@@ -104,7 +104,7 @@ chat_model:
     max_retries: 2 # optional
 embedding_model:
   provider: openai
-  name: text-embedding-ada-002 # or text-embedding-3-small
+  name: text-embedding-3-large # or text-embedding-3-small
   settings: {}
 vision:
   provider: openai
@@ -208,7 +208,7 @@ storage:
 
   vector_store:
     type: opensearch
-    index: vector-index-ada002
+    index: vector-index-3-large
     # Default bulk size for vector insertions is 500. Increase if you have
     # enough memory and want faster ingestion. Or if run into ingestion errors
     # while ingesting large documents.

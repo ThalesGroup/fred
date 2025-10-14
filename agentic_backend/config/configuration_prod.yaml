@@ -80,13 +80,13 @@ ai:
   agents:
     - name: "Apollo"
       type: "leader"
-      class_path: "app.agents.leader.leader.LegacyOrchestrator"
+      class_path: "app.agents.leader.leader.Appollo"
       enabled: true
       role: "Multi-Agent Orchestrator"
       tags: ["orchestrator"]
       crew:
         - "Georges"
-        - "Rico Jr."
+        - "Rico"
         - "Tessa"
       description: >
         An orchestrator agent that can delegate tasks to specialized agents in its crew.
@@ -110,7 +110,7 @@ ai:
           sse_read_timeout: 2000
     - name: "Georges"
       type: "agent"
-      class_path: "app.agents.generalist.generalist_expert.GeneralistExpert"
+      class_path: "app.agents.generalist.generalist_expert.Georges"
       enabled: true
       role: "Generalist Assistant"
       tags: ["general"]
@@ -121,7 +121,7 @@ ai:
     - name: "Tessa"
       type: "agent"
       role: "Data Query and SQL Expert"
-      class_path: "app.agents.tabular.tabular_expert.TabularExpert"
+      class_path: "app.agents.tabular.tabular_expert.Tessa"
       enabled: true
       tags: ["data"]
       chat_model: {}
@@ -133,16 +133,16 @@ ai:
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-tabular
           sse_read_timeout: 2000
-    - name: "Rico Jr."
+    - name: "Rico"
       type: "agent"
       role: "Document Retrieval Expert"
-      class_path: "app.agents.rags.rag_expert.RagExpert"
+      class_path: "app.agents.rags.rag_expert.Rico"
       enabled: true
       tags: ["documents"]
       chat_model: {}
       description: >
         An expert in retrieving and processing documents using retrieval-augmented generation techniques.
-        Rico Jr. can help with tasks that involve understanding and utilizing large document collections.
+        Rico can help with tasks that involve understanding and utilizing large document collections.
     - name: "Brontë"
       type: "agent"
       role: "Content Generator Expert"
@@ -161,7 +161,7 @@ ai:
     - name: "Rico Senior"
       type: "agent"
       role: "Advanced Document Retrieval Expert"
-      class_path: "app.agents.rags.advanced_rag_expert.AdvancedRagExpert"
+      class_path: "app.agents.rags.advanced_rag_expert.AdvancedRico"
       enabled: false
       tags: ["documents"]
       chat_model: {}

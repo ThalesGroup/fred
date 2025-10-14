@@ -30,6 +30,7 @@ from fastapi import (
 )
 from fred_core import (
     KeycloakUser,
+    RBACProvider,
     UserSecurity,
     VectorSearchHit,
     decode_jwt,
@@ -115,6 +116,9 @@ def get_session_orchestrator_ws(websocket: WebSocket) -> SessionOrchestrator:
     return websocket.app.state.session_orchestrator
 
 
+# Create a RBAC provider object to retrieve user permissions in the config/permissions route
+rbac_provider = RBACProvider()
+
 # Create an APIRouter instance here
 router = APIRouter(tags=["Frontend"])
 
@@ -143,6 +147,20 @@ def get_frontend_config() -> FrontendConfigDTO:
             client_id=cfg.security.user.client_id,
         ),
     )
+
+
+@router.get(
+    "/config/permissions",
+    summary="Get the current user's permissions",
+    response_model=list[str],
+)
+def get_user_permissions(
+    current_user: KeycloakUser = Depends(get_current_user),
+) -> list[str]:
+    """
+    Return a flat list of 'resource:action' strings the user is allowed to perform.:
+    """
+    return rbac_provider.list_permissions_for_user(current_user)
 
 
 @router.get(

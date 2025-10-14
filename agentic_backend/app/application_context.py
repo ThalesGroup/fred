@@ -23,9 +23,11 @@ Includes:
 - Context service management
 """
 
+import asyncio
 import logging
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
@@ -243,6 +245,7 @@ class ApplicationContext:
     _outbound_auth: OutboundAuth | None = None
     _kpi_writer: Optional[KPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
+    _io_executor: ThreadPoolExecutor | None = None
 
     def __new__(cls, configuration: Configuration):
         with cls._lock:
@@ -259,8 +262,39 @@ class ApplicationContext:
                 cls._instance._service_instances = {}  # Cache for service instances
                 cls._instance.apply_default_models()
                 cls._instance._log_config_summary()
+                cls._instance._io_executor = ThreadPoolExecutor(max_workers=10)
 
             return cls._instance
+
+    async def run_in_executor(self, func, *args):
+        """
+        Runs a synchronous (blocking) function in the shared thread pool.
+
+        This method correctly retrieves the event loop and uses the loop's
+        run_in_executor method, which is the proper asyncio pattern.
+        """
+        if self._io_executor is None:
+            raise RuntimeError("IO executor not initialized")
+        # 2. Get the active asyncio event loop
+        loop = asyncio.get_event_loop()
+
+        # 3. Call the event loop's run_in_executor method.
+        # This is the awaitable call that runs 'func' in a separate thread.
+        return await loop.run_in_executor(
+            self._io_executor,  # The ThreadPoolExecutor instance
+            func,  # The synchronous function (e.g., fetch_asset_content_text)
+            *args,  # Arguments for the function
+        )
+
+    def get_io_executor(self) -> ThreadPoolExecutor:
+        if self._io_executor is None:
+            raise RuntimeError("IO executor not initialized")
+        return self._io_executor
+
+    def shutdown_io_executor(self):
+        if self._io_executor is not None:
+            self._io_executor.shutdown(wait=True)
+            self._io_executor = None
 
     def apply_default_models(self):
         """

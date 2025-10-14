@@ -64,13 +64,13 @@ ai:
   agents:
     - name: "Apollo"
       type: "leader"
-      class_path: "app.agents.leader.leader.LegacyOrchestrator"
+      class_path: "app.agents.leader.leader.Appollo"
       enabled: true
       role: "Multi-Agent Orchestrator"
       tags: ["orchestrator"]
       crew:
         - "Georges"
-        - "Rico Jr."
+        - "Rico"
         - "Tessa"
       description: >
         An orchestrator agent that can delegate tasks to specialized agents in its crew. Appolo is capable of managing complex workflows by leveraging the expertise of its team members. Not however that Appolo is now outdated and will be replaced by Helios in the coming weeks. See items as a proof of concept.
@@ -92,7 +92,7 @@ ai:
 
     - name: "Georges"
       type: "agent"
-      class_path: "app.agents.generalist.generalist_expert.GeneralistExpert"
+      class_path: "app.agents.generalist.generalist_expert.Georges"
       enabled: true
       role: "Generalist Assistant"
       tags: ["general"]
@@ -103,7 +103,7 @@ ai:
     - name: "Tessa"
       type: "agent"
       role: "Data Query and SQL Expert"
-      class_path: "app.agents.tabular.tabular_expert.TabularExpert"
+      class_path: "app.agents.tabular.tabular_expert.Tessa"
       enabled: true
       tags: ["data"]
       chat_model: {}
@@ -115,15 +115,15 @@ ai:
           url: http://localhost:8111/knowledge-flow/v1/mcp-tabular
           sse_read_timeout: 2000
 
-    - name: "Rico Jr."
+    - name: "Rico"
       type: "agent"
       role: "Document Retrieval Expert"
-      class_path: "app.agents.rags.rag_expert.RagExpert"
+      class_path: "app.agents.rags.rag_expert.Rico"
       enabled: true
       tags: ["documents"]
       chat_model: {}
       description: >
-        An expert in retrieving and processing documents using retrieval-augmented generation techniques. Rico Jr. can help with tasks that involve understanding and utilizing large document collections.
+        An expert in retrieving and processing documents using retrieval-augmented generation techniques. Rico can help with tasks that involve understanding and utilizing large document collections.
 
     - name: "Brontë"
       type: "agent"
@@ -143,7 +143,7 @@ ai:
     - name: "Rico Senior"
       type: "agent"
       role: "Advanced Document Retrieval Expert"
-      class_path: "app.agents.rags.advanced_rag_expert.AdvancedRagExpert"
+      class_path: "app.agents.rags.advanced_rag_expert.AdvancedRico"
       enabled: false
       tags: ["documents"]
       chat_model: {}
@@ -156,21 +156,6 @@ ai:
         - name: knowledge-flow-mcp-server
           transport: streamable_http
           url: http://localhost:8111/knowledge-flow/v1/mcp-advanced-rag
-          sse_read_timeout: 2000
-
-    - name: "Scribo"
-      type: "agent"
-      role: "Structured Report Generator"
-      description: >
-        Produces concise project status reports with Summary, Risks, and Next Steps. Can optionally include CIR (Crédit d’Impôt Recherche) sections for R&D reporting.
-      class_path: "app.agents.content_generator.report_starter.ReportWriter"
-      enabled: true
-      tags: ["content"]
-      chat_model: {}
-      mcp_servers:
-        - name: knowledge-flow-mcp-server
-          transport: streamable_http
-          url: http://localhost:8111/knowledge-flow/v1/mcp-reports
           sse_read_timeout: 2000
 
 storage:

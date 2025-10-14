@@ -5,9 +5,9 @@
   },
   "resource": {
     "kind": {
-      "prompt":   { "one": "prompt",   "other": "prompts" },
+      "prompt": { "one": "prompt", "other": "prompts" },
       "template": { "one": "modèle", "other": "modèles" },
-      "chat-context": { "one" : "contexte de conversation", "other": "contextes de conversation"}
+      "chat-context": { "one": "contexte de conversation", "other": "contextes de conversation" }
     }
   },
   "validation": {
@@ -56,6 +56,32 @@
     },
     "monitoring_kpi": "Kpis",
     "monitoring_logs": "Logs"
+  },
+  "assetManager": {
+    "title": "Gérer les ressources pour {{agentId}}",
+    "description": "Téléchargez et gérez les ressources binaires comme les modèles ou les fichiers de configuration pour cet agent. Ces ressources peuvent être référencées par clé dans vos interactions avec l'agent.",
+    "listTitle": "Ressources Actuelles",
+    "noAssetsFound": "Aucune ressource trouvée. Téléchargez-en une ci-dessous pour commencer.",
+    "uploadTitle": "Télécharger une Nouvelle Ressource",
+    "browseButton": "Parcourir",
+    "labelFile": "Fichier à télécharger",
+    "labelKey": "Clé de Ressource (Nom Logique)",
+    "keyPlaceholder": "ex. mon-modele-de-rapport",
+    "labelContentTypeOverride": "Surcharge de Content-Type (Optionnel)",
+    "uploadButton": "Télécharger la Ressource",
+    "uploading": "Téléchargement en cours...",
+    "noFileSelected": "Veuillez sélectionner un fichier à télécharger.",
+    "unknownUploadError": "Une erreur inconnue est survenue lors du téléchargement.",
+    "uploadSuccessSummary": "Ressource Téléchargée",
+    "uploadSuccessDetail": "La ressource '{{key}}' a été téléchargée avec succès.",
+    "uploadFailedSummary": "Échec du Téléchargement",
+    "confirmDelete": "Êtes-vous sûr de vouloir supprimer la ressource '{{key}}'? Cette action est irréversible.",
+    "deleteSuccessSummary": "Ressource Supprimée",
+    "deleteSuccessDetail": "La ressource '{{key}}' a été supprimée.",
+    "deleteFailedSummary": "Échec de la Suppression",
+    "unknownDeleteError": "Une erreur inconnue est survenue lors de la suppression.",
+    "confirmDeleteTitle": "Confirmer la suppression",
+    "confirmDeleteMessage": "Supprimer cette ressource ? Cette action est irréversible."
   },
   "agentHub": {
     "title": "Centre des Agents",
@@ -187,7 +213,9 @@
     "enabled": "Activer l'agent",
     "disable": "Désactiver l'agent",
     "favorite": "Ajouter l'agent à vos favoris",
-    "unfavorite": "Retirer l'agent de vos favoris"
+    "unfavorite": "Retirer l'agent de vos favoris",
+    "manageAssets": "Gérer les ressources",
+    "manageCrew": "Gérer l'équipe"
   },
   "dialogs": {
     "create": {
@@ -249,7 +277,6 @@
       "documents": "Documents",
       "operations": "Opérations",
       "chatContexts": "Contextes de conversation"
-
     }
   },
   "documentLibrary": {
@@ -332,7 +359,6 @@
     "removedOneResource": "{{typeOne, capitalize}} supprimé(e) de la bibliothèque.",
     "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
     "confirmRemoveMessage": "Supprimer « {{res}} » de « {{folder}} » ?"
-    
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",
@@ -355,7 +381,11 @@
     "nowExcluded": "Désormais exclu de la recherche"
   },
   "documentDrawerTable": {
-    "deleteFile": "Supprimer le fichier"
+    "deleteFile": "Supprimer le fichier",
+    "documentAlreadyAddedToast": {
+      "summary": "Fichier(s) déjà ajouté(s)",
+      "detail": "Certains fichiers étaient déjà dans la liste et ont été ignorés."
+    }
   },
   "documentActions": {
     "menuLabel": "Ouvrir le menu d'actions du document",
@@ -427,5 +457,12 @@
     "openSource": "Ouvrir la source",
     "openAllInPreview": "Tout ouvrir en prévisualisation",
     "openAllInPdfPreview": "Tout ouvrir en prévisualisation PDF"
+  },
+  "pageError": {
+    "message": "Retour à la page d'accueil"
+  },
+  "unauthorized": {
+    "title": "Accès non autorisé",
+    "message": "Vous n'êtes pas autorisé à voir cette page."
   }
 }

@@ -36,9 +36,11 @@ to define clear workflows and data structures.
 
 
 class Status(str, Enum):
+    IN_PROGRESS = "in_progress"
     SUCCESS = "success"
     IGNORED = "ignored"
     ERROR = "error"
+    FINISHED = "finished"
 
 
 class OutputProcessorResponse(BaseModel):

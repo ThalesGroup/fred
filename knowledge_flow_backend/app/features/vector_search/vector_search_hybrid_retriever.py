@@ -36,7 +36,10 @@ logger = logging.getLogger(__name__)
 # ---- Minimal text utils (robust but cheap) ----
 
 _WH_PAT = re.compile(r"(?i)^\s*(who\s+(is|are)|qui\s+(est|sont))\b")
-_QUOTED = re.compile(r'"([^"]{2,120})"|\'([^\']{2,120})\'')
+_QUOTED = re.compile(
+    r'"([^"]{2,120})"'
+    r"|(?:(?<=\s)'([^']{2,120})'(?=\s|[.,;!?]|$))"
+)
 
 _STOP = {
     # articles/conjunctions/preps (EN/FR)
@@ -77,11 +80,20 @@ _STOP = {
 
 
 def _tokenize(q: str) -> List[str]:
-    return re.findall(r"[A-Za-z][A-Za-z\-]{1,40}", q.lower())
+    """
+    Tokenizer that keeps accented letters and hyphens.
+    - Accepts unicode letters (including é, è, ç, ï, ö, etc.)
+    - Keeps hyphens inside words
+    - Lowercases everything
+    """
+    return re.findall(r"[^\W\d_][\w\-]{1,40}", q.lower(), flags=re.UNICODE)
 
 
 def _salient_terms(q: str) -> List[str]:
-    """General-purpose signal: unquoted words ≥3 chars not in _STOP."""
+    """
+    General-purpose signal: unquoted words ≥3 chars not in stopwords.
+    Works with English and French (supports accented letters).
+    """
     return [t for t in _tokenize(q) if len(t) >= 3 and t not in _STOP]
 
 

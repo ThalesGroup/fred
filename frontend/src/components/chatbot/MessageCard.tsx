@@ -20,18 +20,21 @@ import { useMemo, useState } from "react";
 //import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 //import ClearIcon from "@mui/icons-material/Clear";
 import { AnyAgent } from "../../common/agent.ts";
+import type { GeoPart, LinkPart } from "../../slices/agentic/agenticOpenApi.ts";
 import {
   ChatMessage,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
 } from "../../slices/agentic/agenticOpenApi.ts";
+
+import { Download as DownloadIcon } from "@mui/icons-material";
 import { getAgentBadge } from "../../utils/avatar.tsx";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
 import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
 import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
-import { toCopyText, toMarkdown } from "./messageParts.ts";
-
+import GeoMapRenderer from "./GeoMapRenderer.tsx";
+import { MessagePart, toCopyText, toMarkdown } from "./messageParts.ts";
 export default function MessageCard({
   message,
   agent,
@@ -124,9 +127,41 @@ export default function MessageCard({
   const isResult = isToolResult(message);
 
   // Build the markdown content once (optionally filtering out text parts)
-  const mdContent = useMemo(() => {
-    const parts = suppressText ? (message.parts || []).filter((p: any) => p?.type !== "text") : message.parts || [];
-    return toMarkdown(parts);
+  const { mdContent, downloadLinkPart, geoPart } = useMemo(() => {
+    const allParts = message.parts || [];
+    let linkPart: LinkPart | undefined = undefined;
+    let mapPart: GeoPart | undefined = undefined; // 👈 1. Declare the new variable
+
+    // Filter out the specific LinkPart and GeoPart we want to render separately
+    const processedParts = allParts.filter((p: any) => {
+      // Check for DOWNLOAD link
+      if (p.type === "link" && p.kind === "download") {
+        if (!linkPart) {
+          linkPart = p as LinkPart;
+          return false; // Exclude it from the Markdown content
+        }
+      }
+
+      // 👈 2. Check for GEO part
+      if (p.type === "geo") {
+        if (!mapPart) {
+          mapPart = p as GeoPart;
+          return false; // Exclude it from the Markdown content
+        }
+      }
+
+      // If suppressText is true, exclude all 'text' parts from the Markdown content
+      if (suppressText && p.type === "text") {
+        return false;
+      }
+      return true; // Include all other parts (text, code, citations, etc.)
+    }) as MessagePart[];
+
+    return {
+      mdContent: toMarkdown(processedParts), // Convert remaining parts to markdown
+      downloadLinkPart: linkPart,
+      geoPart: mapPart, // 👈 3. Return the GeoPart
+    };
   }, [message.parts, suppressText]);
 
   return (
@@ -213,6 +248,34 @@ export default function MessageCard({
                       }}
                     />{" "}
                   </Box>
+                  {geoPart && (
+                    <Box px={side === "right" ? 0 : 1} pt={0.5} pb={1}>
+                      <GeoMapRenderer part={geoPart} />
+                    </Box>
+                  )}
+                  {/* 🌟 NEW: RENDER DOWNLOAD LINK SEPARATELY 🌟 */}
+                  {downloadLinkPart && (
+                    <Box px={side === "right" ? 0 : 1} pt={0.5} pb={1}>
+                      <Tooltip title="Click to securely download asset. Requires valid authentication context.">
+                        <Chip
+                          icon={<DownloadIcon />}
+                          // Display the title (filename)
+                          label={downloadLinkPart.title || "Download File"}
+                          // Use an anchor tag <a> for the Chip
+                          component="a"
+                          href={downloadLinkPart.href}
+                          // Optional: open in new tab
+                          target="_blank"
+                          clickable
+                          color="primary"
+                          variant="filled"
+                          size="medium"
+                          sx={{ fontWeight: "bold" }}
+                        />
+                      </Tooltip>
+                    </Box>
+                  )}
+                  {/* 🌟 END NEW 🌟 */}
                 </Box>
               </Grid2>
 

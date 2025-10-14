@@ -22,6 +22,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { LibraryCreateDrawer } from "../../common/LibraryCreateDrawer";
 import { useTagCommands } from "../../common/useTagCommands";
+import { usePermissions } from "../../security/usePermissions";
 import {
   Resource,
   ResourceKind,
@@ -97,6 +98,11 @@ export default function ResourceLibraryList({ kind }: Props) {
   const [selectedItems, setSelectedItems] = React.useState<Record<string, TagWithItemsId>>({});
   const selectedCount = React.useMemo(() => Object.keys(selectedItems).length, [selectedItems]);
   const clearSelection = React.useCallback(() => setSelectedItems({}), []);
+
+  // RBAC utils
+  const { can } = usePermissions();
+  const canCreateTag = can("tag", "create");
+  const canCreateResource = can("resource", "create");
 
   /** ---------------- Data fetching ---------------- */
   // 1) Tags for this kind (prompt | template | porfile)
@@ -191,10 +197,8 @@ export default function ResourceLibraryList({ kind }: Props) {
     (res: Resource, tag: TagWithItemsId) => {
       const name = res.name || String(res.id);
       showConfirmationDialog({
-        title: t("resourceLibrary.confirmRemoveTitle") || "Remove from library?",
-        message:
-          t("resourceLibrary.confirmRemoveMessage", { res: name, folder: tag.name }) ||
-          `Remove “${name}” from “${tag.name}”? This does not delete the original resource.`,
+        title: t("resourceLibrary.confirmRemoveTitle"),
+        message: t("resourceLibrary.confirmRemoveMessage", { res: name, folder: tag.name }),
         onConfirm: () => {
           void removeFromLibrary(res, tag);
         },
@@ -226,7 +230,16 @@ export default function ResourceLibraryList({ kind }: Props) {
     refetchTags,
     refetchDocs: refetchResources, // reuse for resources
   });
-
+  const handleDeleteFolder = React.useCallback(
+    (tag: TagWithItemsId) => {
+      // Pass the state reset function as the onSuccess callback
+      confirmDeleteFolder(tag, () => {
+        // This runs only after the user confirms AND the deletion is successful
+        setSelectedFolder(null);
+      });
+    },
+    [confirmDeleteFolder, setSelectedFolder],
+  );
   /** ---------------- Handlers ---------------- */
   const handleOpenCreate = React.useCallback(() => {
     if (!selectedFolder) return;
@@ -284,7 +297,8 @@ export default function ResourceLibraryList({ kind }: Props) {
           <Button
             variant="outlined"
             startIcon={<AddIcon />}
-            onClick={() => setIsCreateDrawerOpen(true)}
+            onClick={canCreateTag ? () => setIsCreateDrawerOpen(true) : undefined}
+            disabled={!canCreateTag}
             sx={{ borderRadius: "8px" }}
           >
             {t("resourceLibrary.createLibrary")}
@@ -292,13 +306,18 @@ export default function ResourceLibraryList({ kind }: Props) {
           <Button
             variant="contained"
             startIcon={<UploadIcon />}
-            onClick={handleOpenCreate}
-            disabled={!selectedFolder}
+            onClick={canCreateResource && selectedFolder ? handleOpenCreate : undefined}
+            disabled={!canCreateResource || !selectedFolder}
             sx={{ borderRadius: "8px" }}
           >
             {t("resourceLibrary.createResource", { typeOne })}
           </Button>
-          <Button variant="contained" startIcon={<UploadIcon />} disabled={!selectedFolder} onClick={openImportDrawer}>
+          <Button
+            variant="contained"
+            startIcon={<UploadIcon />}
+            onClick={canCreateResource && selectedFolder ? openImportDrawer : undefined}
+            disabled={!canCreateResource || !selectedFolder}
+          >
             {t("resourceLibrary.importResource", { typeOne })}
           </Button>
         </Box>
@@ -365,7 +384,7 @@ export default function ResourceLibraryList({ kind }: Props) {
               // NEW: selection + folder deletion
               selectedItems={selectedItems}
               setSelectedItems={setSelectedItems}
-              onDeleteFolder={confirmDeleteFolder}
+              onDeleteFolder={handleDeleteFolder}
             />
           </Box>
         </Card>

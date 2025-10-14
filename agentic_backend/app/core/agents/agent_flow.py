@@ -14,15 +14,40 @@
 
 import logging
 import math
-from abc import abstractmethod
+import sys
+import tempfile
 from datetime import datetime
-from typing import ClassVar, List, Optional, Sequence
+from importlib.resources import files
+from pathlib import Path
+from typing import (
+    Any,
+    AsyncIterator,
+    BinaryIO,
+    ClassVar,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    cast,
+)
 
-from langchain_core.messages import AnyMessage, SystemMessage
+from langchain_core.messages import AIMessage, AnyMessage, BaseMessage, SystemMessage
+from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import MessagesState
 from langgraph.graph.state import CompiledStateGraph
 
-from app.application_context import get_knowledge_flow_base_url
+from app.application_context import (
+    get_app_context,
+    get_knowledge_flow_base_url,
+)
+from app.common.kf_agent_asset_client import (
+    AssetBlob,
+    AssetRetrievalError,
+    AssetUploadError,
+    AssetUploadResult,
+    KfAgentAssetClient,
+)
 from app.common.structures import (
     AgentChatOptions,
     AgentSettings,
@@ -60,6 +85,10 @@ class AgentFlow:
     # Subclasses MUST override this with a concrete AgentTuning
     tuning: ClassVar[Optional[AgentTuning]] = None
     default_chat_options: ClassVar[Optional[AgentChatOptions]] = None
+    # LangGraph/LangChain injects this dynamically, but we define it here
+    # for type checking. It will hold in particular the 'configurable' dict
+    # with the end_user_id when the node is executed.
+    run_config: RunnableConfig = {}  # Use an empty dict as the default/initial value
 
     def __init__(self, agent_settings: AgentSettings):
         """
@@ -79,13 +108,46 @@ class AgentFlow:
         """
         self.apply_settings(agent_settings)
         self.current_date = datetime.now().strftime("%Y-%m-%d")
-        self.model = None  # Will be set in async_init
         self._graph = None  # Will be built in async_init
         self.streaming_memory = MemorySaver()
         self.compiled_graph: Optional[CompiledStateGraph] = None
         self.runtime_context: Optional[RuntimeContext] = None
+        self.asset_client = KfAgentAssetClient()
 
-    @abstractmethod
+    async def astream_updates(
+        self,
+        state: MessagesState,
+        *,
+        config: Optional[RunnableConfig] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Stream LangGraph 'updates' while ensuring the agent sees the run config.
+
+        Why (Fred):
+        - Some nodes rely on self.get_end_user_id() to write/read user-scoped assets.
+        - LangGraph passes `config` to the engine, but your agent methods read `self.run_config`.
+        - We set it once here, before streaming, so node code stays clean.
+
+        Behavior:
+        - Identical to compiled_graph.astream(..., stream_mode='updates')
+        (we just inject self.run_config first).
+        - Accepts **kwargs in case you want to forward additional astream options later.
+        """
+        # Make config available to node methods (e.g., get_end_user_id()).
+        self.run_config = config or {}
+
+        compiled = self.get_compiled_graph()
+
+        # Preserve the exact streaming semantics you had before.
+        async for event in compiled.astream(
+            state,
+            config=config,
+            stream_mode="updates",
+            **kwargs,
+        ):
+            yield event
+
     async def async_init(self):
         """
         Asynchronous initialization routine that must be implemented by subclasses.
@@ -111,6 +173,39 @@ class AgentFlow:
         self.agent_settings = merged_settings
         self._tuning = merged_settings.tuning
         self.agent_settings.tuning = self._tuning
+
+    @staticmethod
+    def _ensure_any_message(msg: object) -> AnyMessage:
+        """
+        Normalize arbitrary model outputs into an AnyMessage.
+        - BaseMessage -> cast to AnyMessage (runtime type will be AIMessage, etc.)
+        - str         -> AIMessage(content=str)
+        - other       -> AIMessage(content=repr(other))
+        """
+        if isinstance(msg, BaseMessage):
+            return cast(AnyMessage, msg)
+        if isinstance(msg, str):
+            return AIMessage(content=msg)
+        return AIMessage(content=repr(msg))
+
+    async def ask_model(
+        self,
+        runnable: Runnable,
+        messages: Sequence[AnyMessage],
+        **kwargs,
+    ) -> AnyMessage:
+        """
+        Invoke any Runnable (model, chain, or tool) and return a normalized AnyMessage.
+        This is the preferred helper for multi-model agents.
+        """
+        raw = await runnable.ainvoke(messages, **kwargs)
+        return self._ensure_any_message(raw)
+
+    @staticmethod
+    def delta(*msgs: AnyMessage) -> MessagesState:
+        """Return a MessagesState-compatible state update."""
+        # Note: You need to ensure MessagesState is imported correctly from langgraph.graph
+        return {"messages": list(msgs)}
 
     @classmethod
     def merge_settings_with_class_defaults(
@@ -140,6 +235,23 @@ class AgentFlow:
         if overrides:
             effective = effective.model_copy(update=overrides)
         return effective
+
+    def get_end_user_id(self) -> str:
+        """
+        Retrieves the ID of the end-user (the human interacting with the chatbot)
+        from the execution configuration.
+        """
+        # self.run_config is available when the node is executed
+        # It contains the 'configurable' dict passed during astream()
+        user_id = self.run_config.get("configurable", {}).get("user_id")
+
+        if not user_id:
+            # IMPORTANT: Raise an error if the user ID is mandatory for asset operations
+            raise ValueError(
+                "Cannot determine end user ID. 'user_id' must be set in the RunnableConfig."
+            )
+
+        return str(user_id)
 
     def get_name(self) -> str:
         """
@@ -178,6 +290,187 @@ class AgentFlow:
         Current values live in `self._tuning` and are read via `get_tuned_text(...)`.
         """
         return self.tuning
+
+    async def read_bundled_file(self, filename: str) -> str:
+        """
+        Reads a static file bundled as a resource alongside the calling agent's module file.
+
+        This is the preferred way to access small, companion text files like
+        templates or hardcoded default content shipped with the agent code.
+
+        Args:
+            filename: The name of the file (e.g., 'welcome.txt') located in
+                      the same directory as the agent's Python file.
+
+        Returns:
+            The content of the file as a string.
+
+        Raises:
+            AssetRetrievalError: If the file is not found or cannot be read.
+        """
+        # 1. Get the module object for the derived class calling this method
+        # We look up the calling frame to find the module path of the agent class instance.
+        agent_module_name = self.__module__
+
+        try:
+            # Get a Traversable object pointing to the file path
+            resource_path = files(sys.modules[agent_module_name]).joinpath(filename)
+
+            # Read the file content as text
+            content = resource_path.read_text(encoding="utf-8")
+            return content
+
+        except FileNotFoundError:
+            error_msg = (
+                f"Bundled file '{filename}' not found in module '{agent_module_name}'."
+            )
+            logger.error(error_msg)
+            # Raise a specific exception so the agent node can handle the failure
+            raise AssetRetrievalError(error_msg)
+
+        except Exception as e:
+            error_msg = (
+                f"Failed to read bundled file '{filename}' in '{agent_module_name}'. "
+                f"Details: {type(e).__name__}: {e}"
+            )
+            logger.error(error_msg, exc_info=True)
+            raise AssetRetrievalError(error_msg)
+
+    async def fetch_asset_text(self, asset_key: str) -> str:
+        """
+        Retrieves the content of a user-uploaded asset securely and cleanly.
+
+        """
+        agent_name = self.get_name()
+        try:
+            return await get_app_context().run_in_executor(
+                self.asset_client.fetch_asset_content_text, agent_name, asset_key
+            )
+        except AssetRetrievalError as e:
+            logger.error(f"Failed to fetch asset for agent: {e}")
+            # Re-raise the error, or return a default/fail state
+            return f"[Asset Retrieval Error: {e.args[0]}]"
+        except Exception as e:
+            logger.error(f"Unexpected error fetching asset for agent: {e}")
+            raise
+
+    async def fetch_asset_blob(self, asset_key: str) -> AssetBlob:
+        """
+        Retrieves the content of a user-uploaded asset securely and cleanly.
+
+        """
+        agent_name = self.get_name()
+        try:
+            return await get_app_context().run_in_executor(
+                self.asset_client.fetch_asset_blob, agent_name, asset_key
+            )
+        except AssetRetrievalError as e:
+            logger.error(f"Failed to fetch asset for agent: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error fetching asset for agent: {e}")
+            raise
+
+    async def fetch_asset_blob_to_tempfile(
+        self, asset_key: str, suffix: str | None = None
+    ) -> Path:
+        """
+        Retrieves a user asset, writes it to a secure temporary file, and returns its Path.
+        Why (Fred): Many libraries (pptx, pdf, docx) expect a file path, not bytes.
+        The file lives only for the lifetime of the node execution.
+        """
+        blob = await self.fetch_asset_blob(asset_key)
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=suffix or Path(blob.filename).suffix
+        ) as f:
+            f.write(blob.bytes)
+            temp_path = Path(f.name)
+        return temp_path
+
+    async def upload_user_asset(
+        self,
+        key: str,
+        file_content: bytes | BinaryIO,
+        filename: str,
+        content_type: Optional[str] = None,
+        user_id_override: Optional[str] = None,
+    ) -> AssetUploadResult:
+        """
+        Uploads a binary file to the user's personal asset storage.
+
+        Args:
+            key: The logical key for the asset (e.g., 'generated_report.pdf').
+            file_content: The binary content (bytes or file-like object).
+            filename: The original/intended filename.
+            content_type: Optional MIME type hint.
+
+        Raises:
+            AssetUploadError: If the upload fails (e.g., HTTP error).
+        """
+        logger.info(
+            "UPLOADING_ASSET: Attempting to upload asset to user store: %s", key
+        )
+        try:
+            # Use get_app_context().run_in_executor to safely run the blocking client call
+            result = await get_app_context().run_in_executor(
+                self.asset_client.upload_user_asset_blob,
+                key,
+                file_content,
+                filename,
+                content_type,
+                user_id_override,
+            )
+            logger.info(
+                "UPLOADING_ASSET: Upload successful. Key: %s, Size: %d",
+                result.key,
+                result.size,
+            )
+            return result
+        except AssetUploadError as e:
+            logger.error(f"Failed to upload user asset: {e}")
+            raise  # Re-raise the specific error
+        except Exception as e:
+            logger.error(f"Unexpected error during user asset upload: {e}")
+            raise
+
+    def get_asset_download_url(self, asset_key: str, scope: str = "user") -> str:
+        """Constructs the full, absolute URL for asset download."""
+
+        # NOTE: You MUST replace `get_api_base_url()` with your actual configuration
+        # or helper that returns the public base URL (e.g., 'https://your-api.com').
+        BASE_URL = get_knowledge_flow_base_url()  # Replace with actual base URL source
+
+        if scope == "user":
+            # The User Asset endpoint format: /user-assets/{key}
+            return f"{BASE_URL}/user-assets/{asset_key}"
+        elif scope == "agent":
+            # The Agent Asset endpoint format: /agent-assets/{agent_name}/{key}
+            agent_name = self.get_name()
+            return f"{BASE_URL}/agent-assets/{agent_name}/{asset_key}"
+
+        raise ValueError(f"Unknown asset scope: {scope}")
+
+    # ...
+
+    def _get_text_content(self, message: AnyMessage) -> str:
+        """
+        Safely extracts string content from an AnyMessage, raising a clean
+        error if the content is unexpectedly not a string (e.g., a dict/tool_call).
+        This avoids ugly inline casts in agent logic.
+        """
+        content = message.content
+        if isinstance(content, str):
+            return content
+
+        # Handle cases where content is None or a complex structure
+        if content is None:
+            return ""
+
+        logger.warning(
+            "Model response content was type %s, expected str. Returning empty string.",
+            type(content).__name__,
+        )
+        return ""
 
     def get_settings(self) -> AgentSettings:
         """Return the current effective AgentSettings for this instance."""

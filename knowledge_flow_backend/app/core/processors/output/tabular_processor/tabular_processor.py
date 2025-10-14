@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
 import io
 import logging
 import re
@@ -59,6 +60,18 @@ _DATE_REGEX = re.compile(
     )""",
     re.IGNORECASE | re.VERBOSE,
 )
+
+
+def safe_table_name(name: str, max_len: int = 63) -> str:
+    name = sanitize_sql_name(name)
+    if len(name) <= max_len:
+        return name
+    # 🚀 FIX B324: Use MD5 for non-security purposes (name hashing)
+    try:
+        hash_suffix = hashlib.md5(name.encode(), usedforsecurity=False).hexdigest()[:8]
+    except TypeError:
+        raise RuntimeError("Python 3.9+ is required for secure MD5 hashing in this context")
+    return name[: max_len - 9] + "_" + hash_suffix
 
 
 def _looks_like_date(value: str) -> bool:
@@ -149,6 +162,8 @@ class TabularProcessor(BaseOutputProcessor):
             try:
                 if self.csv_input_store is None:
                     raise RuntimeError("csv_input_store is not initialized")
+
+                table_name = safe_table_name(metadata.document_name.rsplit(".", 1)[0])
                 result = self.csv_input_store.save_table(table_name, df)
                 logger.debug(f"Document added to Tabular Store: {result}")
             except Exception as e:

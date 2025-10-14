@@ -84,10 +84,10 @@ def minimal_generalist_config() -> Configuration:
             agents=[
                 # ⬇️ instantiate the concrete Agent (discriminator handled automatically)
                 Agent(
-                    name="GeneralistExpert",
+                    name="Georges",
                     role="Generalist",
                     description="Generalist",
-                    class_path="app.agents.generalist.generalist_expert.GeneralistExpert",
+                    class_path="app.agents.generalist.generalist_expert.Georges",
                     enabled=True,
                     model=ModelConfiguration(
                         provider="openai",

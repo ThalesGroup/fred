@@ -22,12 +22,11 @@ import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { Kpis } from "../pages/Kpis";
 import Logs from "../pages/Logs";
 import { PageError } from "../pages/PageError";
+import Unauthorized from "../pages/PageUnauthorized";
 import { Profile } from "../pages/Profile";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => (
-  <ProtectedRoute permission="viewer">
-    <LayoutWithSidebar>{children}</LayoutWithSidebar>
-  </ProtectedRoute>
+  <LayoutWithSidebar>{children}</LayoutWithSidebar>
 );
 
 export const routes: RouteObject[] = [
@@ -45,11 +44,23 @@ export const routes: RouteObject[] = [
       },
       {
         path: "monitoring/kpis",
-        element: <Kpis />,
+        element: (
+          <ProtectedRoute resource="kpi" action="create">
+            <Kpis />
+          </ProtectedRoute>
+        ),
       },
       {
         path: "monitoring/logs",
-        element: <Logs />,
+        element: (
+          <ProtectedRoute
+            resource={["opensearch", "logs"]}
+            action="create"
+            anyResource // means that any of the permissions is enough so the user can have opensearch:create || logs:create and it would let the user pass.
+          >
+            <Logs />
+          </ProtectedRoute>
+        ),
       },
       {
         path: "account",
@@ -68,6 +79,18 @@ export const routes: RouteObject[] = [
         element: <AgentHub />,
       },
     ].filter(Boolean),
+  },
+  {
+    path: "unauthorized",
+    element: <Unauthorized />,
+  },
+  {
+    path: "/knowledge",
+    element: (
+      <RootLayout>
+        <KnowledgeHub />
+      </RootLayout>
+    ),
   },
   {
     path: "*",

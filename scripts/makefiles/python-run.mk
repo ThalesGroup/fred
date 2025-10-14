@@ -33,3 +33,7 @@ run: dev run-local ## Install dependencies and run the app with the dev storages
 .PHONY: run-prod
 run-prod: CONFIG_FILE=$(CONFIG_FILE_PROD)
 run-prod: run ## Install dependencies and run the app with the prod storages activated (OpenSearch, MinIO & cie.)
+
+PHONY: run-academy
+run-academy: CONFIG_FILE=$(CONFIG_FILE_ACADEMY)
+run-academy: run ## Install dependencies and run the app with the academy storages activated (DuckDB)

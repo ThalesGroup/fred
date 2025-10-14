@@ -22,6 +22,8 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { LibraryCreateDrawer } from "../../../common/LibraryCreateDrawer";
 import { useTagCommands } from "../../../common/useTagCommands";
+import { usePermissions } from "../../../security/usePermissions";
+
 import {
   DocumentMetadata,
   TagWithItemsId,
@@ -41,7 +43,7 @@ export default function DocumentLibraryList() {
 
   /* ---------------- State ---------------- */
   const [expanded, setExpanded] = React.useState<string[]>([]);
-  const [selectedFolder, setSelectedFolder] = React.useState<string | null>(undefined);
+  const [selectedFolder, setSelectedFolder] = React.useState<string | null>(null);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = React.useState(false);
   const [openUploadDrawer, setOpenUploadDrawer] = React.useState(false);
   const [uploadTargetTagId, setUploadTargetTagId] = React.useState<string | null>(null);
@@ -50,6 +52,13 @@ export default function DocumentLibraryList() {
   const [selectedDocs, setSelectedDocs] = React.useState<Record<string, TagWithItemsId>>({});
   const selectedCount = React.useMemo(() => Object.keys(selectedDocs).length, [selectedDocs]);
   const clearSelection = React.useCallback(() => setSelectedDocs({}), []);
+
+  // Permissions (RBAC)
+  const { can } = usePermissions();
+  const canCreateDocument = can("document", "create");
+  const canDeleteDocument = can("document", "delete");
+  const canDeleteFolder = can("tag", "delete");
+  const canCreateTag = can("tag", "create");
 
   /* ---------------- Data fetching ---------------- */
   const {
@@ -171,7 +180,16 @@ export default function DocumentLibraryList() {
     refetchTags: refetch,
     refetchDocs: () => fetchAllDocuments({ filters: {} }),
   });
-
+  const handleDeleteFolder = React.useCallback(
+    (tag: TagWithItemsId) => {
+      // Pass the state reset function as the onSuccess callback
+      confirmDeleteFolder(tag, () => {
+        // This runs only after the user confirms AND the deletion is successful
+        setSelectedFolder(null);
+      });
+    },
+    [confirmDeleteFolder, setSelectedFolder],
+  );
   return (
     <Box display="flex" flexDirection="column" gap={2}>
       {/* Top toolbar */}
@@ -205,6 +223,7 @@ export default function DocumentLibraryList() {
             variant="outlined"
             startIcon={<AddIcon />}
             onClick={() => setIsCreateDrawerOpen(true)}
+            disabled={!canCreateTag}
             sx={{ borderRadius: "8px" }}
           >
             {t("documentLibrariesList.createLibrary")}
@@ -221,12 +240,13 @@ export default function DocumentLibraryList() {
                 setOpenUploadDrawer(true);
               }
             }}
-            disabled={!selectedFolder}
+            disabled={!selectedFolder || !canCreateDocument}
             sx={{ borderRadius: "8px" }}
           >
             {t("documentLibrary.uploadInLibrary")}
           </Button>
         </Box>
+
       </Box>
 
       {/* Bulk actions */}
@@ -238,7 +258,13 @@ export default function DocumentLibraryList() {
           <Button size="small" variant="outlined" onClick={clearSelection}>
             {t("documentLibrary.clearSelection") || "Clear selection"}
           </Button>
-          <Button size="small" variant="contained" color="error" onClick={bulkRemoveFromLibrary}>
+          <Button
+            size="small"
+            variant="contained"
+            color="error"
+            onClick={bulkRemoveFromLibrary}
+            disabled={!canDeleteDocument}
+          >
             {t("documentLibrary.bulkRemoveFromLibrary") || "Remove from library"}
           </Button>
         </Card>
@@ -271,14 +297,7 @@ export default function DocumentLibraryList() {
           }}
         >
           {/* Tree header */}
-          <Box
-            display="flex"
-            alignItems="center"
-            justifyContent="space-between"
-            px={1}
-            py={0.5}
-            flex="0 0 auto"
-          >
+          <Box display="flex" alignItems="center" justifyContent="space-between" px={1} py={0.5} flex="0 0 auto">
             <Typography variant="subtitle2" color="text.secondary">
               {t("documentLibrary.folders")}
             </Typography>
@@ -316,12 +335,13 @@ export default function DocumentLibraryList() {
               onRemoveFromLibrary={removeOneWithConfirm}
               selectedDocs={selectedDocs}
               setSelectedDocs={setSelectedDocs}
-              onDeleteFolder={confirmDeleteFolder}
+              onDeleteFolder={handleDeleteFolder}
+              canDeleteDocument={canDeleteDocument}
+              canDeleteFolder={canDeleteFolder}
             />
           </Box>
         </Card>
       )}
-
 
       {/* Upload drawer */}
       <DocumentUploadDrawer

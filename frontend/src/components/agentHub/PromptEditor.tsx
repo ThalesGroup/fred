@@ -1,13 +1,25 @@
-// PromptEditor.tsx — changes only in the token toolbar + insertion logic
-import { useMemo, useRef, useState } from "react";
-import { Box, Tabs, Tab, IconButton, Tooltip, Stack, Typography, Divider, Chip, useTheme } from "@mui/material";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import RestoreIcon from "@mui/icons-material/Restore";
-import PreviewIcon from "@mui/icons-material/Preview";
-import EditIcon from "@mui/icons-material/Edit";
-import ReactMarkdown from "react-markdown";
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 import Editor, { OnMount } from "@monaco-editor/react";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import EditIcon from "@mui/icons-material/Edit";
+import PreviewIcon from "@mui/icons-material/Preview";
+import RestoreIcon from "@mui/icons-material/Restore";
+import { Box, Chip, Divider, IconButton, Stack, Tab, Tabs, Tooltip, Typography, useTheme } from "@mui/material";
 import * as monaco from "monaco-editor";
+import { useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 
 type Props = {
   label: string;

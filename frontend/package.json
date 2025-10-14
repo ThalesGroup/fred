@@ -17,6 +17,8 @@
     "@mui/x-tree-view": "^8.10.0",
     "@reduxjs/toolkit": "^2.1.0",
     "@types/lodash": "^4.14.202",
+    "react-pdf": "7.7.3",
+    "pdfjs-dist": "4.3.136",
     "bootstrap": "^5.3.3",
     "dompurify": "^3.2.6",
     "echarts": "^5.5.1",

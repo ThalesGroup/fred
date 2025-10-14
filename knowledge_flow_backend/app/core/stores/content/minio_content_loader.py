@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import hashlib
 import logging
 from pathlib import Path
 from typing import List
@@ -94,7 +93,7 @@ class MinioContentLoader(BaseContentLoader):
                             path=relative_path,
                             size=obj.size if obj.size else 0,
                             modified_time=obj.last_modified.timestamp() if obj.last_modified else 0,
-                            hash=hashlib.sha256(obj.object_name.encode()).hexdigest(),
+                            hash=obj.etag or "",
                         )
                     )
             return entries

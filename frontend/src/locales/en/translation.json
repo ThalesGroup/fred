@@ -5,9 +5,9 @@
   },
   "resource": {
     "kind": {
-      "prompt":   { "one": "prompt",   "other": "prompts" },
+      "prompt": { "one": "prompt", "other": "prompts" },
       "template": { "one": "template", "other": "templates" },
-      "chat-context": { "one" : "chat context", "other": "chat contexts"}
+      "chat-context": { "one": "chat context", "other": "chat contexts" }
     }
   },
   "validation": {
@@ -56,6 +56,32 @@
     },
     "monitoring_kpi": "Kpis",
     "monitoring_logs": "Logs"
+  },
+  "assetManager": {
+    "title": "Manage Assets for {{agentId}}",
+    "description": "Upload and manage binary resources like templates or configuration files for this agent. These resources can be referenced by key in your agent interactions.",
+    "listTitle": "Current Assets",
+    "noAssetsFound": "No assets found. Upload one below to get started.",
+    "uploadTitle": "Upload New Asset",
+    "browseButton": "Browse",
+    "labelFile": "File to upload",
+    "labelKey": "Asset Key (Logical Name)",
+    "keyPlaceholder": "e.g., my-report-template",
+    "labelContentTypeOverride": "Content-Type Override (Optional)",
+    "uploadButton": "Upload Asset",
+    "uploading": "Uploading...",
+    "noFileSelected": "Please select a file to upload.",
+    "unknownUploadError": "An unknown error occurred during upload.",
+    "uploadSuccessSummary": "Asset Uploaded",
+    "uploadSuccessDetail": "Asset '{{key}}' uploaded successfully.",
+    "uploadFailedSummary": "Upload Failed",
+    "confirmDelete": "Are you sure you want to delete asset '{{key}}'? This action cannot be undone.",
+    "deleteSuccessSummary": "Asset Deleted",
+    "deleteSuccessDetail": "Asset '{{key}}' deleted.",
+    "deleteFailedSummary": "Deletion Failed",
+    "unknownDeleteError": "An unknown error occurred during deletion.",
+    "confirmDeleteTitle": "Confirm deletion",
+    "confirmDeleteMessage": "Delete this asset? This action cannot be undone."
   },
   "agentHub": {
     "title": "Agent Hub",
@@ -158,7 +184,7 @@
     "title": "Log Console",
     "description": "Monitor real-time logs from your AI agents and services, with advanced filtering and search options.",
     "live": "Live",
-    "file": "logger file", 
+    "file": "logger file",
     "content": "log content",
     "copyAll": "Copy All ({{count}})"
   },
@@ -187,8 +213,9 @@
     "enabled": "Enable agent",
     "disable": "Disable agent",
     "favorite": "Add the agent to your favorites",
-    "unfavorite": "Remove the agent from your favorites"
-
+    "unfavorite": "Remove the agent from your favorites",
+    "manageAssets": "Manage Assets",
+    "manageCrew": "Manage Crew"
   },
   "dialogs": {
     "create": {
@@ -331,7 +358,7 @@
     "bulkRemoveFromLibrary": "Remove from library",
     "removedOneResource": "{{typeOne, capitalize}} removed from library.",
     "confirmRemoveTitle": "Remove from library?",
-    "confirmRemoveMessage": "Remove « {{doc}} » from « {{folder}} »?"
+    "confirmRemoveMessage": "Remove « {{res}} » from « {{folder}} »?"
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",
@@ -354,7 +381,11 @@
     "nowExcluded": "Now excluded"
   },
   "documentDrawerTable": {
-    "deleteFile": "Delete file"
+    "deleteFile": "Delete file",
+    "documentAlreadyAddedToast": {
+      "summary": "File(s) already staged for upload",
+      "detail": "Some files have already been added and are ignored as a result."
+    }
   },
   "documentActions": {
     "menuLabel": "Open document actions menu",
@@ -426,5 +457,12 @@
     "openSource": "Open source",
     "openAllInPreview": "Open all in preview",
     "openAllInPdfPreview": "Open all in PDF preview"
+  },
+  "pageError": {
+    "message": "Back to Home"
+  },
+  "unauthorized": {
+    "title": "Unauthorized",
+    "message": "You do not have the required permissions to access this page."
   }
 }

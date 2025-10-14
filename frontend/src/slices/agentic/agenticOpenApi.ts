@@ -19,6 +19,35 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/agents/${queryArg.name}`, method: "DELETE" }),
     }),
+    listRuntimeSourceKeysAgenticV1AgentsSourceKeysGet: build.query<
+      ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiResponse,
+      ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/agents/source/keys` }),
+    }),
+    runtimeSourceByObjectAgenticV1AgentsSourceByObjectGet: build.query<
+      RuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetApiResponse,
+      RuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/source/by-object`,
+        params: {
+          key: queryArg.key,
+        },
+      }),
+    }),
+    runtimeSourceByModuleAgenticV1AgentsSourceByModuleGet: build.query<
+      RuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetApiResponse,
+      RuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/source/by-module`,
+        params: {
+          module: queryArg["module"],
+          qualname: queryArg.qualname,
+        },
+      }),
+    }),
     echoSchemaAgenticV1SchemasEchoPost: build.mutation<
       EchoSchemaAgenticV1SchemasEchoPostApiResponse,
       EchoSchemaAgenticV1SchemasEchoPostApiArg
@@ -30,6 +59,12 @@ const injectedRtkApi = api.injectEndpoints({
       GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiArg
     >({
       query: () => ({ url: `/agentic/v1/config/frontend_settings` }),
+    }),
+    getUserPermissionsAgenticV1ConfigPermissionsGet: build.query<
+      GetUserPermissionsAgenticV1ConfigPermissionsGetApiResponse,
+      GetUserPermissionsAgenticV1ConfigPermissionsGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/config/permissions` }),
     }),
     getAgenticFlowsAgenticV1ChatbotAgenticflowsGet: build.query<
       GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiResponse,
@@ -132,6 +167,19 @@ export type DeleteAgentAgenticV1AgentsNameDeleteApiResponse = /** status 200 Suc
 export type DeleteAgentAgenticV1AgentsNameDeleteApiArg = {
   name: string;
 };
+export type ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiResponse = /** status 200 Successful Response */ any;
+export type ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiArg = void;
+export type RuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetApiResponse =
+  /** status 200 Successful Response */ string;
+export type RuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetApiArg = {
+  key: string;
+};
+export type RuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetApiResponse =
+  /** status 200 Successful Response */ string;
+export type RuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetApiArg = {
+  module: string;
+  qualname?: string | null;
+};
 export type EchoSchemaAgenticV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ null;
 export type EchoSchemaAgenticV1SchemasEchoPostApiArg = {
   echoEnvelope: EchoEnvelope;
@@ -139,6 +187,8 @@ export type EchoSchemaAgenticV1SchemasEchoPostApiArg = {
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiResponse =
   /** status 200 Successful Response */ FrontendConfigDto;
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiArg = void;
+export type GetUserPermissionsAgenticV1ConfigPermissionsGetApiResponse = /** status 200 Successful Response */ string[];
+export type GetUserPermissionsAgenticV1ConfigPermissionsGetApiArg = void;
 export type GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiResponse = /** status 200 Successful Response */ (
   | ({
       type: "agent";
@@ -249,6 +299,7 @@ export type FieldSpec = {
   type:
     | "string"
     | "text"
+    | "text-multiline"
     | "number"
     | "integer"
     | "boolean"
@@ -270,6 +321,7 @@ export type FieldSpec = {
     | (
         | "string"
         | "text"
+        | "text-multiline"
         | "number"
         | "integer"
         | "boolean"
@@ -704,9 +756,17 @@ export const {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
   useDeleteAgentAgenticV1AgentsNameDeleteMutation,
+  useListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetQuery,
+  useLazyListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetQuery,
+  useRuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetQuery,
+  useLazyRuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetQuery,
+  useRuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetQuery,
+  useLazyRuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetQuery,
   useEchoSchemaAgenticV1SchemasEchoPostMutation,
   useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
   useLazyGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
+  useGetUserPermissionsAgenticV1ConfigPermissionsGetQuery,
+  useLazyGetUserPermissionsAgenticV1ConfigPermissionsGetQuery,
   useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,

@@ -36,7 +36,8 @@ from app.common.utils import parse_server_configuration
 from app.core.monitoring.monitoring_controller import MonitoringController
 from app.features.catalog.controller import CatalogController
 from app.features.content import report_controller
-from app.features.content.controller import ContentController
+from app.features.content.asset_controller import AssetController
+from app.features.content.content_controller import ContentController
 from app.features.ingestion.controller import IngestionController
 from app.features.kpi import logs_controller
 from app.features.kpi.kpi_controller import KPIController
@@ -129,6 +130,7 @@ def create_app() -> FastAPI:
     CatalogController(router)
     PullDocumentController(router, pull_document_service)
     ContentController(router)
+    AssetController(router)
     IngestionController(router)
     TabularController(router)
     # CodeSearchController(router)
@@ -147,6 +149,22 @@ def create_app() -> FastAPI:
     app.include_router(router)
     mcp_prefix = "/knowledge-flow/v1"
 
+    # mcp_agent_assets = FastApiMCP(
+    #     app,
+    #     name="Knowledge Flow Agent Assets MCP",
+    #     description=(
+    #         "CRUD interface for per-user and per agent assets (e.g., PPTX templates). "
+    #         "Use this MCP to manage binary assets scoped to specific agents and users. "
+    #         "Supports upload, retrieval (with Range), listing, and deletion of assets. "
+    #         "Ensures clear tenancy boundaries and authorization for secure asset management."
+    #     ),
+    #     include_tags=["Agent Assets"],
+    #     describe_all_responses=True,
+    #     describe_full_response_schema=True,
+    #     auth_config=AuthConfig(dependencies=[Depends(get_current_user)]),
+    # )
+    # mcp_agent_assets.mount_http(mount_path=f"{mcp_prefix}/mcp-assets")
+    logger.info(f"🔌 MCP Agent Assets mounted at {mcp_prefix}/mcp-agent-assets")
     mcp_reports = FastApiMCP(
         app,
         name="Knowledge Flow Reports MCP",

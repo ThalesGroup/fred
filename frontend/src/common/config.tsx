@@ -17,7 +17,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { createKeycloakInstance } from "../security/KeycloakService";
-import type { FrontendConfigDto, UserSecurity, FrontendFlags, Properties } from "../slices/agentic/agenticOpenApi";
+import { KeyCloakService } from "../security/KeycloakService.ts";
+import type { FrontendConfigDto, FrontendFlags, Properties, UserSecurity } from "../slices/agentic/agenticOpenApi";
 
 /** Final merged app config used by the UI. */
 export interface AppConfig {
@@ -27,6 +28,7 @@ export interface AppConfig {
   feature_flags: Record<string, boolean>;
   properties: Record<string, string>;
   user_auth: UserSecurity; // from OpenAPI types
+  permissions: string[];
 }
 
 export const FeatureFlagKey = {
@@ -79,6 +81,7 @@ export const loadConfig = async () => {
     feature_flags,
     properties,
     user_auth: settings.user_auth,
+    permissions: [],
   };
 
   // Initialize PKCE if enabled
@@ -102,3 +105,25 @@ export const isFeatureEnabled = (flag: FeatureFlagKeyType): boolean => !!getConf
 
 /** Properties helper */
 export const getProperty = (key: string): string => getConfig().properties?.[key];
+
+export const loadPermissions = async () => {
+  try {
+    const token = KeyCloakService.GetToken();
+    if (!token) throw new Error("No Keycloak token available");
+
+    const res = await fetch(`${getConfig().backend_url_api}/agentic/v1/config/permissions`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!res.ok) throw new Error(`Cannot load permissions: ${res.status} ${res.statusText}`);
+    const perms: string[] = await res.json();
+    if (config) config.permissions = perms;
+    return perms;
+  } catch (err) {
+    console.error("Failed to load user permissions:", err);
+    if (config) config.permissions = [];
+    return [];
+  }
+};

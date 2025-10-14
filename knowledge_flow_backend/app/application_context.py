@@ -62,6 +62,7 @@ from app.core.processors.output.vectorization_processor.semantic_splitter import
 from app.core.stores.catalog.base_catalog_store import BaseCatalogStore
 from app.core.stores.catalog.duckdb_catalog_store import DuckdbCatalogStore
 from app.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
+from app.core.stores.catalog.sql_catalog_store import SQLCatalogStore
 from app.core.stores.content.base_content_loader import BaseContentLoader
 from app.core.stores.content.base_content_store import BaseContentStore
 from app.core.stores.content.filesystem_content_loader import FileSystemContentLoader
@@ -417,11 +418,15 @@ class ApplicationContext:
         backend_type = config.type
 
         if isinstance(config, MinioStorageConfig):
-            bucket = f"{config.bucket_name}-documents"
-            return MinioStorageBackend(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=bucket, secure=config.secure)
+            document_bucket = f"{config.bucket_name}-documents"
+            object_bucket = f"{config.bucket_name}-objects"
+            return MinioStorageBackend(
+                endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, document_bucket=document_bucket, object_bucket=object_bucket, secure=config.secure
+            )
         elif isinstance(config, LocalContentStorageConfig):
-            root = Path(config.root_path).expanduser() / "documents"
-            return FileSystemContentStore(Path(root).expanduser())
+            document_root = Path(config.root_path).expanduser() / "documents"
+            object_root = Path(config.root_path).expanduser() / "objects"
+            return FileSystemContentStore(document_root=document_root, object_root=object_root)
         else:
             raise ValueError(f"Unsupported storage backend: {backend_type}")
 
@@ -717,6 +722,9 @@ class ApplicationContext:
         if isinstance(store_config, DuckdbStoreConfig):
             db_path = Path(store_config.duckdb_path).expanduser()
             self._catalog_store_instance = DuckdbCatalogStore(db_path)
+        elif isinstance(store_config, SQLStorageConfig):
+            db_path = Path(store_config.path or "").expanduser()
+            self._catalog_store_instance = SQLCatalogStore(driver=store_config.driver, db_path=db_path)
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
             password = opensearch_config.password

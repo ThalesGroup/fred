@@ -12,10 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import ChatIcon from "@mui/icons-material/Chat";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import GroupIcon from "@mui/icons-material/Group";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import {
   Avatar,
   Box,
+  Collapse,
   IconButton,
   List,
   ListItem,
@@ -26,20 +36,11 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import { useLocation, useNavigate } from "react-router-dom";
-import { Collapse } from "@mui/material";
-import AccountCircleIcon from "@mui/icons-material/AccountCircle";
-import ChatIcon from "@mui/icons-material/Chat";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import DarkModeIcon from "@mui/icons-material/DarkMode";
-import GroupIcon from "@mui/icons-material/Group";
-import LightModeIcon from "@mui/icons-material/LightMode";
-import MenuBookIcon from "@mui/icons-material/MenuBook";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation, useNavigate } from "react-router-dom";
 import { getProperty } from "../common/config.tsx";
+import { usePermissions } from "../security/usePermissions";
 import { ImageComponent } from "../utils/image.tsx";
 import { ApplicationContext } from "./ApplicationContextProvider.tsx";
 
@@ -47,7 +48,7 @@ type MenuItemCfg = {
   key: string;
   label: string;
   icon: React.ReactNode;
-  url?: string; // top-level items may navigate OR just expand
+  url?: string;
   canBeDisabled: boolean;
   tooltip: string;
   children?: MenuItemCfg[];
@@ -61,14 +62,19 @@ export default function SideBar({ darkMode, onThemeChange }) {
   const applicationContext = useContext(ApplicationContext);
   const smallScreen = useMediaQuery(theme.breakpoints.down("md"));
 
-  // Couleurs sobres à la manière du second fichier
+  const { can } = usePermissions();
+
   const sideBarBgColor = theme.palette.sidebar.background;
-
   const activeItemBgColor = theme.palette.sidebar.activeItem;
-
   const activeItemTextColor = theme.palette.primary.main;
-
   const hoverColor = theme.palette.sidebar.hoverColor;
+
+  // Here we set the "can" action to "create" since we want the viewer role not to see kpis and logs.
+  // We also can remove the read_only allowed action to the viewer; to: kpi, opensearch & logs in rbac.py in fred_core/security
+  // but for now we can leave it like that. 
+  const canReadKpis = can("kpi", "create");
+  const canReadOpenSearch = can("opensearch", "create");
+  const canReadLogs = can("logs", "create");
 
   const menuItems: MenuItemCfg[] = [
     {
@@ -79,33 +85,45 @@ export default function SideBar({ darkMode, onThemeChange }) {
       canBeDisabled: false,
       tooltip: t("sidebar.tooltip.chat"),
     },
-    {
-      key: "monitoring",
-      label: t("sidebar.monitoring"),
-      icon: <MonitorHeartIcon />,
-      // parent URL is optional; we’ll expand/collapse instead of navigating
-      canBeDisabled: false,
-      tooltip: t("sidebar.tooltip.monitoring"),
-      children: [
-        {
-          key: "monitoring-kpi",
-          label: t("sidebar.monitoring_kpi") || "KPI",
-          icon: <MonitorHeartIcon />,
-          url: `/monitoring/kpis`,
-          canBeDisabled: false,
-          tooltip: t("sidebar.tooltip.monitoring_kpi") || "KPI Overview",
-        },
-        {
-          key: "monitoring-logs",
-          label: t("sidebar.monitoring_logs") || "Logs",
-          icon: <MenuBookIcon />, // pick a terminal/article icon if you prefer
-          url: `/monitoring/logs`,
-          canBeDisabled: false,
-          tooltip: t("sidebar.tooltip.monitoring_logs") || "Log Console",
-        },
-      ],
-    },
-    {
+
+    // Only show monitoring if user has permission
+    ...(canReadKpis || canReadOpenSearch || canReadLogs
+      ? [
+          {
+            key: "monitoring",
+            label: t("sidebar.monitoring"),
+            icon: <MonitorHeartIcon />,
+            canBeDisabled: false,
+            tooltip: t("sidebar.tooltip.monitoring"),
+            children: [
+              ...(canReadKpis
+                ? [
+                    {
+                      key: "monitoring-kpi",
+                      label: t("sidebar.monitoring_kpi") || "KPI",
+                      icon: <MonitorHeartIcon />,
+                      url: `/monitoring/kpis`,
+                      canBeDisabled: false,
+                      tooltip: t("sidebar.tooltip.monitoring_kpi") || "KPI Overview",
+                    },
+                  ]
+                : []),
+              ...(canReadOpenSearch || canReadLogs
+                ? [
+                    {
+                      key: "monitoring-logs",
+                      label: t("sidebar.monitoring_logs") || "Logs",
+                      icon: <MenuBookIcon />,
+                      url: `/monitoring/logs`,
+                      canBeDisabled: false,
+                      tooltip: t("sidebar.tooltip.monitoring_logs") || "Log Console",
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]
+      : []),    {
       key: "knowledge",
       label: t("sidebar.knowledge"),
       icon: <MenuBookIcon />,
@@ -130,23 +148,20 @@ export default function SideBar({ darkMode, onThemeChange }) {
       tooltip: t("sidebar.tooltip.account"),
     },
   ];
+
   const { isSidebarCollapsed, toggleSidebar } = applicationContext;
   const isSidebarSmall = smallScreen || isSidebarCollapsed;
   const sidebarWidth = isSidebarCollapsed ? theme.layout.sidebarCollapsedWidth : theme.layout.sidebarWidth;
 
-  // Helper function to check if the current path matches the menu item path
   const isActive = (path: string) => {
     const menuPathBase = path.split("?")[0];
     const currentPathBase = location.pathname;
-
     return currentPathBase === menuPathBase || currentPathBase.startsWith(menuPathBase + "/");
   };
   const isAnyChildActive = (children?: MenuItemCfg[]) => !!children?.some((c) => c.url && isActive(c.url));
 
-  // NEW: open/close state for expandable parents (key → boolean)
   const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
 
-  // Auto-expand a parent if a child is active (keeps fresh on navigation)
   useEffect(() => {
     setOpenKeys((prev) => {
       const next = { ...prev };
@@ -157,8 +172,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
       }
       return next;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]);
+  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const logoName = getProperty("logoName") || "fred";
 
@@ -167,8 +181,8 @@ export default function SideBar({ darkMode, onThemeChange }) {
       height="100vh"
       width={sidebarWidth}
       sx={{
-        flex: `0 0 ${sidebarWidth}px`, // ← fixed flex-basis
-        minWidth: sidebarWidth, // ← safety
+        flex: `0 0 ${sidebarWidth}px`,
+        minWidth: sidebarWidth,
         bgcolor: sideBarBgColor,
         color: "text.primary",
         borderRight: `1px solid ${theme.palette.divider}`,
@@ -189,7 +203,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          height: 62, 
+          height: 62,
           py: 0.0,
           px: isSidebarSmall ? 1 : 2,
           borderBottom: `1px solid ${theme.palette.divider}`,
@@ -225,12 +239,9 @@ export default function SideBar({ darkMode, onThemeChange }) {
             border: `1px solid ${theme.palette.divider}`,
             width: 28,
             height: 28,
-            "&:hover": {
-              backgroundColor: hoverColor,
-            },
+            "&:hover": { backgroundColor: hoverColor },
           }}
         >
-          {/* Change icon based on state */}
           {isSidebarCollapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
         </IconButton>
       </Box>
@@ -249,13 +260,14 @@ export default function SideBar({ darkMode, onThemeChange }) {
           const active = item.url ? isActive(item.url) : isAnyChildActive(item.children);
           const opened = !!openKeys[item.key];
 
-          // collapsed sidebar: show only top icons, no children
           if (isSidebarSmall) {
             return (
               <Tooltip key={item.key} title={item.tooltip} placement="right" arrow>
                 <ListItem
                   component="div"
-                  onClick={() => (item.url ? navigate(item.url) : setOpenKeys((s) => ({ ...s, [item.key]: !opened })))}
+                  onClick={() =>
+                    item.url ? navigate(item.url) : setOpenKeys((s) => ({ ...s, [item.key]: !opened }))
+                  }
                   sx={{
                     borderRadius: "8px",
                     mb: 0.8,
@@ -280,7 +292,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
             );
           }
 
-          // expanded sidebar: render parent + (optional) children
           return (
             <Box key={item.key}>
               <Tooltip title={item.tooltip} placement="right" arrow>
@@ -310,7 +321,9 @@ export default function SideBar({ darkMode, onThemeChange }) {
                     cursor: "pointer",
                   }}
                 >
-                  <ListItemIcon sx={{ color: "inherit", minWidth: 40, fontSize: "1.2rem" }}>{item.icon}</ListItemIcon>
+                  <ListItemIcon sx={{ color: "inherit", minWidth: 40, fontSize: "1.2rem" }}>
+                    {item.icon}
+                  </ListItemIcon>
                   <ListItemText
                     primary={
                       <Typography variant="sidebar" fontWeight={active ? 500 : 300}>
@@ -379,7 +392,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
         })}
       </List>
 
-      {/* Pied de page */}
       <Box
         sx={{
           display: "flex",
@@ -390,7 +402,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
           borderTop: `1px solid ${theme.palette.divider}`,
         }}
       >
-        {/* Commutateur de thème */}
         <Box
           sx={{
             display: "flex",
@@ -407,12 +418,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
           <IconButton
             size="small"
             onClick={onThemeChange}
-            sx={{
-              p: 1,
-              "&:hover": {
-                backgroundColor: hoverColor,
-              },
-            }}
+            sx={{ p: 1, "&:hover": { backgroundColor: hoverColor } }}
           >
             {darkMode ? (
               <LightModeIcon sx={{ fontSize: "1rem", color: "text.secondary" }} />
@@ -422,34 +428,31 @@ export default function SideBar({ darkMode, onThemeChange }) {
           </IconButton>
         </Box>
 
-        {/* Liens externes */}
         {!isSidebarSmall && (
-          <>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                py: 1,
-                px: 2,
-                mt: 1,
-                width: "90%",
-                borderRadius: 1,
-              }}
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              py: 1,
+              px: 2,
+              mt: 1,
+              width: "90%",
+              borderRadius: 1,
+            }}
+          >
+            <Typography variant="caption" color="text.secondary">
+              Website
+            </Typography>
+            <IconButton
+              color="inherit"
+              size="small"
+              onClick={() => window.open("https://fredk8.dev", "_blank", "noopener,noreferrer")}
+              sx={{ p: 0.3 }}
             >
-              <Typography variant="caption" color="text.secondary">
-                Website
-              </Typography>
-              <IconButton
-                color="inherit"
-                size="small"
-                onClick={() => window.open("https://fredk8.dev", "_blank", "noopener,noreferrer")}
-                sx={{ p: 0.3 }}
-              >
-                <OpenInNewIcon sx={{ fontSize: "0.8rem", color: "text.secondary" }} />
-              </IconButton>
-            </Box>
-          </>
+              <OpenInNewIcon sx={{ fontSize: "0.8rem", color: "text.secondary" }} />
+            </IconButton>
+          </Box>
         )}
       </Box>
     </Box>

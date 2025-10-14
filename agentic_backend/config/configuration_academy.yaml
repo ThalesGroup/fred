@@ -1,0 +1,140 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+app:
+  name: "Agentic Backend"
+  base_url: "/agentic/v1"
+  address: "127.0.0.1"
+  port: 8000
+  log_level: "info"
+  reload: false
+  reload_dir: "."
+security:
+  m2m:
+    enabled: false
+    client_id: "agentic"
+    realm_url: "http://app-keycloak:8080/realms/app"
+  user:
+    enabled: false
+    client_id: "app"
+    realm_url: "http://app-keycloak:8080/realms/app"
+  authorized_origins:
+    - "http://localhost:5173"
+frontend_settings:
+  feature_flags:
+    # If true activate the backend and frontend modules in charge of K8
+    # and frugality monitoring
+    enableK8Features: false
+    # If true activate support for an electronic warfare demonstration
+    enableElecWarfare: false
+  properties:
+    logoName: "fred"
+    siteDisplayName: "Fred Academy"
+ai:
+  knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
+  # Timeout settings for the client
+  timeout:
+    connect: 5 # Time to wait for a connection in seconds
+    read: 15 # Time to wait for a response in seconds
+  default_chat_model:
+    # Required in .env:
+    # - OPENAI_API_KEY
+    provider: "openai"
+    name: "gpt-4o"
+    settings:
+      temperature: 0.0
+      max_retries: 2
+      request_timeout: 30
+  recursion:
+    recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
+  agents:
+    - name: "Echo"
+      type: "agent"
+      role: "Academy sample echo agent"
+      description: >
+        An agent that echoes back user input, demonstrating basic agent functionality.
+      class_path: "app.academy.00-echo.echo.Echo"
+      enabled: true
+      tags: ["academy"]
+      chat_model: {}
+    - name: "Responder"
+      type: "agent"
+      role: "Academy sample echo agent"
+      description: >
+        An agent that responds to user input using a language model.
+      class_path: "app.academy.01-llm-responder.llm-responder.Responder"
+      enabled: true
+      tags: ["academy"]
+      chat_model: {}
+    - name: "DualModelResponder"
+      type: "agent"
+      role: "Academy sample dual model responder"
+      description: >
+        An agent that uses a dual model approach to respond to user input.
+      class_path: "app.academy.02-dual-model-responder.dual-model-responder.DualModelResponder"
+      enabled: true
+      tags: ["academy"]
+      chat_model: {}
+    - name: "AssetResponder"
+      type: "agent"
+      role: "Academy sample asset responder"
+      description: >
+        An agent that responds to user input using a predefined set of assets.
+      class_path: "app.academy.03_asset_responder.asset_responder.AssetResponder"
+      enabled: true
+      tags: ["academy"]
+      chat_model: {}
+    - name: "SlideMaker"
+      type: "agent"
+      role: "Academy sample slide maker"
+      description: >
+        An agent that creates presentation slides based on user input.
+      class_path: "app.academy.04_slide_maker.slide_maker.SlideMaker"
+      enabled: true
+      tags: ["academy"]
+      chat_model: {}
+    - name: "GpsAgent"
+      type: "agent"
+      role: "Academy sample GPS agent"
+      description: >
+        An agent that provides GPS-related information and assistance.
+      class_path: "app.academy.05_gps_agent.gps_agent.GpsAgent"
+      enabled: true
+      tags: ["academy"]
+      chat_model: {}
+
+storage:
+  postgres:
+    host: localhost
+    port: 5432
+    database: fred
+    username: admin
+  opensearch:
+    host: https://localhost:9200
+    secure: true
+    verify_certs: false
+    username: admin
+  feedback_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/agentic/feedback.duckdb"
+  agent_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/agentic/agent.duckdb"
+  session_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/agentic/session.duckdb"
+  history_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/agentic/history.duckdb"
+  kpi_store:
+    type: "log"
+    level: "INFO"

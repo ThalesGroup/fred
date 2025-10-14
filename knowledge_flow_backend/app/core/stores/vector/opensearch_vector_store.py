@@ -138,35 +138,158 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             raise RuntimeError("Failed to delete vectors from OpenSearch.")
 
     # ---------- BaseVectorStore: ANN (semantic) ----------
+    def _supports_knn_filter(self) -> bool:
+        """Detect if OpenSearch supports knn.filter (>=2.19). Cached after first check."""
+        if hasattr(self, "_knn_filter_supported"):
+            return self._knn_filter_supported
+
+        try:
+            info = self._client.info()
+            version = info.get("version", {}).get("number", "")
+            major, minor, *_ = (int(x) for x in version.split("."))
+            self._knn_filter_supported = (major, minor) >= (2, 19)
+        except Exception:
+            logger.warning("⚠️ Could not determine OpenSearch version; assuming no knn.filter support.")
+            self._knn_filter_supported = False
+
+        return self._knn_filter_supported
 
     # --- ann_search: keep passing the list directly to boolean_filter ---
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:
         """
-        ANN (semantic) search honoring library/document filters.
-        Returns hydrated Documents with cosine similarity scores.
+        ANN (semantic) search compatible with OpenSearch 2.18 and 2.19+.
+        Tries native knn.filter (2.19+) → falls back to bool+knn (2.18) → LangChain wrapper.
         """
-        filters = self._to_filter_clause(search_filter)  # now List[Dict] | None
-        kwargs: Dict = {"boolean_filter": filters} if filters else {}
 
-        pairs = self._lc.similarity_search_with_score(query, k=k, **kwargs)
-
-        hits: List[AnnHit] = []
-        model_name = self._embedding_model_name or "unknown"
+        filters = self._to_filter_clause(search_filter)
         now_iso = datetime.now(timezone.utc).isoformat()
+        model_name = self._embedding_model_name or "unknown"
 
+        # ---- helpers ----------------------------------------------------------
+
+        def _build_ann_hits(hits_data: list) -> List[AnnHit]:
+            """Normalize OpenSearch hit results into AnnHit list."""
+            results: List[AnnHit] = []
+            for rank, h in enumerate(hits_data, start=1):
+                src = h.get("_source", {})
+                meta = src.get("metadata", {})
+                text = src.get("text", "")
+                cid = meta.get(CHUNK_ID_FIELD) or h.get("_id")
+                doc = Document(
+                    page_content=text,
+                    metadata={
+                        **meta,
+                        CHUNK_ID_FIELD: cid,
+                        "score": float(h.get("_score", 0.0)),
+                        "rank": rank,
+                        "retrieved_at": now_iso,
+                        "embedding_model": model_name,
+                        "vector_index": self._index,
+                        "token_count": len(text.split()),
+                    },
+                )
+                results.append(AnnHit(document=doc, score=float(h.get("_score", 0.0))))
+            return results
+
+        def _try_os_query(body: dict, label: str) -> Optional[List[AnnHit]]:
+            """Run a raw OpenSearch query. Returns hits or None if it failed."""
+            try:
+                res = self._client.search(index=self._index, body=body)
+                hits_data = res.get("hits", {}).get("hits", [])
+                logger.info("✅ ANN search (%s) returned %d hits", label, len(hits_data))
+                return _build_ann_hits(hits_data)
+            except Exception as e:
+                logger.debug("⚠️ %s query failed: %s", label, e)
+                return None
+
+        # ---- step 1: embed query ---------------------------------------------
+
+        try:
+            vector = self._embedding_model.embed_query(query)
+        except Exception as e:
+            logger.exception("❌ Failed to compute embedding.")
+            raise RuntimeError("Embedding model failed.") from e
+
+        # ---- step 2: native knn.filter (2.19+) -------------------------------
+
+        if self._supports_knn_filter():
+            knn_body = {
+                "size": k,
+                "query": {"knn": {"vector_field": {"vector": vector, "k": k}}},
+                "_source": True,
+            }
+            if filters:
+                knn_body["query"]["knn"]["vector_field"]["filter"] = {"bool": {"filter": filters}}
+            hits = _try_os_query(knn_body, "native knn.filter")
+            if hits is not None:
+                return hits
+        else:
+            logger.debug("ℹ️ knn.filter not supported on this OpenSearch version — using bool+knn fallback.")
+
+        # ---- step 3: bool + knn fallback (2.18 and below) --------------------
+
+        bool_knn_body = {
+            "size": k,
+            "query": {
+                "bool": {
+                    "filter": filters or [],
+                    "must": [{"knn": {"vector_field": {"vector": vector, "k": k}}}],
+                }
+            },
+            "_source": True,
+        }
+
+        hits = _try_os_query(bool_knn_body, "bool+knn fallback")
+        if hits is not None:
+            return hits
+
+        # ---- step 4: LangChain fallback --------------------------------------
+
+        try:
+            # No filters → simple call
+            if not filters:
+                pairs = self._lc.similarity_search_with_score(query, k=k)
+            else:
+                in_query_filter = {"bool": {"filter": filters}}
+
+                # Try known filter argument names in order
+                for attempt in ("efficient_filter", "filter", "boolean_filter"):
+                    try:
+                        if attempt == "efficient_filter":
+                            pairs = self._lc.similarity_search_with_score(query, k=k, efficient_filter=in_query_filter)
+                        elif attempt == "filter":
+                            pairs = self._lc.similarity_search_with_score(query, k=k, filter=in_query_filter)
+                        else:  # boolean_filter
+                            pairs = self._lc.similarity_search_with_score(query, k=k, boolean_filter=filters)
+                        break  # success → exit loop
+                    except TypeError:
+                        continue
+                else:
+                    # No argument worked
+                    raise TypeError("No compatible filter argument found in LangChain OpenSearchVectorSearch.")
+        except Exception:
+            logger.exception("❌ LangChain ANN search failed.")
+            raise RuntimeError("All ANN search modes failed.")
+
+        # normalize LC results
+        results: List[AnnHit] = []
         for rank, (doc, score) in enumerate(pairs, start=1):
             cid = doc.metadata.get(CHUNK_ID_FIELD) or doc.metadata.get("_id")
-            if cid and CHUNK_ID_FIELD not in doc.metadata:
-                doc.metadata[CHUNK_ID_FIELD] = cid
-            doc.metadata["score"] = score
-            doc.metadata["rank"] = rank
-            doc.metadata["retrieved_at"] = now_iso
-            doc.metadata.setdefault("embedding_model", model_name)
-            doc.metadata.setdefault("vector_index", self._index)
-            doc.metadata.setdefault("token_count", len((doc.page_content or "").split()))
-            hits.append(AnnHit(document=doc, score=float(score)))
+            doc.metadata.update(
+                {
+                    CHUNK_ID_FIELD: cid,
+                    "score": float(score),
+                    "rank": rank,
+                    "retrieved_at": now_iso,
+                    "embedding_model": model_name,
+                    "vector_index": self._index,
+                    "token_count": len((doc.page_content or "").split()),
+                }
+            )
+            results.append(AnnHit(document=doc, score=float(score)))
 
-        return hits
+        logger.info("✅ ANN search (LangChain fallback) returned %d hits", len(results))
+        return results
 
     # ---------- LexicalSearchable capability ----------
 

@@ -18,6 +18,7 @@ from app.agents.leader.structures.plan import Plan
 from app.agents.leader.structures.state import State
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from app.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 
@@ -136,9 +137,10 @@ class ExpertProfile:
 # ========
 # Leader
 # ========
-class LegacyOrchestrator(AgentFlow):
+@expose_runtime_source("agent.Appollo")
+class Appollo(AgentFlow):
     """
-    This is the legacy 'Fred' leader. Why legac ? because we are introducing a new version soon
+    This is the legacy fred leader. Why legacy? because we are introducing a new version soon
     that will be much more effective. COnsider this class as a useful example
     Fred = plan → supervise → execute → validate → respond, with expert routing.
 

@@ -73,7 +73,10 @@ def _assert_has_metadata_keys(doc: Document) -> None:
 def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
     """
     Build the 'where' filter for Chroma.
-    Chroma only accepts primitive types (string, number), so we encode lists as JSON strings
+    Supports:
+      - Multiple tag_ids
+      - Multiple metadata fields
+    Chroma only accepts primitive types (string, number), so lists are JSON-encoded
     exactly as stored via `sanitize_metadata`.
     """
     if not search_filter:
@@ -81,13 +84,14 @@ def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
 
     where: Dict[str, Dict] = {}
 
-    # Encode tag_ids to match stored JSON strings
+    # ---- Tag IDs ----
     if search_filter.tag_ids:
+        # Each tag is stored as a JSON array string
         tag_values = [json.dumps([t]) for t in search_filter.tag_ids]
         where["tag_ids"] = {"$in": tag_values}
 
-    # Encode metadata_terms
-    for k, values in (search_filter.metadata_terms or {}).items():
+    # ---- Metadata terms ----
+    for field, values in (search_filter.metadata_terms or {}).items():
         encoded_values: List[Any] = []
         for v in values:
             if isinstance(v, list):
@@ -95,7 +99,7 @@ def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
                 encoded_values.append(json.dumps(v))
             else:
                 encoded_values.append(v)
-        where[k] = {"$in": encoded_values}
+        where[field] = {"$in": encoded_values}
 
     return where or None
 
@@ -217,18 +221,24 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
     ) -> List[AnnHit]:
         """
         Perform semantic (ANN) search with optional filtering.
+        Supports multiple tag_ids and metadata_terms like an OpenSearch efficient_filter.
         Restores metadata lists (tag_ids, etc.) for compatibility with Pydantic.
         """
+        # ---- Build the Chroma 'where' filter ----
         where = _build_where(search_filter)
-        qvec = self.embeddings.embed_query(query)
+
+        # ---- Embed query ----
+        query_vector = self.embeddings.embed_query(query)
+
+        # ---- Query Chroma ----
         res = self._collection.query(
-            query_embeddings=[qvec],
+            query_embeddings=[query_vector],
             n_results=k,
             where=where,
             include=["distances", "documents", "metadatas"],
         )
 
-        # Chroma returns lists per query; we only have one query
+        # ---- Extract results ----
         docs = (res.get("documents") or [[]])[0]
         metas = (res.get("metadatas") or [[]])[0]
         dists = (res.get("distances") or [[]])[0]
@@ -236,8 +246,6 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         hits: List[AnnHit] = []
         for text, meta, dist in zip(docs, metas, dists):
             meta = meta or {}
-
-            # Restore any sanitized lists (including tag_ids)
             restored_meta = restore_metadata(meta)
 
             # Ensure tag_ids is always a list
