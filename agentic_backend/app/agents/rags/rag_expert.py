@@ -17,13 +17,13 @@ from app.common.rags_utils import (
 )
 from app.common.structures import AgentChatOptions
 from app.common.vector_search_client import VectorSearchClient
-from app.core.agents.agent_controller import expose_runtime_source
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from app.core.agents.runtime_context import (
     get_document_library_tags_ids,
     get_search_policy,
 )
+from app.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 

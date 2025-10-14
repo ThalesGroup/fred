@@ -28,6 +28,7 @@ from app.common.structures import Agent, AgentSettings, MCPServerConfiguration
 from app.common.utils import log_exception
 from app.core.agents.agent_manager import AgentManager
 from app.core.agents.agent_service import AgentAlreadyExistsException, AgentService
+from app.core.runtime_source import get_runtime_source_registry
 
 
 def get_agent_manager(request: Request) -> AgentManager:
@@ -43,24 +44,6 @@ def handle_exception(e: Exception) -> HTTPException | Exception:
             status_code=502, detail=f"MCP connection failed: {e.reason}"
         )
     return e
-
-
-_RUNTIME_SOURCE_REGISTRY: dict[str, object] = {}
-
-
-def expose_runtime_source(key: str):
-    """
-    FRED: Decorator for agents/components to opt-in their source exposure.
-    Usage (in any module):
-        @expose_runtime_source("slide_maker.fill_placeholder")
-        def fill_placeholder(...): ...
-    """
-
-    def _wrap(obj):
-        _RUNTIME_SOURCE_REGISTRY[key] = obj
-        return obj
-
-    return _wrap
 
 
 @dataclass
@@ -174,7 +157,8 @@ async def list_runtime_source_keys(
     user: KeycloakUser = Depends(get_current_user),
 ):
     # FRED: Simple discoverability for the UI (Monaco picker, etc.)
-    return {"keys": sorted(_RUNTIME_SOURCE_REGISTRY.keys())}
+    # 👇 CHANGE: Use the getter function
+    return {"keys": sorted(get_runtime_source_registry().keys())}
 
 
 @router.get(
@@ -187,7 +171,8 @@ async def runtime_source_by_object(
     user: KeycloakUser = Depends(get_current_user),
 ):
     # FRED: Prefer this path — explicit allowlist.
-    obj = _RUNTIME_SOURCE_REGISTRY.get(key)
+    # 👇 CHANGE: Access the registry via the getter function
+    obj = get_runtime_source_registry().get(key)
     if obj is None:
         raise HTTPException(status_code=404, detail="Unknown registry key")
     blob = _sourcelines(obj)

@@ -30,9 +30,9 @@ from langchain_core.runnables import Runnable
 from langgraph.graph import END, START, StateGraph
 
 from app.common.structures import ModelConfiguration
-from app.core.agents.agent_controller import expose_runtime_source
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from app.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 

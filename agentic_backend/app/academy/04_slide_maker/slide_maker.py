@@ -23,10 +23,10 @@ from pptx.util import Pt
 from typing_extensions import Annotated
 
 from app.common.kf_agent_asset_client import AssetRetrievalError
-from app.core.agents.agent_controller import expose_runtime_source
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from app.core.chatbot.chat_schema import LinkKind, LinkPart, MessagePart, TextPart
+from app.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 

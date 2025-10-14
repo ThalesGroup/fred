@@ -28,9 +28,9 @@ import logging
 from fred_core import get_model
 from langgraph.graph import END, START, MessagesState, StateGraph
 
-from app.core.agents.agent_controller import expose_runtime_source
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from app.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 

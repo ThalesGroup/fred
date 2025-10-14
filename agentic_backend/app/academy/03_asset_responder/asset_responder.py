@@ -25,10 +25,11 @@ from fred_core import get_model
 from langchain_core.messages import AIMessage, AnyMessage
 from langgraph.graph import END, START, StateGraph
 
-# Import Fred base classes and types
-from app.core.agents.agent_controller import expose_runtime_source
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+
+# Import Fred base classes and types
+from app.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 
