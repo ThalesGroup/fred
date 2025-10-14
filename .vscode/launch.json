@@ -62,7 +62,7 @@
       "justMyCode": false,
       "console": "integratedTerminal"
     },
-        {
+    {
       "name": "Debug Agentic Academy",
       "type": "debugpy",
       "request": "launch",

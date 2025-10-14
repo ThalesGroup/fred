@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import AttachFileIcon from "@mui/icons-material/AttachFile";
+import CodeIcon from "@mui/icons-material/Code";
 import DeleteIcon from "@mui/icons-material/Delete";
 import GroupIcon from "@mui/icons-material/Group"; // for crew
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import PowerOffIcon from "@mui/icons-material/PowerOff"; // for disable
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import StarIcon from "@mui/icons-material/Star";
+
 import StarOutlineIcon from "@mui/icons-material/StarOutline";
 import TuneIcon from "@mui/icons-material/Tune";
 import { Box, Card, CardContent, Chip, IconButton, Stack, Tooltip, Typography, useTheme } from "@mui/material";
@@ -37,6 +39,7 @@ type AgentCardProps = {
   onManageCrew?: (leader: Leader & { type: "leader" }) => void; // only visible for leaders
   onDelete?: (agent: AnyAgent) => void;
   onManageAssets?: (agent: AnyAgent) => void;
+  onInspectCode?: (agent: AnyAgent) => void;
 };
 
 /**
@@ -56,10 +59,10 @@ export const AgentCard = ({
   onManageCrew,
   onDelete,
   onManageAssets,
+  onInspectCode,
 }: AgentCardProps) => {
   const { t } = useTranslation();
   const theme = useTheme();
-
   const tags = agent.tags ?? [];
   const tagLabel = tags.join(", ");
 
@@ -189,7 +192,7 @@ export const AgentCard = ({
             </Tooltip>
           )}
           {onManageAssets && (
-            <Tooltip title={t("agentCard.manageAssets", "Manage Assets (Templates)")}>
+            <Tooltip title={t("agentCard.manageAssets")}>
               <IconButton
                 size="small"
                 onClick={() => onManageAssets(agent)}
@@ -209,6 +212,19 @@ export const AgentCard = ({
                 aria-label="edit agent"
               >
                 <TuneIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {onInspectCode && (
+            <Tooltip title={t("agentCard.inspectCode", "Inspect Source Code")}>
+              <IconButton
+                size="small"
+                // This calls the handler provided by the parent (AgentHub)
+                onClick={() => onInspectCode(agent)}
+                sx={{ color: "text.secondary" }}
+                aria-label="inspect agent source code"
+              >
+                <CodeIcon fontSize="small" /> {/* 👈 Uses the imported icon */}
               </IconButton>
             </Tooltip>
           )}

@@ -28,6 +28,7 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from app.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ TUNING = AgentTuning(
 )
 
 
+@expose_runtime_source("agent.Responder")
 class Responder(AgentFlow):
     tuning = TUNING
 

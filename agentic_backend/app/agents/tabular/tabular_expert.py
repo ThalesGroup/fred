@@ -18,6 +18,7 @@ from app.common.resilient_tool_node import make_resilient_tools_node
 from app.common.structures import AgentSettings
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from app.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ TABULAR_TUNING = AgentTuning(
             type="prompt",
             title="System Prompt",
             description=(
-                "TabularExpert’s operating instructions: list datasets, inspect schema, "
+                "Tessa’s operating instructions: list datasets, inspect schema, "
                 "formulate and run queries, and answer from actual results."
             ),
             required=True,
@@ -57,9 +58,10 @@ TABULAR_TUNING = AgentTuning(
 )
 
 
-class TabularExpert(AgentFlow):
+@expose_runtime_source("agent.Tessa")
+class Tessa(AgentFlow):
     """
-    TabularExpert — searches and analyzes tabular documents via MCP tools (CSV, Excel, DB exports).
+    Tessa — searches and analyzes tabular documents via MCP tools (CSV, Excel, DB exports).
     Pattern alignment with AgentFlow:
     - Class-level `tuning` (spec only; values are provided by YAML/DB/UI).
     - async_init(): set model, init MCP, bind tools, build graph.
@@ -107,7 +109,7 @@ class TabularExpert(AgentFlow):
     def _build_graph(self) -> StateGraph:
         if self.mcp.toolkit is None:
             raise RuntimeError(
-                "TabularExpert: toolkit must be initialized before building the graph."
+                "Tessa: toolkit must be initialized before building the graph."
             )
 
         builder = StateGraph(MessagesState)
@@ -138,7 +140,7 @@ class TabularExpert(AgentFlow):
     async def _run_reasoning_step(self, state: MessagesState):
         if self.model is None:
             raise RuntimeError(
-                "TabularExpert: model is not initialized. Call async_init() first."
+                "Tessa: model is not initialized. Call async_init() first."
             )
 
         # 1) Build the system prompt from tuning (tokens like {today} resolved safely)
@@ -178,7 +180,7 @@ class TabularExpert(AgentFlow):
             return {"messages": [response]}
 
         except Exception:
-            logger.exception("TabularExpert failed during reasoning.")
+            logger.exception("Tessa failed during reasoning.")
             fallback = await self.model.ainvoke(
                 [
                     HumanMessage(
