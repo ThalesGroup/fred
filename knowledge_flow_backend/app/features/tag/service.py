@@ -278,6 +278,17 @@ class TagService:
                 )
             )
 
+    @authorize(Action.READ, Resource.TAGS)
+    def get_tag_permissions_for_user(self, tag_id: str, user: KeycloakUser) -> list[TagPermission]:
+        """
+        Retrieve the list of permissions the user has on the given tag.
+        """
+        self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
+
+        tag_reference = RebacReference(type=Resource.TAGS, id=tag_id)
+        user_reference = RebacReference(type=Resource.USER, id=user.uid)
+        return [permission for permission in TagPermission if self.rebac.has_permission(user_reference, permission, tag_reference)]
+
     @authorize(Action.UPDATE, Resource.TAGS)
     def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:
         self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
