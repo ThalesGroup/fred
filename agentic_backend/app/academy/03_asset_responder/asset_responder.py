@@ -26,6 +26,7 @@ from langchain_core.messages import AIMessage, AnyMessage
 from langgraph.graph import END, START, StateGraph
 
 # Import Fred base classes and types
+from app.core.agents.agent_controller import expose_runtime_source
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
@@ -59,6 +60,7 @@ TUNING = AgentTuning(
 )
 
 
+@expose_runtime_source("agent.AssetResponder")
 class AssetResponder(AgentFlow):
     tuning = TUNING
     _graph: StateGraph | None = None
@@ -87,7 +89,7 @@ class AssetResponder(AgentFlow):
         # 1. Get the configured asset key from tuning
         asset_key = self.get_tuned_text("asset.key")
         # 2. Fetch the actual content of the asset (This is the core logic!)
-        asset_content = await self.fetch_asset_content(asset_key or DEFAULT_ASSET_KEY)
+        asset_content = await self.fetch_asset_text(asset_key or DEFAULT_ASSET_KEY)
         is_error = asset_content.startswith("[Asset Retrieval Error:")
 
         # 3. Fallback Logic

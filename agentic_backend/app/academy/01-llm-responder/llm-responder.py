@@ -26,6 +26,7 @@ from fred_core import get_model  # <- adjust to your codebase
 from langchain_core.messages import AnyMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
+from app.core.agents.agent_controller import expose_runtime_source
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
@@ -48,6 +49,7 @@ TUNING = AgentTuning(
 )
 
 
+@expose_runtime_source("agent.Responder")
 class Responder(AgentFlow):
     tuning = TUNING
 

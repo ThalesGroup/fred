@@ -31,6 +31,7 @@ from langchain_core.messages import AIMessage  # "assistant" message object
 from langgraph.graph import END, START, MessagesState, StateGraph
 
 # Fred base types
+from app.core.agents.agent_controller import expose_runtime_source
 from app.core.agents.agent_flow import (
     AgentFlow,  # ⬅️ The base class all Fred agents extend
 )
@@ -60,6 +61,7 @@ TUNING: AgentTuning = AgentTuning(
 )
 
 
+@expose_runtime_source("agent.Echo")
 class Echo(AgentFlow):
     """
     Minimal AgentFlow:
