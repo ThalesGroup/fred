@@ -129,3 +129,12 @@ class TagController:
         )
         async def share_tag(tag_id: str, share_request: TagShareRequest, user: KeycloakUser = Depends(get_current_user)):
             self.service.share_tag_with_user(user, tag_id, share_request.target_user_id, share_request.relation)
+
+        @router.delete(
+            "/tags/{tag_id}/share/{target_user_id}",
+            status_code=status.HTTP_204_NO_CONTENT,
+            tags=["Tags"],
+            summary="Stop sharing a tag with a user",
+        )
+        async def unshare_tag(tag_id: str, target_user_id: str, user: KeycloakUser = Depends(get_current_user)):
+            self.service.unshare_tag_with_user(user, tag_id, target_user_id)

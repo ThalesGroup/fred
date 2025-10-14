@@ -263,6 +263,21 @@ class TagService:
             )
         )
 
+    def unshare_tag_with_user(self, user: KeycloakUser, tag_id: str, target_user_id: str) -> None:
+        """
+        Revoke tag access previously granted to another user.
+        Removes any user-tag relation regardless of the level originally assigned.
+        """
+        self.rebac.check_user_permission_or_raise(user, TagPermission.SHARE, tag_id)
+        for relation in UserTagRelation:
+            self.rebac.delete_relation(
+                Relation(
+                    subject=RebacReference(type=Resource.USER, id=target_user_id),
+                    relation=relation.to_relation(),
+                    resource=RebacReference(type=Resource.TAGS, id=tag_id),
+                )
+            )
+
     @authorize(Action.UPDATE, Resource.TAGS)
     def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:
         self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
