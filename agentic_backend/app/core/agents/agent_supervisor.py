@@ -23,7 +23,7 @@ from typing import Awaitable, Callable, Iterable
 # ❌ remove anyio.abc TaskGroup import; we won't accept a TG anymore
 # import anyio
 # from anyio.abc import TaskGroup
-from app.agents.leader.leader import LegacyOrchestrator
+from app.agents.leader.leader import Appollo
 from app.common.structures import Leader
 from app.core.agents.agent_flow import AgentFlow
 
@@ -110,7 +110,7 @@ class AgentSupervisor:
                 continue
 
             leader_instance = agents_by_name.get(leader_name)
-            if not isinstance(leader_instance, LegacyOrchestrator):
+            if not isinstance(leader_instance, Appollo):
                 continue
 
             # Reset experts before injecting the new crew

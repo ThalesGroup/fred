@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 FieldType = Literal[
     "string",
     "text",
+    "text-multiline",
     "number",
     "integer",
     "boolean",

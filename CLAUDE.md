@@ -50,9 +50,9 @@ Fred is a production-ready multi-agent AI platform with three main components:
 **Core Framework**: LangGraph with specialized expert agents coordinated by a Leader agent.
 
 **Key Agents**:
-- `GeneralistExpert` - General-purpose reasoning and coordination
+- `Georges` - General-purpose reasoning and coordination
 - `DocumentsExpert` - Document analysis via MCP server (knowledge-flow backend)  
-- `TabularExpert` - Data analysis via MCP server (knowledge-flow backend)
+- `Tessa` - Data analysis via MCP server (knowledge-flow backend)
 - `RagsExpert` - RAG-based document search and retrieval
 - `MonitoringExpert` - System observability and metrics
 - `JiraExpert` - Jira integration (via MCP server)

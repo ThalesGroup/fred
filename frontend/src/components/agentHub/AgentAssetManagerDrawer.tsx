@@ -15,31 +15,32 @@
 import CloseIcon from "@mui/icons-material/Close";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import DeleteIcon from "@mui/icons-material/Delete";
+import FilePresentIcon from "@mui/icons-material/FilePresent"; // New icon for file list
+import UploadIcon from "@mui/icons-material/Upload";
 import {
   Box,
   Button,
   CircularProgress,
   Drawer,
-  FormControl,
   IconButton,
-  // MUI Components for Listing/Form
   List,
   ListItem,
   ListItemText,
-  TextField,
+  Paper, // New import
   Typography,
   useTheme,
 } from "@mui/material";
 import React, { useMemo, useState } from "react";
+import { useDropzone } from "react-dropzone"; // New import
 
 import { useTranslation } from "react-i18next";
 
 // --- RTK Query Hooks & Types ---
 import {
-  AgentAssetMeta,
-  useDeleteAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteMutation,
-  useListAssetsKnowledgeFlowV1AgentAssetsAgentGetQuery,
-  useUploadAssetKnowledgeFlowV1AgentAssetsAgentUploadPostMutation,
+  AssetMeta,
+  useDeleteAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteMutation,
+  useListAgentAssetsKnowledgeFlowV1AgentAssetsAgentGetQuery,
+  useUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostMutation,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useToast } from "../ToastProvider";
@@ -65,11 +66,11 @@ export const AgentAssetManagerDrawer: React.FC<AgentAssetManagerDrawerProps> = (
   const { showInfo, showError } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const theme = useTheme();
-  // --- State for Upload Form ---
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [assetKey, setAssetKey] = useState<string>("");
-  const [contentTypeOverride, setContentTypeOverride] = useState<string>("");
-  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // --- State for Upload Form (Modified) ---
+  const [filesToUpload, setFilesToUpload] = useState<File[]>([]); // List of files ready to upload
+  const [isHighlighted, setIsHighlighted] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); // Used while iterating through files
 
   // --- RTK Query Initialization ---
   const {
@@ -77,72 +78,91 @@ export const AgentAssetManagerDrawer: React.FC<AgentAssetManagerDrawerProps> = (
     isLoading: isListLoading,
     isFetching: isListFetching,
     refetch: refetchAssets,
-  } = useListAssetsKnowledgeFlowV1AgentAssetsAgentGetQuery(
+  } = useListAgentAssetsKnowledgeFlowV1AgentAssetsAgentGetQuery(
     { agent: agentId },
     { skip: !isOpen }, // Skip query if drawer is closed
   );
 
-  const [uploadAsset, { isLoading: isUploading }] = useUploadAssetKnowledgeFlowV1AgentAssetsAgentUploadPostMutation();
+  const [uploadAsset, { isLoading: isApiLoading }] =
+    useUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostMutation();
 
-  const [deleteAsset] = useDeleteAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteMutation();
+  const [deleteAsset] = useDeleteAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteMutation();
+  // The overall loading state combines the API mutation state and the local processing loop state
+  const isUploading = isApiLoading || isProcessing;
   // --------------------------------
 
-  const assets: AgentAssetMeta[] = useMemo(() => listData?.items || [], [listData]);
+  const assets: AssetMeta[] = useMemo(() => listData?.items || [], [listData]);
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files ? event.target.files[0] : null;
-    setSelectedFile(file);
-    if (file && !assetKey) {
-      setAssetKey(file.name.replace(/\.[^/.]+$/, ""));
-    }
-    setUploadError(null);
+  // --- Dropzone Logic (Reused from DocumentUploadDrawer) ---
+  const { getRootProps, getInputProps, open } = useDropzone({
+    noKeyboard: true,
+    onDrop: (acceptedFiles) => {
+      setFilesToUpload((prevFiles) => {
+        // Use a Set for efficient uniqueness check (by name and size)
+        const existingIdentifiers = new Set(prevFiles.map((f) => `${f.name}-${f.size}`));
+
+        const newUniqueFiles = acceptedFiles.filter((f) => !existingIdentifiers.has(`${f.name}-${f.size}`));
+
+        if (newUniqueFiles.length < acceptedFiles.length) {
+          showInfo({
+            summary: t("assetManager.fileAlreadyAddedSummary") || "File Already Added",
+            detail: t("assetManager.fileAlreadyAddedDetail") || "One or more files were already in the queue.",
+          });
+        }
+        return [...prevFiles, ...newUniqueFiles];
+      });
+      setIsHighlighted(false);
+    },
+    // Prevent dropzone from opening file dialog on click by default
+    // We will control it via the button
+    noClick: true,
+  });
+
+  const handleDeleteTemp = (index: number) => {
+    setFilesToUpload((prevFiles) => prevFiles.filter((_, i) => i !== index));
   };
 
   const handleUpload = async () => {
-    if (!selectedFile) {
-      setUploadError(t("assetManager.noFileSelected") || "Please select a file to upload.");
-      return;
+    if (!filesToUpload.length) return;
+    setIsProcessing(true); // Start processing loop
+
+    const filesToProcess = [...filesToUpload];
+    setFilesToUpload([]); // Clear queue immediately
+
+    for (const file of filesToProcess) {
+      // ⚠️ Use file.name as the key to maintain consistency with agent tuning
+      const keyToUse = file.name;
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("key", keyToUse);
+      // NOTE: ContentTypeOverride field is removed from UI and backend logic is relied upon
+
+      try {
+        await uploadAsset({
+          agent: agentId,
+          bodyUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPost: formData as any,
+        }).unwrap();
+
+        showInfo({
+          summary: t("assetManager.uploadSuccessSummary") || "Asset Uploaded",
+          detail:
+            t("assetManager.uploadSuccessDetail", { key: keyToUse }) || `Asset '${keyToUse}' uploaded successfully.`,
+        });
+      } catch (err: any) {
+        const errMsg = err?.data?.detail || err?.error || t("assetManager.unknownUploadError");
+        console.error("Upload failed for file:", file.name, err);
+        showError({
+          summary: t("assetManager.uploadFailedSummary") || "Upload Failed",
+          detail: `Failed to upload ${file.name}: ${errMsg}`,
+        });
+        // Important: Stop the loop on the first severe error or continue?
+        // Continuing allows partial success, which is often preferable.
+      }
     }
-    setUploadError(null);
 
-    const keyToUse = assetKey || selectedFile.name.replace(/\.[^/.]+$/, "");
-
-    // Construct FormData for multipart upload
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-    formData.append("key", keyToUse);
-    if (contentTypeOverride) {
-      formData.append("content_type_override", contentTypeOverride);
-    }
-
-    try {
-      await uploadAsset({
-        agent: agentId,
-        // Cast is necessary as RTK-generated type expects a simplified object for FormData
-        bodyUploadAssetKnowledgeFlowV1AgentAssetsAgentUploadPost: formData as any,
-      }).unwrap();
-
-      showInfo({
-        summary: t("assetManager.uploadSuccessSummary") || "Asset Uploaded",
-        detail:
-          t("assetManager.uploadSuccessDetail", { key: keyToUse }) || `Asset '${keyToUse}' uploaded successfully.`,
-      });
-
-      // Reset form state and refetch the list
-      setSelectedFile(null);
-      setAssetKey("");
-      setContentTypeOverride("");
-      // Clear file input manually
-      const fileInput = document.getElementById("asset-file-input") as HTMLInputElement;
-      if (fileInput) fileInput.value = "";
-
-      refetchAssets();
-    } catch (err: any) {
-      const errMsg = err?.data?.detail || err?.error || t("assetManager.unknownUploadError");
-      console.error("Upload failed:", err);
-      setUploadError(errMsg);
-      showError({ summary: t("assetManager.uploadFailedSummary") || "Upload Failed", detail: errMsg });
-    }
+    setIsProcessing(false); // End processing loop
+    refetchAssets();
   };
 
   const handleDelete = async (key: string) => {
@@ -170,10 +190,8 @@ export const AgentAssetManagerDrawer: React.FC<AgentAssetManagerDrawerProps> = (
 
   // Reset state on initial close
   const handleClose = () => {
-    setSelectedFile(null);
-    setAssetKey("");
-    setContentTypeOverride("");
-    setUploadError(null);
+    setFilesToUpload([]);
+    setIsProcessing(false);
     onClose();
   };
 
@@ -202,8 +220,7 @@ export const AgentAssetManagerDrawer: React.FC<AgentAssetManagerDrawerProps> = (
       <Typography variant="body2" color="text.secondary" gutterBottom>
         {t("assetManager.description")}
       </Typography>
-
-      {/* --- 1. Asset Listing --- */}
+      {/* --- 1. Asset Listing (Existing Assets) --- */}
       <Box sx={{ mt: 3, border: `1px solid ${theme.palette.divider}`, borderRadius: "8px", overflow: "hidden" }}>
         <Typography variant="subtitle1" sx={{ p: 2, bgcolor: theme.palette.action.hover }}>
           {t("assetManager.listTitle")}
@@ -219,83 +236,143 @@ export const AgentAssetManagerDrawer: React.FC<AgentAssetManagerDrawerProps> = (
               assets.map((asset) => (
                 <ListItem
                   key={asset.key}
-                  secondaryAction={
-                    <IconButton edge="end" aria-label="delete" onClick={() => handleDelete(asset.key)}>
-                      <DeleteIcon />
-                    </IconButton>
-                  }
+                  // *** KEY CHANGE 1: Use flexbox for the entire ListItem ***
+                  sx={{
+                    py: 0.5,
+                    px: 2,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    borderBottom: `1px solid ${theme.palette.divider}`,
+                  }}
+                  // *** KEY CHANGE 2: Removed secondaryAction prop ***
                 >
-                  <ListItemText
-                    primary={`${asset.file_name} | ${asset.content_type} | ${formatFileSize(asset.size)}`}
-                  />
+                  {/* Name and Size container */}
+                  <Box sx={{ flexGrow: 1, minWidth: 0, display: "flex", alignItems: "center" }}>
+                    {/* File Name */}
+                    <Typography
+                      variant="body2"
+                      fontWeight="medium"
+                      component="span" // Ensure it renders inline
+                      sx={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        // Takes up max space but respects other items
+                        flexShrink: 1,
+                        mr: 2,
+                      }}
+                    >
+                      {asset.file_name}
+                    </Typography>
+
+                    {/* File Size */}
+                    <Typography variant="caption" color="text.secondary" component="span" sx={{ flexShrink: 0 }}>
+                      ({formatFileSize(asset.size)})
+                    </Typography>
+                  </Box>
+
+                  {/* *** KEY CHANGE 3: Delete Button as a direct child *** */}
+                  <IconButton
+                    aria-label="delete"
+                    onClick={() => handleDelete(asset.key)}
+                    size="small"
+                    color="error"
+                    sx={{ ml: 2, flexShrink: 0 }}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
                 </ListItem>
               ))
             )}
           </List>
         </Box>
-      </Box>
-
-      {/* --- 2. Upload Form --- */}
-      <Box
-        component="form"
-        sx={{ mt: 3, p: 2, border: `1px dashed ${theme.palette.primary.light}`, borderRadius: "8px" }}
+      </Box>{" "}
+      {/* --- 2. Upload Form (Dropzone Integration) --- */}
+      <Typography variant="subtitle1" sx={{ mt: 3 }} gutterBottom>
+        {t("assetManager.uploadTitle")}
+      </Typography>
+      <Paper
+        {...getRootProps()}
+        sx={{
+          p: 3,
+          border: "1px dashed",
+          borderColor: isHighlighted ? theme.palette.primary.main : theme.palette.divider,
+          borderRadius: "12px",
+          cursor: "pointer",
+          minHeight: "150px",
+          backgroundColor: isHighlighted ? theme.palette.action.hover : theme.palette.background.paper,
+          transition: "background-color 0.3s",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: filesToUpload.length ? "stretch" : "center",
+          justifyContent: filesToUpload.length ? "flex-start" : "center",
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setIsHighlighted(true);
+        }}
+        onDragLeave={() => setIsHighlighted(false)}
       >
-        <Typography variant="subtitle1" gutterBottom>
-          {t("assetManager.uploadTitle")}
-        </Typography>
+        <input {...getInputProps()} />
+        {!filesToUpload.length ? (
+          <Box textAlign="center">
+            <UploadIcon sx={{ fontSize: 40, color: "text.secondary", mb: 1 }} />
+            <Typography variant="body1" color="textSecondary">
+              {t("documentLibrary.dropFiles")}
+            </Typography>
+            <Button variant="outlined" sx={{ mt: 1 }} onClick={open}>
+              {t("assetManager.browseButton")}
+            </Button>
+          </Box>
+        ) : (
+          <Box sx={{ width: "100%" }}>
+            <List dense>
+              {filesToUpload.map((file, index) => (
+                <ListItem
+                  key={`${file.name}-${index}`}
+                  secondaryAction={
+                    <IconButton edge="end" aria-label="delete" onClick={() => handleDeleteTemp(index)}>
+                      <CloseIcon fontSize="small" />
+                    </IconButton>
+                  }
+                  sx={{ py: 0.5 }}
+                >
+                  <FilePresentIcon sx={{ mr: 1, color: theme.palette.text.secondary }} />
+                  <ListItemText
+                    primary={
+                      <Typography variant="body2" sx={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {file.name}
+                      </Typography>
+                    }
+                    secondary={formatFileSize(file.size)}
+                  />
+                </ListItem>
+              ))}
+            </List>
+            <Button variant="text" size="small" onClick={open} sx={{ mt: 1 }}>
+              {t("assetManager.addMoreFiles")}
+            </Button>
+          </Box>
+        )}
+      </Paper>
+      {/* --- 3. Action Buttons --- */}
+      <Box sx={{ mt: 3, display: "flex", justifyContent: "space-between" }}>
+        <Button variant="outlined" onClick={handleClose} sx={{ borderRadius: "8px" }}>
+          {t("documentLibrary.cancel")}
+        </Button>
 
-        <FormControl fullWidth margin="normal">
-          <TextField
-            id="asset-file-input"
-            type="file"
-            onChange={handleFileChange}
-            required
-            size="small"
-            InputLabelProps={{ shrink: true }}
-            inputProps={{ accept: "*" }}
-            label={t("assetManager.labelFile")}
-            disabled={isUploading}
-          />
-        </FormControl>
-
-        <FormControl fullWidth margin="normal">
-          <TextField
-            label={t("assetManager.labelKey")}
-            size="small"
-            value={assetKey}
-            onChange={(e) => setAssetKey(e.target.value)}
-            placeholder={selectedFile?.name.replace(/\.[^/.]+$/, "") || t("assetManager.keyPlaceholder")}
-            required
-            disabled={isUploading}
-          />
-        </FormControl>
-
-        <FormControl fullWidth margin="normal">
-          <TextField
-            label={t("assetManager.labelContentTypeOverride")}
-            size="small"
-            value={contentTypeOverride}
-            onChange={(e) => setContentTypeOverride(e.target.value)}
-            placeholder="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            disabled={isUploading}
-          />
-        </FormControl>
-
-        {uploadError &&
-          showError({
-            summary: t("libraryCreateDrawer.validationError"),
-            detail: uploadError,
-          })}
         <Button
-          fullWidth
           variant="contained"
           color="primary"
           startIcon={isUploading ? <CircularProgress size={18} color="inherit" /> : <CloudUploadIcon />}
           onClick={handleUpload}
-          disabled={!selectedFile || isUploading || !assetKey}
-          sx={{ mt: 2, borderRadius: "8px" }}
+          disabled={!filesToUpload.length || isUploading}
+          sx={{ borderRadius: "8px" }}
         >
-          {isUploading ? t("assetManager.uploading") : t("assetManager.uploadButton")}
+          {isUploading
+            ? t("assetManager.uploading") // Using 'isUploading' which combines both states
+            : t("assetManager.uploadButton")}
         </Button>
       </Box>
     </Drawer>
