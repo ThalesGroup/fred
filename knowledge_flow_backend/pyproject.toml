@@ -103,7 +103,7 @@ url = "https://download.pytorch.org/whl/cpu"
 [dependency-groups]
 dev = [
     "bandit>=1.8.5",
-    "basedpyright>=1.31.0",
+    "basedpyright>=1.17.0,<1.30.0",
     "detect-secrets>=1.5.0",
     "ruff>=0.12.0",
 ]
