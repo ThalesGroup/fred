@@ -244,7 +244,7 @@ def test_lookup_subjects_returns_users_by_relation(
     viewer = _make_reference(Resource.USER, prefix="viewer")
     unrelated = _make_reference(Resource.USER, prefix="stranger")
 
-    spicedb_engine.add_relations(
+    token = spicedb_engine.add_relations(
         [
             Relation(subject=owner, relation=RelationType.OWNER, resource=tag),
             Relation(subject=editor, relation=RelationType.EDITOR, resource=tag),
@@ -252,15 +252,57 @@ def test_lookup_subjects_returns_users_by_relation(
         ]
     )
 
-    owners = spicedb_engine.lookup_subjects(tag, RelationType.OWNER, Resource.USER)
-    editors = spicedb_engine.lookup_subjects(tag, RelationType.EDITOR, Resource.USER)
-    viewers = spicedb_engine.lookup_subjects(tag, RelationType.VIEWER, Resource.USER)
+    owners = spicedb_engine.lookup_subjects(
+        tag, RelationType.OWNER, Resource.USER, consistency_token=token
+    )
+    editors = spicedb_engine.lookup_subjects(
+        tag, RelationType.EDITOR, Resource.USER, consistency_token=token
+    )
+    viewers = spicedb_engine.lookup_subjects(
+        tag, RelationType.VIEWER, Resource.USER, consistency_token=token
+    )
 
     assert {ref.id for ref in owners} == {owner.id}
     assert {ref.id for ref in editors} == {editor.id}
     assert {ref.id for ref in viewers} == {viewer.id}
 
-    assert unrelated.id not in {ref.id for ref in owners + editors + viewers}
+
+@pytest.mark.integration
+def test_list_relations_filters_by_subject_type(
+    spicedb_engine: SpiceDbRebacEngine,
+) -> None:
+    team = _make_reference(Resource.GROUP, prefix="team")
+    child_team = _make_reference(Resource.GROUP, prefix="team")
+    member = _make_reference(Resource.USER, prefix="member")
+
+    token = spicedb_engine.add_relations(
+        [
+            Relation(subject=member, relation=RelationType.MEMBER, resource=team),
+            Relation(subject=team, relation=RelationType.MEMBER, resource=child_team),
+        ]
+    )
+
+    user_memberships = spicedb_engine.list_relations(
+        resource_type=Resource.GROUP,
+        relation=RelationType.MEMBER,
+        subject_type=Resource.USER,
+        consistency_token=token,
+    )
+    group_memberships = spicedb_engine.list_relations(
+        resource_type=Resource.GROUP,
+        relation=RelationType.MEMBER,
+        subject_type=Resource.GROUP,
+        consistency_token=token,
+    )
+
+    assert {
+        (relation.subject.type, relation.subject.id, relation.resource.id)
+        for relation in user_memberships
+    } == {(Resource.USER, member.id, team.id)}
+    assert {
+        (relation.subject.type, relation.subject.id, relation.resource.id)
+        for relation in group_memberships
+    } == {(Resource.GROUP, team.id, child_team.id)}
 
 
 @pytest.mark.integration

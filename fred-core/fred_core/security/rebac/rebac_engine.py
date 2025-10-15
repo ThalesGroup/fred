@@ -123,6 +123,17 @@ class RebacEngine(ABC):
             token = self.delete_relation(relation)
         return token
 
+    @abstractmethod
+    def list_relations(
+        self,
+        *,
+        resource_type: Resource,
+        relation: RelationType,
+        subject_type: Resource | None = None,
+        consistency_token: str | None = None,
+    ) -> list[Relation]:
+        """Return all relations matching the provided filters."""
+
     def delete_user_relation(
         self,
         user: KeycloakUser,

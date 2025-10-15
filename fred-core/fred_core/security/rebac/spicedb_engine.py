@@ -13,6 +13,7 @@ from authzed.api.v1 import (
     LookupResourcesRequest,
     LookupSubjectsRequest,
     ObjectReference,
+    ReadRelationshipsRequest,
     Relationship,
     RelationshipFilter,
     RelationshipUpdate,
@@ -186,6 +187,59 @@ class SpiceDbRebacEngine(RebacEngine):
             if subject_id and subject_id != "*":
                 subjects.append(RebacReference(type=subject_type, id=subject_id))
         return subjects
+
+    def list_relations(
+        self,
+        *,
+        resource_type: Resource,
+        relation: RelationType,
+        subject_type: Resource | None = None,
+        consistency_token: str | None = None,
+    ) -> list[Relation]:
+        relationship_filter = RelationshipFilter(
+            resource_type=resource_type.value,
+            optional_relation=relation.value,
+            optional_subject_filter=SubjectFilter(subject_type=subject_type.value)
+            if subject_type
+            else None,
+        )
+
+        request_kwargs: dict[str, object] = {"relationship_filter": relationship_filter}
+        if consistency_token:
+            request_kwargs["consistency"] = Consistency(
+                at_least_as_fresh=ZedToken(token=consistency_token)
+            )
+        elif self._read_consistency is not None:
+            request_kwargs["consistency"] = self._read_consistency
+
+        request = ReadRelationshipsRequest(**request_kwargs)
+        relations: list[Relation] = []
+        for response in self._client.ReadRelationships(request):
+            relationship = getattr(response, "relationship", None)
+            if (
+                relationship is None
+                or relationship.resource is None
+                or relationship.subject is None
+            ):
+                continue
+            resource_object = relationship.resource
+            resource_id = getattr(resource_object, "object_id", "")
+            subject_reference = relationship.subject
+            subject = subject_reference.object if subject_reference else None
+            subject_type_value = getattr(subject, "object_type", "") if subject else ""
+            subject_id = getattr(subject, "object_id", "") if subject else ""
+
+            if not resource_id or not subject_type_value or not subject_id:
+                continue
+
+            relations.append(
+                Relation(
+                    subject=RebacReference(Resource(subject_type_value), subject_id),
+                    relation=relation,
+                    resource=RebacReference(resource_type, resource_id),
+                )
+            )
+        return relations
 
     def has_permission(
         self,
