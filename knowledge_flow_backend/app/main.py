@@ -21,6 +21,7 @@ Entrypoint for the Knowledge Flow Backend App.
 
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
@@ -50,6 +51,7 @@ from app.features.scheduler.controller import SchedulerController
 from app.features.tabular.controller import TabularController
 from app.features.tag.controller import TagController
 from app.features.vector_search.vector_search_controller import VectorSearchController
+from app.security.keycloak_rebac_sync import reconcile_keycloak_groups_with_rebac
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -98,10 +100,17 @@ def create_app() -> FastAPI:
     )
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
     application_context._log_config_summary()
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        await reconcile_keycloak_groups_with_rebac()
+        yield
+
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs",
         redoc_url=f"{configuration.app.base_url}/redoc",
         openapi_url=f"{configuration.app.base_url}/openapi.json",
+        lifespan=lifespan,
     )
 
     # Register exception handlers
