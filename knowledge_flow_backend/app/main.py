@@ -51,6 +51,7 @@ from app.features.resources.controller import ResourceController
 from app.features.scheduler.controller import SchedulerController
 from app.features.tabular.controller import TabularController
 from app.features.tag.controller import TagController
+from app.features.users import users_controller
 from app.features.vector_search.vector_search_controller import VectorSearchController
 from app.security.keycloak_rebac_sync import reconcile_keycloak_groups_with_rebac
 
@@ -166,6 +167,7 @@ def create_app() -> FastAPI:
     OpenSearchOpsController(router)
     router.include_router(logs_controller.router)
     router.include_router(report_controller.router)
+    router.include_router(users_controller.router)
     if configuration.scheduler.enabled:
         logger.info("🧩 Activating ingestion scheduler controller.")
         SchedulerController(router)
