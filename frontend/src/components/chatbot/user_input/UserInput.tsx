@@ -399,7 +399,7 @@ export default function UserInput({
                     disabled={!canSend}
                     color="primary"
                   >
-                    <PlayArrowIcon fontSize="inherit" />
+                    <ArrowUpwardIcon fontSize="inherit" />
                   </IconButton>
                 </span>
               </Tooltip>
