@@ -461,6 +461,18 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.writeReportRequest,
       }),
     }),
+    listGroupsKnowledgeFlowV1GroupsGet: build.query<
+      ListGroupsKnowledgeFlowV1GroupsGetApiResponse,
+      ListGroupsKnowledgeFlowV1GroupsGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/groups` }),
+    }),
+    listUsersKnowledgeFlowV1UsersGet: build.query<
+      ListUsersKnowledgeFlowV1UsersGetApiResponse,
+      ListUsersKnowledgeFlowV1UsersGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/users` }),
+    }),
     processDocumentsKnowledgeFlowV1ProcessDocumentsPost: build.mutation<
       ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse,
       ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg
@@ -796,6 +808,10 @@ export type WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse =
 export type WriteReportKnowledgeFlowV1McpReportsWritePostApiArg = {
   writeReportRequest: WriteReportRequest;
 };
+export type ListGroupsKnowledgeFlowV1GroupsGetApiResponse = /** status 200 Successful Response */ GroupSummary[];
+export type ListGroupsKnowledgeFlowV1GroupsGetApiArg = void;
+export type ListUsersKnowledgeFlowV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
+export type ListUsersKnowledgeFlowV1UsersGetApiArg = void;
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse = /** status 200 Successful Response */ any;
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
   processDocumentsRequest: ProcessDocumentsRequest;
@@ -1246,6 +1262,19 @@ export type WriteReportRequest = {
   tags?: string[];
   render_formats?: string[];
 };
+export type GroupSummary = {
+  id: string;
+  name: string;
+  member_count: number;
+  total_member_count: number;
+  sub_groups?: GroupSummary[];
+};
+export type UserSummary = {
+  id: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  username?: string | null;
+};
 export type FileToProcessWithoutUser = {
   source_tag: string;
   tags?: string[];
@@ -1355,6 +1384,10 @@ export const {
   useLazyOsDiagnosticsQuery,
   useQueryLogsKnowledgeFlowV1LogsQueryPostMutation,
   useWriteReportKnowledgeFlowV1McpReportsWritePostMutation,
+  useListGroupsKnowledgeFlowV1GroupsGetQuery,
+  useLazyListGroupsKnowledgeFlowV1GroupsGetQuery,
+  useListUsersKnowledgeFlowV1UsersGetQuery,
+  useLazyListUsersKnowledgeFlowV1UsersGetQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
 } = injectedRtkApi;
