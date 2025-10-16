@@ -124,6 +124,30 @@ const ChatBot = ({
   };
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
+  const stopStreaming = () => {
+    const socket = webSocketRef.current;
+    if (!socket) {
+      setWaitResponse(false);
+      return;
+    }
+
+    try {
+      if (
+        socket.readyState === WebSocket.OPEN ||
+        socket.readyState === WebSocket.CONNECTING ||
+        socket.readyState === WebSocket.CLOSING
+      ) {
+        socket.close(4000, "client_stop");
+      }
+    } catch (err) {
+      console.error("[❌ ChatBot] Failed to close WebSocket on stop:", err);
+    } finally {
+      webSocketRef.current = null;
+      wsTokenRef.current = null;
+      setWebSocket(null);
+      setWaitResponse(false);
+    }
+  };
 
   // === SINGLE scroll container ref (attach to the ONLY overflow element) ===
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -248,6 +272,8 @@ const ChatBot = ({
       socket.onclose = () => {
         console.warn("[❌ ChatBot] WebSocket closed");
         webSocketRef.current = null;
+        wsTokenRef.current = null;
+        setWebSocket(null);
         setWaitResponse(false);
       };
     });
@@ -606,6 +632,7 @@ const ChatBot = ({
                 agentChatOptions={currentAgent.chat_options}
                 isWaiting={waitResponse}
                 onSend={handleSend}
+                onStop={stopStreaming}
                 onContextChange={setUserInputContext}
                 sessionId={currentChatBotSession?.id}
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
@@ -654,6 +681,7 @@ const ChatBot = ({
                 agentChatOptions={currentAgent.chat_options}
                 isWaiting={waitResponse}
                 onSend={handleSend}
+                onStop={stopStreaming}
                 onContextChange={setUserInputContext}
                 sessionId={currentChatBotSession?.id}
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}

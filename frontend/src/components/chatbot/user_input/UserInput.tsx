@@ -6,6 +6,8 @@
 // User input component for the chatbot
 
 import AddIcon from "@mui/icons-material/Add";
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import StopIcon from "@mui/icons-material/Stop";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import AudioController from "../AudioController.tsx";
@@ -75,6 +77,7 @@ export default function UserInput({
   agentChatOptions,
   isWaiting = false,
   onSend = () => {},
+  onStop,
   onContextChange,
   sessionId,
   initialDocumentLibraryIds,
@@ -85,6 +88,7 @@ export default function UserInput({
   agentChatOptions?: AgentChatOptions;
   isWaiting: boolean;
   onSend: (content: UserInputContent) => void;
+  onStop?: () => void;
   onContextChange?: (ctx: UserInputContent) => void;
   sessionId?: string;
   initialDocumentLibraryIds?: string[];
@@ -114,6 +118,7 @@ export default function UserInput({
   const [selectedPromptResourceIds, setSelectedPromptResourceIds] = useState<string[]>([]);
   const [selectedTemplateResourceIds, setSelectedTemplateResourceIds] = useState<string[]>([]);
   const [selectedSearchPolicyName, setSelectedSearchPolicyName] = useState<SearchPolicyName>("semantic");
+  const canSend = !!userInput.trim() || !!audioBlob || !!(filesBlob && filesBlob.length);
 
   // Selections made *before* we get a real sessionId (first question) — migrate them.
   const preSessionRef = useRef<PersistedCtx>({});
@@ -300,6 +305,10 @@ export default function UserInput({
   // Enter sends; Shift+Enter newline
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === "Enter") {
+      if (isWaiting || !canSend) {
+        event.preventDefault();
+        return;
+      }
       if (event.shiftKey) {
         setUserInput((prev) => prev + "\n");
         event.preventDefault();
@@ -311,6 +320,7 @@ export default function UserInput({
   };
 
   const handleSend = () => {
+    if (isWaiting || !canSend) return;
     onSend({
       text: userInput,
       audio: audioBlob || undefined,
@@ -378,7 +388,36 @@ export default function UserInput({
         {/* Single rounded input with the "+" inside (bottom-left) */}
         <Box sx={{ position: "relative", width: "100%" }}>
           {/* + anchored inside the input, bottom-left */}
-          <Box sx={{ position: "absolute", right: 8, bottom: 6, zIndex: 1 }}>
+          <Box sx={{ position: "absolute", right: 8, bottom: 6, zIndex: 1, display: "flex", gap: 0.75 }}>
+            {!isWaiting && (
+              <Tooltip title={t("chatbot.sendMessage", "Send message")}>
+                <span>
+                  <IconButton
+                    aria-label="send-message"
+                    sx={{ fontSize: "1.6rem", p: "8px" }}
+                    onClick={handleSend}
+                    disabled={!canSend}
+                    color="primary"
+                  >
+                    <ArrowUpwardIcon fontSize="inherit" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )}
+            {isWaiting && onStop && (
+              <Tooltip title={t("chatbot.stopResponse", "Stop response")}>
+                <span>
+                  <IconButton
+                    aria-label="stop-response"
+                    sx={{ fontSize: "1.6rem", p: "8px" }}
+                    onClick={onStop}
+                    color="error"
+                  >
+                    <StopIcon fontSize="inherit" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )}
             <Tooltip title={t("chatbot.menu.addToSetup")}>
               <span>
                 <IconButton
