@@ -15,7 +15,7 @@ The frontend sends a chat message request in the following format:
   "session_id": "abc-123" | null,
   "user_id": "user@example.com",
   "message": "Hello, who is Shakespeare?",
-  "agent_name": "GeneralistExpert"
+  "agent_name": "Georges"
 }
 ```
 
@@ -63,7 +63,7 @@ This is sent once the agent completes the response. It contains the final sessio
     "question": { "content": "Hello, who is Shakespeare?", "filters": {} },
     "answer": { "content": "William Shakespeare was an English playwright...", "filters": {} },
     "model": "gpt-4o-2024-08-06",
-    "agent_name": "GeneralistExpert",
+    "agent_name": "Georges",
     "token_usage": {
       "input_tokens": 0,
       "output_tokens": 0,

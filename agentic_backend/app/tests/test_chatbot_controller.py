@@ -23,7 +23,7 @@ class TestChatbotController:
         "session_id": None,
         "user_id": "mock@user.com",
         "message": "Qui est shakespeare ?",
-        "agent_name": "GeneralistExpert",
+        "agent_name": "Georges",
         "argument": "none",
     }
 

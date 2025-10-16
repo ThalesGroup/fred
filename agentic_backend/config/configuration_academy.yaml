@@ -93,6 +93,25 @@ ai:
       enabled: true
       tags: ["academy"]
       chat_model: {}
+    - name: "SlideMaker"
+      type: "agent"
+      role: "Academy sample slide maker"
+      description: >
+        An agent that creates presentation slides based on user input.
+      class_path: "app.academy.04_slide_maker.slide_maker.SlideMaker"
+      enabled: true
+      tags: ["academy"]
+      chat_model: {}
+    - name: "GpsAgent"
+      type: "agent"
+      role: "Academy sample GPS agent"
+      description: >
+        An agent that provides GPS-related information and assistance.
+      class_path: "app.academy.05_gps_agent.gps_agent.GpsAgent"
+      enabled: true
+      tags: ["academy"]
+      chat_model: {}
+
 storage:
   postgres:
     host: localhost

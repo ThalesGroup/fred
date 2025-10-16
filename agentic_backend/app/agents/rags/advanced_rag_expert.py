@@ -110,7 +110,7 @@ def _chunk_key(d: VectorSearchHit) -> str:
     return f"{uid}|p={page}|cs={start}|ce={end}|h={heading}"
 
 
-class AdvancedRagExpert(AgentFlow):
+class AdvancedRico(AgentFlow):
     """
     A pragmatic RAG agent that:
       1) retrieves chunks (VectorSearchHit) via knowledge-flow REST,
@@ -122,7 +122,7 @@ class AdvancedRagExpert(AgentFlow):
     TOP_K = 5
     MIN_DOCS = 3  # minimum number of docs we'll try to keep for generation
 
-    name: str = "AdvancedRagExpert"
+    name: str = "AdvancedRico"
     nickname: str = "Remulus"
     role: str = "Advanced Rag Expert"
     description: str = """Answers user questions by retrieving relevant information from ingested document corpora.
@@ -348,7 +348,7 @@ class AdvancedRagExpert(AgentFlow):
             else:
                 irrelevant_documents.append(document)
 
-        # Failsafe: ensure we keep at least MIN_DOCS (like standard RagExpert keeps 3).
+        # Failsafe: ensure we keep at least MIN_DOCS (like standard Rico keeps 3).
         if (len(filtered_docs) == 0) and documents:
             filtered_docs = documents[: self.MIN_DOCS]
         elif 0 < len(filtered_docs) < self.MIN_DOCS and documents:

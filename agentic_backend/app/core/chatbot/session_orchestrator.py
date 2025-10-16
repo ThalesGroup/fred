@@ -1,6 +1,16 @@
-# chat/session_orchestrator.py
 # Copyright Thales 2025
-# Licensed under the Apache License, Version 2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from __future__ import annotations
 
@@ -175,7 +185,7 @@ class SessionOrchestrator:
                 actor=actor,
             ):
                 agent_msgs = await self.transcoder.stream_agent_response(
-                    compiled_graph=agent.get_compiled_graph(),
+                    agent=agent,
                     input_messages=lc_history + [HumanMessage(message)],
                     session_id=session.id,
                     exchange_id=exchange_id,
@@ -183,6 +193,7 @@ class SessionOrchestrator:
                     base_rank=base_rank,
                     start_seq=1,  # user message already consumed rank=base_rank
                     callback=callback,
+                    user_context=user,
                 )
                 all_msgs.extend(agent_msgs)
                 # Success signal: exactly one assistant/final per exchange (enforced by transcoder)

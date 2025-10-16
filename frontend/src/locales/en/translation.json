@@ -63,6 +63,7 @@
     "listTitle": "Current Assets",
     "noAssetsFound": "No assets found. Upload one below to get started.",
     "uploadTitle": "Upload New Asset",
+    "browseButton": "Browse",
     "labelFile": "File to upload",
     "labelKey": "Asset Key (Logical Name)",
     "keyPlaceholder": "e.g., my-report-template",
@@ -215,7 +216,8 @@
     "disable": "Disable agent",
     "favorite": "Add the agent to your favorites",
     "unfavorite": "Remove the agent from your favorites",
-    "manageAssets": "Manage Assets (Templates)"
+    "manageAssets": "Manage Assets",
+    "manageCrew": "Manage Crew"
   },
   "dialogs": {
     "create": {
