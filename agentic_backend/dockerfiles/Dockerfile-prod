@@ -14,7 +14,7 @@ ARG GROUP_ID=1000
 
 # Install system deps required for build
 RUN apt-get update && \
-    apt-get install -y curl make && \
+    apt-get install -y curl make libreoffice && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv globally

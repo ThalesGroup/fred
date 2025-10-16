@@ -14,22 +14,27 @@
 
 import logging
 import os
+import subprocess
 import tempfile
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Dict, List, Optional
 
 from fred_core import VectorSearchHit, get_model
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain.output_parsers import ResponseSchema, StructuredOutputParser
+from langchain.prompts import ChatPromptTemplate
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
+from pptx import Presentation
+from pptx.dml.color import RGBColor
+from pptx.util import Pt
 
+from app.common.kf_agent_asset_client import AssetRetrievalError
 from app.common.rags_utils import (
     attach_sources_to_llm_response,
     ensure_ranks,
     format_sources_for_prompt,
     sort_hits,
 )
-from app.core.runtime_source import expose_runtime_source
-
 from app.common.structures import AgentChatOptions
 from app.common.vector_search_client import VectorSearchClient
 from app.core.agents.agent_flow import AgentFlow
@@ -38,18 +43,8 @@ from app.core.agents.runtime_context import (
     get_document_library_tags_ids,
     get_search_policy,
 )
-
-# LangChain structured parsing
-from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import StructuredOutputParser, ResponseSchema
-
-# PowerPoint generation
-from pptx import Presentation
-from pptx.util import Pt
-
-# Asset / UI parts
 from app.core.chatbot.chat_schema import LinkKind, LinkPart, MessagePart, TextPart
-from app.common.kf_agent_asset_client import AssetRetrievalError
+from app.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +87,7 @@ RAG_TUNING = AgentTuning(
             key="ppt.template_path",
             type="text",
             title="PowerPoint Template Path",
-            description="Filesystem path to the .pptx template used to generate the reference sheet.",
+            description="Filesystem path to the .pptx template used to generate the fiche.",
             required=False,
             default="/home/simon/Documents/github_repos/ThalesGroup/fred/agentic_backend/app/agents/content_generator/templates/pptx/template_fiche_ref_projet.pptx",
             ui=UIHints(group="PowerPoint"),
@@ -105,8 +100,9 @@ class SlidShady(AgentFlow):
     """
     RAG agent for project reference extraction:
     - Retrieves context chunks via VectorSearchClient
-    - Uses StructuredOutputParser for structured fields
-    - Generates a PowerPoint reference sheet and provides a download link (LinkPart)
+    - Parses structured data fields
+    - Fills a PowerPoint template and exports both .pptx and .pdf
+    - Returns download + preview links
     """
 
     tuning = RAG_TUNING
@@ -121,8 +117,13 @@ class SlidShady(AgentFlow):
         self.search_client = VectorSearchClient()
         self._graph = self._build_graph()
 
-        # Structured output schema
+        # Structured output schema (header + body)
         self.response_schemas = [
+            ResponseSchema(name="project_name", description="Project name"),
+            ResponseSchema(name="start_date", description="Project start date (month and year if possible)"),
+            ResponseSchema(name="end_date", description="Project end date (month and year if possible)"),
+            ResponseSchema(name="num_people", description="Number of people involved"),
+            ResponseSchema(name="budget_k_eur", description="Project budget in k€"),
             ResponseSchema(name="client_presentation_and_context", description="Client presentation and context"),
             ResponseSchema(name="stakes", description="Project stakes"),
             ResponseSchema(name="activities_and_solutions", description="Activities and solutions"),
@@ -133,31 +134,40 @@ class SlidShady(AgentFlow):
         self.parser = StructuredOutputParser.from_response_schemas(self.response_schemas)
         self.format_instructions = self.parser.get_format_instructions()
 
-        # Prompt template (langchain)
+        # Prompt template
         self.prompt_template = ChatPromptTemplate.from_template("""
-            You are an assistant that reads project documents.
+            You are an assistant that reads project reference documents.
             Extract the following information:
-            1. Client presentation and context
-            2. Project stakes
-            3. Activities and solutions
-            4. Benefits for the client
-            5. Project strengths
-            6. List of technologies used
+
+            HEADER INFORMATION:
+            1. Project name
+            2. Start date (month and year if possible)
+            3. End date (month and year if possible)
+            4. Number of people involved
+            5. Budget in k€
+
+            BODY INFORMATION:
+            6. Client presentation and context
+            7. Project stakes
+            8. Activities and solutions
+            9. Benefits for the client
+            10. Project strengths
+            11. List of technologies used
 
             No field should remain empty unless the information is completely missing.
-            The content of each field should be concise (3 to 5 points maximum).
+            Each field must be concise (3-5 short items or a brief sentence).
 
-            Return only in the following format:
+            Return strictly in this structured format:
             {format_instructions}
 
             Context:
             {context}
-            """)
+        """)
 
-        logger.info("SlidesExpert initialized with structured output parsing enabled.")
+        logger.info("SlidShady initialized with structured output parsing enabled.")
 
     # -----------------------------
-    # Graph definition
+    # Graph
     # -----------------------------
     def _build_graph(self) -> StateGraph:
         builder = StateGraph(MessagesState)
@@ -167,40 +177,73 @@ class SlidShady(AgentFlow):
         return builder
 
     # -----------------------------
-    # Internal helpers
+    # Jelpers
     # -----------------------------
+
+
+    def _convert_pptx_to_pdf(self, pptx_path: Path) -> Optional[Path]:
+        """Convert PPTX to PDF using headless LibreOffice with font embedding."""
+        pdf_path = pptx_path.with_suffix(".pdf")
+        try:
+            subprocess.run(
+                [
+                    "soffice",
+                    "--headless",
+                    "--nologo",
+                    "--nofirststartwizard",
+                    "--convert-to",
+                    "pdf:writer_pdf_Export:EmbedStandardFonts=True,SelectPdfVersion=1",
+                    "--outdir",
+                    str(pptx_path.parent),
+                    str(pptx_path),
+                ],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            if pdf_path.exists():
+                logger.info("LibreOffice successfully converted PPTX to PDF with embedded fonts: %s", pdf_path)
+                return pdf_path
+            else:
+                logger.warning("LibreOffice conversion completed but PDF not found at %s", pdf_path)
+                return None
+        except subprocess.CalledProcessError as e:
+            logger.error("LibreOffice PDF conversion failed: %s", e.stderr.decode(errors='ignore'))
+            return None
+        except FileNotFoundError:
+            logger.error("LibreOffice (soffice) is not installed or not in PATH.")
+            return None
+
+
     def _system_prompt(self) -> str:
         """Retrieve tuned system prompt."""
         sys_tpl = self.get_tuned_text("prompts.system")
         if not sys_tpl:
-            logger.warning("SlidesExpert: no tuned system prompt found.")
+            logger.warning("SlidShady: no tuned system prompt found.")
             raise RuntimeError("Missing system prompt.")
         return self.render(sys_tpl)
 
+    # -----------------------------
+    # PowerPoint filling
+    # -----------------------------
     def _fill_ppt_template(self, output_data: Dict[str, str], project_name: str) -> Path:
-        """
-        Fill a PowerPoint template with extracted fields and write to a temporary file.
-        Returns the Path to the generated pptx file (caller must clean it up).
-        """
-        # Prefer configured template path, fallback to bundled path if not present
+        """Fill PowerPoint template and style header."""
         template_path = self.get_tuned_text("ppt.template_path") or ""
         if not template_path or not os.path.exists(template_path):
-            logger.warning("Configured template not found at '%s'. Trying default path.", template_path)
+            logger.warning("Configured template not found at '%s'. Using fallback path.", template_path)
             template_path = "/home/simon/Documents/github_repos/ThalesGroup/fred/agentic_backend/app/agents/content_generator/templates/pptx/template_fiche_ref_projet.pptx"
 
         if not os.path.exists(template_path):
             raise FileNotFoundError(f"PowerPoint template not found: {template_path}")
 
-        # Create a temp output file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pptx", prefix=f"fiche_{project_name}_") as out:
             output_path = Path(out.name)
 
         prs = Presentation(template_path)
-
-        # We assume the first slide contains placeholders with fixed indexes.
-        # If the template differs, placeholder indexes must be adjusted via tuning.
         slide = prs.slides[0]
 
+        # --- BODY placeholders ---
         mapping = {
             "client_presentation_and_context": 10,
             "stakes": 11,
@@ -215,22 +258,52 @@ class SlidShady(AgentFlow):
                 placeholder = slide.placeholders[ph_idx]
                 if not getattr(placeholder, "has_text_frame", False):
                     continue
-                textbox = placeholder.text_frame  # type: ignore[attr-defined]
+                textbox = placeholder.text_frame # type: ignore
                 textbox.clear()
                 p = textbox.add_paragraph()
                 p.text = output_data.get(key, "")
                 p.font.size = Pt(10)
-            except IndexError:
-                logger.warning("Placeholder index %s not found on slide for key %s", ph_idx, key)
             except Exception as e:
                 logger.warning("Error filling placeholder %s for key %s: %s", ph_idx, key, e)
+
+        # --- HEADER placeholders (styled) ---
+        for shape in slide.shapes:
+            if not shape.has_text_frame:
+                continue
+            text = shape.text # type: ignore
+
+            if "NOM_PROJET" in text:
+                shape.text = output_data.get("project_name", "N/A") # type: ignore
+                for p in shape.text_frame.paragraphs: # type: ignore
+                    for r in p.runs:
+                        r.font.size = Pt(24)
+                        r.font.bold = True
+                        r.font.color.rgb = RGBColor(255, 255, 255)
+            elif "personnes" in text:
+                shape.text = f"{output_data.get('num_people', 'N/A')} personnes" # type: ignore
+            elif "Mois_debut" in text or "Mois_fin" in text:
+                start = output_data.get("start_date", "?")
+                end = output_data.get("end_date", "?")
+                shape.text = f"{start} - {end}" # type: ignore
+            elif "Enjeux" in text or "€" in text:
+                shape.text = f"Enjeux financier : {output_data.get('budget_k_eur', 'N/A')}k€" # type: ignore
+            else:
+                continue
+
+            # Non-title header fields: 16pt white, non-bold
+            if "NOM_PROJET" not in text:
+                for p in shape.text_frame.paragraphs: # type: ignore
+                    for r in p.runs:
+                        r.font.size = Pt(16)
+                        r.font.bold = False
+                        r.font.color.rgb = RGBColor(255, 255, 255)
 
         prs.save(str(output_path))
         logger.info("PowerPoint generated: %s", output_path)
         return output_path
 
     # -----------------------------
-    # Node: reasoner
+    # Reasoning / generation step
     # -----------------------------
     async def _run_reasoning_step(self, state: MessagesState):
         if self.model is None:
@@ -242,12 +315,10 @@ class SlidShady(AgentFlow):
         question = last.content
 
         try:
-            # 1) Retrieval context
             doc_tag_ids = get_document_library_tags_ids(self.get_runtime_context())
             search_policy = get_search_policy(self.get_runtime_context())
             top_k = self.get_tuned_int("rag.top_k", default=6)
 
-            # 2) Retrieve via vector search
             hits: List[VectorSearchHit] = self.search_client.search(
                 question=question,
                 top_k=top_k,
@@ -260,11 +331,9 @@ class SlidShady(AgentFlow):
                 messages = self.with_chat_context_text([HumanMessage(content=warn)])
                 return {"messages": [await self.model.ainvoke(messages)]}
 
-            # 3) Normalize hits
             hits = sort_hits(hits)
             ensure_ranks(hits)
 
-            # 4) Build prompt for structured extraction
             sys_msg = SystemMessage(content=self._system_prompt())
             context_text = format_sources_for_prompt(hits, snippet_chars=1200)
             human_msg = HumanMessage(
@@ -273,28 +342,24 @@ class SlidShady(AgentFlow):
                     context=context_text,
                 )[0].content
             )
-
             messages = [sys_msg, human_msg]
             messages = self.with_chat_context_text(messages)
 
-            # 5) Ask the model for structured output
             answer_msg = await self.model.ainvoke(messages)
             answer_text = getattr(answer_msg, "content", "")
-            logger.debug("Raw model answer: %s", answer_text)
-
-            # 6) Parse structured data
             try:
                 structured_data = self.parser.parse(answer_text)
             except Exception as e:
-                logger.warning("Failed to parse structured output: %s", e)
+                logger.warning("Structured parse failed: %s", e)
                 structured_data = {"raw_text": answer_text}
 
-            # 7) Attach metadata for UI
             attach_sources_to_llm_response(answer_msg, hits)
 
-            # 8) Generate PPTX file from extracted structured data
-            project_name = "project_auto"
+            project_name = structured_data.get("project_name", "project_auto").replace(" ", "_")
             ppt_path: Optional[Path] = None
+            pdf_path: Optional[Path] = None
+            pdf_download_url: Optional[str] = None
+
             try:
                 ppt_path = self._fill_ppt_template(structured_data, project_name)
             except Exception as e:
@@ -302,22 +367,33 @@ class SlidShady(AgentFlow):
                 error_msg = AIMessage(content=f"❌ Error generating PowerPoint: {e}")
                 return {"messages": [answer_msg, error_msg], "structured_data": structured_data}
 
-            # 9) Upload generated PPT to user asset storage and prepare structured LinkPart
+            # Upload PPTX
             try:
                 user_id = self.get_end_user_id()
-                final_key = f"{user_id}_{ppt_path.name}"
-                logger.info(f"override user_id: {user_id}")
                 with open(ppt_path, "rb") as f:
                     upload_result = await self.upload_user_asset(
-                        key=final_key,
+                        key=f"{user_id}_{ppt_path.name}",
                         file_content=f,
                         filename=f"fiche_ref_{project_name}.pptx",
                         content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                         user_id_override=user_id,
                     )
-
                 download_url = self.get_asset_download_url(asset_key=upload_result.key, scope="user")
 
+                # --- Convert to PDF and upload ---
+                pdf_path = self._convert_pptx_to_pdf(ppt_path)
+                if pdf_path and pdf_path.exists():
+                    with open(pdf_path, "rb") as f:
+                        pdf_upload = await self.upload_user_asset(
+                            key=f"{user_id}_{pdf_path.name}",
+                            file_content=f,
+                            filename=f"fiche_ref_{project_name}.pdf",
+                            content_type="application/pdf",
+                            user_id_override=user_id,
+                        )
+                    pdf_download_url = self.get_asset_download_url(asset_key=pdf_upload.key, scope="user")
+
+                # Prepare message parts
                 parts: List[MessagePart] = [
                     TextPart(text="✅ Slides generated successfully."),
                     LinkPart(
@@ -328,25 +404,33 @@ class SlidShady(AgentFlow):
                     ),
                 ]
 
-                ai_msg = AIMessage(content="", parts=parts)
+                if pdf_download_url:
+                    parts.append(
+                        LinkPart(
+                            href=pdf_download_url.replace("/raw_content/", "/raw_content/stream/"),
+                            title="View (PDF Preview)",
+                            kind=LinkKind.view if hasattr(LinkKind, "view") else LinkKind.external,
+                            mime="application/pdf",
+                        )
+                    )
 
+                ai_msg = AIMessage(content="", parts=parts)
                 return {"messages": [ai_msg], "structured_data": structured_data}
 
             except AssetRetrievalError as e:
-                logger.exception("Asset retrieval/upload error: %s", e)
+                logger.exception("Asset upload error: %s", e)
                 return {"messages": [AIMessage(content=f"❌ Upload error: {e}")], "structured_data": structured_data}
-            except Exception as e:
-                logger.exception("Unexpected error during upload: %s", e)
-                return {"messages": [AIMessage(content=f"❌ Unexpected error during upload: {e}")], "structured_data": structured_data}
+
             finally:
-                if ppt_path and ppt_path.exists():
-                    try:
-                        ppt_path.unlink(missing_ok=True)
-                    except Exception:
-                        logger.debug("Could not delete temporary ppt at %s", ppt_path)
+                for p in [ppt_path, pdf_path]:
+                    if p and p.exists():
+                        try:
+                            p.unlink(missing_ok=True)
+                        except Exception:
+                            pass
 
         except Exception:
-            logger.exception("SlidesExpert: error in reasoning step.")
+            logger.exception("SlidShady: error in reasoning step.")
             fallback = await self.model.ainvoke(
                 [HumanMessage(content="An error occurred while extracting the information.")]
             )
