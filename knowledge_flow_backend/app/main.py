@@ -19,9 +19,10 @@
 Entrypoint for the Knowledge Flow Backend App.
 """
 
+import asyncio
 import logging
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
@@ -103,8 +104,23 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        await reconcile_keycloak_groups_with_rebac()
-        yield
+        async def periodic_reconciliation() -> None:
+            while True:
+                try:
+                    await reconcile_keycloak_groups_with_rebac()
+                except Exception:  # noqa: BLE001
+                    logger.exception("Scheduled Keycloak→SpiceDB reconciliation failed.")
+                await asyncio.sleep(15 * 60)
+
+        # Reconcile Keycloak groups with ReBAC every 15 minutes
+        background_task = asyncio.create_task(periodic_reconciliation())
+
+        try:
+            yield
+        finally:
+            background_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await background_task
 
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs",
