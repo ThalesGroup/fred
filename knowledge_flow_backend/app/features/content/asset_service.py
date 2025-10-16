@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import mimetypes
 import re
+import shutil
+import tempfile
+from pathlib import Path
 from typing import BinaryIO, List, Literal, Optional
 
 from fred_core import Action, KeycloakUser, Resource, authorize
@@ -11,6 +14,8 @@ from pydantic import BaseModel, Field
 
 from app.application_context import ApplicationContext
 from app.core.stores.content.base_content_store import StoredObjectInfo
+from app.features.ingestion.service import IngestionService
+from app.features.tag.service import TagCreate, TagService, TagType
 
 # Define the scope type for clarity
 ScopeType = Literal["agents", "users"]
@@ -102,24 +107,61 @@ class AssetService:  # RENAMED from AgentAssetService
     async def put_asset(
         self,
         user: KeycloakUser,
-        scope: ScopeType,  # NEW: Explicit scope parameter
-        entity_id: str,  # RENAMED/REPURPOSED: Agent name or user UID
+        scope: ScopeType,
+        entity_id: str,
         key: str,
         stream: BinaryIO,
         *,
         content_type: Optional[str],
         file_name: Optional[str] = None,
-    ) -> AssetMeta:
-        """Store/replace an asset under a specific scope/entity_id."""
-        norm = self._normalize_key(key)
-        storage_key = self._prefix(scope, entity_id) + norm  # Uses dynamic prefix
-        ct = content_type or (mimetypes.guess_type(file_name or norm)[0]) or "application/octet-stream"
+    ):
+        ingestion_service = IngestionService()
+        tag_service = TagService()
 
-        info = self.store.put_object(storage_key, stream, content_type=ct)
+        # 0️⃣ Get or create the "user_asset" tag
+        existing_tags = tag_service.list_all_tags_for_user(user, tag_type=TagType.DOCUMENT)
+        user_asset_tag = next((t for t in existing_tags if t.name == "user_asset"), None)
+        if user_asset_tag is None:
+            created_tag = tag_service.create_tag_for_user(TagCreate(name="user_asset", path=None, description="Generic tag for all files uploaded by users", type=TagType.DOCUMENT, item_ids=[]), user)
+            tag_id = created_tag.id
+        else:
+            tag_id = user_asset_tag.id
 
-        if not info.file_name:
-            info.file_name = file_name or norm
-        return self._to_meta(scope, entity_id, user, norm, info)
+        # 1️⃣ Save the uploaded file to a temporary location
+        ext = Path(file_name or key).suffix
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp_file:
+            shutil.copyfileobj(stream, tmp_file)
+            tmp_path = Path(tmp_file.name)
+
+        # 2️⃣ Extract metadata using the tag ID
+        metadata = ingestion_service.extract_metadata(
+            user=user,
+            file_path=tmp_path,
+            tags=[tag_id],
+            source_tag="fred",
+        )
+
+        # 3️⃣ Save the input content using the **original file name**
+        output_dir = tmp_path.parent / "input"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        final_file_path = output_dir / (file_name or key)
+        shutil.copy(tmp_path, final_file_path)
+        ingestion_service.save_input(user, metadata=metadata, input_dir=output_dir)
+
+        # 4️⃣ Save the document metadata
+        ingestion_service.save_metadata(user, metadata=metadata)
+
+        # 5️⃣ Store the file in the content store with the correct name
+        norm_key = self._normalize_key(key)
+        storage_key = self._prefix(scope, entity_id) + norm_key
+        ct = content_type or (mimetypes.guess_type(file_name or norm_key)[0]) or "application/octet-stream"
+        info = self.store.put_object(storage_key, final_file_path.open("rb"), content_type=ct)
+
+        # Clean up the temporary file
+        tmp_path.unlink(missing_ok=True)
+
+        # Return the AssetMeta response
+        return self._to_meta(scope, entity_id, user, norm_key, info)
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def list_assets(

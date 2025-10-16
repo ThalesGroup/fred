@@ -17,6 +17,7 @@ import os
 import shutil
 import subprocess  # nosec: controlled subprocess usage
 import tempfile
+import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -421,11 +422,14 @@ class SlidShady(AgentFlow):
             # Upload PPTX
             try:
                 user_id = self.get_end_user_id()
+                timestamp = int(time.time() * 1000)
+                unique_ppt_name = f"fiche_ref_{project_name}_{timestamp}.pptx"
+                unique_pdf_name = f"fiche_ref_{project_name}_{timestamp}.pdf"
                 with open(ppt_path, "rb") as f:
                     upload_result = await self.upload_user_asset(
-                        key=f"{user_id}_{ppt_path.name}",
+                        key=f"{user_id}_{unique_ppt_name}",
                         file_content=f,
-                        filename=f"fiche_ref_{project_name}.pptx",
+                        filename=unique_ppt_name,
                         content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                         user_id_override=user_id,
                     )
@@ -438,9 +442,9 @@ class SlidShady(AgentFlow):
                 if pdf_path and pdf_path.exists():
                     with open(pdf_path, "rb") as f:
                         pdf_upload = await self.upload_user_asset(
-                            key=f"{user_id}_{pdf_path.name}",
+                            key=f"{user_id}_{unique_pdf_name}",
                             file_content=f,
-                            filename=f"fiche_ref_{project_name}.pdf",
+                            filename=unique_pdf_name,
                             content_type="application/pdf",
                             user_id_override=user_id,
                         )

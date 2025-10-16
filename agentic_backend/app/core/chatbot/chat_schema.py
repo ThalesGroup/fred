@@ -60,7 +60,7 @@ class LinkKind(str, Enum):
     external = "external"  # generic external link
     dashboard = "dashboard"  # e.g., Grafana, Kibana
     related = "related"  # further reading
-    view = "view" # for pdf preview
+    view = "view"  # for pdf preview
 
 
 class LinkPart(BaseModel):
