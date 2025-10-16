@@ -242,13 +242,17 @@ def test_lookup_subjects_returns_users_by_relation(
     owner = _make_reference(Resource.USER, prefix="owner")
     editor = _make_reference(Resource.USER, prefix="editor")
     viewer = _make_reference(Resource.USER, prefix="viewer")
-    unrelated = _make_reference(Resource.USER, prefix="stranger")
+    stranger = _make_reference(Resource.USER, prefix="stranger")
+    strangerTag = _make_reference(Resource.TAGS, prefix="stranger-tag")
 
     token = spicedb_engine.add_relations(
         [
             Relation(subject=owner, relation=RelationType.OWNER, resource=tag),
             Relation(subject=editor, relation=RelationType.EDITOR, resource=tag),
             Relation(subject=viewer, relation=RelationType.VIEWER, resource=tag),
+            Relation(
+                subject=stranger, relation=RelationType.VIEWER, resource=strangerTag
+            ),
         ]
     )
 
