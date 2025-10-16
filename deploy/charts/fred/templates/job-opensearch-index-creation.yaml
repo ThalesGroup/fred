@@ -8,7 +8,7 @@
 {{- end }}
 
 {{- $needsOpensearchValue := index $needsOpensearch "value" }} # we need needsOpensearchValue to make a comparison 
-{{- if and $needsOpensearchValue .root.Values.global.create_index.enabled }}
+{{- if and $needsOpensearchValue .root.Values.global.create_index.enabled }} # if opensearch is used as a storage and the index creation is enabled
 
 
 {{- $osHost := .app.configuration.storage.opensearch.host }}
@@ -156,9 +156,21 @@ spec:
         app: {{ .app.applicationName }}
     spec:
       restartPolicy: Never
+      {{- if .app.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .app.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      {{- with .app.podSecurityContext }}
+      securityContext:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: opensearch-init
           image: {{ .root.Values.global.create_index.image | default "alpine:3.22" }}
+          {{- with .app.securityContext }}
+          securityContext:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
           command:
             - sh
             - -c
