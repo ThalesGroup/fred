@@ -69,7 +69,16 @@ ai:
         - "Tessa"
       description: >
         An orchestrator agent that can delegate tasks to specialized agents in its crew. Appolo is capable of managing complex workflows by leveraging the expertise of its team members. Not however that Appolo is now outdated and will be replaced by Helios in the coming weeks. See items as a proof of concept.
-
+    - name: "SlidShady"
+      type: "agent"
+      role: "Content Generator Expert"
+      class_path: "app.agents.content_generator.pptx_generator.SlidShady"
+      enabled: true
+      tags: ["content"]
+      chat_model: {}
+      description: >
+        An expert in generating content based on templates and knowledge from the knowledge-flow backend.
+        Slid Shady can assist with creating various types powerpoint presentations.
     - name: "Samy"
       type: "agent"
       class_path: "app.agents.sentinel.sentinel_expert.SentinelExpert"
