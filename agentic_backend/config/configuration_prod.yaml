@@ -139,21 +139,16 @@ ai:
       description: >
         An expert in retrieving and processing documents using retrieval-augmented generation techniques.
         Rico can help with tasks that involve understanding and utilizing large document collections.
-    - name: "Brontë"
+    - name: "SlidShady"
       type: "agent"
       role: "Content Generator Expert"
-      class_path: "app.agents.content_generator.content_generator_expert.ContentGeneratorExpert"
-      enabled: false
+      class_path: "app.agents.content_generator.pptx_generator.SlidShady"
+      enabled: true
       tags: ["content"]
       chat_model: {}
       description: >
         An expert in generating content based on templates and knowledge from the knowledge-flow backend.
-        Brontë can assist with creating various types of content efficiently.
-      mcp_servers:
-        - name: knowledge-flow-mcp-server
-          transport: streamable_http
-          url: http://localhost:8111/knowledge-flow/v1/mcp-resources
-          sse_read_timeout: 2000
+        SlidShady can assist with creating various types powerpoint presentations.
     - name: "Rico Senior"
       type: "agent"
       role: "Advanced Document Retrieval Expert"

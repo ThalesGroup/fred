@@ -411,7 +411,7 @@ export type ImageUrlPart = {
   url: string;
   alt?: string | null;
 };
-export type LinkKind = "citation" | "download" | "external" | "dashboard" | "related";
+export type LinkKind = "citation" | "download" | "external" | "dashboard" | "related" | "view";
 export type LinkPart = {
   type?: "link";
   href: string;
