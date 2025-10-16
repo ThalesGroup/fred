@@ -1,22 +1,13 @@
+import argparse
+import asyncio
+import json
 import logging
 import sys
 from pathlib import Path
-import json
+
 from datasets import Dataset
-import argparse
-import asyncio
-
-from app.common.utils import parse_server_configuration
-from app.application_context import (
-    ApplicationContext,
-    get_configuration,
-    get_default_model,
-)
-from app.agents.rags.advanced_rag_expert import AdvancedRagExpert
-from app.core.agents.runtime_context import RuntimeContext
-
 from fred_core import ModelConfiguration, get_embeddings
-
+from ragas import RunConfig, evaluate
 from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.llms import LangchainLLMWrapper
 from ragas.metrics import (
@@ -26,7 +17,15 @@ from ragas.metrics import (
     context_recall,
     faithfulness,
 )
-from ragas import RunConfig, evaluate
+
+from app.agents.rags.advanced_rag_expert import AdvancedRagExpert
+from app.application_context import (
+    ApplicationContext,
+    get_configuration,
+    get_default_model,
+)
+from app.common.utils import parse_server_configuration
+from app.core.agents.runtime_context import RuntimeContext
 
 
 def setup_colored_logging():
