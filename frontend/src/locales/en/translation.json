@@ -1,7 +1,8 @@
 {
   "common": {
     "add": "Add",
-    "noneSelected": "None selected"
+    "noneSelected": "None selected",
+    "close": "Close"
   },
   "resource": {
     "kind": {
@@ -359,6 +360,12 @@
     "removedOneResource": "{{typeOne, capitalize}} removed from library.",
     "confirmRemoveTitle": "Remove from library?",
     "confirmRemoveMessage": "Remove « {{res}} » from « {{folder}} »?"
+  },
+  "documentLibraryTree": {
+    "shareFolder": "Share folder",
+    "shareFolderWithName": "Share folder: {{name}}",
+    "deleteFolder": "Delete folder",
+    "deleteFolderDisabled": "A library should be empty to be deleted"
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",

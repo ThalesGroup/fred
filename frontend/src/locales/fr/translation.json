@@ -1,7 +1,8 @@
 {
   "common": {
     "add": "Ajouter",
-    "noneSelected": "Aucune sélection"
+    "noneSelected": "Aucune sélection",
+    "close": "Fermer"
   },
   "resource": {
     "kind": {
@@ -359,6 +360,12 @@
     "removedOneResource": "{{typeOne, capitalize}} supprimé(e) de la bibliothèque.",
     "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
     "confirmRemoveMessage": "Supprimer « {{res}} » de « {{folder}} » ?"
+  },
+  "documentLibraryTree": {
+    "shareFolder": "Partager le dossier",
+    "shareFolderWithName": "Partager le dossier : {{name}}",
+    "deleteFolder": "Supprimer le dossier",
+    "deleteFolderDisabled": "Une bibliothèque doit être vide pour être supprimée"
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",
