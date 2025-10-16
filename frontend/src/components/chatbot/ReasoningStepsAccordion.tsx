@@ -32,7 +32,7 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import Editor from "@monaco-editor/react";
 
 import { Channel, ChatMessage } from "../../slices/agentic/agenticOpenApi";
-import { getExtras, textPreview } from "./ChatBotUtils";
+import { getExtras, isToolCall, isToolResult, textPreview, toolId } from "./ChatBotUtils";
 import ReasoningStepBadge from "./ReasoningStepBadge";
 import { AnyAgent } from "../../common/agent";
 
@@ -55,6 +55,10 @@ const TRACE_CHANNELS: Channel[] = [
   "system_note",
   "error",
 ];
+
+type TraceEntry =
+  | { kind: "solo"; message: ChatMessage }
+  | { kind: "combo"; call: ChatMessage; result?: ChatMessage };
 
 // helpers kept local (can be moved to a shared traceUtils.ts if reused elsewhere)
 const toolName = (m: ChatMessage): string | undefined => {
@@ -115,19 +119,46 @@ function summarizeToolResult(m: ChatMessage): string | undefined {
 
 export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false }: Props) {
   const theme = useTheme();
-  const ordered = useMemo(
-    () => steps.filter((m) => TRACE_CHANNELS.includes(m.channel)).sort((a, b) => a.rank - b.rank),
-    [steps],
-  );
+  const ordered = useMemo(() => {
+    const filtered = steps.filter((m) => TRACE_CHANNELS.includes(m.channel)).sort((a, b) => a.rank - b.rank);
+    const entries: TraceEntry[] = [];
+    const pendingCombos = new Map<string, { kind: "combo"; call: ChatMessage; result?: ChatMessage }>();
+
+    for (const msg of filtered) {
+      if (isToolCall(msg)) {
+        const combo: TraceEntry = { kind: "combo", call: msg, result: undefined };
+        entries.push(combo);
+        const id = toolId(msg);
+        if (id) pendingCombos.set(id, combo);
+        continue;
+      }
+
+      if (isToolResult(msg)) {
+        const id = toolId(msg);
+        const combo = id ? pendingCombos.get(id) : undefined;
+        if (combo && combo.kind === "combo") {
+          combo.result = msg;
+          pendingCombos.delete(id);
+        } else {
+          entries.push({ kind: "solo", message: msg });
+        }
+        continue;
+      }
+
+      entries.push({ kind: "solo", message: msg });
+    }
+
+    return entries;
+  }, [steps]);
 
   const digitCount = useMemo(() => String(Math.max(1, ordered.length)).length, [ordered.length]);
   const numberColWidth = `${Math.max(2, digitCount)}ch`;
 
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<ChatMessage | undefined>(undefined);
+  const [selected, setSelected] = useState<TraceEntry | undefined>(undefined);
 
-  const openDetails = (m: ChatMessage) => {
-    setSelected(m);
+  const openDetails = (entry: TraceEntry) => {
+    setSelected(entry);
     setOpen(true);
   };
   const closeDetails = () => {
@@ -155,23 +186,92 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
         <AccordionDetails>
           <Box sx={{ border: (t) => `1px solid ${t.palette.divider}`, borderRadius: 1, overflowX: "hidden" }}>
             <List dense disablePadding>
-              {ordered.map((m, idx) => {
-                const key = `${m.session_id}-${m.exchange_id}-${m.rank}`;
+              {ordered.map((entry, idx) => {
+                const key =
+                  entry.kind === "combo"
+                    ? `combo-${entry.call.session_id}-${entry.call.exchange_id}-${entry.call.rank}`
+                    : `solo-${entry.message.session_id}-${entry.message.exchange_id}-${entry.message.rank}`;
 
-                const previewRaw = textPreview(m);
+                const message = entry.kind === "combo" ? entry.call : entry.message;
+
+                const previewRaw = textPreview(message);
                 const previewText = asPlainText(previewRaw); // prevents [object Object]
 
-                const ex = getExtras(m);
+                const ex = getExtras(message);
 
                 // Only accept strings for node/task; otherwise ignore to avoid [object Object]
                 const nodeRaw = ex?.node;
                 const taskRaw = ex?.task;
                 const chipNode = typeof nodeRaw === "string" ? nodeRaw.replaceAll("_", " ") : undefined;
                 const chipTask = !chipNode && typeof taskRaw === "string" ? taskRaw : undefined;
-                const chipChannel = formatChannel(m.channel);
+                const chipChannel = formatChannel(message.channel);
 
                 // Prefer tool_result summary when available; else preview/node/task/channel
-                const primary = summarizeToolResult(m) || previewText || chipNode || chipTask || chipChannel;
+                const primarySolo =
+                  summarizeToolResult(message) || previewText || chipNode || chipTask || chipChannel;
+
+                const callJustification =
+                  entry.kind === "combo"
+                    ? (() => {
+                        const firstPart = entry.call.parts?.[0];
+                        if (firstPart?.type === "tool_call") {
+                          const justification = (firstPart as any)?.args?.justification;
+                          return typeof justification === "string" ? justification : undefined;
+                        }
+                        return undefined;
+                      })()
+                    : undefined;
+                const callPreview =
+                  entry.kind === "combo" ? asPlainText(textPreview(entry.call)) : undefined;
+                const resultSummary =
+                  entry.kind === "combo" && entry.result ? summarizeToolResult(entry.result) : undefined;
+                const pendingResult =
+                  entry.kind === "combo" && !entry.result ? "waiting for result…" : undefined;
+
+                const primary = entry.kind === "combo" ? callJustification || callPreview || chipChannel : primarySolo;
+                const primaryTooltip =
+                  entry.kind === "combo"
+                    ? (() => {
+                        const firstPart = entry.call.parts?.[0];
+                        if (firstPart?.type === "tool_call") {
+                          const argsPreview = asPlainText(firstPart.args, 200);
+                          return argsPreview;
+                        }
+                        return undefined;
+                      })()
+                    : undefined;
+
+                const secondary = entry.kind === "combo" ? resultSummary || pendingResult : undefined;
+                const secondaryTooltip =
+                  entry.kind === "combo" && entry.result
+                    ? (() => {
+                        const part = entry.result.parts?.find((p) => p.type === "tool_result") as
+                          | Extract<ChatMessage["parts"][number], { type: "tool_result" }>
+                          | undefined;
+                        return part ? asPlainText(part.content, 200) : undefined;
+                      })()
+                    : undefined;
+                const resultOk =
+                  entry.kind === "combo" && entry.result ? okFlag(entry.result) : entry.kind === "combo"
+                    ? undefined
+                    : okFlag(message);
+
+                const collapsedStatus =
+                  entry.kind === "combo"
+                    ? entry.result
+                      ? typeof resultOk === "boolean"
+                        ? resultOk
+                          ? "ok"
+                          : "error"
+                        : undefined
+                      : "pending"
+                    : message.channel === "tool_result"
+                      ? typeof resultOk === "boolean"
+                        ? resultOk
+                          ? "ok"
+                          : "error"
+                        : undefined
+                      : undefined;
 
                 // Optional tiny debug to catch unexpected objects in extras/preview
                 if (
@@ -181,8 +281,8 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
                 ) {
                   // eslint-disable-next-line no-console
                   console.warn("Trace value was non-string → stringified", {
-                    rank: m.rank,
-                    channel: m.channel,
+                    rank: message.rank,
+                    channel: message.channel,
                     nodeType: typeof nodeRaw,
                     taskType: typeof taskRaw,
                     previewType: typeof previewRaw,
@@ -192,16 +292,20 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
                 return (
                   <React.Fragment key={key}>
                     <ReasoningStepBadge
-                      message={m}
+                      message={message}
                       indexLabel={idx + 1}
                       numberColWidth={numberColWidth}
-                      onClick={() => openDetails(m)}
+                      onToggleDetails={() => openDetails(entry)}
+                      statusLabel={collapsedStatus}
                       primaryText={primary}
+                      primaryTooltip={primaryTooltip}
+                      secondaryText={secondary}
+                      secondaryTooltip={secondaryTooltip}
                       chipChannel={chipChannel}
                       chipNode={chipNode}
                       chipTask={chipTask}
-                      toolName={toolName(m)}
-                      resultOk={okFlag(m)}
+                      toolName={toolName(entry.kind === "combo" ? entry.call : message)}
+                      resultOk={resultOk}
                     />
                     {idx < ordered.length - 1 && <Divider component="li" />}
                   </React.Fragment>
@@ -242,14 +346,30 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
         >
           <Stack direction="row" alignItems="center" spacing={1}>
             <Typography variant="subtitle1" sx={{ flex: 1, minWidth: 0, fontWeight: 600, color: "inherit" }} noWrap>
-              {selected
-                ? [
-                    formatChannel(selected.channel),
-                    getExtras(selected)?.node?.toString().replaceAll("_", " ") || getExtras(selected)?.task,
+              {(() => {
+                if (!selected) return "Details";
+                if (selected.kind === "combo") {
+                  const extras = getExtras(selected.call);
+                  const parts = [
+                    formatChannel(selected.call.channel),
+                    toolName(selected.call),
+                    extras?.node?.toString().replaceAll("_", " ") || extras?.task,
                   ]
                     .filter(Boolean)
-                    .join(" · ")
-                : "Details"}
+                    .map(String);
+                  if (selected.result) {
+                    parts.push(formatChannel(selected.result.channel));
+                  }
+                  return parts.join(" · ");
+                }
+                const extras = getExtras(selected.message);
+                return [
+                  formatChannel(selected.message.channel),
+                  extras?.node?.toString().replaceAll("_", " ") || extras?.task,
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
+              })()}
             </Typography>
             <Tooltip title="Close">
               <IconButton onClick={closeDetails} size="small" sx={{ color: "inherit" }}>
@@ -264,7 +384,14 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
           <Editor
             height="100%"
             defaultLanguage="json"
-            value={safeStringify(selected ?? {}, 2)}
+            value={safeStringify(
+              selected
+                ? selected.kind === "combo"
+                  ? { tool_call: selected.call, tool_result: selected.result ?? null }
+                  : selected.message
+                : {},
+              2,
+            )}
             // Fred rationale:
             // Monaco defaults to light ("vs"). Switch with the MUI palette.
             theme={theme.palette.mode === "dark" ? "vs-dark" : "vs"}
