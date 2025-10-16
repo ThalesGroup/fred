@@ -352,6 +352,13 @@ const lightTheme = createTheme({
         },
       ],
     },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          borderRadius: 16,
+        },
+      },
+    },
 
     // Apply the subtle hero-tinted surfaces globally
     MuiPaper: {
@@ -458,6 +465,13 @@ const darkTheme = createTheme({
           },
         },
       ],
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          borderRadius: 16,
+        },
+      },
     },
 
     // Apply the subtle hero-tinted surfaces globally
