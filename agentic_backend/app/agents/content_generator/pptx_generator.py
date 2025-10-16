@@ -80,7 +80,7 @@ RAG_TUNING = AgentTuning(
             title="Append Chat Context to System Prompt",
             description="If true, append the runtime chat context text after the system prompt.",
             required=False,
-            default=False,
+            default=True,
             ui=UIHints(group="Prompts"),
         ),
         FieldSpec(
@@ -89,7 +89,7 @@ RAG_TUNING = AgentTuning(
             title="PowerPoint Template Path",
             description="Filesystem path to the .pptx template used to generate the fiche.",
             required=False,
-            default="/home/simon/Documents/github_repos/ThalesGroup/fred/agentic_backend/app/agents/content_generator/templates/pptx/template_fiche_ref_projet.pptx",
+            default="./app/agents/content_generator/templates/pptx/template_fiche_ref_projet.pptx",
             ui=UIHints(group="PowerPoint"),
         ),
     ]
@@ -232,7 +232,7 @@ class SlidShady(AgentFlow):
         template_path = self.get_tuned_text("ppt.template_path") or ""
         if not template_path or not os.path.exists(template_path):
             logger.warning("Configured template not found at '%s'. Using fallback path.", template_path)
-            template_path = "/home/simon/Documents/github_repos/ThalesGroup/fred/agentic_backend/app/agents/content_generator/templates/pptx/template_fiche_ref_projet.pptx"
+            template_path = "./app/agents/content_generator/templates/pptx/template_fiche_ref_projet.pptx"
 
         if not os.path.exists(template_path):
             raise FileNotFoundError(f"PowerPoint template not found: {template_path}")
@@ -393,9 +393,25 @@ class SlidShady(AgentFlow):
                         )
                     pdf_download_url = self.get_asset_download_url(asset_key=pdf_upload.key, scope="user")
 
-                # Prepare message parts
+                summary_prompt = HumanMessage(
+                    content=f"""
+                You are an assistant that summarizes project reference information for a chat user.
+                Given the extracted structured data below, produce a concise, readable summary in 3-5 short sentences.
+                Do not repeat fields unnecessarily, focus on key points like project name, duration, team size, budget, and main activities.
+                Structured data:
+                {structured_data}
+                """
+                )
+
+                summary_msg = await self.model.ainvoke([summary_prompt])
+                summary_text = getattr(summary_msg, "content", "").strip()
+
+                text_summary = "✅ **Slides generated successfully!**"
+                if summary_text:
+                    text_summary += "\n\n🔎 **Generated content summary:**\n\n" + summary_text
+
                 parts: List[MessagePart] = [
-                    TextPart(text="✅ Slides generated successfully."),
+                    TextPart(text=text_summary),
                     LinkPart(
                         href=download_url,
                         title=f"Download {upload_result.file_name}",
