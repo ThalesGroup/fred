@@ -6,7 +6,7 @@
 // User input component for the chatbot
 
 import AddIcon from "@mui/icons-material/Add";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import StopIcon from "@mui/icons-material/Stop";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import React, { useEffect, useMemo, useRef, useState } from "react";
