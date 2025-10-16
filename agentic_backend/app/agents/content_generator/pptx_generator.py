@@ -14,7 +14,8 @@
 
 import logging
 import os
-import subprocess
+import shutil
+import subprocess # nosec: controlled subprocess usage
 import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -95,6 +96,7 @@ RAG_TUNING = AgentTuning(
     ]
 )
 
+
 @expose_runtime_source("agent.SlidShady")
 class SlidShady(AgentFlow):
     """
@@ -120,18 +122,31 @@ class SlidShady(AgentFlow):
         # Structured output schema (header + body)
         self.response_schemas = [
             ResponseSchema(name="project_name", description="Project name"),
-            ResponseSchema(name="start_date", description="Project start date (month and year if possible)"),
-            ResponseSchema(name="end_date", description="Project end date (month and year if possible)"),
+            ResponseSchema(
+                name="start_date",
+                description="Project start date (month and year if possible)",
+            ),
+            ResponseSchema(
+                name="end_date",
+                description="Project end date (month and year if possible)",
+            ),
             ResponseSchema(name="num_people", description="Number of people involved"),
             ResponseSchema(name="budget_k_eur", description="Project budget in k€"),
-            ResponseSchema(name="client_presentation_and_context", description="Client presentation and context"),
+            ResponseSchema(
+                name="client_presentation_and_context",
+                description="Client presentation and context",
+            ),
             ResponseSchema(name="stakes", description="Project stakes"),
-            ResponseSchema(name="activities_and_solutions", description="Activities and solutions"),
+            ResponseSchema(
+                name="activities_and_solutions", description="Activities and solutions"
+            ),
             ResponseSchema(name="client_benefits", description="Client benefits"),
             ResponseSchema(name="strengths", description="Strengths"),
             ResponseSchema(name="tech_list", description="List of technologies used"),
         ]
-        self.parser = StructuredOutputParser.from_response_schemas(self.response_schemas)
+        self.parser = StructuredOutputParser.from_response_schemas(
+            self.response_schemas
+        )
         self.format_instructions = self.parser.get_format_instructions()
 
         # Prompt template
@@ -180,14 +195,20 @@ class SlidShady(AgentFlow):
     # Jelpers
     # -----------------------------
 
-
     def _convert_pptx_to_pdf(self, pptx_path: Path) -> Optional[Path]:
         """Convert PPTX to PDF using headless LibreOffice with font embedding."""
         pdf_path = pptx_path.with_suffix(".pdf")
         try:
+            soffice_path = shutil.which("soffice")
+            if not soffice_path:
+                raise FileNotFoundError(
+                    "LibreOffice executable 'soffice' not found in PATH. "
+                    "Please ensure LibreOffice is installed and 'soffice' is in your PATH."
+                )
+            
             subprocess.run(
                 [
-                    "soffice",
+                    soffice_path,
                     "--headless",
                     "--nologo",
                     "--nofirststartwizard",
@@ -200,21 +221,28 @@ class SlidShady(AgentFlow):
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-            )
+            ) # nosec: inputs are fully controlled and shell=False
 
             if pdf_path.exists():
-                logger.info("LibreOffice successfully converted PPTX to PDF with embedded fonts: %s", pdf_path)
+                logger.info(
+                    "LibreOffice successfully converted PPTX to PDF with embedded fonts: %s",
+                    pdf_path,
+                )
                 return pdf_path
             else:
-                logger.warning("LibreOffice conversion completed but PDF not found at %s", pdf_path)
+                logger.warning(
+                    "LibreOffice conversion completed but PDF not found at %s", pdf_path
+                )
                 return None
         except subprocess.CalledProcessError as e:
-            logger.error("LibreOffice PDF conversion failed: %s", e.stderr.decode(errors='ignore'))
+            logger.error(
+                "LibreOffice PDF conversion failed: %s",
+                e.stderr.decode(errors="ignore"),
+            )
             return None
         except FileNotFoundError:
             logger.error("LibreOffice (soffice) is not installed or not in PATH.")
             return None
-
 
     def _system_prompt(self) -> str:
         """Retrieve tuned system prompt."""
@@ -227,17 +255,24 @@ class SlidShady(AgentFlow):
     # -----------------------------
     # PowerPoint filling
     # -----------------------------
-    def _fill_ppt_template(self, output_data: Dict[str, str], project_name: str) -> Path:
+    def _fill_ppt_template(
+        self, output_data: Dict[str, str], project_name: str
+    ) -> Path:
         """Fill PowerPoint template and style header."""
         template_path = self.get_tuned_text("ppt.template_path") or ""
         if not template_path or not os.path.exists(template_path):
-            logger.warning("Configured template not found at '%s'. Using fallback path.", template_path)
+            logger.warning(
+                "Configured template not found at '%s'. Using fallback path.",
+                template_path,
+            )
             template_path = "./app/agents/content_generator/templates/pptx/template_fiche_ref_projet.pptx"
 
         if not os.path.exists(template_path):
             raise FileNotFoundError(f"PowerPoint template not found: {template_path}")
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pptx", prefix=f"fiche_{project_name}_") as out:
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=".pptx", prefix=f"fiche_{project_name}_"
+        ) as out:
             output_path = Path(out.name)
 
         prs = Presentation(template_path)
@@ -258,41 +293,45 @@ class SlidShady(AgentFlow):
                 placeholder = slide.placeholders[ph_idx]
                 if not getattr(placeholder, "has_text_frame", False):
                     continue
-                textbox = placeholder.text_frame # type: ignore
+                textbox = placeholder.text_frame  # type: ignore
                 textbox.clear()
                 p = textbox.add_paragraph()
                 p.text = output_data.get(key, "")
                 p.font.size = Pt(10)
             except Exception as e:
-                logger.warning("Error filling placeholder %s for key %s: %s", ph_idx, key, e)
+                logger.warning(
+                    "Error filling placeholder %s for key %s: %s", ph_idx, key, e
+                )
 
         # --- HEADER placeholders (styled) ---
         for shape in slide.shapes:
             if not shape.has_text_frame:
                 continue
-            text = shape.text # type: ignore
+            text = shape.text  # type: ignore
 
             if "NOM_PROJET" in text:
-                shape.text = output_data.get("project_name", "N/A") # type: ignore
-                for p in shape.text_frame.paragraphs: # type: ignore
+                shape.text = output_data.get("project_name", "N/A")  # type: ignore
+                for p in shape.text_frame.paragraphs:  # type: ignore
                     for r in p.runs:
                         r.font.size = Pt(24)
                         r.font.bold = True
                         r.font.color.rgb = RGBColor(255, 255, 255)
             elif "personnes" in text:
-                shape.text = f"{output_data.get('num_people', 'N/A')} personnes" # type: ignore
+                shape.text = f"{output_data.get('num_people', 'N/A')} personnes"  # type: ignore
             elif "Mois_debut" in text or "Mois_fin" in text:
                 start = output_data.get("start_date", "?")
                 end = output_data.get("end_date", "?")
-                shape.text = f"{start} - {end}" # type: ignore
+                shape.text = f"{start} - {end}"  # type: ignore
             elif "Enjeux" in text or "€" in text:
-                shape.text = f"Enjeux financier : {output_data.get('budget_k_eur', 'N/A')}k€" # type: ignore
+                shape.text = ( # type: ignore
+                    f"Enjeux financier : {output_data.get('budget_k_eur', 'N/A')}k€"  # type: ignore
+                )
             else:
                 continue
 
             # Non-title header fields: 16pt white, non-bold
             if "NOM_PROJET" not in text:
-                for p in shape.text_frame.paragraphs: # type: ignore
+                for p in shape.text_frame.paragraphs:  # type: ignore
                     for r in p.runs:
                         r.font.size = Pt(16)
                         r.font.bold = False
@@ -355,7 +394,9 @@ class SlidShady(AgentFlow):
 
             attach_sources_to_llm_response(answer_msg, hits)
 
-            project_name = structured_data.get("project_name", "project_auto").replace(" ", "_")
+            project_name = structured_data.get("project_name", "project_auto").replace(
+                " ", "_"
+            )
             ppt_path: Optional[Path] = None
             pdf_path: Optional[Path] = None
             pdf_download_url: Optional[str] = None
@@ -365,7 +406,10 @@ class SlidShady(AgentFlow):
             except Exception as e:
                 logger.exception("Failed to generate PPTX: %s", e)
                 error_msg = AIMessage(content=f"❌ Error generating PowerPoint: {e}")
-                return {"messages": [answer_msg, error_msg], "structured_data": structured_data}
+                return {
+                    "messages": [answer_msg, error_msg],
+                    "structured_data": structured_data,
+                }
 
             # Upload PPTX
             try:
@@ -378,7 +422,9 @@ class SlidShady(AgentFlow):
                         content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                         user_id_override=user_id,
                     )
-                download_url = self.get_asset_download_url(asset_key=upload_result.key, scope="user")
+                download_url = self.get_asset_download_url(
+                    asset_key=upload_result.key, scope="user"
+                )
 
                 # --- Convert to PDF and upload ---
                 pdf_path = self._convert_pptx_to_pdf(ppt_path)
@@ -391,7 +437,9 @@ class SlidShady(AgentFlow):
                             content_type="application/pdf",
                             user_id_override=user_id,
                         )
-                    pdf_download_url = self.get_asset_download_url(asset_key=pdf_upload.key, scope="user")
+                    pdf_download_url = self.get_asset_download_url(
+                        asset_key=pdf_upload.key, scope="user"
+                    )
 
                 summary_prompt = HumanMessage(
                     content=f"""
@@ -408,7 +456,9 @@ class SlidShady(AgentFlow):
 
                 text_summary = "✅ **Slides generated successfully!**"
                 if summary_text:
-                    text_summary += "\n\n🔎 **Generated content summary:**\n\n" + summary_text
+                    text_summary += (
+                        "\n\n🔎 **Generated content summary:**\n\n" + summary_text
+                    )
 
                 parts: List[MessagePart] = [
                     TextPart(text=text_summary),
@@ -423,9 +473,13 @@ class SlidShady(AgentFlow):
                 if pdf_download_url:
                     parts.append(
                         LinkPart(
-                            href=pdf_download_url.replace("/raw_content/", "/raw_content/stream/"),
+                            href=pdf_download_url.replace(
+                                "/raw_content/", "/raw_content/stream/"
+                            ),
                             title="View (PDF Preview)",
-                            kind=LinkKind.view if hasattr(LinkKind, "view") else LinkKind.external,
+                            kind=LinkKind.view
+                            if hasattr(LinkKind, "view")
+                            else LinkKind.external,
                             mime="application/pdf",
                         )
                     )
@@ -435,19 +489,26 @@ class SlidShady(AgentFlow):
 
             except AssetRetrievalError as e:
                 logger.exception("Asset upload error: %s", e)
-                return {"messages": [AIMessage(content=f"❌ Upload error: {e}")], "structured_data": structured_data}
+                return {
+                    "messages": [AIMessage(content=f"❌ Upload error: {e}")],
+                    "structured_data": structured_data,
+                }
 
             finally:
                 for p in [ppt_path, pdf_path]:
                     if p and p.exists():
                         try:
                             p.unlink(missing_ok=True)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning("Failed to delete temporary file %s: %s", p, e)
 
         except Exception:
             logger.exception("SlidShady: error in reasoning step.")
             fallback = await self.model.ainvoke(
-                [HumanMessage(content="An error occurred while extracting the information.")]
+                [
+                    HumanMessage(
+                        content="An error occurred while extracting the information."
+                    )
+                ]
             )
             return {"messages": [fallback]}
