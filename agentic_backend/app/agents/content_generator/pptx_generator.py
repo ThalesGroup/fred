@@ -15,7 +15,7 @@
 import logging
 import os
 import shutil
-import subprocess # nosec: controlled subprocess usage
+import subprocess  # nosec: controlled subprocess usage
 import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -258,7 +258,7 @@ class SlidShady(AgentFlow):
     def _fill_ppt_template(
         self, output_data: Dict[str, str], project_name: str
     ) -> Path:
-        """Fill PowerPoint template and style header."""
+        """Fill PowerPoint template and style header, with fallback text for missing info."""
         template_path = self.get_tuned_text("ppt.template_path") or ""
         if not template_path or not os.path.exists(template_path):
             logger.warning(
@@ -269,6 +269,13 @@ class SlidShady(AgentFlow):
 
         if not os.path.exists(template_path):
             raise FileNotFoundError(f"PowerPoint template not found: {template_path}")
+
+        # Helper to normalize missing fields
+        def safe_get(key: str, suffix: str = "") -> str:
+            value = str(output_data.get(key, "") or "").strip()
+            if not value:
+                value = "N/A"
+            return f"{value}{suffix}" if suffix else value
 
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=".pptx", prefix=f"fiche_{project_name}_"
@@ -296,7 +303,7 @@ class SlidShady(AgentFlow):
                 textbox = placeholder.text_frame  # type: ignore
                 textbox.clear()
                 p = textbox.add_paragraph()
-                p.text = output_data.get(key, "")
+                p.text = safe_get(key)
                 p.font.size = Pt(10)
             except Exception as e:
                 logger.warning(
@@ -310,21 +317,21 @@ class SlidShady(AgentFlow):
             text = shape.text  # type: ignore
 
             if "NOM_PROJET" in text:
-                shape.text = output_data.get("project_name", "N/A")  # type: ignore
+                shape.text = safe_get("project_name")  # type: ignore
                 for p in shape.text_frame.paragraphs:  # type: ignore
                     for r in p.runs:
                         r.font.size = Pt(24)
                         r.font.bold = True
                         r.font.color.rgb = RGBColor(255, 255, 255)
             elif "personnes" in text:
-                shape.text = f"{output_data.get('num_people', 'N/A')} personnes"  # type: ignore
+                shape.text = safe_get("num_people", " personnes")  # type: ignore
             elif "Mois_debut" in text or "Mois_fin" in text:
-                start = output_data.get("start_date", "?")
-                end = output_data.get("end_date", "?")
+                start = safe_get("start_date")
+                end = safe_get("end_date")
                 shape.text = f"{start} - {end}"  # type: ignore
             elif "Enjeux" in text or "€" in text:
-                shape.text = ( # type: ignore
-                    f"Enjeux financier : {output_data.get('budget_k_eur', 'N/A')}k€"  # type: ignore
+                shape.text = (  # type: ignore
+                    f"Enjeux financier : {safe_get('budget_k_eur')}k€"  # type: ignore
                 )
             else:
                 continue
