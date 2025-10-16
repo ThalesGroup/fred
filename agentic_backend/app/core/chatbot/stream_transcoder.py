@@ -1,6 +1,16 @@
-# chat/stream_transcoder.py
 # Copyright Thales 2025
-# Licensed under the Apache License, Version 2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from __future__ import annotations
 
@@ -8,12 +18,14 @@ import inspect
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Awaitable, Callable, List
+from typing import Awaitable, Callable, List, Optional, cast
 
-from langchain_core.messages import BaseMessage
+from fred_core import KeycloakUser
+from langchain_core.messages import AnyMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
-from langgraph.graph.state import CompiledStateGraph
+from langgraph.graph import MessagesState
 
+from app.core.agents.agent_flow import AgentFlow
 from app.core.chatbot.chat_schema import (
     Channel,
     ChatMessage,
@@ -43,6 +55,46 @@ def _utcnow_dt():
     return datetime.now(timezone.utc).replace(microsecond=0)
 
 
+def _infer_tool_ok_flag(raw_md: dict, content: str) -> Optional[bool]:
+    """
+    Best-effort determination of tool_result.ok.
+    - Honour explicit metadata provided by the tool (ok / success / status).
+    - Detect common error markers when metadata is missing so the UI does not
+      show a green “ok” badge for a textual error payload.
+    """
+    if isinstance(raw_md, dict):
+        explicit_ok = raw_md.get("ok")
+        if isinstance(explicit_ok, bool):
+            return explicit_ok
+
+        success = raw_md.get("success")
+        if isinstance(success, bool):
+            return success
+
+        status = raw_md.get("status")
+        if isinstance(status, str):
+            status_lc = status.lower()
+            if status_lc in ("ok", "success", "succeeded", "completed"):
+                return True
+            if status_lc in ("error", "failed", "fail", "exception"):
+                return False
+
+        if raw_md.get("error") or raw_md.get("is_error") is True:
+            return False
+        if raw_md.get("failed") is True:
+            return False
+
+    if isinstance(content, str):
+        stripped = content.strip()
+        lowered = stripped.lower()
+        if lowered.startswith("error") or lowered.startswith("exception"):
+            return False
+        if "toolexception" in lowered or "traceback" in lowered:
+            return False
+
+    return None
+
+
 class StreamTranscoder:
     """
     Purpose:
@@ -62,7 +114,7 @@ class StreamTranscoder:
     async def stream_agent_response(
         self,
         *,
-        compiled_graph: CompiledStateGraph,
+        agent: AgentFlow,
         input_messages: List[BaseMessage],
         session_id: str,
         exchange_id: str,
@@ -70,20 +122,24 @@ class StreamTranscoder:
         base_rank: int,
         start_seq: int,
         callback: CallbackType,
+        user_context: KeycloakUser,
     ) -> List[ChatMessage]:
         config: RunnableConfig = {
-            "configurable": {"thread_id": session_id},
+            "configurable": {
+                "thread_id": session_id,
+                "user_id": user_context.uid,
+            },
             "recursion_limit": 40,
         }
 
         out: List[ChatMessage] = []
         seq = start_seq
         final_sent = False
-
-        async for event in compiled_graph.astream(
-            {"messages": input_messages},
+        msgs_any: list[AnyMessage] = [cast(AnyMessage, m) for m in input_messages]
+        state: MessagesState = {"messages": msgs_any}
+        async for event in agent.astream_updates(
+            state=state,
             config=config,
-            stream_mode="updates",
         ):
             # `event` looks like: {'node_name': {'messages': [...]}} or {'end': None}
             key = next(iter(event))
@@ -152,6 +208,7 @@ class StreamTranscoder:
                     content_str = getattr(msg, "content", "")
                     if not isinstance(content_str, str):
                         content_str = json.dumps(content_str)
+                    ok_flag = _infer_tool_ok_flag(raw_md, content_str)
                     tr_msg = ChatMessage(
                         session_id=session_id,
                         exchange_id=exchange_id,
@@ -162,7 +219,7 @@ class StreamTranscoder:
                         parts=[
                             ToolResultPart(
                                 call_id=call_id,
-                                ok=True,
+                                ok=ok_flag,
                                 latency_ms=raw_md.get("latency_ms"),
                                 content=content_str,
                             )
@@ -188,7 +245,17 @@ class StreamTranscoder:
                 }.get(lc_type, Role.assistant)
 
                 content = getattr(msg, "content", "")
-                parts: List[MessagePart] = parts_from_raw_content(content)
+
+                # CRITICAL FIX: Check msg.parts for structured content first.
+                lc_parts = getattr(msg, "parts", []) or []
+                parts: List[MessagePart] = []
+
+                if lc_parts:
+                    # 1. Use structured parts (e.g., LinkPart, TextPart list) from the agent's AIMessage.
+                    parts.extend(lc_parts)
+                elif content:
+                    # 2. If no structured parts, fall back to parsing the raw content string.
+                    parts.extend(parts_from_raw_content(content))
 
                 # Append any structured UI payloads (LinkPart/GeoPart...)
                 additional_kwargs = getattr(msg, "additional_kwargs", {}) or {}

@@ -63,6 +63,37 @@
       "console": "integratedTerminal"
     },
     {
+      "name": "Debug Agentic Academy",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/agentic_backend/.venv/bin/python",
+      "cwd": "${workspaceFolder}/agentic_backend",
+      "module": "uvicorn",
+      "args": [
+        "app.main:create_app",
+        "--factory",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--log-level",
+        "info",
+        "--loop",
+        "asyncio",
+        "--reload",
+        "--reload-dir", "${workspaceFolder}/agentic_backend/config",
+        "--reload-include", "*.py",
+        "--reload-include", "*.yaml",
+
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/agentic_backend",
+        "CONFIG_FILE": "${workspaceFolder}/agentic_backend/config/configuration_academy.yaml"
+      },
+      "justMyCode": false,
+      "console": "integratedTerminal"
+    },
+    {
       "name": "Debug Knowledge Flow Backend (configuration.yaml)",
       "type": "debugpy",
       "request": "launch",

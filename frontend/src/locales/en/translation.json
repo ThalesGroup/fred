@@ -57,6 +57,32 @@
     "monitoring_kpi": "Kpis",
     "monitoring_logs": "Logs"
   },
+  "assetManager": {
+    "title": "Manage Assets for {{agentId}}",
+    "description": "Upload and manage binary resources like templates or configuration files for this agent. These resources can be referenced by key in your agent interactions.",
+    "listTitle": "Current Assets",
+    "noAssetsFound": "No assets found. Upload one below to get started.",
+    "uploadTitle": "Upload New Asset",
+    "browseButton": "Browse",
+    "labelFile": "File to upload",
+    "labelKey": "Asset Key (Logical Name)",
+    "keyPlaceholder": "e.g., my-report-template",
+    "labelContentTypeOverride": "Content-Type Override (Optional)",
+    "uploadButton": "Upload Asset",
+    "uploading": "Uploading...",
+    "noFileSelected": "Please select a file to upload.",
+    "unknownUploadError": "An unknown error occurred during upload.",
+    "uploadSuccessSummary": "Asset Uploaded",
+    "uploadSuccessDetail": "Asset '{{key}}' uploaded successfully.",
+    "uploadFailedSummary": "Upload Failed",
+    "confirmDelete": "Are you sure you want to delete asset '{{key}}'? This action cannot be undone.",
+    "deleteSuccessSummary": "Asset Deleted",
+    "deleteSuccessDetail": "Asset '{{key}}' deleted.",
+    "deleteFailedSummary": "Deletion Failed",
+    "unknownDeleteError": "An unknown error occurred during deletion.",
+    "confirmDeleteTitle": "Confirm deletion",
+    "confirmDeleteMessage": "Delete this asset? This action cannot be undone."
+  },
   "agentHub": {
     "title": "Agent Hub",
     "confirmDeleteTitle": "Confirm deletion",
@@ -187,7 +213,9 @@
     "enabled": "Enable agent",
     "disable": "Disable agent",
     "favorite": "Add the agent to your favorites",
-    "unfavorite": "Remove the agent from your favorites"
+    "unfavorite": "Remove the agent from your favorites",
+    "manageAssets": "Manage Assets",
+    "manageCrew": "Manage Crew"
   },
   "dialogs": {
     "create": {

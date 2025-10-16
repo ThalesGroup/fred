@@ -153,7 +153,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             self._knn_filter_supported = False
 
         return self._knn_filter_supported
-    
+
     # --- ann_search: keep passing the list directly to boolean_filter ---
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:
         """
@@ -266,9 +266,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
                         continue
                 else:
                     # No argument worked
-                    raise TypeError(
-                        "No compatible filter argument found in LangChain OpenSearchVectorSearch."
-                    )
+                    raise TypeError("No compatible filter argument found in LangChain OpenSearchVectorSearch.")
         except Exception:
             logger.exception("❌ LangChain ANN search failed.")
             raise RuntimeError("All ANN search modes failed.")
@@ -277,15 +275,17 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         results: List[AnnHit] = []
         for rank, (doc, score) in enumerate(pairs, start=1):
             cid = doc.metadata.get(CHUNK_ID_FIELD) or doc.metadata.get("_id")
-            doc.metadata.update({
-                CHUNK_ID_FIELD: cid,
-                "score": float(score),
-                "rank": rank,
-                "retrieved_at": now_iso,
-                "embedding_model": model_name,
-                "vector_index": self._index,
-                "token_count": len((doc.page_content or '').split()),
-            })
+            doc.metadata.update(
+                {
+                    CHUNK_ID_FIELD: cid,
+                    "score": float(score),
+                    "rank": rank,
+                    "retrieved_at": now_iso,
+                    "embedding_model": model_name,
+                    "vector_index": self._index,
+                    "token_count": len((doc.page_content or "").split()),
+                }
+            )
             results.append(AnnHit(document=doc, score=float(score)))
 
         logger.info("✅ ANN search (LangChain fallback) returned %d hits", len(results))
