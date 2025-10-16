@@ -35,11 +35,13 @@ from app.application_state import attach_app
 from app.common.http_logging import RequestResponseLogger
 from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
+from app.compat import fastapi_mcp_patch  # noqa: F401
 from app.core.monitoring.monitoring_controller import MonitoringController
 from app.features.catalog.controller import CatalogController
 from app.features.content import report_controller
 from app.features.content.asset_controller import AssetController
 from app.features.content.content_controller import ContentController
+from app.features.groups import groups_controller
 from app.features.ingestion.controller import IngestionController
 from app.features.kpi import logs_controller
 from app.features.kpi.kpi_controller import KPIController
@@ -167,6 +169,7 @@ def create_app() -> FastAPI:
     OpenSearchOpsController(router)
     router.include_router(logs_controller.router)
     router.include_router(report_controller.router)
+    router.include_router(groups_controller.router)
     router.include_router(users_controller.router)
     if configuration.scheduler.enabled:
         logger.info("🧩 Activating ingestion scheduler controller.")
