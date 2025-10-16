@@ -32,6 +32,7 @@ from langgraph.graph import END, START, StateGraph
 from app.common.structures import ModelConfiguration
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from app.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,7 @@ TUNING = AgentTuning(
 )
 
 
+@expose_runtime_source("agent.DualModelResponder")
 class DualModelResponder(AgentFlow):
     tuning = TUNING
 

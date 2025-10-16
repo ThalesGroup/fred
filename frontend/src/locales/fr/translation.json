@@ -63,6 +63,7 @@
     "listTitle": "Ressources Actuelles",
     "noAssetsFound": "Aucune ressource trouvée. Téléchargez-en une ci-dessous pour commencer.",
     "uploadTitle": "Télécharger une Nouvelle Ressource",
+    "browseButton": "Parcourir",
     "labelFile": "Fichier à télécharger",
     "labelKey": "Clé de Ressource (Nom Logique)",
     "keyPlaceholder": "ex. mon-modele-de-rapport",
@@ -213,7 +214,8 @@
     "disable": "Désactiver l'agent",
     "favorite": "Ajouter l'agent à vos favoris",
     "unfavorite": "Retirer l'agent de vos favoris",
-    "manageAssets": "Gérer les ressources (modèles)"
+    "manageAssets": "Gérer les ressources",
+    "manageCrew": "Gérer l'équipe"
   },
   "dialogs": {
     "create": {
