@@ -74,7 +74,7 @@ baseline-detect-secret: ${BASELINE_DIR} ## Set detect-secrets baseline
 
 .PHONY: baseline-type-check
 baseline-type-check: ${BASELINE_DIR} ## Set basedpyright baseline
-	${UV} run basedpyright --baseline-file ${BASEDPYRIGHT_BASELINE_FILE} --writebaseline 
+	${UV} run basedpyright --baselinefile ${BASEDPYRIGHT_BASELINE_FILE} --writebaseline 
 
 .PHONY: baseline
 baseline: format ## Format code and set all baselines
