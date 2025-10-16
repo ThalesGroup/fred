@@ -9,7 +9,7 @@ ARG GROUP_ID=1000
 
 # Install required system dependencies
 RUN apt-get update && \
-    apt-get install -y git curl make net-tools && \
+    apt-get install -y git curl make net-tools libreoffice && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv globally

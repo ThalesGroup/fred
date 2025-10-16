@@ -65,6 +65,7 @@ By default:
   | yq           | Utility                    | system                                                                 | Install via system package manager                                                          |
   | SQLite       | Local RDBMS engine         | ≥ 3.35.0                                                               | Install via system package manager                                                          |
   | Pandoc       | 2.9.2.1                    | [Pandoc installation instructions](https://pandoc.org/installing.html) | For DOCX document ingestion                                                                 |
+  | LibreOffice  | Headless doc converter     | [LibreOffice installation instructions](https://www.libreoffice.org/download/download-libreoffice/) | For PPTX conversion into PDF                                   |
 
   <details>
     <summary>Dependency details</summary>
