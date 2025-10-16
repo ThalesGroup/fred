@@ -141,6 +141,8 @@
       "count": "{{count}} attached"
     },
     "recordAudio": "Record audio",
+    "sendMessage": "Send message",
+    "stopResponse": "Stop response",
     "stopRecording": "Stop recording",
     "audioChip": "Audio recording",
     "hideAudio": "Hide audio controller",
