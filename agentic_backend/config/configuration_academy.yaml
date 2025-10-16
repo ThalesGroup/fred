@@ -111,6 +111,15 @@ ai:
       enabled: true
       tags: ["academy"]
       chat_model: {}
+    - name: "SimpleRouter"
+      type: "leader"
+      role: "Academy sample simple leader"
+      description: >
+        A leader agent that coordinates multiple expert agents to achieve complex tasks.
+      class_path: "app.academy.06_simple_leader.simple_leader.SimpleRouter"
+      enabled: true
+      tags: ["academy"]
+      chat_model: {}
 
 storage:
   postgres:
