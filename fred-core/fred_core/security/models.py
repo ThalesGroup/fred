@@ -64,14 +64,14 @@ class AuthorizationError(Exception):
     def __init__(
         self,
         user_id: str,
-        action: Action,
+        action: str,
         resource: Resource,
         message: Optional[str] = None,
     ):
         self.user_id = user_id
         self.action = action
         self.resource = resource
-        default_message = f"Not authorized to {action.value} {resource.value}"
+        default_message = f"Not authorized to {action} {resource.value}"
         super().__init__(message or default_message)
 
 

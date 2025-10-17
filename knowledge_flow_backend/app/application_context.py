@@ -32,6 +32,9 @@ from fred_core import (
     OpenSearchKPIStore,
     OpenSearchLogStore,
     RamLogStore,
+    RebacEngine,
+    SpiceDbRebacConfig,
+    SpiceDbRebacEngine,
     SQLStorageConfig,
     SQLTableStore,
     StoreInfo,
@@ -138,6 +141,12 @@ def get_kpi_writer() -> KPIWriter:
     return get_app_context().get_kpi_writer()
 
 
+def get_rebac_engine() -> RebacEngine:
+    """Expose the shared ReBAC engine instance."""
+
+    return get_app_context().get_rebac_engine()
+
+
 def get_app_context() -> "ApplicationContext":
     """
     Retrieves the global application context instance.
@@ -209,6 +218,7 @@ class ApplicationContext:
     _catalog_store_instance: Optional[BaseCatalogStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
     _kpi_writer: Optional[KPIWriter] = None
+    _rebac_engine: Optional[RebacEngine] = None
 
     def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
@@ -563,6 +573,30 @@ class ApplicationContext:
         self._kpi_writer = KPIWriter(store=self.get_kpi_store())
         return self._kpi_writer
 
+    def get_rebac_engine(self) -> RebacEngine:
+        if self._rebac_engine is not None:
+            return self._rebac_engine
+
+        rebac_config = self.configuration.security.rebac
+        if isinstance(rebac_config, SpiceDbRebacConfig):
+            token_env_var = rebac_config.token_env_var
+            token = os.getenv(token_env_var)
+            if not token:
+                raise ValueError(f"Missing SpiceDB token environment variable: {token_env_var}")
+
+            logger.info(
+                "Initializing SpiceDB ReBAC engine (endpoint=%s, insecure=%s)",
+                rebac_config.endpoint,
+                rebac_config.insecure,
+            )
+            self._rebac_engine = SpiceDbRebacEngine(
+                rebac_config,
+                token=token,
+            )
+        else:
+            raise ValueError(f"Unsupported ReBAC engine type: {getattr(rebac_config, 'type', rebac_config)}")
+        return self._rebac_engine
+
     def get_kpi_store(self) -> BaseKPIStore:
         if self._kpi_store_instance is not None:
             return self._kpi_store_instance
@@ -778,6 +812,17 @@ class ApplicationContext:
                 logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
                 raise ValueError("Invalid Keycloak URL") from e
             _require_env("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
+
+        rebac = self.configuration.security.rebac
+        if rebac:
+            logger.info("  🕸️ ReBAC engine: %s", rebac.type)
+            logger.info("     • endpoint: %s", rebac.endpoint)
+            logger.info("     • insecure: %s", rebac.insecure)
+            logger.info("     • sync_schema_on_init: %s", rebac.sync_schema_on_init)
+            env_name = rebac.token_env_var
+            self._log_sensitive(env_name, os.getenv(env_name))
+        else:
+            logger.info("  🕸️ ReBAC engine: disabled")
 
         embedding = self.configuration.embedding_model
         # Non-secret settings from YAML

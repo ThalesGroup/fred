@@ -19,8 +19,10 @@
 Entrypoint for the Knowledge Flow Backend App.
 """
 
+import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager, suppress
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
@@ -33,11 +35,13 @@ from app.application_state import attach_app
 from app.common.http_logging import RequestResponseLogger
 from app.common.structures import Configuration
 from app.common.utils import parse_server_configuration
+from app.compat import fastapi_mcp_patch  # noqa: F401
 from app.core.monitoring.monitoring_controller import MonitoringController
 from app.features.catalog.controller import CatalogController
 from app.features.content import report_controller
 from app.features.content.asset_controller import AssetController
 from app.features.content.content_controller import ContentController
+from app.features.groups import groups_controller
 from app.features.ingestion.controller import IngestionController
 from app.features.kpi import logs_controller
 from app.features.kpi.kpi_controller import KPIController
@@ -49,7 +53,9 @@ from app.features.resources.controller import ResourceController
 from app.features.scheduler.controller import SchedulerController
 from app.features.tabular.controller import TabularController
 from app.features.tag.controller import TagController
+from app.features.users import users_controller
 from app.features.vector_search.vector_search_controller import VectorSearchController
+from app.security.keycloak_rebac_sync import reconcile_keycloak_groups_with_rebac
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -98,10 +104,32 @@ def create_app() -> FastAPI:
     )
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
     application_context._log_config_summary()
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        async def periodic_reconciliation() -> None:
+            while True:
+                try:
+                    await reconcile_keycloak_groups_with_rebac()
+                except Exception:  # noqa: BLE001
+                    logger.exception("Scheduled Keycloak→SpiceDB reconciliation failed.")
+                await asyncio.sleep(15 * 60)
+
+        # Reconcile Keycloak groups with ReBAC every 15 minutes
+        background_task = asyncio.create_task(periodic_reconciliation())
+
+        try:
+            yield
+        finally:
+            background_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await background_task
+
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs",
         redoc_url=f"{configuration.app.base_url}/redoc",
         openapi_url=f"{configuration.app.base_url}/openapi.json",
+        lifespan=lifespan,
     )
 
     # Register exception handlers
@@ -141,6 +169,8 @@ def create_app() -> FastAPI:
     OpenSearchOpsController(router)
     router.include_router(logs_controller.router)
     router.include_router(report_controller.router)
+    router.include_router(groups_controller.router)
+    router.include_router(users_controller.router)
     if configuration.scheduler.enabled:
         logger.info("🧩 Activating ingestion scheduler controller.")
         SchedulerController(router)

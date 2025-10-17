@@ -24,7 +24,7 @@ from fred_core import KeycloakUser, get_current_user
 from app.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
 from app.features.metadata.service import MetadataNotFound
 from app.features.tag.service import TagService
-from app.features.tag.structure import TagCreate, TagType, TagUpdate, TagWithItemsId
+from app.features.tag.structure import TagCreate, TagMembersResponse, TagPermissionsResponse, TagShareRequest, TagType, TagUpdate, TagWithItemsId
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +89,26 @@ class TagController:
         async def get_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
             return self.service.get_tag_for_user(tag_id, user)
 
+        @router.get(
+            "/tags/{tag_id}/permissions",
+            response_model=TagPermissionsResponse,
+            tags=["Tags"],
+            summary="List permissions available on a tag for the current user",
+        )
+        async def get_tag_permissions(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
+            permissions = self.service.get_tag_permissions_for_user(tag_id, user)
+            return TagPermissionsResponse(permissions=permissions)
+
+        @router.get(
+            "/tags/{tag_id}/members",
+            response_model=TagMembersResponse,
+            tags=["Tags"],
+            summary="List users who can access a tag",
+        )
+        async def list_tag_members(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
+            members = self.service.list_tag_members(tag_id, user)
+            return TagMembersResponse(members=members)
+
         @router.post(
             "/tags",
             response_model=TagWithItemsId,
@@ -120,3 +140,21 @@ class TagController:
         )
         async def delete_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
             self.service.delete_tag_for_user(tag_id, user)
+
+        @router.post(
+            "/tags/{tag_id}/share",
+            status_code=status.HTTP_204_NO_CONTENT,
+            tags=["Tags"],
+            summary="Share a tag with another user",
+        )
+        async def share_tag(tag_id: str, share_request: TagShareRequest, user: KeycloakUser = Depends(get_current_user)):
+            self.service.share_tag_with_user(user, tag_id, share_request.target_user_id, share_request.relation)
+
+        @router.delete(
+            "/tags/{tag_id}/share/{target_user_id}",
+            status_code=status.HTTP_204_NO_CONTENT,
+            tags=["Tags"],
+            summary="Stop sharing a tag with a user",
+        )
+        async def unshare_tag(tag_id: str, target_user_id: str, user: KeycloakUser = Depends(get_current_user)):
+            self.service.unshare_tag_with_user(user, tag_id, target_user_id)

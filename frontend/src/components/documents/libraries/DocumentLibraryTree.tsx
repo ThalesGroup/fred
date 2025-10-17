@@ -17,17 +17,20 @@ import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
+import PersonAddAltIcon from "@mui/icons-material/PersonAddAlt";
 import { Box, Checkbox, IconButton, Tooltip } from "@mui/material";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import type { DocumentMetadata, TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { TagNode } from "../../tags/tagTree";
 import { DocumentRowCompact } from "./DocumentLibraryRow";
+import { DocumentLibraryShareDialog } from "./DocumentLibraryShareDialog";
 
 /* --------------------------------------------------------------------------
- * Helpers (tiny & explicit)
+ * Helpers
  * -------------------------------------------------------------------------- */
 
 function getPrimaryTag(n: TagNode): TagWithItemsId | undefined {
@@ -106,6 +109,13 @@ export function DocumentLibraryTree({
   canDeleteDocument = true,
   canDeleteFolder = true,
 }: DocumentLibraryTreeProps) {
+  const { t } = useTranslation();
+  const [shareTarget, setShareTarget] = React.useState<TagNode | null>(null);
+
+  const handleCloseShareDialog = React.useCallback(() => {
+    setShareTarget(null);
+  }, []);
+
   /** Select/unselect all docs in a folder’s subtree (by that folder’s primary tag). */
   const toggleFolderSelection = React.useCallback(
     (node: TagNode) => {
@@ -157,6 +167,7 @@ export function DocumentLibraryTree({
 
       // Empty = no subfolders + no direct items on this node’s tag(s)
       const isEmptyFolder = c.children.size === 0 && directItemCount(c) === 0 && !!folderTag;
+      const canBeDeleted = !!folderTag && !!onDeleteFolder && isEmptyFolder && canDeleteFolder;
 
       return (
         <TreeItem
@@ -174,9 +185,9 @@ export function DocumentLibraryTree({
                 bgcolor: isSelected ? "action.selected" : "transparent",
               }}
               onClick={(e) => {
-  e.stopPropagation();
-  setSelectedFolder(isSelected ? null : c.full); // toggle
-}}
+                e.stopPropagation();
+                setSelectedFolder(isSelected ? null : c.full); // toggle
+              }}
             >
               {/* Left: tri-state + folder icon + name */}
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flex: 1 }}>
@@ -195,23 +206,41 @@ export function DocumentLibraryTree({
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
               </Box>
 
-              {/* Right: delete (only when selected + empty + real tag + handler) */}
-              {isSelected && isEmptyFolder && folderTag && onDeleteFolder && (
-                <Box sx={{ ml: "auto", display: "flex", alignItems: "center" }}>
-                  <Tooltip title="Delete folder">
+              {/* Right: share + delete */}
+              <Box sx={{ ml: "auto", display: "flex", alignItems: "center" }}>
+                <Tooltip title={t("documentLibraryTree.shareFolder")} enterTouchDelay={10}>
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (folderTag) setShareTarget(c);
+                    }}
+                  >
+                    <PersonAddAltIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip
+                  title={
+                    canBeDeleted ? t("documentLibraryTree.deleteFolder") : t("documentLibraryTree.deleteFolderDisabled")
+                  }
+                  enterTouchDelay={10}
+                >
+                  {/* span needed to trigger tooltip when IconButton is disabled */}
+                  <span style={{ display: "inline-flex" }}>
                     <IconButton
                       size="small"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (canDeleteFolder) onDeleteFolder(folderTag);
+                        if (!canBeDeleted || !folderTag || !onDeleteFolder) return;
+                        onDeleteFolder(folderTag);
                       }}
-                      disabled={!canDeleteFolder}
+                      disabled={!canBeDeleted}
                     >
                       <DeleteOutlineIcon fontSize="small" />
                     </IconButton>
-                  </Tooltip>
-                </Box>
-              )}
+                  </span>
+                </Tooltip>
+              </Box>
             </Box>
           }
         >
@@ -268,15 +297,22 @@ export function DocumentLibraryTree({
     });
 
   return (
-    <SimpleTreeView
-      sx={{
-        "& .MuiTreeItem-content .MuiTreeItem-label": { flex: 1, width: "100%", overflow: "visible" },
-      }}
-      expandedItems={expanded}
-      onExpandedItemsChange={(_, ids) => setExpanded(ids as string[])}
-      slots={{ expandIcon: KeyboardArrowRightIcon, collapseIcon: KeyboardArrowDownIcon }}
-    >
-      {renderTree(tree)}
-    </SimpleTreeView>
+    <>
+      <SimpleTreeView
+        sx={{
+          "& .MuiTreeItem-content .MuiTreeItem-label": { flex: 1, width: "100%", overflow: "visible" },
+        }}
+        expandedItems={expanded}
+        onExpandedItemsChange={(_, ids) => setExpanded(ids as string[])}
+        slots={{ expandIcon: KeyboardArrowRightIcon, collapseIcon: KeyboardArrowDownIcon }}
+      >
+        {renderTree(tree)}
+      </SimpleTreeView>
+      <DocumentLibraryShareDialog
+        open={!!shareTarget}
+        folderName={shareTarget?.name}
+        onClose={handleCloseShareDialog}
+      />
+    </>
   );
 }

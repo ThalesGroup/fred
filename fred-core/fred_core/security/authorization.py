@@ -64,4 +64,4 @@ def authorize_or_raise(
 ) -> None:
     """Authorize user to perform action on resource, raising AuthorizationError if denied."""
     if not is_authorized(user, action, resource):
-        raise AuthorizationError(user.uid, action, resource)
+        raise AuthorizationError(user.uid, action.value, resource)

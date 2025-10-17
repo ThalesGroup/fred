@@ -27,7 +27,8 @@ logger = logging.getLogger(__name__)
 ALL = set(Action)
 CRUD = {Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE}
 READ_ONLY = {Action.READ}
-CRU =  {Action.CREATE, Action.READ, Action.UPDATE}
+CRU = {Action.CREATE, Action.READ, Action.UPDATE}
+
 
 class RBACProvider(AuthorizationProvider):
     """Role-Based Access Control authorization provider."""
@@ -58,6 +59,8 @@ class RBACProvider(AuthorizationProvider):
                 Resource.AGENTS: READ_ONLY,  # Can't create/update/delete agents
                 Resource.SESSIONS: CRUD,
                 Resource.MESSAGE_ATTACHMENTS: {Action.CREATE},
+                Resource.USER: READ_ONLY,
+                Resource.GROUP: READ_ONLY,
             },
             "viewer": {
                 # Viewer can only read

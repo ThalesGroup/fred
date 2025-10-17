@@ -290,6 +290,37 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tags/${queryArg.tagId}`, method: "DELETE" }),
     }),
+    getTagPermissionsKnowledgeFlowV1TagsTagIdPermissionsGet: build.query<
+      GetTagPermissionsKnowledgeFlowV1TagsTagIdPermissionsGetApiResponse,
+      GetTagPermissionsKnowledgeFlowV1TagsTagIdPermissionsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tags/${queryArg.tagId}/permissions` }),
+    }),
+    listTagMembersKnowledgeFlowV1TagsTagIdMembersGet: build.query<
+      ListTagMembersKnowledgeFlowV1TagsTagIdMembersGetApiResponse,
+      ListTagMembersKnowledgeFlowV1TagsTagIdMembersGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tags/${queryArg.tagId}/members` }),
+    }),
+    shareTagKnowledgeFlowV1TagsTagIdSharePost: build.mutation<
+      ShareTagKnowledgeFlowV1TagsTagIdSharePostApiResponse,
+      ShareTagKnowledgeFlowV1TagsTagIdSharePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tags/${queryArg.tagId}/share`,
+        method: "POST",
+        body: queryArg.tagShareRequest,
+      }),
+    }),
+    unshareTagKnowledgeFlowV1TagsTagIdShareTargetUserIdDelete: build.mutation<
+      UnshareTagKnowledgeFlowV1TagsTagIdShareTargetUserIdDeleteApiResponse,
+      UnshareTagKnowledgeFlowV1TagsTagIdShareTargetUserIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tags/${queryArg.tagId}/share/${queryArg.targetUserId}`,
+        method: "DELETE",
+      }),
+    }),
     getCreateResSchemaKnowledgeFlowV1ResourcesSchemaGet: build.query<
       GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiResponse,
       GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiArg
@@ -429,6 +460,18 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
         body: queryArg.writeReportRequest,
       }),
+    }),
+    listGroupsKnowledgeFlowV1GroupsGet: build.query<
+      ListGroupsKnowledgeFlowV1GroupsGetApiResponse,
+      ListGroupsKnowledgeFlowV1GroupsGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/groups` }),
+    }),
+    listUsersKnowledgeFlowV1UsersGet: build.query<
+      ListUsersKnowledgeFlowV1UsersGetApiResponse,
+      ListUsersKnowledgeFlowV1UsersGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/users` }),
     }),
     processDocumentsKnowledgeFlowV1ProcessDocumentsPost: build.mutation<
       ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse,
@@ -650,6 +693,26 @@ export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiResponse = unknown;
 export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiArg = {
   tagId: string;
 };
+export type GetTagPermissionsKnowledgeFlowV1TagsTagIdPermissionsGetApiResponse =
+  /** status 200 Successful Response */ TagPermissionsResponse;
+export type GetTagPermissionsKnowledgeFlowV1TagsTagIdPermissionsGetApiArg = {
+  tagId: string;
+};
+export type ListTagMembersKnowledgeFlowV1TagsTagIdMembersGetApiResponse =
+  /** status 200 Successful Response */ TagMembersResponse;
+export type ListTagMembersKnowledgeFlowV1TagsTagIdMembersGetApiArg = {
+  tagId: string;
+};
+export type ShareTagKnowledgeFlowV1TagsTagIdSharePostApiResponse = unknown;
+export type ShareTagKnowledgeFlowV1TagsTagIdSharePostApiArg = {
+  tagId: string;
+  tagShareRequest: TagShareRequest;
+};
+export type UnshareTagKnowledgeFlowV1TagsTagIdShareTargetUserIdDeleteApiResponse = unknown;
+export type UnshareTagKnowledgeFlowV1TagsTagIdShareTargetUserIdDeleteApiArg = {
+  tagId: string;
+  targetUserId: string;
+};
 export type GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiResponse = /** status 200 Successful Response */ {
   [key: string]: any;
 };
@@ -745,6 +808,10 @@ export type WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse =
 export type WriteReportKnowledgeFlowV1McpReportsWritePostApiArg = {
   writeReportRequest: WriteReportRequest;
 };
+export type ListGroupsKnowledgeFlowV1GroupsGetApiResponse = /** status 200 Successful Response */ GroupSummary[];
+export type ListGroupsKnowledgeFlowV1GroupsGetApiArg = void;
+export type ListUsersKnowledgeFlowV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
+export type ListUsersKnowledgeFlowV1UsersGetApiArg = void;
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse = /** status 200 Successful Response */ any;
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
   processDocumentsRequest: ProcessDocumentsRequest;
@@ -976,6 +1043,22 @@ export type TagUpdate = {
   type: TagType;
   item_ids?: string[];
 };
+export type TagPermission = "read" | "update" | "delete" | "share";
+export type TagPermissionsResponse = {
+  permissions: TagPermission[];
+};
+export type UserTagRelation = "owner" | "editor" | "viewer";
+export type TagMember = {
+  user_id: string;
+  relation: UserTagRelation;
+};
+export type TagMembersResponse = {
+  members: TagMember[];
+};
+export type TagShareRequest = {
+  target_user_id: string;
+  relation: UserTagRelation;
+};
 export type ResourceKind = "prompt" | "template" | "chat-context";
 export type Resource = {
   id: string;
@@ -1179,6 +1262,19 @@ export type WriteReportRequest = {
   tags?: string[];
   render_formats?: string[];
 };
+export type GroupSummary = {
+  id: string;
+  name: string;
+  member_count: number;
+  total_member_count: number;
+  sub_groups?: GroupSummary[];
+};
+export type UserSummary = {
+  id: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  username?: string | null;
+};
 export type FileToProcessWithoutUser = {
   source_tag: string;
   tags?: string[];
@@ -1248,6 +1344,12 @@ export const {
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
+  useGetTagPermissionsKnowledgeFlowV1TagsTagIdPermissionsGetQuery,
+  useLazyGetTagPermissionsKnowledgeFlowV1TagsTagIdPermissionsGetQuery,
+  useListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery,
+  useLazyListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery,
+  useShareTagKnowledgeFlowV1TagsTagIdSharePostMutation,
+  useUnshareTagKnowledgeFlowV1TagsTagIdShareTargetUserIdDeleteMutation,
   useGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
   useLazyGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
   useCreateResourceKnowledgeFlowV1ResourcesPostMutation,
@@ -1282,6 +1384,10 @@ export const {
   useLazyOsDiagnosticsQuery,
   useQueryLogsKnowledgeFlowV1LogsQueryPostMutation,
   useWriteReportKnowledgeFlowV1McpReportsWritePostMutation,
+  useListGroupsKnowledgeFlowV1GroupsGetQuery,
+  useLazyListGroupsKnowledgeFlowV1GroupsGetQuery,
+  useListUsersKnowledgeFlowV1UsersGetQuery,
+  useLazyListUsersKnowledgeFlowV1UsersGetQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
 } = injectedRtkApi;
