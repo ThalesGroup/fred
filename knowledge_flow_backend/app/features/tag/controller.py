@@ -103,7 +103,7 @@ class TagController:
             "/tags/{tag_id}/members",
             response_model=TagMembersResponse,
             tags=["Tags"],
-            summary="List users who can access a tag",
+            summary="List users and groups who can access a tag",
         )
         async def list_tag_members(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
             members = self.service.list_tag_members(tag_id, user)

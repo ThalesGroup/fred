@@ -1,25 +1,18 @@
+import asyncio
 import logging
+from collections.abc import Iterable
+from typing import cast
 
 from keycloak import KeycloakAdmin
-from pydantic import BaseModel, Field
+from keycloak.exceptions import KeycloakGetError
 
+from app.features.groups.groups_structures import GroupSummary
 from app.security.keycloack_admin_client import create_keycloak_admin
 
 logger = logging.getLogger(__name__)
 
 _GROUP_PAGE_SIZE = 200
 _MEMBER_PAGE_SIZE = 200
-
-
-class GroupSummary(BaseModel):
-    id: str
-    name: str
-    member_count: int
-    total_member_count: int
-    sub_groups: list["GroupSummary"] = Field(default_factory=list)
-
-
-GroupSummary.model_rebuild()  # to support self-referencing models
 
 
 async def list_groups() -> list[GroupSummary]:
@@ -32,11 +25,57 @@ async def list_groups() -> list[GroupSummary]:
     groups: list[GroupSummary] = []
 
     for raw_group in root_groups:
-        group, _ = await _build_group_tree(admin, raw_group)
+        group_id = raw_group.get("id")
+        if not group_id:
+            logger.debug("Skipping Keycloak group without identifier: %s", raw_group)
+            continue
+        group, _ = await _build_group_tree(admin, group_id)
         if group:
             groups.append(group)
 
     return groups
+
+
+def get_groups_by_ids(group_ids: Iterable[str]) -> dict[str, GroupSummary]:
+    """
+    Fetch hierarchical summaries for the provided group ids.
+    Falls back to id-only summaries when Keycloak data cannot be retrieved.
+    """
+
+    def _fallback(group_id: str) -> GroupSummary:
+        return GroupSummary(id=group_id, name=group_id, member_count=0, total_member_count=0)
+
+    unique_ids = {group_id for group_id in group_ids if group_id}
+    if not unique_ids:
+        return {}
+
+    admin = create_keycloak_admin()
+    if not admin:
+        logger.info("Keycloak admin client not configured; returning fallback group profiles.")
+        return {group_id: _fallback(group_id) for group_id in unique_ids}
+
+    ordered_ids = sorted(unique_ids)
+
+    async def _collect() -> dict[str, GroupSummary]:
+        coroutines = {group_id: _build_group_tree(admin, group_id) for group_id in ordered_ids}
+        results = await asyncio.gather(*coroutines.values(), return_exceptions=True)
+
+        summaries: dict[str, GroupSummary] = {}
+        for group_id, result in zip(coroutines.keys(), results):
+            if isinstance(result, BaseException):
+                if isinstance(result, KeycloakGetError) and result.response_code == 404:
+                    logger.debug("Group %s not found in Keycloak.", group_id)
+                    continue
+                raise result
+
+            summary, _ = cast(tuple[GroupSummary | None, set[str]], result)
+            if summary:
+                summaries[group_id] = summary
+        return summaries
+
+    summaries = asyncio.run(_collect())
+
+    return summaries
 
 
 async def _fetch_root_groups(admin: KeycloakAdmin) -> list[dict]:
@@ -57,19 +96,21 @@ async def _fetch_root_groups(admin: KeycloakAdmin) -> list[dict]:
     return groups
 
 
-async def _build_group_tree(admin: KeycloakAdmin, raw_group: dict) -> tuple[GroupSummary | None, set[str]]:
-    group_id = raw_group.get("id")
-    if not group_id:
-        logger.debug("Skipping Keycloak group without identifier: %s", raw_group)
-        return None, set()
-
+async def _build_group_tree(admin: KeycloakAdmin, group_id: str) -> tuple[GroupSummary | None, set[str]]:
     detailed_group = await admin.a_get_group(group_id)
+    if not detailed_group:
+        logger.debug("Keycloak returned empty group payload for id %s", group_id)
+        return None, set()
     subgroups_payload = detailed_group.get("subGroups") or []
 
     sub_groups: list[GroupSummary] = []
     aggregated_members: set[str] = set()
     for subgroup in subgroups_payload:
-        child_summary, child_members = await _build_group_tree(admin, subgroup)
+        child_id = subgroup.get("id")
+        if not child_id:
+            logger.debug("Skipping Keycloak subgroup without identifier under group %s: %s", group_id, subgroup)
+            continue
+        child_summary, child_members = await _build_group_tree(admin, child_id)
         if child_summary:
             sub_groups.append(child_summary)
             aggregated_members.update(child_members)
@@ -79,7 +120,7 @@ async def _build_group_tree(admin: KeycloakAdmin, raw_group: dict) -> tuple[Grou
 
     summary = GroupSummary(
         id=group_id,
-        name=_sanitize_name(detailed_group.get("name") or raw_group.get("name"), fallback=group_id),
+        name=_sanitize_name(detailed_group.get("name"), fallback=group_id),
         member_count=len(direct_members),
         total_member_count=len(aggregated_members),
         sub_groups=sub_groups,

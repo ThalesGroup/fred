@@ -14,10 +14,13 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Annotated, Literal, Optional, Union
 
 from fred_core import BaseModelWithId, RelationType, TagPermission
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
+
+from app.features.groups.groups_structures import GroupSummary
+from app.features.users.users_structures import UserSummary
 
 
 class TagType(str, Enum):
@@ -128,9 +131,19 @@ class TagPermissionsResponse(BaseModel):
     permissions: list[TagPermission]
 
 
-class TagMember(BaseModel):
-    user_id: str
+class TagMemberUser(BaseModel):
+    type: Literal["user"] = "user"
     relation: UserTagRelation
+    user: UserSummary
+
+
+class TagMemberGroup(BaseModel):
+    type: Literal["group"] = "group"
+    relation: UserTagRelation
+    group: GroupSummary
+
+
+TagMember = Annotated[Union[TagMemberUser, TagMemberGroup], Field(discriminator="type")]
 
 
 class TagMembersResponse(BaseModel):
