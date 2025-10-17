@@ -43,9 +43,9 @@ export function DocumentLibraryPendingRecipientsList({
     <List dense disablePadding>
       {items.map((recipient) => (
         <ListItem
-          key={recipient.id}
+          key={recipient.target_id}
           secondaryAction={
-            <IconButton edge="end" onClick={() => onRemove(recipient.id)} disabled={disabled}>
+            <IconButton edge="end" onClick={() => onRemove(recipient.target_id)} disabled={disabled}>
               <RemoveCircleOutlineOutlinedIcon fontSize="small" />
             </IconButton>
           }
@@ -58,7 +58,7 @@ export function DocumentLibraryPendingRecipientsList({
           <ListItemText
             primary={recipient.displayName}
             secondary={
-              recipient.audience === "user"
+              recipient.target_type === "user"
                 ? t("documentLibraryShareDialog.type.user", { defaultValue: "User" })
                 : t("documentLibraryShareDialog.type.group", { defaultValue: "Group" })
             }
@@ -67,7 +67,7 @@ export function DocumentLibraryPendingRecipientsList({
             size="small"
             value={recipient.relation}
             exclusive
-            onChange={(_, value) => value && onChangeRelation(recipient.id, value as UserTagRelation)}
+            onChange={(_, value) => value && onChangeRelation(recipient.target_id, value as UserTagRelation)}
             sx={{
               "& .MuiToggleButton-root": {
                 textTransform: "none",

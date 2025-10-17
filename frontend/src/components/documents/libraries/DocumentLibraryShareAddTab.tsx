@@ -15,18 +15,15 @@ import {
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
+  ShareTargetResource,
   TagWithItemsId,
   UserTagRelation,
   useShareTagKnowledgeFlowV1TagsTagIdSharePostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import {
-  DocumentLibraryPendingRecipient,
-  DocumentLibraryShareAudience,
-  DocumentLibraryShareSelectableTarget,
-} from "./DocumentLibraryShareTypes";
-import { DocumentLibraryShareGroupTree } from "./DocumentLibraryShareGroupTree";
-import { DocumentLibraryShareUsersList } from "./DocumentLibraryShareUsersList";
 import { DocumentLibraryPendingRecipientsList } from "./DocumentLibraryPendingRecipientsList";
+import { DocumentLibraryShareGroupTree } from "./DocumentLibraryShareGroupTree";
+import { DocumentLibraryPendingRecipient } from "./DocumentLibraryShareTypes";
+import { DocumentLibraryShareUsersList } from "./DocumentLibraryShareUsersList";
 
 interface DocumentLibraryShareAddTabProps {
   tag: TagWithItemsId;
@@ -36,31 +33,34 @@ interface DocumentLibraryShareAddTabProps {
 
 export function DocumentLibraryShareAddTab({ tag, onShared, onSwitchToCurrent }: DocumentLibraryShareAddTabProps) {
   const { t } = useTranslation();
-  const [audience, setAudience] = React.useState<DocumentLibraryShareAudience>("user");
+  const [audience, setAudience] = React.useState<ShareTargetResource>("user");
   const [searchQuery, setSearchQuery] = React.useState("");
   const [pendingRecipients, setPendingRecipients] = React.useState<DocumentLibraryPendingRecipient[]>([]);
   const [isSharing, setIsSharing] = React.useState(false);
   const [shareError, setShareError] = React.useState<string | null>(null);
   const [shareTag] = useShareTagKnowledgeFlowV1TagsTagIdSharePostMutation();
 
-  const selectedIds = React.useMemo(() => new Set(pendingRecipients.map((item) => item.id)), [pendingRecipients]);
+  const selectedIds = React.useMemo(
+    () => new Set(pendingRecipients.map((item) => item.target_id)),
+    [pendingRecipients],
+  );
 
   const handleAddRecipient = React.useCallback(
-    (target: DocumentLibraryShareSelectableTarget) => {
+    (target_id: string, target_type: ShareTargetResource, displayName: string) => {
       setPendingRecipients((prev) => {
-        if (prev.some((item) => item.id === target.id)) return prev;
-        return [...prev, { ...target, relation: "viewer" }];
+        if (prev.some((item) => item.target_id === target_id)) return prev;
+        return [...prev, { target_id, target_type, displayName, relation: "viewer" }];
       });
     },
     [],
   );
 
   const handleRelationChange = (id: string, relation: UserTagRelation) => {
-    setPendingRecipients((prev) => prev.map((item) => (item.id === id ? { ...item, relation } : item)));
+    setPendingRecipients((prev) => prev.map((item) => (item.target_id === id ? { ...item, relation } : item)));
   };
 
   const handleRemoveRecipient = (id: string) => {
-    setPendingRecipients((prev) => prev.filter((item) => item.id !== id));
+    setPendingRecipients((prev) => prev.filter((item) => item.target_id !== id));
   };
 
   const handleShare = async () => {
@@ -73,10 +73,7 @@ export function DocumentLibraryShareAddTab({ tag, onShared, onSwitchToCurrent }:
       for (const recipient of pendingRecipients) {
         await shareTag({
           tagId: tag.id,
-          tagShareRequest: {
-            target_user_id: recipient.id,
-            relation: recipient.relation,
-          },
+          tagShareRequest: recipient,
         }).unwrap();
       }
 
