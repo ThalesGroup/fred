@@ -1,0 +1,148 @@
+import logging
+from fastapi import APIRouter, Depends, HTTPException
+from fred_core import KeycloakUser, get_current_user
+
+from app.features.statistic.utils import clean_json
+from app.features.statistic.structures import (
+    SetDatasetRequest,
+    DetectOutliersRequest,
+    CorrelationsRequest,
+    PlotHistogramRequest,
+    PlotScatterRequest,
+    TrainModelRequest,
+    PredictRowRequest,
+    SaveModelRequest,
+    LoadModelRequest,
+)
+from app.features.statistic.service import StatisticService
+from app.application_context import ApplicationContext
+from app.common.utils import sanitize_sql_name
+
+logger = logging.getLogger(__name__)
+
+
+class StatisticController:
+    def __init__(self, router: APIRouter):
+        self.service = StatisticService()
+        self.store = ApplicationContext.get_instance().get_csv_input_store()
+
+        self._register_routes(router)
+
+    def _register_routes(self, router: APIRouter):
+        @router.get("/stat/list_datasets", tags=["Statistic"], summary="View the available datasets")
+        async def list_datasets(_: KeycloakUser = Depends(get_current_user)):
+            try:
+                return f"available_datasets:{self.store.list_tables()}"
+            except Exception as e:
+                logger.exception("Failed to get head")
+                raise HTTPException(500, str(e))
+
+        @router.post("/stat/set_dataset", tags=["Statistic"], summary="Select a dataset")
+        async def set_dataset(request: SetDatasetRequest, _: KeycloakUser = Depends(get_current_user)):
+            try:
+                dataset = self.store.load_table(sanitize_sql_name(request.dataset_name))
+                self.service.set_dataset(dataset)
+                return f"{request.dataset_name} is loaded."
+            except Exception as e:
+                logger.exception(f"Failed to set the dataset as {request.dataset_name}")
+                raise HTTPException(500, str(e))
+
+        @router.get("/stat/head", tags=["Statistic"], summary="Preview the dataset")
+        async def head(n: int = 5, _: KeycloakUser = Depends(get_current_user)):
+            try:
+                return clean_json(self.service.head(n))
+            except Exception as e:
+                logger.exception("Failed to get head")
+                raise HTTPException(500, str(e))
+
+        @router.get("/stat/describe", tags=["Statistic"], summary="Describe the dataset")
+        async def describe(_: KeycloakUser = Depends(get_current_user)):
+            try:
+                return clean_json(self.service.describe_data())
+            except Exception as e:
+                logger.exception("Failed to describe dataset")
+                raise HTTPException(500, str(e))
+
+        @router.post("/stat/detect_outliers", tags=["Statistic"], summary="Detect outliers in numeric columns")
+        async def detect_outliers(request: DetectOutliersRequest, _: KeycloakUser = Depends(get_current_user)):
+            try:
+                return clean_json(self.service.detect_outliers(method=request.method, threshold=request.threshold))
+            except Exception as e:
+                logger.exception("Outlier detection failed")
+                raise HTTPException(500, str(e))
+
+        @router.get("/stat/correlations", tags=["Statistic"], summary="Get top correlations in the dataset")
+        async def correlations(request: CorrelationsRequest, _: KeycloakUser = Depends(get_current_user)):
+            try:
+                return clean_json(self.service.correlation_analysis(request.top_n))
+            except Exception as e:
+                logger.exception("Correlation analysis failed")
+                raise HTTPException(500, str(e))
+
+        @router.post("/stat/plot/histogram", tags=["Statistic"], summary="Plot histogram for a column")
+        async def plot_histogram(request: PlotHistogramRequest, _: KeycloakUser = Depends(get_current_user)):
+            try:
+                path = self.service.plot_histogram(column=request.column, bins=request.bins)
+                return clean_json({"status": "success", "path": path})
+            except Exception as e:
+                raise HTTPException(400, str(e))
+
+        @router.post("/stat/plot/scatter", tags=["Statistic"], summary="Plot scatter plot")
+        async def plot_scatter(request: PlotScatterRequest, _: KeycloakUser = Depends(get_current_user)):
+            try:
+                path = self.service.plot_scatter(request.x_col, request.y_col)
+                return clean_json({"status": "success", "path": path})
+            except Exception as e:
+                raise HTTPException(400, str(e))
+
+        @router.post("/stat/train", tags=["Statistic"], summary="Train a model")
+        async def train_model(request: TrainModelRequest, _: KeycloakUser = Depends(get_current_user)):
+            try:
+                training_results = self.service.train_model(request.target, request.features, model_type=request.model_type)
+                return clean_json({"status": "success", "message": training_results})
+            except Exception as e:
+                logger.exception("Model training failed")
+                raise HTTPException(400, str(e))
+
+        @router.get("/stat/evaluate", tags=["Statistic"], summary="Evaluate last trained model")
+        async def evaluate_model(_: KeycloakUser = Depends(get_current_user)):
+            try:
+                return clean_json(self.service.evaluate_model())
+            except Exception as e:
+                logger.exception("Model evaluation failed")
+                raise HTTPException(400, str(e))
+
+        @router.post("/stat/predict_row", tags=["Statistic"], summary="Predict a single row of data")
+        async def predict_row(request: PredictRowRequest, _: KeycloakUser = Depends(get_current_user)):
+            try:
+                prediction = self.service.predict_from_row(request.row)
+                return clean_json({"prediction": prediction})
+            except Exception as e:
+                logger.exception("Row prediction failed")
+                raise HTTPException(400, str(e))
+
+        @router.post("/stat/save_model", tags=["Statistic"], summary="Save trained model")
+        async def save_model(request: SaveModelRequest, _: KeycloakUser = Depends(get_current_user)):
+            try:
+                self.service.save_model(request.name)
+                return {"status": "success", "message": f"Model saved as '{request.name}'."}
+            except Exception as e:
+                logger.exception("Model saving failed")
+                raise HTTPException(400, str(e))
+
+        @router.get("/stat/list_models", tags=["Statistic"], summary="List saved models")
+        async def list_models(_: KeycloakUser = Depends(get_current_user)):
+            try:
+                return clean_json({"models": self.service.list_models()})
+            except Exception as e:
+                logger.exception("Failed to list models")
+                raise HTTPException(500, str(e))
+
+        @router.post("/stat/load_model", tags=["Statistic"], summary="Load a previously saved model")
+        async def load_model(request: LoadModelRequest, _: KeycloakUser = Depends(get_current_user)):
+            try:
+                self.service.load_model(request.name)
+                return clean_json({"status": "success", "message": f"Model '{request.name}' loaded."})
+            except Exception as e:
+                logger.exception("Model loading failed")
+                raise HTTPException(400, str(e))
