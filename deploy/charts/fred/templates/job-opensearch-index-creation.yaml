@@ -176,7 +176,7 @@ spec:
             - -c
             - |
               set -e
-              apk add curl
+              if [ -z $(which curl 2> /dev/null) ]; then apk add curl ; fi
               /app/wait_for_os_init.sh {{ $osHost }}
 {{- range $name, $store := .app.configuration.storage }}
 {{- if and (hasSuffix "_store" $name) (eq $store.type "opensearch") }}
