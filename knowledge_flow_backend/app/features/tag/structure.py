@@ -14,9 +14,9 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Literal, Optional, Union
+from typing import Literal, Optional
 
-from fred_core import BaseModelWithId, RelationType, TagPermission
+from fred_core import BaseModelWithId, RelationType, Resource, TagPermission
 from pydantic import BaseModel, Field, field_validator
 
 from app.features.groups.groups_structures import GroupSummary
@@ -122,8 +122,18 @@ class UserTagRelation(str, Enum):
         return RelationType(self.value)
 
 
+# Subset of valid Resource you can share a tag with
+class ShareTargetResource(str, Enum):
+    USER = Resource.USER.value
+    GROUP = Resource.GROUP.value
+
+    def to_resource(self) -> Resource:
+        return Resource(self.value)
+
+
 class TagShareRequest(BaseModel):
-    target_user_id: str
+    target_id: str
+    target_type: ShareTargetResource
     relation: UserTagRelation
 
 

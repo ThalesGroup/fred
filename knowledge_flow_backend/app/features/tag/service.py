@@ -262,29 +262,29 @@ class TagService:
         self._tag_store.delete_tag_by_id(tag_id)
         # TODO: remove relation in ReBAC
 
-    def share_tag_with_user(self, user: KeycloakUser, tag_id: str, target_user_id: str, relation: UserTagRelation) -> None:
+    def share_tag_with_user_or_group(self, user: KeycloakUser, tag_id: str, target_id: str, target_type: Resource, relation: UserTagRelation) -> None:
         """
-        Share a tag with another user by adding a relation in the ReBAC engine.
+        Share a tag with another user or group by adding a relation in the ReBAC engine.
         """
         self.rebac.check_user_permission_or_raise(user, TagPermission.SHARE, tag_id)
         self.rebac.add_relation(
             Relation(
-                subject=RebacReference(type=Resource.USER, id=target_user_id),
+                subject=RebacReference(type=target_type, id=target_id),
                 relation=relation.to_relation(),
                 resource=RebacReference(type=Resource.TAGS, id=tag_id),
             )
         )
 
-    def unshare_tag_with_user(self, user: KeycloakUser, tag_id: str, target_user_id: str) -> None:
+    def unshare_tag_with_user_or_group(self, user: KeycloakUser, tag_id: str, target_id: str, target_type: Resource) -> None:
         """
-        Revoke tag access previously granted to another user.
+        Revoke tag access previously granted to another user or group.
         Removes any user-tag relation regardless of the level originally assigned.
         """
         self.rebac.check_user_permission_or_raise(user, TagPermission.SHARE, tag_id)
         for relation in UserTagRelation:
             self.rebac.delete_relation(
                 Relation(
-                    subject=RebacReference(type=Resource.USER, id=target_user_id),
+                    subject=RebacReference(type=target_type, id=target_id),
                     relation=relation.to_relation(),
                     resource=RebacReference(type=Resource.TAGS, id=tag_id),
                 )
@@ -302,7 +302,7 @@ class TagService:
         return [permission for permission in TagPermission if self.rebac.has_permission(user_reference, permission, tag_reference)]
 
     @authorize(Action.READ, Resource.TAGS)
-    def list_tag_members(self, tag_id: str, user: KeycloakUser) -> tuple[list[TagMemberUser], list[TagMemberGroup]]:
+    async def list_tag_members(self, tag_id: str, user: KeycloakUser) -> tuple[list[TagMemberUser], list[TagMemberGroup]]:
         """
         List users and groups who have access to the tag along with their relation level.
         """
@@ -313,8 +313,8 @@ class TagService:
         group_relations = self._get_tag_members_by_type(tag_id, Resource.GROUP)
 
         # Fetch user and group summaries
-        user_summaries = get_users_by_ids(user_relations.keys())
-        group_summaries = get_groups_by_ids(group_relations.keys())
+        user_summaries = await get_users_by_ids(user_relations.keys())
+        group_summaries = await get_groups_by_ids(group_relations.keys())
 
         # Compose result
         users: list[TagMemberUser] = []

@@ -24,7 +24,7 @@ from fred_core import KeycloakUser, get_current_user
 from app.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
 from app.features.metadata.service import MetadataNotFound
 from app.features.tag.service import TagService
-from app.features.tag.structure import TagCreate, TagMembersResponse, TagPermissionsResponse, TagShareRequest, TagType, TagUpdate, TagWithItemsId
+from app.features.tag.structure import ShareTargetResource, TagCreate, TagMembersResponse, TagPermissionsResponse, TagShareRequest, TagType, TagUpdate, TagWithItemsId
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +106,7 @@ class TagController:
             summary="List users and groups who can access a tag",
         )
         async def list_tag_members(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
-            users, groups = self.service.list_tag_members(tag_id, user)
+            users, groups = await self.service.list_tag_members(tag_id, user)
             return TagMembersResponse(users=users, groups=groups)
 
         @router.post(
@@ -148,13 +148,13 @@ class TagController:
             summary="Share a tag with another user",
         )
         async def share_tag(tag_id: str, share_request: TagShareRequest, user: KeycloakUser = Depends(get_current_user)):
-            self.service.share_tag_with_user(user, tag_id, share_request.target_user_id, share_request.relation)
+            self.service.share_tag_with_user_or_group(user, tag_id, share_request.target_id, share_request.target_type.to_resource(), share_request.relation)
 
         @router.delete(
-            "/tags/{tag_id}/share/{target_user_id}",
+            "/tags/{tag_id}/share/{target_id}",
             status_code=status.HTTP_204_NO_CONTENT,
             tags=["Tags"],
             summary="Stop sharing a tag with a user",
         )
-        async def unshare_tag(tag_id: str, target_user_id: str, user: KeycloakUser = Depends(get_current_user)):
-            self.service.unshare_tag_with_user(user, tag_id, target_user_id)
+        async def unshare_tag(tag_id: str, target_id: str, target_type: ShareTargetResource, user: KeycloakUser = Depends(get_current_user)):
+            self.service.unshare_tag_with_user_or_group(user, tag_id, target_id, target_type.to_resource())

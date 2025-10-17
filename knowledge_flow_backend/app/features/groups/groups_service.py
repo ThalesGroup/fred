@@ -36,15 +36,11 @@ async def list_groups() -> list[GroupSummary]:
     return groups
 
 
-def get_groups_by_ids(group_ids: Iterable[str]) -> dict[str, GroupSummary]:
+async def get_groups_by_ids(group_ids: Iterable[str]) -> dict[str, GroupSummary]:
     """
     Fetch hierarchical summaries for the provided group ids.
     Falls back to id-only summaries when Keycloak data cannot be retrieved.
     """
-
-    def _fallback(group_id: str) -> GroupSummary:
-        return GroupSummary(id=group_id, name=group_id, member_count=0, total_member_count=0)
-
     unique_ids = {group_id for group_id in group_ids if group_id}
     if not unique_ids:
         return {}
@@ -52,29 +48,24 @@ def get_groups_by_ids(group_ids: Iterable[str]) -> dict[str, GroupSummary]:
     admin = create_keycloak_admin()
     if not admin:
         logger.info("Keycloak admin client not configured; returning fallback group profiles.")
-        return {group_id: _fallback(group_id) for group_id in unique_ids}
+        return {}
 
     ordered_ids = sorted(unique_ids)
 
-    async def _collect() -> dict[str, GroupSummary]:
-        coroutines = {group_id: _build_group_tree(admin, group_id) for group_id in ordered_ids}
-        results = await asyncio.gather(*coroutines.values(), return_exceptions=True)
+    coroutines = {group_id: _build_group_tree(admin, group_id) for group_id in ordered_ids}
+    results = await asyncio.gather(*coroutines.values(), return_exceptions=True)
 
-        summaries: dict[str, GroupSummary] = {}
-        for group_id, result in zip(coroutines.keys(), results):
-            if isinstance(result, BaseException):
-                if isinstance(result, KeycloakGetError) and result.response_code == 404:
-                    logger.debug("Group %s not found in Keycloak.", group_id)
-                    continue
-                raise result
+    summaries: dict[str, GroupSummary] = {}
+    for group_id, result in zip(coroutines.keys(), results):
+        if isinstance(result, BaseException):
+            if isinstance(result, KeycloakGetError) and result.response_code == 404:
+                logger.debug("Group %s not found in Keycloak.", group_id)
+                continue
+            raise result
 
-            summary, _ = cast(tuple[GroupSummary | None, set[str]], result)
-            if summary:
-                summaries[group_id] = summary
-        return summaries
-
-    summaries = asyncio.run(_collect())
-
+        summary, _ = cast(tuple[GroupSummary | None, set[str]], result)
+        if summary:
+            summaries[group_id] = summary
     return summaries
 
 
