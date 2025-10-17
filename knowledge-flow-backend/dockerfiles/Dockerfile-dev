@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # Backend development image (hot-reload enabled)
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/python:3.12.8-slim
+FROM mirror.gcr.io/python:3.12
 
 ARG USER_NAME=python-user
 ARG USER_ID=1000
@@ -33,15 +33,18 @@ ENV OPENAI_API_KEY=<MUST_BE_DEFINED>
 WORKDIR /app
 
 # Copy only dependency files first to leverage Docker layer caching
-COPY --chown=${USER_ID}:${GROUP_ID} knowledge_flow_backend/Makefile knowledge_flow_backend/pyproject.toml knowledge_flow_backend/uv.lock* /app/
-COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
-COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
+COPY --chown=${USER_ID}:${GROUP_ID} knowledge-flow-backend/Makefile knowledge-flow-backend/pyproject.toml knowledge-flow-backend/uv.lock* knowledge-flow-backend/
+COPY --chown=${USER_ID}:${GROUP_ID} fred-core fred-core
+COPY --chown=${USER_ID}:${GROUP_ID} scripts scripts
 
 # Copy the rest of the project files
-COPY --chown=${USER_ID}:${GROUP_ID} knowledge_flow_backend/. /app
+COPY --chown=${USER_ID}:${GROUP_ID} knowledge-flow-backend/knowledge_flow_backend knowledge-flow-backend/
 
 # Switch to the created user
 USER ${USER_NAME}
+
+# Set working directory
+WORKDIR /app/knowledge-flow-backend
 
 # Install dependencies with uv
 RUN make dev
@@ -50,5 +53,5 @@ RUN make dev
 EXPOSE 8111
 
 # Run the application
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/knowledge-flow-backend
 ENTRYPOINT ["make", "run-local"]
