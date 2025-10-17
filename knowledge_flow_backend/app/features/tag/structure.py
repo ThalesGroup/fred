@@ -143,8 +143,6 @@ class TagMemberGroup(BaseModel):
     group: GroupSummary
 
 
-TagMember = Annotated[Union[TagMemberUser, TagMemberGroup], Field(discriminator="type")]
-
-
 class TagMembersResponse(BaseModel):
-    members: list[TagMember]
+    users: list[TagMemberUser] = Field(default_factory=list)
+    groups: list[TagMemberGroup] = Field(default_factory=list)

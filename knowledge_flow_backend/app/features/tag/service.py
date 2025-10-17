@@ -31,7 +31,6 @@ from app.features.resources.structures import ResourceKind
 from app.features.tag.structure import (
     Tag,
     TagCreate,
-    TagMember,
     TagMemberGroup,
     TagMemberUser,
     TagType,
@@ -303,7 +302,7 @@ class TagService:
         return [permission for permission in TagPermission if self.rebac.has_permission(user_reference, permission, tag_reference)]
 
     @authorize(Action.READ, Resource.TAGS)
-    def list_tag_members(self, tag_id: str, user: KeycloakUser) -> list[TagMember]:
+    def list_tag_members(self, tag_id: str, user: KeycloakUser) -> tuple[list[TagMemberUser], list[TagMemberGroup]]:
         """
         List users and groups who have access to the tag along with their relation level.
         """
@@ -317,19 +316,18 @@ class TagService:
         user_summaries = get_users_by_ids(user_relations.keys())
         group_summaries = get_groups_by_ids(group_relations.keys())
 
-        # Compose members list
-        members: list[TagMember] = []
+        # Compose result
+        users: list[TagMemberUser] = []
+        groups: list[TagMemberGroup] = []
         for user_id, relation in user_relations.items():
             summary = user_summaries.get(user_id) or UserSummary(id=user_id)
-            members.append(TagMemberUser(relation=relation, user=summary))
-        for group_id, relation in group_relations.items():
-            profile = group_summaries.get(group_id) or GroupSummary(
-                id=group_id,
-                name=group_id,
-            )
-            members.append(TagMemberGroup(relation=relation, group=profile))
+            users.append(TagMemberUser(relation=relation, user=summary))
 
-        return members
+        for group_id, relation in group_relations.items():
+            profile = group_summaries.get(group_id) or GroupSummary(id=group_id, name=group_id)
+            groups.append(TagMemberGroup(relation=relation, group=profile))
+
+        return users, groups
 
     @authorize(Action.UPDATE, Resource.TAGS)
     def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:

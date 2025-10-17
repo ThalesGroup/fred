@@ -106,8 +106,8 @@ class TagController:
             summary="List users and groups who can access a tag",
         )
         async def list_tag_members(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
-            members = self.service.list_tag_members(tag_id, user)
-            return TagMembersResponse(members=members)
+            users, groups = self.service.list_tag_members(tag_id, user)
+            return TagMembersResponse(users=users, groups=groups)
 
         @router.post(
             "/tags",
