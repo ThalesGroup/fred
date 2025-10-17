@@ -310,7 +310,7 @@ export function DocumentLibraryTree({
       </SimpleTreeView>
       <DocumentLibraryShareDialog
         open={!!shareTarget}
-        folderName={shareTarget?.name}
+        tag={shareTarget?.tagsHere?.[0]}
         onClose={handleCloseShareDialog}
       />
     </>
