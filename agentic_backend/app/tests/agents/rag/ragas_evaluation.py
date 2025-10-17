@@ -18,7 +18,7 @@ from ragas.metrics import (
     faithfulness,
 )
 
-from app.agents.rags.advanced_rag_expert import AdvancedRagExpert
+from app.agents.rags.advanced_rag_expert import AdvancedRico
 from app.application_context import (
     ApplicationContext,
     get_configuration,
@@ -83,13 +83,15 @@ def setup_embedding_model(embedding_name: str, config):
         LangchainEmbeddingsWrapper: A wrapped embedding model instance ready for use.
     """
     default_config = config.ai.default_chat_model.model_dump(exclude_unset=True)
-    embedding_config = ModelConfiguration(**default_config)
+    # Create a new ModelConfiguration including the desired embedding model name
+    embedding_config = ModelConfiguration(**{**default_config, "model": embedding_name})
     embedding = get_embeddings(embedding_config)
-    embedding.model = embedding_name
     return LangchainEmbeddingsWrapper(embedding)
 
 
-async def setup_agent(agent_name: str = "Rico Senior", doc_lib_ids: list = None):
+async def setup_agent(
+    agent_name: str = "Rico Senior", doc_lib_ids: list[str] | None = None
+):
     """
     Initialize and configure an agent by name, optionally setting document libraries.
 
@@ -107,7 +109,7 @@ async def setup_agent(agent_name: str = "Rico Senior", doc_lib_ids: list = None)
         available = [a.name for a in agents]
         raise ValueError(f"Agent '{agent_name}' not found. Available: {available}")
 
-    agent = AdvancedRagExpert(settings)
+    agent = AdvancedRico(settings)
     await agent.async_init()
 
     if doc_lib_ids:
@@ -150,7 +152,7 @@ async def run_evaluation(
     chat_model: str,
     embedding_model: str,
     agent_name: str = "Rico Senior",
-    doc_lib_ids: list = None,
+    doc_lib_ids: list[str] | None = None,
 ):
     """
     Run evaluation of an agent using RAGAS metrics.
@@ -165,7 +167,8 @@ async def run_evaluation(
     config = load_config()
 
     llm_as_judge = get_default_model()
-    llm_as_judge.model = chat_model
+    # Avoid assigning unknown attributes on BaseLanguageModel; set the model name dynamically
+    setattr(llm_as_judge, "model", chat_model)
     llm = LangchainLLMWrapper(llm_as_judge)
     embeddings = setup_embedding_model(embedding_model, config)
 
