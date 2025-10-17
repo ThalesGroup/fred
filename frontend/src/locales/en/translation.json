@@ -6,9 +6,18 @@
   },
   "resource": {
     "kind": {
-      "prompt": { "one": "prompt", "other": "prompts" },
-      "template": { "one": "template", "other": "templates" },
-      "chat-context": { "one": "chat context", "other": "chat contexts" }
+      "prompt": {
+        "one": "prompt",
+        "other": "prompts"
+      },
+      "template": {
+        "one": "template",
+        "other": "templates"
+      },
+      "chat-context": {
+        "one": "chat context",
+        "other": "chat contexts"
+      }
     }
   },
   "validation": {
@@ -363,7 +372,7 @@
   },
   "documentLibraryTree": {
     "shareFolder": "Share folder",
-    "shareFolderWithName": "Share folder: {{name}}",
+    "shareFolderWithName": "Share \"{{name}}\"",
     "deleteFolder": "Delete folder",
     "deleteFolderDisabled": "A library should be empty to be deleted"
   },
