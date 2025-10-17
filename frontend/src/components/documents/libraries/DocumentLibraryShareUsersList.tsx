@@ -2,14 +2,16 @@ import PersonAddAlt1OutlinedIcon from "@mui/icons-material/PersonAddAlt1Outlined
 import { Avatar, IconButton, List, ListItem, ListItemAvatar, ListItemText, Typography } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { useListUsersKnowledgeFlowV1UsersGetQuery } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { DocumentLibraryShareSelectableTarget } from "./DocumentLibraryShareTypes";
+import {
+  ShareTargetResource,
+  useListUsersKnowledgeFlowV1UsersGetQuery,
+} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 interface DocumentLibraryShareUsersListProps {
   searchQuery: string;
   selectedIds: Set<string>;
   disabled?: boolean;
-  onAdd: (target: DocumentLibraryShareSelectableTarget) => void;
+  onAdd: (target_id: string, target_type: ShareTargetResource, displayName: string) => void;
 }
 
 export function DocumentLibraryShareUsersList({
@@ -62,7 +64,7 @@ export function DocumentLibraryShareUsersList({
             secondaryAction={
               <IconButton
                 edge="end"
-                onClick={() => onAdd({ id: user.id, displayName: primary, audience: "user" })}
+                onClick={() => onAdd(user.id, "user", fullName)}
                 disabled={disabled || alreadySelected}
               >
                 <PersonAddAlt1OutlinedIcon fontSize="small" />
