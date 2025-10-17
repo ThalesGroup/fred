@@ -19,20 +19,18 @@ Application-scoped runtime state (FastAPI-bound).
 - Propagates user bearer when present; falls back to M2M service token.
 """
 
-from __future__ import annotations
-
 from typing import Any, Mapping, Optional
 
 import httpx
 from fastapi import FastAPI
+
+from app.application_context import get_configuration
 from fred_core import (
     M2MAuthConfig,
     M2MBearerAuth,
     M2MTokenProvider,
     make_m2m_asgi_client,
 )
-
-from app.application_context import get_configuration
 
 
 class _AppState:

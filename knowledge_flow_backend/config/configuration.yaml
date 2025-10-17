@@ -13,14 +13,14 @@
 app:
   name: "Knowledge Flow Backend"
   base_url: "/knowledge-flow/v1"
-  address: "127.0.0.1"
+  address: "0.0.0.0"
   port: 8111
   log_level: "info"
-  reload: false
+  reload: true
   reload_dir: "."
 processing:
   generate_summary: false
-  use_gpu: true
+  use_gpu: false
   process_images: false
 security:
   m2m:
@@ -72,20 +72,19 @@ document_sources:
     base_path: ~/Documents/Fred
     description: "Personal local documents available for pull-mode ingestion"
 embedding_model:
-  provider: openai
-  name: text-embedding-3-large
+  provider: ollama
+  name: bge-m3:567m-fp16
 # Configuration for the LLM used for summary, keyword generation
 # and other text generation tasks.
+#chat_model:
+#  provider: openai # openai | azure | ollama
+#  name: gpt-4o-mini # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
 chat_model:
-  provider: openai # openai | azure | ollama
-  name: gpt-4o-mini # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
-# chat_model:
-#   provider: ollama
-#   name: qwen2.5:3b-instruct         # any chat-capable Ollama model you pulled
-#   settings:
-#     base_url: http://localhost:11434
-#     temperature: 0.7                # optional, forwarded to LangChain Ollama wrapper
-
+   provider: ollama
+   name: mistral-small3.2:24b-instruct-2506-fp16         # any chat-capable Ollama model you pulled
+   settings:
+     base_url: http://localhost:31434
+#      temperature: 0.7                # optional, forwarded to LangChain Ollama wrapper
 # chat_model:
 #   provider: azure
 #   # azure use deployment name instead of a plain model name as OpenAI does. The principle
@@ -94,7 +93,6 @@ chat_model:
 #   settings:
 #     azure_endpoint: https://<your-azure-openai>.openai.azure.com
 #     api_version: 2024-05-01-preview
-
 # chat_model:
 #   provider: azure-apim        # openai | azure | ollama
 #   # azure use deployment name instead of a plain model name as openai. The principle

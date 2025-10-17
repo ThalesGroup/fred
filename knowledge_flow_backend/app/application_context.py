@@ -18,42 +18,8 @@ import os
 from pathlib import Path
 from typing import Dict, Optional, Type, Union
 
-from fred_core import (
-    BaseKPIStore,
-    BaseLogStore,
-    DuckdbStoreConfig,
-    InMemoryLogStorageConfig,
-    KpiLogStore,
-    KPIWriter,
-    LogStoreConfig,
-    ModelConfiguration,
-    ModelProvider,
-    OpenSearchIndexConfig,
-    OpenSearchKPIStore,
-    OpenSearchLogStore,
-    RamLogStore,
-    SQLStorageConfig,
-    SQLTableStore,
-    StoreInfo,
-    get_embeddings,
-    get_model,
-    split_realm_url,
-)
-from langchain_core.embeddings import Embeddings
-from opensearchpy import OpenSearch, RequestsHttpConnection
-
-from app.common.structures import (
-    ChromaVectorStorageConfig,
-    Configuration,
-    FileSystemPullSource,
-    InMemoryVectorStorage,
-    LocalContentStorageConfig,
-    MinioPullSource,
-    MinioStorageConfig,
-    OpenSearchVectorIndexConfig,
-    WeaviateVectorStorage,
-)
-from app.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
+from app.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, \
+    BaseTabularProcessor
 from app.core.processors.output.base_output_processor import BaseOutputProcessor
 from app.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 from app.core.stores.catalog.base_catalog_store import BaseCatalogStore
@@ -82,6 +48,41 @@ from app.core.stores.vector.base_text_splitter import BaseTextSplitter
 from app.core.stores.vector.base_vector_store import BaseVectorStore
 from app.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from app.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
+from langchain_core.embeddings import Embeddings
+from opensearchpy import OpenSearch, RequestsHttpConnection
+
+from app.common.structures import (
+    ChromaVectorStorageConfig,
+    Configuration,
+    FileSystemPullSource,
+    InMemoryVectorStorage,
+    LocalContentStorageConfig,
+    MinioPullSource,
+    MinioStorageConfig,
+    OpenSearchVectorIndexConfig,
+    WeaviateVectorStorage,
+)
+from fred_core import (
+    BaseKPIStore,
+    BaseLogStore,
+    DuckdbStoreConfig,
+    InMemoryLogStorageConfig,
+    KpiLogStore,
+    KPIWriter,
+    LogStoreConfig,
+    ModelConfiguration,
+    ModelProvider,
+    OpenSearchIndexConfig,
+    OpenSearchKPIStore,
+    OpenSearchLogStore,
+    RamLogStore,
+    SQLStorageConfig,
+    SQLTableStore,
+    StoreInfo,
+    get_embeddings,
+    get_model,
+    split_realm_url,
+)
 
 # Union of supported processor base classes
 BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]

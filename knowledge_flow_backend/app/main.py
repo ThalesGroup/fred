@@ -22,18 +22,9 @@ Entrypoint for the Knowledge Flow Backend App.
 import logging
 import os
 
-from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi_mcp import AuthConfig, FastApiMCP
-from fred_core import get_current_user, initialize_user_security, log_setup, register_exception_handlers
-
-from app.application_context import ApplicationContext
+import uvicorn
 from app.application_state import attach_app
 from app.common.http_logging import RequestResponseLogger
-from app.common.structures import Configuration
-from app.common.utils import parse_server_configuration
-from app.core.monitoring.monitoring_controller import MonitoringController
 from app.features.catalog.controller import CatalogController
 from app.features.content import report_controller
 from app.features.content.asset_controller import AssetController
@@ -50,11 +41,27 @@ from app.features.scheduler.controller import SchedulerController
 from app.features.tabular.controller import TabularController
 from app.features.tag.controller import TagController
 from app.features.vector_search.vector_search_controller import VectorSearchController
+from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi_mcp import AuthConfig, FastApiMCP
+
+from app.application_context import ApplicationContext
+from app.common.structures import Configuration
+from app.common.utils import parse_server_configuration
+from app.core.monitoring.monitoring_controller import MonitoringController
+from fred_core import (
+    get_current_user,
+    initialize_user_security,
+    log_setup,
+    register_exception_handlers,
+)
 
 # -----------------------
 # LOGGING + ENVIRONMENT
 # -----------------------
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -70,15 +77,26 @@ def load_environment(dotenv_path: str = "./config/.env"):
         logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
 
 
+def load_configuration():
+    config_file = os.environ.get("CONFIG_FILE", "./config/configuration.yaml")
+    configuration: Configuration = parse_server_configuration(config_file)
+    logger.info(f"✅ Loaded configuration from: {config_file}")
+    return configuration
+
+
 # -----------------------
 # APP CREATION
 # -----------------------
 
 
 def create_app() -> FastAPI:
-    load_environment()
-    config_file = os.environ["CONFIG_FILE"]
-    configuration: Configuration = parse_server_configuration(config_file)
+    configuration: Configuration = load_configuration()
+    logger.info(
+        f"🛠️ Embedding Model configuration: [{configuration.embedding_model.provider}] {configuration.embedding_model.name}"
+    )
+    logger.info(
+        f"🛠️ Chat Model configuration: [{configuration.chat_model.provider}] {configuration.chat_model.name}"
+    )
 
     base_url = configuration.app.base_url
 
@@ -106,7 +124,9 @@ def create_app() -> FastAPI:
 
     # Register exception handlers
     register_exception_handlers(app)
-    allowed_origins = list({_norm_origin(o) for o in configuration.security.authorized_origins})
+    allowed_origins = list(
+        {_norm_origin(o) for o in configuration.security.authorized_origins}
+    )
     logger.info("[CORS] allow_origins=%s", allowed_origins)
     app.add_middleware(
         CORSMiddleware,
@@ -149,6 +169,8 @@ def create_app() -> FastAPI:
     app.include_router(router)
     mcp_prefix = "/knowledge-flow/v1"
 
+    logger.info(f"🔌 MCP Agent Assets mounted at {mcp_prefix}/mcp-agent-assets")
+    auth_cfg: AuthConfig = AuthConfig(dependencies=[Depends(get_current_user)])
     # mcp_agent_assets = FastApiMCP(
     #     app,
     #     name="Knowledge Flow Agent Assets MCP",
@@ -161,10 +183,9 @@ def create_app() -> FastAPI:
     #     include_tags=["Agent Assets"],
     #     describe_all_responses=True,
     #     describe_full_response_schema=True,
-    #     auth_config=AuthConfig(dependencies=[Depends(get_current_user)]),
+    #     auth_config=auth_cfg,
     # )
     # mcp_agent_assets.mount_http(mount_path=f"{mcp_prefix}/mcp-assets")
-    logger.info(f"🔌 MCP Agent Assets mounted at {mcp_prefix}/mcp-agent-assets")
     mcp_reports = FastApiMCP(
         app,
         name="Knowledge Flow Reports MCP",
@@ -172,19 +193,21 @@ def create_app() -> FastAPI:
         include_tags=["Reports"],  # ← export only these routes as tools
         describe_all_responses=True,
         describe_full_response_schema=True,
-        auth_config=AuthConfig(dependencies=[Depends(get_current_user)]),
+        auth_config=auth_cfg,
     )
     mcp_reports.mount_http(mount_path=f"{mcp_prefix}/mcp-reports")
     mcp_opensearch_ops = FastApiMCP(
         app,
         name="Knowledge Flow OpenSearch Ops MCP",
-        description=("Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only."),
-        include_tags=["OpenSearch"],  # <-- only export routes tagged OpenSearch as MCP tools
+        description=(
+            "Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only."
+        ),
+        include_tags=[
+            "OpenSearch"
+        ],  # <-- only export routes tagged OpenSearch as MCP tools
         describe_all_responses=True,
         describe_full_response_schema=True,
-        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
-            dependencies=[Depends(get_current_user)]
-        ),
+        auth_config=auth_cfg,
     )
     # Mount via HTTP at a clear, versioned path:
     mcp_mount_path = f"{mcp_prefix}/mcp-opensearch-ops"
@@ -203,9 +226,7 @@ def create_app() -> FastAPI:
         include_tags=["KPI"],
         describe_all_responses=True,
         describe_full_response_schema=True,
-        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
-            dependencies=[Depends(get_current_user)]
-        ),
+        auth_config=auth_cfg,
     )
     mcp_kpi.mount_http(mount_path=f"{mcp_prefix}/mcp-kpi")
 
@@ -222,9 +243,7 @@ def create_app() -> FastAPI:
         include_tags=["Tabular"],
         describe_all_responses=True,
         describe_full_response_schema=True,
-        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
-            dependencies=[Depends(get_current_user)]
-        ),
+        auth_config=auth_cfg,
     )
     mcp_tabular.mount_http(mount_path=f"{mcp_prefix}/mcp-tabular")
 
@@ -240,9 +259,7 @@ def create_app() -> FastAPI:
         include_tags=["Vector Search"],
         describe_all_responses=True,
         describe_full_response_schema=True,
-        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
-            dependencies=[Depends(get_current_user)]
-        ),
+        auth_config=auth_cfg,
     )
     mcp_text.mount_http(mount_path=f"{mcp_prefix}/mcp-text")
 
@@ -253,9 +270,7 @@ def create_app() -> FastAPI:
         include_tags=["Templates", "Prompts"],
         describe_all_responses=True,
         describe_full_response_schema=True,
-        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
-            dependencies=[Depends(get_current_user)]
-        ),
+        auth_config=auth_cfg,
     )
     mcp_template.mount_http(mount_path=f"{mcp_prefix}/mcp-template")
 
@@ -272,9 +287,7 @@ def create_app() -> FastAPI:
         include_tags=["Code Search"],
         describe_all_responses=True,
         describe_full_response_schema=True,
-        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
-            dependencies=[Depends(get_current_user)]
-        ),
+        auth_config=auth_cfg,
     )
     mcp_code.mount_http(mount_path=f"{mcp_prefix}/mcp-code")
 
@@ -290,9 +303,7 @@ def create_app() -> FastAPI:
         include_tags=["Resources", "Tags"],
         describe_all_responses=True,
         describe_full_response_schema=True,
-        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
-            dependencies=[Depends(get_current_user)]
-        ),
+        auth_config=auth_cfg,
     )
     mcp_resources.mount_http(mount_path=f"{mcp_prefix}/mcp-resources")
 
@@ -304,5 +315,14 @@ def create_app() -> FastAPI:
 # -----------------------
 
 if __name__ == "__main__":
-    print("To start the app, use uvicorn cli with:")
-    print("uv run uvicorn app.main:create_app --factory ...")
+    logger.warning("To start the app, use uvicorn cli with:")
+    logger.warning("uv run uvicorn app.main:create_app --factory ...")
+    config: Configuration = load_configuration()
+    uvicorn.run(
+        app="app.main:create_app",
+        factory=True,
+        host=config.app.address,
+        port=config.app.port,
+        reload=config.app.reload,
+        log_level=config.app.log_level.lower(),
+    )
