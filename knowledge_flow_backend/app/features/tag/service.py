@@ -23,10 +23,23 @@ from fred_core import Action, KeycloakUser, RebacReference, Relation, RelationTy
 from app.application_context import ApplicationContext
 from app.common.document_structures import DocumentMetadata
 from app.core.stores.tags.base_tag_store import TagAlreadyExistsError
+from app.features.groups.groups_service import get_groups_by_ids
+from app.features.groups.groups_structures import GroupSummary
 from app.features.metadata.service import MetadataService
 from app.features.resources.service import ResourceService
 from app.features.resources.structures import ResourceKind
-from app.features.tag.structure import Tag, TagCreate, TagMember, TagType, TagUpdate, TagWithItemsId, UserTagRelation
+from app.features.tag.structure import (
+    Tag,
+    TagCreate,
+    TagMember,
+    TagMemberGroup,
+    TagMemberUser,
+    TagType,
+    TagUpdate,
+    TagWithItemsId,
+    UserTagRelation,
+)
+from app.features.users.users_service import UserSummary, get_users_by_ids
 
 logger = logging.getLogger(__name__)
 
@@ -292,26 +305,31 @@ class TagService:
     @authorize(Action.READ, Resource.TAGS)
     def list_tag_members(self, tag_id: str, user: KeycloakUser) -> list[TagMember]:
         """
-        List users who have access to the tag along with their relation level.
+        List users and groups who have access to the tag along with their relation level.
         """
         self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
 
-        tag_reference = RebacReference(type=Resource.TAGS, id=tag_id)
-        relation_priority = {
-            UserTagRelation.OWNER: 0,
-            UserTagRelation.EDITOR: 1,
-            UserTagRelation.VIEWER: 2,
-        }
-        members: dict[str, UserTagRelation] = {}
+        # Fetch user and group relations
+        user_relations = self._get_tag_members_by_type(tag_id, Resource.USER)
+        group_relations = self._get_tag_members_by_type(tag_id, Resource.GROUP)
 
-        for relation in (UserTagRelation.OWNER, UserTagRelation.EDITOR, UserTagRelation.VIEWER):
-            subjects = self.rebac.lookup_subjects(tag_reference, relation.to_relation(), Resource.USER)
-            for subject in subjects:
-                current = members.get(subject.id)
-                if current is None or relation_priority[relation] < relation_priority[current]:
-                    members[subject.id] = relation
+        # Fetch user and group summaries
+        user_summaries = get_users_by_ids(user_relations.keys())
+        group_summaries = get_groups_by_ids(group_relations.keys())
 
-        return [TagMember(user_id=user_id, relation=relation) for user_id, relation in sorted(members.items(), key=lambda item: (relation_priority[item[1]], item[0]))]
+        # Compose members list
+        members: list[TagMember] = []
+        for user_id, relation in user_relations.items():
+            summary = user_summaries.get(user_id) or UserSummary(id=user_id)
+            members.append(TagMemberUser(relation=relation, user=summary))
+        for group_id, relation in group_relations.items():
+            profile = group_summaries.get(group_id) or GroupSummary(
+                id=group_id,
+                name=group_id,
+            )
+            members.append(TagMemberGroup(relation=relation, group=profile))
+
+        return members
 
     @authorize(Action.UPDATE, Resource.TAGS)
     def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:
@@ -322,6 +340,24 @@ class TagService:
         self._tag_store.update_tag_by_id(tag_id, tag)
 
     # ---------- Internals / helpers ----------
+
+    def _get_tag_members_by_type(self, tag_id: str, subject_type: Resource) -> dict[str, UserTagRelation]:
+        tag_reference = RebacReference(type=Resource.TAGS, id=tag_id)
+        relation_priority = {
+            UserTagRelation.OWNER: 0,
+            UserTagRelation.EDITOR: 1,
+            UserTagRelation.VIEWER: 2,
+        }
+        members: dict[str, UserTagRelation] = {}
+
+        for relation in (UserTagRelation.OWNER, UserTagRelation.EDITOR, UserTagRelation.VIEWER):
+            subjects = self.rebac.lookup_subjects(tag_reference, relation.to_relation(), subject_type)
+            for subject in subjects:
+                current = members.get(subject.id)
+                if current is None or relation_priority[relation] < relation_priority[current]:
+                    members[subject.id] = relation
+
+        return members
 
     def _retrieve_documents_for_tag(self, user: KeycloakUser, tag_id: str) -> list[DocumentMetadata]:
         return self.document_metadata_service.get_document_metadata_in_tag(user, tag_id)
