@@ -34,7 +34,7 @@ async def list_users(_curent_user: KeycloakUser) -> list[UserSummary]:
     return summaries
 
 
-def get_users_by_ids(user_ids: Iterable[str]) -> dict[str, UserSummary]:
+async def get_users_by_ids(user_ids: Iterable[str]) -> dict[str, UserSummary]:
     """
     Retrieve user summaries for the provided ids.
     Falls back to id-only summaries when Keycloak is unavailable or the user is missing.
@@ -46,33 +46,29 @@ def get_users_by_ids(user_ids: Iterable[str]) -> dict[str, UserSummary]:
     admin = create_keycloak_admin()
     if not admin:
         logger.info("Keycloak admin client not configured; returning fallback users.")
-        return {user_id: UserSummary(id=user_id) for user_id in unique_ids}
+        return {}
 
     ordered_ids = sorted(unique_ids)
 
-    async def _collect() -> dict[str, UserSummary]:
-        coroutines = {user_id: admin.a_get_user(user_id) for user_id in ordered_ids}
-        raw_results = await asyncio.gather(*coroutines.values(), return_exceptions=True)
+    coroutines = {user_id: admin.a_get_user(user_id) for user_id in ordered_ids}
+    raw_results = await asyncio.gather(*coroutines.values(), return_exceptions=True)
 
-        summaries: dict[str, UserSummary] = {}
-        for user_id, result in zip(ordered_ids, raw_results):
-            if isinstance(result, BaseException):
-                if isinstance(result, KeycloakGetError) and result.response_code == 404:
-                    logger.debug("User %s not found in Keycloak.", user_id)
-                    continue
-                raise result
-
-            if not isinstance(result, dict):
-                logger.debug("Unexpected payload for user %s: %r", user_id, result)
+    summaries: dict[str, UserSummary] = {}
+    for user_id, result in zip(ordered_ids, raw_results):
+        if isinstance(result, BaseException):
+            if isinstance(result, KeycloakGetError) and result.response_code == 404:
+                logger.debug("User %s not found in Keycloak.", user_id)
                 continue
+            raise result
 
-            try:
-                summaries[user_id] = UserSummary.from_raw_user(result)
-            except ValueError:
-                logger.debug("User %s payload missing identifier: %s", user_id, result)
-        return summaries
+        if not isinstance(result, dict):
+            logger.debug("Unexpected payload for user %s: %r", user_id, result)
+            continue
 
-    summaries = asyncio.run(_collect())
+        try:
+            summaries[user_id] = UserSummary.from_raw_user(result)
+        except ValueError:
+            logger.debug("User %s payload missing identifier: %s", user_id, result)
 
     return summaries
 
