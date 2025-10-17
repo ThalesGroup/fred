@@ -64,7 +64,7 @@ fred-core = { path = "../fred-core", editable = true }
 [dependency-groups]
 dev = [
     "bandit>=1.8.6",
-    "basedpyright>=1.17.0,<1.30.0",
+    "basedpyright==1.31.0",
     "detect-secrets>=1.5.0",
     "ragas>=0.3.6",
     "ruff>=0.12.5",
