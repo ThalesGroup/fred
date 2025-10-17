@@ -122,8 +122,8 @@ declare module "@mui/material/Typography" {
 }
 
 // ---------- Shared Gradient Stops (single source of truth) ----------
-const lightHeroFrom = "#ffffffd9";
-const lightHeroTo = "#ffffffe6";
+const lightHeroFrom = "#ffffffff";
+const lightHeroTo = "#ffffffff";
 
 const darkHeroFrom = "#191923ff";
 const darkHeroTo = "#191923ff";
