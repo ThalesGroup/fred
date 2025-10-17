@@ -1,8 +1,8 @@
 [project]
-name = "knowledge-flow-backend-app"
+name = "knowledge-flow-backend"
 readme = "README.md"
 version = "0.1"
-description = "Knowledge Flow Backend App"
+description = "Knowledge Flow Backend"
 authors = [
     {name = "Fred", email = "noreply@example.com"}
 ]
@@ -74,7 +74,7 @@ packages = [
 line-length = 200
 
 [tool.setuptools.packages.find]
-include = ["app*"]
+include = ["knowledge_flow_backend*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"

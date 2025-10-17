@@ -2,7 +2,7 @@
 // in vscode and by the pyright CLI
 {
   "typeCheckingMode": "basic",
-  "include": ["app"],
+  "include": ["knowledge_flow_backend"],
   "reportMissingTypeStubs": false,
   "reportIncompatibleMethodOverride": "error",
   "reportIncompatibleVariableOverride": "error"
