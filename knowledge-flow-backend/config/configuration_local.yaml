@@ -13,14 +13,14 @@
 app:
   name: "Knowledge Flow Backend"
   base_url: "/knowledge-flow/v1"
-  address: "127.0.0.1"
+  address: "0.0.0.0"
   port: 8111
   log_level: "info"
-  reload: false
+  reload: true
   reload_dir: "."
 processing:
   generate_summary: false
-  use_gpu: true
+  use_gpu: false
   process_images: false
 security:
   m2m:
@@ -44,21 +44,21 @@ scheduler:
     connect_timeout_seconds: 5
 input_processors:
   - prefix: ".pdf"
-    class_path: app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+    class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
   - prefix: ".docx"
-    class_path: app.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+    class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
   - prefix: ".pptx"
-    class_path: app.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+    class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
   - prefix: ".csv"
-    class_path: app.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+    class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
   - prefix: ".txt"
-    class_path: app.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+    class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
   - prefix: ".md"
-    class_path: app.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+    class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
   - prefix: ".xlsm"
-    class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+    class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
   - prefix: ".jsonl"
-    class_path: app.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+    class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
 content_storage:
   type: "local"
   root_path: ~/.fred/knowledge-flow/content-storage
@@ -72,20 +72,19 @@ document_sources:
     base_path: ~/Documents/Fred
     description: "Personal local documents available for pull-mode ingestion"
 embedding_model:
-  provider: openai
-  name: text-embedding-3-large
+  provider: ollama
+  name: bge-m3:567m-fp16
 # Configuration for the LLM used for summary, keyword generation
 # and other text generation tasks.
+#chat_model:
+#  provider: openai # openai | azure | ollama
+#  name: gpt-4o-mini # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
 chat_model:
-  provider: openai # openai | azure | ollama
-  name: gpt-4o-mini # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
-# chat_model:
-#   provider: ollama
-#   name: qwen2.5:3b-instruct         # any chat-capable Ollama model you pulled
-#   settings:
-#     base_url: http://localhost:11434
-#     temperature: 0.7                # optional, forwarded to LangChain Ollama wrapper
-
+   provider: ollama
+   name: mistral-small3.2:24b-instruct-2506-fp16         # any chat-capable Ollama model you pulled
+   settings:
+     base_url: http://localhost:31434
+#      temperature: 0.7                # optional, forwarded to LangChain Ollama wrapper
 # chat_model:
 #   provider: azure
 #   # azure use deployment name instead of a plain model name as OpenAI does. The principle
@@ -94,7 +93,6 @@ chat_model:
 #   settings:
 #     azure_endpoint: https://<your-azure-openai>.openai.azure.com
 #     api_version: 2024-05-01-preview
-
 # chat_model:
 #   provider: azure-apim        # openai | azure | ollama
 #   # azure use deployment name instead of a plain model name as openai. The principle

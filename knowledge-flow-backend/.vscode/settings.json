@@ -2,14 +2,14 @@
     "python.defaultInterpreterPath": ".venv/bin/python",
     "search.exclude": {
         "**/.venv": true,
-        "**/__pycache__": true,
+        "**/__pycache__": true
     },
     "editor.formatOnSave": true,
     "[python]": {
         "editor.wordBasedSuggestions": "off",
-        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.defaultFormatter": "charliermarsh.ruff"
     },
     "editor.codeActionsOnSave": {
         "source.organizeImports": "always"
-    },
+    }
 }
