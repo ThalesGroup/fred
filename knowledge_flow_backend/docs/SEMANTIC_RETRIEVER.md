@@ -1,16 +1,19 @@
 # Semantic Search (Semantic)
 
 **Who is this for?**  
-Data scientists, architects, and users who want **fast**, **concept-oriented** results using AI embeddings only—no keyword or phrase matching.
+Data scientists, architects, and users who want **fast**, **concept-oriented** results using AI embeddings only—no
+keyword or phrase matching.
 
 ---
 
 ## What it does (in plain language)
 
-Semantic relies purely on **semantic similarity**: it embeds your question and the document chunks into the same vector space and returns the closest chunks. This means it can match **paraphrases** and **related concepts** even when wording doesn’t line up exactly.
+Semantic relies purely on **semantic similarity**: it embeds your question and the document chunks into the same vector
+space and returns the closest chunks. This means it can match **paraphrases** and **related concepts** even when wording
+doesn’t line up exactly.
 
-- ✅ Great at **conceptual questions** and **natural language** prompts  
-- ✅ Works the same across backends (no keyword index required)  
+- ✅ Great at **conceptual questions** and **natural language** prompts
+- ✅ Works the same across backends (no keyword index required)
 - ⚠️ Not designed for **exact tokens** (IDs, error strings, config keys)
 
 ---
@@ -18,22 +21,26 @@ Semantic relies purely on **semantic similarity**: it embeds your question and t
 ## When to pick **Semantic**
 
 Choose Semantic if you:
+
 - Want **lowest latency** and minimal infrastructure.
 - Are **exploring** a topic or asking open-ended questions.
 - Run in a **dev/demo** environment without a keyword/phrase index.
 - Have a corpus where exact matching isn’t critical, and **paraphrase recall** matters more.
 
 **Examples**
-- “Explain autoscaling trade-offs for batch processing.”  
-- “What are the security considerations for multi-tenant APIs?”  
+
+- “Explain autoscaling trade-offs for batch processing.”
+- “What are the security considerations for multi-tenant APIs?”
 - “How does our agent framework orchestrate long-running tasks?”
 
 ---
 
 ## When **Hybrid** or **Strict** may be better
 
-- **Hybrid** (default): Balanced results. Best when your query mixes **natural language** and **specific tokens** (like `SLA`, `CVE-2024-xxxx`, `max.poll.interval.ms`).  
-- **Strict**: Precision-first. Best when **false positives are costly** (audits, policy lookups). Requires keyword/phrase support.
+- **Hybrid** (default): Balanced results. Best when your query mixes **natural language** and **specific tokens** (like
+  `SLA`, `CVE-2024-xxxx`, `max.poll.interval.ms`).
+- **Strict**: Precision-first. Best when **false positives are costly** (audits, policy lookups). Requires
+  keyword/phrase support.
 
 ---
 
@@ -41,7 +48,8 @@ Choose Semantic if you:
 
 - A list of passages ranked by **semantic closeness** (often with a similarity indicator).
 - Results may include **relevant paraphrases** you didn’t type verbatim.
-- If your query is short or very specific (e.g., an error code), results may be **too broad**—that’s expected with semantic-only.
+- If your query is short or very specific (e.g., an error code), results may be **too broad**—that’s expected with
+  semantic-only.
 
 > Tip: If you need exact terms, switch to **Hybrid** or add a couple of precise tokens to your query.
 
@@ -49,26 +57,26 @@ Choose Semantic if you:
 
 ## Why choose Semantic
 
-- **Speed & simplicity**: no keyword index; fewer moving parts.  
-- **Portability**: consistent behavior across storage backends.  
+- **Speed & simplicity**: no keyword index; fewer moving parts.
+- **Portability**: consistent behavior across storage backends.
 - **Great for ideation**: surfaces related concepts you might not think to type.
 
 ---
 
 ## Performance notes
 
-- Usually the **fastest** option, especially on small/medium corpora.  
+- Usually the **fastest** option, especially on small/medium corpora.
 - Quality depends on your **embedding model** and **chunking**. Better titles and structured context improve results.
 
 ---
 
 ## Quick decision guide
 
-| Your situation | Best first choice | Why |
-|---|---|---|
-| Concept exploration / brainstorming | **Semantic** | Fast, paraphrase-friendly |
-| Mixed query (words + IDs/keys) | **Hybrid** | Balances semantic + exact terms |
-| Compliance / exact policy text | **Strict** | High precision, low noise |
+| Your situation                      | Best first choice | Why                             |
+|-------------------------------------|-------------------|---------------------------------|
+| Concept exploration / brainstorming | **Semantic**      | Fast, paraphrase-friendly       |
+| Mixed query (words + IDs/keys)      | **Hybrid**        | Balances semantic + exact terms |
+| Compliance / exact policy text      | **Strict**        | High precision, low noise       |
 
 ---
 

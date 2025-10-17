@@ -15,11 +15,11 @@ The `knowledge_flow_app` exposes two API namespaces for different purposes:
 - **Base URL**: `/knowledge-flow/v1`
 - **Used by**: React frontend, CLI tools, admin scripts
 - **Includes**:
-  - Ingestion endpoints
-  - Metadata management
-  - Vector search
-  - Tabular schema/query
-  - Raw content access
+    - Ingestion endpoints
+    - Metadata management
+    - Vector search
+    - Tabular schema/query
+    - Raw content access
 
 You can access the Swagger UI at:
 
@@ -32,10 +32,11 @@ http://localhost:8111/knowledge-flow/v1/docs
 ### 2. MCP API
 
 - **Base URL**: `/mcp` (not nested under `/knowledge-flow/v1`)
-- **Used by**: Agents (e.g., Dominic) that follow the [LangGraph MCP spec](https://github.com/langchain-ai/langgraph/tree/main/libs/langgraph/experimental/mcp)
+- **Used by**: Agents (e.g., Dominic) that follow
+  the [LangGraph MCP spec](https://github.com/langchain-ai/langgraph/tree/main/libs/langgraph/experimental/mcp)
 - **Exposes only tagged endpoints**:
-  - `Vector Search`
-  - `Tabular`
+    - `Vector Search`
+    - `Tabular`
 
 Mounted via `FastApiMCP` in `main.py`:
 
@@ -68,10 +69,10 @@ As a result, all MCP endpoints follow this pattern:
 /mcp/tabular/list
 ```
 
-Even though the `VectorSearchController` and `TabularController` do **not** hardcode `/mcp/` in their route paths, MCP tagging ensures proper exposure.
+Even though the `VectorSearchController` and `TabularController` do **not** hardcode `/mcp/` in their route paths, MCP
+tagging ensures proper exposure.
 
 This approach is consistent and scalable across all agent-facing interfaces.
-
 
 ## Processor Architecture
 
@@ -79,10 +80,10 @@ This approach is consistent and scalable across all agent-facing interfaces.
 
 Input processors extract structured content and metadata from uploaded files.
 
-| Type     | Location                     | Output        |
-|----------|------------------------------|---------------|
-| Markdown | `input_processors/`          | Markdown text |
-| Tabular  | `input_processors/`          | Table rows    |
+| Type     | Location            | Output        |
+|----------|---------------------|---------------|
+| Markdown | `input_processors/` | Markdown text |
+| Tabular  | `input_processors/` | Table rows    |
 
 Each input processor specializes in a file type (PDF, DOCX, CSV, etc.).
 
@@ -90,10 +91,10 @@ Each input processor specializes in a file type (PDF, DOCX, CSV, etc.).
 
 Output processors transform parsed content into embeddings or structured records.
 
-| Type         | Location                       | Output       |
-|--------------|--------------------------------|--------------|
-| Vectorization| `output_processors/vectorization_processor/` | Embeddings + metadata |
-| Tabular      | `output_processors/tabular_processor/`       | Normalized records    |
+| Type          | Location                                     | Output                |
+|---------------|----------------------------------------------|-----------------------|
+| Vectorization | `output_processors/vectorization_processor/` | Embeddings + metadata |
+| Tabular       | `output_processors/tabular_processor/`       | Normalized records    |
 
 ---
 
@@ -118,13 +119,15 @@ Output processors transform parsed content into embeddings or structured records
    BaseMetadataStore
 ```
 
-Each interface is pluggable. You can switch OpenSearch → Pinecone, or Azure → HuggingFace by updating config and implementing the interface.
+Each interface is pluggable. You can switch OpenSearch → Pinecone, or Azure → HuggingFace by updating config and
+implementing the interface.
 
 ---
 
 ## Knowledge Flow – Project Layout (Modularized)
 
-This project uses a modular architecture that separates domain features from core infrastructure. Below is the directory structure with roles and guidelines for extension.
+This project uses a modular architecture that separates domain features from core infrastructure. Below is the directory
+structure with roles and guidelines for extension.
 
 ---
 
@@ -164,6 +167,7 @@ features/
 ```
 
 📌 **Where to add a new API?**
+
 - Create a folder in `features/`
 - Add controller, service, and structures as needed
 
@@ -203,9 +207,11 @@ core/
 ```
 
 📌 **Where to add new file support?**
+
 - Add an `input/your_type/` folder inside `core/processors`
 
 📌 **Where to add embedding or normalization logic?**
+
 - Use `core/pipelines/` and optionally create helpers in `output/`
 
 ---
@@ -235,14 +241,14 @@ config/
 
 ### Developer Guidance
 
-| Task                          | Location                                      |
-|-------------------------------|-----------------------------------------------|
-| Add a new REST API            | `features/your_feature/`                      |
-| Add support for a new file    | `core/processors/input/your_type/`            |
-| Add a new vector store        | `core/stores/vector_store/`                   |
-| Change embedding backend      | `core/pipelines/vectorization_pipeline.py`    |
-| Customize ingestion flow      | `services/ingestion_service.py`               |
-| Add business exceptions       | into your feature                             |
+| Task                       | Location                                   |
+|----------------------------|--------------------------------------------|
+| Add a new REST API         | `features/your_feature/`                   |
+| Add support for a new file | `core/processors/input/your_type/`         |
+| Add a new vector store     | `core/stores/vector_store/`                |
+| Change embedding backend   | `core/pipelines/vectorization_pipeline.py` |
+| Customize ingestion flow   | `services/ingestion_service.py`            |
+| Add business exceptions    | into your feature                          |
 
 ---
 
@@ -261,11 +267,13 @@ make test        # Run pytest
 Use standard `pytest`. Tests live in `tests/`.
 
 Run all:
+
 ```bash
 pytest
 ```
 
 Run specific:
+
 ```bash
 pytest tests/test_vector_search_service.py
 ```
