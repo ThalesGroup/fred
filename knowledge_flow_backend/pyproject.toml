@@ -33,7 +33,8 @@ dependencies = [
   "openpyxl==3.1.5",
   "docling==2.34.0",
   "hf-xet==1.1.1",
-  "torch==2.7.1",
+  "torch==2.7.1+cpu",
+  "torchvision==0.22.1+cpu",
   "fastapi-mcp==0.4.0",
   "duckdb>=1.3.2",
   "weaviate-client<4.0.0",
@@ -88,11 +89,21 @@ markers = [
 
 [tool.uv.sources]
 fred-core = { path = "../fred-core", editable = true }
+torch = { index = "pytorch-cpu", marker = "sys_platform == 'linux'"}
+torchvision = { index = "pytorch-cpu", marker = "sys_platform == 'linux'" }
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
 
 [dependency-groups]
 dev = [
     "bandit>=1.8.5",
-    "basedpyright>=1.31.0",
+    "basedpyright==1.31.0",
     "detect-secrets>=1.5.0",
     "ruff>=0.12.0",
 ]
@@ -101,3 +112,6 @@ dev = [
 # Using `editable_mode = "compat"` when installing fred-core to make editable install work with Pylance (vscode):
 # https://github.com/microsoft/pylance-release/blob/main/TROUBLESHOOTING.md#editable-install-modules-not-found
 config-settings = { editable_mode = "compat" }
+environments = [
+    "sys_platform == 'linux'"
+]
