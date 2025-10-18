@@ -122,33 +122,38 @@ class AssetService:  # RENAMED from AgentAssetService
         existing_tags = tag_service.list_all_tags_for_user(user, tag_type=TagType.DOCUMENT)
         user_asset_tag = next((t for t in existing_tags if t.name == "user_asset"), None)
         if user_asset_tag is None:
-            created_tag = tag_service.create_tag_for_user(TagCreate(name="user_asset", path=None, description="Generic tag for all files uploaded by users", type=TagType.DOCUMENT, item_ids=[]), user)
+            created_tag = tag_service.create_tag_for_user(
+                TagCreate(
+                    name="user_asset",
+                    path=None,
+                    description="Generic tag for all files uploaded by users",
+                    type=TagType.DOCUMENT,
+                    item_ids=[],
+                ),
+                user,
+            )
             tag_id = created_tag.id
         else:
             tag_id = user_asset_tag.id
 
-        # 1️⃣ Save the uploaded file to a temporary location
-        ext = Path(file_name or key).suffix
-        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp_file:
-            shutil.copyfileobj(stream, tmp_file)
-            tmp_path = Path(tmp_file.name)
+        # 1️⃣ Create a temporary folder, but use the *real* filename
+        tmp_dir = Path(tempfile.mkdtemp())
+        final_file_path = tmp_dir / (file_name or key)
+        with open(final_file_path, "wb") as f:
+            shutil.copyfileobj(stream, f)
 
         # 2️⃣ Extract metadata using the tag ID
         metadata = ingestion_service.extract_metadata(
             user=user,
-            file_path=tmp_path,
+            file_path=final_file_path,
             tags=[tag_id],
             source_tag="fred",
         )
 
-        # 3️⃣ Save the input content using the **original file name**
-        output_dir = tmp_path.parent / "input"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        final_file_path = output_dir / (file_name or key)
-        shutil.copy(tmp_path, final_file_path)
-        ingestion_service.save_input(user, metadata=metadata, input_dir=output_dir)
+        # 3️⃣ Save input
+        ingestion_service.save_input(user, metadata=metadata, input_dir=tmp_dir)
 
-        # 4️⃣ Save the document metadata
+        # 4️⃣ Save metadata
         ingestion_service.save_metadata(user, metadata=metadata)
 
         # 5️⃣ Store the file in the content store with the correct name
@@ -157,10 +162,9 @@ class AssetService:  # RENAMED from AgentAssetService
         ct = content_type or (mimetypes.guess_type(file_name or norm_key)[0]) or "application/octet-stream"
         info = self.store.put_object(storage_key, final_file_path.open("rb"), content_type=ct)
 
-        # Clean up the temporary file
-        tmp_path.unlink(missing_ok=True)
+        # Clean up
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
-        # Return the AssetMeta response
         return self._to_meta(scope, entity_id, user, norm_key, info)
 
     @authorize(Action.READ, Resource.DOCUMENTS)
