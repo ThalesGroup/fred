@@ -72,71 +72,76 @@ data:
   mapping.json: |
     {
       "settings": {
-        "number_of_shards": 1,
-        "number_of_replicas": 1,
-        "knn.algo_param": {
-          "ef_search": "512"
-        },  
-        "knn": "true"
+        "index": {
+          "knn": true,
+          "number_of_shards": 1,
+          "number_of_replicas": 1,
+          "knn.algo_param": {
+            "ef_search": "512"
+          }
+        }
       },
       "mappings": {
+        "dynamic": false,
         "properties": {
-          "metadata": {
-            "properties": {
-              "my_field_1": {
-                "type": "text",
-                "fields": {
-                  "keyword": {
-                    "type": "keyword",
-                    "ignore_above": 256
-                  }
-                }
-              },
-              "my_field_2": {
-                "type": "text",
-                "fields": {
-                  "keyword": {
-                    "type": "keyword",
-                    "ignore_above": 256
-                  }
-                }
-              },
-              "my_field_3": {
-                "type": "text",
-                "fields": {
-                  "keyword": {
-                    "type": "keyword",
-                    "ignore_above": 256
-                  }
-                }
-              }
-            }
-          },
           "text": {
             "type": "text",
             "fields": {
-              "keyword": {
-                "type": "keyword",
-                "ignore_above": 256
-              }
+              "keyword": { "type": "keyword", "ignore_above": 256 }
             }
           },
           "vector_field": {
             "type": "knn_vector",
-            "dimension": 1536,
+            "dimension": 3072,
             "method": {
-              "engine": "nmslib",
-              "space_type": "l2",
               "name": "hnsw",
-              "parameters": {
-                "ef_construction": 512,
-                "m": 16
-              }
+              "engine": "lucene",
+              "space_type": "l2",
+              "parameters": { "ef_construction": 512, "m": 16 }
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "dynamic": false,
+            "properties": {
+              "document_uid": { "type": "keyword" },
+              "document_name": { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } } },
+              "title": { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } } },
+              "author": { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } } },
+              "created": { "type": "date" },
+              "modified": { "type": "date" },
+              "last_modified_by": { "type": "keyword" },
+              "repository": { "type": "keyword" },
+              "pull_location": { "type": "keyword" },
+              "repository_web": { "type": "keyword" },
+              "repo_ref": { "type": "keyword" },
+              "file_path": { "type": "keyword" },
+              "date_added_to_kb": { "type": "date" },
+              "type": { "type": "keyword" },
+              "mime_type": { "type": "keyword" },
+              "file_size_bytes": { "type": "long" },
+              "page_count": { "type": "long" },
+              "row_count": { "type": "long" },
+              "sha256": { "type": "keyword" },
+              "language": { "type": "keyword" },
+              "tag_ids": { "type": "keyword" },
+              "license": { "type": "keyword" },
+              "confidential": { "type": "boolean" },
+              "acl": { "type": "keyword" },
+              "chunk_index": { "type": "long" },
+              "chunk_uid": { "type": "keyword" },
+              "char_start": { "type": "long" },
+              "char_end": { "type": "long" },
+              "heading_slug": { "type": "keyword" },
+              "viewer_fragment": { "type": "keyword" },
+              "original_doc_length": { "type": "long" },
+              "section": { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } } }
             }
           }
         }
       }
     }
+
 
 
 
@@ -176,7 +181,7 @@ spec:
             - -c
             - |
               set -e
-              apk add curl
+              if [ -z $(which curl 2> /dev/null) ]; then apk add curl ; fi
               /app/wait_for_os_init.sh {{ $osHost }}
 {{- range $name, $store := .app.configuration.storage }}
 {{- if and (hasSuffix "_store" $name) (eq $store.type "opensearch") }}
