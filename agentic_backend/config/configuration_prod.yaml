@@ -76,7 +76,7 @@ ai:
   agents:
     - name: "Apollo"
       type: "leader"
-      class_path: "app.agents.leader.appollo.Appollo"
+      class_path: "app.agents.appollo.appollo.Appollo"
       enabled: true
       role: "Multi-Agent Orchestrator"
       tags: ["orchestrator"]

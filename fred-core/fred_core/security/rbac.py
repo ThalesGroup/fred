@@ -27,7 +27,8 @@ logger = logging.getLogger(__name__)
 ALL = set(Action)
 CRUD = {Action.CREATE, Action.READ, Action.UPDATE, Action.DELETE}
 READ_ONLY = {Action.READ}
-CRU =  {Action.CREATE, Action.READ, Action.UPDATE}
+CRU = {Action.CREATE, Action.READ, Action.UPDATE}
+
 
 class RBACProvider(AuthorizationProvider):
     """Role-Based Access Control authorization provider."""
@@ -74,6 +75,7 @@ class RBACProvider(AuthorizationProvider):
                 Resource.DOCUMENTS: READ_ONLY,
                 Resource.TABLES_DATABASES: READ_ONLY,
                 Resource.TABLES: READ_ONLY,
+                Resource.OPENSEARCH: READ_ONLY,
             },
         }
 
