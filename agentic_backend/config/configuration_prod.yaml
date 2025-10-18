@@ -139,16 +139,16 @@ ai:
       description: >
         An expert in retrieving and processing documents using retrieval-augmented generation techniques.
         Rico can help with tasks that involve understanding and utilizing large document collections.
-    - name: "SlidShady"
+    - name: "Sloan"
       type: "agent"
-      role: "Content Generator Expert"
-      class_path: "app.agents.content_generator.pptx_generator.SlidShady"
+      role: "Slides Generator Expert"
+      class_path: "app.agents.content_generator.pptx_generator.Sloan"
       enabled: true
       tags: ["content"]
       chat_model: {}
       description: >
-        An expert in generating content based on templates and knowledge from the knowledge-flow backend.
-        SlidShady can assist with creating various types powerpoint presentations.
+        An expert in generating content based on templates and knowledge from e knowlethdge-flow backend.
+        Sloan can assist with creating various types powerpoint presentations.
     - name: "Rico Senior"
       type: "agent"
       role: "Advanced Document Retrieval Expert"
