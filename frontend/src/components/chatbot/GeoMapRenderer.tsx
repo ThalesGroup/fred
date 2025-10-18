@@ -44,12 +44,17 @@ function featureStyleFromProps(feature: GeoJSON.Feature | undefined): L.PathOpti
 
 // -- WHY: For points, default to circleMarker for consistent, styleable dots.
 // Honor properties.radius and properties.style if present.
-function pointToLayerGeneric(feature: GeoJSON.Feature<Point, any>, latlng: L.LatLng): L.Layer {
+function pointToLayerGeneric(feature: GeoJSON.Feature<GeoJSON.Point, any>, latlng: L.LatLng): L.Layer {
   const p = (feature.properties ?? {}) as Record<string, unknown>;
-  const base: L.CircleMarkerOptions =
-    (p.style as L.CircleMarkerOptions) || (featureStyleFromProps(feature) as L.CircleMarkerOptions) || {};
+  const styleOverride =
+    typeof p.style === "object"
+      ? (p.style as Partial<L.CircleMarkerOptions>)
+      : undefined;
+  const fallbackStyle = featureStyleFromProps(feature) as Partial<L.CircleMarkerOptions> | undefined;
+  const base: Partial<L.CircleMarkerOptions> = styleOverride ?? fallbackStyle ?? {};
   const radius = typeof p.radius === "number" ? (p.radius as number) : 6;
-  return L.circleMarker(latlng, { radius, ...base });
+  const circleOptions: L.CircleMarkerOptions = { ...base, radius } as L.CircleMarkerOptions;
+  return L.circleMarker(latlng, circleOptions);
 }
 
 // -- WHY: Popup content should be predictable and data-driven.
