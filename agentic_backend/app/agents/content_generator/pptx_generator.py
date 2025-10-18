@@ -98,8 +98,8 @@ RAG_TUNING = AgentTuning(
 )
 
 
-@expose_runtime_source("agent.SlidShady")
-class SlidShady(AgentFlow):
+@expose_runtime_source("agent.Sloan")
+class Sloan(AgentFlow):
     """
     RAG agent for project reference extraction:
     - Retrieves context chunks via VectorSearchClient
@@ -180,7 +180,7 @@ class SlidShady(AgentFlow):
             {context}
         """)
 
-        logger.info("SlidShady initialized with structured output parsing enabled.")
+        logger.info("Sloan initialized with structured output parsing enabled.")
 
     # -----------------------------
     # Graph
@@ -249,7 +249,7 @@ class SlidShady(AgentFlow):
         """Retrieve tuned system prompt."""
         sys_tpl = self.get_tuned_text("prompts.system")
         if not sys_tpl:
-            logger.warning("SlidShady: no tuned system prompt found.")
+            logger.warning("Sloan: no tuned system prompt found.")
             raise RuntimeError("Missing system prompt.")
         return self.render(sys_tpl)
 
@@ -514,7 +514,7 @@ class SlidShady(AgentFlow):
                             logger.warning("Failed to delete temporary file %s: %s", p, e)
 
         except Exception:
-            logger.exception("SlidShady: error in reasoning step.")
+            logger.exception("Sloan: error in reasoning step.")
             fallback = await self.model.ainvoke(
                 [
                     HumanMessage(
