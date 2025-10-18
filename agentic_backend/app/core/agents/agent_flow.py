@@ -31,7 +31,13 @@ from typing import (
     cast,
 )
 
-from langchain_core.messages import AIMessage, AnyMessage, BaseMessage, SystemMessage
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+)
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState
@@ -175,7 +181,7 @@ class AgentFlow:
         self.agent_settings.tuning = self._tuning
 
     @staticmethod
-    def _ensure_any_message(msg: object) -> AnyMessage:
+    def ensure_any_message(msg: object) -> AnyMessage:
         """
         Normalize arbitrary model outputs into an AnyMessage.
         - BaseMessage -> cast to AnyMessage (runtime type will be AIMessage, etc.)
@@ -199,13 +205,28 @@ class AgentFlow:
         This is the preferred helper for multi-model agents.
         """
         raw = await runnable.ainvoke(messages, **kwargs)
-        return self._ensure_any_message(raw)
+        return self.ensure_any_message(raw)
 
     @staticmethod
     def delta(*msgs: AnyMessage) -> MessagesState:
         """Return a MessagesState-compatible state update."""
         # Note: You need to ensure MessagesState is imported correctly from langgraph.graph
         return {"messages": list(msgs)}
+
+    @staticmethod
+    def fresh_turn(human: HumanMessage) -> dict:
+        """
+        Start a brand-new turn:
+        - Only the new human message is appended.
+        - Force ephemeral state back to defaults (plan/progress/step_index).
+        """
+        return {
+            "messages": [human],
+            "plan": None,
+            "progress": [],
+            "step_index": 0,
+            # keep 'objective' unset; `plan()` will set it from latest human
+        }
 
     @classmethod
     def merge_settings_with_class_defaults(

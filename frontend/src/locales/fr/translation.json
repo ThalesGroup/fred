@@ -173,6 +173,7 @@
     "newConversation": "Nouvelle conversation",
     "noConversation": "Aucune conversation",
     "delete": "Supprimer",
+    "deleteAll": "Tout supprimer",
     "conversationSetup": "Configuration de la conversation",
     "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
     "draftNotSaved": "Brouillon • non encore enregistré",

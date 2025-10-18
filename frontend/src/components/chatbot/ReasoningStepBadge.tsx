@@ -228,10 +228,9 @@ export default function ReasoningStepBadge({
         {(primaryText || secondaryText) && (
           <Collapse in={expanded} timeout="auto" unmountOnExit sx={{ minWidth: 0 }}>
             <Stack direction="column" spacing={0.75} sx={{ minWidth: 0, pr: 1 }}>
-              {(chipNode || chipTask) && (
+              {chipTask && chipTask !== chipNode && (
                 <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap">
-                  {chipNode && <Chip label={chipNode} size="small" variant="outlined" />}
-                  {chipTask && <Chip label={chipTask} size="small" />}
+                  <Chip label={chipTask} size="small" />
                 </Stack>
               )}
               {primaryText && (

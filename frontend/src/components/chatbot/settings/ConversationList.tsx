@@ -3,7 +3,6 @@
 
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import {
   Box,
   Button,
@@ -13,7 +12,6 @@ import {
   InputAdornment,
   List,
   ListItem,
-  MenuItem,
   SxProps,
   TextField,
   Theme,
@@ -25,7 +23,6 @@ import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { SessionSchema } from "../../../slices/agentic/agenticOpenApi";
-import { StyledMenu } from "../../../utils/styledMenu";
 
 /**
  * Fred UI rationale:
@@ -38,6 +35,7 @@ export type ConversationListProps = {
   currentSession: SessionSchema | null;
   onSelectSession: (session: SessionSchema) => void;
   onCreateNewConversation: () => void;
+  onDeleteAllSessions: () => void;
   onDeleteSession: (session: SessionSchema) => void;
   isCreatingNewConversation: boolean;
   sx?: SxProps<Theme>;
@@ -49,6 +47,7 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
     currentSession,
     onSelectSession,
     onCreateNewConversation,
+    onDeleteAllSessions,
     onDeleteSession,
     isCreatingNewConversation,
     sx = [],
@@ -63,22 +62,15 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
   const activeItemTextColor = theme.palette.primary.main;
   const hoverColor = theme.palette.sidebar.hoverColor;
 
-  // Local UI state (menu + inline edit + initial fade)
-  const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
-  const [menuSession, setMenuSession] = useState<SessionSchema | null>(null);
+  // Local UI state (inline edit + initial fade)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [showElements, setShowElements] = useState(false);
 
-  useEffect(() => setShowElements(true), []);
+  const hasSessions = sessions.length > 0;
 
-  const openMenu = (e: React.MouseEvent<HTMLElement>, session: SessionSchema) => {
-    e.stopPropagation();
-    setMenuAnchorEl(e.currentTarget);
-    setMenuSession(session);
-  };
-  const closeMenu = () => setMenuAnchorEl(null);
+  useEffect(() => setShowElements(true), []);
 
   // (Reserved for future rename UX — kept for parity with previous code)
   const saveEditing = () => {
@@ -134,19 +126,37 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
           }}
         >
           <Typography variant="subtitle1">{t("settings.conversations")}</Typography>
-          <Tooltip title={t("settings.newConversation")}>
-            <IconButton
-              onClick={onCreateNewConversation}
-              size="small"
-              sx={{
-                borderRadius: "8px",
-                p: 0.5,
-                "&:hover": { backgroundColor: hoverColor },
-              }}
-            >
-              <AddIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          <Box sx={{ display: "flex", alignItems: "center" }}>
+            <Tooltip title={t("settings.newConversation")}>
+              <IconButton
+                onClick={onCreateNewConversation}
+                size="small"
+                sx={{
+                  borderRadius: "8px",
+                  p: 0.5,
+                  "&:hover": { backgroundColor: hoverColor },
+                }}
+              >
+                <AddIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={t("settings.deleteAll")}>
+              <span>
+                <IconButton
+                  onClick={onDeleteAllSessions}
+                  size="small"
+                  disabled={!hasSessions}
+                  sx={{
+                    borderRadius: "8px",
+                    p: 0.5,
+                    "&:hover": { backgroundColor: hoverColor },
+                  }}
+                >
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Box>
         </Box>
       </Fade>
 
@@ -295,18 +305,23 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
                           {new Date(session.updated_at).toLocaleDateString()}
                         </Typography>
                       </Box>
-                      <IconButton
-                        size="small"
-                        sx={{
-                          p: 0,
-                          color: "inherit",
-                          opacity: 0.7,
-                          "&:hover": { opacity: 1, backgroundColor: "transparent" },
-                        }}
-                        onClick={(e) => openMenu(e, session)}
-                      >
-                        <MoreHorizIcon fontSize="small" />
-                      </IconButton>
+                      <Tooltip title={t("settings.delete")}>
+                        <IconButton
+                          size="small"
+                          sx={{
+                            p: 0,
+                            color: "inherit",
+                            opacity: 0.7,
+                            "&:hover": { opacity: 1, backgroundColor: "transparent" },
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteSession(session);
+                          }}
+                        >
+                          <DeleteOutlineIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                     </Box>
                   )}
                 </ListItem>
@@ -320,22 +335,6 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
           )}
         </List>
       </Fade>
-
-      {/* Actions menu */}
-      <StyledMenu id="conversation-menu" anchorEl={menuAnchorEl} open={Boolean(menuAnchorEl)} onClose={closeMenu}>
-        <MenuItem
-          onClick={() => {
-            if (menuSession) {
-              onDeleteSession(menuSession);
-              closeMenu();
-            }
-          }}
-          disableRipple
-        >
-          <DeleteOutlineIcon fontSize="small" sx={{ mr: 2, fontSize: "1rem" }} />
-          <Typography variant="body2">{t("settings.delete")}</Typography>
-        </MenuItem>
-      </StyledMenu>
     </Box>
   );
 };

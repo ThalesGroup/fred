@@ -12,29 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Fred architecture notes for implementers:
-# - Graphs are built PER INSTANCE (self._graph) in async_init().
-#   Why: LangGraph nodes call bound methods (they require `self`) and often depend on
-#   per-instance state (model bindings, user tuning, runtime context). Building at class
-#   import time would capture unbound functions and the wrong lifecycle.
-# - Tuning is declared at CLASS LEVEL (Georges.tuning) because it is a static
-#   “capability contract” for the UI. The user’s overrides live in AgentSettings.tuning
-#   and are merged into the instance by AgentFlow.__init__/apply_settings.
-# - No hidden prompt composition: each node explicitly decides which tuned text to use
-#   and whether to include the (optional) chat context. This keeps behavior auditable.
 
 import logging
+from typing import Sequence
 
 from fred_core import get_model
-from langgraph.graph import END, START, MessagesState, StateGraph
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+)
 
-from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from app.core.agents.simple_agent_flow import SimpleAgentFlow
 from app.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 
 TUNING = AgentTuning(
+    # ... (TUNING definition remains the same)
     fields=[
         FieldSpec(
             key="prompts.system",
@@ -59,49 +54,65 @@ TUNING = AgentTuning(
 
 
 @expose_runtime_source("agent.Georges")
-class Georges(AgentFlow):
+class Georges(SimpleAgentFlow):
+    """
+    The Generalist/Fallback Expert. Simplified to a single-step LLM call
+    without a LangGraph wrapper.
+    """
+
     tuning = TUNING
 
-    async def async_init(self):
-        """
-        Instance lifecycle hook.
-        - Bind your model here (per-instance): lets you apply runtime/provider settings safely.
-        - Build the LangGraph here and store it on `self._graph`.
-          This ensures nodes are bound to THIS instance (self) and can safely call instance methods.
-        """
-
+    def __init__(self, *args, **kwargs):
+        # The SimpleAgentFlow base class would handle setting self.agent_settings
+        super().__init__(*args, **kwargs)
+        # Bind the model directly in __init__ if it's not resource-heavy,
+        # or rely on SimpleAgentFlow's initialization
         self.model = get_model(self.agent_settings.model)
-        # Build a tiny, linear graph:
-        # START → expert (reasoner) → END
-        self._graph = self._build_graph()
+        logger.info(f"Georges initialized with model: {self.agent_settings.model}")
 
-    def _build_graph(self) -> StateGraph:
-        builder = StateGraph(MessagesState)
-        builder.add_node("expert", self.reasoner)
-        builder.add_edge(START, "expert")
-        builder.add_edge("expert", END)
-        return builder
+    async def arun(self, messages: Sequence[AnyMessage]) -> AIMessage:
+        """
+        The core single-step execution for a SimpleAgentFlow.
+        Takes the current message history and returns the response message.
+        """
+        logger.debug(f"Georges.arun START. Input message count: {len(messages)}")
+        logger.debug(f"Georges.arun Input messages: {messages}")
 
-    async def reasoner(self, state: MessagesState):
-        """
-        Single-step reasoning node.
-        Rationale:
-        - We pull the tuned system prompt by key (no magic). If the user updated it in the UI,
-          AgentFlow has already placed the latest value in this instance.
-        - We render {tokens} through AgentFlow.render(...) to resolve simple placeholders.
-        - We *optionally* append the chat context text if this node decides it’s relevant.
-          (Convention: dev chooses; Fred does not inject chat context automatically.)
-        - We then prepend it as a SystemMessage and call the model with the user messages.
-        """
-        # 1) choose the tuning field you want. In this case, the system prompt
+        # 1) Get the tuned system prompt
         tpl = self.get_tuned_text("prompts.system") or ""
-        # 2) render tokens. You should always do this to resolve {placeholders}
-        #    (e.g. {current_time}, {agent_name}, {user_name}, etc.)
-        sys = self.render(tpl)
-        # 3) optionally add the chat context text (if any). It's up to the node to decide
-        #    whether to use it or not.
 
-        messages = self.with_system(sys, state["messages"])
-        messages = self.with_chat_context_text(messages)
-        response = await self.model.ainvoke(messages)
-        return {"messages": [response]}
+        # 2) Render tokens (like {agent_name}, {user_name}, etc.)
+        sys = self.render(tpl)
+        logger.debug(f"Georges: Rendered final system prompt (len={len(sys)}).")
+        logger.debug(f"Georges: System prompt: {sys[:100]}...")
+
+        # 3) Prepend the system prompt to the messages
+        llm_messages = self.with_system(sys, messages)
+        logger.debug(
+            f"Georges: Messages after adding system prompt. Count: {len(llm_messages)}"
+        )
+
+        # 4) Optionally add the chat context text (if available)
+        llm_messages = self.with_chat_context_text(llm_messages)
+        logger.debug(
+            f"Georges: Messages after adding context text. Final count: {len(llm_messages)}"
+        )
+        logger.debug(
+            f"Georges: Final messages sent to LLM: {[type(m).__name__ for m in llm_messages]}"
+        )
+
+        # 5) Invoke the model
+        logger.info(
+            f"Georges: Invoking model {self.agent_settings.model} asynchronously..."
+        )
+        try:
+            response = await self.model.ainvoke(llm_messages)
+            logger.info("Georges: LLM call successful (await complete).")
+        except Exception as e:
+            logger.error(
+                f"Georges: LLM invocation failed with exception: {e}", exc_info=True
+            )
+            # Raise or return a clear error message if LLM fails
+            raise
+
+        return self.ensure_aimessage(response)

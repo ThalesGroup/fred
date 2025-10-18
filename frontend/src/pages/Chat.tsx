@@ -98,6 +98,22 @@ export default function Chat() {
     }
   };
 
+  const handleDeleteAllSessions = async () => {
+    if (!sessions.length) return;
+    const deletePromises = sessions.map((session) =>
+      deleteSessionMutation({ sessionId: session.id })
+        .unwrap()
+        .catch((e) => {
+          console.error(`Failed to delete session ${session.id}`, e);
+        })
+    );
+    try {
+      await Promise.all(deletePromises);
+    } finally {
+      setTimeout(() => refetchSessions(), 1000);
+    }
+  };
+
   if (flowsLoading || sessionsLoading) {
     return (
       <Box sx={{ p: 3, display: "grid", placeItems: "center", height: "100vh" }}>
@@ -230,6 +246,7 @@ export default function Chat() {
               currentSession={currentSession}
               onSelectSession={handleSelectSession}
               onCreateNewConversation={handleCreateNewConversation}
+              onDeleteAllSessions={handleDeleteAllSessions}
               onDeleteSession={handleDeleteSession}
               isCreatingNewConversation={isCreatingNewConversation}
               sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}

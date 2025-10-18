@@ -23,9 +23,9 @@ from typing import Awaitable, Callable, Iterable
 # ❌ remove anyio.abc TaskGroup import; we won't accept a TG anymore
 # import anyio
 # from anyio.abc import TaskGroup
-from app.agents.leader.leader import Appollo
 from app.common.structures import Leader
 from app.core.agents.agent_flow import AgentFlow
+from app.core.leader.leader_flow import LeaderFlow
 
 logger = logging.getLogger(__name__)
 
@@ -110,11 +110,11 @@ class AgentSupervisor:
                 continue
 
             leader_instance = agents_by_name.get(leader_name)
-            if not isinstance(leader_instance, Appollo):
+            if not isinstance(leader_instance, LeaderFlow):
                 continue
 
             # Reset experts before injecting the new crew
-            leader_instance.reset_experts()
+            leader_instance.reset_crew()
             logger.info(
                 "Starting to inject experts into leader '%s' based on its crew list.",
                 leader_name,
