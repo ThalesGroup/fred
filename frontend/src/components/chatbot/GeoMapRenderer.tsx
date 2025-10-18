@@ -1,105 +1,138 @@
 import { Paper } from "@mui/material";
 import L, { LatLngExpression } from "leaflet";
-import "leaflet/dist/leaflet.css"; // CRITICAL: Import Leaflet CSS
+import "leaflet/dist/leaflet.css";
 import React from "react";
 import { GeoJSON, MapContainer, TileLayer, useMap } from "react-leaflet";
-
-// Import the GeoPart type from your OpenAPI generated file
 import type { GeoPart } from "../../slices/agentic/agenticOpenApi.ts";
 
-// --- ⚠️ CRITICAL FIX for Leaflet Marker Icons in React/Webpack/Vite ---
-// If you see missing markers, this block is essential.
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
-  // Standard Leaflet marker images
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
-// ---------------------------------------------------------------------
 
-type GeoMapRendererProps = {
-  part: GeoPart;
-};
+type GeoMapRendererProps = { part: GeoPart };
 
-// --- Utility Component to Fit Bounds ---
-// This component must be a child of MapContainer to access the 'map' instance via useMap().
-const MapBoundFitter: React.FC<{ geojson: GeoPart["geojson"]; fitBounds: boolean }> = ({ geojson, fitBounds }) => {
-  const map = useMap();
+// -- WHY: Keep renderer generic. Let *data* control styling when provided.
+// Accepted per-feature hints:
+// - properties.style: Leaflet PathOptions (preferred)
+// - properties.color, properties.fillColor, properties.weight, properties.opacity, properties.fillOpacity
+// - points: properties.radius (number)
+function featureStyleFromProps(feature: GeoJSON.Feature | undefined): L.PathOptions | undefined {
+  const p = (feature?.properties ?? {}) as Record<string, unknown>;
+  if (!p) return undefined;
 
-  React.useEffect(() => {
-    if (fitBounds && geojson && geojson.features && geojson.features.length > 0) {
-      // L.geoJSON() handles parsing the GeoJSON object to calculate the bounds
-      const bounds = L.geoJSON(geojson as any).getBounds();
-      if (bounds.isValid()) {
-        // Fly to the calculated bounds with a small padding
-        map.flyToBounds(bounds, { padding: L.point(50, 50) });
-      }
+  // Highest authority: properties.style object (leaflet PathOptions)
+  if (p.style && typeof p.style === "object") {
+    return p.style as L.PathOptions;
+  }
+
+  // Lightweight hints (optional, all safe fallbacks)
+  const color = typeof p.color === "string" ? (p.color as string) : undefined;
+  const fillColor = typeof p.fillColor === "string" ? (p.fillColor as string) : undefined;
+  const weight = typeof p.weight === "number" ? (p.weight as number) : undefined;
+  const opacity = typeof p.opacity === "number" ? (p.opacity as number) : undefined;
+  const fillOpacity = typeof p.fillOpacity === "number" ? (p.fillOpacity as number) : undefined;
+
+  if (color || fillColor || weight || opacity || fillOpacity) {
+    return { color, fillColor, weight, opacity, fillOpacity };
+  }
+
+  return undefined; // Leaflet defaults
+}
+
+// -- WHY: For points, default to circleMarker for consistent, styleable dots.
+// Honor properties.radius and properties.style if present.
+function pointToLayerGeneric(feature: GeoJSON.Feature<Point, any>, latlng: L.LatLng): L.Layer {
+  const p = (feature.properties ?? {}) as Record<string, unknown>;
+  const base: L.CircleMarkerOptions =
+    (p.style as L.CircleMarkerOptions) || (featureStyleFromProps(feature) as L.CircleMarkerOptions) || {};
+  const radius = typeof p.radius === "number" ? (p.radius as number) : 6;
+  return L.circleMarker(latlng, { radius, ...base });
+}
+
+// -- WHY: Popup content should be predictable and data-driven.
+// Priority: popup_property -> properties.name -> compact JSON(props)
+function bindPopupGeneric(layer: L.Layer, feature: GeoJSON.Feature | undefined, popupProperty?: string) {
+  if (!feature) return;
+  const p = (feature.properties ?? {}) as Record<string, unknown>;
+  let text: string | undefined;
+
+  if (popupProperty && p && p[popupProperty] != null) {
+    text = String(p[popupProperty]);
+  } else if (p && p.name != null) {
+    text = String(p.name);
+  } else if (p && Object.keys(p).length > 0) {
+    try {
+      text = JSON.stringify(p, Object.keys(p).sort()).slice(0, 300);
+    } catch {
+      // ignore JSON issues; leave no popup
     }
-  }, [map, geojson, fitBounds]); // Dependencies on map, data, and fit flag
+  }
 
+  if (text) {
+    (layer as L.Layer & { bindPopup?: (s: string) => void }).bindPopup?.(text);
+  }
+}
+
+// -- WHY: Fit map to provided data without flashing default view.
+const MapBoundFitter: React.FC<{
+  geojson: GeoPart["geojson"];
+  fitBounds: boolean;
+}> = ({ geojson, fitBounds }) => {
+  const map = useMap();
+  React.useEffect(() => {
+    if (!fitBounds) return;
+    if (!geojson || !(geojson as any).features?.length) return;
+    const bounds = L.geoJSON(geojson as any).getBounds();
+    if (bounds.isValid()) {
+      map.flyToBounds(bounds, { padding: L.point(50, 50) });
+    }
+  }, [map, geojson, fitBounds]);
   return null;
 };
-// ---------------------------------------
 
 export const GeoMapRenderer: React.FC<GeoMapRendererProps> = ({ part }) => {
-  // Note: GeoJSON is expected to be { [key: string]: any; } which works as GeoJSON
   const { geojson, popup_property, style, fit_bounds = true } = part;
-
-  // Fallback/initial center (e.g., Marseille, France)
   const INITIAL_CENTER: LatLngExpression = [43.296, 5.385];
-
   const mapStyle = { height: "350px", width: "100%" };
-
-  // Calculate initial bounds to prevent flash of a default map view
   const initialBounds = L.geoJSON(geojson as any).getBounds();
 
   return (
     <Paper elevation={3} sx={{ my: 2, overflow: "hidden", borderRadius: 2 }}>
       <MapContainer
-        // Set center/zoom if initial bounds are invalid, otherwise bounds will take over
         center={initialBounds.isValid() ? undefined : INITIAL_CENTER}
         zoom={10}
         scrollWheelZoom={false}
         style={mapStyle}
-        // Use bounds for initial view (React-Leaflet best practice)
         bounds={fit_bounds && initialBounds.isValid() ? initialBounds : undefined}
-        // Fixes rendering issue when container is initially hidden or zero-size
-        whenReady={() => {
-          // Access the map instance via document query or a ref if needed
-          // But for most cases, this can be left empty or used for side effects
-        }}
       >
-        {/* Standard OSM Tile Layer (The actual map images) */}
         <TileLayer
           attribution='&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {/* 🌟 RENDER GEOJSON DATA 🌟 */}
         <GeoJSON
+          // NOTE: keep component generic; "style" may be a static PathOptions OR a function(feature) -> PathOptions
           data={geojson as any}
-          style={style as any} // Pass optional GeoJSON styling
+          style={(f) =>
+            // Prefer caller-provided style if it's a function; else fall back to per-feature props.
+            typeof style === "function"
+              ? (style as (feat: GeoJSON.Feature) => L.PathOptions | undefined)(f as GeoJSON.Feature)
+              : ((style as L.PathOptions | undefined) ?? featureStyleFromProps(f as GeoJSON.Feature))
+          }
+          pointToLayer={(feature, latlng) => pointToLayerGeneric(feature as GeoJSON.Feature<GeoJSON.Point>, latlng)}
           onEachFeature={(feature, layer) => {
-            // 1. Handle Popups if popup_property is set
-            if (popup_property && feature.properties && feature.properties[popup_property]) {
-              const popupText = String(feature.properties[popup_property]);
-              layer.bindPopup(popupText);
-            }
-
-            // 2. Add custom styling for specific features (e.g., making vessels red)
-            if (feature.properties?.type === "Tanker" && (layer as L.Path).setStyle) {
-              (layer as L.Path).setStyle({ color: "#FF0000" });
-            }
+            bindPopupGeneric(layer, feature as GeoJSON.Feature, popup_property);
+            // No domain hardcoding here; feature-level `properties.style` drives any special visuals.
           }}
         />
 
-        {/* Component to re-fit bounds dynamically after data load */}
         <MapBoundFitter geojson={geojson} fitBounds={fit_bounds} />
       </MapContainer>
     </Paper>
   );
 };
 
-// Export GeoMapRenderer for use in MessageCard
 export default GeoMapRenderer;

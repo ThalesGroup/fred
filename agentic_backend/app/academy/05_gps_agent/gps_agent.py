@@ -76,32 +76,45 @@ class GpsAgent(AgentFlow):
         VESSEL_DATA = {
             "type": "FeatureCollection",
             "features": [
+                # Reference: Toulon Port (near downtown). Helpful for popups + fit bounds.
                 {
                     "type": "Feature",
-                    "geometry": {"type": "Point", "coordinates": [5.385, 43.296]},
-                    "properties": {"name": "Marseille Port (Ref)", "type": "Port"},
+                    "geometry": {"type": "Point", "coordinates": [5.931, 43.118]},
+                    "properties": {"name": "Toulon Port (Ref)", "type": "Port"},
                 },
+                # ~10–12 NM SE of Toulon, safely offshore.
                 {
                     "type": "Feature",
-                    "geometry": {"type": "Point", "coordinates": [5.2, 43.1]},
+                    "geometry": {"type": "Point", "coordinates": [6.050, 43.020]},
                     "properties": {
                         "name": "Cargo Vessel A",
                         "type": "Cargo",
                         "speed": "12.5 kts",
+                        "heading": "285°",
                     },
                 },
+                # South of Toulon roadstead, off the coast.
                 {
                     "type": "Feature",
-                    "geometry": {"type": "Point", "coordinates": [5.6, 43.5]},
+                    "geometry": {"type": "Point", "coordinates": [5.990, 42.980]},
                     "properties": {
                         "name": "Oil Tanker B",
                         "type": "Tanker",
                         "destination": "Fos-sur-Mer",
                     },
                 },
+                # East of Toulon, off Hyères islands area (still offshore).
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [6.150, 43.080]},
+                    "properties": {
+                        "name": "Research Vessel C",
+                        "type": "Research",
+                        "mission": "Hydro survey",
+                    },
+                },
             ],
-        }
-        # --- END STATIC DATA DEFINITION ---
+        }  # --- END STATIC DATA DEFINITION ---
 
         # Construct the final structured message using the GeoPart
         final_parts: list[MessagePart] = [
