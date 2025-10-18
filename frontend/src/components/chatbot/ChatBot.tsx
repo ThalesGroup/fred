@@ -308,9 +308,22 @@ const ChatBot = ({
   // Fetch messages when the session changes
   useEffect(() => {
     const id = currentChatBotSession?.id;
-    if (!id) return;
 
-    setAllMessages([]); // clear view while fetching
+    if (!id) {
+      messagesRef.current = [];
+      setAllMessages([]);
+      return;
+    }
+
+    const existingForSession = messagesRef.current.filter((msg) => msg.session_id === id);
+    if (existingForSession.length > 0) {
+      const sortedExisting = sortMessages(existingForSession);
+      messagesRef.current = sortedExisting;
+      setAllMessages(sortedExisting);
+    } else if (messagesRef.current.length > 0) {
+      messagesRef.current = [];
+      setAllMessages([]);
+    }
 
     fetchHistory({ sessionId: id })
       .unwrap()
@@ -320,7 +333,9 @@ const ChatBot = ({
         for (const msg of serverMessages) console.log(msg);
         console.groupEnd();
 
-        setAllMessages(sortMessages(serverMessages)); // layout effect will scroll
+        const sorted = sortMessages(serverMessages);
+        messagesRef.current = sorted;
+        setAllMessages(sorted); // layout effect will scroll
         // NEW — If this is the first time we "see" this id, bind draft now.
         console.log("[🔗 ChatBot] Binding draft agent to session id from history load:", id);
         onBindDraftAgentToSessionId?.(id);

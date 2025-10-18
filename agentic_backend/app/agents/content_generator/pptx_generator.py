@@ -206,7 +206,7 @@ class Sloan(AgentFlow):
                     "LibreOffice executable 'soffice' not found in PATH. "
                     "Please ensure LibreOffice is installed and 'soffice' is in your PATH."
                 )
-            
+
             subprocess.run(
                 [
                     soffice_path,
@@ -222,7 +222,7 @@ class Sloan(AgentFlow):
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-            ) # nosec: inputs are fully controlled and shell=False
+            )  # nosec: inputs are fully controlled and shell=False
 
             if pdf_path.exists():
                 logger.info(
@@ -511,7 +511,9 @@ class Sloan(AgentFlow):
                         try:
                             p.unlink(missing_ok=True)
                         except Exception as e:
-                            logger.warning("Failed to delete temporary file %s: %s", p, e)
+                            logger.warning(
+                                "Failed to delete temporary file %s: %s", p, e
+                            )
 
         except Exception:
             logger.exception("Sloan: error in reasoning step.")

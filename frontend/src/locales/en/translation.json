@@ -173,6 +173,7 @@
     "newConversation": "New conversation",
     "noConversation": "No conversation",
     "delete": "Delete",
+    "deleteAll": "Delete all",
     "chatContext": "Chat context",
     "conversationSetup": "Conversation setup",
     "newConversationHelp": "Start a new conversation (not yet saved)",

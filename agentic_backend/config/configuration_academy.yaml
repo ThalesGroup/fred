@@ -111,6 +111,43 @@ ai:
       enabled: true
       tags: ["academy"]
       chat_model: {}
+    - name: "MiniRagExpert"
+      type: "agent"
+      role: "Academy sample mini RAG expert"
+      description: >
+        An expert agent that uses a retrieval-augmented generation approach to provide answers.
+      class_path: "app.academy.06_simple_leader.mini_rag_expert.MiniRagExpert"
+      enabled: true
+      tags: ["academy"]
+      chat_model: {}
+    - name: "MiniDataExpert"
+      type: "agent"
+      role: "Academy sample mini data expert"
+      description: >
+        An expert agent that provides data-related insights and answers.
+      class_path: "app.academy.06_simple_leader.mini_data_expert.MiniDataExpert"
+      enabled: true
+      tags: ["academy"]
+      chat_model: {}
+    - name: "MiniLlmOrchestrator"
+      type: "leader"
+      role: "Academy sample mini LLM orchestrator"
+      description: >
+        A leader agent that orchestrates multiple expert agents to provide comprehensive answers.
+      class_path: "app.academy.06_simple_leader.mini_llm_orchestrator.MiniLLMOrchestrator"
+      enabled: true
+      tags: ["academy"]
+      chat_model: {}
+    - name: "Georges"
+      type: "agent"
+      class_path: "app.agents.generalist.generalist_expert.Georges"
+      enabled: true
+      role: "Generalist Assistant"
+      tags: ["general"]
+      chat_model: {}
+      description: >
+        A generalist assistant that can handle a wide range of tasks.
+        He is the default assistant that can handle any task that does not require a specialized assistant.
 
 storage:
   postgres:

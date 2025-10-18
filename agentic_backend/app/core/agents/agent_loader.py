@@ -181,7 +181,22 @@ class AgentLoader:
                     agent_settings.name,
                     agent_settings.class_path,
                 )
-
+            except ModuleNotFoundError:
+                logger.error(
+                    "❌ Failed to load persisted agent '%s' (ModuleNotFoundError). Removing stale entry from store.",
+                    agent_settings.name,
+                )
+                try:
+                    self.store.delete(agent_settings.name)
+                    logger.info(
+                        "🗑️ Successfully deleted stale agent '%s' from persistent store.",
+                        agent_settings.name,
+                    )
+                except Exception:
+                    logger.exception(
+                        "⚠️ Failed to delete stale agent '%s' from persistent store.",
+                        agent_settings.name,
+                    )
             except Exception as e:
                 logger.exception(
                     "❌ Failed to load persisted agent '%s': %s",
