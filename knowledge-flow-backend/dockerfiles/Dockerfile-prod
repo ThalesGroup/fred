@@ -25,18 +25,21 @@ ENV PATH="/app/venv/bin:$PATH"
 WORKDIR /app
 
 # Copy python dependencies files
-COPY knowledge_flow_backend/pyproject.toml knowledge_flow_backend/uv.lock* /app/
+COPY knowledge-flow-backend/pyproject.toml knowledge-flow-backend/uv.lock* /app/knowledge-flow-backend/
 # Copy Makefile-related files
-COPY knowledge_flow_backend/Makefile /app/
-COPY scripts /scripts
+COPY knowledge-flow-backend/Makefile /app/knowledge-flow-backend/
+COPY scripts /app/scripts
 # Copy fred-core folder as this is a Python-dependency for the backend
-COPY fred-core /fred-core
+COPY fred-core /app/fred-core
+
+# Set working directory
+WORKDIR /app/knowledge-flow-backend
 
 # Install dependencies using make with both VENV and TARGET properly set
 RUN make dev
 
 # Copy projets
-COPY knowledge_flow_backend/. /app/
+COPY knowledge-flow-backend /app/knowledge-flow-backend
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE: PROD IMAGE
@@ -65,12 +68,15 @@ ENV PATH="/app/venv/bin:$PATH"
 WORKDIR /app
 
 # Copy app source
-COPY --chown=${USER_ID}:${GROUP_ID} knowledge_flow_backend/. /app
-COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
-COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
+COPY --chown=${USER_ID}:${GROUP_ID} knowledge-flow-backend /app/knowledge-flow-backend
+COPY --chown=${USER_ID}:${GROUP_ID} fred-core /app/fred-core
+COPY --chown=${USER_ID}:${GROUP_ID} scripts /app/scripts
+
+# Set working directory
+WORKDIR /app/knowledge-flow-backend
 
 # Set environment
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/fred-core:/app/knowledge-flow-backend
 
 # Switch to non-root user
 USER ${USER_NAME}
@@ -79,5 +85,5 @@ USER ${USER_NAME}
 EXPOSE 8111
 
 # Entrypoint without make
-ENTRYPOINT ["uvicorn", "app.main:create_app", "--factory"]
+ENTRYPOINT ["uvicorn", "knowledge_flow_backend.main:create_app", "--factory"]
 CMD ["--port", "8111", "--host", "0.0.0.0", "--log-level", "info", "--loop", "asyncio"]

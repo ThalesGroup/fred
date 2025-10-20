@@ -21,13 +21,15 @@ run-worker: dev ## Run an ingestion worker (requires Temporal daemon)
 	ENV_FILE=$(ENV_FILE) \
 	$(PYTHON) $(PY_PACKAGE)/main_worker.py --config-path ./config/configuration_worker.yaml
 
+
 .PHONY: docker-run
 docker-run: ## Run the app in Docker
 	docker run -it \
 		-p $(PORT):$(PORT) \
 		-v ~/.kube/:/home/fred-user/.kube/ \
-		-v $(realpath app/config/configuration.yaml):/app/configuration.yaml \
-		$(IMAGE_FULL) --config-path /app/configuration.yaml
+		-v $(realpath config/configuration.yaml):/app/knowledge-flow-backend/config/configuration.yaml \
+		-e CONFIG_FILE=/app/knowledge-flow-backend/config/configuration.yaml \
+		$(IMAGE_FULL)
 
 ##@ Docker
 
