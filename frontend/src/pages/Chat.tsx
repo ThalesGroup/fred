@@ -11,9 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+import AppsIcon from "@mui/icons-material/Apps";
 import ChatIcon from "@mui/icons-material/Chat";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ExtensionIcon from "@mui/icons-material/Extension";
+
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import { Box, CircularProgress, Grid2, IconButton, Paper, Typography } from "@mui/material";
 import { useRef, useState } from "react";
@@ -246,7 +247,7 @@ export default function Chat() {
           onClick={openAgentsPanel}
           title={t("settings.assistants")}
         >
-          <ExtensionIcon />
+          <AppsIcon />
         </IconButton>
         <IconButton
           color={panelContentType === "context" ? "primary" : "default"}
