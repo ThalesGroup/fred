@@ -122,11 +122,11 @@ class AssetService:  # RENAMED from AgentAssetService
 
         # 0️⃣ Get or create the "user_asset" tag
         existing_tags = tag_service.list_all_tags_for_user(user, tag_type=TagType.DOCUMENT)
-        user_asset_tag = next((t for t in existing_tags if t.name == "user_asset"), None)
+        user_asset_tag = next((t for t in existing_tags if t.name == "User Space"), None)
         if user_asset_tag is None:
             created_tag = tag_service.create_tag_for_user(
                 TagCreate(
-                    name="user_asset",
+                    name="User Space",
                     path=None,
                     description="Generic tag for all files uploaded by users",
                     type=TagType.DOCUMENT,
