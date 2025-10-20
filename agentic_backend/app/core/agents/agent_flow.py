@@ -442,9 +442,10 @@ class AgentFlow:
                 user_id_override,
             )
             logger.info(
-                "UPLOADING_ASSET: Upload successful. Key: %s, Size: %d",
+                "UPLOADING_ASSET: Upload successful. Key: %s, Size: %d, document_uid: %s",
                 result.key,
                 result.size,
+                result.document_uid
             )
             return result
         except AssetUploadError as e:

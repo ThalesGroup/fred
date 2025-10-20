@@ -63,7 +63,8 @@ RAG_TUNING = AgentTuning(
             required=True,
             default=(
                 "You answer strictly based on the retrieved document chunks.\n"
-                "Extract the project reference information"
+                "Extract the project reference information\n"
+                "Each field must be concise (3-5 short items or a brief sentence)."
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
@@ -171,7 +172,6 @@ class Sloan(AgentFlow):
             11. List of technologies used
 
             No field should remain empty unless the information is completely missing.
-            Each field must be concise (3-5 short items or a brief sentence).
 
             Return strictly in this structured format:
             {format_instructions}
@@ -448,6 +448,7 @@ class Sloan(AgentFlow):
                             content_type="application/pdf",
                             user_id_override=user_id,
                         )
+                        logger.info(f"pdf_upload: {pdf_upload}")
                     pdf_download_url = self.get_asset_download_url(
                         asset_key=pdf_upload.key, scope="user"
                     )
@@ -455,6 +456,9 @@ class Sloan(AgentFlow):
                 summary_prompt = HumanMessage(
                     content=f"""
                 You are an assistant that summarizes project reference information for a chat user.
+                You are an assistant specialized in extracting project reference information from documents.
+                You must always respond in the same language as the source documents you extract information from.
+                If multiple languages are detected, use the predominant one. If non are detected fall back to French.
                 Given the extracted structured data below, produce a concise, readable summary in 3-5 short sentences.
                 Do not repeat fields unnecessarily, focus on key points like project name, duration, team size, budget, and main activities.
                 Structured data:
@@ -484,14 +488,11 @@ class Sloan(AgentFlow):
                 if pdf_download_url:
                     parts.append(
                         LinkPart(
-                            href=pdf_download_url.replace(
-                                "/raw_content/", "/raw_content/stream/"
-                            ),
                             title="View (PDF Preview)",
-                            kind=LinkKind.view
-                            if hasattr(LinkKind, "view")
-                            else LinkKind.external,
+                            kind=LinkKind.view,
                             mime="application/pdf",
+                            document_uid=pdf_upload.document_uid,
+                            file_name=pdf_upload.file_name
                         )
                     )
 

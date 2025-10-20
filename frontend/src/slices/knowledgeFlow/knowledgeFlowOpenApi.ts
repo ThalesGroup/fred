@@ -895,6 +895,7 @@ export type AssetMeta = {
   size: number;
   etag?: string | null;
   modified?: string | null;
+  document_uid?: string | null;
   extra?: {
     [key: string]: any;
   };

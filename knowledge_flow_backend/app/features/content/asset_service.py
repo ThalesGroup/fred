@@ -39,6 +39,7 @@ class AssetMeta(BaseModel):
     size: int
     etag: Optional[str] = None
     modified: Optional[str] = None
+    document_uid:  Optional[str] = ""
     extra: dict = Field(default_factory=dict)
 
 
@@ -98,6 +99,7 @@ class AssetService:  # RENAMED from AgentAssetService
             content_type=ct,
             size=info.size,
             etag=info.etag,
+            document_uid=info.document_uid,
             modified=info.modified.isoformat() if info.modified else None,
         )
 
@@ -161,7 +163,8 @@ class AssetService:  # RENAMED from AgentAssetService
         storage_key = self._prefix(scope, entity_id) + norm_key
         ct = content_type or (mimetypes.guess_type(file_name or norm_key)[0]) or "application/octet-stream"
         info = self.store.put_object(storage_key, final_file_path.open("rb"), content_type=ct)
-
+        info.document_uid = metadata.document_uid
+        
         # Clean up
         shutil.rmtree(tmp_dir, ignore_errors=True)
 

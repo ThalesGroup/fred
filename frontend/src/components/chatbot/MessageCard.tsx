@@ -20,15 +20,15 @@ import { useTheme } from "@mui/material/styles";
 import { useMemo, useState } from "react";
 //import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 //import ClearIcon from "@mui/icons-material/Clear";
+import { Download as DownloadIcon } from "@mui/icons-material";
 import { AnyAgent } from "../../common/agent.ts";
+import { AgentChipMini } from "../../common/AgentChip.tsx";
+import { usePdfDocumentViewer } from "../../common/usePdfDocumentViewer";
 import type { GeoPart, LinkPart } from "../../slices/agentic/agenticOpenApi.ts";
 import {
   ChatMessage,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
 } from "../../slices/agentic/agenticOpenApi.ts";
-
-import { Download as DownloadIcon } from "@mui/icons-material";
-import { AgentChipMini } from "../../common/AgentChip.tsx";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
 import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
 import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
@@ -63,6 +63,7 @@ export default function MessageCard({
   onCitationClick?: (uid: string | null) => void;
 }) {
   const theme = useTheme();
+  const { openPdfDocument } = usePdfDocumentViewer();
   const { showError, showInfo } = useToast();
 
   // const [postSpeechText] = usePostSpeechTextMutation();
@@ -280,20 +281,26 @@ export default function MessageCard({
                           />
                         </Tooltip>
                       )}
-
                       {viewLinkPart && (
                         <Tooltip title="Open PDF preview in viewer">
                           <Chip
                             icon={<PreviewIcon />}
                             label={viewLinkPart.title || "View PDF"}
-                            component="a"
-                            href={viewLinkPart.href}
-                            target="_blank"
                             clickable
                             color="secondary"
                             variant="outlined"
                             size="medium"
                             sx={{ fontWeight: "bold" }}
+                            onClick={() => {
+                              if (viewLinkPart.document_uid) {
+                                openPdfDocument({
+                                  document_uid: viewLinkPart.document_uid,
+                                  file_name: viewLinkPart.file_name,
+                                });
+                              } else if (viewLinkPart.href) {
+                                window.open(viewLinkPart.href, "_blank");
+                              }
+                            }}
                           />
                         </Tooltip>
                       )}
