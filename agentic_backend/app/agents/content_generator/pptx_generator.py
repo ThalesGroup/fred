@@ -59,63 +59,13 @@ RAG_TUNING = AgentTuning(
             key="prompts.system",
             type="prompt",
             title="RAG System Prompt",
-            description="Defines assistant behavior and citation style. Example: 'Always reply in French.'",
+            description="Defines assistant behavior and citation style.",
             required=True,
             default=(
                 "You answer strictly based on the retrieved document chunks.\n"
                 "Extract the project reference information"
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
-        ),
-        # NEW FIELD 1: Structured Extraction Prompt Template
-        FieldSpec(
-            key="prompts.extraction_template",
-            type="prompt",
-            title="Structured Extraction Prompt",
-            description="Template for extracting structured data from RAG context. MUST contain {format_instructions} and {context} placeholders.",
-            required=True,
-            default="""You are an assistant that reads project reference documents.
-Extract the following information. Ensure the content for all description fields (6-10) is translated into concise French before being put into the structured format:
-
-HEADER INFORMATION:
-1. Project name
-2. Start date (month and year if possible)
-3. End date (month and year if possible)
-4. Number of people involved
-5. Budget in k€
-
-BODY INFORMATION (Must be in French):
-6. Client presentation and context
-7. Project stakes
-8. Activities and solutions
-9. Benefits for the client
-10. Project strengths
-11. List of technologies used
-
-No field should remain empty unless the information is completely missing.
-Each field must be concise (3-5 short items or a brief sentence).
-
-Return strictly in this structured format:
-{format_instructions}
-
-Context:
-{context}""",
-            ui=UIHints(group="Prompts", multiline=True),
-        ),
-        # NEW FIELD 2: Summary Prompt Template
-        FieldSpec(
-            key="prompts.summary_template",
-            type="prompt",
-            title="Final Summary Prompt",
-            description="Template used to generate a chat summary of the structured data. MUST contain {structured_data} placeholder.",
-            required=True,
-            default="""You are an assistant that summarizes project reference information for a chat user.
-Given the extracted structured data below, produce a concise, readable summary in 3-5 short sentences.
-The summary must be written in French.
-Do not repeat fields unnecessarily, focus on key points like project name, duration, team size, budget, and main activities.
-Structured data:
-{structured_data}""",
-            ui=UIHints(group="Prompts", multiline=True),
         ),
         FieldSpec(
             key="rag.top_k",
@@ -164,14 +114,6 @@ class Sloan(AgentFlow):
         libraries_selection=True,
     )
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Initialize placeholders for prompts
-        self.parser: Optional[StructuredOutputParser] = None
-        self.prompt_template: Optional[ChatPromptTemplate] = None
-        self.summary_prompt_template: Optional[ChatPromptTemplate] = None
-        self.format_instructions: str = ""
-
     async def async_init(self):
         """Initialize model, search client, parser, and prompt."""
         self.model = get_model(self.agent_settings.model)
@@ -208,25 +150,35 @@ class Sloan(AgentFlow):
         )
         self.format_instructions = self.parser.get_format_instructions()
 
-        # --- Use Tuned Prompts ---
-        extraction_template_text = self.get_tuned_text("prompts.extraction_template")
-        summary_template_text = self.get_tuned_text("prompts.summary_template")
+        # Prompt template
+        self.prompt_template = ChatPromptTemplate.from_template("""
+            You are an assistant that reads project reference documents.
+            Extract the following information:
 
-        if not extraction_template_text or not summary_template_text:
-            raise RuntimeError(
-                "Missing required extraction or summary prompt template in tuning."
-            )
+            HEADER INFORMATION:
+            1. Project name
+            2. Start date (month and year if possible)
+            3. End date (month and year if possible)
+            4. Number of people involved
+            5. Budget in k€
 
-        # Extraction Prompt (for structured data generation)
-        self.prompt_template = ChatPromptTemplate.from_template(
-            extraction_template_text
-        )
+            BODY INFORMATION:
+            6. Client presentation and context
+            7. Project stakes
+            8. Activities and solutions
+            9. Benefits for the client
+            10. Project strengths
+            11. List of technologies used
 
-        # Summary Prompt (for final chat output summary)
-        self.summary_prompt_template = ChatPromptTemplate.from_template(
-            summary_template_text
-        )
-        # -------------------------
+            No field should remain empty unless the information is completely missing.
+            Each field must be concise (3-5 short items or a brief sentence).
+
+            Return strictly in this structured format:
+            {format_instructions}
+
+            Context:
+            {context}
+        """)
 
         logger.info("Sloan initialized with structured output parsing enabled.")
 
@@ -241,7 +193,7 @@ class Sloan(AgentFlow):
         return builder
 
     # -----------------------------
-    # Helpers
+    # Jelpers
     # -----------------------------
 
     def _convert_pptx_to_pdf(self, pptx_path: Path) -> Optional[Path]:
@@ -403,9 +355,6 @@ class Sloan(AgentFlow):
     async def _run_reasoning_step(self, state: MessagesState):
         if self.model is None:
             raise RuntimeError("Model not initialized. Call async_init().")
-        # Check for prompt initialization
-        if self.prompt_template is None or self.summary_prompt_template is None:
-            raise RuntimeError("Prompts not initialized. Call async_init().")
 
         last = state["messages"][-1]
         if not isinstance(last.content, str):
@@ -434,16 +383,12 @@ class Sloan(AgentFlow):
 
             sys_msg = SystemMessage(content=self._system_prompt())
             context_text = format_sources_for_prompt(hits, snippet_chars=1200)
-
-            # --- Use Tuned Extraction Prompt ---
             human_msg = HumanMessage(
                 content=self.prompt_template.format_messages(
                     format_instructions=self.format_instructions,
                     context=context_text,
                 )[0].content
             )
-            # ----------------------------------
-
             messages = [sys_msg, human_msg]
             messages = self.with_chat_context_text(messages)
 
@@ -507,12 +452,15 @@ class Sloan(AgentFlow):
                         asset_key=pdf_upload.key, scope="user"
                     )
 
-                # --- Use Tuned Summary Prompt ---
-                summary_template_text = self.summary_prompt_template.format_messages(
-                    structured_data=structured_data
-                )[0].content
-                summary_prompt = HumanMessage(content=summary_template_text)
-                # ------------------------------
+                summary_prompt = HumanMessage(
+                    content=f"""
+                You are an assistant that summarizes project reference information for a chat user.
+                Given the extracted structured data below, produce a concise, readable summary in 3-5 short sentences.
+                Do not repeat fields unnecessarily, focus on key points like project name, duration, team size, budget, and main activities.
+                Structured data:
+                {structured_data}
+                """
+                )
 
                 summary_msg = await self.model.ainvoke([summary_prompt])
                 summary_text = getattr(summary_msg, "content", "").strip()
