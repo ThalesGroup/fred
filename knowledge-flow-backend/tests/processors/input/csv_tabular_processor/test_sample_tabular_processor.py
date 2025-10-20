@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# test_example_tabular_processor.py
+
 import tempfile
 from pathlib import Path
 
 import pandas as pd
 
-from app.core.processors.input.csv_tabular_processor.csv_tabular_processor import CsvTabularProcessor
+from knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor import CsvTabularProcessor
 
 
 def test_valid_csv():

@@ -25,8 +25,8 @@ import pytest
 from fred_core import KeycloakUser
 from langchain.schema.document import Document
 
-from app.features.vector_search import vector_search_service
-from app.features.vector_search.vector_search_service import VectorSearchService
+from knowledge_flow_backend.features.vector_search import vector_search_service
+from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
 
 
 class DummyVectorStore:

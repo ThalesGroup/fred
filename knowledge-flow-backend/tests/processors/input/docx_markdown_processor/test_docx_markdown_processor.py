@@ -17,8 +17,10 @@ from pathlib import Path
 
 import pytest
 
-from app.common.document_structures import DocumentMetadata
-from app.core.processors.input.docx_markdown_processor.docx_markdown_processor import DocxMarkdownProcessor
+from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor import (
+    DocxMarkdownProcessor,
+)
 
 
 @pytest.fixture
@@ -26,9 +28,14 @@ def processor():
     return DocxMarkdownProcessor()
 
 
+@pytest.fixture
+def samples_path():
+    return Path(__file__).parent / "assets"
+
+
 @pytest.mark.asyncio
-async def test_process_docx_file(processor: DocxMarkdownProcessor):
-    test_docx_path = Path("app/core/processors/input/docx_markdown_processor/tests/assets/sample.docx")
+async def test_process_docx_file(processor: DocxMarkdownProcessor, samples_path):
+    test_docx_path = samples_path / "sample.docx"
 
     assert processor.check_file_validity(test_docx_path)
     metadata = processor.process_metadata(test_docx_path, [], "uploads")

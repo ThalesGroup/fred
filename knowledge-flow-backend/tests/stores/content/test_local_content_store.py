@@ -30,7 +30,7 @@ from pathlib import Path
 
 import pytest
 
-from app.core.stores.content.filesystem_content_store import FileSystemContentStore
+from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
 
 # ----------------------------
 # ⚙️ Fixtures

@@ -17,7 +17,7 @@
 import tempfile
 from pathlib import Path
 
-from app.core.processors.input.text_markdown_processor.text_markdown_processor import TextMarkdownProcessor
+from knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor import TextMarkdownProcessor
 
 
 def test_sample_markdown_processor_end_to_end():

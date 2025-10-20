@@ -12,15 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# app/tests/test_utils/fake_processors.py
-
 from pathlib import Path
 
 import pandas as pd
 
-from app.common.document_structures import DocumentMetadata
-from app.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
-from app.core.processors.output.base_output_processor import BaseOutputProcessor
+from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
+from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 
 
 class TestMarkdownProcessor(BaseMarkdownProcessor):

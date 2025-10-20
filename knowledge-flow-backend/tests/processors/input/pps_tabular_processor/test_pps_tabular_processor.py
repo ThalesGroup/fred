@@ -17,7 +17,9 @@ from pathlib import Path
 
 import pytest
 
-from app.core.processors.input.pps_tabular_processor.pps_tabular_processor import PpsTabularProcessor
+from knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor import (
+    PpsTabularProcessor,
+)
 
 
 @pytest.fixture
@@ -25,13 +27,18 @@ def processor():
     return PpsTabularProcessor()
 
 
-def test_check_file_validity(processor):
-    test_file = Path("app/core/processors/input/pps_tabular_processor/tests/assets/sample_pps.xlsm")
+@pytest.fixture
+def samples_path():
+    return Path(__file__).parent / "assets"
+
+
+def test_check_file_validity(processor, samples_path):
+    test_file = samples_path / "sample_pps.xlsm"
     assert processor.check_file_validity(test_file)
 
 
-def test_convert_file_to_table(processor):
-    test_file = Path("app/core/processors/input/pps_tabular_processor/tests/assets/sample_pps.xlsm")
+def test_convert_file_to_table(processor, samples_path):
+    test_file = samples_path / "sample_pps.xlsm"
     with tempfile.TemporaryDirectory() as tmpdir:
         Path(tmpdir)
         df = processor.convert_file_to_table(test_file)

@@ -89,8 +89,8 @@ BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
 
 # Default mapping for output processors by category
 DEFAULT_OUTPUT_PROCESSORS = {
-    "markdown": "app.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor",
-    "tabular": "app.core.processors.output.tabular_processor.tabular_processor.TabularProcessor",
+    "markdown": "knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor",
+    "tabular": "knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor.TabularProcessor",
 }
 
 # Mapping file extensions to categories

@@ -1,4 +1,17 @@
-# app/tests/conftest.py
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,8 +27,8 @@ from fred_core import (
 from langchain_community.embeddings import FakeEmbeddings
 from pydantic import AnyHttpUrl, AnyUrl
 
-from app.application_context import ApplicationContext
-from app.common.structures import (
+from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.structures import (
     AppConfig,
     Configuration,
     InMemoryVectorStorage,
@@ -27,9 +40,9 @@ from app.common.structures import (
     StorageConfig,
     TemporalSchedulerConfig,
 )
-from app.core.processors.output.vectorization_processor.embedder import Embedder
-from app.main import create_app
-from app.tests.test_utils.test_processors import TestMarkdownProcessor, TestOutputProcessor
+from knowledge_flow_backend.core.processors.output.vectorization_processor.embedder import Embedder
+from knowledge_flow_backend.main import create_app
+from .test_utils.test_processors import TestMarkdownProcessor, TestOutputProcessor
 
 
 @pytest.fixture(scope="function", autouse=True)
