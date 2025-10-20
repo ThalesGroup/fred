@@ -147,8 +147,8 @@ ai:
       tags: ["content"]
       chat_model: {}
       description: >
-        An expert in generating content based on templates and knowledge from e knowlethdge-flow backend.
-        Sloan can assist with creating various types powerpoint presentations.
+        An expert in generating content based on templates and knowledge from the knowledge-flow backend.
+        Sloan can assist with creating various types of documents including powerpoint presentations.
     - name: "Rico Senior"
       type: "agent"
       role: "Advanced Document Retrieval Expert"
