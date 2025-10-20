@@ -15,7 +15,7 @@
       "nosec": 0,
       "skipped_tests": 2
     },
-    "app/__init__.py": {
+    "knowledge_flow_backend/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -28,7 +28,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/application_context.py": {
+    "knowledge_flow_backend/application_context.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -41,7 +41,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/application_state.py": {
+    "knowledge_flow_backend/application_state.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -54,7 +54,7 @@
       "nosec": 0,
       "skipped_tests": 1
     },
-    "app/common/__init__.py": {
+    "knowledge_flow_backend/common/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -67,7 +67,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/document_structures.py": {
+    "knowledge_flow_backend/common/document_structures.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -80,7 +80,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/http_logging.py": {
+    "knowledge_flow_backend/common/http_logging.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -93,7 +93,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/report_util.py": {
+    "knowledge_flow_backend/common/report_util.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -106,7 +106,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/source_utils.py": {
+    "knowledge_flow_backend/common/source_utils.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -119,7 +119,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/structures.py": {
+    "knowledge_flow_backend/common/structures.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -132,7 +132,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/utils.py": {
+    "knowledge_flow_backend/common/utils.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -145,7 +145,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/contrib/eliccir/eliccir_vectorization_enricher.py": {
+    "knowledge_flow_backend/contrib/eliccir/eliccir_vectorization_enricher.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -158,7 +158,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/contrib/eliccir/eliccir_vectorization_processor.py": {
+    "knowledge_flow_backend/contrib/eliccir/eliccir_vectorization_processor.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -171,7 +171,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/monitoring/monitoring_controller.py": {
+    "knowledge_flow_backend/core/monitoring/monitoring_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -184,7 +184,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/__init__.py": {
+    "knowledge_flow_backend/core/processors/input/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -197,7 +197,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/common/base_image_describer.py": {
+    "knowledge_flow_backend/core/processors/input/common/base_image_describer.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -210,7 +210,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/common/base_input_processor.py": {
+    "knowledge_flow_backend/core/processors/input/common/base_input_processor.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -223,7 +223,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/common/enrichment.py": {
+    "knowledge_flow_backend/core/processors/input/common/enrichment.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -236,7 +236,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/common/image_describer.py": {
+    "knowledge_flow_backend/core/processors/input/common/image_describer.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -249,7 +249,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/csv_tabular_processor/__init__.py": {
+    "knowledge_flow_backend/core/processors/input/csv_tabular_processor/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -262,7 +262,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/csv_tabular_processor/csv_tabular_processor.py": {
+    "knowledge_flow_backend/core/processors/input/csv_tabular_processor/csv_tabular_processor.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -275,7 +275,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/csv_tabular_processor/tests/__init__.py": {
+    "knowledge_flow_backend/core/processors/input/csv_tabular_processor/tests/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -288,7 +288,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/csv_tabular_processor/tests/sample_tabular_processor_test.py": {
+    "knowledge_flow_backend/core/processors/input/csv_tabular_processor/tests/sample_tabular_processor_test.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -301,7 +301,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/docx_markdown_processor/__init__.py": {
+    "knowledge_flow_backend/core/processors/input/docx_markdown_processor/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -314,7 +314,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/docx_markdown_processor/docx_markdown_processor.py": {
+    "knowledge_flow_backend/core/processors/input/docx_markdown_processor/docx_markdown_processor.py": {
       "CONFIDENCE.HIGH": 5,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -327,7 +327,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/docx_markdown_processor/tests/docx_markdown_processor_test.py": {
+    "knowledge_flow_backend/core/processors/input/docx_markdown_processor/tests/docx_markdown_processor_test.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -340,7 +340,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/jsonl/__init__.py": {
+    "knowledge_flow_backend/core/processors/input/jsonl/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -353,7 +353,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/jsonl/jsonl_markdown_processor.py": {
+    "knowledge_flow_backend/core/processors/input/jsonl/jsonl_markdown_processor.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -366,7 +366,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/markdown_markdown_processor/__init__.py": {
+    "knowledge_flow_backend/core/processors/input/markdown_markdown_processor/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -379,7 +379,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/markdown_markdown_processor/markdown_markdown_processor.py": {
+    "knowledge_flow_backend/core/processors/input/markdown_markdown_processor/markdown_markdown_processor.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -392,7 +392,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/markdown_markdown_processor/tests/__init__.py": {
+    "knowledge_flow_backend/core/processors/input/markdown_markdown_processor/tests/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -405,7 +405,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/markdown_markdown_processor/tests/markdown_markdown_processor_test.py": {
+    "knowledge_flow_backend/core/processors/input/markdown_markdown_processor/tests/markdown_markdown_processor_test.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -418,7 +418,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/pdf_markdown_processor/__init__.py": {
+    "knowledge_flow_backend/core/processors/input/pdf_markdown_processor/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -431,7 +431,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/pdf_markdown_processor/pdf_markdown_processor.py": {
+    "knowledge_flow_backend/core/processors/input/pdf_markdown_processor/pdf_markdown_processor.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -444,7 +444,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/pdf_markdown_processor/tests/__init__.py": {
+    "knowledge_flow_backend/core/processors/input/pdf_markdown_processor/tests/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -457,7 +457,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/pdf_markdown_processor/tests/pdf_markdown_processor_test.py": {
+    "knowledge_flow_backend/core/processors/input/pdf_markdown_processor/tests/pdf_markdown_processor_test.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -470,7 +470,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/pps_tabular_processor/__init__.py": {
+    "knowledge_flow_backend/core/processors/input/pps_tabular_processor/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -483,7 +483,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/pps_tabular_processor/pps_tabular_processor.py": {
+    "knowledge_flow_backend/core/processors/input/pps_tabular_processor/pps_tabular_processor.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -496,7 +496,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/pps_tabular_processor/tests/__init__.py": {
+    "knowledge_flow_backend/core/processors/input/pps_tabular_processor/tests/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -509,7 +509,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/pps_tabular_processor/tests/pps_tabular_processor_test.py": {
+    "knowledge_flow_backend/core/processors/input/pps_tabular_processor/tests/pps_tabular_processor_test.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -522,7 +522,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/pptx_markdown_processor/__init__.py": {
+    "knowledge_flow_backend/core/processors/input/pptx_markdown_processor/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -535,7 +535,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/pptx_markdown_processor/pptx_markdown_processor.py": {
+    "knowledge_flow_backend/core/processors/input/pptx_markdown_processor/pptx_markdown_processor.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -548,7 +548,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/text_markdown_processor/__init__.py": {
+    "knowledge_flow_backend/core/processors/input/text_markdown_processor/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -561,7 +561,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/text_markdown_processor/tests/__init__.py": {
+    "knowledge_flow_backend/core/processors/input/text_markdown_processor/tests/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -574,7 +574,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/text_markdown_processor/tests/text_markdown_processor_test.py": {
+    "knowledge_flow_backend/core/processors/input/text_markdown_processor/tests/text_markdown_processor_test.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -587,7 +587,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/input/text_markdown_processor/text_markdown_processor.py": {
+    "knowledge_flow_backend/core/processors/input/text_markdown_processor/text_markdown_processor.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -600,7 +600,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/output/__init__.py": {
+    "knowledge_flow_backend/core/processors/output/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -613,7 +613,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/output/base_output_processor.py": {
+    "knowledge_flow_backend/core/processors/output/base_output_processor.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -626,7 +626,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/output/empty_output_processor.py": {
+    "knowledge_flow_backend/core/processors/output/empty_output_processor.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -639,7 +639,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/output/summarizer/base_summarizer.py": {
+    "knowledge_flow_backend/core/processors/output/summarizer/base_summarizer.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -652,7 +652,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/output/summarizer/cheap_extractive_summarizer.py": {
+    "knowledge_flow_backend/core/processors/output/summarizer/cheap_extractive_summarizer.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -665,7 +665,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/output/summarizer/llm_summarizer.py": {
+    "knowledge_flow_backend/core/processors/output/summarizer/llm_summarizer.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -678,7 +678,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/output/summarizer/smart_llm_summarizer.py": {
+    "knowledge_flow_backend/core/processors/output/summarizer/smart_llm_summarizer.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -691,7 +691,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/output/tabular_processor/tabular_processor.py": {
+    "knowledge_flow_backend/core/processors/output/tabular_processor/tabular_processor.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -704,7 +704,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/output/vectorization_processor/embedder.py": {
+    "knowledge_flow_backend/core/processors/output/vectorization_processor/embedder.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -717,7 +717,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/output/vectorization_processor/recursive_splitter.py": {
+    "knowledge_flow_backend/core/processors/output/vectorization_processor/recursive_splitter.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -730,7 +730,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/output/vectorization_processor/semantic_splitter.py": {
+    "knowledge_flow_backend/core/processors/output/vectorization_processor/semantic_splitter.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -743,7 +743,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/output/vectorization_processor/vectorization_processor.py": {
+    "knowledge_flow_backend/core/processors/output/vectorization_processor/vectorization_processor.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -756,7 +756,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/processors/output/vectorization_processor/vectorization_utils.py": {
+    "knowledge_flow_backend/core/processors/output/vectorization_processor/vectorization_utils.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -769,7 +769,7 @@
       "nosec": 0,
       "skipped_tests": 1
     },
-    "app/core/stores/__init__.py": {
+    "knowledge_flow_backend/core/stores/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -782,7 +782,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/catalog/base_catalog_store.py": {
+    "knowledge_flow_backend/core/stores/catalog/base_catalog_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -795,7 +795,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/catalog/duckdb_catalog_store.py": {
+    "knowledge_flow_backend/core/stores/catalog/duckdb_catalog_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 3,
@@ -808,7 +808,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/catalog/opensearch_catalog_store.py": {
+    "knowledge_flow_backend/core/stores/catalog/opensearch_catalog_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -821,7 +821,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/content/__init__.py": {
+    "knowledge_flow_backend/core/stores/content/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -834,7 +834,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/content/base_content_loader.py": {
+    "knowledge_flow_backend/core/stores/content/base_content_loader.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -847,7 +847,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/content/base_content_store.py": {
+    "knowledge_flow_backend/core/stores/content/base_content_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -860,7 +860,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/content/filesystem_content_loader.py": {
+    "knowledge_flow_backend/core/stores/content/filesystem_content_loader.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -873,7 +873,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/content/filesystem_content_store.py": {
+    "knowledge_flow_backend/core/stores/content/filesystem_content_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -886,7 +886,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/content/minio_content_loader.py": {
+    "knowledge_flow_backend/core/stores/content/minio_content_loader.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -899,7 +899,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/content/minio_content_store.py": {
+    "knowledge_flow_backend/core/stores/content/minio_content_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -912,7 +912,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/content/sphere_content_loader.py": {
+    "knowledge_flow_backend/core/stores/content/sphere_content_loader.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -925,7 +925,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/files/base_file_store.py": {
+    "knowledge_flow_backend/core/stores/files/base_file_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -938,7 +938,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/files/local_file_store.py": {
+    "knowledge_flow_backend/core/stores/files/local_file_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -951,7 +951,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/files/minio_file_store.py": {
+    "knowledge_flow_backend/core/stores/files/minio_file_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -964,7 +964,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/files/structures.py": {
+    "knowledge_flow_backend/core/stores/files/structures.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -977,7 +977,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/metadata/__init__.py": {
+    "knowledge_flow_backend/core/stores/metadata/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -990,7 +990,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/metadata/base_metadata_store.py": {
+    "knowledge_flow_backend/core/stores/metadata/base_metadata_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1003,7 +1003,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/metadata/duckdb_metadata_store.py": {
+    "knowledge_flow_backend/core/stores/metadata/duckdb_metadata_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 6,
@@ -1016,7 +1016,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/metadata/opensearch_metadata_store.py": {
+    "knowledge_flow_backend/core/stores/metadata/opensearch_metadata_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1029,7 +1029,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/resources/base_resource_store.py": {
+    "knowledge_flow_backend/core/stores/resources/base_resource_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1042,7 +1042,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/resources/duckdb_resource_store.py": {
+    "knowledge_flow_backend/core/stores/resources/duckdb_resource_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 10,
@@ -1055,7 +1055,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/resources/opensearch_resource_store.py": {
+    "knowledge_flow_backend/core/stores/resources/opensearch_resource_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1068,7 +1068,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/tags/__init__.py": {
+    "knowledge_flow_backend/core/stores/tags/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1081,7 +1081,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/tags/base_tag_store.py": {
+    "knowledge_flow_backend/core/stores/tags/base_tag_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1094,7 +1094,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/tags/duckdb_tag_store.py": {
+    "knowledge_flow_backend/core/stores/tags/duckdb_tag_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 6,
@@ -1107,7 +1107,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/tags/opensearch_tags_store.py": {
+    "knowledge_flow_backend/core/stores/tags/opensearch_tags_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1120,7 +1120,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/vector/__init__.py": {
+    "knowledge_flow_backend/core/stores/vector/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1133,7 +1133,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/vector/base_embedding_model.py": {
+    "knowledge_flow_backend/core/stores/vector/base_embedding_model.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1146,7 +1146,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/vector/base_text_splitter.py": {
+    "knowledge_flow_backend/core/stores/vector/base_text_splitter.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1159,7 +1159,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/vector/base_vector_store.py": {
+    "knowledge_flow_backend/core/stores/vector/base_vector_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1172,7 +1172,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/vector/chromadb_vector_store.py": {
+    "knowledge_flow_backend/core/stores/vector/chromadb_vector_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1185,7 +1185,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/vector/in_memory_langchain_vector_store.py": {
+    "knowledge_flow_backend/core/stores/vector/in_memory_langchain_vector_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1198,7 +1198,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/vector/opensearch_vector_store.py": {
+    "knowledge_flow_backend/core/stores/vector/opensearch_vector_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1211,7 +1211,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/stores/vector/weaviate_vector_store.py": {
+    "knowledge_flow_backend/core/stores/vector/weaviate_vector_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1224,7 +1224,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/catalog/controller.py": {
+    "knowledge_flow_backend/features/catalog/controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1237,7 +1237,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/catalog/service.py": {
+    "knowledge_flow_backend/features/catalog/service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1250,7 +1250,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/content/__init__.py": {
+    "knowledge_flow_backend/features/content/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1263,7 +1263,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/content/controller.py": {
+    "knowledge_flow_backend/features/content/controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1276,7 +1276,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/content/rendering_service.py": {
+    "knowledge_flow_backend/features/content/rendering_service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1289,7 +1289,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/content/report_controller.py": {
+    "knowledge_flow_backend/features/content/report_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1302,7 +1302,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/content/report_service.py": {
+    "knowledge_flow_backend/features/content/report_service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1315,7 +1315,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/content/service.py": {
+    "knowledge_flow_backend/features/content/service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1328,7 +1328,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/ingestion/controller.py": {
+    "knowledge_flow_backend/features/ingestion/controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1341,7 +1341,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/ingestion/service.py": {
+    "knowledge_flow_backend/features/ingestion/service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1354,7 +1354,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/kpi/kpi_controller.py": {
+    "knowledge_flow_backend/features/kpi/kpi_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1367,7 +1367,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/kpi/logs_controller.py": {
+    "knowledge_flow_backend/features/kpi/logs_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1380,7 +1380,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/kpi/opensearch_controller.py": {
+    "knowledge_flow_backend/features/kpi/opensearch_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1393,7 +1393,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/metadata/__init__.py": {
+    "knowledge_flow_backend/features/metadata/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1406,7 +1406,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/metadata/controller.py": {
+    "knowledge_flow_backend/features/metadata/controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1419,7 +1419,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/metadata/metadata_utils.py": {
+    "knowledge_flow_backend/features/metadata/metadata_utils.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1432,7 +1432,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/metadata/service.py": {
+    "knowledge_flow_backend/features/metadata/service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1445,7 +1445,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/pull/controller.py": {
+    "knowledge_flow_backend/features/pull/controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1458,7 +1458,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/pull/service.py": {
+    "knowledge_flow_backend/features/pull/service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1471,7 +1471,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/resources/controller.py": {
+    "knowledge_flow_backend/features/resources/controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1484,7 +1484,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/resources/service.py": {
+    "knowledge_flow_backend/features/resources/service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1497,7 +1497,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/resources/structures.py": {
+    "knowledge_flow_backend/features/resources/structures.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1510,7 +1510,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/resources/utils.py": {
+    "knowledge_flow_backend/features/resources/utils.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1523,7 +1523,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/scheduler/activities.py": {
+    "knowledge_flow_backend/features/scheduler/activities.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1536,7 +1536,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/scheduler/controller.py": {
+    "knowledge_flow_backend/features/scheduler/controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1549,7 +1549,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/scheduler/structure.py": {
+    "knowledge_flow_backend/features/scheduler/structure.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1562,7 +1562,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/scheduler/worker.py": {
+    "knowledge_flow_backend/features/scheduler/worker.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1575,7 +1575,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/scheduler/workflow.py": {
+    "knowledge_flow_backend/features/scheduler/workflow.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1588,7 +1588,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/tabular/__init__.py": {
+    "knowledge_flow_backend/features/tabular/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1601,7 +1601,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/tabular/controller.py": {
+    "knowledge_flow_backend/features/tabular/controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1614,7 +1614,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/tabular/service.py": {
+    "knowledge_flow_backend/features/tabular/service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 2,
       "CONFIDENCE.MEDIUM": 0,
@@ -1627,7 +1627,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/tabular/structures.py": {
+    "knowledge_flow_backend/features/tabular/structures.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1640,7 +1640,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/tabular/utils.py": {
+    "knowledge_flow_backend/features/tabular/utils.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1653,7 +1653,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/tag/__init__.py": {
+    "knowledge_flow_backend/features/tag/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1666,7 +1666,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/tag/controller.py": {
+    "knowledge_flow_backend/features/tag/controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1679,7 +1679,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/tag/service.py": {
+    "knowledge_flow_backend/features/tag/service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1692,7 +1692,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/tag/structure.py": {
+    "knowledge_flow_backend/features/tag/structure.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1705,7 +1705,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/vector_search/__init__.py": {
+    "knowledge_flow_backend/features/vector_search/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1718,7 +1718,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/vector_search/vector_search_controller.py": {
+    "knowledge_flow_backend/features/vector_search/vector_search_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1731,7 +1731,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/vector_search/vector_search_hybrid_retriever.py": {
+    "knowledge_flow_backend/features/vector_search/vector_search_hybrid_retriever.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1744,7 +1744,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/vector_search/vector_search_service.py": {
+    "knowledge_flow_backend/features/vector_search/vector_search_service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1757,7 +1757,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/vector_search/vector_search_strict_retriever.py": {
+    "knowledge_flow_backend/features/vector_search/vector_search_strict_retriever.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1770,7 +1770,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/features/vector_search/vector_search_structures.py": {
+    "knowledge_flow_backend/features/vector_search/vector_search_structures.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1783,7 +1783,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/main.py": {
+    "knowledge_flow_backend/main.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1796,7 +1796,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/main_worker.py": {
+    "knowledge_flow_backend/main_worker.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1809,7 +1809,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/tests/__init__.py": {
+    "knowledge_flow_backend/tests/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1822,7 +1822,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/tests/conftest.py": {
+    "knowledge_flow_backend/tests/conftest.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1835,7 +1835,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/tests/services/test_ingestion_service.py": {
+    "knowledge_flow_backend/tests/services/test_ingestion_service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1848,7 +1848,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/tests/services/test_vector_search_service.py": {
+    "knowledge_flow_backend/tests/services/test_vector_search_service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1861,7 +1861,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/tests/stores/content/test_local_content_store.py": {
+    "knowledge_flow_backend/tests/stores/content/test_local_content_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1874,7 +1874,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/tests/test_utils/test_processors.py": {
+    "knowledge_flow_backend/tests/test_utils/test_processors.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1893,7 +1893,7 @@
       "code": "15 import logging\n16 import subprocess\n17 import zipfile\n",
       "col_offset": 0,
       "end_col_offset": 17,
-      "filename": "app/core/processors/input/docx_markdown_processor/docx_markdown_processor.py",
+      "filename": "knowledge_flow_backend/core/processors/input/docx_markdown_processor/docx_markdown_processor.py",
       "issue_confidence": "HIGH",
       "issue_cwe": {
         "id": 78,
@@ -1913,7 +1913,7 @@
       "code": "71 \n72         subprocess.run(\n73             [\n74                 \"pandoc\",\n75                 \"--to\",\n76                 \"markdown\",\n77                 \"--to\",\n78                 \"markdown_strict\",\n79                 str(file_path),\n80                 \"-o\",\n81                 str(md_path),\n82                 *extra_args,\n83             ],\n84         )\n85 \n",
       "col_offset": 8,
       "end_col_offset": 9,
-      "filename": "app/core/processors/input/docx_markdown_processor/docx_markdown_processor.py",
+      "filename": "knowledge_flow_backend/core/processors/input/docx_markdown_processor/docx_markdown_processor.py",
       "issue_confidence": "HIGH",
       "issue_cwe": {
         "id": 78,
@@ -1945,7 +1945,7 @@
       "code": "71 \n72         subprocess.run(\n73             [\n74                 \"pandoc\",\n75                 \"--to\",\n76                 \"markdown\",\n77                 \"--to\",\n78                 \"markdown_strict\",\n79                 str(file_path),\n80                 \"-o\",\n81                 str(md_path),\n82                 *extra_args,\n83             ],\n84         )\n85 \n",
       "col_offset": 8,
       "end_col_offset": 9,
-      "filename": "app/core/processors/input/docx_markdown_processor/docx_markdown_processor.py",
+      "filename": "knowledge_flow_backend/core/processors/input/docx_markdown_processor/docx_markdown_processor.py",
       "issue_confidence": "HIGH",
       "issue_cwe": {
         "id": 78,
@@ -1977,7 +1977,7 @@
       "code": "90             svg_path = img_path.with_suffix(\".svg\")\n91             subprocess.run([\"inkscape\", str(img_path), \"--export-filename=\" + str(svg_path)])\n92 \n",
       "col_offset": 12,
       "end_col_offset": 93,
-      "filename": "app/core/processors/input/docx_markdown_processor/docx_markdown_processor.py",
+      "filename": "knowledge_flow_backend/core/processors/input/docx_markdown_processor/docx_markdown_processor.py",
       "issue_confidence": "HIGH",
       "issue_cwe": {
         "id": 78,
@@ -1997,7 +1997,7 @@
       "code": "90             svg_path = img_path.with_suffix(\".svg\")\n91             subprocess.run([\"inkscape\", str(img_path), \"--export-filename=\" + str(svg_path)])\n92 \n",
       "col_offset": 12,
       "end_col_offset": 93,
-      "filename": "app/core/processors/input/docx_markdown_processor/docx_markdown_processor.py",
+      "filename": "knowledge_flow_backend/core/processors/input/docx_markdown_processor/docx_markdown_processor.py",
       "issue_confidence": "HIGH",
       "issue_cwe": {
         "id": 78,
@@ -2017,7 +2017,7 @@
       "code": "51         with self.store._connect() as conn:\n52             conn.execute(f'DELETE FROM \"{full_table}\" WHERE source_tag = ?', [source_tag])\n53             for entry in entries:\n",
       "col_offset": 27,
       "end_col_offset": 40,
-      "filename": "app/core/stores/catalog/duckdb_catalog_store.py",
+      "filename": "knowledge_flow_backend/core/stores/catalog/duckdb_catalog_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2037,7 +2037,7 @@
       "code": "54                 conn.execute(\n55                     f\"\"\"\n56                     INSERT INTO \"{full_table}\" (source_tag, path, size, modified_time, hash)\n57                     VALUES (?, ?, ?, ?, ?)\n58                     \"\"\",\n59                     [source_tag, entry.path, entry.size, entry.modified_time, entry.hash],\n",
       "col_offset": 24,
       "end_col_offset": 33,
-      "filename": "app/core/stores/catalog/duckdb_catalog_store.py",
+      "filename": "knowledge_flow_backend/core/stores/catalog/duckdb_catalog_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2060,7 +2060,7 @@
       "code": "65             result = conn.execute(\n66                 f\"\"\"\n67                 SELECT path, size, modified_time, hash\n68                 FROM \"{full_table}\"\n69                 WHERE source_tag = ?\n70                 \"\"\",\n71                 [source_tag],\n",
       "col_offset": 20,
       "end_col_offset": 22,
-      "filename": "app/core/stores/catalog/duckdb_catalog_store.py",
+      "filename": "knowledge_flow_backend/core/stores/catalog/duckdb_catalog_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2084,7 +2084,7 @@
       "code": "85             row = conn.execute(\n86                 f'SELECT doc FROM \"{self._table()}\" WHERE document_uid = ?',\n87                 [document_uid],\n",
       "col_offset": 18,
       "end_col_offset": 35,
-      "filename": "app/core/stores/metadata/duckdb_metadata_store.py",
+      "filename": "knowledge_flow_backend/core/stores/metadata/duckdb_metadata_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2104,7 +2104,7 @@
       "code": "93             rows = conn.execute(\n94                 f'SELECT doc FROM \"{self._table()}\" WHERE source_tag = ?',\n95                 [source_tag],\n",
       "col_offset": 18,
       "end_col_offset": 35,
-      "filename": "app/core/stores/metadata/duckdb_metadata_store.py",
+      "filename": "knowledge_flow_backend/core/stores/metadata/duckdb_metadata_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2124,7 +2124,7 @@
       "code": "104             rows = conn.execute(\n105                 f'SELECT doc FROM \"{self._table()}\" WHERE list_contains(tag_ids, ?)',\n106                 [tag_id],\n",
       "col_offset": 18,
       "end_col_offset": 35,
-      "filename": "app/core/stores/metadata/duckdb_metadata_store.py",
+      "filename": "knowledge_flow_backend/core/stores/metadata/duckdb_metadata_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2144,7 +2144,7 @@
       "code": "114         with self.store._connect() as conn:\n115             rows = conn.execute(f'SELECT doc FROM \"{self._table()}\"').fetchall()\n116         docs = [self._from_json(r[0]) for r in rows]\n",
       "col_offset": 34,
       "end_col_offset": 51,
-      "filename": "app/core/stores/metadata/duckdb_metadata_store.py",
+      "filename": "knowledge_flow_backend/core/stores/metadata/duckdb_metadata_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2164,7 +2164,7 @@
       "code": "143             result = conn.execute(\n144                 f'DELETE FROM \"{self._table()}\" WHERE document_uid = ?',\n145                 [document_uid],\n",
       "col_offset": 18,
       "end_col_offset": 31,
-      "filename": "app/core/stores/metadata/duckdb_metadata_store.py",
+      "filename": "knowledge_flow_backend/core/stores/metadata/duckdb_metadata_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2184,7 +2184,7 @@
       "code": "151         with self.store._connect() as conn:\n152             conn.execute(f'DELETE FROM \"{self._table()}\"')\n153 \n",
       "col_offset": 27,
       "end_col_offset": 40,
-      "filename": "app/core/stores/metadata/duckdb_metadata_store.py",
+      "filename": "knowledge_flow_backend/core/stores/metadata/duckdb_metadata_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2204,7 +2204,7 @@
       "code": "56                 conn.execute(f'ALTER TABLE \"{full_table}\" ADD COLUMN version TEXT')\n57                 conn.execute(f'UPDATE \"{full_table}\" SET version = current_version')\n58             if \"author\" not in cols and \"user\" in cols:\n",
       "col_offset": 31,
       "end_col_offset": 39,
-      "filename": "app/core/stores/resources/duckdb_resource_store.py",
+      "filename": "knowledge_flow_backend/core/stores/resources/duckdb_resource_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2224,7 +2224,7 @@
       "code": "59                 conn.execute(f'ALTER TABLE \"{full_table}\" ADD COLUMN author TEXT')\n60                 conn.execute(f'UPDATE \"{full_table}\" SET author = user')\n61             if \"content\" not in cols and \"uri\" in cols:\n",
       "col_offset": 31,
       "end_col_offset": 39,
-      "filename": "app/core/stores/resources/duckdb_resource_store.py",
+      "filename": "knowledge_flow_backend/core/stores/resources/duckdb_resource_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2244,7 +2244,7 @@
       "code": "62                 conn.execute(f'ALTER TABLE \"{full_table}\" ADD COLUMN content TEXT')\n63                 conn.execute(f'UPDATE \"{full_table}\" SET content = uri')\n64 \n",
       "col_offset": 31,
       "end_col_offset": 39,
-      "filename": "app/core/stores/resources/duckdb_resource_store.py",
+      "filename": "knowledge_flow_backend/core/stores/resources/duckdb_resource_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2264,7 +2264,7 @@
       "code": "104             rows = conn.execute(\n105                 f'SELECT * FROM \"{self._table()}\" WHERE author = ? AND kind = ?',\n106                 [user, kind.value],\n",
       "col_offset": 18,
       "end_col_offset": 33,
-      "filename": "app/core/stores/resources/duckdb_resource_store.py",
+      "filename": "knowledge_flow_backend/core/stores/resources/duckdb_resource_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2284,7 +2284,7 @@
       "code": "112             rows = conn.execute(\n113                 f'SELECT * FROM \"{self._table()}\" WHERE kind = ?',\n114                 [kind.value],\n",
       "col_offset": 18,
       "end_col_offset": 33,
-      "filename": "app/core/stores/resources/duckdb_resource_store.py",
+      "filename": "knowledge_flow_backend/core/stores/resources/duckdb_resource_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2304,7 +2304,7 @@
       "code": "120             row = conn.execute(\n121                 f'SELECT * FROM \"{self._table()}\" WHERE id = ?',\n122                 [resource_id],\n",
       "col_offset": 18,
       "end_col_offset": 33,
-      "filename": "app/core/stores/resources/duckdb_resource_store.py",
+      "filename": "knowledge_flow_backend/core/stores/resources/duckdb_resource_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2324,7 +2324,7 @@
       "code": "137             conn.execute(\n138                 f'INSERT INTO \"{self._table()}\" (id, kind, version, name, description, labels, author, created_at, updated_at, content, library_tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',\n139                 self._serialize(resource),\n",
       "col_offset": 18,
       "end_col_offset": 31,
-      "filename": "app/core/stores/resources/duckdb_resource_store.py",
+      "filename": "knowledge_flow_backend/core/stores/resources/duckdb_resource_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2344,7 +2344,7 @@
       "code": "148             conn.execute(\n149                 f\"\"\"\n150                 UPDATE \"{self._table()}\"\n151                 SET\n152                     kind = ?,\n153                     version = ?,\n154                     name = ?,\n155                     description = ?,\n156                     labels = ?,\n157                     author = ?,\n158                     created_at = ?,\n159                     updated_at = ?,\n160                     content = ?,\n161                     library_tags = ?\n162                 WHERE id = ?\n163                 \"\"\",\n164                 (\n",
       "col_offset": 20,
       "end_col_offset": 24,
-      "filename": "app/core/stores/resources/duckdb_resource_store.py",
+      "filename": "knowledge_flow_backend/core/stores/resources/duckdb_resource_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2378,7 +2378,7 @@
       "code": "182             result = conn.execute(\n183                 f'DELETE FROM \"{self._table()}\" WHERE id = ?',\n184                 [resource_id],\n",
       "col_offset": 18,
       "end_col_offset": 31,
-      "filename": "app/core/stores/resources/duckdb_resource_store.py",
+      "filename": "knowledge_flow_backend/core/stores/resources/duckdb_resource_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2398,7 +2398,7 @@
       "code": "192             rows = conn.execute(\n193                 f'SELECT * FROM \"{self._table()}\" WHERE list_contains(library_tags, ?)',\n194                 [tag_id],\n",
       "col_offset": 18,
       "end_col_offset": 33,
-      "filename": "app/core/stores/resources/duckdb_resource_store.py",
+      "filename": "knowledge_flow_backend/core/stores/resources/duckdb_resource_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2418,7 +2418,7 @@
       "code": "92                 rows = conn.execute(\n93                     f\"\"\"\n94                     SELECT id, created_at, updated_at, owner_id, name, path, description, type\n95                     FROM \"{self._table()}\"\n96                     ORDER BY COALESCE(path, ''), name\n97                     \"\"\",\n98                 ).fetchall()\n",
       "col_offset": 24,
       "end_col_offset": 26,
-      "filename": "app/core/stores/tags/duckdb_tag_store.py",
+      "filename": "knowledge_flow_backend/core/stores/tags/duckdb_tag_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2442,7 +2442,7 @@
       "code": "106             row = conn.execute(\n107                 f\"\"\"\n108                 SELECT id, created_at, updated_at, owner_id, name, path, description, type\n109                 FROM \"{self._table()}\"\n110                 WHERE id = ?\n111                 \"\"\",\n112                 [tag_id],\n",
       "col_offset": 20,
       "end_col_offset": 22,
-      "filename": "app/core/stores/tags/duckdb_tag_store.py",
+      "filename": "knowledge_flow_backend/core/stores/tags/duckdb_tag_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2466,7 +2466,7 @@
       "code": "127                 conn.execute(\n128                     f\"\"\"\n129                     INSERT INTO \"{self._table()}\" (\n130                         id, created_at, updated_at, owner_id, name, path, description, type\n131                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)\n132                     \"\"\",\n133                     self._serialize(tag),\n",
       "col_offset": 24,
       "end_col_offset": 33,
-      "filename": "app/core/stores/tags/duckdb_tag_store.py",
+      "filename": "knowledge_flow_backend/core/stores/tags/duckdb_tag_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2490,7 +2490,7 @@
       "code": "145                 conn.execute(\n146                     f\"\"\"\n147                     UPDATE \"{self._table()}\"\n148                     SET created_at = ?,\n149                         updated_at = ?,\n150                         owner_id   = ?,\n151                         name       = ?,\n152                         path       = ?,         -- \u2705 update path\n153                         description= ?,\n154                         type       = ?\n155                     WHERE id = ?\n156                     \"\"\",\n157                     (\n",
       "col_offset": 24,
       "end_col_offset": 28,
-      "filename": "app/core/stores/tags/duckdb_tag_store.py",
+      "filename": "knowledge_flow_backend/core/stores/tags/duckdb_tag_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2520,7 +2520,7 @@
       "code": "176             with self.store._connect() as conn:\n177                 result = conn.execute(f'DELETE FROM \"{self._table()}\" WHERE id = ?', [tag_id])\n178             if result.rowcount == 0:\n",
       "col_offset": 40,
       "end_col_offset": 53,
-      "filename": "app/core/stores/tags/duckdb_tag_store.py",
+      "filename": "knowledge_flow_backend/core/stores/tags/duckdb_tag_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2540,7 +2540,7 @@
       "code": "196             row = conn.execute(\n197                 f\"\"\"\n198                 SELECT id, created_at, updated_at, owner_id, name, path, description, type\n199                 FROM {self._table()}\n200                 WHERE owner_id = ?\n201                   AND type = ?\n202                   AND CASE WHEN path IS NULL OR path = ''\n203                            THEN name\n204                            ELSE path || '/' || name\n205                       END = ?\n206                 LIMIT 1\n207                 \"\"\",\n208                 [owner_id, tag_type.value, full_path],\n",
       "col_offset": 20,
       "end_col_offset": 21,
-      "filename": "app/core/stores/tags/duckdb_tag_store.py",
+      "filename": "knowledge_flow_backend/core/stores/tags/duckdb_tag_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -2570,7 +2570,7 @@
       "code": "79 \n80         count_df = store.execute_sql_query(f'SELECT COUNT(*) AS count FROM \"{table_name}\"')\n81         row_count = count_df[\"count\"][0]\n",
       "col_offset": 45,
       "end_col_offset": 76,
-      "filename": "app/features/tabular/service.py",
+      "filename": "knowledge_flow_backend/features/tabular/service.py",
       "issue_confidence": "LOW",
       "issue_cwe": {
         "id": 89,
@@ -2590,7 +2590,7 @@
       "code": "94                 columns = [TabularColumnSchema(name=col_name, dtype=self._map_sql_type_to_literal(col_type)) for col_name, col_type in schema_info]\n95                 count_df = store.execute_sql_query(f'SELECT COUNT(*) AS count FROM \"{table}\"')\n96                 row_count = count_df[\"count\"][0]\n",
       "col_offset": 53,
       "end_col_offset": 84,
-      "filename": "app/features/tabular/service.py",
+      "filename": "knowledge_flow_backend/features/tabular/service.py",
       "issue_confidence": "LOW",
       "issue_cwe": {
         "id": 89,

@@ -23,14 +23,14 @@ from typing import Any, Mapping, Optional
 
 import httpx
 from fastapi import FastAPI
-
-from knowledge_flow_backend.application_context import get_configuration
 from fred_core import (
     M2MAuthConfig,
     M2MBearerAuth,
     M2MTokenProvider,
     make_m2m_asgi_client,
 )
+
+from knowledge_flow_backend.application_context import get_configuration
 
 
 class _AppState:

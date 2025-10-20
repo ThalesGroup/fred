@@ -50,13 +50,13 @@ import asyncio
 import logging
 import os
 
-from knowledge_flow_backend.features.scheduler.worker import run_worker
 from dotenv import load_dotenv
 from rich.logging import RichHandler
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import Configuration
 from knowledge_flow_backend.common.utils import parse_server_configuration
+from knowledge_flow_backend.features.scheduler.worker import run_worker
 
 # -----------------------
 # LOGGING + ENVIRONMENT

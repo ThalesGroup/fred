@@ -23,8 +23,23 @@ import logging
 import os
 
 import uvicorn
+from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi_mcp import AuthConfig, FastApiMCP
+from fred_core import (
+    get_current_user,
+    initialize_user_security,
+    log_setup,
+    register_exception_handlers,
+)
+
+from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.application_state import attach_app
 from knowledge_flow_backend.common.http_logging import RequestResponseLogger
+from knowledge_flow_backend.common.structures import Configuration
+from knowledge_flow_backend.common.utils import parse_server_configuration
+from knowledge_flow_backend.core.monitoring.monitoring_controller import MonitoringController
 from knowledge_flow_backend.features.catalog.controller import CatalogController
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.asset_controller import AssetController
@@ -41,21 +56,6 @@ from knowledge_flow_backend.features.scheduler.controller import SchedulerContro
 from knowledge_flow_backend.features.tabular.controller import TabularController
 from knowledge_flow_backend.features.tag.controller import TagController
 from knowledge_flow_backend.features.vector_search.vector_search_controller import VectorSearchController
-from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi_mcp import AuthConfig, FastApiMCP
-
-from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.structures import Configuration
-from knowledge_flow_backend.common.utils import parse_server_configuration
-from knowledge_flow_backend.core.monitoring.monitoring_controller import MonitoringController
-from fred_core import (
-    get_current_user,
-    initialize_user_security,
-    log_setup,
-    register_exception_handlers,
-)
 
 # -----------------------
 # LOGGING + ENVIRONMENT

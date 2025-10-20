@@ -42,6 +42,7 @@ from knowledge_flow_backend.common.structures import (
 )
 from knowledge_flow_backend.core.processors.output.vectorization_processor.embedder import Embedder
 from knowledge_flow_backend.main import create_app
+
 from .test_utils.test_processors import TestMarkdownProcessor, TestOutputProcessor
 
 

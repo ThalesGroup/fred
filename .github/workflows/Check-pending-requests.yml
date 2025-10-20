@@ -34,7 +34,7 @@ jobs:
             deploy-chart:
               - 'deploy/charts/**'
             knowledge-flow:
-              - 'knowledge_flow_backend/**'
+              - 'knowledge-flow-backend/**'
             fred-core:
               - 'fred-core/**'
 
@@ -45,7 +45,7 @@ jobs:
     if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
     strategy:
       matrix:
-        directory: [agentic_backend, knowledge_flow_backend, fred-core]
+        directory: [agentic_backend, knowledge-flow-backend, fred-core]
         check: 
           - lint
           - format
@@ -58,7 +58,7 @@ jobs:
           - directory: agentic_backend
             condition: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.fred-core == 'true'
           # Knowledge flow backend runs when knowledge-flow or fred-core changes  
-          - directory: knowledge_flow_backend
+          - directory: knowledge-flow-backend
             condition: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
           # Fred core runs when fred-core changes
           - directory: fred-core
@@ -220,16 +220,16 @@ jobs:
       - name: Setup Python environment
         uses: ./.github/actions/setup-python-env
         with:
-          working-directory: knowledge_flow_backend
+          working-directory: knowledge-flow-backend
 
       - name: Check route security
         run: |
-          cd knowledge_flow_backend/
+          cd knowledge-flow-backend/
           make check-route-security
 
       - name: Build and test
         run: |
-          cd knowledge_flow_backend/
+          cd knowledge-flow-backend/
           timeout 30s make run || true
 
   # Job to check OpenAPI spec drift when backends or frontend change
@@ -263,7 +263,7 @@ jobs:
       - name: Setup knowledge-flow backend dependencies  
         if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.frontend == 'true'
         run: |
-          cd knowledge_flow_backend/
+          cd knowledge-flow-backend/
           make dev
 
       - name: Backup current generated files

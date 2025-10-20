@@ -15,7 +15,8 @@ def main():
     try:
         # Determine the backend directory from current working directory
         backend_dir = Path.cwd()
-        app_dir = backend_dir / "app"
+        app_name = '_'.join(sys.argv[1:]) or "app"
+        app_dir = backend_dir / app_name
         config_dir = backend_dir / "config"
         
         # Validate that we're in a valid backend directory
