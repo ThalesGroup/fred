@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import PreviewIcon from '@mui/icons-material/Preview';
+import PreviewIcon from "@mui/icons-material/Preview";
 import RateReviewIcon from "@mui/icons-material/RateReview";
 import { Box, Chip, Grid2, IconButton, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
@@ -28,7 +28,7 @@ import {
 } from "../../slices/agentic/agenticOpenApi.ts";
 
 import { Download as DownloadIcon } from "@mui/icons-material";
-import { getAgentBadge } from "../../utils/avatar.tsx";
+import { AgentChipMini } from "../../common/AgentChip.tsx";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
 import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
 import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
@@ -179,7 +179,7 @@ export default function MessageCard({
         {side === "left" && agent && (
           <Grid2 size="auto" paddingTop={2}>
             <Tooltip title={`${agent.name}: ${agent.role}`}>
-              <Box sx={{ mr: 2, mb: 2 }}>{getAgentBadge(agent.name, agent.type === "leader")}</Box>
+              <AgentChipMini agent={agent} />
             </Tooltip>
           </Grid2>
         )}
@@ -261,52 +261,45 @@ export default function MessageCard({
                       <GeoMapRenderer part={geoPart} />
                     </Box>
                   )}
-                {/* 🌟 DOWNLOAD / VIEW LINKS 🌟 */}
-                {(downloadLinkPart || viewLinkPart) && (
-                  <Box
-                    px={side === "right" ? 0 : 1}
-                    pt={0.5}
-                    pb={1}
-                    display="flex"
-                    gap={1}
-                    flexWrap="wrap"
-                  >
-                    {downloadLinkPart && (
-                      <Tooltip title="Click to securely download the PowerPoint file">
-                        <Chip
-                          icon={<DownloadIcon />}
-                          label={downloadLinkPart.title || "Download File"}
-                          component="a"
-                          href={downloadLinkPart.href}
-                          target="_blank"
-                          clickable
-                          color="primary"
-                          variant="filled"
-                          size="medium"
-                          sx={{ fontWeight: "bold" }}
-                        />
-                      </Tooltip>
-                    )}
+                  {/* 🌟 DOWNLOAD / VIEW LINKS 🌟 */}
+                  {(downloadLinkPart || viewLinkPart) && (
+                    <Box px={side === "right" ? 0 : 1} pt={0.5} pb={1} display="flex" gap={1} flexWrap="wrap">
+                      {downloadLinkPart && (
+                        <Tooltip title="Click to securely download the PowerPoint file">
+                          <Chip
+                            icon={<DownloadIcon />}
+                            label={downloadLinkPart.title || "Download File"}
+                            component="a"
+                            href={downloadLinkPart.href}
+                            target="_blank"
+                            clickable
+                            color="primary"
+                            variant="filled"
+                            size="medium"
+                            sx={{ fontWeight: "bold" }}
+                          />
+                        </Tooltip>
+                      )}
 
-                    {viewLinkPart && (
-                      <Tooltip title="Open PDF preview in viewer">
-                        <Chip
-                          icon={<PreviewIcon />}
-                          label={viewLinkPart.title || "View PDF"}
-                          component="a"
-                          href={viewLinkPart.href}
-                          target="_blank"
-                          clickable
-                          color="secondary"
-                          variant="outlined"
-                          size="medium"
-                          sx={{ fontWeight: "bold" }}
-                        />
-                      </Tooltip>
-                    )}
-                  </Box>
-                )}
-                {/* 🌟 END LINKS 🌟 */}
+                      {viewLinkPart && (
+                        <Tooltip title="Open PDF preview in viewer">
+                          <Chip
+                            icon={<PreviewIcon />}
+                            label={viewLinkPart.title || "View PDF"}
+                            component="a"
+                            href={viewLinkPart.href}
+                            target="_blank"
+                            clickable
+                            color="secondary"
+                            variant="outlined"
+                            size="medium"
+                            sx={{ fontWeight: "bold" }}
+                          />
+                        </Tooltip>
+                      )}
+                    </Box>
+                  )}
+                  {/* 🌟 END LINKS 🌟 */}
                 </Box>
               </Grid2>
 

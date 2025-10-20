@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Sequence
 
@@ -23,6 +24,42 @@ from langchain_core.embeddings import Embeddings
 from app.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, AnnHit, BaseVectorStore, LexicalHit, LexicalSearchable, SearchFilter
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ExpectedIndexSpec:
+    dim: int
+    engine: str  # "lucene"
+    space_type: str  # "cosinesimil"
+    method_name: str  # "hnsw"
+
+
+MODEL_INDEX_SPECS: dict[str, ExpectedIndexSpec] = {
+    # OpenAI 3-series
+    "text-embedding-3-large": ExpectedIndexSpec(dim=3072, engine="lucene", space_type="cosinesimil", method_name="hnsw"),
+    "text-embedding-3-small": ExpectedIndexSpec(dim=1536, engine="lucene", space_type="cosinesimil", method_name="hnsw"),
+    # Legacy (still supported but discouraged)
+    "text-embedding-ada-002": ExpectedIndexSpec(dim=1536, engine="lucene", space_type="cosinesimil", method_name="hnsw"),
+}
+
+
+def _safe_get(d: dict, path: list[str], default=None):
+    cur = d
+    for key in path:
+        if not isinstance(cur, dict) or key not in cur:
+            return default
+        cur = cur[key]
+    return cur
+
+
+def _norm_str(value: object) -> str:
+    """Safely convert any mapping value (dict/None/str) to lowercase str."""
+    if isinstance(value, dict):
+        # Sometimes OpenSearch returns {"engine": "lucene"} instead of "lucene"
+        return next(iter(value.values()), "").lower()
+    if isinstance(value, (list, tuple)):
+        return str(value[0]).lower() if value else ""
+    return str(value or "").lower()
 
 
 class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
@@ -76,7 +113,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
                 bulk_size=self._bulk_size,
             )
             self._expected_dim = self._get_embedding_dimension()
-            self._check_vector_index_dimension(self._expected_dim)
+            self._validate_index_compatibility(self._expected_dim)
         return self._vs
 
     @property
@@ -352,23 +389,72 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         dummy_vector = self._embedding_model.embed_query("dummy")
         return len(dummy_vector)
 
-    def _check_vector_index_dimension(self, expected_dim: int):
+    def _validate_index_compatibility(self, expected_dim: int):
+        """
+        Fred rationale:
+        - We fail fast if index mapping cannot faithfully serve the configured embedding model.
+        - Checks: vector dimension, engine, space type, and HNSW method.
+        """
         try:
             mapping = self._client.indices.get_mapping(index=self._index)
-            actual_dim = mapping[self._index]["mappings"]["properties"]["vector_field"]["dimension"]
         except Exception as e:
-            logger.warning("⚠️ Failed to check vector dimension: %s", e)
-            return
+            logger.warning("⚠️ Could not fetch mapping for %r: %s", self._index, e)
+            return  # Don't block init; ANN calls will fail later with clearer errors.
+
+        m = mapping.get(self._index, {}).get("mappings", {})
+        actual_dim = _safe_get(m, ["properties", "vector_field", "dimension"])
+        method_engine = _norm_str(_safe_get(m, ["properties", "vector_field", "method", "engine"]))
+        method_space = _norm_str(_safe_get(m, ["properties", "vector_field", "method", "space_type"]))
+        method_name = _norm_str(_safe_get(m, ["properties", "vector_field", "method", "name"]))
 
         model_name = self._embedding_model_name or "unknown"
-        if actual_dim != expected_dim:
+        spec = MODEL_INDEX_SPECS.get(model_name)
+
+        # If we don't know the model, fall back to the dimension we probed.
+        if spec is None:
+            spec = ExpectedIndexSpec(dim=expected_dim, engine="lucene", space_type="cosinesimil", method_name="hnsw")
+
+        problems: list[str] = []
+
+        # 1) Dimension
+        if actual_dim != spec.dim:
+            problems.append(f"- Dimension mismatch: index has {actual_dim}, model '{model_name}' requires {spec.dim}.")
+
+        # 2) Engine (we standardize on lucene)
+        if (method_engine or "") != spec.engine:
+            problems.append(f"- Engine mismatch: index uses '{method_engine}', expected '{spec.engine}'. Lucene is recommended; nmslib may degrade recall and complicate filters.")
+
+        # 3) Space type (cosine for OpenAI)
+        if (method_space or "") != spec.space_type:
+            msg = f"- Space mismatch: index uses '{method_space}', expected '{spec.space_type}' for OpenAI embeddings."
+            if (method_space or "").lower() in {"l2", "euclidean"}:
+                msg += " If you must keep L2, you must L2-normalize vectors at ingest and query time (not recommended)."
+            problems.append(msg)
+
+        # 4) Method name (HNSW)
+        if (method_name or "") != spec.method_name:
+            problems.append(f"- Method mismatch: index uses '{method_name}', expected '{spec.method_name}'.")
+
+        # 5) Optional sanity: index setting 'knn' should be true
+        try:
+            settings = self._client.indices.get_settings(index=self._index)
+            knn_enabled = _safe_get(settings, [self._index, "settings", "index", "knn"])
+            if str(knn_enabled).lower() not in {"true", "1"}:
+                problems.append("- Index setting 'index.knn' is not enabled (should be true).")
+        except Exception as e:
+            logger.debug("Could not check index.knn setting: %s", e)
+
+        if problems:
             raise ValueError(
-                "❌ Vector dimension mismatch:\n"
-                f"   - OpenSearch index '{self._index}' expects: {actual_dim}\n"
-                f"   - Embedding model '{model_name}' outputs: {expected_dim}\n"
-                "💡 Make sure the index and embedding model are compatible."
+                "❌ OpenSearch index is not compatible with the configured embedding model.\n"
+                f"   Index: {self._index}\n"
+                f"   Model: {model_name}\n"
+                "   Problems:\n" + "\n".join(f"   {p}" for p in problems) + "\n\n✔ Expected vector_field.method:\n"
+                f"   engine={spec.engine}, space_type={spec.space_type}, name={spec.method_name}, dimension={spec.dim}\n"
+                "💡 Fix: recreate the index with lucene+cosinesimil (HNSW) and the correct dimension."
             )
-        logger.info("✅ Vector dimension check passed: model %r outputs %s", model_name, expected_dim)
+        else:
+            logger.info("✅ Index mapping is compatible: engine=%s space=%s method=%s dim=%s", method_engine, method_space, method_name, actual_dim)
 
     # --- helper: return a flat list of term filters (or None) ---
     def _to_filter_clause(self, f: Optional[SearchFilter]) -> Optional[List[Dict]]:
