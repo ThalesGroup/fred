@@ -91,7 +91,7 @@ RAG_TUNING = AgentTuning(
             title="PowerPoint Template Path",
             description="Filesystem path to the .pptx template used to generate the fiche.",
             required=False,
-            default="./app/agents/content_generator/templates/pptx/template_fiche_ref_projet.pptx",
+            default="template_fiche_ref_projet.pptx",
             ui=UIHints(group="PowerPoint"),
         ),
     ]
@@ -256,18 +256,18 @@ class Sloan(AgentFlow):
     # -----------------------------
     # PowerPoint filling
     # -----------------------------
-    def _fill_ppt_template(
+    async def _fill_ppt_template(
         self, output_data: Dict[str, str], project_name: str
     ) -> Path:
         """Fill PowerPoint template and style header, with fallback text for missing info."""
-        template_path = self.get_tuned_text("ppt.template_path") or ""
-        if not template_path or not os.path.exists(template_path):
-            logger.warning(
-                "Configured template not found at '%s'. Using fallback path.",
-                template_path,
-            )
-            template_path = "./app/agents/content_generator/templates/pptx/template_fiche_ref_projet.pptx"
+        
+        template_key = self.get_tuned_text("ppt.template_key") or "template_fiche_ref_projet.pptx"
 
+        # If the key already ends with .pptx, don't append another suffix
+        suffix = "" if template_key.lower().endswith(".pptx") else ".pptx"
+
+        template_path = await self.fetch_asset_blob_to_tempfile(template_key, suffix=suffix)
+    
         if not os.path.exists(template_path):
             raise FileNotFoundError(f"PowerPoint template not found: {template_path}")
 
@@ -410,7 +410,7 @@ class Sloan(AgentFlow):
             pdf_download_url: Optional[str] = None
 
             try:
-                ppt_path = self._fill_ppt_template(structured_data, project_name)
+                ppt_path =  await self._fill_ppt_template(structured_data, project_name)
             except Exception as e:
                 logger.exception("Failed to generate PPTX: %s", e)
                 error_msg = AIMessage(content=f"❌ Error generating PowerPoint: {e}")
