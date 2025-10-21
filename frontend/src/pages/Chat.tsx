@@ -15,7 +15,6 @@ import AppsIcon from "@mui/icons-material/Apps";
 import ChatIcon from "@mui/icons-material/Chat";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 
-import MenuBookIcon from "@mui/icons-material/MenuBook";
 import { Box, CircularProgress, Grid2, IconButton, Paper, Typography } from "@mui/material";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -34,7 +33,7 @@ import {
 
 const PANEL_W = { xs: 300, sm: 340, md: 360 };
 
-type PanelContentType = "agents" | "context" | "conversations" | null;
+type PanelContentType = "agents" | "conversations" | null;
 
 export default function Chat() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -89,7 +88,6 @@ export default function Chat() {
   const closePanel = () => setPanelContentType(null);
 
   const openAgentsPanel = () => openPanel("agents");
-  const openContextPanel = () => openPanel("context");
   const openConversationsPanel = () => openPanel("conversations");
 
   const handleSelectAgent = (agent: AnyAgent) => {
@@ -193,26 +191,33 @@ export default function Chat() {
             sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}
           />
         );
-      case "context":
-        return (
-          <ChatContextPickerPanel
-            selectedChatContextIds={selectedChatContextIds}
-            onChangeSelectedChatContextIds={setSelectedChatContextIds}
-            sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}
-          />
-        );
       case "conversations":
         return (
-          <ConversationList
-            sessions={sessions}
-            currentSession={currentSession}
-            onSelectSession={handleSelectSession}
-            onCreateNewConversation={handleCreateNewConversation}
-            onDeleteAllSessions={handleDeleteAllSessions}
-            onDeleteSession={handleDeleteSession}
-            isCreatingNewConversation={isCreatingNewConversation}
-            sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}
-          />
+          <Box sx={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, gap: 1 }}>
+            <ChatContextPickerPanel
+              selectedChatContextIds={selectedChatContextIds}
+              onChangeSelectedChatContextIds={setSelectedChatContextIds}
+              sx={{
+                flex: "0 0 auto",
+                maxHeight: "40%",
+                overflowY: "auto",
+                borderBottom: (t) => `1px solid ${t.palette.divider}`,
+                pb: 1,
+              }}
+            />
+            <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+              <ConversationList
+                sessions={sessions}
+                currentSession={currentSession}
+                onSelectSession={handleSelectSession}
+                onCreateNewConversation={handleCreateNewConversation}
+                onDeleteAllSessions={handleDeleteAllSessions}
+                onDeleteSession={handleDeleteSession}
+                isCreatingNewConversation={isCreatingNewConversation}
+                sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}
+              />
+            </Box>
+          </Box>
         );
       default:
         return null;
@@ -242,7 +247,7 @@ export default function Chat() {
 
   return (
     <Box ref={containerRef} sx={{ height: "100vh", position: "relative", overflow: "hidden" }}>
-      {/* Three Small Buttons to open the panels */}
+      {/* Panel toggle buttons */}
       <Box sx={buttonContainerSx}>
         <IconButton
           color={panelContentType === "agents" ? "primary" : "default"}
@@ -250,13 +255,6 @@ export default function Chat() {
           title={t("settings.assistants")}
         >
           <AppsIcon />
-        </IconButton>
-        <IconButton
-          color={panelContentType === "context" ? "primary" : "default"}
-          onClick={openContextPanel}
-          title={t("settings.chatContext")}
-        >
-          <MenuBookIcon />
         </IconButton>
         <IconButton
           color={panelContentType === "conversations" ? "primary" : "default"}
