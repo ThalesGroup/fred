@@ -53,8 +53,8 @@ from knowledge_flow_backend.features.pull.controller import PullDocumentControll
 from knowledge_flow_backend.features.pull.service import PullDocumentService
 from knowledge_flow_backend.features.resources.controller import ResourceController
 from knowledge_flow_backend.features.scheduler.controller import SchedulerController
-from knowledge_flow_backend.features.tabular.controller import TabularController
 from knowledge_flow_backend.features.statistic.controller import StatisticController
+from knowledge_flow_backend.features.tabular.controller import TabularController
 from knowledge_flow_backend.features.tag.controller import TagController
 from knowledge_flow_backend.features.vector_search.vector_search_controller import VectorSearchController
 

@@ -1,20 +1,20 @@
-import os
 import base64
 import logging
-import joblib
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
+import os
+from typing import Any, Dict, Hashable, List
 
-from typing import List, Dict, Any, Hashable
+import joblib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from scipy import stats
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier, IsolationForest
-from sklearn.preprocessing import LabelEncoder
-from sklearn.neighbors import LocalOutlierFactor
 from sklearn.decomposition import PCA
-from sklearn.metrics import confusion_matrix, accuracy_score, r2_score, mean_absolute_error, root_mean_squared_error
+from sklearn.ensemble import IsolationForest, RandomForestClassifier, RandomForestRegressor
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.metrics import accuracy_score, confusion_matrix, mean_absolute_error, r2_score, root_mean_squared_error
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import LocalOutlierFactor
+from sklearn.preprocessing import LabelEncoder
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -1,23 +1,24 @@
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from fred_core import KeycloakUser, get_current_user
 
-from knowledge_flow_backend.features.statistic.utils import clean_json
-from knowledge_flow_backend.features.statistic.structures import (
-    SetDatasetRequest,
-    DetectOutliersRequest,
-    PlotHistogramRequest,
-    PlotScatterRequest,
-    TrainModelRequest,
-    PredictRowRequest,
-    SaveModelRequest,
-    LoadModelRequest,
-    DetectOutliersMLRequest,
-    PCARequest,
-)
-from knowledge_flow_backend.features.statistic.service import StatisticService
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.utils import sanitize_sql_name
+from knowledge_flow_backend.features.statistic.service import StatisticService
+from knowledge_flow_backend.features.statistic.structures import (
+    DetectOutliersMLRequest,
+    DetectOutliersRequest,
+    LoadModelRequest,
+    PCARequest,
+    PlotHistogramRequest,
+    PlotScatterRequest,
+    PredictRowRequest,
+    SaveModelRequest,
+    SetDatasetRequest,
+    TrainModelRequest,
+)
+from knowledge_flow_backend.features.statistic.utils import clean_json
 
 logger = logging.getLogger(__name__)
 
