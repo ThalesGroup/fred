@@ -229,7 +229,9 @@ class AgentFlow:
         }
 
     @classmethod
-    def merge_settings_with_class_defaults(cls, settings: AgentSettings) -> AgentSettings:
+    def merge_settings_with_class_defaults(
+        cls, settings: AgentSettings
+    ) -> AgentSettings:
         merged = settings.model_copy(deep=True)
 
         # Ensure tuning exists

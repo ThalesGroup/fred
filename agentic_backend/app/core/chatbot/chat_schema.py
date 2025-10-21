@@ -71,7 +71,7 @@ class LinkPart(BaseModel):
     """
 
     type: Literal["link"] = "link"
-    href:  Optional[str] = None  # absolute URL
+    href: Optional[str] = None  # absolute URL
     title: Optional[str] = None  # human label; fallback to href if None
     kind: LinkKind = LinkKind.external
     rel: Optional[str] = None  # e.g. "noopener", "noreferrer", "ugc"
@@ -81,6 +81,7 @@ class LinkPart(BaseModel):
     #   set source_id = hit.id so the UI can cross-highlight.
     document_uid: Optional[str] = None
     file_name: Optional[str] = None
+
 
 class GeoPart(BaseModel):
     """

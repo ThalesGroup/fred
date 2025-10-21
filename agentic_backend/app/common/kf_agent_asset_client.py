@@ -46,6 +46,7 @@ class AssetUploadResult:
     size: int
     document_uid: Optional[str] = None
 
+
 class KfAgentAssetClient(KfBaseClient):
     """
     Client for fetching user-uploaded assets, inheriting security and retry logic.

@@ -75,8 +75,7 @@ RAG_TUNING = AgentTuning(
             title="Structured Extraction Prompt",
             description="Template for extracting structured data from RAG context. MUST contain {format_instructions} and {context} placeholders.",
             required=True,
-            default=
-"""You are an assistant that reads project reference documents.
+            default="""You are an assistant that reads project reference documents.
 Extract the following information. Ensure the content for all description fields (6-10) is translated into concise French before being put into the structured format:
 
 HEADER INFORMATION:
@@ -111,8 +110,7 @@ Context:
             title="Final Summary Prompt",
             description="Template used to generate a chat summary of the structured data. MUST contain {structured_data} placeholder.",
             required=True,
-            default=
-"""You are an assistant that summarizes project reference information for a chat user.
+            default="""You are an assistant that summarizes project reference information for a chat user.
 Given the extracted structured data below, produce a concise, readable summary in 3-5 short sentences.You must always respond in the same language as the source documents you extract information from.
 If multiple languages are detected, use the predominant one. If non are detected fall back to French.
 Do not repeat fields unnecessarily, focus on key points like project name, duration, team size, budget, and main activities.
@@ -457,7 +455,7 @@ class Sloan(AgentFlow):
             answer_text = getattr(answer_msg, "content", "")
             try:
                 assert self.parser is not None
-                structured_data = self.parser.parse(answer_text) 
+                structured_data = self.parser.parse(answer_text)
             except Exception as e:
                 logger.warning("Structured parse failed: %s", e)
                 structured_data = {"raw_text": answer_text}
