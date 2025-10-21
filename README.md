@@ -18,13 +18,14 @@ See the project site: <https://fredk8.dev>
 Contents: 
 
   - [Getting started](#getting-started)
-    - [Development mode](#development-mode)
-      - [Development environment setup](#development-environment-setup)
-        - [Dev-Container mode](#dev-container-mode)
-        - [Local (Native) Mode](#local-native-mode)
-        - [Advanced developer tips](#advanced-developer-tips)
-      - [Model configuration](#model-configuration-2)
-    - [Production mode](#production-mode)
+    - [Development environment setup](#development-environment-setup)
+      - [Option 1: Dev-Container mode (recommended)](#option-1-dev-container-mode-recommended)
+      - [Option 2: Local (Native) Mode](#option-2-local-native-mode)
+      - [Advanced developer tips](#advanced-developer-tips)
+    - [Model configuration](#model-configuration)
+    - [Start Fred components](#start-fred-components)
+    - [Head to the Fred UI!](#head-to-the-fred-ui)
+  - [Production mode](#production-mode)
   - [Agent coding academy](#agent-coding-academy)
   - [Advanced configuration](#advanced-configuration)
   - [Core Architecture and Licensing Clarity](#core-architecture-and-licensing-clarity)
@@ -34,8 +35,6 @@ Contents:
   - [Contacts](#contacts)
 
 ## Getting started
-
-### Development mode
 
 To ensure a smooth first-time experience, Fred’s maintainers designed Dev Container/Native startup to require no additional external components (except, of course, to LLM APIs).
 
@@ -53,23 +52,20 @@ By default:
 >
 > Detailed instructions for configuring your chosen model provider are provided below.
 
-#### Development environment setup
+### Development environment setup
 
 Choose how you want to prepare Fred's development environment: 
 - [Let the Dev Container do it for you](#dev-container-mode) (recommended)
 - [Install everything locally](#local-native-mode)
 
 
-##### Dev-Container mode
+#### Option 1: Dev-Container mode (recommended)
 
 Prefer an isolated environment with everything pre-installed? 
 
-The `.devcontainer` setup prepares the agentic backend, knowledge-flow backend, and frontend toolchains — no MinIO, OpenSearch, or other optional services.
+The Dev Container setup prepares the agentic backend, knowledge-flow backend, and frontend toolchains — no MinIO, OpenSearch, or other optional services.
 
-###### Start Dev container
-
-
-**Prerequisites**
+##### Prerequisites
 
 | Tool                                                                | Purpose                                  |
 |---------------------------------------------------------------------|------------------------------------------|
@@ -77,51 +73,30 @@ The `.devcontainer` setup prepares the agentic backend, knowledge-flow backend, 
 | **VS Code**                                                         | Primary IDE                              |
 | **Dev Containers extension** (`ms-vscode-remote.remote-containers`) | Opens the repo inside the container      |
 
-**Open the container**
+##### Open the container
 
 1. Clone (or open) the repository in VS Code.  
 2. Press <kbd>F1</kbd> → **Dev Containers: Reopen in Container**.  
-3. VS Code builds `.devcontainer/Dockerfile-devcontainer` and runs the post-create script.
+3. VS Code builds `.devcontainer/Dockerfile-devcontainer` and runs the ``post-create`` script.
 
 On first start the script:
 
 - Installs the Python virtual environments for `fred-core`, `agentic_backend`, and `knowledge-flow-backend`  
 - Installs `frontend/node_modules`  
 
-When the terminal prompt appears, the workspace is ready. Ports **8000**, **8111**, and **5173** are forwarded to the host.
+When the terminal prompt appears, the workspace is ready. Ports ``8000``, ``8111``, and ``5173`` are forwarded to the host.
 
-###### Model configuration
-
-Before running any services, edit `agentic_backend/config/.env`, `knowledge_flow_backend/config/.env`, and the corresponding `configuration.yaml` files inside the container following [Model configuration](#model-configuration).
-
-###### Start Fred components
-
-```bash
-# agentic backend
-cd agentic_backend && make run
-```
-
-```bash
-# knowledge-flow backend
-cd knowledge-flow-backend && make run
-```
-
-```bash
-# frontend
-cd frontend && make run
-```
-
-**Rebuilds & troubleshooting**
+##### Rebuilds & troubleshooting
 
 - Rebuild the container: <kbd>F1</kbd> → *Dev Containers: Rebuild Container*  
 - Dependencies feel stale? Delete the relevant `.venv` or `frontend/node_modules` inside the container, then rerun the associated `make` target.  
-- Need to change API keys or models? Update the backend `.env` files inside the container and restart the relevant service.
+- Need to change API keys or models? Update the backend `.env` files inside the container and restart the relevant service. See [Model configuration](#model-configuration) for more details.
 
-##### Local (Native) Mode
+#### Option 2: Local (Native) Mode
 
 Note that this native mode only applies to Unix-based OS (e.g., Mac or Linux related OS)
 
-###### Prerequisites
+##### Prerequisites
 
 <details>
   <summary>First, make sure you have all the requirements installed</summary> 
@@ -189,37 +164,14 @@ Note that this native mode only applies to Unix-based OS (e.g., Mac or Linux rel
 </details>
 
 
-###### Clone
+##### Clone the repo
 
 ```bash
 git clone https://github.com/ThalesGroup/fred.git
 cd fred
 ```
 
-###### Model configuration
-
-Next, follow [Model configuration](#model-configuration) to fill the `.env` files and choose your model provider.
-
-###### Start Fred components
-
-```bash
-# Terminal 1 – knowledge flow backend
-cd knowledge_flow_backend && make run
-```
-
-```bash
-# Terminal 2 – agentic backend
-cd agentic_backend && make run
-```
-
-```bash
-# Terminal 3 – frontend
-cd frontend && make run
-```
-
-Open <http://localhost:5173> in your browser.
-
-##### Advanced developer tips
+#### Advanced developer tips
 
 > Prerequisites:
 >
@@ -255,12 +207,12 @@ To get full VS Code Python support (linting, IntelliSense, debugging, etc.) acr
   - Provide linting, IntelliSense, formatting, and debugging using the correct Python
 </details>
 
-#### Model configuration
+### Model configuration
 
-No matter which development environment you choose, both backends rely on two `.env` files for credentials and model settings:
+No matter which development environment you choose, both backends rely on two pairs of `.env`/`configuration.yaml` files for credentials and model settings:
 
-- `agentic_backend/config/.env`
-- `knowledge_flow_backend/config/.env`
+- Agentic backend: `agentic_backend/config/.env` and `agentic_backend/config/configuration.yaml` 
+- Knowledge Flow backend: `knowledge_flow_backend/config/.env` and `knowledge_flow_backend/config/configuration.yaml`
 
 1. **Copy the templates (skip if they already exist).**
 
@@ -446,7 +398,28 @@ No matter which development environment you choose, both backends rely on two `.
 
 </details>
 
-### Production mode
+### Start Fred components
+
+```bash
+# agentic backend
+cd agentic_backend && make run
+```
+
+```bash
+# knowledge-flow backend
+cd knowledge-flow-backend && make run
+```
+
+```bash
+# frontend
+cd frontend && make run
+```
+
+### Head for the Fred UI!
+
+Open <http://localhost:5173> in your browser.
+
+## Production mode
 
 For production mode, please reach out to your DevOps team so that they tune Fred configuration to match your needs. See [this section](#advanced-configuration) on advanced configuration.
 
