@@ -1,0 +1,98 @@
+{
+    "files": {
+        "./knowledge_flow_backend/core/processors/input/pps_tabular_processor/pps_tabular_processor.py": [
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 70,
+                    "endColumn": 74,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./knowledge_flow_backend/core/processors/input/pptx_markdown_processor/pptx_markdown_processor.py": [
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 12,
+                    "endColumn": 34,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportAttributeAccessIssue",
+                "range": {
+                    "startColumn": 56,
+                    "endColumn": 60,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportAttributeAccessIssue",
+                "range": {
+                    "startColumn": 46,
+                    "endColumn": 50,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./knowledge_flow_backend/core/stores/content/minio_content_store.py": [
+            {
+                "code": "reportReturnType",
+                "range": {
+                    "startColumn": 19,
+                    "endColumn": 65,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./knowledge_flow_backend/core/stores/vector/weaviate_vector_store.py": [
+            {
+                "code": "reportAttributeAccessIssue",
+                "range": {
+                    "startColumn": 24,
+                    "endColumn": 29,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./knowledge_flow_backend/features/tabular/service.py": [
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 93,
+                    "endColumn": 102,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 103,
+                    "endColumn": 112,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./knowledge_flow_backend/features/tabular/structures.py": [
+            {
+                "code": "reportAssignmentType",
+                "range": {
+                    "startColumn": 12,
+                    "endColumn": 19,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./knowledge_flow_backend/tests/test_utils/test_processors.py": [
+            {
+                "code": "reportIncompatibleMethodOverride",
+                "range": {
+                    "startColumn": 8,
+                    "endColumn": 32,
+                    "lineCount": 1
+                }
+            }
+        ]
+    }
+}
