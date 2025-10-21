@@ -44,6 +44,7 @@ class AssetUploadResult:
     key: str
     file_name: str
     size: int
+    document_uid: Optional[str] = None
 
 
 class KfAgentAssetClient(KfBaseClient):
@@ -221,6 +222,7 @@ class KfAgentAssetClient(KfBaseClient):
                 key=meta.get("key", key),
                 file_name=meta.get("file_name", filename),
                 size=meta.get("size", 0),
+                document_uid=meta.get("document_uid", 0),
             )
 
         except requests.exceptions.HTTPError as e:

@@ -44,6 +44,7 @@ class StoredObjectInfo(BaseModel):
     content_type: Optional[str] = None
     modified: Optional[datetime] = None
     etag: Optional[str] = None
+    document_uid: Optional[str] = None
 
 
 class BaseContentStore(ABC):

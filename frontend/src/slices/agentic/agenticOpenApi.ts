@@ -414,12 +414,14 @@ export type ImageUrlPart = {
 export type LinkKind = "citation" | "download" | "external" | "dashboard" | "related" | "view";
 export type LinkPart = {
   type?: "link";
-  href: string;
+  href?: string | null;
   title?: string | null;
   kind?: LinkKind;
   rel?: string | null;
   mime?: string | null;
   source_id?: string | null;
+  document_uid?: string | null;
+  file_name?: string | null;
 };
 export type TextPart = {
   type?: "text";

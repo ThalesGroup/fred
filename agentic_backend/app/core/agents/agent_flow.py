@@ -177,7 +177,7 @@ class AgentFlow:
         """
         merged_settings = type(self).merge_settings_with_class_defaults(new_settings)
         self.agent_settings = merged_settings
-        self._tuning = merged_settings.tuning
+        self._tuning = merged_settings.tuning or type(self).tuning
         self.agent_settings.tuning = self._tuning
 
     @staticmethod
@@ -232,13 +232,18 @@ class AgentFlow:
     def merge_settings_with_class_defaults(
         cls, settings: AgentSettings
     ) -> AgentSettings:
-        """Return a copy of settings augmented with class-level defaults."""
-
         merged = settings.model_copy(deep=True)
 
-        resolved_tuning = merged.tuning or cls.tuning
-        if resolved_tuning is not None:
-            merged.tuning = resolved_tuning.model_copy(deep=True)
+        # Ensure tuning exists
+        if not merged.tuning:
+            merged.tuning = cls.tuning.model_copy(deep=True) if cls.tuning else None
+        else:
+            # Merge missing fields from class tuning
+            if cls.tuning and getattr(cls.tuning, "fields", None):
+                existing_keys = {f.key for f in (merged.tuning.fields or [])}
+                for f in cls.tuning.fields:
+                    if f.key not in existing_keys:
+                        merged.tuning.fields.append(f)
 
         merged.chat_options = cls._merge_chat_options(merged.chat_options)
         return merged
@@ -442,9 +447,10 @@ class AgentFlow:
                 user_id_override,
             )
             logger.info(
-                "UPLOADING_ASSET: Upload successful. Key: %s, Size: %d",
+                "UPLOADING_ASSET: Upload successful. Key: %s, Size: %d, document_uid: %s",
                 result.key,
                 result.size,
+                result.document_uid,
             )
             return result
         except AssetUploadError as e:
