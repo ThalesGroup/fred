@@ -103,7 +103,9 @@ export default function Chat() {
 
   const handleSelectSession = (s: SessionSchema) => {
     selectSession(s);
-    closePanel();
+    if (panelContentType !== "conversations") {
+      closePanel();
+    }
   };
 
   const handleDeleteSession = async (s: SessionSchema) => {
