@@ -1,4 +1,4 @@
-# app/core/session/stores/duckdb_session_storage.py
+# agentic_backend/core/session/stores/duckdb_session_storage.py
 # Copyright Thales 2025
 # Licensed under the Apache License, Version 2.0
 
@@ -22,7 +22,10 @@ from agentic_backend.core.chatbot.chat_schema import (
     MessagePart,
     Role,
 )
-from agentic_backend.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
+from agentic_backend.core.chatbot.metric_structures import (
+    MetricsBucket,
+    MetricsResponse,
+)
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 
 logger = logging.getLogger(__name__)

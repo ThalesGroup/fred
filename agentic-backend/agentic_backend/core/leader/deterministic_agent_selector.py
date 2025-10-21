@@ -1,4 +1,4 @@
-# app/core/agents/leader_deterministic_router_picker.py
+# agentic_backend/core/agents/leader_deterministic_router_picker.py
 
 from __future__ import annotations
 
@@ -7,7 +7,10 @@ from typing import Dict, List, Sequence, Tuple
 
 # Assuming these imports are available from your project structure
 from agentic_backend.core.agents.agent_flow import AgentFlow
-from agentic_backend.core.leader.base_agent_selector import BaseAgentSelector, RoutingDecision
+from agentic_backend.core.leader.base_agent_selector import (
+    BaseAgentSelector,
+    RoutingDecision,
+)
 
 
 @dataclass

@@ -1,4 +1,4 @@
-# app/core/agents/report_writer.py
+# agentic_backend/core/agents/report_writer.py
 # -----------------------------------------------------------------------------
 # Fred Agent: ReportWriter
 # Architecture notes (hover-friendly):

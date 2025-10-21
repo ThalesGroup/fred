@@ -1,4 +1,4 @@
-# app/agents/sentinel/sentinel.py
+# agentic_backend/agents/sentinel/sentinel.py
 # Copyright Thales 2025
 # Licensed under the Apache License, Version 2.0
 

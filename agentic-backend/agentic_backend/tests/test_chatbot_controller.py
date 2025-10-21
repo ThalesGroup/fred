@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# app/tests/controllers/test_chatbot_controller.py
+# agentic_backend/tests/controllers/test_chatbot_controller.py
 
 from fastapi import status
 from fastapi.testclient import TestClient

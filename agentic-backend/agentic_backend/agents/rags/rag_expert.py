@@ -1,4 +1,4 @@
-# app/agents/rag/rag_expert.py
+# agentic_backend/agents/rag/rag_expert.py
 # Copyright Thales 2025
 # Licensed under the Apache License, Version 2.0
 

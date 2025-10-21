@@ -1,4 +1,4 @@
-# app/agents/mcp/mcp_agent.py
+# agentic_backend/agents/mcp/mcp_agent.py
 # Copyright Thales 2025
 # Licensed under the Apache License, Version 2.0
 

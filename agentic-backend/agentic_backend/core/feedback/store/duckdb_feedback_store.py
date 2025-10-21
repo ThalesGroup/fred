@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# app/core/feedback/store/duckdb_feedback_store.py
+# agentic_backend/core/feedback/store/duckdb_feedback_store.py
 
 # Copyright Thales 2025
 #

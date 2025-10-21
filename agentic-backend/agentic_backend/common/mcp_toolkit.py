@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# app/common/mcp_toolkit.py
+# agentic_backend/common/mcp_toolkit.py
 
 """
 # McpToolkit — context-aware wrapper over MCP tools

@@ -1,4 +1,4 @@
-# app/core/http/asset_client.py (Derived from base client)
+# agentic_backend/core/http/asset_client.py (Derived from base client)
 
 from __future__ import annotations
 

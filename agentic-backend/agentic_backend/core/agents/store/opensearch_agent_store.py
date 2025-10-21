@@ -1,4 +1,4 @@
-# app/core/agents/store/opensearch_agent_store.py
+# agentic_backend/core/agents/store/opensearch_agent_store.py
 # Copyright Thales 2025
 # Apache-2.0
 

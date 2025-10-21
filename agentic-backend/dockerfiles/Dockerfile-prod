@@ -97,5 +97,5 @@ USER ${USER_NAME}
 EXPOSE 8000
 
 # Entrypoint without make
-ENTRYPOINT ["uvicorn", "app.main:create_app", "--factory"]
+ENTRYPOINT ["uvicorn", "agentic_backend.main:create_app", "--factory"]
 CMD ["--port", "8000", "--host", "0.0.0.0", "--log-level", "info", "--loop", "asyncio"]

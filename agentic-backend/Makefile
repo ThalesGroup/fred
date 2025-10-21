@@ -28,5 +28,5 @@ docker-push: ## Push the Docker image
 docker-run: ## Run the app in Docker
 	docker run -it \
 		-p $(PORT):$(PORT) \
-		-v $(realpath app/config/configuration.yaml):/app/configuration.yaml \
+		-v $(realpath config/configuration.yaml):/app/configuration.yaml \
 		$(IMAGE_FULL) --config-path /app/configuration.yaml

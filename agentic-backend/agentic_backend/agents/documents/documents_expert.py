@@ -1,4 +1,4 @@
-# app/agents/dominic/dominic.py
+# agentic_backend/agents/dominic/dominic.py
 # Copyright Thales 2025
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

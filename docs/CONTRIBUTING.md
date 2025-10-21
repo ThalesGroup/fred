@@ -221,7 +221,7 @@ Ensure tests pass **before** opening a pull request.
 
 ### 🧩 `conftest.py` and Configuration for Local Testing
 
-Both the `agentic-backend` and `knowledge_flow_backend` components include a centralized `app/tests/conftest.py` file. This shared testing convention plays a crucial role in keeping the test environments **robust, isolated, and developer-friendly**.
+Both the `agentic-backend` and `knowledge_flow_backend` components include a centralized `tests/conftest.py` file. This shared testing convention plays a crucial role in keeping the test environments **robust, isolated, and developer-friendly**.
 
 #### Why this matters:
 

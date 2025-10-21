@@ -59,7 +59,7 @@ ai:
   agents:
     - name: "Apollo"
       type: "leader"
-      class_path: "app.agents.appollo.appollo.Appollo"
+      class_path: "agentic_backend.agents.appollo.appollo.Appollo"
       enabled: true
       role: "Multi-Agent Orchestrator"
       tags: ["orchestrator"]
@@ -72,7 +72,7 @@ ai:
     - name: "Sloan"
       type: "agent"
       role: "Slides Generator Expert"
-      class_path: "app.agents.content_generator.pptx_generator.Sloan"
+      class_path: "agentic_backend.agents.content_generator.pptx_generator.Sloan"
       enabled: true
       tags: ["content"]
       chat_model: {}
@@ -81,7 +81,7 @@ ai:
         Sloan can assist with creating various types powerpoint presentations.
     - name: "Samy"
       type: "agent"
-      class_path: "app.agents.sentinel.sentinel_expert.SentinelExpert"
+      class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
       enabled: false
       role: "Opensearch instance monitoring expert"
       tags: ["monitoring"]
@@ -96,7 +96,7 @@ ai:
 
     - name: "Georges"
       type: "agent"
-      class_path: "app.agents.generalist.generalist_expert.Georges"
+      class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
       enabled: true
       role: "Generalist Assistant"
       tags: ["general"]
@@ -107,7 +107,7 @@ ai:
     - name: "Tessa"
       type: "agent"
       role: "Data Query and SQL Expert"
-      class_path: "app.agents.tabular.tabular_expert.Tessa"
+      class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
       enabled: true
       tags: ["data"]
       chat_model: {}
@@ -122,7 +122,7 @@ ai:
     - name: "Rico"
       type: "agent"
       role: "Document Retrieval Expert"
-      class_path: "app.agents.rags.rag_expert.Rico"
+      class_path: "agentic_backend.agents.rags.rag_expert.Rico"
       enabled: true
       tags: ["documents"]
       chat_model: {}
@@ -132,7 +132,7 @@ ai:
     - name: "Brontë"
       type: "agent"
       role: "Content Generator Expert"
-      class_path: "app.agents.content_generator.content_generator_expert.ContentGeneratorExpert"
+      class_path: "agentic_backend.agents.content_generator.content_generator_expert.ContentGeneratorExpert"
       enabled: false
       tags: ["content"]
       chat_model: {}
@@ -147,7 +147,7 @@ ai:
     - name: "Rico Senior"
       type: "agent"
       role: "Advanced Document Retrieval Expert"
-      class_path: "app.agents.rags.advanced_rag_expert.AdvancedRico"
+      class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
       enabled: false
       tags: ["documents"]
       chat_model: {}

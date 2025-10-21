@@ -1,4 +1,4 @@
-# app/tests/conftest.py
+# agentic_backend/tests/conftest.py
 
 import pytest
 from fastapi import APIRouter, FastAPI
@@ -79,7 +79,7 @@ def minimal_generalist_config() -> Configuration:
                     name="Georges",
                     role="Generalist",
                     description="Generalist",
-                    class_path="app.agents.generalist.generalist_expert.Georges",
+                    class_path="agentic_backend.agents.generalist.generalist_expert.Georges",
                     enabled=True,
                     model=ModelConfiguration(
                         provider="openai",

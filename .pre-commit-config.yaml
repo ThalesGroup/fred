@@ -24,7 +24,7 @@ repos:
             "-s",
             "B101,B108",
             "--",
-            "agentic-backend/app",
+            "agentic-backend/agentic_backend",
             "knowledge_flow_backend/app",
           ]
         name: sast

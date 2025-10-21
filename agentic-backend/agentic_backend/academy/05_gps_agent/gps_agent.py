@@ -1,4 +1,4 @@
-# app/core/agents/gps_agent.py
+# agentic_backend/core/agents/gps_agent.py
 # -----------------------------------------------------------------------------
 # 💡 ACADEMY AGENT: GPS AGENT (STATIC DEMO) 💡
 # This agent returns a hardcoded GeoJSON FeatureCollection to demonstrate

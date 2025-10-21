@@ -48,7 +48,7 @@ Notes on logging
 
 Used by
 -------
-`app.common.mcp_runtime.MCPRuntime`:
+`agentic_backend.common.mcp_runtime.MCPRuntime`:
 - `init()` → calls `get_mcp_client_for_agent` once.
 - `refresh()` → calls it again and swaps the client/toolkit.
 """

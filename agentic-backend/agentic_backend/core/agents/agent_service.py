@@ -30,7 +30,7 @@ class AgentAlreadyExistsException(Exception):
 
 
 def _class_path(obj_or_type) -> str:
-    """Return fully-qualified class path, e.g. 'app.agents.mcp.mcp_agent.MCPAgent'."""
+    """Return fully-qualified class path, e.g. 'agentic_backend.agents.mcp.mcp_agent.MCPAgent'."""
     t = obj_or_type if isinstance(obj_or_type, type) else type(obj_or_type)
     return f"{t.__module__}.{t.__name__}"
 

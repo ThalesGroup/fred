@@ -1,7 +1,7 @@
 // Pyright config to trigger type check in vscode if if you open
 // the monorepo without the "workspace" feature
 {
-  "include": ["agentic-backend/app", "knowledge_flow_backend/app"],
+  "include": ["agentic-backend/agentic_backend", "knowledge_flow_backend/app"],
   "reportMissingTypeStubs": false,
   "executionEnvironments": [
     {

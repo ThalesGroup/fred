@@ -26,7 +26,7 @@ class InvalidCacheError(FileNotFoundError): ...
 # ------------------------------
 # MCP & Agent setup Exceptions
 # ------------------------------
-# app/features/dynamic_agent/exceptions.py
+# agentic_backend/features/dynamic_agent/exceptions.py
 
 
 class MCPClientConnectionException(Exception):

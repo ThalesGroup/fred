@@ -15,7 +15,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/__init__.py": {
+    "agentic_backend/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -28,7 +28,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/__init__.py": {
+    "agentic_backend/agents/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -41,7 +41,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/content_generator/__init__.py": {
+    "agentic_backend/agents/content_generator/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -54,7 +54,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/content_generator/content_generator_expert.py": {
+    "agentic_backend/agents/content_generator/content_generator_expert.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -67,7 +67,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/content_generator/report_starter.py": {
+    "agentic_backend/agents/content_generator/report_starter.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -80,7 +80,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/documents/documents_expert.py": {
+    "agentic_backend/agents/documents/documents_expert.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -93,7 +93,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/generalist/__init__.py": {
+    "agentic_backend/agents/generalist/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -106,7 +106,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/generalist/generalist_expert.py": {
+    "agentic_backend/agents/generalist/generalist_expert.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -119,7 +119,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/leader/__init__.py": {
+    "agentic_backend/agents/leader/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -132,7 +132,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/leader/leader.py": {
+    "agentic_backend/agents/leader/leader.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -145,7 +145,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/leader/structures/__init__.py": {
+    "agentic_backend/agents/leader/structures/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -158,7 +158,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/leader/structures/decision.py": {
+    "agentic_backend/agents/leader/structures/decision.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -171,7 +171,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/leader/structures/plan.py": {
+    "agentic_backend/agents/leader/structures/plan.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -184,7 +184,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/leader/structures/state.py": {
+    "agentic_backend/agents/leader/structures/state.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -197,7 +197,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/rags/__init__.py": {
+    "agentic_backend/agents/rags/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -210,7 +210,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/rags/advanced_rag_expert.py": {
+    "agentic_backend/agents/rags/advanced_rag_expert.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -223,7 +223,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/rags/rag_expert.py": {
+    "agentic_backend/agents/rags/rag_expert.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -236,7 +236,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/rags/structures.py": {
+    "agentic_backend/agents/rags/structures.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -249,7 +249,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/sentinel/sentinel_expert.py": {
+    "agentic_backend/agents/sentinel/sentinel_expert.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -262,7 +262,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/agents/tabular/tabular_expert.py": {
+    "agentic_backend/agents/tabular/tabular_expert.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -275,7 +275,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/application_context.py": {
+    "agentic_backend/application_context.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -288,7 +288,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/__init__.py": {
+    "agentic_backend/common/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -301,7 +301,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/error.py": {
+    "agentic_backend/common/error.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -314,7 +314,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/mcp_runtime.py": {
+    "agentic_backend/common/mcp_runtime.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -327,7 +327,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/mcp_toolkit.py": {
+    "agentic_backend/common/mcp_toolkit.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -340,7 +340,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/mcp_utils.py": {
+    "agentic_backend/common/mcp_utils.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -353,7 +353,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/rags_settings.py": {
+    "agentic_backend/common/rags_settings.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -366,7 +366,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/rags_utils.py": {
+    "agentic_backend/common/rags_utils.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -379,7 +379,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/resilient_tool_node.py": {
+    "agentic_backend/common/resilient_tool_node.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -392,7 +392,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/structures.py": {
+    "agentic_backend/common/structures.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -405,7 +405,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/tools_utils.py": {
+    "agentic_backend/common/tools_utils.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -418,7 +418,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/utils.py": {
+    "agentic_backend/common/utils.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -431,7 +431,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/common/vector_search_client.py": {
+    "agentic_backend/common/vector_search_client.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -444,7 +444,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/__init__.py": {
+    "agentic_backend/core/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -457,7 +457,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/agent_controller.py": {
+    "agentic_backend/core/agents/agent_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -470,7 +470,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/agent_flow.py": {
+    "agentic_backend/core/agents/agent_flow.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -483,7 +483,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/agent_loader.py": {
+    "agentic_backend/core/agents/agent_loader.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -496,7 +496,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/agent_manager.py": {
+    "agentic_backend/core/agents/agent_manager.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -509,7 +509,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/agent_service.py": {
+    "agentic_backend/core/agents/agent_service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -522,7 +522,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/agent_spec.py": {
+    "agentic_backend/core/agents/agent_spec.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -535,7 +535,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/agent_state.py": {
+    "agentic_backend/core/agents/agent_state.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -548,7 +548,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/agent_supervisor.py": {
+    "agentic_backend/core/agents/agent_supervisor.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -561,7 +561,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/context_aware_tool.py": {
+    "agentic_backend/core/agents/context_aware_tool.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -574,7 +574,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/mcp_agent.py": {
+    "agentic_backend/core/agents/mcp_agent.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -587,7 +587,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/mcp_agent_toolkit.py": {
+    "agentic_backend/core/agents/mcp_agent_toolkit.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -600,7 +600,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/runtime_context.py": {
+    "agentic_backend/core/agents/runtime_context.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -613,7 +613,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/store/__init__.py": {
+    "agentic_backend/core/agents/store/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -626,7 +626,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/store/base_agent_store.py": {
+    "agentic_backend/core/agents/store/base_agent_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -639,7 +639,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/store/duckdb_agent_store.py": {
+    "agentic_backend/core/agents/store/duckdb_agent_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 3,
@@ -652,7 +652,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/agents/store/opensearch_agent_store.py": {
+    "agentic_backend/core/agents/store/opensearch_agent_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -665,7 +665,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/chatbot/__init__.py": {
+    "agentic_backend/core/chatbot/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -678,7 +678,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/chatbot/chat_schema.py": {
+    "agentic_backend/core/chatbot/chat_schema.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -691,7 +691,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/chatbot/chatbot_controller.py": {
+    "agentic_backend/core/chatbot/chatbot_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -704,7 +704,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/chatbot/message_part.py": {
+    "agentic_backend/core/chatbot/message_part.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -717,7 +717,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/chatbot/metric_structures.py": {
+    "agentic_backend/core/chatbot/metric_structures.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -730,7 +730,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/chatbot/session_orchestrator.py": {
+    "agentic_backend/core/chatbot/session_orchestrator.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -743,7 +743,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/chatbot/stream_transcoder.py": {
+    "agentic_backend/core/chatbot/stream_transcoder.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -756,7 +756,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/feedback/__init__.py": {
+    "agentic_backend/core/feedback/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -769,7 +769,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/feedback/feedback_controller.py": {
+    "agentic_backend/core/feedback/feedback_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -782,7 +782,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/feedback/feedback_service.py": {
+    "agentic_backend/core/feedback/feedback_service.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -795,7 +795,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/feedback/feedback_structures.py": {
+    "agentic_backend/core/feedback/feedback_structures.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -808,7 +808,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/feedback/store/__init__.py": {
+    "agentic_backend/core/feedback/store/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -821,7 +821,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/feedback/store/base_feedback_store.py": {
+    "agentic_backend/core/feedback/store/base_feedback_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -834,7 +834,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/feedback/store/duckdb_feedback_store.py": {
+    "agentic_backend/core/feedback/store/duckdb_feedback_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 3,
@@ -847,7 +847,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/feedback/store/opensearch_feedback_store.py": {
+    "agentic_backend/core/feedback/store/opensearch_feedback_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -860,7 +860,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/logs_controller.py": {
+    "agentic_backend/core/logs_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -873,7 +873,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/monitoring/base_history_store.py": {
+    "agentic_backend/core/monitoring/base_history_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -886,7 +886,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/monitoring/duckdb_history_store.py": {
+    "agentic_backend/core/monitoring/duckdb_history_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -899,7 +899,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/monitoring/monitoring_controller.py": {
+    "agentic_backend/core/monitoring/monitoring_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -912,7 +912,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/monitoring/opensearch_history_store.py": {
+    "agentic_backend/core/monitoring/opensearch_history_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -925,7 +925,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/session/attachement_processing.py": {
+    "agentic_backend/core/session/attachement_processing.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -938,7 +938,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/session/stores/__init__.py": {
+    "agentic_backend/core/session/stores/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -951,7 +951,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/session/stores/base_session_store.py": {
+    "agentic_backend/core/session/stores/base_session_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -964,7 +964,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/session/stores/duckdb_session_store.py": {
+    "agentic_backend/core/session/stores/duckdb_session_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -977,7 +977,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/core/session/stores/opensearch_session_store.py": {
+    "agentic_backend/core/session/stores/opensearch_session_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -990,7 +990,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/deps/__init__.py": {
+    "agentic_backend/deps/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1003,7 +1003,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/main.py": {
+    "agentic_backend/main.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1016,7 +1016,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/main_utils.py": {
+    "agentic_backend/main_utils.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1029,7 +1029,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/tests/__init__.py": {
+    "agentic_backend/tests/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1042,7 +1042,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/tests/conftest.py": {
+    "agentic_backend/tests/conftest.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1055,7 +1055,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "app/tests/test_chatbot_controller.py": {
+    "agentic_backend/tests/test_chatbot_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1074,7 +1074,7 @@
       "code": "79             row = conn.execute(\n80                 f'SELECT settings_json FROM \"{self.store._prefixed(self.table_name)}\" WHERE name = ?',\n81                 (name,),\n",
       "col_offset": 18,
       "end_col_offset": 45,
-      "filename": "app/core/agents/store/duckdb_agent_store.py",
+      "filename": "agentic_backend/core/agents/store/duckdb_agent_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -1094,7 +1094,7 @@
       "code": "98             rows = conn.execute(\n99                 f'SELECT settings_json FROM \"{self.store._prefixed(self.table_name)}\"'\n100             ).fetchall()\n",
       "col_offset": 18,
       "end_col_offset": 45,
-      "filename": "app/core/agents/store/duckdb_agent_store.py",
+      "filename": "agentic_backend/core/agents/store/duckdb_agent_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -1114,7 +1114,7 @@
       "code": "117             conn.execute(\n118                 f'DELETE FROM \"{self.store._prefixed(self.table_name)}\" WHERE name = ?',\n119                 (name,),\n",
       "col_offset": 18,
       "end_col_offset": 31,
-      "filename": "app/core/agents/store/duckdb_agent_store.py",
+      "filename": "agentic_backend/core/agents/store/duckdb_agent_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -1134,7 +1134,7 @@
       "code": "57             rows = conn.execute(\n58                 f'SELECT * FROM \"{self.store._prefixed(self.table_name)}\" ORDER BY created_at DESC'\n59             ).fetchall()\n",
       "col_offset": 18,
       "end_col_offset": 33,
-      "filename": "app/core/feedback/store/duckdb_feedback_store.py",
+      "filename": "agentic_backend/core/feedback/store/duckdb_feedback_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -1154,7 +1154,7 @@
       "code": "64             row = conn.execute(\n65                 f'SELECT * FROM \"{self.store._prefixed(self.table_name)}\" WHERE id = ?',\n66                 (feedback_id,),\n",
       "col_offset": 18,
       "end_col_offset": 33,
-      "filename": "app/core/feedback/store/duckdb_feedback_store.py",
+      "filename": "agentic_backend/core/feedback/store/duckdb_feedback_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,
@@ -1174,7 +1174,7 @@
       "code": "94             result = conn.execute(\n95                 f'DELETE FROM \"{self.store._prefixed(self.table_name)}\" WHERE id = ?',\n96                 (feedback_id,),\n",
       "col_offset": 18,
       "end_col_offset": 31,
-      "filename": "app/core/feedback/store/duckdb_feedback_store.py",
+      "filename": "agentic_backend/core/feedback/store/duckdb_feedback_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
         "id": 89,

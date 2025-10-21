@@ -1,4 +1,4 @@
-# app/core/session/stores/duckdb_session_storage.py
+# agentic_backend/core/session/stores/duckdb_session_storage.py
 
 import logging
 from datetime import datetime, timezone

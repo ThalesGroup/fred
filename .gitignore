@@ -45,7 +45,7 @@ pip-delete-this-directory.txt
 
 # Monitoring logs
 
-agentic-backend/app/monitoring/logs/*.jsonl
+agentic-backend/agentic_backend/monitoring/logs/*.jsonl
 
 # Unit test / coverage reports
 htmlcov/

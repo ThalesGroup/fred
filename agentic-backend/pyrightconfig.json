@@ -1,7 +1,7 @@
 // Pyright config used when opening project with workspace
 // in vscode and by the pyright CLI
 {
-  "include": ["app"],
+  "include": ["agentic_backend"],
   "typeCheckingMode": "basic",
   "reportMissingTypeStubs": false
 }

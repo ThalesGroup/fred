@@ -1,4 +1,4 @@
-# app/core/agents/prompt_probe.py
+# agentic_backend/core/agents/prompt_probe.py
 # -----------------------------------------------------------------------------
 # Fred Agent: PromptProbe (skeleton)
 # Goal: expose REQUIRED prompt fields in the UI so you can edit/test them.

@@ -1,4 +1,4 @@
-# app/core/runtime_source.py
+# agentic_backend/core/runtime_source.py
 # Contains the registry and decorator for exposing runtime source code.
 
 from typing import Callable, TypeVar

@@ -1,4 +1,4 @@
-# app/core/agents/slide_maker.py
+# agentic_backend/core/agents/slide_maker.py
 # -----------------------------------------------------------------------------
 # 💡 ACADEMY AGENT: SLIDE MAKER 💡
 # This agent demonstrates two key patterns for asset generation:
@@ -25,7 +25,12 @@ from typing_extensions import Annotated
 from agentic_backend.common.kf_agent_asset_client import AssetRetrievalError
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
-from agentic_backend.core.chatbot.chat_schema import LinkKind, LinkPart, MessagePart, TextPart
+from agentic_backend.core.chatbot.chat_schema import (
+    LinkKind,
+    LinkPart,
+    MessagePart,
+    TextPart,
+)
 from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)

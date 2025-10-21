@@ -409,7 +409,7 @@ For production mode, please reach out to your DevOps team so that they tune Fred
 
 ## Agent coding academy
 
-Refer to the [academy](./agentic-backend/app/academy/ACADEMY.md) 
+Refer to the [academy](./agentic-backend/agentic_backend/academy/ACADEMY.md) 
 
 ## Advanced configuration
 

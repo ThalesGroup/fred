@@ -1,4 +1,4 @@
-# app/core/http/knowledge_flow_client.py
+# agentic_backend/core/http/knowledge_flow_client.py
 
 from __future__ import annotations
 

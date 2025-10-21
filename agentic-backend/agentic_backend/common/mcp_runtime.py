@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# app/common/mcp_runtime.py
+# agentic_backend/common/mcp_runtime.py
 
 """
 # MCPRuntime — one place to own MCP init/refresh/close across agents

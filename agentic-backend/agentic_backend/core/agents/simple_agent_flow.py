@@ -1,4 +1,4 @@
-# app/core/agents/async_simple_expert_flow.py (REFACTORED BASE CLASS)
+# agentic_backend/core/agents/async_simple_expert_flow.py (REFACTORED BASE CLASS)
 
 # Copyright Thales 2025
 #
