@@ -1,83 +1,65 @@
-# -----------------------------------------------------------------------------
-# Frontend builder image
-# -----------------------------------------------------------------------------
-FROM mirror.gcr.io/node:22.13.0-slim AS frontend
+FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 
-# Install dependencies
+ARG USERNAME=vscode
+ARG USER_UID=1000
+ARG USER_GID=${USER_UID}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
 RUN apt-get update && \
-    apt-get install -y make
+    apt-get install -y --no-install-recommends \
+        bash-completion \
+        build-essential \
+        ca-certificates \
+        curl \
+        fd-find \
+        git \
+        gnupg \
+        jq \
+        less \
+        libffi-dev \
+        libpq-dev \
+        libsqlite3-dev \
+        libssl-dev \
+        locales \
+        make \
+        pandoc \
+        python3 \
+        python3-venv \
+        python3-pip \
+        sqlite3 \
+        sudo \
+        unzip \
+        wget \
+        xz-utils \
+        zip \
+        libreoffice \
+        fonts-dejavu \
+        tmux && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g npm@latest && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy project files
-COPY frontend /app/frontend
+RUN YQ_VERSION="4.44.3" && \
+    curl -L "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" -o /usr/local/bin/yq && \
+    chmod +x /usr/local/bin/yq
 
-# Move to workdir
-WORKDIR /app/frontend
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    mv /root/.local/bin/uv /usr/local/bin/uv && \
+    chmod +x /usr/local/bin/uv
 
-# Install node deps
-RUN make node_modules
+RUN if ! id -u ${USERNAME} >/dev/null 2>&1; then \
+        groupadd --gid ${USER_GID} ${USERNAME} && \
+        useradd --uid ${USER_UID} --gid ${USER_GID} -m ${USERNAME} && \
+        usermod -aG sudo ${USERNAME}; \
+    fi && \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME}
 
-# -----------------------------------------------------------------------------
-# backend builder image
-# -----------------------------------------------------------------------------
-FROM mirror.gcr.io/python:3.12.8-slim AS backend
+USER ${USERNAME}
 
-# Set the poetry env
-ENV POETRY_VIRTUALENVS_CREATE=true
-ENV POETRY_VIRTUALENVS_IN_PROJECT=true
-ENV POETRY_CACHE_DIR=/tmp/poetry_cache
+WORKDIR /workspaces
 
-# Install dependencies
-RUN apt-get update && \
-    apt-get install -y make
+ENV PATH="/home/${USERNAME}/.local/bin:${PATH}"
 
-# Copy project files
-COPY backend /app/backend
-
-# Install poetry
-RUN pip install poetry==1.7.1
-
-# Move to workdir
-WORKDIR /app/backend
-
-# Install dependancies for bid_gpt
-RUN make dev
-
-# -----------------------------------------------------------------------------
-# Dev container image
-# -----------------------------------------------------------------------------
-FROM mirror.gcr.io/debian:12-slim
-
-ARG USER_NAME=fred-user
-ARG USER_ID=1000
-ARG GROUP_ID=1000
-
-# Install dependencies
-RUN apt-get update && \
-    apt-get install -y make git libsqlite3-0
-
-# Setup user
-RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
-    useradd -s /bin/bash -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME} && \
-    mkdir /app /opt/python && \
-    chown -R ${USER_ID}:${GROUP_ID} /app /opt/python
-
-# Copy bin and lib node and python
-COPY --from=frontend /usr/local /usr/local
-COPY --from=backend /usr/local /usr/local
-
-# Copy  deps lib node and python
-COPY --from=frontend --chown=${USER_ID}:${GROUP_ID} /app/frontend/node_modules /app/frontend/node_modules
-COPY --from=backend --chown=${USER_ID}:${GROUP_ID} /app/backend/.venv /app/backend/.venv
-COPY --from=backend --chown=${USER_ID}:${GROUP_ID} /app/backend/target /app/backend/target
-
-# Change user
-USER ${USER_NAME}
-
-# Move to workdir
-WORKDIR /app
-
-# Expose default ports
-EXPOSE 8000
-EXPOSE 5173
-
-ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["sleep", "infinity"]
