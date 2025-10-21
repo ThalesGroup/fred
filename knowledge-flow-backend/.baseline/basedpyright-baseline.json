@@ -83,16 +83,6 @@
                     "lineCount": 1
                 }
             }
-        ],
-        "./knowledge_flow_backend/tests/test_utils/test_processors.py": [
-            {
-                "code": "reportIncompatibleMethodOverride",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 32,
-                    "lineCount": 1
-                }
-            }
         ]
     }
 }

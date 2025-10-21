@@ -72,9 +72,7 @@ def configure_logging(log_level: str):
         datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[RichHandler(rich_tracebacks=False, show_time=False, show_path=False)],
     )
-    logging.getLogger(__name__).info(
-        f"Logging configured at {log_level.upper()} level."
-    )
+    logging.getLogger(__name__).info(f"Logging configured at {log_level.upper()} level.")
 
 
 def load_environment(dotenv_path: str = "./config/.env"):
@@ -101,9 +99,7 @@ async def main():
             logger.info("🛠️ Launching Temporal ingestion scheduler (backend: temporal)")
             await run_worker(configuration.scheduler.temporal)
         else:
-            raise ValueError(
-                f"Scheduler is enabled but unsupported backend '{configuration.scheduler.backend}' was provided. Expected: 'temporal'. Please check your configuration.yaml."
-            )
+            raise ValueError(f"Scheduler is enabled but unsupported backend '{configuration.scheduler.backend}' was provided. Expected: 'temporal'. Please check your configuration.yaml.")
 
 
 if __name__ == "__main__":
