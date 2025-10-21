@@ -78,6 +78,7 @@ def load_environment(dotenv_path: str = "./config/.env"):
 
 
 def load_configuration():
+    load_environment()
     config_file = os.environ.get("CONFIG_FILE", "./config/configuration.yaml")
     configuration: Configuration = parse_server_configuration(config_file)
     logger.info(f"✅ Loaded configuration from: {config_file}")
