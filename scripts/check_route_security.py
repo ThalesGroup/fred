@@ -13,7 +13,7 @@ from typing import Dict, List, Set, Optional
 
 def setup_backend_environment(backend_dir: Path):
     """Setup environment to import the FastAPI app."""
-    app_dir = backend_dir / "app"
+    app_dir = backend_dir / "knowledge_flow_backend"
     config_dir = backend_dir / "config"
     
     # Validate backend directory structure

@@ -71,7 +71,7 @@ update-agentic-api: ## update the generated hooks used in UI based on agentic ba
 .PHONY: update-knowledge-flow-api
 update-knowledge-flow-api: ## update the generated hooks used in UI based on knowledge-flow backend openApi spec
 	@echo "🔧 Generating knowledge-flow backend OpenAPI specification..."
-	cd ../knowledge_flow_backend && make generate-openapi
+	cd ../knowledge-flow-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for knowledge-flow backend..."
 	npx -y @rtk-query/codegen-openapi src/slices/knowledgeFlow/knowledgeFlowOpenApiConfig.json
 
