@@ -17,6 +17,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
+import { AgentChipWithIcon } from "../../common/AgentChip.tsx";
 import { getConfig } from "../../common/config.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
@@ -34,7 +35,6 @@ import {
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { getAgentBadge } from "../../utils/avatar.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import { keyOf, mergeAuthoritative, sortMessages, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import ChatKnowledge from "./ChatKnowledge.tsx";
@@ -607,7 +607,8 @@ const ChatBot = ({
                   flexWrap: "nowrap",
                 }}
               >
-                {getAgentBadge(currentAgent.name, currentAgent.type === "leader")}
+                <AgentChipWithIcon agent={currentAgent} />
+
                 <Typography variant="h5" sx={{ fontWeight: 600, letterSpacing: 0.2 }}>
                   {t("chatbot.startNew", { name: currentAgent.name })}
                 </Typography>

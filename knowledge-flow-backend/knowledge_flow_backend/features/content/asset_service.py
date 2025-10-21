@@ -39,6 +39,7 @@ class AssetMeta(BaseModel):
     size: int
     etag: Optional[str] = None
     modified: Optional[str] = None
+    document_uid:  Optional[str] = ""
     extra: dict = Field(default_factory=dict)
 
 
@@ -98,6 +99,7 @@ class AssetService:  # RENAMED from AgentAssetService
             content_type=ct,
             size=info.size,
             etag=info.etag,
+            document_uid=info.document_uid,
             modified=info.modified.isoformat() if info.modified else None,
         )
 
@@ -120,11 +122,11 @@ class AssetService:  # RENAMED from AgentAssetService
 
         # 0️⃣ Get or create the "user_asset" tag
         existing_tags = tag_service.list_all_tags_for_user(user, tag_type=TagType.DOCUMENT)
-        user_asset_tag = next((t for t in existing_tags if t.name == "user_asset"), None)
+        user_asset_tag = next((t for t in existing_tags if t.name == "User Space"), None)
         if user_asset_tag is None:
             created_tag = tag_service.create_tag_for_user(
                 TagCreate(
-                    name="user_asset",
+                    name="User Space",
                     path=None,
                     description="Generic tag for all files uploaded by users",
                     type=TagType.DOCUMENT,
@@ -161,7 +163,8 @@ class AssetService:  # RENAMED from AgentAssetService
         storage_key = self._prefix(scope, entity_id) + norm_key
         ct = content_type or (mimetypes.guess_type(file_name or norm_key)[0]) or "application/octet-stream"
         info = self.store.put_object(storage_key, final_file_path.open("rb"), content_type=ct)
-
+        info.document_uid = metadata.document_uid
+        
         # Clean up
         shutil.rmtree(tmp_dir, ignore_errors=True)
 

@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Outlet } from "react-router-dom";
+import { Box, CssBaseline } from "@mui/material";
 import { useContext } from "react";
+import { Outlet } from "react-router-dom";
 import { ApplicationContext } from "./ApplicationContextProvider";
 import SideBar from "./SideBar";
-import { Box, CssBaseline } from "@mui/material";
 
 export const LayoutWithSidebar = ({ children }: React.PropsWithChildren<{}>) => {
   const { darkMode, toggleDarkMode } = useContext(ApplicationContext);
@@ -24,18 +24,30 @@ export const LayoutWithSidebar = ({ children }: React.PropsWithChildren<{}>) => 
   return (
     <>
       <CssBaseline enableColorScheme />
-      <Box sx={{ display: "flex" }}>
+      {/* 🔒 App frame owns the viewport; prevent body scrolling */}
+      <Box
+        sx={{
+          display: "flex",
+          height: "100vh", // viewport-locked container
+          overflow: "hidden", // body never scrolls; only inner panes do
+        }}
+      >
         <SideBar darkMode={darkMode} onThemeChange={toggleDarkMode} />
+
+        {/* 👉 Right pane is a flex column that hosts the routed pages */}
         <Box
           sx={{
-            flexGrow: 1,
-            display: 'flex', // Add display flex
-            flexDirection: 'column', // Add flex direction column
-            width: '100%', // Ensure it takes full width
+            flex: 1,
+            minWidth: 0, // prevents flex overflow with long content
+            display: "flex",
+            flexDirection: "column",
           }}
         >
-          {children}
-          <Outlet />
+          {/* 🌀 This is the ONLY vertical scroller in the app shell */}
+          <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
+            {children}
+            <Outlet />
+          </Box>
         </Box>
       </Box>
     </>

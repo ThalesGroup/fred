@@ -11,8 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+import AppsIcon from "@mui/icons-material/Apps";
+import ChatIcon from "@mui/icons-material/Chat";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import { Box, CircularProgress, Divider, Grid2, IconButton, Paper, Typography } from "@mui/material";
+
+import { Box, CircularProgress, Grid2, IconButton, Paper, Typography } from "@mui/material";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../common/agent";
@@ -20,7 +23,6 @@ import ChatBot from "../components/chatbot/ChatBot";
 import AgentsList from "../components/chatbot/settings/AgentList";
 import { ChatContextPickerPanel } from "../components/chatbot/settings/ChatContextPickerPanel";
 import { ConversationList } from "../components/chatbot/settings/ConversationList";
-import { SidePanelToggle } from "../components/SidePanelToogle";
 import { useSessionOrchestrator } from "../hooks/useSessionOrchestrator";
 import {
   SessionSchema,
@@ -30,6 +32,8 @@ import {
 } from "../slices/agentic/agenticOpenApi";
 
 const PANEL_W = { xs: 300, sm: 340, md: 360 };
+
+type PanelContentType = "agents" | "conversations" | null;
 
 export default function Chat() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -74,19 +78,33 @@ export default function Chat() {
 
   const [baseRuntimeContext] = useState<Record<string, any>>({});
   const [selectedChatContextIds, setSelectedChatContextIds] = useState<string[]>([]);
-  const [agentsOpen, setAgentsOpen] = useState(false);
 
-  const openAgents = () => setAgentsOpen(true);
-  const closeAgents = () => setAgentsOpen(false);
+  const [panelContentType, setPanelContentType] = useState<PanelContentType>(null);
+  const isPanelOpen = panelContentType !== null;
 
-  const handleSelectAgent = (agent: AnyAgent) => selectAgentForCurrentSession(agent);
+  const openPanel = (type: PanelContentType) => {
+    setPanelContentType(panelContentType === type ? null : type);
+  };
+  const closePanel = () => setPanelContentType(null);
+
+  const openAgentsPanel = () => openPanel("agents");
+  const openConversationsPanel = () => openPanel("conversations");
+
+  const handleSelectAgent = (agent: AnyAgent) => {
+    selectAgentForCurrentSession(agent);
+  };
 
   const handleCreateNewConversation = () => {
     startNewConversation();
-    if (!agentsOpen) setAgentsOpen(true);
+    if (panelContentType !== "agents") setPanelContentType("agents");
   };
 
-  const handleSelectSession = (s: SessionSchema) => selectSession(s);
+  const handleSelectSession = (s: SessionSchema) => {
+    selectSession(s);
+    if (panelContentType !== "conversations") {
+      closePanel();
+    }
+  };
 
   const handleDeleteSession = async (s: SessionSchema) => {
     try {
@@ -105,7 +123,7 @@ export default function Chat() {
         .unwrap()
         .catch((e) => {
           console.error(`Failed to delete session ${session.id}`, e);
-        })
+        }),
     );
     try {
       await Promise.all(deletePromises);
@@ -161,22 +179,96 @@ export default function Chat() {
     );
   }
 
+  // Helper function to render the correct panel content
+  const renderPanelContent = () => {
+    switch (panelContentType) {
+      case "agents":
+        return (
+          <AgentsList
+            agents={enabledAgents}
+            selected={currentAgent}
+            onSelect={handleSelectAgent}
+            sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}
+          />
+        );
+      case "conversations":
+        return (
+          <Box sx={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, gap: 1 }}>
+            <ChatContextPickerPanel
+              selectedChatContextIds={selectedChatContextIds}
+              onChangeSelectedChatContextIds={setSelectedChatContextIds}
+              sx={{
+                flex: "0 0 auto",
+                maxHeight: "40%",
+                overflowY: "auto",
+                borderBottom: (t) => `1px solid ${t.palette.divider}`,
+                pb: 1,
+              }}
+            />
+            <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+              <ConversationList
+                sessions={sessions}
+                currentSession={currentSession}
+                onSelectSession={handleSelectSession}
+                onCreateNewConversation={handleCreateNewConversation}
+                onDeleteAllSessions={handleDeleteAllSessions}
+                onDeleteSession={handleDeleteSession}
+                isCreatingNewConversation={isCreatingNewConversation}
+                sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}
+              />
+            </Box>
+          </Box>
+        );
+      default:
+        return null;
+    }
+  };
+
+  // --- START MODIFIED SECTION ---
+  const buttonContainerSx = {
+    position: "absolute",
+    top: 12,
+    zIndex: 10,
+    display: "flex",
+    alignItems: "center",
+    gap: 1,
+    transition: (t) => t.transitions.create("left"), // Add transition for smooth movement
+
+    // Conditional left position to move the buttons when the panel is open
+    left: isPanelOpen
+      ? {
+          xs: `calc(${PANEL_W.xs}px + 12px)`,
+          sm: `calc(${PANEL_W.sm}px + 12px)`,
+          md: `calc(${PANEL_W.md}px + 12px)`,
+        }
+      : 12, // Original position when closed
+  };
+  // --- END MODIFIED SECTION ---
+
   return (
     <Box ref={containerRef} sx={{ height: "100vh", position: "relative", overflow: "hidden" }}>
-      {!agentsOpen && (
-        <Box sx={{ position: "absolute", top: 12, left: 12, zIndex: 10 }}>
-          <SidePanelToggle
-            isOpen={agentsOpen}
-            label={currentAgent ? currentAgent.name : "Assistants"}
-            onToggle={openAgents}
-          />
-        </Box>
-      )}
+      {/* Panel toggle buttons */}
+      <Box sx={buttonContainerSx}>
+        <IconButton
+          color={panelContentType === "agents" ? "primary" : "default"}
+          onClick={openAgentsPanel}
+          title={t("settings.assistants")}
+        >
+          <AppsIcon />
+        </IconButton>
+        <IconButton
+          color={panelContentType === "conversations" ? "primary" : "default"}
+          onClick={openConversationsPanel}
+          title={t("settings.conversations")}
+        >
+          <ChatIcon />
+        </IconButton>
+      </Box>
 
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: agentsOpen
+          gridTemplateColumns: isPanelOpen
             ? { xs: `${PANEL_W.xs}px 1fr`, sm: `${PANEL_W.sm}px 1fr`, md: `${PANEL_W.md}px 1fr` }
             : "0px 1fr",
           transition: (t) =>
@@ -187,70 +279,50 @@ export default function Chat() {
           height: "100%",
         }}
       >
+        {/* Side Panel */}
         <Paper
           square
-          elevation={agentsOpen ? 6 : 0}
+          elevation={isPanelOpen ? 6 : 0}
           sx={{
             overflow: "hidden",
             borderRight: (t) => `1px solid ${t.palette.divider}`,
             bgcolor: (t) => t.palette.sidebar?.background ?? t.palette.background.paper,
             display: "flex",
             flexDirection: "column",
-            pointerEvents: agentsOpen ? "auto" : "none",
+            pointerEvents: isPanelOpen ? "auto" : "none",
           }}
         >
-          <Box sx={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                px: 1,
-                py: 1,
-                borderBottom: (t) => `1px solid ${t.palette.divider}`,
-                flex: "0 0 auto",
-              }}
-            >
-              <Typography variant="h6" sx={{ flexGrow: 1, pl: 1 }}>
-                {t("settings.conversationSetup")}
-              </Typography>
+          {/* Panel Header (Static top part) */}
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              px: 1,
+              py: 1,
+              borderBottom: (t) => `1px solid ${t.palette.divider}`,
+              flex: "0 0 auto",
+            }}
+          >
+            {/* Back Button */}
+            <IconButton size="small" onClick={closePanel} sx={{ visibility: isPanelOpen ? "visible" : "hidden" }}>
+              <ChevronLeftIcon fontSize="small" />
+            </IconButton>
 
-              <IconButton size="small" onClick={closeAgents}>
-                <ChevronLeftIcon fontSize="small" />
-              </IconButton>
-            </Box>
+            {/* Title */}
+          </Box>
 
-            {/* Chat Context Section */}
-            <Box sx={{ flex: "0 0 auto" }}>
-              <ChatContextPickerPanel
-                selectedChatContextIds={selectedChatContextIds}
-                onChangeSelectedChatContextIds={setSelectedChatContextIds}
-              />
-            </Box>
-
-            <Divider />
-
-            {/* Agents Section */}
-            <AgentsList
-              agents={enabledAgents}
-              selected={currentAgent}
-              onSelect={handleSelectAgent}
-              sx={{ flex: 1, minHeight: 0, overflow: "hidden", maxHeight: "fit-content" }}
-            />
-
-            <Divider />
-
-            {/* Conversations Section */}
-            <ConversationList
-              sessions={sessions}
-              currentSession={currentSession}
-              onSelectSession={handleSelectSession}
-              onCreateNewConversation={handleCreateNewConversation}
-              onDeleteAllSessions={handleDeleteAllSessions}
-              onDeleteSession={handleDeleteSession}
-              isCreatingNewConversation={isCreatingNewConversation}
-              sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}
-            />
+          {/* Content Body (Takes the rest of the space) */}
+          <Box
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              overflowY: "auto",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            {renderPanelContent()}
           </Box>
         </Paper>
 

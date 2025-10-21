@@ -25,7 +25,7 @@ import {
 import { memo, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../../common/agent";
-import { getAgentBadge } from "../../../utils/avatar";
+import { AgentChipWithIcon } from "../../../common/AgentChip";
 
 // Public contract kept minimal on purpose:
 // - agents: source of truth from backend
@@ -126,7 +126,7 @@ const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense 
                   sx={{
                     borderRadius: 1,
                     px: 1,
-                    py: 0,
+                    py: 1,
                     // Fred: selection/hover strictly via theme tokens
                     border: `1px solid ${isSelected ? theme.palette.primary.main : theme.palette.divider}`,
                     backgroundColor: isSelected ? theme.palette.sidebar.activeItem : "transparent",
@@ -136,10 +136,12 @@ const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense 
                   }}
                 >
                   {/* Single source of avatar truth */}
-                  <Box sx={{ mr: 1, lineHeight: 0 }}>{getAgentBadge(agent.name, agent.type === "leader")}</Box>
 
+                  <AgentChipWithIcon
+                    agent={agent}
+                    sx={{ mr: 1 }} // You can keep the margin-right here
+                  />
                   <ListItemText
-                    primary={agent.name}
                     secondary={agent.role}
                     slotProps={{
                       primary: {
@@ -161,12 +163,6 @@ const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense 
           );
         })}
       </List>
-
-      {!selected && (
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, px: 1 }}>
-          {t("settings.pickAssistantToStart")}
-        </Typography>
-      )}
     </Box>
   );
 });
