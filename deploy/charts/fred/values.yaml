@@ -34,7 +34,7 @@ applications:
       enabled: true
       data:
         - "uvicorn"
-        - "app.main:create_app"
+        - "agentic_backend.main:create_app"
         - "--factory"
         - "--host"
         - "0.0.0.0"
@@ -439,7 +439,7 @@ applications:
       enabled: true
       data:
         - "uvicorn"
-        - "app.main:create_app"
+        - "knowledge_flow_backend.main:create_app"
         - "--factory"
         - "--host"
         - "0.0.0.0"

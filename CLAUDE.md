@@ -116,8 +116,8 @@ Fred is a production-ready multi-agent AI platform with three main components:
 ## Development Patterns
 
 ### Document Processing Extensions  
-1. **Input Processors**: Add new file type support in `knowledge_flow_backend/app/core/processors/input/`
-2. **Output Processors**: Custom processing logic in `knowledge_flow_backend/app/core/processors/output/`
+1. **Input Processors**: Add new file type support in `knowledge-flow-backend/knowledge_flow_backend/core/processors/input/`
+2. **Output Processors**: Custom processing logic in `knowledge-flow-backend/knowledge_flow_backend/core/processors/output/`
 3. Update processor mappings in `configuration.yaml`
 4. Add file extension to frontend upload validation
 

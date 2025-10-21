@@ -25,7 +25,7 @@ repos:
             "B101,B108",
             "--",
             "agentic-backend/agentic_backend",
-            "knowledge_flow_backend/app",
+            "knowledge-flow-backend/knowledge_flow_backend",
           ]
         name: sast
   - repo: https://github.com/DetachHead/basedpyright-pre-commit-mirror
@@ -37,5 +37,5 @@ repos:
         args: ["--project", "agentic-backend"]
       - id: basedpyright
         name: type-check-knowledge-flow
-        files: ^knowledge_flow_backend/
-        args: ["--project", "knowledge_flow_backend"]
+        files: ^knowledge-flow-backend/
+        args: ["--project", "knowledge-flow-backend"]
