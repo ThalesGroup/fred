@@ -54,6 +54,7 @@ from knowledge_flow_backend.features.pull.service import PullDocumentService
 from knowledge_flow_backend.features.resources.controller import ResourceController
 from knowledge_flow_backend.features.scheduler.controller import SchedulerController
 from knowledge_flow_backend.features.tabular.controller import TabularController
+from knowledge_flow_backend.features.statistic.controller import StatisticController
 from knowledge_flow_backend.features.tag.controller import TagController
 from knowledge_flow_backend.features.vector_search.vector_search_controller import VectorSearchController
 
@@ -154,6 +155,7 @@ def create_app() -> FastAPI:
     AssetController(router)
     IngestionController(router)
     TabularController(router)
+    StatisticController(router)
     # CodeSearchController(router)
     TagController(app, router)
     ResourceController(router)
@@ -247,6 +249,24 @@ def create_app() -> FastAPI:
         auth_config=auth_cfg,
     )
     mcp_tabular.mount_http(mount_path=f"{mcp_prefix}/mcp-tabular")
+
+    mcp_statistical = FastApiMCP(
+        app,
+        name="Knowledge Flow Statistic MCP",
+        description=(
+            "Provides endpoints to load, explore, and analyze tabular datasets,"
+            "including outlier detection and correlation analysis."
+            "Supports plotting histograms and scatter plots, plus ML operations:"
+            "training, evaluation, saving/loading models, and single-row predictions."
+        ),
+        include_tags=["Statistic"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+            dependencies=[Depends(get_current_user)]
+        ),
+    )
+    mcp_statistical.mount_http(mount_path=f"{mcp_prefix}/mcp-statistic")
 
     mcp_text = FastApiMCP(
         app,

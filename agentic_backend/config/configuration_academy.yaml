@@ -148,6 +148,20 @@ ai:
       description: >
         A generalist assistant that can handle a wide range of tasks.
         He is the default assistant that can handle any task that does not require a specialized assistant.
+    - name: "Sage"
+      type: "agent"
+      role: "Data Scientist Expert"
+      class_path: "app.agents.statistic.statistic_expert.Sage"
+      enabled: true
+      tags: ["data"]
+      chat_model: {}
+      description: >
+        An expert in data analysis able to plot graphs, analyse data and train basics ML models.
+      mcp_servers:
+        - name: knowledge-flow-mcp-server
+          transport: streamable_http
+          url: http://localhost:8111/knowledge-flow/v1/mcp-statistic
+          sse_read_timeout: 2000
 
 storage:
   postgres:
