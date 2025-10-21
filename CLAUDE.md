@@ -14,14 +14,14 @@ Fred is a production-ready multi-agent AI platform with three main components:
 2. **API Key**: Add `OPENAI_API_KEY=sk-...` to both backend `config/.env` files
 3. **Start services** in separate terminals:
    ```bash
-   cd agentic_backend && make run      # Port 8000
+   cd agentic-backend && make run      # Port 8000
    cd knowledge_flow_backend && make run # Port 8111  
    cd frontend && make run             # Port 5173
    ```
 
 ## Common Commands
 
-### Agentic Backend (`agentic_backend/`)
+### Agentic Backend (`agentic-backend/`)
 - `make run` - Start FastAPI server with hot reload on port 8000
 - `make test` - Run pytest with coverage report
 - `make clean` - Remove virtualenv and build artifacts
@@ -58,7 +58,7 @@ Fred is a production-ready multi-agent AI platform with three main components:
 - `JiraExpert` - Jira integration (via MCP server)
 - `K8SOperatorExpert` - Kubernetes operations (via MCP server)
 
-**Agent Configuration**: Agents defined in `agentic_backend/config/configuration.yaml` with enable/disable flags, MCP server connections, and model overrides.
+**Agent Configuration**: Agents defined in `agentic-backend/config/configuration.yaml` with enable/disable flags, MCP server connections, and model overrides.
 
 **MCP Integration**: Agents connect to Model Context Protocol servers for external tool access (Jira, Kubernetes, knowledge management).
 
@@ -98,7 +98,7 @@ Fred is a production-ready multi-agent AI platform with three main components:
 - `.env` for secret (like `OPENAI_API_KEY`)
 - `configuration.yaml` for everything else
 
-**Agentic Backend** (`agentic_backend/config/configuration.yaml`):
+**Agentic Backend** (`agentic-backend/config/configuration.yaml`):
 - Agent definitions with enable/disable flags
 - MCP server connections (SSE or STDIO transport)
 - Model provider settings (OpenAI/Azure/Ollama)  

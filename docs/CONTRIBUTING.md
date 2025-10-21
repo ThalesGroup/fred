@@ -221,12 +221,12 @@ Ensure tests pass **before** opening a pull request.
 
 ### 🧩 `conftest.py` and Configuration for Local Testing
 
-Both the `agentic_backend` and `knowledge_flow_backend` components include a centralized `app/tests/conftest.py` file. This shared testing convention plays a crucial role in keeping the test environments **robust, isolated, and developer-friendly**.
+Both the `agentic-backend` and `knowledge_flow_backend` components include a centralized `app/tests/conftest.py` file. This shared testing convention plays a crucial role in keeping the test environments **robust, isolated, and developer-friendly**.
 
 #### Why this matters:
 
 - **Isolated unit testing**: Each backend runs with a minimal local configuration (no OpenSearch, Keycloak, or external LLMs). This avoids coupling unit tests with infrastructure.
-- **Reliable app context**: The `ApplicationContext` is initialized with a handcrafted in-memory config (e.g., `minimal_generalist_config()` in `agentic_backend`), which provides just enough structure for testing core logic.
+- **Reliable app context**: The `ApplicationContext` is initialized with a handcrafted in-memory config (e.g., `minimal_generalist_config()` in `agentic-backend`), which provides just enough structure for testing core logic.
 - **No noise from immature configs**: Since the production `configuration.yaml` files are still evolving, using a custom `conftest.py` config helps avoid boilerplate or fragile test setups.
 - **Developer clarity**: The fixtures make it obvious how to initialize services, mock agents, or plug in `TestClient` with mounted routers—without needing to run the whole stack.
 - **Scalable to integration tests**: You can keep using this base and extend it later with additional marks (`@pytest.mark.integration`) or Docker-based services.

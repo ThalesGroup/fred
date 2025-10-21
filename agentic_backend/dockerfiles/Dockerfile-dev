@@ -32,12 +32,12 @@ ENV OPENAI_API_KEY=<MUST_BE_DEFINED>
 WORKDIR /app
 
 # Copy only dependency files first to leverage Docker layer caching
-COPY --chown=${USER_ID}:${GROUP_ID} agentic_backend/Makefile agentic_backend/pyproject.toml agentic_backend/uv.lock* /app/
+COPY --chown=${USER_ID}:${GROUP_ID} agentic-backend/Makefile agentic-backend/pyproject.toml agentic-backend/uv.lock* /app/
 COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
 
 # Copy the rest of the project files
-COPY --chown=${USER_ID}:${GROUP_ID} agentic_backend/. /app
+COPY --chown=${USER_ID}:${GROUP_ID} agentic-backend/. /app
 
 # Switch to the created user
 USER ${USER_NAME}

@@ -74,7 +74,7 @@ By default:
   graph TD
       subgraph FredComponents["Fred Components"]
         style FredComponents fill:#b0e57c,stroke:#333,stroke-width:2px  %% Green Color
-          Agentic["agentic_backend"]
+          Agentic["agentic-backend"]
           Knowledge["knowledge_flow_backend"]
           Frontend["frontend"]
       end
@@ -153,9 +153,9 @@ Then, depending on your model provider, actions may differ.
     - Chat model
       
       ```bash
-      yq eval '.ai.default_chat_model.provider = "openai"' -i agentic_backend/config/configuration.yaml
-      yq eval '.ai.default_chat_model.name = "<your-openai-model-name>"' -i agentic_backend/config/configuration.yaml
-      yq eval 'del(.ai.default_chat_model.settings)' -i agentic_backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.provider = "openai"' -i agentic-backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.name = "<your-openai-model-name>"' -i agentic-backend/config/configuration.yaml
+      yq eval 'del(.ai.default_chat_model.settings)' -i agentic-backend/config/configuration.yaml
       ```
       
   - Knowledge Flow backend configuration
@@ -193,11 +193,11 @@ Then, depending on your model provider, actions may differ.
     - Chat model
       
       ```bash
-      yq eval '.ai.default_chat_model.provider = "azure-openai"' -i agentic_backend/config/configuration.yaml
-      yq eval '.ai.default_chat_model.name = "<your-azure-openai-deployment-name>"' -i agentic_backend/config/configuration.yaml
-      yq eval 'del(.ai.default_chat_model.settings)' -i agentic_backend/config/configuration.yaml
-      yq eval '.ai.default_chat_model.settings.azure_endpoint = "<your-azure-openai-endpoint>"' -i agentic_backend/config/configuration.yaml
-      yq eval '.ai.default_chat_model.settings.azure_openai_api_version = "<your-azure-openai-api-version>"' -i agentic_backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.provider = "azure-openai"' -i agentic-backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.name = "<your-azure-openai-deployment-name>"' -i agentic-backend/config/configuration.yaml
+      yq eval 'del(.ai.default_chat_model.settings)' -i agentic-backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.settings.azure_endpoint = "<your-azure-openai-endpoint>"' -i agentic-backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.settings.azure_openai_api_version = "<your-azure-openai-api-version>"' -i agentic-backend/config/configuration.yaml
       ```
       
   - Knowledge Flow backend configuration
@@ -237,10 +237,10 @@ Then, depending on your model provider, actions may differ.
     - Chat model
       
       ```bash
-      yq eval '.ai.default_chat_model.provider = "ollama"' -i agentic_backend/config/configuration.yaml
-      yq eval '.ai.default_chat_model.name = "<your-ollama-model-name>"' -i agentic_backend/config/configuration.yaml
-      yq eval 'del(.ai.default_chat_model.settings)' -i agentic_backend/config/configuration.yaml
-      yq eval '.ai.default_chat_model.settings.base_url = "<your-ollama-endpoint>"' -i agentic_backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.provider = "ollama"' -i agentic-backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.name = "<your-ollama-model-name>"' -i agentic-backend/config/configuration.yaml
+      yq eval 'del(.ai.default_chat_model.settings)' -i agentic-backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.settings.base_url = "<your-ollama-endpoint>"' -i agentic-backend/config/configuration.yaml
       ```
       
   - Knowledge Flow backend configuration
@@ -273,15 +273,15 @@ Then, depending on your model provider, actions may differ.
     - Chat model
       
       ```bash
-      yq eval '.ai.default_chat_model.provider = "azure-apim"' -i agentic_backend/config/configuration.yaml
-      yq eval '.ai.default_chat_model.name = "<your-azure-openai-deployment-name>"' -i agentic_backend/config/configuration.yaml
-      yq eval 'del(.ai.default_chat_model.settings)' -i agentic_backend/config/configuration.yaml
-      yq eval '.ai.default_chat_model.settings.azure_ad_client_id = "<your-azure-apim-client-id>"' -i agentic_backend/config/configuration.yaml
-      yq eval '.ai.default_chat_model.settings.azure_ad_client_scope = "<your-azure-apim-client-scope>"' -i agentic_backend/config/configuration.yaml
-      yq eval '.ai.default_chat_model.settings.azure_apim_base_url = "<your-azure-apim-endpoint>"' -i agentic_backend/config/configuration.yaml
-      yq eval '.ai.default_chat_model.settings.azure_apim_resource_path = "<your-azure-apim-resource-path>"' -i agentic_backend/config/configuration.yaml
-      yq eval '.ai.default_chat_model.settings.azure_openai_api_version = "<your-azure-openai-api-version>"' -i agentic_backend/config/configuration.yaml
-      yq eval '.ai.default_chat_model.settings.azure_tenant_id = "<your-azure-tenant-id>"' -i agentic_backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.provider = "azure-apim"' -i agentic-backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.name = "<your-azure-openai-deployment-name>"' -i agentic-backend/config/configuration.yaml
+      yq eval 'del(.ai.default_chat_model.settings)' -i agentic-backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.settings.azure_ad_client_id = "<your-azure-apim-client-id>"' -i agentic-backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.settings.azure_ad_client_scope = "<your-azure-apim-client-scope>"' -i agentic-backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.settings.azure_apim_base_url = "<your-azure-apim-endpoint>"' -i agentic-backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.settings.azure_apim_resource_path = "<your-azure-apim-resource-path>"' -i agentic-backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.settings.azure_openai_api_version = "<your-azure-openai-api-version>"' -i agentic-backend/config/configuration.yaml
+      yq eval '.ai.default_chat_model.settings.azure_tenant_id = "<your-azure-tenant-id>"' -i agentic-backend/config/configuration.yaml
       ```
       
   - Knowledge Flow backend configuration
@@ -409,7 +409,7 @@ For production mode, please reach out to your DevOps team so that they tune Fred
 
 ## Agent coding academy
 
-Refer to the [academy](./agentic_backend/app/academy/ACADEMY.md) 
+Refer to the [academy](./agentic-backend/app/academy/ACADEMY.md) 
 
 ## Advanced configuration
 
@@ -418,16 +418,16 @@ Refer to the [academy](./agentic_backend/app/academy/ACADEMY.md)
 | Component              | Location                   | Role                                                                  |
 | ---------------------- | -------------------------- | --------------------------------------------------------------------- |
 | Frontend UI            | `./frontend`               | React-based chatbot                                                   |
-| Agentic backend        | `./agentic_backend`        | Multi-agent API server                                                |
+| Agentic backend        | `./agentic-backend`        | Multi-agent API server                                                |
 | Knowledge Flow backend | `./knowledge_flow_backend` | **Optional** knowledge management component (document ingestion & Co) |
 
 ### Configuration Files
 
 | File                                               | Purpose                                                 | Tip                                                                 |
 | -------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------- |
-| `agentic_backend/config/.env`                      | Secrets (API keys, passwords). Not committed to Git.    | Copy `.env.template` to `.env` and then fill in any missing values. |
+| `agentic-backend/config/.env`                      | Secrets (API keys, passwords). Not committed to Git.    | Copy `.env.template` to `.env` and then fill in any missing values. |
 | `knowledge_flow_backend/config/.env`               | Same as above                                           | Same as above                                                       |
-| `agentic_backend/config/configuration.yaml`        | Functional settings (providers, agents, feature flags). | -                                                                   |
+| `agentic-backend/config/configuration.yaml`        | Functional settings (providers, agents, feature flags). | -                                                                   |
 | `knowledge_flow_backend/config/configuration.yaml` | Same as above                                           | -                                                                   |
 
 ### Supported Model Providers
@@ -439,7 +439,7 @@ Refer to the [academy](./agentic_backend/app/academy/ACADEMY.md)
 | Azure OpenAI via Azure APIM | Add `AZURE_APIM_SUBSCRIPTION_KEY` and `AZURE_AD_CLIENT_SECRET` to `config/.env`; Adjust `configuration.yaml` |
 | Ollama (local models)       | Adjust `configuration.yaml`                                                                                  |
 
-See `agentic_backend/config/configuration.yaml` (section `ai:`) and `knowledge_flow_backend/config/configuration.yaml` (sections `chat_model:` and `embedding_model:`)  for concrete examples.
+See `agentic-backend/config/configuration.yaml` (section `ai:`) and `knowledge_flow_backend/config/configuration.yaml` (sections `chat_model:` and `embedding_model:`)  for concrete examples.
 
 ### Advanced Integrations
 
@@ -462,9 +462,9 @@ Instead, Fred is designed with a modular architecture that allows optional integ
 
 - Agentic backend
   
-  - [Agentic backend README](./agentic_backend/README.md)  
-  - [Agentic backend agentic design](./agentic_backend/docs/AGENTS.md)  
-  - [MCP capabilities for agent](./agentic_backend/docs/MCP.md)
+  - [Agentic backend README](./agentic-backend/README.md)  
+  - [Agentic backend agentic design](./agentic-backend/docs/AGENTS.md)  
+  - [MCP capabilities for agent](./agentic-backend/docs/MCP.md)
 
 - Knowledge Flow backend
 

@@ -1,5 +1,5 @@
 {
-  "schemaFile": "../../../../agentic_backend/openapi.json",
+  "schemaFile": "../../../../agentic-backend/openapi.json",
   "apiFile": "./agenticApi.ts",
   "apiImport": "agenticApi",
   "outputFile": "agenticOpenApi.ts",

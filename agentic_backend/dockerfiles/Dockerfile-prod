@@ -30,9 +30,9 @@ ENV PATH="/app/venv/bin:$PATH"
 WORKDIR /app
 
 # Copy python dependencies files
-COPY agentic_backend/pyproject.toml agentic_backend/uv.lock* /app/
+COPY agentic-backend/pyproject.toml agentic-backend/uv.lock* /app/
 # Copy Makefile-related files
-COPY agentic_backend/Makefile /app/
+COPY agentic-backend/Makefile /app/
 COPY scripts /scripts
 # Copy fred-core folder as this is a Python-dependency for the backend
 COPY fred-core /fred-core
@@ -41,7 +41,7 @@ COPY fred-core /fred-core
 RUN make dev
 
 # Copy projets
-COPY agentic_backend/. /app/
+COPY agentic-backend/. /app/
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE: PROD IMAGE
@@ -84,7 +84,7 @@ ENV PATH="/app/venv/bin:$PATH"
 WORKDIR /app
 
 # Copy app source
-COPY --chown=${USER_ID}:${GROUP_ID} agentic_backend/. /app
+COPY --chown=${USER_ID}:${GROUP_ID} agentic-backend/. /app
 COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
 

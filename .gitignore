@@ -45,7 +45,7 @@ pip-delete-this-directory.txt
 
 # Monitoring logs
 
-agentic_backend/app/monitoring/logs/*.jsonl
+agentic-backend/app/monitoring/logs/*.jsonl
 
 # Unit test / coverage reports
 htmlcov/
@@ -205,7 +205,7 @@ secrets/openai-api-key.sh
 
 
 # OpenAPI specs
-agentic_backend/openapi.json
+agentic-backend/openapi.json
 knowledge_flow_backend/openapi.json
 
 # evaluation results
