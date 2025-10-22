@@ -8,8 +8,8 @@ if [[ ! -d "fred-core/.venv" ]]; then
   (cd "fred-core" && make dev)
 fi
 
-if [[ ! -d "agentic_backend/.venv" ]]; then
-  (cd "agentic_backend" && make dev)
+if [[ ! -d "agentic-backend/.venv" ]]; then
+  (cd "agentic-backend" && make dev)
 fi
 
 if [[ ! -d "knowledge-flow-backend/.venv" ]]; then
