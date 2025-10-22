@@ -353,7 +353,9 @@ class ApplicationContext:
 
         store_config = get_configuration().storage.session_store
         if isinstance(store_config, DuckdbStoreConfig):
-            from agentic_backend.core.session.stores.duckdb_session_store import DuckdbSessionStore
+            from agentic_backend.core.session.stores.duckdb_session_store import (
+                DuckdbSessionStore,
+            )
 
             db_path = Path(store_config.duckdb_path).expanduser()
             return DuckdbSessionStore(db_path)
@@ -423,11 +425,15 @@ class ApplicationContext:
         """
         if self._history_store_instance is not None:
             return self._history_store_instance
-        from agentic_backend.core.monitoring.duckdb_history_store import DuckdbHistoryStore
+        from agentic_backend.core.monitoring.duckdb_history_store import (
+            DuckdbHistoryStore,
+        )
 
         store_config = get_configuration().storage.history_store
         if isinstance(store_config, DuckdbStoreConfig):
-            from agentic_backend.core.monitoring.duckdb_history_store import DuckdbHistoryStore
+            from agentic_backend.core.monitoring.duckdb_history_store import (
+                DuckdbHistoryStore,
+            )
 
             db_path = Path(store_config.duckdb_path).expanduser()
             return DuckdbHistoryStore(db_path)
@@ -487,12 +493,18 @@ class ApplicationContext:
         """
         if self._agent_store_instance is not None:
             return self._agent_store_instance
-        from agentic_backend.core.agents.store.duckdb_agent_store import DuckdbAgentStore
-        from agentic_backend.core.agents.store.opensearch_agent_store import OpenSearchAgentStore
+        from agentic_backend.core.agents.store.duckdb_agent_store import (
+            DuckdbAgentStore,
+        )
+        from agentic_backend.core.agents.store.opensearch_agent_store import (
+            OpenSearchAgentStore,
+        )
 
         store_config = get_configuration().storage.agent_store
         if isinstance(store_config, DuckdbStoreConfig):
-            from agentic_backend.core.agents.store.duckdb_agent_store import DuckdbAgentStore
+            from agentic_backend.core.agents.store.duckdb_agent_store import (
+                DuckdbAgentStore,
+            )
 
             db_path = Path(store_config.duckdb_path).expanduser()
             return DuckdbAgentStore(db_path)

@@ -21,7 +21,9 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 from fred_core import VectorSearchHit
 from pydantic import BaseModel, ConfigDict, Field
 
-from agentic_backend.core.agents.runtime_context import RuntimeContext  # Unchanged, as requested
+from agentic_backend.core.agents.runtime_context import (
+    RuntimeContext,  # Unchanged, as requested
+)
 
 
 # ---------- Core enums ----------

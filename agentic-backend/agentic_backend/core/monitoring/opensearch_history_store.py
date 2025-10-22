@@ -17,7 +17,10 @@ from agentic_backend.core.chatbot.chat_schema import (
     ChatMessage,
     Role,
 )
-from agentic_backend.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
+from agentic_backend.core.chatbot.metric_structures import (
+    MetricsBucket,
+    MetricsResponse,
+)
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 
 logger = logging.getLogger(__name__)

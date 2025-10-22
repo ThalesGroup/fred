@@ -45,7 +45,12 @@ from agentic_backend.core.agents.runtime_context import (
     get_document_library_tags_ids,
     get_search_policy,
 )
-from agentic_backend.core.chatbot.chat_schema import LinkKind, LinkPart, MessagePart, TextPart
+from agentic_backend.core.chatbot.chat_schema import (
+    LinkKind,
+    LinkPart,
+    MessagePart,
+    TextPart,
+)
 from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)

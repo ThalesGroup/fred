@@ -53,7 +53,10 @@ from agentic_backend.core.chatbot.chat_schema import (
     SessionWithFiles,
     StreamEvent,
 )
-from agentic_backend.core.chatbot.metric_structures import MetricsBucket, MetricsResponse
+from agentic_backend.core.chatbot.metric_structures import (
+    MetricsBucket,
+    MetricsResponse,
+)
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
 
 logger = logging.getLogger(__name__)
