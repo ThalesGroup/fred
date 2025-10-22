@@ -1,6 +1,6 @@
 import PersonAddAlt1OutlinedIcon from "@mui/icons-material/PersonAddAlt1Outlined";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Tab, Typography } from "@mui/material";
+import { Dialog, DialogContent, DialogTitle, Tab, Typography } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -71,11 +71,6 @@ export function DocumentLibraryShareDialog({ tag, open, onClose }: DocumentLibra
           <DocumentLibraryShareCurrentAccessTab tag={tag} open={open} refreshKey={refreshKey} />
         )}
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>
-          {t("common.cancel", { defaultValue: "Cancel" })}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }
