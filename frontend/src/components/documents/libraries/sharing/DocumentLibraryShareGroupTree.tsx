@@ -77,7 +77,8 @@ export function DocumentLibraryShareGroupTree({
                 pl: (theme) => theme.spacing(1 + indent),
                 pr: 1,
                 gap: 1,
-                alignItems: "flex-start",
+                alignItems: "center",
+                height: 60,
               }}
               secondaryAction={
                 <IconButton
@@ -104,7 +105,6 @@ export function DocumentLibraryShareGroupTree({
                   alignItems: "center",
                   gap: 1,
                   flex: 1,
-                  p: 1,
                   borderRadius: 1,
                   cursor: disabledForGroup ? "default" : "pointer",
                   opacity: disabledForGroup ? 0.6 : 1,
