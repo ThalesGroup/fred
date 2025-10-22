@@ -1,5 +1,15 @@
 import PersonAddAlt1OutlinedIcon from "@mui/icons-material/PersonAddAlt1Outlined";
-import { Avatar, IconButton, List, ListItem, ListItemAvatar, ListItemText, Typography } from "@mui/material";
+import {
+  alpha,
+  Avatar,
+  IconButton,
+  List,
+  ListItem,
+  ListItemAvatar,
+  ListItemText,
+  Typography,
+  useTheme,
+} from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -23,16 +33,30 @@ export function DocumentLibraryShareUsersList({
   const { t } = useTranslation();
   const { data: users = [], isLoading } = useListUsersKnowledgeFlowV1UsersGetQuery();
 
-  const filteredUsers = React.useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return users;
+  const theme = useTheme();
+  const overlayColor = theme.palette.mode === "light" ? alpha("#000", 0.1) : alpha("#fff", 0.1);
 
+  const filteredUsers = React.useMemo(() => {
     return users.filter((user) => {
+      // Remove already selected users
+      const isSelected = selectedIds.has(user.id);
+      if (isSelected) {
+        return false;
+      }
+
+      // Apply search filter
+      const query = searchQuery.trim().toLowerCase();
+      if (!query) {
+        return true;
+      }
+
       const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
       const fields = [user.username ?? "", fullName, user.id];
-      return fields.some((field) => field.toLowerCase().includes(query));
+      const isSearched = fields.some((field) => field.toLowerCase().includes(query));
+
+      return isSearched;
     });
-  }, [searchQuery, users]);
+  }, [searchQuery, users, selectedIds]);
 
   if (isLoading) {
     return (
@@ -56,17 +80,18 @@ export function DocumentLibraryShareUsersList({
         const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
         const primary = fullName || user.username || user.id;
         const secondary = user.username && fullName ? user.username : undefined;
-        const alreadySelected = selectedIds.has(user.id);
 
         return (
           <ListItem
+            sx={{
+              height: 60,
+              cursor: disabled ? "default" : "pointer",
+              "&:hover": { backgroundColor: disabled ? "transparent" : overlayColor },
+            }}
             key={user.id}
+            onClick={() => onAdd(user.id, "user", fullName)}
             secondaryAction={
-              <IconButton
-                edge="end"
-                onClick={() => onAdd(user.id, "user", fullName)}
-                disabled={disabled || alreadySelected}
-              >
+              <IconButton edge="end" disabled={disabled}>
                 <PersonAddAlt1OutlinedIcon fontSize="small" />
               </IconButton>
             }
