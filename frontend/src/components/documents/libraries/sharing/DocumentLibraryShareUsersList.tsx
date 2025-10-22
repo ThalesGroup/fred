@@ -17,8 +17,8 @@ import {
   ShareTargetResource,
   useListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery,
   useListUsersKnowledgeFlowV1UsersGetQuery,
-} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useToast } from "../../ToastProvider";
+} from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useToast } from "../../../ToastProvider";
 
 interface DocumentLibraryShareUsersListProps {
   searchQuery: string;

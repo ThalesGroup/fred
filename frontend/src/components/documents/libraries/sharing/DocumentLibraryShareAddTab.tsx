@@ -19,8 +19,8 @@ import {
   TagWithItemsId,
   UserTagRelation,
   useShareTagKnowledgeFlowV1TagsTagIdSharePostMutation,
-} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { DocumentLibraryPendingRecipientsList } from "./DocumentLibraryPendingRecipientsList";
+} from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { DocumentLibraryPendingRecipientsList } from "../DocumentLibraryPendingRecipientsList";
 import { DocumentLibraryShareGroupTree } from "./DocumentLibraryShareGroupTree";
 import { DocumentLibraryPendingRecipient } from "./DocumentLibraryShareTypes";
 import { DocumentLibraryShareUsersList } from "./DocumentLibraryShareUsersList";

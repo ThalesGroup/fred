@@ -8,7 +8,7 @@ import {
   GroupSummary,
   ShareTargetResource,
   useListGroupsKnowledgeFlowV1GroupsGetQuery,
-} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+} from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 interface DocumentLibraryShareGroupTreeProps {
   searchQuery: string;

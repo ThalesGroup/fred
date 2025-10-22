@@ -12,7 +12,7 @@ import {
 } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { UserTagRelation } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { DocumentLibraryPendingRecipient } from "./DocumentLibraryShareTypes";
+import { DocumentLibraryPendingRecipient } from "./sharing/DocumentLibraryShareTypes";
 
 interface DocumentLibraryPendingRecipientsListProps {
   items: DocumentLibraryPendingRecipient[];

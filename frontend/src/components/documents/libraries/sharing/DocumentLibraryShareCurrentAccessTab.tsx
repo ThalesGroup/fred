@@ -9,7 +9,7 @@ import {
   UserSummary,
   UserTagRelation,
   useListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery,
-} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+} from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 const relationPriority = {
   owner: 0,

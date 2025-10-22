@@ -27,7 +27,7 @@ import { useTranslation } from "react-i18next";
 import type { DocumentMetadata, TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { TagNode } from "../../tags/tagTree";
 import { DocumentRowCompact } from "./DocumentLibraryRow";
-import { DocumentLibraryShareDialog } from "./DocumentLibraryShareDialog";
+import { DocumentLibraryShareDialog } from "./sharing/DocumentLibraryShareDialog";
 
 /* --------------------------------------------------------------------------
  * Helpers

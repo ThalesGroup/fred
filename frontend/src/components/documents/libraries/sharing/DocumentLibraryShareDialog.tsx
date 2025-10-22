@@ -3,8 +3,8 @@ import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
 import { Dialog, DialogContent, DialogTitle, Tab, Typography } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { RoundTabs } from "../../RoundTabs";
+import { TagWithItemsId } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { RoundTabs } from "../../../RoundTabs";
 import { DocumentLibraryShareAddTab } from "./DocumentLibraryShareAddTab";
 import { DocumentLibraryShareCurrentAccessTab } from "./DocumentLibraryShareCurrentAccessTab";
 
