@@ -125,14 +125,6 @@ export function DocumentLibraryShareAddTab({ tag, onShared }: DocumentLibrarySha
         exclusive
         onChange={(_, value) => value && setAudience(value)}
         color="primary"
-        sx={{
-          alignSelf: "flex-start",
-          "& .MuiToggleButton-root": {
-            borderRadius: 999,
-            textTransform: "none",
-            px: 2.5,
-          },
-        }}
         disabled={isSharing}
       >
         <ToggleButton value="user">

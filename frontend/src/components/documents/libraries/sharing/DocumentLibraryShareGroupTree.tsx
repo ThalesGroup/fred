@@ -1,6 +1,6 @@
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import GroupAddOutlinedIcon from "@mui/icons-material/GroupAddOutlined";
+import KeyboardArrowRightOutlinedIcon from "@mui/icons-material/KeyboardArrowRightOutlined";
 import { Avatar, Box, Collapse, IconButton, List, ListItem, ListItemText, Typography } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -93,7 +93,11 @@ export function DocumentLibraryShareGroupTree({
             >
               {hasChildren ? (
                 <IconButton size="small" edge="start" onClick={() => toggleGroup(group.id)}>
-                  {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                  {isExpanded ? (
+                    <ExpandMoreIcon fontSize="small" />
+                  ) : (
+                    <KeyboardArrowRightOutlinedIcon fontSize="small" />
+                  )}
                 </IconButton>
               ) : (
                 <Box sx={{ width: 32 }} />
