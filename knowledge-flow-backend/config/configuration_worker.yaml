@@ -65,19 +65,19 @@ input_processors:
 #
 # output_processors:
 #   - prefix: ".docx"
-#     class_path: app.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor
+#     class_path: knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor
 #   - prefix: ".csv"
-#     class_path: app.core.processors.output.tabular_processor.tabular_processor.TabularProcessor
+#     class_path: knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor.TabularProcessor
 #   - prefix: ".xlsx"
-#     class_path: app.core.processors.output.tabular_processor.tabular_processor.TabularProcessor
+#     class_path: knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor.TabularProcessor
 #   - prefix: ".pptx"
-#     class_path: app.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor
+#     class_path: knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor
 #
 # To SKIP processing for a specific file type, you can specify an empty output processor.
 #
 # output_processors:
 #  - prefix: ".txt"
-#    class_path: app.core.processors.output.empty_output_processor.EmptyOutputProcessor
+#    class_path: knowledge_flow_backend.core.processors.output.empty_output_processor.EmptyOutputProcessor
 
 content_storage:
   # The content store type can be either "local" or "minio" or "gcs"

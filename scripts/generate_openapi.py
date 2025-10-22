@@ -15,13 +15,13 @@ def main():
     try:
         # Determine the backend directory from current working directory
         backend_dir = Path.cwd()
-        app_name = '_'.join(sys.argv[1:]) or "app"
+        app_name = '_'.join(sys.argv[1:])
         app_dir = backend_dir / app_name
         config_dir = backend_dir / "config"
         
         # Validate that we're in a valid backend directory
         if not app_dir.exists() or not (app_dir / "main.py").exists():
-            raise FileNotFoundError(f"Could not find app/main.py in {backend_dir}")
+            raise FileNotFoundError(f"Could not find main.py in {backend_dir}")
         
         if not config_dir.exists() or not (config_dir / "configuration.yaml").exists():
             raise FileNotFoundError(f"Could not find config/configuration.yaml in {backend_dir}")

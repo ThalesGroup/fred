@@ -17,7 +17,7 @@ def setup_backend_environment(backend_dir: Path):
     # --- Flexible App Directory Discovery ---
     # We check for these two paths in order
     app_dir_options = [
-        backend_dir / "app",
+        backend_dir / "agentic_backend",
         backend_dir / "knowledge_flow_backend",
     ]
     
@@ -33,13 +33,13 @@ def setup_backend_environment(backend_dir: Path):
     if not app_dir:
         raise FileNotFoundError(
             f"Could not find app/main.py in expected locations within {backend_dir}. "
-            f"Checked: {backend_dir / 'app'} and {backend_dir / 'knowledge_flow_backend'}"
+            f"Checked: {backend_dir / 'agentic_backend'} and {backend_dir / 'knowledge_flow_backend'}"
         )
     # --- End Flexible App Directory Discovery ---
     
     # Validate backend directory structure
     if not app_dir.exists() or not (app_dir / "main.py").exists():
-        raise FileNotFoundError(f"Could not find app/main.py in {backend_dir}")
+        raise FileNotFoundError(f"Could not find main.py in {backend_dir}")
     
     if not config_dir.exists() or not (config_dir / "configuration.yaml").exists():
         raise FileNotFoundError(f"Could not find config/configuration.yaml in {backend_dir}")

@@ -1,0 +1,190 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+app:
+  name: "Agentic Backend"
+  base_url: "/agentic/v1"
+  address: "127.0.0.1"
+  port: 8000
+  log_level: "info"
+  reload: false
+  reload_dir: "."
+security:
+  m2m:
+    enabled: false
+    client_id: "agentic"
+    realm_url: "http://app-keycloak:8080/realms/app"
+  user:
+    enabled: false
+    client_id: "app"
+    realm_url: "http://app-keycloak:8080/realms/app"
+  authorized_origins:
+    - "http://localhost:5173"
+frontend_settings:
+  feature_flags:
+    # If true activate the backend and frontend modules in charge of K8
+    # and frugality monitoring
+    enableK8Features: false
+    # If true activate support for an electronic warfare demonstration
+    enableElecWarfare: false
+  properties:
+    logoName: "fred"
+    siteDisplayName: "Fred"
+ai:
+  knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
+  # Timeout settings for the client
+  timeout:
+    connect: 5 # Time to wait for a connection in seconds
+    read: 15 # Time to wait for a response in seconds
+  default_chat_model:
+    # Required in .env:
+    # - OPENAI_API_KEY
+    provider: "openai"
+    name: "gpt-4o"
+    settings:
+      temperature: 0.0
+      max_retries: 2
+      request_timeout: 30
+  recursion:
+    recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
+  agents:
+    - name: "Apollo"
+      type: "leader"
+      class_path: "agentic_backend.agents.appollo.appollo.Appollo"
+      enabled: true
+      role: "Multi-Agent Orchestrator"
+      tags: ["orchestrator"]
+      crew:
+        - "Georges"
+        - "Rico"
+        - "Tessa"
+      description: >
+        An orchestrator agent that can delegate tasks to specialized agents in its crew. Appolo is capable of managing complex workflows by leveraging the expertise of its team members. Not however that Appolo is now outdated and will be replaced by Helios in the coming weeks. See items as a proof of concept.
+    - name: "Sloan"
+      type: "agent"
+      role: "Slides Generator Expert"
+      class_path: "agentic_backend.agents.content_generator.pptx_generator.Sloan"
+      enabled: true
+      tags: ["content"]
+      chat_model: {}
+      description: >
+        An expert in generating content based on templates and knowledge from the knowledge-flow backend.
+        Sloan can assist with creating various types powerpoint presentations.
+    - name: "Samy"
+      type: "agent"
+      class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
+      enabled: false
+      role: "Opensearch instance monitoring expert"
+      tags: ["monitoring"]
+      chat_model: {}
+      description: >
+        An expert in monitoring and managing Opensearch instances. Samy can analyze performance metrics, identify issues, and provide recommendations for optimization.
+      mcp_servers:
+        - name: knowledge-flow-mcp-server
+          transport: streamable_http
+          url: http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops
+          sse_read_timeout: 2000
+
+    - name: "Georges"
+      type: "agent"
+      class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
+      enabled: true
+      role: "Generalist Assistant"
+      tags: ["general"]
+      chat_model: {}
+      description: >
+        A generalist assistant that can handle a wide range of tasks. He is the default assistant that can handle any task that does not require a specialized assistant.
+
+    - name: "Tessa"
+      type: "agent"
+      role: "Data Query and SQL Expert"
+      class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
+      enabled: true
+      tags: ["data"]
+      chat_model: {}
+      description: >
+        An expert in querying databases and generating SQL queries. Tessa can assist with data retrieval, manipulation, and analysis tasks.
+      mcp_servers:
+        - name: knowledge-flow-mcp-server
+          transport: streamable_http
+          url: http://localhost:8111/knowledge-flow/v1/mcp-tabular
+          sse_read_timeout: 2000
+
+    - name: "Rico"
+      type: "agent"
+      role: "Document Retrieval Expert"
+      class_path: "agentic_backend.agents.rags.rag_expert.Rico"
+      enabled: true
+      tags: ["documents"]
+      chat_model: {}
+      description: >
+        An expert in retrieving and processing documents using retrieval-augmented generation techniques. Rico can help with tasks that involve understanding and utilizing large document collections.
+
+    - name: "Brontë"
+      type: "agent"
+      role: "Content Generator Expert"
+      class_path: "agentic_backend.agents.content_generator.content_generator_expert.ContentGeneratorExpert"
+      enabled: false
+      tags: ["content"]
+      chat_model: {}
+      description: >
+        An expert in generating content based on templates and knowledge from the knowledge-flow backend. Brontë can assist with creating various types of content efficiently.
+      mcp_servers:
+        - name: knowledge-flow-mcp-server
+          transport: streamable_http
+          url: http://localhost:8111/knowledge-flow/v1/mcp-resources
+          sse_read_timeout: 2000
+
+    - name: "Rico Senior"
+      type: "agent"
+      role: "Advanced Document Retrieval Expert"
+      class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
+      enabled: false
+      tags: ["documents"]
+      chat_model: {}
+      description: >
+        An advanced expert in retrieving and processing documents using enhanced retrieval-augmented generation techniques. Rico Senior is capable of handling more complex document-related tasks with improved accuracy.
+      # settings:
+      #   chunk_size: 512
+      #   chunk_overlap: 64
+      mcp_servers:
+        - name: knowledge-flow-mcp-server
+          transport: streamable_http
+          url: http://localhost:8111/knowledge-flow/v1/mcp-advanced-rag
+          sse_read_timeout: 2000
+
+storage:
+  postgres:
+    host: localhost
+    port: 5432
+    database: fred
+    username: admin
+  opensearch:
+    host: https://localhost:9200
+    secure: true
+    verify_certs: false
+    username: admin
+  feedback_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/agentic/feedback.duckdb"
+  agent_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/agentic/agent.duckdb"
+  session_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/agentic/session.duckdb"
+  history_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/agentic/history.duckdb"
+  kpi_store:
+    type: "log"
+    level: "INFO"

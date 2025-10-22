@@ -5,11 +5,11 @@
       "name": "Debug Agentic Backend (configuration.yaml)",
       "type": "debugpy",
       "request": "launch",
-      "pythonPath": "${workspaceFolder}/agentic_backend/.venv/bin/python",
-      "cwd": "${workspaceFolder}/agentic_backend",
+      "pythonPath": "${workspaceFolder}/agentic-backend/.venv/bin/python",
+      "cwd": "${workspaceFolder}/agentic-backend",
       "module": "uvicorn",
       "args": [
-        "app.main:create_app",
+        "agentic_backend.main:create_app",
         "--factory",
         "--host",
         "0.0.0.0",
@@ -20,13 +20,13 @@
         "--loop",
         "asyncio",
         "--reload",
-        "--reload-dir", "${workspaceFolder}/agentic_backend/config",
+        "--reload-dir", "${workspaceFolder}/agentic-backend/config",
         "--reload-include", "*.py",
         "--reload-include", "*.yaml"
       ],
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/agentic_backend",
-        "CONFIG_FILE": "${workspaceFolder}/agentic_backend/config/configuration.yaml"
+        "PYTHONPATH": "${workspaceFolder}/agentic-backend",
+        "CONFIG_FILE": "${workspaceFolder}/agentic-backend/config/configuration.yaml"
       },
       "justMyCode": false,
       "console": "integratedTerminal"
@@ -35,11 +35,11 @@
       "name": "Debug Agentic Backend (configuration_prod.yaml)",
       "type": "debugpy",
       "request": "launch",
-      "python": "${workspaceFolder}/agentic_backend/.venv/bin/python",
-      "cwd": "${workspaceFolder}/agentic_backend",
+      "python": "${workspaceFolder}/agentic-backend/.venv/bin/python",
+      "cwd": "${workspaceFolder}/agentic-backend",
       "module": "uvicorn",
       "args": [
-        "app.main:create_app",
+        "agentic_backend.main:create_app",
         "--factory",
         "--host",
         "0.0.0.0",
@@ -50,14 +50,14 @@
         "--loop",
         "asyncio",
         "--reload",
-        "--reload-dir", "${workspaceFolder}/agentic_backend/config",
+        "--reload-dir", "${workspaceFolder}/agentic-backend/config",
         "--reload-include", "*.py",
         "--reload-include", "*.yaml",
 
       ],
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/agentic_backend",
-        "CONFIG_FILE": "${workspaceFolder}/agentic_backend/config/configuration_prod.yaml"
+        "PYTHONPATH": "${workspaceFolder}/agentic-backend",
+        "CONFIG_FILE": "${workspaceFolder}/agentic-backend/config/configuration_prod.yaml"
       },
       "justMyCode": false,
       "console": "integratedTerminal"
@@ -66,11 +66,11 @@
       "name": "Debug Agentic Academy",
       "type": "debugpy",
       "request": "launch",
-      "python": "${workspaceFolder}/agentic_backend/.venv/bin/python",
-      "cwd": "${workspaceFolder}/agentic_backend",
+      "python": "${workspaceFolder}/agentic-backend/.venv/bin/python",
+      "cwd": "${workspaceFolder}/agentic-backend",
       "module": "uvicorn",
       "args": [
-        "app.main:create_app",
+        "agentic_backend.main:create_app",
         "--factory",
         "--host",
         "0.0.0.0",
@@ -81,14 +81,14 @@
         "--loop",
         "asyncio",
         "--reload",
-        "--reload-dir", "${workspaceFolder}/agentic_backend/config",
+        "--reload-dir", "${workspaceFolder}/agentic-backend/config",
         "--reload-include", "*.py",
         "--reload-include", "*.yaml",
 
       ],
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/agentic_backend",
-        "CONFIG_FILE": "${workspaceFolder}/agentic_backend/config/configuration_academy.yaml"
+        "PYTHONPATH": "${workspaceFolder}/agentic-backend",
+        "CONFIG_FILE": "${workspaceFolder}/agentic-backend/config/configuration_academy.yaml"
       },
       "justMyCode": false,
       "console": "integratedTerminal"
@@ -176,14 +176,14 @@
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
-      "cwd": "${workspaceFolder}/agentic_backend",
+      "cwd": "${workspaceFolder}/agentic-backend",
       "args": [
         "-s",
         "-q"
       ],
       "envFile": "config/.env",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/agentic_backend/knowledge_flow_backend",
+        "PYTHONPATH": "${workspaceFolder}/agentic-backend/knowledge_flow_backend",
         "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       },
@@ -233,7 +233,7 @@
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
-      "cwd": "${workspaceFolder}/agentic_backend",
+      "cwd": "${workspaceFolder}/agentic-backend",
       "args": [
         "-s",
         "-vv",
@@ -241,7 +241,7 @@
       ],
       "envFile": "config/.env",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/agentic_backend/app",
+        "PYTHONPATH": "${workspaceFolder}/agentic-backend/agentic_backend",
         "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}",
         "LOG_LEVEL": "DEBUG"
       },
