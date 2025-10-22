@@ -17,53 +17,27 @@ mcp_utils
 =========
 
 Single-responsibility module that **creates and connects** a `MultiServerMCPClient`
-for a given agent, with outbound auth and transport-specific hardening.
+for a given agent, using the **end-user's identity token** for outbound auth.
 
-Audience
---------
-Framework developers and maintainers. Application agents should **not**
-import this directly—use `MCPRuntime` which wraps it and handles refresh/rebind.
-
-Why this exists
----------------
-- Agents may declare one or more MCP servers (OpenSearch ops, KPI services, etc.).
-- Each server can use a different transport (`stdio`, `sse`, `streamable_http`, `websocket`).
-- Outbound auth must be injected consistently (HTTP headers vs. env for stdio).
-- Auth can expire: we *retry once* on auth failures after refreshing the token.
-- We want strong, **safe** logging (no secret leakage) and helpful diagnostics.
+This module enforces user identity propagation and **removes M2M fallback**.
 
 Contract
 --------
-- Returns a connected `MultiServerMCPClient` with all configured servers attached.
-- Raises `ExceptionGroup` if **any** server fails after retries (so devs see the full set).
-- Only allows transports we know how to configure; misconfig leads to
-  `UnsupportedTransportError`.
-
-Notes on logging
-----------------
-- We mask auth headers in logs (`present:Bearer <first8>…`).
-- We record which transports and URLs were used (with trailing slash normalization
-  where required).
-- On failure we log per-server errors and summarize.
-
-Used by
--------
-`app.common.mcp_runtime.MCPRuntime`:
-- `init()` → calls `get_mcp_client_for_agent` once.
-- `refresh()` → calls it again and swaps the client/toolkit.
+- Requires an `access_token_provider` (a callable) to fetch the user's token
+  before connecting to any MCP server.
+- Returns a connected `MultiServerMCPClient`.
+- Raises `ExceptionGroup` if **any** server fails to connect.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from datetime import timedelta
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
-from app.application_context import get_app_context
 from app.common.error import UnsupportedTransportError
 from app.common.structures import AgentSettings
 
@@ -83,73 +57,35 @@ class MCPConnectionError(Exception):
 
 
 def _mask_auth_value(v: str | None) -> str:
-    """Return a non-sensitive label for Authorization header values.
-
-    - If value is falsy → "none"
-    - If value starts with "Bearer " → "present:Bearer xxxxxxxx…"
-    - Otherwise → "present"
-
-    This keeps logs useful without leaking secrets.
-    """
+    """Return a non-sensitive label for Authorization header values."""
     if not v:
         return "none"
     if v.lower().startswith("bearer "):
+        # Always mask the bulk of the token
         return "present:Bearer " + v[7:15] + "…"
     return "present"
 
 
-def _auth_headers() -> Dict[str, str]:
-    """Build HTTP Authorization headers for outbound MCP requests.
+def _auth_headers(access_token: str | None) -> Dict[str, str]:
+    """Build HTTP Authorization headers using the provided access token.
 
-    We consult the app-level outbound auth provider (if configured).
-    - If a token is available, return {"Authorization": "Bearer <token>"}.
-    - Otherwise return an empty dict.
-
-    Returns:
-        Dict of headers suitable for HTTP transports (SSE, streamable_http, websocket).
+    If the token is missing, returns an empty dict (connection will fail 401).
     """
-    oa = get_app_context().get_outbound_auth()
-    provider = getattr(oa.auth, "_provider", None)  # internal by design
-    if callable(provider):
-        try:
-            token = provider()
-        except Exception:
-            return {}
-        if token:
-            return {"Authorization": f"Bearer {token}"}
+    if access_token:
+        return {"Authorization": f"Bearer {access_token}"}
     return {}
 
 
-def _auth_stdio_env() -> Dict[str, str]:
+def _auth_stdio_env(access_token: str | None) -> Dict[str, str]:
     """Build env vars used to pass auth to stdio transports.
 
-    stdio servers don't see HTTP headers, so we mirror the Authorization header
-    as environment variables to maximize compatibility:
-
-    - MCP_AUTHORIZATION
-    - AUTHORIZATION
-
-    Returns:
-        Environment variable mapping (possibly empty).
+    Mirrors the Authorization header as environment variables.
     """
-    hdrs = _auth_headers()
+    hdrs = _auth_headers(access_token)
     if not hdrs:
         return {}
     val = hdrs["Authorization"]
     return {"MCP_AUTHORIZATION": val, "AUTHORIZATION": val}
-
-
-def _is_auth_error(exc: BaseException) -> bool:
-    """Heuristic to detect auth failures from adapter exceptions.
-
-    Some adapter layers surface HTTP auth errors without structured status codes.
-    We fallback to message inspection.
-
-    Returns:
-        True if the exception likely indicates a 401/Unauthorized, else False.
-    """
-    msg = str(exc)
-    return "401" in msg or "Unauthorized" in msg
 
 
 # --- small, clear constants (Fred rationale: fast-fail, let retry loop recover) ---
@@ -159,13 +95,18 @@ CONNECT_TIMEOUT_TD = timedelta(seconds=CONNECT_TIMEOUT_SECS)
 SSE_READ_TIMEOUT_TD = timedelta(seconds=SSE_READ_TIMEOUT_SECS)
 
 
-def _build_streamable_http_kwargs(server, headers: dict[str, str]) -> dict[str, Any]:
+def _build_streamable_http_kwargs(
+    server, headers: dict[str, str], env: dict[str, str]
+) -> dict[str, Any]:
     """
     Fred rationale: build explicit, inspectable kwargs for one server.
     Only supports streamable_http here (narrow & simple).
     """
     if not server.url:
         raise ValueError(f"{server.name}: missing URL for streamable_http")
+
+    # We only use streamable_http, so only headers are relevant here.
+    # The `env` parameter is included for completeness for other transports.
     kw: dict[str, Any] = {
         "server_name": server.name,
         "transport": "streamable_http",
@@ -175,6 +116,8 @@ def _build_streamable_http_kwargs(server, headers: dict[str, str]) -> dict[str, 
     }
     if headers:
         kw["headers"] = dict(headers)
+    if env:
+        kw["env"] = dict(env)
     return kw
 
 
@@ -185,83 +128,15 @@ async def _cleanup_client_quiet(client: MultiServerMCPClient) -> None:
         pass
 
 
-async def _retry_auth_once(
-    oa,
-    client: MultiServerMCPClient,
-    server,
-    connect_kwargs: dict[str, Any],
-    auth_label: str,
-) -> None:
-    """
-    Fred rationale: one conservative auth retry path.
-    """
-    refresh_fn = getattr(oa, "refresh", None)
-    if callable(refresh_fn):
-        try:
-            refresh_fn()
-        except Exception:
-            logger.warning("Auth refresh failed", exc_info=True)
-            # best-effort; continue with retry anyway
-            pass
-
-    fresh_headers = _auth_headers()
-    fresh_label = _mask_auth_value(fresh_headers.get("Authorization"))
-    if fresh_headers:
-        connect_kwargs["headers"] = dict(fresh_headers)
-    else:
-        connect_kwargs.pop("headers", None)
-
-    start = time.perf_counter()
-    try:
-        await client.connect_to_server(**connect_kwargs)
-        dur_ms = (time.perf_counter() - start) * 1000
-        tools = client.server_name_to_tools.get(server.name, [])
-        logger.info(
-            "MCP connect ok (after refresh) name=%s transport=streamable_http url=%s auth=%s tools=%d dur_ms=%.0f",
-            server.name,
-            connect_kwargs.get("url", ""),
-            fresh_label,
-            len(tools),
-            dur_ms,
-        )
-    except asyncio.CancelledError:
-        logger.warning(
-            "🧹 [%s] connect_to_server CANCELLED", connect_kwargs.get("server_name")
-        )
-        raise
-
-    except asyncio.TimeoutError as e2:
-        dur_ms = (time.perf_counter() - start) * 1000
-        logger.info(
-            "MCP connect timeout (after refresh) name=%s transport=streamable_http url=%s auth=%s dur_ms=%.0f",
-            server.name,
-            connect_kwargs.get("url", ""),
-            fresh_label,
-            dur_ms,
-        )
-        raise e2
-    except Exception as e2:
-        dur_ms = (time.perf_counter() - start) * 1000
-        logger.info(
-            "MCP connect fail (after refresh) name=%s transport=streamable_http url=%s auth=%s dur_ms=%.0f err=%s",
-            server.name,
-            connect_kwargs.get("url", ""),
-            fresh_label,
-            dur_ms,
-            e2.__class__.__name__,
-        )
-        raise
-
-
 async def get_mcp_client_for_agent(
     agent_settings: AgentSettings,
+    # --- NEW: Accept the token provider callback ---
+    access_token_provider: Callable[[], str | None] | None = None,
+    # -----------------------------------------------
 ) -> MultiServerMCPClient:
     """
-    Streamable HTTP ONLY.
-    Fred rationale:
-    - Keep agent dev simple (just call MCPRuntime.init()).
-    - Bound every external call; return fast on failure.
-    - Manager’s retry loop handles eventual success.
+    Streamable HTTP ONLY. Creates and connects the MultiServerMCPClient using
+    the token provided by `access_token_provider`.
     """
     if not agent_settings.mcp_servers:
         raise ValueError("No MCP server configuration")
@@ -273,19 +148,29 @@ async def get_mcp_client_for_agent(
                 "This build supports only 'streamable_http'."
             )
 
-    ctx = get_app_context()
-    oa = ctx.get_outbound_auth()
+    # --- Fetch the required user token BEFORE connection attempts ---
+    access_token = access_token_provider() if access_token_provider else None
+    if not access_token:
+        # Since we removed M2M fallback, a missing token is a fatal setup error
+        raise ValueError(
+            "Access token provider did not supply a token. MCP access requires user identity."
+        )
+
+    # Build auth once for all servers
+    base_headers = _auth_headers(access_token)
+    stdio_env = _auth_stdio_env(access_token)
+    auth_label = _mask_auth_value(base_headers.get("Authorization"))
+    # ----------------------------------------------------------------
 
     client = MultiServerMCPClient()
     exceptions: list[Exception] = []
 
-    base_headers = _auth_headers()
-    auth_label = _mask_auth_value(base_headers.get("Authorization"))
-
     for server in agent_settings.mcp_servers:
         # Build kwargs
         try:
-            connect_kwargs = _build_streamable_http_kwargs(server, base_headers)
+            connect_kwargs = _build_streamable_http_kwargs(
+                server, base_headers, stdio_env
+            )
         except Exception as e:
             exceptions.append(e)
             continue
@@ -293,7 +178,7 @@ async def get_mcp_client_for_agent(
         url_for_log = connect_kwargs.get("url", "")
         start = time.perf_counter()
 
-        # ---- first attempt (bounded) --------------------------------------
+        # ---- first (and only) attempt --------------------------------------
         try:
             logger.info(
                 "MCP connect start name=%s transport=streamable_http url=%s auth=%s",
@@ -308,19 +193,12 @@ async def get_mcp_client_for_agent(
                 url_for_log,
                 auth_label,
             )
-            # snapshot the spec used — useful for diagnostics
             client.__dict__.setdefault("_conn_specs", {})[server.name] = dict(
                 connect_kwargs
             )
 
             dur_ms = (time.perf_counter() - start) * 1000
             tools = client.server_name_to_tools.get(server.name, [])
-            logger.info(
-                "MCP post-connect: client=%s sessions=%s tools=%d",
-                f"0x{id(client):x}",
-                list(client.sessions.keys()),
-                len(tools),
-            )
             logger.info(
                 "MCP connect ok name=%s transport=streamable_http url=%s auth=%s tools=%d dur_ms=%.0f",
                 server.name,
@@ -329,7 +207,7 @@ async def get_mcp_client_for_agent(
                 len(tools),
                 dur_ms,
             )
-            continue
+            continue  # Success
 
         except BaseException as e1:
             dur_ms = (time.perf_counter() - start) * 1000
@@ -341,17 +219,9 @@ async def get_mcp_client_for_agent(
                 dur_ms,
                 e1.__class__.__name__,
             )
-
-            if not _is_auth_error(e1):
-                exceptions.extend(getattr(e1, "exceptions", [e1]))
-                continue
-
-            # ---- one auth retry -------------------------------------------
-            try:
-                await _retry_auth_once(oa, client, server, connect_kwargs, auth_label)
-            except BaseException as e2:
-                exceptions.extend(getattr(e2, "exceptions", [e2]))
-                continue
+            # Since we removed the auth retry logic, any failure is final for this server
+            exceptions.extend(getattr(e1, "exceptions", [e1]))
+            continue
 
     # ---- finalize ---------------------------------------------------------
     if exceptions:

@@ -118,10 +118,7 @@ class ContentGeneratorExpert(AgentFlow):
 
     async def async_init(self):
         self.mcp = MCPRuntime(
-            agent_settings=self.agent_settings,
-            # If you expose runtime filtering (tenant/library/time window),
-            # pass a provider: lambda: self.get_runtime_context()
-            context_provider=(lambda: self.get_runtime_context()),
+            agent=self,
         )
         self.model = get_model(self.agent_settings.model)
         await self.mcp.init()

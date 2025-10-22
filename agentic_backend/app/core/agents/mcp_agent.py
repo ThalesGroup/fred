@@ -63,9 +63,7 @@ class MCPAgent(AgentFlow):
     # ---------------------------
     async def async_init(self):
         self.mcp = MCPRuntime(
-            agent_settings=self.agent_settings,
-            # If you expose runtime scoping (tenant/library/time), keep this provider:
-            context_provider=lambda: self.get_runtime_context(),
+            agent=self,
         )
         self.model = get_model(self.agent_settings.model)
         await self.mcp.init()

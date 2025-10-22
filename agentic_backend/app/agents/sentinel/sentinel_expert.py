@@ -7,6 +7,9 @@ import logging
 from typing import Any, Dict, List
 
 from fred_core import get_model
+
+# 🟢 NEW IMPORT: Required for explicit type hint
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
@@ -55,23 +58,27 @@ class SentinelExpert(AgentFlow):
     """
     Sentinel — Ops & Monitoring agent (OpenSearch + KPIs).
 
-    Pattern alignment with AgentFlow:
-    - Class-level `tuning` (spec only; values come from YAML/DB/UI).
-    - async_init(): set model, init MCP (tools), bind tools, build graph.
-    - Each node chooses if/when to use the tuned prompt (no global magic).
+    Uses lazy initialization for the MCP client to defer connection until the
+    first user message, avoiding cold-start token issues.
     """
 
     tuning = SENTINEL_TUNING
+
+    # 🟢 NEW: Explicitly type-hint self.model to stop Pylance warning
+    # The bound model may become a Runnable (from .bind_tools), so allow Any to cover both BaseChatModel and Runnable types.
+    model: BaseChatModel | Any | None = None
 
     def __init__(self, agent_settings: AgentSettings):
         super().__init__(agent_settings=agent_settings)
         # MCP runtime keeps the tool client fresh and provides a current toolkit.
         self.mcp = MCPRuntime(
-            agent_settings=self.agent_settings,
-            context_provider=lambda: self.get_runtime_context(),
+            agent=self,
         )
         # Accept list/dict tool payloads and raw strings (we’ll normalize)
         self._any_list_adapter: TypeAdapter[List[Any]] = TypeAdapter(List[Any])
+
+        # 🟢 NEW: Flag to track if MCP has been initialized
+        self._mcp_initialized = False
 
     # ---------------------------
     # Bootstrap
@@ -80,9 +87,24 @@ class SentinelExpert(AgentFlow):
         # 1) LLM
         self.model = get_model(self.agent_settings.model)
 
-        # 2) Tools
-        await self.mcp.init()  # start MCP + toolkit
-        self.model = self.model.bind_tools(self.mcp.get_tools())
+        # Ensure a model was returned
+        if self.model is None:
+            raise RuntimeError(
+                "Sentinel: get_model returned None for model config: "
+                f"{self.agent_settings.model}"
+            )
+
+        # 2) Tools: 🔴 CHANGE - DO NOT CALL self.mcp.init() here.
+        # Bind model with NO tools initially (self.mcp.get_tools() returns []).
+        # Only call bind_tools if the returned model actually provides it.
+        if hasattr(self.model, "bind_tools"):
+            # mypy/pylance: we already guarded against None above
+            self.model = self.model.bind_tools(self.mcp.get_tools())
+        else:
+            logger.warning(
+                "Sentinel: model of type %s does not expose bind_tools(); skipping initial tool binding",
+                type(self.model),
+            )
 
         # 3) Graph
         self._graph = self._build_graph()
@@ -92,15 +114,47 @@ class SentinelExpert(AgentFlow):
         await self.mcp.aclose()
 
     # ---------------------------
+    # Lazy MCP Initialization Node
+    # ---------------------------
+    async def init_mcp(self, state: MessagesState):
+        """
+        Initializes the MCP client and rebinds the model with the loaded tools.
+        This runs only on the first message.
+        """
+        if not self._mcp_initialized:
+            logger.info("Sentinel: Lazy initializing MCP client and binding tools.")
+
+            # This is the point where the connection happens
+            await self.mcp.init()
+
+            # Ensure model was initialized (async_init should have been called).
+            if self.model is None:
+                raise RuntimeError(
+                    "Sentinel: model is not initialized. Call async_init() before MCP initialization."
+                )
+
+            # Rebind the model with the now-available tools only if supported.
+            if hasattr(self.model, "bind_tools"):
+                self.model = self.model.bind_tools(self.mcp.get_tools())
+            else:
+                logger.warning(
+                    "Sentinel: model of type %s does not expose bind_tools(); skipping tool bind",
+                    type(self.model),
+                )
+
+            self._mcp_initialized = True
+
+        # Pass control to the reasoner
+        return state
+
+    # ---------------------------
     # Graph
     # ---------------------------
     def _build_graph(self) -> StateGraph:
-        if self.mcp.toolkit is None:
-            raise RuntimeError(
-                "Sentinel: toolkit must be initialized before building the graph."
-            )
-
         builder = StateGraph(MessagesState)
+
+        # Node for lazy initialization. This is the first step.
+        builder.add_node("init_mcp", self.init_mcp)
 
         # LLM node
         builder.add_node("reasoner", self.reasoner)
@@ -116,8 +170,10 @@ class SentinelExpert(AgentFlow):
         )
         builder.add_node("tools", tools_node)
 
-        # Flow: START → reasoner → (tools?) → reasoner → …
-        builder.add_edge(START, "reasoner")
+        # Flow: START → init_mcp → reasoner → (tools?) → reasoner → …
+        builder.add_edge(START, "init_mcp")
+        builder.add_edge("init_mcp", "reasoner")  # Link init node to the main logic
+
         builder.add_conditional_edges("reasoner", tools_condition)
         builder.add_edge("tools", "reasoner")
         return builder
@@ -131,6 +187,7 @@ class SentinelExpert(AgentFlow):
         After tools run, ToolMessages are present in `state["messages"]`.
         We collect their outputs and attach to the model response metadata for the UI.
         """
+        # This check is now redundant but kept for robustness/safety
         if self.model is None:
             raise RuntimeError(
                 "Sentinel: model is not initialized. Call async_init() first."
@@ -145,6 +202,7 @@ class SentinelExpert(AgentFlow):
         messages = self.with_chat_context_text(messages)
 
         try:
+            # Pylance is happy here due to the explicit type hint
             response = await self.model.ainvoke(messages)
 
             # 3) Collect tool outputs (latest per tool name) from the history
@@ -177,6 +235,7 @@ class SentinelExpert(AgentFlow):
 
         except Exception:
             logger.exception("Sentinel: unexpected error")
+            # Pylance is happy here due to the explicit type hint
             fallback = await self.model.ainvoke(
                 [
                     HumanMessage(

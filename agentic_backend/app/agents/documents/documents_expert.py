@@ -41,10 +41,7 @@ class DocumentExpert(AgentFlow):
     def __init__(self, agent_settings: AgentSettings):
         super().__init__(agent_settings=agent_settings)
         self.mcp = MCPRuntime(
-            agent_settings=agent_settings,
-            # If you expose runtime filtering (tenant/library/time window),
-            # pass a provider: lambda: self.get_runtime_context()
-            context_provider=(lambda: self.get_runtime_context()),
+            agent=self,
         )
         self.base_prompt = self._generate_prompt()
 

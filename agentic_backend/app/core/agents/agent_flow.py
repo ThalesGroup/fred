@@ -31,6 +31,7 @@ from typing import (
     cast,
 )
 
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
@@ -54,6 +55,7 @@ from app.common.kf_agent_asset_client import (
     AssetUploadResult,
     KfAgentAssetClient,
 )
+from app.common.mcp_runtime import MCPRuntime
 from app.common.structures import (
     AgentChatOptions,
     AgentSettings,
@@ -119,6 +121,35 @@ class AgentFlow:
         self.compiled_graph: Optional[CompiledStateGraph] = None
         self.runtime_context: Optional[RuntimeContext] = None
         self.asset_client = KfAgentAssetClient()
+        self.mcp = MCPRuntime(agent=self)
+        self._model: BaseChatModel | Any | None = None
+
+    def get_end_user_access_token(self) -> str:
+        """Reads the raw access token from the current run config."""
+        return (
+            self.run_config.get("configurable", {}).get("access_token")
+            or "MISSING_TOKEN"
+        )
+
+    # This method is for testing propagation, you'd integrate this logic
+    # into your tool calls later (e.g., in a tool calling VectorSearchClient)
+    def debug_print_user_info(self) -> str:
+        """
+        A temporary method to demonstrate token access within an agent node.
+        """
+        user_id = self.get_end_user_id()
+        # NOTE: Do NOT log the token in production, just print a confirmation
+        token_present = self.get_end_user_access_token() is not None
+
+        print(f"Agent Node: User ID: {user_id}")
+        print(f"Agent Node: Access Token Present: {token_present}")
+
+        # Optional: Print the first few characters of the token for manual verification
+        # (Be very careful with logging this in real systems)
+        token_prefix = self.get_end_user_access_token()[:10] if token_present else "N/A"
+        print(f"Agent Node: Token Prefix: {token_prefix}...")
+
+        return f"User ID is {user_id}. Token presence confirmed: {token_present}"
 
     async def astream_updates(
         self,
@@ -142,7 +173,8 @@ class AgentFlow:
         """
         # Make config available to node methods (e.g., get_end_user_id()).
         self.run_config = config or {}
-
+        if self.get_end_user_access_token():
+            self.debug_print_user_info()
         compiled = self.get_compiled_graph()
 
         # Preserve the exact streaming semantics you had before.
@@ -278,6 +310,10 @@ class AgentFlow:
             )
 
         return str(user_id)
+
+    def get_agent_settings(self) -> AgentSettings:
+        """Return the current effective AgentSettings for this instance."""
+        return self.agent_settings
 
     def get_name(self) -> str:
         """

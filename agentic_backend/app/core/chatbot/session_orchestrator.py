@@ -101,6 +101,7 @@ class SessionOrchestrator:
         self,
         *,
         user: KeycloakUser,
+        access_token: str,
         callback: CallbackType,
         session_id: str | None,
         message: str,
@@ -194,6 +195,7 @@ class SessionOrchestrator:
                     start_seq=1,  # user message already consumed rank=base_rank
                     callback=callback,
                     user_context=user,
+                    access_token=access_token,
                 )
                 all_msgs.extend(agent_msgs)
                 # Success signal: exactly one assistant/final per exchange (enforced by transcoder)

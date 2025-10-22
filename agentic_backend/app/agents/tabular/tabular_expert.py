@@ -85,8 +85,7 @@ class Tessa(AgentFlow):
     def __init__(self, agent_settings: AgentSettings):
         super().__init__(agent_settings=agent_settings)
         self.mcp = MCPRuntime(
-            agent_settings=agent_settings,
-            context_provider=lambda: self.get_runtime_context(),
+            agent=self,
         )
         # Accept list/dict tool payloads and raw strings; we normalize for UI metadata
         self._any_list_adapter: TypeAdapter[List[Any]] = TypeAdapter(List[Any])

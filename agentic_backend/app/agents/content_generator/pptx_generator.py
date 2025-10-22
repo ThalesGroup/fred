@@ -31,6 +31,7 @@ from pptx.dml.color import RGBColor
 from pptx.util import Pt
 
 from app.common.kf_agent_asset_client import AssetRetrievalError
+from app.common.kf_vectorsearch_client import VectorSearchClient
 from app.common.rags_utils import (
     attach_sources_to_llm_response,
     ensure_ranks,
@@ -38,7 +39,6 @@ from app.common.rags_utils import (
     sort_hits,
 )
 from app.common.structures import AgentChatOptions
-from app.common.vector_search_client import VectorSearchClient
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from app.core.agents.runtime_context import (
@@ -426,6 +426,7 @@ class Sloan(AgentFlow):
                 top_k=top_k,
                 document_library_tags_ids=doc_tag_ids,
                 search_policy=search_policy,
+                access_token=self.get_end_user_access_token(),
             )
 
             if not hits:

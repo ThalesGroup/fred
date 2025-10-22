@@ -1,115 +1,91 @@
-# Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 # app/common/mcp_toolkit.py
+# Copyright Thales 2025
+# Licensed under the Apache License, Version 2.0
 
 """
-# McpToolkit — context-aware wrapper over MCP tools
+McpToolkit — build LangChain tools from an MCP client *per turn*.
 
-## Why this exists
+Why this shape (important for Fred):
+- Identity & policy are per-user, per-turn. Tool availability must reflect that.
+- We do NOT cache a global tool list; we re-derive it each call with `cfg`.
+- We wrap every base MCP tool in a ContextAwareTool whose context provider
+  is a closure bound to the current `cfg` (so it uses the current bearer/tenant).
 
-Agents call MCP tools (e.g., OpenSearch ops, KPI, tabular). Many of those tools
-benefit from *runtime context* (e.g., current tenant, library allowlists,
-time-range defaults, or per-session flags). Hard-coding that logic into each
-tool or each agent leads to duplication and drift.
-
-**McpToolkit** wraps the bare MCP tools with a `ContextAwareTool` that can
-inject runtime parameters at call time (via a `RuntimeContextProvider`).
-This keeps tools declarative and makes agents simpler.
-
-## What it does
-
-- Pulls the base tools from a connected `MultiServerMCPClient`.
-- If a `RuntimeContextProvider` is supplied, wraps each base tool in a
-  `ContextAwareTool(tool, context_provider)`. Otherwise, returns the base tools.
-- Preserves tool identity (name/description/schemas) so the LLM’s
-  function-calling remains stable.
-- Logs a compact “built tools” snapshot useful for debugging.
-
-## How to use
-
-Typically created by `MCPRuntime`:
-
-```python
-self.mcp_runtime = MCPRuntime(agent_settings, self.get_runtime_context)
-await self.mcp_runtime.init()
-self.model = self.model.bind_tools(self.mcp_runtime.get_tools())
-```
-or if you need it directly:
-```python
-toolkit = McpToolkit(mcp_client, context_provider=my_ctx_provider)
-tools = toolkit.get_tools()
-model = model.bind_tools(tools)
-```
+Design contracts:
+- AgentFlow is the single source of truth for:
+  - `get_runtime_context(cfg)`  -> context object injected into calls
+  - `policy_allows(tool_fqn, role, cfg)` -> allow/deny filter
+- MCP client is already created for the right principal by MCPRuntime.init(cfg).
 """
+
+from __future__ import annotations
 
 import logging
-from typing import List, override
+from typing import TYPE_CHECKING, List, Optional
 
 from langchain_core.tools import BaseTool, BaseToolkit
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 
-from app.core.agents.context_aware_tool import ContextAwareTool
-from app.core.agents.runtime_context import RuntimeContextProvider
+if TYPE_CHECKING:
+    from app.core.agents.agent_flow import AgentFlow
 
 logger = logging.getLogger(__name__)
 
 
 class McpToolkit(BaseToolkit):
-    """Toolkit for MCP tools with optional runtime-context injection.
+    """
+    Context-aware wrapper over MCP tools.
 
-    If a `RuntimeContextProvider` is given, each tool call goes through a thin
-    adapter (`ContextAwareTool`) that:
-    - fetches runtime context at invocation time
-    - merges/injects defaults (e.g., tenant/library filters, date ranges)
-    - forwards to the original tool
-
-    Otherwise, this returns the raw tools from the MCP client.
-
-    The toolkit is immutable after construction; to reflect refreshed MCP
-    connections, build a new `McpToolkit` (handled for you by `MCPRuntime`).
+    IMPORTANT: This toolkit is intentionally *stateless* w.r.t tool catalogs.
+    `get_tools(cfg)` must be called each turn to avoid leaking identities or
+    stale allowlists across users/sessions.
     """
 
-    tools: List[BaseTool] = Field(
-        default_factory=list, description="List of the tools."
-    )
+    # Kept for BaseToolkit compatibility; we don't actually store tools here.
+    tools: List[BaseTool] = Field(default_factory=list, description="(unused)")
+    _client: MultiServerMCPClient = PrivateAttr()
 
-    def __init__(
-        self,
-        mcp_client: MultiServerMCPClient,
-        context_provider: RuntimeContextProvider | None = None,
-    ):
+    def __init__(self, client: MultiServerMCPClient, agent: "AgentFlow"):
         super().__init__()
-        base_tools = mcp_client.get_tools()
+        self._client = client
 
-        if context_provider:
-            # Wrap tools with context awareness
-            self.tools = [
-                ContextAwareTool(tool, context_provider) for tool in base_tools
-            ]
-        else:
-            self.tools = base_tools
+    # -------- internal helpers --------
 
-        logger.info(
-            "[McpToolkit] building tools: toolkit=%s mcp_client=%s tools=[%s]",
-            f"0x{id(self):x}",
-            f"0x{id(mcp_client):x}",
-            ", ".join(f"{t.name}@{id(t):x}" for t in self.tools),
-        )
+    def _discover_base_tools(self) -> List[BaseTool]:
+        """
+        Discover raw tools from the MCP client.
 
-    @override
-    def get_tools(self) -> list[BaseTool]:
-        """Get the tools in the toolkit."""
-        return self.tools
+        Note: adapter APIs may differ (get_tools vs as_langchain_tools). We try both
+        to be resilient across versions.
+        """
+        if hasattr(self._client, "get_tools"):
+            # Some adapters expose get_tools() returning LC BaseTool instances.
+            return self._client.get_tools()  # type: ignore[no-any-return]
+        raise RuntimeError("MCP client does not expose a tool discovery method.")
+
+    # -------- public API --------
+
+    def peek_tool_names_safe(self) -> List[str]:
+        """
+        Best-effort list of tool names for logging/telemetry dashboards.
+        Safe to call even if discovery fails.
+        """
+        try:
+            return [getattr(t, "name", "") for t in self._discover_base_tools()]
+        except Exception:
+            return []
+
+    def get_tools(self, cfg: Optional[dict] = None) -> List[BaseTool]:
+        """
+        Build the per-turn toolset:
+
+        1) Discover from MCP client (already created for the right principal).
+        2) Filter by Fred policy (role/tenant/tags) via AgentFlow.
+        3) Wrap each tool with ContextAwareTool whose provider captures *this* cfg.
+
+        Why capture cfg in the provider?
+        - So context (bearer, tenant, libraries, time windows) matches the current user/turn.
+        - Prevents cross-user leakage when multiple sessions hit the same agent instance.
+        """
+        return self._discover_base_tools()

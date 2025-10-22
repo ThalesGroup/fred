@@ -9,6 +9,7 @@ from fred_core import VectorSearchHit, get_model
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
+from app.common.kf_vectorsearch_client import VectorSearchClient
 from app.common.rags_utils import (
     attach_sources_to_llm_response,
     ensure_ranks,
@@ -16,7 +17,6 @@ from app.common.rags_utils import (
     sort_hits,
 )
 from app.common.structures import AgentChatOptions
-from app.common.vector_search_client import VectorSearchClient
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from app.core.agents.runtime_context import (
@@ -146,6 +146,7 @@ class Rico(AgentFlow):
                 top_k=top_k,
                 document_library_tags_ids=doc_tag_ids,
                 search_policy=search_policy,
+                access_token=self.get_end_user_access_token(),
             )
             if not hits:
                 warn = "I couldn't find any relevant documents. Try rephrasing or expanding your query?"

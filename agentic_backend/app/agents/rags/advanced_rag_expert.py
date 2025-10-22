@@ -27,9 +27,9 @@ from app.agents.rags.structures import (
     RagGraphState,
     RephraseQueryOutput,
 )
+from app.common.kf_vectorsearch_client import VectorSearchClient
 from app.common.rags_utils import attach_sources_to_llm_response
 from app.common.structures import AgentChatOptions, AgentSettings
-from app.common.vector_search_client import VectorSearchClient
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.runtime_context import (
     get_document_library_tags_ids,
@@ -218,6 +218,7 @@ class AdvancedRico(AgentFlow):
                 top_k=top_k,
                 document_library_tags_ids=document_library_tags_ids,
                 search_policy=search_policy,
+                access_token=self.get_end_user_access_token(),
             )
 
             if not hits:

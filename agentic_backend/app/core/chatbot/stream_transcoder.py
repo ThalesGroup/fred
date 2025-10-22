@@ -123,11 +123,13 @@ class StreamTranscoder:
         start_seq: int,
         callback: CallbackType,
         user_context: KeycloakUser,
+        access_token: str,
     ) -> List[ChatMessage]:
         config: RunnableConfig = {
             "configurable": {
                 "thread_id": session_id,
                 "user_id": user_context.uid,
+                "access_token": access_token,
             },
             "recursion_limit": 40,
         }
