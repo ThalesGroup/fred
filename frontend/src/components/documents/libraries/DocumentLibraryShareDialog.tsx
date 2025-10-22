@@ -30,6 +30,7 @@ export function DocumentLibraryShareDialog({ tag, open, onClose }: DocumentLibra
 
   const handleShared = React.useCallback(() => {
     setRefreshKey((prev) => prev + 1);
+    setActiveTab("current");
   }, []);
 
   if (!tag) return null;
@@ -61,12 +62,7 @@ export function DocumentLibraryShareDialog({ tag, open, onClose }: DocumentLibra
         </RoundTabs>
 
         {activeTab === "add" ? (
-          <DocumentLibraryShareAddTab
-            key={`${tag.id}-${refreshKey}`}
-            tag={tag}
-            onShared={handleShared}
-            onSwitchToCurrent={() => setActiveTab("current")}
-          />
+          <DocumentLibraryShareAddTab key={`${tag.id}-${refreshKey}`} tag={tag} onShared={handleShared} />
         ) : (
           <DocumentLibraryShareCurrentAccessTab tag={tag} open={open} refreshKey={refreshKey} />
         )}
