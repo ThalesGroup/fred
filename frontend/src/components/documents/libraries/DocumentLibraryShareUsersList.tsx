@@ -11,17 +11,21 @@ import {
   useTheme,
 } from "@mui/material";
 import * as React from "react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ShareTargetResource,
+  useListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery,
   useListUsersKnowledgeFlowV1UsersGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useToast } from "../../ToastProvider";
 
 interface DocumentLibraryShareUsersListProps {
   searchQuery: string;
   selectedIds: Set<string>;
   disabled?: boolean;
   onAdd: (target_id: string, target_type: ShareTargetResource, displayName: string) => void;
+  tagId: string;
 }
 
 export function DocumentLibraryShareUsersList({
@@ -29,16 +33,53 @@ export function DocumentLibraryShareUsersList({
   selectedIds,
   disabled = false,
   onAdd,
+  tagId,
 }: DocumentLibraryShareUsersListProps) {
   const { t } = useTranslation();
-  const { data: users = [], isLoading } = useListUsersKnowledgeFlowV1UsersGetQuery();
 
   const theme = useTheme();
   const overlayColor = theme.palette.mode === "light" ? alpha("#000", 0.1) : alpha("#fff", 0.1);
 
+  // Get list of all users
+  const {
+    data: users = [],
+    isLoading: isLoadingUsers,
+    error: errorFetchingUsers,
+  } = useListUsersKnowledgeFlowV1UsersGetQuery();
+  // Get list of members of the tag
+  const {
+    data: members,
+    isLoading: isLoadingMembers,
+    error: errorFetchingMembers,
+  } = useListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery({ tagId: tagId ?? "" }, { skip: !open || !tagId });
+
+  // Handle fetching errors
+  const { showError } = useToast();
+
+  useEffect(() => {
+    if (errorFetchingMembers) {
+      console.error("Error fetching tag members:", errorFetchingMembers);
+      showError(t("documentLibraryShareDialog.errorFetchingMembers", { defaultValue: "Error fetching tag members." }));
+    }
+  }, [errorFetchingMembers]);
+
+  useEffect(() => {
+    if (errorFetchingUsers) {
+      console.error("Error fetching users:", errorFetchingUsers);
+      showError(t("documentLibraryShareDialog.errorFetchingUsers", { defaultValue: "Error fetching users." }));
+    }
+  }, [errorFetchingUsers]);
+
+  // Filter usrers
   const filteredUsers = React.useMemo(() => {
     return users.filter((user) => {
-      // Remove already selected users
+      // Remove user already members of the tag
+      const isMember = members?.users.some((member) => member.user.id === user.id);
+      if (isMember) {
+        return false;
+      }
+
+      // Remove users already selected
       const isSelected = selectedIds.has(user.id);
       if (isSelected) {
         return false;
@@ -56,8 +97,9 @@ export function DocumentLibraryShareUsersList({
 
       return isSearched;
     });
-  }, [searchQuery, users, selectedIds]);
+  }, [searchQuery, users, selectedIds, members]);
 
+  const isLoading = isLoadingUsers || isLoadingMembers;
   if (isLoading) {
     return (
       <Typography variant="body2" color="text.secondary">

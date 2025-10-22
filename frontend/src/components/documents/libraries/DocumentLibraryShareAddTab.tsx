@@ -28,10 +28,9 @@ import { DocumentLibraryShareUsersList } from "./DocumentLibraryShareUsersList";
 interface DocumentLibraryShareAddTabProps {
   tag: TagWithItemsId;
   onShared?: () => void;
-  onSwitchToCurrent?: () => void;
 }
 
-export function DocumentLibraryShareAddTab({ tag, onShared, onSwitchToCurrent }: DocumentLibraryShareAddTabProps) {
+export function DocumentLibraryShareAddTab({ tag, onShared }: DocumentLibraryShareAddTabProps) {
   const { t } = useTranslation();
   const [audience, setAudience] = React.useState<ShareTargetResource>("user");
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -81,7 +80,6 @@ export function DocumentLibraryShareAddTab({ tag, onShared, onSwitchToCurrent }:
       setSearchQuery("");
       setAudience("user");
       onShared?.();
-      onSwitchToCurrent?.();
     } catch (error) {
       let message = t("documentLibraryShareDialog.shareError", {
         defaultValue: "We couldn't apply sharing settings. Please try again.",
@@ -154,6 +152,7 @@ export function DocumentLibraryShareAddTab({ tag, onShared, onSwitchToCurrent }:
           selectedIds={selectedIds}
           disabled={isSharing}
           onAdd={handleAddRecipient}
+          tagId={tag.id}
         />
       ) : (
         <DocumentLibraryShareGroupTree
