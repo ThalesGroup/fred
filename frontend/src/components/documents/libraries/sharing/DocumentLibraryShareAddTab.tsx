@@ -44,15 +44,12 @@ export function DocumentLibraryShareAddTab({ tag, onShared }: DocumentLibrarySha
     [pendingRecipients],
   );
 
-  const handleAddRecipient = React.useCallback(
-    (target_id: string, target_type: ShareTargetResource, displayName: string) => {
-      setPendingRecipients((prev) => {
-        if (prev.some((item) => item.target_id === target_id)) return prev;
-        return [...prev, { target_id, target_type, displayName, relation: "viewer" }];
-      });
-    },
-    [],
-  );
+  const handleAddRecipient = React.useCallback((newRecipient: DocumentLibraryPendingRecipient) => {
+    setPendingRecipients((prev) => {
+      if (prev.some((item) => item.target_id === newRecipient.target_id)) return prev;
+      return [...prev, newRecipient];
+    });
+  }, []);
 
   const handleRelationChange = (id: string, relation: UserTagRelation) => {
     setPendingRecipients((prev) => prev.map((item) => (item.target_id === id ? { ...item, relation } : item)));

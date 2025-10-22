@@ -1,4 +1,7 @@
-import { Avatar, Box, CircularProgress, List, ListItem, ListItemAvatar, ListItemText, Typography } from "@mui/material";
+import CreateIcon from "@mui/icons-material/Create";
+import StarIcon from "@mui/icons-material/Star";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import { Box, CircularProgress, List, Stack, Typography } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -10,6 +13,8 @@ import {
   UserTagRelation,
   useListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery,
 } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { GroupListItem } from "./GroupListItem";
+import { UserListItem } from "./UserListItem";
 
 const relationPriority = {
   owner: 0,
@@ -36,11 +41,6 @@ const sortMembers = <T extends { relation: UserTagRelation }>(list: T[], getKey:
     // If relation is the same, sort by name
     return getKey(a).localeCompare(getKey(b), undefined, { sensitivity: "base" });
   });
-};
-
-const getInitial = (value: string): string => {
-  const trimmed = value.trim();
-  return trimmed ? trimmed.charAt(0).toUpperCase() : "?";
 };
 
 interface DocumentLibraryShareCurrentAccessTabProps {
@@ -78,39 +78,6 @@ export function DocumentLibraryShareCurrentAccessTab({ tag, open }: DocumentLibr
     return sortMembers(members?.groups ?? [], (member) => getGroupDisplayName(member.group));
   }, [members?.groups, getGroupDisplayName, sortMembers]);
 
-  const renderMemberSection = React.useCallback(
-    <T extends { relation: UserTagRelation }>(
-      title: string,
-      items: T[],
-      getKey: (item: T) => string,
-      getPrimaryText: (item: T) => string,
-    ) => {
-      if (!items.length) return null;
-
-      return (
-        <Box component="section" key={title}>
-          <Typography variant="subtitle2" color="text.secondary" sx={{ px: 2, py: 1 }}>
-            {title}
-          </Typography>
-          <List dense disablePadding>
-            {items.map((item) => {
-              const primaryText = getPrimaryText(item);
-              return (
-                <ListItem key={getKey(item)}>
-                  <ListItemAvatar>
-                    <Avatar>{getInitial(primaryText)}</Avatar>
-                  </ListItemAvatar>
-                  <ListItemText primary={primaryText} secondary={relationLabels[item.relation]} />
-                </ListItem>
-              );
-            })}
-          </List>
-        </Box>
-      );
-    },
-    [getInitial, relationLabels],
-  );
-
   if (isLoading) {
     return (
       <Box display="flex" alignItems="center" justifyContent="center" py={4}>
@@ -141,18 +108,59 @@ export function DocumentLibraryShareCurrentAccessTab({ tag, open }: DocumentLibr
 
   return (
     <Box display="flex" flexDirection="column" gap={3}>
-      {renderMemberSection(
-        t("documentLibraryShareDialog.usersSectionTitle", { defaultValue: "Users" }),
-        users,
-        (member) => member.user.id,
-        (member) => getUserDisplayName(member.user),
-      )}
-      {renderMemberSection(
-        t("documentLibraryShareDialog.groupsSectionTitle", { defaultValue: "Groups" }),
-        groups,
-        (member) => member.group.id,
-        (member) => getGroupDisplayName(member.group),
-      )}
+      <Box component="section">
+        <Typography variant="subtitle2" color="text.secondary" sx={{ px: 2, py: 1 }}>
+          {t("documentLibraryShareDialog.usersSectionTitle", { defaultValue: "Users" })}
+        </Typography>
+        <List dense disablePadding>
+          {users.map((userMember) => (
+            <UserListItem
+              user={userMember.user}
+              secondaryAction={
+                <Stack alignItems="center" direction="row" gap={1}>
+                  <RelationIcon relation={userMember.relation} />
+                  {relationLabels[userMember.relation]}
+                </Stack>
+              }
+            />
+          ))}
+        </List>
+      </Box>
+
+      <Box component="section">
+        <Typography variant="subtitle2" color="text.secondary" sx={{ px: 2, py: 1 }}>
+          {t("documentLibraryShareDialog.groupsSectionTitle", { defaultValue: "Groups" })}
+        </Typography>
+        <List dense disablePadding>
+          {groups.map((groupMember) => (
+            <GroupListItem
+              group={groupMember.group}
+              secondaryAction={
+                <Stack alignItems="center" direction="row" gap={1}>
+                  <RelationIcon relation={groupMember.relation} />
+                  {relationLabels[groupMember.relation]}
+                </Stack>
+              }
+            />
+          ))}
+        </List>
+      </Box>
     </Box>
   );
+}
+
+function RelationIcon({ relation }: { relation: UserTagRelation }) {
+  if (relation === "owner") {
+    return <StarIcon />;
+  }
+
+  if (relation === "editor") {
+    return <CreateIcon />;
+  }
+
+  if (relation === "viewer") {
+    return <VisibilityIcon />;
+  }
+
+  return null;
 }
