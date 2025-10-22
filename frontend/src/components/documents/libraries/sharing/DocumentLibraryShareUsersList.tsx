@@ -1,30 +1,21 @@
 import PersonAddAlt1OutlinedIcon from "@mui/icons-material/PersonAddAlt1Outlined";
-import {
-  alpha,
-  Avatar,
-  IconButton,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
-  Typography,
-  useTheme,
-} from "@mui/material";
+import { alpha, IconButton, List, Typography, useTheme } from "@mui/material";
 import * as React from "react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  ShareTargetResource,
   useListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery,
   useListUsersKnowledgeFlowV1UsersGetQuery,
 } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../../../ToastProvider";
+import { DocumentLibraryPendingRecipient } from "./DocumentLibraryShareTypes";
+import { UserListItem } from "./UserListItem";
 
 interface DocumentLibraryShareUsersListProps {
   searchQuery: string;
   selectedIds: Set<string>;
   disabled?: boolean;
-  onAdd: (target_id: string, target_type: ShareTargetResource, displayName: string) => void;
+  onAdd: (newRecipient: DocumentLibraryPendingRecipient) => void;
   tagId: string;
 }
 
@@ -119,30 +110,20 @@ export function DocumentLibraryShareUsersList({
   return (
     <List dense disablePadding>
       {filteredUsers.map((user) => {
-        const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
-        const primary = fullName || user.username || user.id;
-        const secondary = user.username && fullName ? user.username : undefined;
-
         return (
-          <ListItem
+          <UserListItem
             sx={{
-              height: 60,
               cursor: disabled ? "default" : "pointer",
               "&:hover": { backgroundColor: disabled ? "transparent" : overlayColor },
             }}
-            key={user.id}
-            onClick={() => onAdd(user.id, "user", fullName)}
+            user={user}
+            onClick={() => onAdd({ target_id: user.id, target_type: "user", relation: "viewer", data: user })}
             secondaryAction={
               <IconButton edge="end" disabled={disabled}>
                 <PersonAddAlt1OutlinedIcon fontSize="small" />
               </IconButton>
             }
-          >
-            <ListItemAvatar>
-              <Avatar>{primary.charAt(0).toUpperCase()}</Avatar>
-            </ListItemAvatar>
-            <ListItemText primary={primary} secondary={secondary} />
-          </ListItem>
+          />
         );
       })}
     </List>

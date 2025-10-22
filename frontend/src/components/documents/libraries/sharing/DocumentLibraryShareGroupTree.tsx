@@ -6,15 +6,15 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
   GroupSummary,
-  ShareTargetResource,
   useListGroupsKnowledgeFlowV1GroupsGetQuery,
 } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { DocumentLibraryPendingRecipient } from "./DocumentLibraryShareTypes";
 
 interface DocumentLibraryShareGroupTreeProps {
   searchQuery: string;
   selectedIds: Set<string>;
   disabled?: boolean;
-  onAdd: (target_id: string, target_type: ShareTargetResource, displayName: string) => void;
+  onAdd: (newRecipient: DocumentLibraryPendingRecipient) => void;
 }
 
 export function DocumentLibraryShareGroupTree({
@@ -82,7 +82,7 @@ export function DocumentLibraryShareGroupTree({
               secondaryAction={
                 <IconButton
                   edge="end"
-                  onClick={() => onAdd(group.id, "group", group.name)}
+                  onClick={() => onAdd({ target_id: group.id, target_type: "group", relation: "viewer", data: group })}
                   disabled={disabledForGroup}
                   size="small"
                 >
@@ -98,7 +98,7 @@ export function DocumentLibraryShareGroupTree({
                 <Box sx={{ width: 32 }} />
               )}
               <Box
-                onClick={() => onAdd(group.id, "group", group.name)}
+                onClick={() => onAdd({ target_id: group.id, target_type: "group", relation: "viewer", data: group })}
                 sx={{
                   display: "flex",
                   alignItems: "center",
