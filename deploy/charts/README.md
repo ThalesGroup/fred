@@ -17,7 +17,7 @@ Build the agentic backend, the knowledge-flow backend, and the frontend images:
 ### 1. Build the Docker images
 
 ```bash
-docker build -f agentic_backend/dockerfiles/Dockerfile-prod -t ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1 .
+docker build -f agentic-backend/dockerfiles/Dockerfile-prod -t ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1 .
 docker build -f knowledge_flow_backend/dockerfiles/Dockerfile-prod -t ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1 .
 docker build -f frontend/dockerfiles/Dockerfile-prod -t ghcr.io/thalesgroup/fred-agent/frontend:0.1 .
 ```

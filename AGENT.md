@@ -4,7 +4,7 @@ Guidance for AI coding assistants working in the Fred repository. Follow these n
 
 ## Project Snapshot
 - Fred is a production-ready, multi-agent AI platform.
-- Three top-level services: `agentic_backend/` (LangGraph orchestration), `knowledge_flow_backend/` (document ingestion + vector search), `frontend/` (React UI).
+- Three top-level services: `agentic-backend/` (LangGraph orchestration), `knowledge_flow_backend/` (document ingestion + vector search), `frontend/` (React UI).
 - Python services target Python 3.12.8 with `pyenv` + `python3-venv`; frontend targets Node.js 22.13.0 via `nvm`.
 
 ## Getting Started
@@ -12,18 +12,18 @@ Guidance for AI coding assistants working in the Fred repository. Follow these n
 2. Copy `OPENAI_API_KEY=...` into both backends under `config/.env`.
 3. Launch services (separate terminals):
    ```bash
-   cd agentic_backend && make run      # FastAPI on :8000
+   cd agentic-backend && make run      # FastAPI on :8000
    cd knowledge_flow_backend && make run  # FastAPI on :8111
    cd frontend && make run             # Vite on :5173
    ```
 
 ## Common Commands
-- **agentic_backend**: `make run`, `make test`, `make test-one TEST=...`, `make clean`.
+- **agentic-backend**: `make run`, `make test`, `make test-one TEST=...`, `make clean`.
 - **knowledge_flow_backend**: `make run`, `make run-worker`, `make test`, `make lint`, `make lint-fix`, `make format`, `make sast`, `make code-quality`.
 - **frontend**: `make run`, `make format`, `make update-knowledge-flow-api`.
 
 ## Repository Orientation
-- `agentic_backend/` – LangGraph agents, configuration at `config/configuration.yaml`.
+- `agentic-backend/` – LangGraph agents, configuration at `config/configuration.yaml`.
 - `knowledge_flow_backend/` – Document processors, storage adapters, Temporal workflows, configuration at `config/configuration.yaml`.
 - `frontend/` – React 18 + TypeScript app using Vite, Material UI, Redux Toolkit, and RTK Query.
 - `docs/`, `deploy/`, `developer_tools/`, `fred-core/`, `scripts/` – supporting assets, tooling, deployment helpers.
