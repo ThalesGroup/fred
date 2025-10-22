@@ -46,28 +46,20 @@ const getInitial = (value: string): string => {
 interface DocumentLibraryShareCurrentAccessTabProps {
   tag?: TagWithItemsId;
   open: boolean;
-  refreshKey: number;
 }
 
-export function DocumentLibraryShareCurrentAccessTab({
-  tag,
-  open,
-  refreshKey,
-}: DocumentLibraryShareCurrentAccessTabProps) {
+export function DocumentLibraryShareCurrentAccessTab({ tag, open }: DocumentLibraryShareCurrentAccessTabProps) {
   const { t } = useTranslation();
 
   const tagId = tag?.id;
   const {
     data: members,
-    isFetching,
+    isLoading,
     isError,
-    refetch,
-  } = useListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery({ tagId: tagId ?? "" }, { skip: !open || !tagId });
-
-  React.useEffect(() => {
-    if (!open || !tagId) return;
-    void refetch();
-  }, [open, tagId, refreshKey, refetch]);
+  } = useListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery(
+    { tagId: tagId ?? "" },
+    { skip: !open || !tagId, refetchOnMountOrArgChange: true },
+  );
 
   const relationLabels = React.useMemo<Record<UserTagRelation, string>>(
     () => ({
@@ -119,7 +111,7 @@ export function DocumentLibraryShareCurrentAccessTab({
     [getInitial, relationLabels],
   );
 
-  if (isFetching) {
+  if (isLoading) {
     return (
       <Box display="flex" alignItems="center" justifyContent="center" py={4}>
         <CircularProgress size={24} />
