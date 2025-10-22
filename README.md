@@ -19,12 +19,12 @@ Contents:
 
   - [Getting started](#getting-started)
     - [Development environment setup](#development-environment-setup)
-      - [Option 1: Dev-Container mode (recommended)](#option-1-dev-container-mode-recommended)
-      - [Option 2: Local (Native) Mode](#option-2-local-native-mode)
+      - [Option 1 (recommended): Let the Dev Container do it for you!](#option-1-recommended-let-the-dev-container-do-it-for-you)
+      - [Option 2: Native mode i.e. install everything locally](#option-2-native-mode-ie-install-everything-locally)
       - [Advanced developer tips](#advanced-developer-tips)
     - [Model configuration](#model-configuration)
     - [Start Fred components](#start-fred-components)
-    - [Head to the Fred UI!](#head-to-the-fred-ui)
+    - [Head for the Fred UI!](#head-for-the-fred-ui)
   - [Production mode](#production-mode)
   - [Agent coding academy](#agent-coding-academy)
   - [Advanced configuration](#advanced-configuration)
@@ -38,7 +38,7 @@ Contents:
 
 To ensure a smooth first-time experience, Fred’s maintainers designed Dev Container/Native startup to require no additional external components (except, of course, to LLM APIs).
 
-By default:
+By default, using either Dev Container or native startup:
 
 - Fred stores all data on the local filesystem or through local-first tools such as DuckDB (for SQL-like data) and ChromaDB (for local embeddings). Data includes metrics, chat conversations, document uploads, and embeddings.  
 - Authentication and authorization are mocked.
@@ -50,20 +50,20 @@ By default:
 > - **Private Ollama Server:** Host open-source models such as Mistral, Qwen, Gemma, and Phi locally or on a shared server.  
 > - **Private Azure AI Endpoints:** Connect using your Azure OpenAI key.  
 >
-> Detailed instructions for configuring your chosen model provider are provided below.
+> Detailed instructions for configuring your chosen model provider are provided [below](#model-configuration).
 
 ### Development environment setup
 
 Choose how you want to prepare Fred's development environment: 
-- [Let the Dev Container do it for you](#dev-container-mode) (recommended)
-- [Install everything locally](#local-native-mode)
 
+#### Option 1 (recommended): Let the Dev Container do it for you! 
 
-#### Option 1: Dev-Container mode (recommended)
+<details>
+  <summary>Details</summary>
 
 Prefer an isolated environment with everything pre-installed? 
 
-The Dev Container setup prepares the agentic backend, knowledge-flow backend, and frontend toolchains — no MinIO, OpenSearch, or other optional services.
+The Dev Container setup takes care of all dependencies related to agentic backend, knowledge-flow backend, and frontend components.
 
 ##### Prerequisites
 
@@ -84,7 +84,7 @@ On first start the script:
 - Installs the Python virtual environments for `fred-core`, `agentic_backend`, and `knowledge-flow-backend`  
 - Installs `frontend/node_modules`  
 
-When the terminal prompt appears, the workspace is ready. Ports ``8000``, ``8111``, and ``5173`` are forwarded to the host.
+When the terminal prompt appears, the workspace is ready. Ports ``8000`` (Agentic backend), ``8111`` (Knowledge Flow backend), and ``5173`` (Frontend (vite)) are automatically forwarded to the host.
 
 ##### Rebuilds & troubleshooting
 
@@ -92,9 +92,14 @@ When the terminal prompt appears, the workspace is ready. Ports ``8000``, ``8111
 - Dependencies feel stale? Delete the relevant `.venv` or `frontend/node_modules` inside the container, then rerun the associated `make` target.  
 - Need to change API keys or models? Update the backend `.env` files inside the container and restart the relevant service. See [Model configuration](#model-configuration) for more details.
 
-#### Option 2: Local (Native) Mode
+</details>
 
-Note that this native mode only applies to Unix-based OS (e.g., Mac or Linux related OS)
+#### Option 2: Native mode i.e. install everything locally
+
+<details>
+  <summary>Details</summary>
+
+> Note: Note that this native mode only applies to Unix-based OS (e.g., Mac or Linux-related OS).
 
 ##### Prerequisites
 
@@ -170,6 +175,8 @@ Note that this native mode only applies to Unix-based OS (e.g., Mac or Linux rel
 git clone https://github.com/ThalesGroup/fred.git
 cd fred
 ```
+
+</details>
 
 #### Advanced developer tips
 
