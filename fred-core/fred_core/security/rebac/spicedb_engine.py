@@ -34,7 +34,7 @@ from fred_core.security.rebac.rebac_engine import (
     Relation,
     RelationType,
 )
-from fred_core.security.rebac.schema import DEFAULT_SCHEMA
+from fred_core.security.rebac.spicedb_schema import DEFAULT_SCHEMA
 from fred_core.security.structure import SpiceDbRebacConfig
 
 
