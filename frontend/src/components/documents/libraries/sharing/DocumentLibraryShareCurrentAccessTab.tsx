@@ -108,43 +108,47 @@ export function DocumentLibraryShareCurrentAccessTab({ tag, open }: DocumentLibr
 
   return (
     <Box display="flex" flexDirection="column" gap={3}>
-      <Box component="section">
-        <Typography variant="subtitle2" color="text.secondary" sx={{ px: 2, py: 1 }}>
-          {t("documentLibraryShareDialog.usersSectionTitle", { defaultValue: "Users" })}
-        </Typography>
-        <List dense disablePadding>
-          {users.map((userMember) => (
-            <UserListItem
-              user={userMember.user}
-              secondaryAction={
-                <Stack alignItems="center" direction="row" gap={1}>
-                  <RelationIcon relation={userMember.relation} />
-                  {relationLabels[userMember.relation]}
-                </Stack>
-              }
-            />
-          ))}
-        </List>
-      </Box>
+      {users.length > 0 && (
+        <Box component="section">
+          <Typography variant="subtitle2" color="text.secondary" sx={{ px: 2, py: 1 }}>
+            {t("documentLibraryShareDialog.usersSectionTitle", { defaultValue: "Users" })}
+          </Typography>
+          <List dense disablePadding>
+            {users.map((userMember) => (
+              <UserListItem
+                user={userMember.user}
+                secondaryAction={
+                  <Stack alignItems="center" direction="row" gap={1}>
+                    <RelationIcon relation={userMember.relation} />
+                    {relationLabels[userMember.relation]}
+                  </Stack>
+                }
+              />
+            ))}
+          </List>
+        </Box>
+      )}
 
-      <Box component="section">
-        <Typography variant="subtitle2" color="text.secondary" sx={{ px: 2, py: 1 }}>
-          {t("documentLibraryShareDialog.groupsSectionTitle", { defaultValue: "Groups" })}
-        </Typography>
-        <List dense disablePadding>
-          {groups.map((groupMember) => (
-            <GroupListItem
-              group={groupMember.group}
-              secondaryAction={
-                <Stack alignItems="center" direction="row" gap={1}>
-                  <RelationIcon relation={groupMember.relation} />
-                  {relationLabels[groupMember.relation]}
-                </Stack>
-              }
-            />
-          ))}
-        </List>
-      </Box>
+      {groups.length > 0 && (
+        <Box component="section">
+          <Typography variant="subtitle2" color="text.secondary" sx={{ px: 2, py: 1 }}>
+            {t("documentLibraryShareDialog.groupsSectionTitle", { defaultValue: "Groups" })}
+          </Typography>
+          <List dense disablePadding>
+            {groups.map((groupMember) => (
+              <GroupListItem
+                group={groupMember.group}
+                secondaryAction={
+                  <Stack alignItems="center" direction="row" gap={1}>
+                    <RelationIcon relation={groupMember.relation} />
+                    {relationLabels[groupMember.relation]}
+                  </Stack>
+                }
+              />
+            ))}
+          </List>
+        </Box>
+      )}
     </Box>
   );
 }
