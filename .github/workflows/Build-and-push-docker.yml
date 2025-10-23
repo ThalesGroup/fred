@@ -25,7 +25,7 @@ jobs:
             image: agentic-backend
           - name: knowledge-flow-backend
             context: ./
-            dockerfile: ./knowledge_flow_backend/dockerfiles/Dockerfile-prod
+            dockerfile: ./knowledge-flow-backend/dockerfiles/Dockerfile-prod
             image: knowledge-flow-backend
           - name: frontend
             context: ./
