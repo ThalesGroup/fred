@@ -107,7 +107,7 @@ export function DocumentLibraryShareCurrentAccessTab({ tag, open }: DocumentLibr
   }
 
   return (
-    <Box display="flex" flexDirection="column" gap={3}>
+    <Box display="flex" flexDirection="column" gap={3} sx={{ flex: 1, minHeight: 0, overflow: "auto", pb: 1 }}>
       {users.length > 0 && (
         <Box component="section">
           <Typography variant="subtitle2" color="text.secondary" sx={{ px: 2, py: 1 }}>
