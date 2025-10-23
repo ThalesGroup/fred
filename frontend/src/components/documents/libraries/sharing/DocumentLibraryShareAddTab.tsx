@@ -95,7 +95,7 @@ export function DocumentLibraryShareAddTab({ tag, onShared }: DocumentLibrarySha
   };
 
   return (
-    <Box display="flex" flexDirection="column" gap={2}>
+    <Box display="flex" flexDirection="column" gap={2} sx={{ flex: 1, minHeight: "500px" }}>
       {shareError ? (
         <Alert severity="error" onClose={() => setShareError(null)}>
           {shareError}
@@ -135,47 +135,70 @@ export function DocumentLibraryShareAddTab({ tag, onShared }: DocumentLibrarySha
         </ToggleButton>
       </ToggleButtonGroup>
 
-      {audience === "user" ? (
-        <DocumentLibraryShareUsersList
-          searchQuery={searchQuery}
-          selectedIds={selectedIds}
-          disabled={isSharing}
-          onAdd={handleAddRecipient}
-          tagId={tag.id}
-        />
-      ) : (
-        <DocumentLibraryShareGroupTree
-          searchQuery={searchQuery}
-          selectedIds={selectedIds}
-          disabled={isSharing}
-          onAdd={handleAddRecipient}
-        />
-      )}
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateRows: "1fr auto auto 1fr",
+          gap: 2,
+          flex: 1,
+          minHeight: 0,
+          overflow: "hidden",
+        }}
+      >
+        <Box
+          sx={{
+            overflowY: "auto",
+          }}
+        >
+          {audience === "user" ? (
+            <DocumentLibraryShareUsersList
+              searchQuery={searchQuery}
+              selectedIds={selectedIds}
+              disabled={isSharing}
+              onAdd={handleAddRecipient}
+              tagId={tag.id}
+            />
+          ) : (
+            <DocumentLibraryShareGroupTree
+              searchQuery={searchQuery}
+              selectedIds={selectedIds}
+              disabled={isSharing}
+              onAdd={handleAddRecipient}
+            />
+          )}
+        </Box>
 
-      <Divider />
+        <Divider />
 
-      <Stack direction="row" justifyContent="space-between" alignItems="center">
-        <Typography variant="subtitle2">
-          {t("documentLibraryShareDialog.pendingTitle", { defaultValue: "Pending access" })}
-        </Typography>
-        {pendingRecipients.length > 0 && (
-          <Chip
-            color="default"
-            variant="outlined"
-            label={t("documentLibraryShareDialog.pendingCount", {
-              count: pendingRecipients.length,
-              defaultValue: "{{count}} pending",
-            })}
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <Typography variant="subtitle2">
+            {t("documentLibraryShareDialog.pendingTitle", { defaultValue: "Pending access" })}
+          </Typography>
+          {pendingRecipients.length > 0 && (
+            <Chip
+              color="default"
+              variant="outlined"
+              label={t("documentLibraryShareDialog.pendingCount", {
+                count: pendingRecipients.length,
+                defaultValue: "{{count}} pending",
+              })}
+            />
+          )}
+        </Stack>
+
+        <Box
+          sx={{
+            overflowY: "auto",
+          }}
+        >
+          <DocumentLibraryPendingRecipientsList
+            items={pendingRecipients}
+            disabled={isSharing}
+            onChangeRelation={handleRelationChange}
+            onRemove={handleRemoveRecipient}
           />
-        )}
-      </Stack>
-
-      <DocumentLibraryPendingRecipientsList
-        items={pendingRecipients}
-        disabled={isSharing}
-        onChangeRelation={handleRelationChange}
-        onRemove={handleRemoveRecipient}
-      />
+        </Box>
+      </Box>
 
       <Box display="flex" justifyContent="flex-end">
         <Button
