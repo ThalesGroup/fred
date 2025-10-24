@@ -534,6 +534,9 @@ export type RuntimeContext = {
   selected_template_ids?: string[] | null;
   selected_chat_context_ids?: string[] | null;
   search_policy?: string | null;
+  access_token?: string | null;
+  refresh_token?: string | null;
+  access_token_expires_at?: number | null;
   [key: string]: any;
 };
 export type ChatAskInput = {

@@ -14,7 +14,6 @@ IMAGE_TAG           ?= $(VERSION)
 IMAGE_FULL          ?= $(REGISTRY_URL)/$(REGISTRY_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG)
 
 # Runtime
-UVICORN_FACTORY     ?= $(PY_PACKAGE).main:create_app
 PORT                ?= 8111
 ENV_FILE            ?= .venv
 LOG_LEVEL           ?= info

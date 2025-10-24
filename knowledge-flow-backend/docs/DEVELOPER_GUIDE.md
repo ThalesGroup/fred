@@ -81,7 +81,7 @@ This approach is consistent and scalable across all agent-facing interfaces.
 Input processors extract structured content and metadata from uploaded files.
 
 | Type     | Location            | Output        |
-|----------|---------------------|---------------|
+| -------- | ------------------- | ------------- |
 | Markdown | `input_processors/` | Markdown text |
 | Tabular  | `input_processors/` | Table rows    |
 
@@ -92,7 +92,7 @@ Each input processor specializes in a file type (PDF, DOCX, CSV, etc.).
 Output processors transform parsed content into embeddings or structured records.
 
 | Type          | Location                                     | Output                |
-|---------------|----------------------------------------------|-----------------------|
+| ------------- | -------------------------------------------- | --------------------- |
 | Vectorization | `output_processors/vectorization_processor/` | Embeddings + metadata |
 | Tabular       | `output_processors/tabular_processor/`       | Normalized records    |
 
@@ -134,7 +134,7 @@ structure with roles and guidelines for extension.
 ### 🔩 Root Layout
 
 ```
-app/
+knowledge_flow_backend/
 ├── main.py                       # FastAPI + MCP entrypoint
 ├── application_context.py        # Shared runtime context (DI / singleton-style config)
 ├── config/                       # YAML and Python-based configuration modules
@@ -242,7 +242,7 @@ config/
 ### Developer Guidance
 
 | Task                       | Location                                   |
-|----------------------------|--------------------------------------------|
+| -------------------------- | ------------------------------------------ |
 | Add a new REST API         | `features/your_feature/`                   |
 | Add support for a new file | `core/processors/input/your_type/`         |
 | Add a new vector store     | `core/stores/vector_store/`                |

@@ -7,7 +7,7 @@
 			"path": "../fred-core"
 		},
 		{
-			"path": "../agentic_backend"
+			"path": "../agentic-backend"
 		},
 		{
 			"path": "../knowledge-flow-backend"
@@ -18,7 +18,7 @@
 	],
 	"settings": {
 		"files.exclude": {
-			"agentic_backend/": true,
+			"agentic-backend/": true,
 			"knowledge_flow_backend/": true,
 			"frontend/": true,
 			"fred-core/": true,
