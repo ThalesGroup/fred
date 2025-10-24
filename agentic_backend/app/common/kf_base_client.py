@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -43,6 +43,9 @@ def _session_with_retries(allowed_methods: frozenset) -> requests.Session:
 
 TokenRefreshCallback = Callable[[], str]
 
+if TYPE_CHECKING:
+    from app.core.agents.agent_flow import AgentFlow
+
 
 class KfBaseClient:
     """
@@ -52,13 +55,9 @@ class KfBaseClient:
     `access_token` to be explicitly passed for all requests. M2M authentication is removed.
     """
 
-    def __init__(
-        self,
-        allowed_methods: frozenset,
-        refresh_callback: Optional[TokenRefreshCallback] = None,
-    ):
+    def __init__(self, allowed_methods: frozenset, agent: "AgentFlow"):
         ctx = get_app_context()
-        self._refresh_callback = refresh_callback
+        self.agent = agent
         # Base URL: ensure no trailing slash so path concatenation is safe
         self.base_url = ctx.get_knowledge_flow_base_url().rstrip("/")
 
@@ -75,12 +74,13 @@ class KfBaseClient:
         # self._on_auth_refresh = None # (or just don't define it)
 
     def _execute_authenticated_request(
-        self, method: str, path: str, access_token: str, **kwargs: Any
+        self, method: str, path: str, **kwargs: Any
     ) -> requests.Response:
         """
         Executes a single authenticated request attempt. Requires `access_token`.
         This is the core execution logic, replacing _request_once.
         """
+        access_token = self.agent.runtime_context.access_token
         if not access_token:
             raise ValueError(
                 "Cannot make an authenticated request: 'access_token' must be provided to KfBaseClient."
@@ -98,19 +98,19 @@ class KfBaseClient:
         )
 
     def _request_with_token_refresh(
-        self, method: str, path: str, access_token: str, **kwargs: Any
+        self, method: str, path: str, **kwargs: Any
     ) -> requests.Response:
         """
         Executes a request, handling token expiration (401) via callback and retry.
         """
-        current_token = access_token
 
         for attempt in range(2):
             try:
                 # Use the existing _request_with_auth_retry for the network retry part
                 r = self._execute_authenticated_request(
-                    method=method, path=path, access_token=current_token, **kwargs
+                    method=method, path=path, **kwargs
                 )
+
                 r.raise_for_status()  # Raise exception on 4xx/5xx
                 return r  # Success!
 
@@ -119,7 +119,7 @@ class KfBaseClient:
                 if (
                     e.response.status_code == 401
                     and attempt == 0
-                    and self._refresh_callback
+                    and self.agent.refresh_user_access_token is not None
                 ):
                     logger.warning(
                         "Received 401 Unauthorized on %s %s. Attempting token refresh via callback...",
@@ -129,7 +129,7 @@ class KfBaseClient:
 
                     try:
                         # 2. Call the provided refresh function
-                        current_token = self._refresh_callback()
+                        self.agent.refresh_user_access_token()
                         logger.info("Token refresh successful. Retrying request.")
                         continue  # Skip to next iteration (attempt = 1)
 

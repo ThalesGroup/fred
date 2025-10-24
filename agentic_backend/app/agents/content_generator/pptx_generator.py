@@ -176,7 +176,7 @@ class Sloan(AgentFlow):
     async def async_init(self):
         """Initialize model, search client, parser, and prompt."""
         self.model = get_model(self.agent_settings.model)
-        self.search_client = VectorSearchClient()
+        self.search_client = VectorSearchClient(agent=self)
         self._graph = self._build_graph()
 
         # Structured output schema (header + body)
@@ -426,7 +426,6 @@ class Sloan(AgentFlow):
                 top_k=top_k,
                 document_library_tags_ids=doc_tag_ids,
                 search_policy=search_policy,
-                access_token=self.get_end_user_access_token(),
             )
 
             if not hits:

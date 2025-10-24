@@ -542,6 +542,8 @@ export type ChatAskInput = {
   agent_name: string;
   runtime_context?: RuntimeContext | null;
   client_exchange_id?: string | null;
+  access_token?: string | null;
+  refresh_token?: string | null;
 };
 export type StreamEvent = {
   type?: "stream";

@@ -26,6 +26,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import MessagesState
 
 from app.core.agents.agent_flow import AgentFlow
+from app.core.agents.runtime_context import RuntimeContext
 from app.core.chatbot.chat_schema import (
     Channel,
     ChatMessage,
@@ -123,13 +124,14 @@ class StreamTranscoder:
         start_seq: int,
         callback: CallbackType,
         user_context: KeycloakUser,
-        access_token: str,
+        runtime_context: RuntimeContext,
     ) -> List[ChatMessage]:
         config: RunnableConfig = {
             "configurable": {
                 "thread_id": session_id,
                 "user_id": user_context.uid,
-                "access_token": access_token,
+                "access_token": runtime_context.access_token,
+                "refresh_token": runtime_context.refresh_token,
             },
             "recursion_limit": 40,
         }

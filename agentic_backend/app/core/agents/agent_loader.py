@@ -31,11 +31,9 @@ Public API:
 
 from __future__ import annotations
 
-import asyncio
 import importlib
 import logging
-from inspect import iscoroutinefunction
-from typing import Dict, List, Tuple, Type
+from typing import Dict, Type
 
 from app.common.structures import (
     AgentSettings,
@@ -51,11 +49,9 @@ SUPPORTED_TRANSPORTS = ["sse", "stdio", "streamable_http", "websocket"]
 
 class AgentLoader:
     """
-    Factory for AgentFlow instances with a bounded async initialization step.
-
-    Rationale:
-    - Keeps `AgentManager` small and focused on orchestration.
-    - Makes testing easier: you can unit-test mapping and init paths separately.
+    Loads agents from static configuration and persistent storage. This
+    class does not create or activate any agent instance, it only loads and check
+    that configured or persisted agent settings are correct and still valid
     """
 
     def __init__(self, config: Configuration, store: BaseAgentStore):
@@ -66,16 +62,15 @@ class AgentLoader:
     # Public API
     # ---------------------------------------------------------------------
 
-    async def load_static(self) -> Tuple[List[AgentFlow], Dict[str, AgentSettings]]:
+    def load_static(self) -> Dict[str, AgentSettings]:
         """
         Build agents declared in configuration (enabled only), run `async_init()`,
         and return `(instances, failed_map)`. `failed_map` contains AgentSettings
         for static agents that failed to import/instantiate/init (so a retry loop
         can attempt later).
         """
-        instances: List[AgentFlow] = []
         failed: Dict[str, AgentSettings] = {}
-
+        successful: Dict[str, AgentSettings] = {}
         for agent_cfg in self.config.ai.agents:
             if not agent_cfg.enabled:
                 continue
@@ -96,41 +91,22 @@ class AgentLoader:
                     )
                     failed[agent_cfg.name] = agent_cfg
                     continue
-
-                inst: AgentFlow = cls(agent_settings=agent_cfg)
-
-                if iscoroutinefunction(getattr(inst, "async_init", None)):
-                    # Catch BaseException so GeneratorExit doesn’t take down the lifespan.
-                    try:
-                        await inst.async_init()
-                    except (SystemExit, KeyboardInterrupt, GeneratorExit):
-                        # Don’t swallow process shutdown signals
-                        raise
-                    except BaseException:
-                        logger.warning(
-                            "Static async_init cancelled for '%s'",
-                            agent_cfg.name,
-                        )
-                        failed[agent_cfg.name] = agent_cfg
-                        continue
-
-                instances.append(inst)
                 logger.info("✅ Static agent ready: %s", agent_cfg.name)
-
+                successful[agent_cfg.name] = agent_cfg
             except Exception as e:
                 logger.exception(
                     "❌ Failed to construct static agent '%s': %s", agent_cfg.name, e
                 )
                 failed[agent_cfg.name] = agent_cfg
 
-        return instances, failed
+        return successful
 
-    async def load_persisted(self) -> List[AgentFlow]:
+    def load_persisted(self) -> Dict[str, AgentSettings]:
         """
         Build agents from persistent storage (e.g., DuckDB), run `async_init()`,
         and return ready instances. Agents with missing/invalid class_path are skipped.
         """
-        out: List[AgentFlow] = []
+        out: Dict[str, AgentSettings] = {}
 
         for agent_settings in self.store.load_all():
             if not agent_settings.class_path:
@@ -155,32 +131,12 @@ class AgentLoader:
                     )
                     continue
 
-                inst: AgentFlow = cls(agent_settings=agent_settings)
-
-                if iscoroutinefunction(getattr(inst, "async_init", None)):
-                    try:
-                        await inst.async_init()
-                    except asyncio.CancelledError:
-                        logger.warning(
-                            "Persisted async_init cancelled for '%s'",
-                            agent_settings.name,
-                        )
-                        # shutdown path: don’t log as an error
-                        raise
-                    except BaseException as be:
-                        logger.exception(
-                            "Persisted async_init failed for '%s' (suppressed): %s",
-                            agent_settings.name,
-                            be,
-                        )
-                        continue
-
-                out.append(inst)
                 logger.info(
                     "✅ Persisted agent loaded: %s (%s)",
                     agent_settings.name,
                     agent_settings.class_path,
                 )
+                out[agent_settings.name] = agent_settings
             except ModuleNotFoundError:
                 logger.error(
                     "❌ Failed to load persisted agent '%s' (ModuleNotFoundError). Removing stale entry from store.",
@@ -207,6 +163,13 @@ class AgentLoader:
         return out
 
     def _import_agent_class(self, class_path: str) -> Type[AgentFlow]:
+        """
+        Dynamically import an agent class from its full class path.
+        Raises ImportError if the class cannot be found.
+
+        This method is only used to check class validity during loading;
+        actual instantiation is done elsewhere.
+        """
         module_name, class_name = class_path.rsplit(".", 1)
         module = importlib.import_module(module_name)
         if class_name == "Leader":

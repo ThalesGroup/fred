@@ -1,6 +1,16 @@
-# app/common/mcp_toolkit.py
 # Copyright Thales 2025
-# Licensed under the Apache License, Version 2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 """
 McpToolkit — build LangChain tools from an MCP client *per turn*.
@@ -17,8 +27,6 @@ from langchain_core.tools import BaseTool, BaseToolkit
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from pydantic import Field, PrivateAttr
 
-from app.common.mcp_client_wrapper import RefreshableTool
-
 if TYPE_CHECKING:
     from app.core.agents.agent_flow import AgentFlow
 
@@ -26,13 +34,6 @@ logger = logging.getLogger(__name__)
 
 
 class McpToolkit(BaseToolkit):
-    """
-    Context-aware wrapper over MCP tools.
-
-    ... [rest of docstring truncated for brevity] ...
-    """
-
-    # Kept for BaseToolkit compatibility; we don't actually store tools here.
     tools: List[BaseTool] = Field(default_factory=list, description="(unused)")
     _client: MultiServerMCPClient = PrivateAttr()
     _agent: "AgentFlow" = PrivateAttr()
@@ -59,14 +60,14 @@ class McpToolkit(BaseToolkit):
         """
         if hasattr(self._client, "get_tools"):
             base_tools = self._client.get_tools()  # type: ignore[no-any-return]
-            # 🟢 LOG 2: Discovery success
+            #  Discovery success
             logger.info(
                 "McpToolkit discovered %d base tools via get_tools()",
                 len(base_tools),
             )
             return base_tools
 
-        # 🟢 LOG 2 (Failure): Tool discovery failed
+        # LOG 2 (Failure): Tool discovery failed
         logger.error("MCP client does not expose a tool discovery method.")
         raise RuntimeError("MCP client does not expose a tool discovery method.")
 
@@ -94,30 +95,4 @@ class McpToolkit(BaseToolkit):
         Build the per-turn toolset: Discover, Filter, and Wrap, using the
         agent's RuntimeContext for context-specific filtering.
         """
-        logger.info("McpToolkit starting per-turn tool building.")
-
-        base_tools = self._discover_base_tools()
-
-        # Example of context-aware filtering:
-        # if runtime_context.search_policy == "restricted":
-        #    allowed_tools = [t for t in base_tools if "search" not in t.name]
-        # else:
-        allowed_tools = base_tools
-
-        # 2. WRAP each allowed tool with the RefreshableTool
-        wrapped_tools: List[BaseTool] = []
-        for tool in allowed_tools:
-            # Pass the raw tool and the agent_flow instance
-            wrapped_tools.append(
-                RefreshableTool(underlying_tool=tool, agent_flow=self._agent)
-            )
-        wrapped_tool_names = [t.name for t in wrapped_tools if hasattr(t, "name")]
-        # 🟢 LOG 6: Final result
-        logger.info(
-            "McpToolkit returning %d wrapped tools: %s",
-            len(wrapped_tools),
-            ", ".join(wrapped_tool_names),
-        )
-
-        # return wrapped_tools
-        return allowed_tools
+        return self._discover_base_tools()

@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, BinaryIO, Optional
 
 import requests
 
-from app.common.kf_base_client import KfBaseClient, TokenRefreshCallback
+from app.common.kf_base_client import KfBaseClient
 
 if TYPE_CHECKING:
     from app.core.agents.agent_flow import AgentFlow
@@ -71,11 +71,10 @@ class KfAgentAssetClient(KfBaseClient):
     """
 
     def __init__(self, agent: "AgentFlow"):
-        refresh_fn: TokenRefreshCallback = agent.refresh_user_access_token
-
         # Initialize the base client, specifying the methods we allow (GET and POST)
         super().__init__(
-            allowed_methods=frozenset({"GET", "POST"}), refresh_callback=refresh_fn
+            agent=agent,
+            allowed_methods=frozenset({"GET", "POST"}),
         )
 
     def _get_asset_stream(

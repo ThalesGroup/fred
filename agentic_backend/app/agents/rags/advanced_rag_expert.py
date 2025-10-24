@@ -141,7 +141,7 @@ class AdvancedRico(AgentFlow):
 
     async def async_init(self):
         self.model = get_model(self.agent_settings.model)
-        self.search_client = VectorSearchClient()
+        self.search_client = VectorSearchClient(agent=self)
         self.base_prompt = self._generate_prompt()
         self._graph = self._build_graph()
 
@@ -218,7 +218,6 @@ class AdvancedRico(AgentFlow):
                 top_k=top_k,
                 document_library_tags_ids=document_library_tags_ids,
                 search_policy=search_policy,
-                access_token=self.get_end_user_access_token(),
             )
 
             if not hits:

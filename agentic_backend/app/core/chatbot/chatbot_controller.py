@@ -178,9 +178,6 @@ def get_agentic_flows(
 @router.websocket("/chatbot/query/ws")
 async def websocket_chatbot_question(
     websocket: WebSocket,
-    agent_manager: AgentManager = Depends(
-        get_agent_manager_ws
-    ),  # Use WebSocket-specific dependency
     session_orchestrator: SessionOrchestrator = Depends(
         get_session_orchestrator_ws
     ),  # Use WebSocket-specific dependency
@@ -213,12 +210,46 @@ async def websocket_chatbot_question(
         await websocket.close(code=4401)
         return
 
+    active_token = token
+    active_user = user
+    active_refresh_token: str | None = None
+
     try:
         while True:
             client_request = None
             try:
                 client_request = await websocket.receive_json()
                 ask = ChatAskInput(**client_request)
+
+                incoming_token = ask.access_token
+                incoming_refresh = ask.refresh_token
+                if incoming_token and incoming_token != active_token:
+                    try:
+                        refreshed_user = decode_jwt(incoming_token)
+                    except HTTPException:
+                        logger.warning(
+                            "Rejected invalid token provided via ChatAskInput payload."
+                        )
+                    else:
+                        if refreshed_user.uid != active_user.uid:
+                            logger.warning(
+                                "WS token subject mismatch (current=%s new=%s); keeping previous token.",
+                                active_user.uid,
+                                refreshed_user.uid,
+                            )
+                        else:
+                            active_token = incoming_token
+                            active_user = refreshed_user
+                            if incoming_refresh:
+                                active_refresh_token = incoming_refresh
+                elif incoming_refresh:
+                    active_refresh_token = incoming_refresh
+
+                # TODO HACK SEND THE TOKEN DIRECTLY IN RUNTIME CONTEXT
+                if not ask.runtime_context:
+                    ask.runtime_context = RuntimeContext()
+                ask.runtime_context.access_token = active_token
+                ask.runtime_context.refresh_token = active_refresh_token
 
                 async def ws_callback(msg_dict: dict):
                     event = StreamEvent(type="stream", message=ChatMessage(**msg_dict))
@@ -228,8 +259,7 @@ async def websocket_chatbot_question(
                     session,
                     final_messages,
                 ) = await session_orchestrator.chat_ask_websocket(  # Use injected object
-                    user=user,
-                    access_token=token,
+                    user=active_user,
                     callback=ws_callback,
                     session_id=ask.session_id,
                     message=ask.message,

@@ -40,7 +40,7 @@ from app.application_context import (
     get_history_store,
     get_kpi_writer,
 )
-from app.core.agents.agent_flow import AgentFlow
+from app.core.agents.agent_factory import AgentFactory
 from app.core.agents.agent_manager import AgentManager
 from app.core.agents.runtime_context import RuntimeContext
 from app.core.chatbot.chat_schema import (
@@ -81,9 +81,15 @@ class SessionOrchestrator:
       Result: Single Responsibility, easy to unit test, and the WS layer remains simple.
     """
 
-    def __init__(self, session_store: BaseSessionStore, agent_manager: AgentManager):
+    def __init__(
+        self,
+        session_store: BaseSessionStore,
+        agent_manager: AgentManager,
+        agent_factory: AgentFactory,
+    ):
         self.session_store = session_store
         self.agent_manager = agent_manager
+        self.agent_factory = agent_factory
 
         # Side services
         self.history_store = get_history_store()
@@ -101,12 +107,11 @@ class SessionOrchestrator:
         self,
         *,
         user: KeycloakUser,
-        access_token: str,
         callback: CallbackType,
         session_id: str | None,
         message: str,
         agent_name: str,
-        runtime_context: Optional[RuntimeContext] = None,
+        runtime_context: RuntimeContext,
         client_exchange_id: Optional[str] = None,
     ) -> Tuple[SessionSchema, List[ChatMessage]]:
         """
@@ -122,11 +127,15 @@ class SessionOrchestrator:
         if session_id is not None:
             self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
 
-        logger.info(
+        logger.debug(
             "chat_ask_websocket user_id=%s session_id=%s agent=%s",
             user.uid,
             session_id,
             agent_name,
+        )
+
+        transient_agent = await self.agent_factory.create_and_init(
+            agent_name=agent_name, runtime_context=runtime_context
         )
 
         # KPI: count incoming question early (before any work)
@@ -145,7 +154,7 @@ class SessionOrchestrator:
         )
 
         # 1) Ensure session + rebuild minimal LC history
-        session, lc_history, agent, _is_new_session = self._prepare_session_and_history(
+        session, lc_history = self._prepare_session_and_history(
             user=user,
             session_id=session_id,
             message=message,
@@ -186,7 +195,7 @@ class SessionOrchestrator:
                 actor=actor,
             ):
                 agent_msgs = await self.transcoder.stream_agent_response(
-                    agent=agent,
+                    agent=transient_agent,
                     input_messages=lc_history + [HumanMessage(message)],
                     session_id=session.id,
                     exchange_id=exchange_id,
@@ -195,7 +204,7 @@ class SessionOrchestrator:
                     start_seq=1,  # user message already consumed rank=base_rank
                     callback=callback,
                     user_context=user,
-                    access_token=access_token,
+                    runtime_context=runtime_context,
                 )
                 all_msgs.extend(agent_msgs)
                 # Success signal: exactly one assistant/final per exchange (enforced by transcoder)
@@ -378,7 +387,7 @@ class SessionOrchestrator:
         message: str,
         agent_name: str,
         runtime_context: RuntimeContext | None = None,
-    ) -> tuple[SessionSchema, list[BaseMessage], AgentFlow, bool]:
+    ) -> tuple[SessionSchema, list[BaseMessage]]:
         """
         Why here:
           Session creation, title generation and *minimal* LC history reconstruction
@@ -386,7 +395,7 @@ class SessionOrchestrator:
           lean (user/assistant/system only) to avoid leaking UI-specific messages
           (tools, thought traces) into the prompt.
         """
-        session, is_new_session = self._get_or_create_session(
+        session = self._get_or_create_session(
             user_id=user.uid, query=message, session_id=session_id
         )
 
@@ -407,19 +416,16 @@ class SessionOrchestrator:
                 lc_history.append(SystemMessage(_concat_text_parts(m.parts or [])))
             # Role.tool is ignored for prompt cleanliness.
 
-        agent: AgentFlow = self.agent_manager.get_agent_instance(
-            name=agent_name, runtime_context=runtime_context
-        )
-        return session, lc_history, agent, is_new_session
+        return session, lc_history
 
     def _get_or_create_session(
         self, *, user_id: str, query: str, session_id: Optional[str]
-    ) -> Tuple[SessionSchema, bool]:
+    ) -> SessionSchema:
         if session_id:
             existing = self.session_store.get(session_id)
             if existing:
                 logger.info("Resumed session %s for user %s", session_id, user_id)
-                return existing, False
+                return existing
 
         new_session_id = secrets.token_urlsafe(8)
         title: str = (
@@ -435,7 +441,7 @@ class SessionOrchestrator:
         )
         self.session_store.save(session)
         logger.info("Created new session %s for user %s", new_session_id, user_id)
-        return session, True
+        return session
 
 
 # ---------- pure helpers (kept local for discoverability) ----------

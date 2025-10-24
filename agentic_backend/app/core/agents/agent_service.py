@@ -72,16 +72,19 @@ class AgentService:
             )
 
         # Instantiate and init the runtime agent
-        agent_instance = MCPAgent(agent_settings=agent_settings)
-        await agent_instance.async_init()
+        # agent_instance = MCPAgent(agent_settings=agent_settings)
+        # await agent_instance.async_init()
 
-        # Persist first (source of truth)
-        self.store.save(agent_settings)
+        # # Persist first (source of truth)
+        # self.store.save(agent_settings)
 
-        # Register live (so UI/routing sees it immediately)
-        self.agent_manager.register_dynamic_agent(agent_instance, agent_settings)
+        # # Register live (so UI/routing sees it immediately)
+        # self.agent_manager.register_dynamic_agent(agent_instance, agent_settings)
 
-        logger.info("✅ Created MCP agent '%s'", name)
+        # logger.info("✅ Created MCP agent '%s'", name)
+        logger.error(
+            "⚠️ TODO AgentService.create_agent() incomplete; agent not created or stored."
+        )
 
     @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
     async def update_agent(self, user: KeycloakUser, agent_settings: AgentSettings):

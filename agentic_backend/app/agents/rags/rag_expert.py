@@ -1,6 +1,17 @@
-# app/agents/rag/rag_expert.py
 # Copyright Thales 2025
-# Licensed under the Apache License, Version 2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 
 import logging
 from typing import List
@@ -20,6 +31,7 @@ from app.common.structures import AgentChatOptions
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from app.core.agents.runtime_context import (
+    RuntimeContext,
     get_document_library_tags_ids,
     get_search_policy,
 )
@@ -89,10 +101,10 @@ class Rico(AgentFlow):
         libraries_selection=True,
     )
 
-    async def async_init(self):
+    async def async_init(self, runtime_context: RuntimeContext):
         """Bind the model, create the vector search client, and build the graph."""
         self.model = get_model(self.agent_settings.model)
-        self.search_client = VectorSearchClient()
+        self.search_client = VectorSearchClient(agent=self)
         self._graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
@@ -146,7 +158,6 @@ class Rico(AgentFlow):
                 top_k=top_k,
                 document_library_tags_ids=doc_tag_ids,
                 search_policy=search_policy,
-                access_token=self.get_end_user_access_token(),
             )
             if not hits:
                 warn = "I couldn't find any relevant documents. Try rephrasing or expanding your query?"

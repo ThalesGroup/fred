@@ -493,12 +493,19 @@ const ChatBot = ({
    */
   const queryChatBot = async (input: string, agent?: AnyAgent, runtimeContext?: RuntimeContext) => {
     console.log(`[📤 ChatBot] Sending message: ${input}`);
-
+    // Get tokens for backend use. This proacively allows the backend to perform
+    // user-authenticated operations (e.g., vector search) on behalf of the user.
+    // The backend is then responsible for refreshing tokens as needed. Which will rarely be needed
+    // because tokens are refreshed often on the frontend.
+    const refreshToken = KeyCloakService.GetRefreshToken();
+    const accessToken = KeyCloakService.GetToken();
     const eventBase: ChatAskInput = {
       message: input,
       agent_name: agent ? agent.name : currentAgent.name,
       session_id: currentChatBotSession?.id,
       runtime_context: runtimeContext,
+      access_token: accessToken || undefined, // Now the backend can read the active token
+      refresh_token: refreshToken || undefined, // Now the backend can save and use the refresh token
     };
 
     const event = {

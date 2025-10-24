@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from fred_core import VectorSearchHit
 from pydantic import TypeAdapter
 
-from app.common.kf_base_client import KfBaseClient, TokenRefreshCallback
+from app.common.kf_base_client import KfBaseClient
 from app.core.agents.agent_flow import AgentFlow
 
 logger = logging.getLogger(__name__)
@@ -37,12 +37,9 @@ class VectorSearchClient(KfBaseClient):
     """
 
     def __init__(self, agent: AgentFlow):
-        # access the refresh_user_access_token attribute at runtime.
-        refresh_fn: TokenRefreshCallback = agent.refresh_user_access_token
-
-        # Pass the refresh function to the base class
         super().__init__(
-            allowed_methods=frozenset({"POST"}), refresh_callback=refresh_fn
+            agent=agent,
+            allowed_methods=frozenset({"POST"}),
         )
 
     def search(
@@ -52,7 +49,6 @@ class VectorSearchClient(KfBaseClient):
         top_k: int = 10,
         document_library_tags_ids: Optional[Sequence[str]] = None,
         search_policy: Optional[str] = None,
-        access_token: str,
     ) -> List[VectorSearchHit]:
         """
         Perform a vector search against the Knowledge Flow backend. This method
@@ -67,11 +63,6 @@ class VectorSearchClient(KfBaseClient):
             "search_policy": str?
           }
         """
-        if not access_token:
-            raise ValueError(
-                "The 'access_token' is required for user-authenticated vector search."
-            )
-
         payload: Dict[str, Any] = {"question": question, "top_k": top_k}
         if document_library_tags_ids:
             payload["document_library_tags_ids"] = list(document_library_tags_ids)
@@ -85,7 +76,6 @@ class VectorSearchClient(KfBaseClient):
         r = self._request_with_token_refresh(
             method="POST",
             path="/vector/search",
-            access_token=access_token,
             json=payload,
         )
         r.raise_for_status()

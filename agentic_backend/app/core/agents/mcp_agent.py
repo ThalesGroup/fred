@@ -10,10 +10,9 @@ from fred_core import get_model
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
-from langgraph.prebuilt import tools_condition
+from langgraph.prebuilt import ToolNode, tools_condition
 
 from app.common.mcp_runtime import MCPRuntime
-from app.common.resilient_tool_node import make_resilient_tools_node
 from app.core.agents.agent_flow import AgentFlow
 from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
@@ -86,16 +85,9 @@ class MCPAgent(AgentFlow):
 
         # LLM node
         builder.add_node("reasoner", self.reasoner)
-
-        # Tools node with resilient refresh/rebind on transient failures
-        async def _refresh_and_rebind():
-            self.model = await self.mcp.refresh_and_bind(self.model)
-
-        tools_node = make_resilient_tools_node(
-            get_tools=self.mcp.get_tools,
-            refresh_cb=_refresh_and_rebind,
-        )
-        builder.add_node("tools", tools_node)
+        tools = self.mcp.get_tools()
+        tool_node = ToolNode(tools=tools)
+        builder.add_node("tools", tool_node)
 
         builder.add_edge(START, "reasoner")
         builder.add_conditional_edges(

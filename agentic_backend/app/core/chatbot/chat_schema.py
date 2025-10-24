@@ -182,6 +182,8 @@ class ChatAskInput(BaseModel):
     agent_name: str
     runtime_context: Optional[RuntimeContext] = None
     client_exchange_id: str | None = None
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
 
 
 class ChatMessage(BaseModel):

@@ -31,6 +31,7 @@ from typing import (
     cast,
 )
 
+from fred_core import get_keycloak_client_id, get_keycloak_url
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -55,12 +56,12 @@ from app.common.kf_agent_asset_client import (
     AssetUploadResult,
     KfAgentAssetClient,
 )
-from app.common.mcp_runtime import MCPRuntime
 from app.common.structures import (
     AgentChatOptions,
     AgentSettings,
     ChatContextMessage,
 )
+from app.common.user_token_refresher import refresh_user_access_token_from_keycloak
 from app.core.agents.agent_spec import AgentTuning, FieldSpec
 from app.core.agents.agent_state import Prepared, resolve_prepared
 from app.core.agents.runtime_context import RuntimeContext
@@ -119,37 +120,77 @@ class AgentFlow:
         self._graph = None  # Will be built in async_init
         self.streaming_memory = MemorySaver()
         self.compiled_graph: Optional[CompiledStateGraph] = None
-        self.runtime_context: Optional[RuntimeContext] = None
-        self.asset_client = KfAgentAssetClient()
-        self.mcp = MCPRuntime(agent=self)
         self._model: BaseChatModel | Any | None = None
 
-    def get_end_user_access_token(self) -> str:
-        """Reads the raw access token from the current run config."""
-        return (
-            self.run_config.get("configurable", {}).get("access_token")
-            or "MISSING_TOKEN"
+    async def async_init(self, runtime_context: RuntimeContext):
+        """
+        Asynchronous initialization routine that must be implemented by subclasses.
+        """
+        self.runtime_context: RuntimeContext = runtime_context
+        self.asset_client = KfAgentAssetClient(agent=self)
+
+    def refresh_user_access_token(self) -> str:
+        """
+        Refreshes the user's access token and updates the session's run_config.
+        Returns the newly acquired access token.
+        """
+        refresh_token = self.runtime_context.refresh_token
+        if not refresh_token:
+            raise RuntimeError(
+                "Cannot refresh user access token: refresh_token missing from run_config."
+            )
+
+        keycloak_url = get_keycloak_url()
+        client_id = get_keycloak_client_id()
+        if not keycloak_url:
+            raise RuntimeError(
+                "User security realm_url is not configured for Keycloak."
+            )
+        if not client_id:
+            raise RuntimeError(
+                "User security client_id is not configured for Keycloak."
+            )
+
+        logger.info(
+            "SECURITY: Refreshing user access token via Keycloak realm %s", keycloak_url
+        )
+        payload = refresh_user_access_token_from_keycloak(
+            keycloak_url=keycloak_url,
+            client_id=client_id,
+            refresh_token=refresh_token,
         )
 
-    # This method is for testing propagation, you'd integrate this logic
-    # into your tool calls later (e.g., in a tool calling VectorSearchClient)
-    def debug_print_user_info(self) -> str:
-        """
-        A temporary method to demonstrate token access within an agent node.
-        """
-        user_id = self.get_end_user_id()
-        # NOTE: Do NOT log the token in production, just print a confirmation
-        token_present = self.get_end_user_access_token() is not None
+        new_access_token = payload.get("access_token")
+        new_refresh_token = payload.get("refresh_token") or refresh_token
+        if not new_access_token:
+            raise RuntimeError(
+                "Keycloak refresh response did not include access_token."
+            )
 
-        print(f"Agent Node: User ID: {user_id}")
-        print(f"Agent Node: Access Token Present: {token_present}")
+        # Update RuntimeContext attributes (RuntimeContext does not implement item assignment).
+        try:
+            setattr(self.runtime_context, "access_token", new_access_token)
+            setattr(self.runtime_context, "refresh_token", new_refresh_token)
+        except Exception:
+            logger.debug(
+                "Could not set attributes on runtime_context; skipping attribute assignment."
+            )
 
-        # Optional: Print the first few characters of the token for manual verification
-        # (Be very careful with logging this in real systems)
-        token_prefix = self.get_end_user_access_token()[:10] if token_present else "N/A"
-        print(f"Agent Node: Token Prefix: {token_prefix}...")
+        expires_at = payload.get("expires_at_timestamp")
+        if expires_at:
+            try:
+                setattr(self.runtime_context, "access_token_expires_at", expires_at)
+            except Exception:
+                logger.debug(
+                    "Could not set access_token_expires_at on runtime_context; skipping attribute assignment."
+                )
 
-        return f"User ID is {user_id}. Token presence confirmed: {token_present}"
+        logger.info(
+            "SECURITY: User access token refreshed successfully [token=%s] [expires_at=%s]",
+            new_access_token,
+            expires_at,
+        )
+        return new_access_token
 
     async def astream_updates(
         self,
@@ -171,10 +212,8 @@ class AgentFlow:
         (we just inject self.run_config first).
         - Accepts **kwargs in case you want to forward additional astream options later.
         """
-        # Make config available to node methods (e.g., get_end_user_id()).
+        # Make config available to node methods
         self.run_config = config or {}
-        if self.get_end_user_access_token():
-            self.debug_print_user_info()
         compiled = self.get_compiled_graph()
 
         # Preserve the exact streaming semantics you had before.
@@ -185,12 +224,6 @@ class AgentFlow:
             **kwargs,
         ):
             yield event
-
-    async def async_init(self):
-        """
-        Asynchronous initialization routine that must be implemented by subclasses.
-        """
-        pass
 
     def apply_settings(self, new_settings: AgentSettings) -> None:
         """
@@ -238,6 +271,23 @@ class AgentFlow:
         """
         raw = await runnable.ainvoke(messages, **kwargs)
         return self.ensure_any_message(raw)
+
+    def recent_messages(
+        self,
+        messages: Sequence[AnyMessage],
+        *,
+        max_messages: int = 8,
+    ) -> List[AnyMessage]:
+        """
+        Return a shallow copy of the latest `max_messages` items.
+        Call this before invoking the LLM to keep prompts short while
+        the full dialogue remains in MessagesState for other nodes.
+        """
+        if max_messages is None or max_messages <= 0:
+            return []
+        if len(messages) <= max_messages:
+            return list(messages)
+        return list(messages[-max_messages:])
 
     @staticmethod
     def delta(*msgs: AnyMessage) -> MessagesState:
