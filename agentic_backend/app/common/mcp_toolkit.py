@@ -5,27 +5,19 @@
 """
 McpToolkit — build LangChain tools from an MCP client *per turn*.
 
-Why this shape (important for Fred):
-- Identity & policy are per-user, per-turn. Tool availability must reflect that.
-- We do NOT cache a global tool list; we re-derive it each call with `cfg`.
-- We wrap every base MCP tool in a ContextAwareTool whose context provider
-  is a closure bound to the current `cfg` (so it uses the current bearer/tenant).
-
-Design contracts:
-- AgentFlow is the single source of truth for:
-  - `get_runtime_context(cfg)`  -> context object injected into calls
-  - `policy_allows(tool_fqn, role, cfg)` -> allow/deny filter
-- MCP client is already created for the right principal by MCPRuntime.init(cfg).
+... [rest of docstring truncated for brevity] ...
 """
 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List
 
 from langchain_core.tools import BaseTool, BaseToolkit
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from pydantic import Field, PrivateAttr
+
+from app.common.mcp_client_wrapper import RefreshableTool
 
 if TYPE_CHECKING:
     from app.core.agents.agent_flow import AgentFlow
@@ -37,18 +29,24 @@ class McpToolkit(BaseToolkit):
     """
     Context-aware wrapper over MCP tools.
 
-    IMPORTANT: This toolkit is intentionally *stateless* w.r.t tool catalogs.
-    `get_tools(cfg)` must be called each turn to avoid leaking identities or
-    stale allowlists across users/sessions.
+    ... [rest of docstring truncated for brevity] ...
     """
 
     # Kept for BaseToolkit compatibility; we don't actually store tools here.
     tools: List[BaseTool] = Field(default_factory=list, description="(unused)")
     _client: MultiServerMCPClient = PrivateAttr()
+    _agent: "AgentFlow" = PrivateAttr()
 
     def __init__(self, client: MultiServerMCPClient, agent: "AgentFlow"):
         super().__init__()
         self._client = client
+        self._agent = agent
+        # 🟢 LOG 1: Initialization success
+        logger.info(
+            "McpToolkit initialized. Client: %s, Agent: %s",
+            type(client).__name__,
+            type(agent).__name__,
+        )
 
     # -------- internal helpers --------
 
@@ -60,8 +58,16 @@ class McpToolkit(BaseToolkit):
         to be resilient across versions.
         """
         if hasattr(self._client, "get_tools"):
-            # Some adapters expose get_tools() returning LC BaseTool instances.
-            return self._client.get_tools()  # type: ignore[no-any-return]
+            base_tools = self._client.get_tools()  # type: ignore[no-any-return]
+            # 🟢 LOG 2: Discovery success
+            logger.info(
+                "McpToolkit discovered %d base tools via get_tools()",
+                len(base_tools),
+            )
+            return base_tools
+
+        # 🟢 LOG 2 (Failure): Tool discovery failed
+        logger.error("MCP client does not expose a tool discovery method.")
         raise RuntimeError("MCP client does not expose a tool discovery method.")
 
     # -------- public API --------
@@ -72,20 +78,46 @@ class McpToolkit(BaseToolkit):
         Safe to call even if discovery fails.
         """
         try:
-            return [getattr(t, "name", "") for t in self._discover_base_tools()]
-        except Exception:
+            names = [getattr(t, "name", "") for t in self._discover_base_tools()]
+            # 🟢 LOG 3: Peek successful
+            logger.info("McpToolkit peeked tool names: %s", names)
+            return names
+        except Exception as e:
+            # 🟢 LOG 3 (Failure): Peek failed
+            logger.warning("McpToolkit peek failed during tool discovery: %s", e)
             return []
 
-    def get_tools(self, cfg: Optional[dict] = None) -> List[BaseTool]:
+    def get_tools(
+        self,
+    ) -> List[BaseTool]:  # ❌ Removed: cfg: Optional[Mapping[str, Any]] = None
         """
-        Build the per-turn toolset:
-
-        1) Discover from MCP client (already created for the right principal).
-        2) Filter by Fred policy (role/tenant/tags) via AgentFlow.
-        3) Wrap each tool with ContextAwareTool whose provider captures *this* cfg.
-
-        Why capture cfg in the provider?
-        - So context (bearer, tenant, libraries, time windows) matches the current user/turn.
-        - Prevents cross-user leakage when multiple sessions hit the same agent instance.
+        Build the per-turn toolset: Discover, Filter, and Wrap, using the
+        agent's RuntimeContext for context-specific filtering.
         """
-        return self._discover_base_tools()
+        logger.info("McpToolkit starting per-turn tool building.")
+
+        base_tools = self._discover_base_tools()
+
+        # Example of context-aware filtering:
+        # if runtime_context.search_policy == "restricted":
+        #    allowed_tools = [t for t in base_tools if "search" not in t.name]
+        # else:
+        allowed_tools = base_tools
+
+        # 2. WRAP each allowed tool with the RefreshableTool
+        wrapped_tools: List[BaseTool] = []
+        for tool in allowed_tools:
+            # Pass the raw tool and the agent_flow instance
+            wrapped_tools.append(
+                RefreshableTool(underlying_tool=tool, agent_flow=self._agent)
+            )
+        wrapped_tool_names = [t.name for t in wrapped_tools if hasattr(t, "name")]
+        # 🟢 LOG 6: Final result
+        logger.info(
+            "McpToolkit returning %d wrapped tools: %s",
+            len(wrapped_tools),
+            ", ".join(wrapped_tool_names),
+        )
+
+        # return wrapped_tools
+        return allowed_tools

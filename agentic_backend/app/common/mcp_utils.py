@@ -123,14 +123,20 @@ def _build_streamable_http_kwargs(
 
 async def _cleanup_client_quiet(client: MultiServerMCPClient) -> None:
     try:
+        # 🟢 LOG 1: Attempting client cleanup
+        logger.info(
+            "[MCP] _cleanup_client_quiet: attempting to close client via exit_stack."
+        )
         await client.exit_stack.aclose()
+        # 🟢 LOG 1: Client cleanup complete
+        logger.info("[MCP] _cleanup_client_quiet: client successfully closed.")
     except BaseException:
-        pass
+        # 🟢 LOG 1: Client cleanup failed
+        logger.info("[MCP] _cleanup_client_quiet: client close ignored.", exc_info=True)
 
 
-async def get_mcp_client_for_agent(
+async def get_connected_mcp_client_for_agent(
     agent_settings: AgentSettings,
-    # --- NEW: Accept the token provider callback ---
     access_token_provider: Callable[[], str | None] | None = None,
     # -----------------------------------------------
 ) -> MultiServerMCPClient:
@@ -138,12 +144,24 @@ async def get_mcp_client_for_agent(
     Streamable HTTP ONLY. Creates and connects the MultiServerMCPClient using
     the token provided by `access_token_provider`.
     """
+    # 🟢 LOG 2: Start of connection process
+    logger.info(
+        "MCP connect init: Starting connection process for %d server(s).",
+        len(agent_settings.mcp_servers or []),
+    )
+
     if not agent_settings.mcp_servers:
+        logger.info("MCP connect init: No MCP server configuration found.")
         raise ValueError("No MCP server configuration")
 
     # Enforce streamable_http-only for this slim version
     for s in agent_settings.mcp_servers:
         if s.transport != "streamable_http":
+            # 🟢 LOG 3: Unsupported transport failure
+            logger.info(
+                "MCP connect init: Unsupported transport '%s' found. Only 'streamable_http' is allowed.",
+                s.transport,
+            )
             raise UnsupportedTransportError(
                 "This build supports only 'streamable_http'."
             )
@@ -151,7 +169,8 @@ async def get_mcp_client_for_agent(
     # --- Fetch the required user token BEFORE connection attempts ---
     access_token = access_token_provider() if access_token_provider else None
     if not access_token:
-        # Since we removed M2M fallback, a missing token is a fatal setup error
+        # 🟢 LOG 4: Missing token failure
+        logger.info("MCP connect init: Access token provider did not supply a token.")
         raise ValueError(
             "Access token provider did not supply a token. MCP access requires user identity."
         )
@@ -160,6 +179,10 @@ async def get_mcp_client_for_agent(
     base_headers = _auth_headers(access_token)
     stdio_env = _auth_stdio_env(access_token)
     auth_label = _mask_auth_value(base_headers.get("Authorization"))
+    # 🟢 LOG 5: Auth status
+    logger.info(
+        "MCP connect init: Token retrieved successfully. Auth status: %s", auth_label
+    )
     # ----------------------------------------------------------------
 
     client = MultiServerMCPClient()
@@ -172,6 +195,12 @@ async def get_mcp_client_for_agent(
                 server, base_headers, stdio_env
             )
         except Exception as e:
+            # 🟢 LOG 6: Kwargs build failure
+            logger.warning(
+                "MCP connect pre-fail name=%s: Failed to build connection kwargs: %s",
+                server.name,
+                e,
+            )
             exceptions.append(e)
             continue
 
@@ -180,13 +209,17 @@ async def get_mcp_client_for_agent(
 
         # ---- first (and only) attempt --------------------------------------
         try:
+            # 🟢 LOG 7: Connection attempt start
             logger.info(
-                "MCP connect start name=%s transport=streamable_http url=%s auth=%s",
+                "MCP connect attempt name=%s transport=streamable_http url=%s auth=%s timeout=%.0fs",
                 server.name,
                 url_for_log,
                 auth_label,
+                CONNECT_TIMEOUT_SECS,
             )
             await client.connect_to_server(**connect_kwargs)
+
+            # This log is redundant but kept for clarity/flow inspection:
             logger.info(
                 "MCP connect established name=%s transport=streamable_http url=%s auth=%s",
                 server.name,
@@ -199,11 +232,11 @@ async def get_mcp_client_for_agent(
 
             dur_ms = (time.perf_counter() - start) * 1000
             tools = client.server_name_to_tools.get(server.name, [])
+            # 🟢 LOG 8: Connection success
             logger.info(
-                "MCP connect ok name=%s transport=streamable_http url=%s auth=%s tools=%d dur_ms=%.0f",
+                "MCP connect ok name=%s transport=streamable_http url=%s tools=%d dur_ms=%.0f",
                 server.name,
                 url_for_log,
-                auth_label,
                 len(tools),
                 dur_ms,
             )
@@ -211,13 +244,16 @@ async def get_mcp_client_for_agent(
 
         except BaseException as e1:
             dur_ms = (time.perf_counter() - start) * 1000
+            # 🟢 LOG 9: Connection failure
             logger.warning(
-                "MCP connect fail name=%s transport=streamable_http url=%s auth=%s dur_ms=%.0f err=%s",
+                "MCP connect fail name=%s url=%s err=%s dur_ms=%.0f: %s",
                 server.name,
                 url_for_log,
-                auth_label,
-                dur_ms,
                 e1.__class__.__name__,
+                dur_ms,
+                str(e1).split("\n")[
+                    0
+                ],  # Only take the first line of the error message for the summary log
             )
             # Since we removed the auth retry logic, any failure is final for this server
             exceptions.extend(getattr(e1, "exceptions", [e1]))
@@ -225,6 +261,7 @@ async def get_mcp_client_for_agent(
 
     # ---- finalize ---------------------------------------------------------
     if exceptions:
+        # 🟢 LOG 10: Summary failure
         logger.info("MCP summary: %d server(s) failed to connect.", len(exceptions))
         for i, exc in enumerate(exceptions, 1):
             logger.info("  [%d] %s: %s", i, exc.__class__.__name__, str(exc))
@@ -232,5 +269,6 @@ async def get_mcp_client_for_agent(
         raise MCPConnectionError("Some MCP connections failed", exceptions)
 
     total_tools = sum(len(v) for v in client.server_name_to_tools.values())
+    # 🟢 LOG 11: Summary success
     logger.info("MCP summary: all servers connected, total tools=%d", total_tools)
     return client

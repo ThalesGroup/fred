@@ -1,15 +1,31 @@
-# app/core/http/asset_client.py (Derived from base client)
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from __future__ import annotations
 
 import logging
 import re
 from dataclasses import dataclass
-from typing import BinaryIO, Optional
+from typing import TYPE_CHECKING, BinaryIO, Optional
 
 import requests
 
-from app.common.kf_base_client import KfBaseClient
+from app.common.kf_base_client import KfBaseClient, TokenRefreshCallback
+
+if TYPE_CHECKING:
+    from app.core.agents.agent_flow import AgentFlow
+
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +70,13 @@ class KfAgentAssetClient(KfBaseClient):
     Requires an access_token for all requests.
     """
 
-    def __init__(self):
+    def __init__(self, agent: "AgentFlow"):
+        refresh_fn: TokenRefreshCallback = agent.refresh_user_access_token
+
         # Initialize the base client, specifying the methods we allow (GET and POST)
-        super().__init__(allowed_methods=frozenset({"GET", "POST"}))
+        super().__init__(
+            allowed_methods=frozenset({"GET", "POST"}), refresh_callback=refresh_fn
+        )
 
     def _get_asset_stream(
         self, agent: str, key: str, access_token: str
@@ -71,8 +91,7 @@ class KfAgentAssetClient(KfBaseClient):
         path = f"/agent-assets/{agent}/{key}"
 
         # Use the base class's authenticated retry mechanism for a GET request.
-        # CRITICAL: Pass the required user token
-        r = self._request_with_auth_retry(
+        r = self._request_with_token_refresh(
             "GET", path, access_token=access_token, stream=True
         )
         r.raise_for_status()  # Raise HTTPError for bad status codes (4xx, 5xx)
@@ -219,7 +238,7 @@ class KfAgentAssetClient(KfBaseClient):
 
         # 3. Perform the POST request
         try:
-            r = self._request_with_auth_retry(
+            r = self._request_with_token_refresh(
                 "POST",
                 path,
                 access_token=access_token,  # Pass the required user token

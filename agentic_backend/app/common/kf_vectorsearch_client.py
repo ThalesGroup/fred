@@ -1,4 +1,16 @@
-# agentic/.../vector_client.py
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from __future__ import annotations
 
@@ -8,8 +20,8 @@ from typing import Any, Dict, List, Optional, Sequence
 from fred_core import VectorSearchHit
 from pydantic import TypeAdapter
 
-# NOTE: Updated import path based on the previous context (renamed from app.core.http)
-from app.common.kf_base_client import KfBaseClient
+from app.common.kf_base_client import KfBaseClient, TokenRefreshCallback
+from app.core.agents.agent_flow import AgentFlow
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +36,14 @@ class VectorSearchClient(KfBaseClient):
     access_token for all requests. Inherits session and retry logic from KfBaseClient.
     """
 
-    def __init__(self):
-        # The VectorSearchClient only needs to support POST for its 'search' method.
-        super().__init__(allowed_methods=frozenset({"POST"}))
+    def __init__(self, agent: AgentFlow):
+        # access the refresh_user_access_token attribute at runtime.
+        refresh_fn: TokenRefreshCallback = agent.refresh_user_access_token
+
+        # Pass the refresh function to the base class
+        super().__init__(
+            allowed_methods=frozenset({"POST"}), refresh_callback=refresh_fn
+        )
 
     def search(
         self,
@@ -35,11 +52,12 @@ class VectorSearchClient(KfBaseClient):
         top_k: int = 10,
         document_library_tags_ids: Optional[Sequence[str]] = None,
         search_policy: Optional[str] = None,
-        # --- NEW: MUST require access_token for user identity propagation ---
         access_token: str,
-        # ------------------------------------------------------------------
     ) -> List[VectorSearchHit]:
         """
+        Perform a vector search against the Knowledge Flow backend. This method
+        requires an access_token for user-authenticated requests. It will trigger
+        token refresh via the provided agent callback if the token is expired.
         Wire format (matches controller):
           POST /vector/search
           {
@@ -61,10 +79,13 @@ class VectorSearchClient(KfBaseClient):
             payload["search_policy"] = search_policy
 
         # Use the base class's request method, passing the required access_token.
-        r = self._request_with_auth_retry(
+        # This will handle token refresh if needed. The required refresh token
+        # is obtained via the refresh_callback provided at initialization. And the actual
+        # token used is part of the runtime configuration passed to the agent.
+        r = self._request_with_token_refresh(
             method="POST",
             path="/vector/search",
-            access_token=access_token,  # Pass the required user token
+            access_token=access_token,
             json=payload,
         )
         r.raise_for_status()

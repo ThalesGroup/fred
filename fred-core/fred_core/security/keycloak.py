@@ -195,7 +195,7 @@ def decode_jwt(token: str) -> KeycloakUser:
     if KEYCLOAK_CLIENT_ID:
         aud_list = aud if isinstance(aud, list) else [aud] if aud else []
         if KEYCLOAK_CLIENT_ID not in aud_list:
-            logger.warning(
+            logger.debug(
                 "JWT audience does not include client_id (soft): aud=%s client_id=%s",
                 aud_list,
                 KEYCLOAK_CLIENT_ID,
@@ -241,7 +241,7 @@ def decode_jwt(token: str) -> KeycloakUser:
             },
         )
     except jwt.InvalidTokenError as e:
-        logger.warning("Invalid JWT token: %s", e)
+        logger.error("Invalid JWT token: %s", e)
         raise HTTPException(
             status_code=401,
             detail="Invalid token",

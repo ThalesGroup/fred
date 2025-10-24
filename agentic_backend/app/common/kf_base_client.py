@@ -1,9 +1,21 @@
-# app/core/http/knowledge_flow_client.py
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any, Callable, Dict, Optional
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -29,6 +41,9 @@ def _session_with_retries(allowed_methods: frozenset) -> requests.Session:
     return s
 
 
+TokenRefreshCallback = Callable[[], str]
+
+
 class KfBaseClient:
     """
     Base client providing secured, retrying access to any Fred/Knowledge Flow backend service.
@@ -37,9 +52,13 @@ class KfBaseClient:
     `access_token` to be explicitly passed for all requests. M2M authentication is removed.
     """
 
-    def __init__(self, allowed_methods: frozenset):
+    def __init__(
+        self,
+        allowed_methods: frozenset,
+        refresh_callback: Optional[TokenRefreshCallback] = None,
+    ):
         ctx = get_app_context()
-
+        self._refresh_callback = refresh_callback
         # Base URL: ensure no trailing slash so path concatenation is safe
         self.base_url = ctx.get_knowledge_flow_base_url().rstrip("/")
 
@@ -55,11 +74,12 @@ class KfBaseClient:
         # M2M token refresh logic is removed, as we don't use M2M tokens.
         # self._on_auth_refresh = None # (or just don't define it)
 
-    def _request_once(
+    def _execute_authenticated_request(
         self, method: str, path: str, access_token: str, **kwargs: Any
     ) -> requests.Response:
         """
-        Executes a single authenticated request. Requires `access_token`.
+        Executes a single authenticated request attempt. Requires `access_token`.
+        This is the core execution logic, replacing _request_once.
         """
         if not access_token:
             raise ValueError(
@@ -67,29 +87,60 @@ class KfBaseClient:
             )
 
         url = f"{self.base_url}{path}"
-
         headers: Dict[str, str] = kwargs.pop("headers", {})
 
         # Set the Bearer header with the required user token.
         headers["Authorization"] = f"Bearer {access_token}"
 
+        # Network retries (for 5xx, 429) are handled by self.session automatically.
         return self.session.request(
             method, url, timeout=self.timeout, headers=headers, **kwargs
         )
 
-    def _request_with_auth_retry(
+    def _request_with_token_refresh(
         self, method: str, path: str, access_token: str, **kwargs: Any
     ) -> requests.Response:
         """
-        Executes a request. No token refresh logic is needed here as user tokens
-        cannot be refreshed by the backend service.
+        Executes a request, handling token expiration (401) via callback and retry.
         """
-        # We only need one attempt, as the retry logic in `_session_with_retries`
-        # handles transient network/server errors (5xx, 429), and we don't handle
-        # a 401 (expired token) with a refresh.
-        r = self._request_once(method, path, access_token=access_token, **kwargs)
+        current_token = access_token
 
-        # If the user token is expired, the caller will handle the resulting 401
-        # or the request will fail with `r.raise_for_status()` if called later.
+        for attempt in range(2):
+            try:
+                # Use the existing _request_with_auth_retry for the network retry part
+                r = self._execute_authenticated_request(
+                    method=method, path=path, access_token=current_token, **kwargs
+                )
+                r.raise_for_status()  # Raise exception on 4xx/5xx
+                return r  # Success!
 
-        return r
+            except requests.exceptions.HTTPError as e:
+                # 1. Check for 401 and if a callback is available on the first attempt
+                if (
+                    e.response.status_code == 401
+                    and attempt == 0
+                    and self._refresh_callback
+                ):
+                    logger.warning(
+                        "Received 401 Unauthorized on %s %s. Attempting token refresh via callback...",
+                        method,
+                        path,
+                    )
+
+                    try:
+                        # 2. Call the provided refresh function
+                        current_token = self._refresh_callback()
+                        logger.info("Token refresh successful. Retrying request.")
+                        continue  # Skip to next iteration (attempt = 1)
+
+                    except Exception as refresh_err:
+                        logger.error(
+                            f"FATAL: Token refresh failed. Cannot retry: {refresh_err}"
+                        )
+                        raise e  # Re-raise the original 401 error
+
+                # 3. Re-raise if not a 401, no callback, or second attempt
+                raise e
+
+        # Should be unreachable
+        raise Exception("Unhandled HTTP error after all retries.")
