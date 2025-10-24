@@ -73,7 +73,7 @@ class SpiceDbRebacEngine(RebacEngine):
         if schema and config.sync_schema_on_init:
             self.sync_schema(schema)
 
-    def add_relation(self, relation: Relation) -> str | None:
+    async def add_relation(self, relation: Relation) -> str | None:
         relationship = self._relationship_from_dataclass(relation)
         request = WriteRelationshipsRequest(
             updates=[
@@ -86,7 +86,7 @@ class SpiceDbRebacEngine(RebacEngine):
         response = self._client.WriteRelationships(request)
         return response.written_at.token
 
-    def delete_relation(self, relation: Relation) -> str | None:
+    async def delete_relation(self, relation: Relation) -> str | None:
         relationship = self._relationship_from_dataclass(relation)
         request = WriteRelationshipsRequest(
             updates=[
@@ -99,7 +99,7 @@ class SpiceDbRebacEngine(RebacEngine):
         response = self._client.WriteRelationships(request)
         return response.written_at.token
 
-    def delete_reference_relations(self, reference: RebacReference) -> str | None:
+    async def delete_reference_relations(self, reference: RebacReference) -> str | None:
         last_token: str | None = None
 
         # Delete all relationships where the reference is the resource
@@ -129,7 +129,7 @@ class SpiceDbRebacEngine(RebacEngine):
 
         return last_token
 
-    def lookup_resources(
+    async def lookup_resources(
         self,
         subject: RebacReference,
         permission: RebacPermission,
@@ -155,7 +155,7 @@ class SpiceDbRebacEngine(RebacEngine):
             for response in self._client.LookupResources(request)
         ]
 
-    def lookup_subjects(
+    async def lookup_subjects(
         self,
         resource: RebacReference,
         relation: RelationType,
@@ -188,7 +188,7 @@ class SpiceDbRebacEngine(RebacEngine):
                 subjects.append(RebacReference(type=subject_type, id=subject_id))
         return subjects
 
-    def list_relations(
+    async def list_relations(
         self,
         *,
         resource_type: Resource,
@@ -241,7 +241,7 @@ class SpiceDbRebacEngine(RebacEngine):
             )
         return relations
 
-    def has_permission(
+    async def has_permission(
         self,
         subject: RebacReference,
         permission: RebacPermission,

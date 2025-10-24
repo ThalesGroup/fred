@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
-import time
 import uuid
 
 import grpc
 import pytest
+import pytest_asyncio
 
 from fred_core import (
     DocumentPermission,
@@ -40,8 +41,8 @@ MAX_STARTUP_ATTEMPTS = 40
 STARTUP_BACKOFF_SECONDS = 0.5
 
 
-@pytest.fixture()
-def spicedb_engine() -> SpiceDbRebacEngine:
+@pytest_asyncio.fixture()
+async def spicedb_engine() -> SpiceDbRebacEngine:
     """Provide a SpiceDB-backed engine, skipping if the server is unavailable."""
 
     token = _integration_token()
@@ -60,7 +61,7 @@ def spicedb_engine() -> SpiceDbRebacEngine:
                 token=token,
             )
             # Trigger a cheap RPC call to confirm the server is reachable.
-            engine.lookup_resources(
+            await engine.lookup_resources(
                 subject=probe_subject,
                 permission=DocumentPermission.READ,
                 resource_type=Resource.TAGS,
@@ -68,7 +69,7 @@ def spicedb_engine() -> SpiceDbRebacEngine:
             return engine
         except grpc.RpcError as exc:  # pragma: no cover - depends on external service
             last_error = exc
-            time.sleep(STARTUP_BACKOFF_SECONDS)
+            await asyncio.sleep(STARTUP_BACKOFF_SECONDS)
 
     pytest.skip(
         "SpiceDB test server not available after retries: "
@@ -77,22 +78,23 @@ def spicedb_engine() -> SpiceDbRebacEngine:
 
 
 @pytest.mark.integration
-def test_owner_has_full_access(spicedb_engine: SpiceDbRebacEngine) -> None:
+@pytest.mark.asyncio
+async def test_owner_has_full_access(spicedb_engine: SpiceDbRebacEngine) -> None:
     owner = _make_reference(Resource.USER, prefix="owner")
     tag = _make_reference(Resource.TAGS)
     stranger = _make_reference(Resource.USER, prefix="stranger")
 
-    token = spicedb_engine.add_relation(
+    token = await spicedb_engine.add_relation(
         Relation(subject=owner, relation=RelationType.OWNER, resource=tag)
     )
 
-    assert spicedb_engine.has_permission(
+    assert await spicedb_engine.has_permission(
         owner,
         TagPermission.DELETE,
         tag,
         consistency_token=token,
     )
-    assert not spicedb_engine.has_permission(
+    assert not await spicedb_engine.has_permission(
         stranger,
         TagPermission.READ,
         tag,
@@ -101,26 +103,29 @@ def test_owner_has_full_access(spicedb_engine: SpiceDbRebacEngine) -> None:
 
 
 @pytest.mark.integration
-def test_deleting_relation_revokes_access(spicedb_engine: SpiceDbRebacEngine) -> None:
+@pytest.mark.asyncio
+async def test_deleting_relation_revokes_access(
+    spicedb_engine: SpiceDbRebacEngine,
+) -> None:
     owner = _make_reference(Resource.USER, prefix="owner")
     tag = _make_reference(Resource.TAGS)
 
-    consistency_token = spicedb_engine.add_relation(
+    consistency_token = await spicedb_engine.add_relation(
         Relation(subject=owner, relation=RelationType.OWNER, resource=tag)
     )
 
-    assert spicedb_engine.has_permission(
+    assert await spicedb_engine.has_permission(
         owner,
         TagPermission.DELETE,
         tag,
         consistency_token=consistency_token,
     )
 
-    deletion_token = spicedb_engine.delete_relation(
+    deletion_token = await spicedb_engine.delete_relation(
         Relation(subject=owner, relation=RelationType.OWNER, resource=tag)
     )
 
-    assert not spicedb_engine.has_permission(
+    assert not await spicedb_engine.has_permission(
         owner,
         TagPermission.DELETE,
         tag,
@@ -131,50 +136,51 @@ def test_deleting_relation_revokes_access(spicedb_engine: SpiceDbRebacEngine) ->
 
 
 @pytest.mark.integration
-def test_delete_reference_relations_removes_incoming_and_outgoing_edges(
+@pytest.mark.asyncio
+async def test_delete_reference_relations_removes_incoming_and_outgoing_edges(
     spicedb_engine: SpiceDbRebacEngine,
 ) -> None:
     owner = _make_reference(Resource.USER, prefix="owner")
     tag = _make_reference(Resource.TAGS, prefix="tag")
     document = _make_reference(Resource.DOCUMENTS, prefix="document")
 
-    token = spicedb_engine.add_relations(
+    token = await spicedb_engine.add_relations(
         [
             Relation(subject=owner, relation=RelationType.OWNER, resource=tag),
             Relation(subject=tag, relation=RelationType.PARENT, resource=document),
         ]
     )
 
-    assert spicedb_engine.has_permission(
+    assert await spicedb_engine.has_permission(
         owner,
         TagPermission.DELETE,
         tag,
         consistency_token=token,
     )
-    assert spicedb_engine.has_permission(
+    assert await spicedb_engine.has_permission(
         owner,
         DocumentPermission.READ,
         document,
         consistency_token=token,
     )
 
-    deletion_token = spicedb_engine.delete_reference_relations(tag)
+    deletion_token = await spicedb_engine.delete_reference_relations(tag)
     assert deletion_token is not None
 
-    assert not spicedb_engine.has_permission(
+    assert not await spicedb_engine.has_permission(
         owner,
         TagPermission.DELETE,
         tag,
         consistency_token=deletion_token,
     )
-    assert not spicedb_engine.has_permission(
+    assert not await spicedb_engine.has_permission(
         owner,
         DocumentPermission.READ,
         document,
         consistency_token=deletion_token,
     )
     assert (
-        spicedb_engine.lookup_resources(
+        await spicedb_engine.lookup_resources(
             subject=owner,
             permission=DocumentPermission.READ,
             resource_type=Resource.DOCUMENTS,
@@ -185,19 +191,22 @@ def test_delete_reference_relations_removes_incoming_and_outgoing_edges(
 
 
 @pytest.mark.integration
-def test_group_members_inherit_permissions(spicedb_engine: SpiceDbRebacEngine) -> None:
+@pytest.mark.asyncio
+async def test_group_members_inherit_permissions(
+    spicedb_engine: SpiceDbRebacEngine,
+) -> None:
     alice = _make_reference(Resource.USER, prefix="alice")
     team = _make_reference(Resource.GROUP, prefix="team")
     tag = _make_reference(Resource.TAGS)
 
-    token = spicedb_engine.add_relations(
+    token = await spicedb_engine.add_relations(
         [
             Relation(subject=alice, relation=RelationType.MEMBER, resource=team),
             Relation(subject=team, relation=RelationType.EDITOR, resource=tag),
         ]
     )
 
-    assert spicedb_engine.has_permission(
+    assert await spicedb_engine.has_permission(
         alice,
         TagPermission.UPDATE,
         tag,
@@ -206,27 +215,28 @@ def test_group_members_inherit_permissions(spicedb_engine: SpiceDbRebacEngine) -
 
 
 @pytest.mark.integration
-def test_parent_relationships_extend_permissions(
+@pytest.mark.asyncio
+async def test_parent_relationships_extend_permissions(
     spicedb_engine: SpiceDbRebacEngine,
 ) -> None:
     owner = _make_reference(Resource.USER, prefix="owner")
     tag = _make_reference(Resource.TAGS, prefix="tag")
     document = _make_reference(Resource.DOCUMENTS, prefix="document")
 
-    token = spicedb_engine.add_relations(
+    token = await spicedb_engine.add_relations(
         [
             Relation(subject=owner, relation=RelationType.OWNER, resource=tag),
             Relation(subject=tag, relation=RelationType.PARENT, resource=document),
         ]
     )
 
-    assert spicedb_engine.has_permission(
+    assert await spicedb_engine.has_permission(
         owner,
         DocumentPermission.READ,
         document,
         consistency_token=token,
     )
-    assert spicedb_engine.has_permission(
+    assert await spicedb_engine.has_permission(
         owner,
         DocumentPermission.DELETE,
         document,
@@ -235,7 +245,8 @@ def test_parent_relationships_extend_permissions(
 
 
 @pytest.mark.integration
-def test_lookup_subjects_returns_users_by_relation(
+@pytest.mark.asyncio
+async def test_lookup_subjects_returns_users_by_relation(
     spicedb_engine: SpiceDbRebacEngine,
 ) -> None:
     tag = _make_reference(Resource.TAGS)
@@ -245,7 +256,7 @@ def test_lookup_subjects_returns_users_by_relation(
     stranger = _make_reference(Resource.USER, prefix="stranger")
     strangerTag = _make_reference(Resource.TAGS, prefix="stranger-tag")
 
-    token = spicedb_engine.add_relations(
+    token = await spicedb_engine.add_relations(
         [
             Relation(subject=owner, relation=RelationType.OWNER, resource=tag),
             Relation(subject=editor, relation=RelationType.EDITOR, resource=tag),
@@ -256,13 +267,13 @@ def test_lookup_subjects_returns_users_by_relation(
         ]
     )
 
-    owners = spicedb_engine.lookup_subjects(
+    owners = await spicedb_engine.lookup_subjects(
         tag, RelationType.OWNER, Resource.USER, consistency_token=token
     )
-    editors = spicedb_engine.lookup_subjects(
+    editors = await spicedb_engine.lookup_subjects(
         tag, RelationType.EDITOR, Resource.USER, consistency_token=token
     )
-    viewers = spicedb_engine.lookup_subjects(
+    viewers = await spicedb_engine.lookup_subjects(
         tag, RelationType.VIEWER, Resource.USER, consistency_token=token
     )
 
@@ -272,27 +283,28 @@ def test_lookup_subjects_returns_users_by_relation(
 
 
 @pytest.mark.integration
-def test_list_relations_filters_by_subject_type(
+@pytest.mark.asyncio
+async def test_list_relations_filters_by_subject_type(
     spicedb_engine: SpiceDbRebacEngine,
 ) -> None:
     team = _make_reference(Resource.GROUP, prefix="team")
     child_team = _make_reference(Resource.GROUP, prefix="team")
     member = _make_reference(Resource.USER, prefix="member")
 
-    token = spicedb_engine.add_relations(
+    token = await spicedb_engine.add_relations(
         [
             Relation(subject=member, relation=RelationType.MEMBER, resource=team),
             Relation(subject=team, relation=RelationType.MEMBER, resource=child_team),
         ]
     )
 
-    user_memberships = spicedb_engine.list_relations(
+    user_memberships = await spicedb_engine.list_relations(
         resource_type=Resource.GROUP,
         relation=RelationType.MEMBER,
         subject_type=Resource.USER,
         consistency_token=token,
     )
-    group_memberships = spicedb_engine.list_relations(
+    group_memberships = await spicedb_engine.list_relations(
         resource_type=Resource.GROUP,
         relation=RelationType.MEMBER,
         subject_type=Resource.GROUP,
@@ -310,7 +322,10 @@ def test_list_relations_filters_by_subject_type(
 
 
 @pytest.mark.integration
-def test_list_documents_user_can_read(spicedb_engine: SpiceDbRebacEngine) -> None:
+@pytest.mark.asyncio
+async def test_list_documents_user_can_read(
+    spicedb_engine: SpiceDbRebacEngine,
+) -> None:
     user = _make_reference(Resource.USER, prefix="reader")
     team = _make_reference(Resource.GROUP, prefix="team")
     tag = _make_reference(Resource.TAGS, prefix="tag")
@@ -321,7 +336,7 @@ def test_list_documents_user_can_read(spicedb_engine: SpiceDbRebacEngine) -> Non
     private_tag = _make_reference(Resource.TAGS, prefix="private-tag")
     private_document = _make_reference(Resource.DOCUMENTS, prefix="doc-private")
 
-    token = spicedb_engine.add_relations(
+    token = await spicedb_engine.add_relations(
         [
             Relation(subject=user, relation=RelationType.MEMBER, resource=team),
             Relation(subject=team, relation=RelationType.EDITOR, resource=tag),
@@ -339,7 +354,7 @@ def test_list_documents_user_can_read(spicedb_engine: SpiceDbRebacEngine) -> Non
         ]
     )
 
-    readable_documents = spicedb_engine.lookup_resources(
+    readable_documents = await spicedb_engine.lookup_resources(
         subject=user,
         permission=DocumentPermission.READ,
         resource_type=Resource.DOCUMENTS,
@@ -354,14 +369,14 @@ def test_list_documents_user_can_read(spicedb_engine: SpiceDbRebacEngine) -> Non
         reference.type is Resource.DOCUMENTS for reference in readable_documents
     ), "Lookup must return document references"
 
-    assert spicedb_engine.has_permission(
+    assert await spicedb_engine.has_permission(
         user,
         DocumentPermission.READ,
         document1,
         consistency_token=token,
     )
 
-    assert not spicedb_engine.has_permission(
+    assert not await spicedb_engine.has_permission(
         user,
         DocumentPermission.READ,
         private_document,
