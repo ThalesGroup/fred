@@ -72,6 +72,28 @@ def _iso(ts: int | float | None) -> str | None:
         return None
 
 
+def get_keycloak_url() -> str:
+    """
+    Returns the globally initialized Keycloak Realm URL (e.g., http://host:port/realms/app).
+    """
+    if not KEYCLOAK_URL:
+        # This state should not be hit if initialize_user_security ran at startup
+        logger.warning("Keycloak URL requested but not initialized.")
+        return ""
+    return KEYCLOAK_URL
+
+
+def get_keycloak_client_id() -> str:
+    """
+    Returns the globally initialized Keycloak Client ID.
+    """
+    if not KEYCLOAK_CLIENT_ID:
+        # This state should not be hit if initialize_user_security ran at startup
+        logger.warning("Keycloak Client ID requested but not initialized.")
+        return ""
+    return KEYCLOAK_CLIENT_ID
+
+
 def initialize_user_security(config: UserSecurity):
     """
     Initialize the Keycloak authentication settings from the given configuration.
@@ -129,7 +151,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 def _get_jwks_client() -> PyJWKClient:
     global _JWKS_CLIENT
     if _JWKS_CLIENT is None:
-        logger.info("Creating PyJWKClient for %s", KEYCLOAK_JWKS_URL)
+        logger.debug("Creating PyJWKClient for %s", KEYCLOAK_JWKS_URL)
         _JWKS_CLIENT = PyJWKClient(KEYCLOAK_JWKS_URL)
     return _JWKS_CLIENT
 
@@ -146,7 +168,7 @@ def decode_jwt(token: str) -> KeycloakUser:
     header, payload_peek = _peek_header_and_claims(token)
     kid = header.get("kid")
     alg = header.get("alg")
-    logger.info(
+    logger.debug(
         "JWT peek: kid=%s alg=%s iss=%s aud=%s azp=%s sub=%s exp=%s(%s) nbf=%s(%s)",
         kid,
         alg,
@@ -187,7 +209,7 @@ def decode_jwt(token: str) -> KeycloakUser:
         jwks_client = _get_jwks_client()
         signing_key = jwks_client.get_signing_key_from_jwt(token).key
         jwks_ms = (time.perf_counter() - t0) * 1000
-        logger.info("JWKS resolved key in %.1f ms (kid=%s)", jwks_ms, kid)
+        logger.debug("JWKS resolved key in %.1f ms (kid=%s)", jwks_ms, kid)
     except Exception as e:
         # Invalid JWT structure/kid/signature is a normal 401, not a 500.
         logger.warning("Could not retrieve signing key from JWKS: %s", e)
@@ -210,7 +232,7 @@ def decode_jwt(token: str) -> KeycloakUser:
         )
         logger.debug("JWT token successfully decoded")
     except jwt.ExpiredSignatureError:
-        logger.info("Access token expired")
+        logger.warning("Access token expired")
         raise HTTPException(
             status_code=401,
             detail="Token has expired",
@@ -232,8 +254,8 @@ def decode_jwt(token: str) -> KeycloakUser:
         client_data = payload["resource_access"].get(KEYCLOAK_CLIENT_ID, {})
         client_roles = client_data.get("roles", [])
 
-    logger.debug(
-        "JWT decoded (safe): sub=%s preferred_username=%s email=%s roles=%s",
+    logger.info(
+        "JWT token decoded: sub=%s preferred_username=%s email=%s roles=%s",
         payload.get("sub"),
         payload.get("preferred_username"),
         payload.get("email"),
@@ -247,14 +269,14 @@ def decode_jwt(token: str) -> KeycloakUser:
         roles=client_roles,
         email=payload.get("email"),
     )
-    logger.info("KeycloakUser built: %s", user)
+    logger.debug("KeycloakUser built: %s", user)
     return user
 
 
 def get_current_user(token: str = Security(oauth2_scheme)) -> KeycloakUser:
     """Fetches the current user from Keycloak token with robust diagnostics."""
     if not KEYCLOAK_ENABLED:
-        logger.info("Authentication is DISABLED. Returning a mock user.")
+        logger.debug("Authentication is DISABLED. Returning a mock user.")
         return KeycloakUser(
             uid="admin", username="admin", roles=["admin"], email="admin@mail.com"
         )
