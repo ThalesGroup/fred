@@ -1,7 +1,3 @@
-<<<<<<< HEAD:agentic_backend/app/agents/tabular/tabular_expert.py
-=======
-# agentic_backend/agents/tabular/tabular.py
->>>>>>> main:agentic-backend/agentic_backend/agents/tabular/tabular_expert.py
 # Copyright Thales 2025
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

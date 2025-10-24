@@ -1,7 +1,3 @@
-<<<<<<< HEAD:agentic_backend/app/agents/sentinel/sentinel_expert.py
-=======
-# agentic_backend/agents/sentinel/sentinel.py
->>>>>>> main:agentic-backend/agentic_backend/agents/sentinel/sentinel_expert.py
 # Copyright Thales 2025
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,19 +22,11 @@ from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
-<<<<<<< HEAD:agentic_backend/app/agents/sentinel/sentinel_expert.py
-from app.common.mcp_runtime import MCPRuntime
-from app.common.structures import AgentSettings
-from app.core.agents.agent_flow import AgentFlow
-from app.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
-from app.core.agents.runtime_context import RuntimeContext
-=======
 from agentic_backend.common.mcp_runtime import MCPRuntime
-from agentic_backend.common.resilient_tool_node import make_resilient_tools_node
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
->>>>>>> main:agentic-backend/agentic_backend/agents/sentinel/sentinel_expert.py
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
 
