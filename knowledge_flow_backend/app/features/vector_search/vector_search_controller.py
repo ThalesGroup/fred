@@ -50,11 +50,11 @@ class VectorSearchController:
             response_model=list[VectorSearchHit],
             operation_id="search_documents_using_vectorization",
         )
-        def vector_search(
+        async def vector_search(
             request: SearchRequest,
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
-            hits = self.service.search(
+            hits = await self.service.search(
                 question=request.question,
                 user=user,
                 top_k=request.top_k,

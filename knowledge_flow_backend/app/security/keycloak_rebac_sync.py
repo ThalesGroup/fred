@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import NamedTuple
 
-from fred_core import RebacReference, Relation, RelationType, Resource
+from fred_core import RebacEngine, RebacReference, Relation, RelationType, Resource
 from keycloak import KeycloakAdmin
 
 from app.application_context import ApplicationContext
@@ -43,26 +43,25 @@ async def reconcile_keycloak_groups_with_rebac() -> None:
 
     # Collect membership edges from both systems
     keycloak_edges = await _collect_keycloak_memberships(admin)
-    spicedb_edges = await _collect_spicedb_memberships(rebac_engine)
+    rebac_edges = await _collect_rebac_memberships(rebac_engine)
 
     # Compute the diff
-    edges_to_add = keycloak_edges - spicedb_edges
-    edges_to_remove = spicedb_edges - keycloak_edges
+    edges_to_add = keycloak_edges - rebac_edges
+    edges_to_remove = rebac_edges - keycloak_edges
 
     if not edges_to_add and not edges_to_remove:
-        logger.info("Keycloak and SpiceDB membership graphs are already in sync.")
+        logger.info("Keycloak and ReBAC membership graphs are already in sync.")
         return
 
-    # Apply the diff with limited concurrency (to avoid overwhelming RebAC engine)
+    # Apply the diff with limited concurrency (to avoid overwhelming ReBAC engine)
     relation_semaphore = asyncio.Semaphore(8)
     await _apply_membership_diff(rebac_engine, edges_to_add, edges_to_remove, relation_semaphore)
 
     logger.info("Completed Keycloak group reconciliation.")
 
 
-async def _collect_spicedb_memberships(rebac_engine) -> set[MembershipEdge]:
-    relations = await asyncio.to_thread(
-        rebac_engine.list_relations,
+async def _collect_rebac_memberships(rebac_engine: RebacEngine) -> set[MembershipEdge]:
+    relations = await rebac_engine.list_relations(
         resource_type=Resource.GROUP,
         relation=RelationType.MEMBER,
     )
