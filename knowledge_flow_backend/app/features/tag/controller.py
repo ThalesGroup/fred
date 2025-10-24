@@ -71,7 +71,7 @@ class TagController:
             offset: Annotated[int, Query(ge=0, description="Items to skip")] = 0,
             user: KeycloakUser = Depends(get_current_user),
         ) -> list[TagWithItemsId]:
-            return self.service.list_all_tags_for_user(
+            return await self.service.list_all_tags_for_user(
                 user,
                 tag_type=type,
                 path_prefix=path_prefix,
@@ -87,7 +87,7 @@ class TagController:
             summary="Get a tag by ID",
         )
         async def get_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
-            return self.service.get_tag_for_user(tag_id, user)
+            return await self.service.get_tag_for_user(tag_id, user)
 
         @router.get(
             "/tags/{tag_id}/permissions",
@@ -96,7 +96,7 @@ class TagController:
             summary="List permissions available on a tag for the current user",
         )
         async def get_tag_permissions(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
-            permissions = self.service.get_tag_permissions_for_user(tag_id, user)
+            permissions = await self.service.get_tag_permissions_for_user(tag_id, user)
             return TagPermissionsResponse(permissions=permissions)
 
         @router.get(
@@ -120,7 +120,7 @@ class TagController:
         async def create_tag(tag: TagCreate, user: KeycloakUser = Depends(get_current_user)):
             # Consider normalizing tag.path in the service if not already done
             logger.info(f"Creating tag: {tag} for user: {user.uid}")
-            return self.service.create_tag_for_user(tag, user)
+            return await self.service.create_tag_for_user(tag, user)
 
         @router.put(
             "/tags/{tag_id}",
@@ -130,7 +130,7 @@ class TagController:
             summary="Update a tag (can rename/move via name/path)",
         )
         async def update_tag(tag_id: str, tag: TagUpdate, user: KeycloakUser = Depends(get_current_user)):
-            return self.service.update_tag_for_user(tag_id, tag, user)
+            return await self.service.update_tag_for_user(tag_id, tag, user)
 
         @router.delete(
             "/tags/{tag_id}",
@@ -139,7 +139,7 @@ class TagController:
             summary="Delete a tag",
         )
         async def delete_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
-            self.service.delete_tag_for_user(tag_id, user)
+            await self.service.delete_tag_for_user(tag_id, user)
 
         @router.post(
             "/tags/{tag_id}/share",
@@ -148,7 +148,7 @@ class TagController:
             summary="Share a tag with another user",
         )
         async def share_tag(tag_id: str, share_request: TagShareRequest, user: KeycloakUser = Depends(get_current_user)):
-            self.service.share_tag_with_user_or_group(user, tag_id, share_request.target_id, share_request.target_type.to_resource(), share_request.relation)
+            await self.service.share_tag_with_user_or_group(user, tag_id, share_request.target_id, share_request.target_type.to_resource(), share_request.relation)
 
         @router.delete(
             "/tags/{tag_id}/share/{target_id}",
@@ -157,4 +157,4 @@ class TagController:
             summary="Stop sharing a tag with a user",
         )
         async def unshare_tag(tag_id: str, target_id: str, target_type: ShareTargetResource, user: KeycloakUser = Depends(get_current_user)):
-            self.service.unshare_tag_with_user_or_group(user, tag_id, target_id, target_type.to_resource())
+            await self.service.unshare_tag_with_user_or_group(user, tag_id, target_id, target_type.to_resource())

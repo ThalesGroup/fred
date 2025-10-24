@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
 import pathlib
 import tempfile
@@ -64,7 +65,7 @@ def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
         metadata.source.pull_location = file.external_path
         logger.info(f"[create_pull_file_metadata] Generated metadata: {metadata}")
 
-        ingestion_service.save_metadata(file.processed_by, metadata=metadata)
+        asyncio.run(ingestion_service.save_metadata(file.processed_by, metadata=metadata))
 
         logger.info(f"[create_pull_file_metadata] Metadata extracted and saved for pull file: {metadata.document_uid}")
         return metadata
@@ -79,7 +80,7 @@ def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
     ingestion_service = IngestionService()
     logger.info(f"[get_push_file_metadata] push file UID: {file.document_uid}.")
     assert file.document_uid, "Push files must have a document UID"
-    metadata = ingestion_service.get_metadata(file.processed_by, file.document_uid)
+    metadata = asyncio.run(ingestion_service.get_metadata(file.processed_by, file.document_uid))
     if metadata is None:
         logger.error(f"[get_push_file_metadata] Metadata not found for push file UID: {file.document_uid}")
         raise RuntimeError(f"Metadata missing for push file: {file.document_uid}")
@@ -155,7 +156,7 @@ def input_process(user: KeycloakUser, input_file: pathlib.Path, metadata: Docume
     ingestion_service.save_output(user, metadata=metadata, output_dir=output_dir)
 
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
-    ingestion_service.save_metadata(user, metadata=metadata)
+    asyncio.run(ingestion_service.save_metadata(user, metadata=metadata))
 
     logger.info(f"[input_process] Done for UID: {metadata.document_uid}")
     return metadata
@@ -192,7 +193,7 @@ def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memor
     metadata = ingestion_service.process_output(file.processed_by, output_dir=output_dir, input_file_name=preview_file.name, input_file_metadata=metadata)
 
     # Save the updated metadata
-    ingestion_service.save_metadata(file.processed_by, metadata=metadata)
+    asyncio.run(ingestion_service.save_metadata(file.processed_by, metadata=metadata))
 
     logger.info(f"[output_process] Done for UID: {metadata.document_uid}")
     return metadata

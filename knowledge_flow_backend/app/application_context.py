@@ -816,8 +816,6 @@ class ApplicationContext:
         rebac = self.configuration.security.rebac
         if rebac:
             logger.info("  🕸️ ReBAC engine: %s", rebac.type)
-            logger.info("     • endpoint: %s", rebac.endpoint)
-            logger.info("     • insecure: %s", rebac.insecure)
             logger.info("     • sync_schema_on_init: %s", rebac.sync_schema_on_init)
             env_name = rebac.token_env_var
             self._log_sensitive(env_name, os.getenv(env_name))

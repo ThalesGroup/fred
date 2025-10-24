@@ -53,8 +53,8 @@ class MetadataService:
         self.rebac = context.get_rebac_engine()
 
     @authorize(Action.READ, Resource.DOCUMENTS)
-    def get_documents_metadata(self, user: KeycloakUser, filters_dict: dict) -> list[DocumentMetadata]:
-        authorized_doc_ids = [d.id for d in self.rebac.lookup_user_resources(user, DocumentPermission.READ)]
+    async def get_documents_metadata(self, user: KeycloakUser, filters_dict: dict) -> list[DocumentMetadata]:
+        authorized_doc_ids = [d.id for d in await self.rebac.lookup_user_resources(user, DocumentPermission.READ)]
 
         try:
             docs = self.metadata_store.get_all_metadata(filters_dict)
@@ -69,11 +69,11 @@ class MetadataService:
             raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
 
     @authorize(Action.READ, Resource.DOCUMENTS)
-    def get_document_metadata_in_tag(self, user: KeycloakUser, tag_id: str) -> list[DocumentMetadata]:
+    async def get_document_metadata_in_tag(self, user: KeycloakUser, tag_id: str) -> list[DocumentMetadata]:
         """
         Return all metadata entries associated with a specific tag.
         """
-        authorized_doc_ids = [d.id for d in self.rebac.lookup_user_resources(user, DocumentPermission.READ)]
+        authorized_doc_ids = [d.id for d in await self.rebac.lookup_user_resources(user, DocumentPermission.READ)]
 
         try:
             docs = self.metadata_store.get_metadata_in_tag(tag_id)
@@ -84,11 +84,11 @@ class MetadataService:
             raise MetadataUpdateError(f"Failed to retrieve metadata for tag {tag_id}: {e}")
 
     @authorize(Action.READ, Resource.DOCUMENTS)
-    def get_document_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata:
+    async def get_document_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata:
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
 
-        self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
 
         try:
             metadata = self.metadata_store.get_metadata_by_uid(document_uid)
@@ -102,8 +102,8 @@ class MetadataService:
         return metadata
 
     @authorize(Action.UPDATE, Resource.DOCUMENTS)
-    def add_tag_id_to_document(self, user: KeycloakUser, metadata: DocumentMetadata, new_tag_id: str, consistency_token=None) -> None:
-        self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, new_tag_id, consistency_token=consistency_token)
+    async def add_tag_id_to_document(self, user: KeycloakUser, metadata: DocumentMetadata, new_tag_id: str, consistency_token=None) -> None:
+        await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, new_tag_id, consistency_token=consistency_token)
 
         try:
             if metadata.tags is None:
@@ -117,7 +117,7 @@ class MetadataService:
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = user.uid
                 self.metadata_store.save_metadata(metadata)
-                self._set_tag_as_parent_in_rebac(new_tag_id, metadata.document_uid)
+                await self._set_tag_as_parent_in_rebac(new_tag_id, metadata.document_uid)
 
                 logger.info(f"[METADATA] Added tag '{new_tag_id}' to document '{metadata.document_name}' by '{user.uid}'")
             else:
@@ -128,8 +128,8 @@ class MetadataService:
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
 
     @authorize(Action.UPDATE, Resource.DOCUMENTS)
-    def remove_tag_id_from_document(self, user: KeycloakUser, metadata: DocumentMetadata, tag_id_to_remove: str) -> None:
-        self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id_to_remove)
+    async def remove_tag_id_from_document(self, user: KeycloakUser, metadata: DocumentMetadata, tag_id_to_remove: str) -> None:
+        await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id_to_remove)
 
         try:
             if not metadata.tags or not metadata.tags.tag_ids or tag_id_to_remove not in metadata.tags.tag_ids:
@@ -169,18 +169,18 @@ class MetadataService:
                 self.metadata_store.save_metadata(metadata)
                 logger.info(f"[METADATA] Removed tag '{tag_id_to_remove}' from document '{metadata.document_name}' by '{user.uid}'")
 
-            self._remove_tag_as_parent_in_rebac(tag_id_to_remove, metadata.document_uid)
+            await self._remove_tag_as_parent_in_rebac(tag_id_to_remove, metadata.document_uid)
 
         except Exception as e:
             logger.error(f"Failed to remove tag '{tag_id_to_remove}' from document '{metadata.document_name}': {e}")
             raise MetadataUpdateError(f"Failed to remove tag: {e}")
 
     @authorize(Action.UPDATE, Resource.DOCUMENTS)
-    def update_document_retrievable(self, user: KeycloakUser, document_uid: str, value: bool, modified_by: str) -> None:
+    async def update_document_retrievable(self, user: KeycloakUser, document_uid: str, value: bool, modified_by: str) -> None:
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
 
-        self.rebac.check_user_permission_or_raise(user, DocumentPermission.UPDATE, document_uid)
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.UPDATE, document_uid)
 
         try:
             metadata = self.metadata_store.get_metadata_by_uid(document_uid)
@@ -199,7 +199,7 @@ class MetadataService:
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
 
     @authorize(Action.CREATE, Resource.DOCUMENTS)
-    def save_document_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
+    async def save_document_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
         """
         Save document metadata and update tag timestamps for any assigned tags.
         This is an internal method only called by other services
@@ -207,23 +207,23 @@ class MetadataService:
         # Check if user has permissions to add document in all specified tags
         if metadata.tags:
             for tag_id in metadata.tags.tag_ids:
-                self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+                await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
 
         try:
             # Save the metadata first
             self.metadata_store.save_metadata(metadata)
             for tag_id in metadata.tags.tag_ids:
-                self._set_tag_as_parent_in_rebac(tag_id, metadata.document_uid)
+                await self._set_tag_as_parent_in_rebac(tag_id, metadata.document_uid)
 
             # Update tag timestamps for any tags assigned to this document
             if metadata.tags:
-                self._update_tag_timestamps(user, metadata.tags.tag_ids)
+                await self._update_tag_timestamps(user, metadata.tags.tag_ids)
 
         except Exception as e:
             logger.error(f"Error saving metadata for {metadata.document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to save metadata: {e}")
 
-    def _handle_tag_timestamp_updates(self, user: KeycloakUser, document_uid: str, new_tags: list[str]) -> None:
+    async def _handle_tag_timestamp_updates(self, user: KeycloakUser, document_uid: str, new_tags: list[str]) -> None:
         """
         Update tag timestamps when document tags are modified.
         """
@@ -240,12 +240,12 @@ class MetadataService:
 
             # Update timestamps for affected tags
             if affected_tags:
-                self._update_tag_timestamps(user, list(affected_tags))
+                await self._update_tag_timestamps(user, list(affected_tags))
 
         except Exception as e:
             logger.warning(f"Failed to handle tag timestamp updates for {document_uid}: {e}")
 
-    def _update_tag_timestamps(self, user: KeycloakUser, tag_ids: list[str]) -> None:
+    async def _update_tag_timestamps(self, user: KeycloakUser, tag_ids: list[str]) -> None:
         """
         Update timestamps for a list of tag IDs.
         """
@@ -257,24 +257,24 @@ class MetadataService:
 
             for tag_id in tag_ids:
                 try:
-                    tag_service.update_tag_timestamp(tag_id, user)
+                    await tag_service.update_tag_timestamp(tag_id, user)
                 except Exception as tag_error:
                     logger.warning(f"Failed to update timestamp for tag {tag_id}: {tag_error}")
 
         except Exception as e:
             logger.warning(f"Failed to update tag timestamps: {e}")
 
-    def _set_tag_as_parent_in_rebac(self, tag_id: str, document_uid: str) -> None:
+    async def _set_tag_as_parent_in_rebac(self, tag_id: str, document_uid: str) -> None:
         """
         Add a relation in the ReBAC engine between a tag and a document.
         """
-        self.rebac.add_relation(self._get_tag_as_parent_relation(tag_id, document_uid))
+        await self.rebac.add_relation(self._get_tag_as_parent_relation(tag_id, document_uid))
 
-    def _remove_tag_as_parent_in_rebac(self, tag_id: str, document_uid: str) -> None:
+    async def _remove_tag_as_parent_in_rebac(self, tag_id: str, document_uid: str) -> None:
         """
         Remove a relation in the ReBAC engine between a tag and a document.
         """
-        self.rebac.delete_relation(self._get_tag_as_parent_relation(tag_id, document_uid))
+        await self.rebac.delete_relation(self._get_tag_as_parent_relation(tag_id, document_uid))
 
     def _get_tag_as_parent_relation(self, tag_id: str, document_uid: str) -> Relation:
         return Relation(subject=RebacReference(Resource.TAGS, tag_id), relation=RelationType.PARENT, resource=RebacReference(Resource.DOCUMENTS, document_uid))
