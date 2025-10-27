@@ -14,7 +14,7 @@
 
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from fred_core import Action, KeycloakUser, Resource, authorize
 from fred_core.store.sql_store import SQLTableStore
@@ -24,6 +24,7 @@ from knowledge_flow_backend.features.tabular.structures import (
     DTypes,
     RawSQLRequest,
     TabularColumnSchema,
+    ListTableResponse,
     TabularQueryResponse,
     TabularSchemaResponse,
 )
@@ -43,7 +44,7 @@ class TabularService:
         self.stores_info = stores_info
         self.default_db = default_db or (next(iter(stores_info.keys())) if stores_info else None)
 
-    def _get_store(self, db_name: str) -> SQLTableStore:
+    def _get_store(self, db_name: str) -> Tuple[SQLTableStore, str]:
         """
         Retrieve the SQLTableStore for the given database name.
         Falls back to the default database if db_name is unknown.
@@ -53,7 +54,7 @@ class TabularService:
             if not self.default_db or self.default_db not in self.stores_info:
                 raise ValueError(f"Unknown database: {db_name} and no valid fallback configured")
             db_name = self.default_db
-        return self.stores_info[db_name].store
+        return self.stores_info[db_name].store, db_name
 
     def _check_write_allowed(self, db_name: str):
         store = self.stores_info.get(db_name)
@@ -82,9 +83,14 @@ class TabularService:
 
     @authorize(action=Action.DELETE, resource=Resource.TABLES)
     def delete_table(self, user: KeycloakUser, db_name: str, table_name: str) -> None:
-        self._check_write_allowed(db_name)
-        store = self._get_store(db_name)
-        store.delete_table(table_name)
+        store, actual_db = self._get_store(db_name)
+        self._check_write_allowed(actual_db)
+        try:
+            store.delete_table(table_name)
+            logger.info(f"Table '{table_name}' deleted from database '{actual_db}'")
+        except Exception as e:
+            logger.error(f"Failed to delete table '{table_name}' from '{actual_db}': {e}")
+            raise
 
     @authorize(action=Action.READ, resource=Resource.TABLES_DATABASES)
     def list_databases(self, user: KeycloakUser) -> List[str]:
@@ -93,16 +99,22 @@ class TabularService:
     @authorize(action=Action.READ, resource=Resource.TABLES)
     def get_schema(self, user: KeycloakUser, db_name: str, table_name: str) -> TabularSchemaResponse:
         table_name = self._sanitize_table_name(table_name)
-        store = self._get_store(db_name)
+        store, db_name = self._get_store(db_name)
         schema = store.get_table_schema(table_name)
         columns = [TabularColumnSchema(name=col, dtype=self._map_sql_type_to_literal(dtype)) for col, dtype in schema]
         count_df = store.execute_sql_query(f'SELECT COUNT(*) AS count FROM "{table_name}"')
         row_count = int(count_df["count"].iloc[0])
-        return TabularSchemaResponse(table_name=table_name, columns=columns, row_count=row_count)
+        return TabularSchemaResponse(db_name=db_name, table_name=table_name, columns=columns, row_count=row_count)
+
+    @authorize(action=Action.READ, resource=Resource.TABLES)
+    def list_tables(self, user: KeycloakUser, db_name: str) -> ListTableResponse:
+        store, db_name = self._get_store(db_name)
+        table_names = store.list_tables()
+        return ListTableResponse(db_name=db_name, tables=table_names)
 
     @authorize(action=Action.READ, resource=Resource.TABLES)
     def list_tables_with_schema(self, user: KeycloakUser, db_name: str) -> list[TabularSchemaResponse]:
-        store = self._get_store(db_name)
+        store, db_name = self._get_store(db_name)
         responses = []
         table_names = store.list_tables()
         for table in table_names:
@@ -111,7 +123,7 @@ class TabularService:
                 columns = [TabularColumnSchema(name=col_name, dtype=self._map_sql_type_to_literal(col_type)) for col_name, col_type in schema_info]
                 count_df = store.execute_sql_query(f'SELECT COUNT(*) AS count FROM "{table}"')
                 row_count = int(count_df["count"].iloc[0])
-                responses.append(TabularSchemaResponse(table_name=table, columns=columns, row_count=row_count))
+                responses.append(TabularSchemaResponse(db_name=db_name, table_name=table, columns=columns, row_count=row_count))
             except Exception as e:
                 logger.warning(f"[{db_name}] Failed to load schema for {table}: {e}")
                 continue
@@ -123,7 +135,7 @@ class TabularService:
         sql = request.query.strip()
         if not sql.lower().lstrip().startswith("select"):
             raise ValueError("Only SELECT statements are allowed on the read endpoint")
-        store = self._get_store(db_name)
+        store, db_name = self._get_store(db_name)
         df = store.execute_sql_query(sql)
         return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=df.to_dict(orient="records"), error=None)
 
@@ -136,6 +148,6 @@ class TabularService:
         if not sql:
             raise ValueError("Empty SQL string provided")
         self._check_write_allowed(db_name)
-        store = self._get_store(db_name)
+        store, db_name = self._get_store(db_name)
         store.execute_update_query(sql)
         return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=[], error=None)

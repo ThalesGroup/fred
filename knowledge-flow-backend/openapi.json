@@ -1320,11 +1320,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "title": "Response List Table Names"
+                  "$ref": "#/components/schemas/ListTableResponse"
                 }
               }
             }
@@ -3993,6 +3989,27 @@
         ],
         "title": "KPIQueryResultRow"
       },
+      "ListTableResponse": {
+        "properties": {
+          "db_name": {
+            "type": "string",
+            "title": "Db Name"
+          },
+          "tables": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tables"
+          }
+        },
+        "type": "object",
+        "required": [
+          "db_name",
+          "tables"
+        ],
+        "title": "ListTableResponse"
+      },
       "LogEventDTO": {
         "properties": {
           "ts": {
@@ -4902,6 +4919,10 @@
       },
       "TabularSchemaResponse": {
         "properties": {
+          "db_name": {
+            "type": "string",
+            "title": "Db Name"
+          },
           "table_name": {
             "type": "string",
             "title": "Table Name"
@@ -4927,6 +4948,7 @@
         },
         "type": "object",
         "required": [
+          "db_name",
           "table_name",
           "columns"
         ],

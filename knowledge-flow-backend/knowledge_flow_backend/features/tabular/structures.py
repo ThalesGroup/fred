@@ -28,7 +28,13 @@ class TabularColumnSchema(BaseModel):
     dtype: DTypes
 
 
+class ListTableResponse(BaseModel):
+    db_name: str
+    tables: list[str]
+
+
 class TabularSchemaResponse(BaseModel):
+    db_name: str
     table_name: str
     columns: List[TabularColumnSchema]
     row_count: Optional[int] = None

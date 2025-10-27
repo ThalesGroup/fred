@@ -601,7 +601,7 @@ export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiArg 
 };
 export type ListTabularDatabasesApiResponse = /** status 200 Successful Response */ string[];
 export type ListTabularDatabasesApiArg = void;
-export type ListTableNamesApiResponse = /** status 200 Successful Response */ string[];
+export type ListTableNamesApiResponse = /** status 200 Successful Response */ ListTableResponse;
 export type ListTableNamesApiArg = {
   /** Name of the tabular database */
   dbName: string;
@@ -946,11 +946,16 @@ export type BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost = 
   files: Blob[];
   metadata_json: string;
 };
+export type ListTableResponse = {
+  db_name: string;
+  tables: string[];
+};
 export type TabularColumnSchema = {
   name: string;
   dtype: "string" | "integer" | "float" | "boolean" | "datetime" | "unknown";
 };
 export type TabularSchemaResponse = {
+  db_name: string;
   table_name: string;
   columns: TabularColumnSchema[];
   row_count?: number | null;
