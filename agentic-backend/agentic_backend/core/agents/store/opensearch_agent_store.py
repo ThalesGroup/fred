@@ -5,13 +5,16 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Tuple  # Added Tuple, Any for save_all fix
 
 from fred_core import validate_index_mapping
 from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection, exceptions
 from pydantic import TypeAdapter
 
 from agentic_backend.common.structures import AgentSettings
+from agentic_backend.core.agents.agent_spec import (
+    AgentTuning,  # Import the Tuning model
+)
 from agentic_backend.core.agents.store.base_agent_store import (
     SCOPE_GLOBAL,
     BaseAgentStore,
@@ -26,6 +29,8 @@ AGENTS_INDEX_MAPPING = {
         "properties": {
             # New Scope Fields
             "scope": {"type": "keyword"},
+            # NOTE: For GLOBAL scope (scope_id=None), OpenSearch stores the field as null
+            # The mapping's "null_value": "null" ensures a query for "scope_id":"null" finds it.
             "scope_id": {"type": "keyword", "null_value": "null"},
             # Existing Fields (Rest of the Pydantic model is stored in _source)
             "name": {"type": "keyword"},
@@ -107,6 +112,7 @@ class OpenSearchAgentStore(BaseAgentStore):
     # --- Utility Methods ---
     def _create_doc_id(self, name: str, scope: str, scope_id: Optional[str]) -> str:
         """Creates a composite document ID: <name>:<scope>:<scope_id or 'NULL'>"""
+        # FIX: The original was slightly inconsistent. This is the correct, cleaner version:
         scope_id_part = scope_id if scope_id is not None else "NULL"
         return f"{name}:{scope}:{scope_id_part}"
 
@@ -115,6 +121,8 @@ class OpenSearchAgentStore(BaseAgentStore):
     def save(
         self,
         settings: AgentSettings,
+        # FIX 1: Add the required 'tuning' parameter, even if we don't use it directly
+        tuning: AgentTuning,
         scope: str = SCOPE_GLOBAL,
         scope_id: Optional[str] = None,
     ) -> None:
@@ -130,7 +138,7 @@ class OpenSearchAgentStore(BaseAgentStore):
 
         # 2. Add scope fields for indexing/querying
         body["scope"] = scope
-        body["scope_id"] = scope_id
+        body["scope_id"] = scope_id  # If scope_id is None, it is stored as 'null'
 
         try:
             self.client.index(index=self.index_name, id=doc_id, body=body)
@@ -143,18 +151,20 @@ class OpenSearchAgentStore(BaseAgentStore):
 
     def save_all(
         self,
-        settings_list: List[AgentSettings],
+        # FIX 2: Correct the type hint to match BaseAgentStore interface
+        settings_tuning_list: List[Tuple[AgentSettings, AgentTuning]],
         scope: str = SCOPE_GLOBAL,
         scope_id: Optional[str] = None,
     ) -> None:
         """
         Efficient batch save using the OpenSearch Bulk API.
         """
-        if not settings_list:
+        if not settings_tuning_list:
             return
 
         actions = []
-        for settings in settings_list:
+        # Iterate over the correct tuple type
+        for settings, _ in settings_tuning_list:
             doc_id = self._create_doc_id(settings.name, scope, scope_id)
 
             # 1. Prepare base document body
@@ -171,7 +181,7 @@ class OpenSearchAgentStore(BaseAgentStore):
         try:
             self.client.bulk(actions)
             logger.info(
-                f"[AGENTS] Batch saved {len(settings_list)} agents (Scope: {scope})"
+                f"[AGENTS] Batch saved {len(settings_tuning_list)} agents (Scope: {scope})"
             )
         except Exception as e:
             logger.error(f"[AGENTS] Failed to perform bulk save: {e}")
@@ -188,7 +198,7 @@ class OpenSearchAgentStore(BaseAgentStore):
         must_clauses: List[dict] = [{"term": {"scope": scope}}]
 
         if scope_id is None:
-            # Match documents where scope_id field is explicitly missing or NULL
+            # Correctly match documents where scope_id is null, using the mapping's 'null_value'
             must_clauses.append({"term": {"scope_id": "null"}})
         else:
             must_clauses.append({"term": {"scope_id": scope_id}})

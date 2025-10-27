@@ -26,7 +26,12 @@ from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_flow import AgentFlow
-from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from agentic_backend.core.agents.agent_spec import (
+    AgentTuning,
+    FieldSpec,
+    MCPServerRef,
+    UIHints,
+)
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.runtime_source import expose_runtime_source
 
@@ -67,6 +72,9 @@ TABULAR_TUNING = AgentTuning(
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
+    ],
+    mcp_servers=[
+        MCPServerRef(name="knowledge-flow-mcp-tabular"),
     ],
 )
 
