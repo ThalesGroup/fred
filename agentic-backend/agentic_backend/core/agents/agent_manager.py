@@ -50,6 +50,7 @@ class AgentManager:
         self.loader = agent_loader
         self.agent_settings: Dict[str, AgentSettings] = {}
         self.agent_instances: Dict[str, AgentFlow] = {}
+        self.use_static_config_only = config.ai.use_static_config_only or True
 
     def get_agent_settings(self, name: str) -> AgentSettings | None:
         return self.agent_settings.get(name)
@@ -126,7 +127,7 @@ class AgentManager:
         """
         # 1. Load and Map Data
         static_instances = self.loader.load_static()
-        if self.config.ai.use_static_config_only:
+        if self.use_static_config_only:
             logger.warning(
                 "[AGENTS] 'use_static_config_only' is ENABLED. Skipping all persistent agent configuration (DB)."
             )

@@ -140,9 +140,12 @@ class AIConfig(BaseModel):
     timeout: TimeoutSettings = Field(
         ..., description="Timeout settings for the AI client."
     )
-    use_static_config_only: bool = Field(
+    use_static_config_only: Optional[bool] = Field(
         True,
-        description="If true, only static agent configurations from YAML are used; persistent configurations are ignored.",
+        description=(
+            "If true, only static agent configurations from YAML are used; "
+            "persistent configurations are ignored."
+        ),
     )
     default_chat_model: ModelConfiguration = Field(
         ...,
