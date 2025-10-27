@@ -15,7 +15,7 @@
 import inspect
 import sys
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
@@ -25,7 +25,6 @@ from pydantic import BaseModel
 from agentic_backend.common.error import MCPClientConnectionException
 from agentic_backend.common.mcp_utils import MCPConnectionError
 from agentic_backend.common.structures import (
-    Agent,
     AgentSettings,
 )
 from agentic_backend.common.utils import log_exception
@@ -34,7 +33,6 @@ from agentic_backend.core.agents.agent_service import (
     AgentAlreadyExistsException,
     AgentService,
 )
-from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerConfiguration
 from agentic_backend.core.runtime_source import get_runtime_source_registry
 
 
@@ -91,10 +89,6 @@ router = APIRouter(tags=["Agents"])
 
 class CreateMcpAgentRequest(BaseModel):
     name: str
-    mcp_servers: List[MCPServerConfiguration]
-    role: str
-    description: str
-    tags: Optional[List[str]] = None
 
 
 @router.post(
@@ -108,20 +102,7 @@ async def create_agent(
 ):
     try:
         service = AgentService(agent_manager=agent_manager)
-        tunings = AgentTuning(
-            role=request.role,
-            description=request.description,
-            fields=[],
-            legacy_mcp_servers=request.mcp_servers,
-        )
-        agent = Agent(
-            type="agent",
-            name=request.name,
-            class_path="agentic_backend.core.agents.mcp_agent.MCPAgent",  # dynamic agent
-            tuning=tunings,
-        )
-        await service.create_agent(user, agent)
-        return {"message": f"Agent '{agent.name}' created successfully."}
+        await service.create_mcp_agent(user, request.name)
     except Exception as e:
         log_exception(e)
         raise handle_exception(e)

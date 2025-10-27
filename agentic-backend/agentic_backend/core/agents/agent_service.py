@@ -41,7 +41,7 @@ class AgentService:
         self.agent_manager = agent_manager
 
     @authorize(action=Action.CREATE, resource=Resource.AGENTS)
-    async def create_agent(self, user: KeycloakUser, agent_settings: AgentSettings):
+    async def create_mcp_agent(self, user: KeycloakUser, name: str):
         """
         Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
         """

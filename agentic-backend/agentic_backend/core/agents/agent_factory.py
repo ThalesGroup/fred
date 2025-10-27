@@ -39,6 +39,9 @@ class AgentFactory:
         self.manager = manager
         self.loader = loader
 
+    def _import_agent_class(self, class_path: str):
+        return self.loader._import_agent_class(class_path)
+
     async def create_and_init(
         self,
         agent_name: str,
