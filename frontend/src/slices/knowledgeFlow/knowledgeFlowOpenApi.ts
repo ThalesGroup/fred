@@ -228,6 +228,11 @@ const injectedRtkApi = api.injectEndpoints({
     getAllSchemas: build.query<GetAllSchemasApiResponse, GetAllSchemasApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/schemas` }),
     }),
+    getTableSchema: build.query<GetTableSchemaApiResponse, GetTableSchemaApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/tables/${queryArg.tableName}/schema`,
+      }),
+    }),
     rawSqlQueryRead: build.mutation<RawSqlQueryReadApiResponse, RawSqlQueryReadApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/sql/read`,
@@ -596,7 +601,7 @@ export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiArg 
 };
 export type ListTabularDatabasesApiResponse = /** status 200 Successful Response */ string[];
 export type ListTabularDatabasesApiArg = void;
-export type ListTableNamesApiResponse = /** status 200 Successful Response */ string[];
+export type ListTableNamesApiResponse = /** status 200 Successful Response */ ListTableResponse;
 export type ListTableNamesApiArg = {
   /** Name of the tabular database */
   dbName: string;
@@ -605,6 +610,13 @@ export type GetAllSchemasApiResponse = /** status 200 Successful Response */ Tab
 export type GetAllSchemasApiArg = {
   /** Name of the tabular database */
   dbName: string;
+};
+export type GetTableSchemaApiResponse = /** status 200 Successful Response */ TabularSchemaResponse;
+export type GetTableSchemaApiArg = {
+  /** Name of the tabular database */
+  dbName: string;
+  /** Name of the table */
+  tableName: string;
 };
 export type RawSqlQueryReadApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
 export type RawSqlQueryReadApiArg = {
@@ -934,12 +946,17 @@ export type BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost = 
   files: Blob[];
   metadata_json: string;
 };
+export type ListTableResponse = {
+  db_name: string;
+  tables: string[];
+};
 export type TabularColumnSchema = {
   name: string;
   dtype: "string" | "integer" | "float" | "boolean" | "datetime" | "unknown";
 };
 export type TabularSchemaResponse = {
-  document_name: string;
+  db_name: string;
+  table_name: string;
   columns: TabularColumnSchema[];
   row_count?: number | null;
 };
@@ -1244,6 +1261,8 @@ export const {
   useLazyListTableNamesQuery,
   useGetAllSchemasQuery,
   useLazyGetAllSchemasQuery,
+  useGetTableSchemaQuery,
+  useLazyGetTableSchemaQuery,
   useRawSqlQueryReadMutation,
   useRawSqlQueryWriteMutation,
   useDeleteTableMutation,

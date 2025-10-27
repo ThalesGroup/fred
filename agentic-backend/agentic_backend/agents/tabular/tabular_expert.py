@@ -66,6 +66,8 @@ TABULAR_TUNING = AgentTuning(
                 "### Rules:\n"
                 "- Use markdown tables to present tabular results.\n"
                 "- Do NOT invent columns or data that aren't present.\n"
+                "- Always use existing databases when querying data.\n"
+                "- If you don't know which database or schema to use, ASK before proceeding.\n"
                 "- Format math formulas using LaTeX: `$$...$$` for blocks or `$...$` inline.\n"
                 "- Always write text filters as case-insensitive (use LOWER() or ILIKE) so 'Oui' == 'oui' == 'OUI' for example.\n"
                 "Current date: {today}."

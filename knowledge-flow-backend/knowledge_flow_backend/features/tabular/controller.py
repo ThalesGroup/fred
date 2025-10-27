@@ -21,7 +21,7 @@ from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_cu
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.tabular.service import TabularService
-from knowledge_flow_backend.features.tabular.structures import RawSQLRequest, TabularQueryResponse, TabularSchemaResponse
+from knowledge_flow_backend.features.tabular.structures import ListTableResponse, RawSQLRequest, TabularQueryResponse, TabularSchemaResponse
 
 logger = logging.getLogger(__name__)
 
@@ -46,13 +46,11 @@ class TabularController:
                 logger.exception("Failed to list databases")
                 raise e
 
-        @router.get("/tabular/{db_name}/tables", response_model=List[str], tags=["Tabular"], summary="List tables in a database", operation_id="list_table_names")
+        @router.get("/tabular/{db_name}/tables", response_model=ListTableResponse, tags=["Tabular"], summary="List tables in a database", operation_id="list_table_names")
         async def list_tables(db_name: str = Path(..., description="Name of the tabular database"), user: KeycloakUser = Depends(get_current_user)):
             authorize_or_raise(user, Action.READ, Resource.TABLES)
-
             try:
-                store = self.service._get_store(db_name)
-                return store.list_tables()
+                return self.service.list_tables(user, db_name)
             except Exception as e:
                 logger.exception(f"Failed to list tables for {db_name}")
                 raise e
@@ -64,6 +62,20 @@ class TabularController:
             except Exception as e:
                 logger.exception(f"Failed to get schemas for {db_name}")
                 raise e
+
+        @router.get("/tabular/{db_name}/tables/{table_name}/schema", response_model=TabularSchemaResponse, tags=["Tabular"], summary="Get schema of a single table", operation_id="get_table_schema")
+        async def get_table_schema(
+            db_name: str = Path(..., description="Name of the tabular database"), table_name: str = Path(..., description="Name of the table"), user: KeycloakUser = Depends(get_current_user)
+        ):
+            authorize_or_raise(user, Action.READ, Resource.TABLES)
+            try:
+                return self.service.get_schema(user, db_name, table_name)
+            except ValueError as ve:
+                logger.warning(f"Database or table not found: {ve}")
+                raise HTTPException(status_code=404, detail=str(ve))
+            except Exception as e:
+                logger.exception(f"Failed to get schema for table '{table_name}' in database '{db_name}' exception : {e}")
+                raise HTTPException(status_code=500, detail="Internal server error")
 
         @router.post(
             "/tabular/{db_name}/sql/read",
@@ -116,8 +128,7 @@ class TabularController:
                 if not table_name.isidentifier():
                     raise HTTPException(status_code=400, detail="Invalid table name")
 
-                store = self.service._get_store(db_name)
-                store.delete_table(table_name)
+                self.service.delete_table(user=user, db_name=db_name, table_name=table_name)
                 logger.info(f"[{db_name}] Table '{table_name}' deleted successfully.")
             except PermissionError as pe:
                 logger.warning(f"[{db_name}] Forbidden delete attempt: {pe}")
