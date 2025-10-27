@@ -56,24 +56,6 @@
                 }
             }
         ],
-        "./knowledge_flow_backend/features/tabular/service.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 93,
-                    "endColumn": 102,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 103,
-                    "endColumn": 112,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./knowledge_flow_backend/features/tabular/structures.py": [
             {
                 "code": "reportAssignmentType",
