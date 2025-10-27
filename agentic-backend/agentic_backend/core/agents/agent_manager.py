@@ -28,6 +28,18 @@ from agentic_backend.core.agents.store.base_agent_store import (
 logger = logging.getLogger(__name__)
 
 
+# agentic_backend/core/agents/agent_service.py (or exceptions.py if you have one)
+
+
+class AgentUpdatesDisabled(Exception):
+    """Raised when updates are attempted while static-config-only mode is enabled."""
+
+    def __init__(self, message: str | None = None):
+        super().__init__(
+            message or "Agent updates are disabled in static-config-only mode."
+        )
+
+
 class AgentManager:
     """
     Manages the full lifecycle of AI agents (leaders and experts), including:
@@ -50,7 +62,11 @@ class AgentManager:
         self.loader = agent_loader
         self.agent_settings: Dict[str, AgentSettings] = {}
         self.agent_instances: Dict[str, AgentFlow] = {}
-        self.use_static_config_only = config.ai.use_static_config_only or True
+        self.use_static_config_only = config.ai.use_static_config_only
+        logger.info(
+            "[AGENTS] AgentManager initialized with static_config_only=%s",
+            self.use_static_config_only,
+        )
 
     def get_agent_settings(self, name: str) -> AgentSettings | None:
         return self.agent_settings.get(name)
@@ -74,6 +90,9 @@ class AgentManager:
         - If `enabled=False`: close & unregister.
         - Leaders: crew changes are honored by a deterministic rewire pass.
         """
+        if self.use_static_config_only:
+            raise AgentUpdatesDisabled()
+
         name = new_settings.name
         tunings = new_settings.tuning
         if not tunings:
@@ -97,6 +116,9 @@ class AgentManager:
         """
         Deletes an agent from the persistent store and unregisters it from runtime.
         """
+        if self.use_static_config_only:
+            raise AgentUpdatesDisabled()
+
         settings = self.agent_settings.pop(name, None)
         if not settings:
             logger.warning("[AGENTS] agent=%s deleted but not found in memory.", name)

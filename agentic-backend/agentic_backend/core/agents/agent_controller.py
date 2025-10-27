@@ -29,7 +29,7 @@ from agentic_backend.common.structures import (
     AgentSettings,
 )
 from agentic_backend.common.utils import log_exception
-from agentic_backend.core.agents.agent_manager import AgentManager
+from agentic_backend.core.agents.agent_manager import AgentManager, AgentUpdatesDisabled
 from agentic_backend.core.agents.agent_service import (
     AgentAlreadyExistsException,
     AgentService,
@@ -50,7 +50,9 @@ def handle_exception(e: Exception) -> HTTPException | Exception:
         return HTTPException(
             status_code=502, detail=f"MCP connection failed: {e.reason}"
         )
-    return e
+    if isinstance(e, AgentUpdatesDisabled):
+        return HTTPException(status_code=403, detail=str(e))
+    return HTTPException(status_code=500, detail="Internal Server Error")
 
 
 @dataclass

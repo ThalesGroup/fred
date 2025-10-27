@@ -495,7 +495,7 @@ class ApplicationContext:
         if self._agent_store_instance is not None:
             return self._agent_store_instance
         from agentic_backend.core.agents.store.duckdb_agent_store import (
-            DuckdbAgentStore,
+            DuckDBAgentStore,
         )
         from agentic_backend.core.agents.store.opensearch_agent_store import (
             OpenSearchAgentStore,
@@ -504,11 +504,11 @@ class ApplicationContext:
         store_config = get_configuration().storage.agent_store
         if isinstance(store_config, DuckdbStoreConfig):
             from agentic_backend.core.agents.store.duckdb_agent_store import (
-                DuckdbAgentStore,
+                DuckDBAgentStore,
             )
 
             db_path = Path(store_config.duckdb_path).expanduser()
-            return DuckdbAgentStore(db_path)
+            return DuckDBAgentStore(db_path)
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
             password = opensearch_config.password
