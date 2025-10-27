@@ -64,6 +64,27 @@ class TabularController:
             except Exception as e:
                 logger.exception(f"Failed to get schemas for {db_name}")
                 raise e
+            
+        @router.get(
+            "/tabular/{db_name}/tables/{table_name}/schema",
+            response_model=TabularSchemaResponse,
+            tags=["Tabular"],
+            summary="Get schema of a single table",
+            operation_id="get_table_schema"
+        )
+        async def get_table_schema(db_name: str = Path(..., description="Name of the tabular database"),
+            table_name: str = Path(..., description="Name of the table"),
+            user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.TABLES)
+            try:
+                return self.service.get_schema(user, db_name, table_name)
+            except ValueError as ve:
+                logger.warning(f"Database or table not found: {ve}")
+                raise HTTPException(status_code=404, detail=str(ve))
+            except Exception as e:
+                logger.exception(f"Failed to get schema for table '{table_name}' in database '{db_name}'")
+                raise HTTPException(status_code=500, detail="Internal server error")
+
 
         @router.post(
             "/tabular/{db_name}/sql/read",

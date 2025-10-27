@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,24 +14,46 @@
 
 import logging
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from fred_core import Action, KeycloakUser, Resource, authorize
 from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo
-
-from knowledge_flow_backend.features.tabular.structures import DTypes, RawSQLRequest, TabularColumnSchema, TabularQueryResponse, TabularSchemaResponse
+from knowledge_flow_backend.features.tabular.structures import (
+    DTypes,
+    RawSQLRequest,
+    TabularColumnSchema,
+    TabularQueryResponse,
+    TabularSchemaResponse,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class TabularService:
-    def __init__(self, stores_info: Dict[str, StoreInfo]):
+    def __init__(self, stores_info: Dict[str, StoreInfo], default_db: Optional[str] = None):
+        """
+        Initialize the TabularService.
+
+        :param stores_info: Mapping of database names to their StoreInfo.
+        :param default_db: Optional name of the default database to fall back to
+                           if the requested one is unknown.
+        """
         self.stores_info = stores_info
+        self.default_db = default_db or (next(iter(stores_info.keys())) if stores_info else None)
 
     def _get_store(self, db_name: str) -> SQLTableStore:
+        """
+        Retrieve the SQLTableStore for the given database name.
+        Falls back to the default database if db_name is unknown.
+        """
         if db_name not in self.stores_info:
-            raise ValueError(f"Unknown database: {db_name}")
+            logger.warning(
+                f"Unknown database '{db_name}', falling back to default database '{self.default_db}'"
+            )
+            if not self.default_db or self.default_db not in self.stores_info:
+                raise ValueError(f"Unknown database: {db_name} and no valid fallback configured")
+            db_name = self.default_db
         return self.stores_info[db_name].store
 
     def _check_write_allowed(self, db_name: str):
@@ -70,39 +92,39 @@ class TabularService:
         return list(self.stores_info.keys())
 
     @authorize(action=Action.READ, resource=Resource.TABLES)
-    def get_schema(self, user: KeycloakUser, db_name: str, document_name: str) -> TabularSchemaResponse:
-        table_name = self._sanitize_table_name(document_name)
+    def get_schema(self, user: KeycloakUser, db_name: str, table_name: str) -> TabularSchemaResponse:
+        table_name = self._sanitize_table_name(table_name)
         store = self._get_store(db_name)
-
         schema = store.get_table_schema(table_name)
-        columns = [TabularColumnSchema(name=col, dtype=self._map_sql_type_to_literal(dtype)) for col, dtype in schema]
-
+        columns = [
+            TabularColumnSchema(name=col, dtype=self._map_sql_type_to_literal(dtype))
+            for col, dtype in schema
+        ]
         count_df = store.execute_sql_query(f'SELECT COUNT(*) AS count FROM "{table_name}"')
         row_count = count_df["count"][0]
-
-        return TabularSchemaResponse(document_name=document_name, columns=columns, row_count=row_count)
+        return TabularSchemaResponse(table_name=table_name, columns=columns, row_count=row_count)
 
     @authorize(action=Action.READ, resource=Resource.TABLES)
     def list_tables_with_schema(self, user: KeycloakUser, db_name: str) -> list[TabularSchemaResponse]:
         store = self._get_store(db_name)
         responses = []
         table_names = store.list_tables()
-
         for table in table_names:
             try:
                 schema_info = store.get_table_schema(table)
-                columns = [TabularColumnSchema(name=col_name, dtype=self._map_sql_type_to_literal(col_type)) for col_name, col_type in schema_info]
+                columns = [
+                    TabularColumnSchema(name=col_name, dtype=self._map_sql_type_to_literal(col_type))
+                    for col_name, col_type in schema_info
+                ]
                 count_df = store.execute_sql_query(f'SELECT COUNT(*) AS count FROM "{table}"')
                 row_count = count_df["count"][0]
-
-                responses.append(TabularSchemaResponse(document_name=table, columns=columns, row_count=row_count))
+                responses.append(TabularSchemaResponse(table_name=table, columns=columns, row_count=row_count))
             except Exception as e:
                 logger.warning(f"[{db_name}] Failed to load schema for {table}: {e}")
                 continue
-
         return responses
 
-    # Read only queries, such as SELECT
+    # Read-only queries (SELECT)
     @authorize(action=Action.READ, resource=Resource.TABLES)
     def query_read(self, user: KeycloakUser, db_name: str, request: RawSQLRequest) -> TabularQueryResponse:
         sql = request.query.strip()
@@ -112,7 +134,7 @@ class TabularService:
         df = store.execute_sql_query(sql)
         return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=df.to_dict(orient="records"), error=None)
 
-    # Write queries such as UPDATE, CREATE, DELETE
+    # Write queries (UPDATE, CREATE, DELETE)
     @authorize(action=Action.UPDATE, resource=Resource.TABLES)
     @authorize(action=Action.CREATE, resource=Resource.TABLES)
     @authorize(action=Action.DELETE, resource=Resource.TABLES)

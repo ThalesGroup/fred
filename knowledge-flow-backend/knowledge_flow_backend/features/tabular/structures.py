@@ -29,7 +29,7 @@ class TabularColumnSchema(BaseModel):
 
 
 class TabularSchemaResponse(BaseModel):
-    document_name: str
+    table_name: str
     columns: List[TabularColumnSchema]
     row_count: Optional[int] = None
 
