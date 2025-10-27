@@ -1,7 +1,7 @@
-# Keycloak Integration — Users & Services
+# Keycloak Integration — User Identity Forwarding
 (Fred: Agentic ↔ Knowledge Flow)
 
-This guide shows how to wire **user login** (UI ↔ backends) and **service-to-service** calls (**Agentic → Knowledge Flow**) using Keycloak. It is **linear**, and each section is complete on its own.
+This guide explains how to configure Keycloak so every request processed by the Agentic backend — including calls into Knowledge Flow — carries the authenticated **user’s** identity. Agent actions are now audited as user actions. The Agentic service account remains available for administrative jobs such as enumerating known users, but it is not used for runtime calls between backends.
 
 > Enforcement today
 > - Signature / expiry / issuer: **enforced** in backends  
@@ -10,57 +10,52 @@ This guide shows how to wire **user login** (UI ↔ backends) and **service-to-s
 
 ---
 
-## 1) Keycloak Configuration
+## 1) Keycloak Setup
 
-This MUST be performed for each application environment. 
+Perform these steps in every environment.
 
 ### 1.1 Realm
-- Create realm, e.g. **`app`** (matches your config: `.../realms/app`).
+- Create a realm such as **`app`** so your endpoints resolve to `.../realms/app`.
 
 ### 1.2 Clients
-Create **three** clients:
+Create (or verify) the clients below:
 
 | Client ID         | Type           | Service Account | Used by | Purpose |
 |---                |---             |---              |---      |---|
-| `app`             | Public (SPA+PKCE) or Confidential | **OFF** | **UI** | End-user login. UI reads bootstrap from Agentic’s `security.user`. |
-| `agentic`         | **Confidential** | **ON** | **Agentic backend** | Mints **service tokens** to call Knowledge Flow. **Needs a client secret.** |
-| `knowledge-flow`  | **Confidential** | ON | **KF backend** | KF’s identity; can mint tokens when KF calls other services. **Needs a client secret** if used for outbound calls.
+| `app`             | Public (SPA + PKCE) or Confidential | **OFF** | **UI** | Interactive user login. The UI fetches bootstrap data from Agentic’s `security.user`. |
+| `agentic`         | **Confidential** | **ON** | **Agentic backend** | Provides a service identity for background administration (e.g. querying Keycloak for known users). **Not used for runtime API calls.** |
+| `knowledge-flow`  | **Confidential** | ON | **Knowledge Flow backend** | Optional outbound identity when Knowledge Flow calls third-party services. Keep enabled if you plan to expand integrations. |
 
-> Generate and note **two secrets**:
-> - `agentic` → **KEYCLOAK_AGENTIC_CLIENT_SECRET**
-> - `knowledge-flow` → **KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET** (only needed if KF calls others)
+> Secrets to store:
+> - `agentic` → `KEYCLOAK_AGENTIC_CLIENT_SECRET`
+> - `knowledge-flow` → `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET` (only required when Knowledge Flow calls other services)
 
-### 1.3 Roles (used by KF RBAC)
-Create **client roles** for `app` client (not realm roles):
+### 1.3 Roles for user RBAC
+Create **client roles on `app`** (not realm roles) so Knowledge Flow receives them in `realm_access.roles`:
 
-| Role       | Assigned To                 | Grants in KF (`RBACProvider`) |
-|---               |---                          |---|
-| `admin`          | Admin users                 | All actions on all resources |
-| `editor`         | Power users / curators      | CRUD on most KF resources + limited Agentic actions |
-| `viewer`         | Standard users              | READ on most resources; can chat, upload attachments |
-| `service_agent`  | **Agentic service account** | `READ` on `TAGS`, `DOCUMENTS` (vector search) |
+| Role    | Assigned To             | Grants in Knowledge Flow (`RBACProvider`) |
+|---      |---                      |---|
+| `admin` | Admin users             | All actions on all resources |
+| `editor`| Power users / curators  | CRUD on most Knowledge Flow resources + selected Agentic actions |
+| `viewer`| Standard users          | Read access to most resources; can chat and upload attachments |
 
-### 1.4 (Optional but recommended) Groups
-- Create groups `admins`, `editors`, `viewers` and map roles 1:1.
-- Assign users to groups.
+> Optional: define a dedicated role (e.g. `directory_reader`) for the Agentic service account if you intend to call Keycloak admin APIs. Grant only what those tasks require.
 
-### 1.5 Assign `service_agent` to Agentic’s **service account**
-- **Clients → agentic → Service account roles → Assign** → `service_agent`.
+### 1.4 Groups (recommended)
+- Create groups `admins`, `editors`, `viewers` and map each group to the matching role.
+- Add users to groups so the UI tokens automatically include the correct client roles.
 
-### 1.6 Attach built-in `roles` client scope
-- **Clients → app → Client scopes → Default client scopes** must include `roles`.
-- **Clients → agentic → Client scopes → Default client scopes** must include `roles`.
-  - Without this, tokens won’t carry `realm_access.roles`.
+### 1.5 Client scopes
+- `roles` scope must appear under **Default client scopes** for `app`, `agentic`, and any other confidential client that should receive role claims.
 
-> (Later, for strict audience) add an **Audience** mapper so tokens that hit KF include `knowledge-flow` in `aud`.
+### 1.6 Audience (strict mode)
+- When enforcing audience checks, add an **Audience** mapper so tokens destined for Knowledge Flow include `knowledge-flow` in `aud`.
 
 ---
 
-## 2) Configure the two backends
+## 2) Backend Configuration
 
-Both backends use the **same pattern**: a YAML block with `security.m2m` and `security.user`.
-- `security.user`: lets the **UI** log users in against the **realm `app`** with **client `app`** (both Agentic and KF can validate user tokens).
-- `security.m2m`: identifies the **service identity** of that backend (Agentic uses `agentic`, KF uses `knowledge-flow`).
+Both backends validate the same user tokens. `security.user` is therefore identical, while `security.m2m` remains available for service-account automation.
 
 ### 2.1 Agentic `configuration.yaml`
 ```yaml
@@ -74,30 +69,26 @@ app:
   reload_dir: "."
 
 security:
-  # Machine-to-machine (Agentic => Knowledge Flow)
+  # Service account kept for background jobs (e.g., Keycloak user sync); not used for runtime API calls.
   m2m:
     enabled: true
-    client_id: "agentic"                          # Keycloak client for Agentic's service account
+    client_id: "agentic"
     realm_url: "http://app-keycloak:8080/realms/app"
 
-  # User OIDC bootstrap (read by the UI at startup)
+  # User bootstrap consumed by the UI and by Agentic when forwarding user tokens.
   user:
     enabled: true
-    client_id: "app"                              # Frontend client
+    client_id: "app"
     realm_url: "http://app-keycloak:8080/realms/app"
 
   authorized_origins:
-    - "http://localhost:5173"                   # CORS for dev UI
+    - "http://localhost:5173"
 ```
 
-#### Required environment variable (secret)
+Environment variable:
 ```
 KEYCLOAK_AGENTIC_CLIENT_SECRET=<secret of client 'agentic'>
 ```
-
-> Why: Agentic uses **client_credentials** with `agentic` + secret to mint service tokens for calls to KF.
-
----
 
 ### 2.2 Knowledge Flow `configuration.yaml`
 ```yaml
@@ -111,127 +102,130 @@ app:
   reload_dir: "."
 
 security:
-  # Machine-to-machine identity (used if KF calls other services)
+  # Optional identity for outbound calls from Knowledge Flow.
   m2m:
     enabled: true
-    client_id: "knowledge-flow"                   # KF's own service identity
+    client_id: "knowledge-flow"
     realm_url: "http://app-keycloak:8080/realms/app"
 
-  # User OIDC bootstrap (same realm/client as the UI)
+  # Shared realm/client with the UI to validate forwarded user tokens.
   user:
     enabled: true
     client_id: "app"
     realm_url: "http://app-keycloak:8080/realms/app"
-  
+
   authorized_origins:
     - "http://localhost:5173"
 ```
 
-#### Required environment variable (secret, only if KF calls others)
+Environment variable (only if outbound calls are required):
 ```
 KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET=<secret of client 'knowledge-flow'>
 ```
 
-#### Recommended hardening flags (if using envs)
+### 2.3 Recommended hardening flags
 ```
 FRED_STRICT_ISSUER=true
-FRED_STRICT_AUDIENCE=true   # turn on after adding Audience mapper
+FRED_STRICT_AUDIENCE=true   # enable after configuring the Audience mapper
 FRED_JWT_CLOCK_SKEW=0
 FRED_AUTH_VERBOSE=false
 ```
 
-> Why: KF must **validate incoming tokens** (from UI users and from Agentic). RBAC is enforced via `@authorize(...)` and your `RBACProvider`.
+---
+
+## 3) Runtime Flow — User Identity Forwarding
+- UI boots, fetches Agentic’s `security.user`, and launches the PKCE flow against realm `app`, client `app`.
+- User obtains an access token that carries `realm_access.roles`.
+- UI calls Agentic with that Bearer token.
+- Agentic validates the JWT, enforces any local checks, and forwards the **same** token when invoking Knowledge Flow or other downstream services.
+- Knowledge Flow validates the forwarded token, checks RBAC via `@authorize(...)`, and executes the request as the originating user.
+- Any actions performed by agents are now logged and audited as end-user activity.
 
 ---
 
-## 3) What the UI does 
-- At startup, the **UI fetches Agentic’s `security.user`** (realm URL, client_id, allowed origins).
-- The UI logs the user into **realm `app`**, **client `app`** (Authorization Code + PKCE).
-- The UI calls Agentic and/or KF with the **user’s Bearer token**.
-- Both backends can validate that user token (they share realm and client scope setup).
+## 4) Verify End-to-End
+
+1. Authenticate as a user (via the UI or CLI helper) to obtain an access token for client `app`.
+   ```bash
+   KC="http://app-keycloak:8080/realms/app/protocol/openid-connect/token"
+   TOKEN=$(curl -s -X POST "$KC" \
+     -d grant_type=password \
+     -d client_id=app \
+     -d username="<user>" \
+     -d password="<password>" \
+     | jq -r .access_token)
+   ```
+   (Use the UI for production flows; `password` grant is only for local verification.)
+
+2. Call Agentic with the user token:
+   ```bash
+   curl -H "Authorization: Bearer $TOKEN" \
+        -H "Accept: application/json" \
+        http://localhost:8000/agentic/v1/health
+   ```
+
+3. Trigger an Agentic action that calls Knowledge Flow and confirm the same token appears in Knowledge Flow logs (`user=<uid>` with the expected roles).
+
+4. Optional: capture the forwarded request in Knowledge Flow and inspect the JWT payload.
+   ```bash
+   cut -d. -f2 <<<"$TOKEN" | base64 -d | jq .realm_access
+   # Expect assigned roles, e.g. ["viewer", ...]
+   ```
 
 ---
 
-## 4) Verify your setup
+## 5) RBAC Reference
 
-### 4.1 Get a **service** token for Agentic
-```bash
-KC="http://app-keycloak:8080/realms/app/protocol/openid-connect/token"
-TOKEN=$(curl -s -X POST "$KC" \
-  -d grant_type=client_credentials \
-  -d client_id=agentic \
-  -d client_secret="$KEYCLOAK_AGENTIC_CLIENT_SECRET" | jq -r .access_token)
-
-# Check roles in the token
-cut -d. -f2 <<<"$TOKEN" | base64 -d | jq .realm_access
-# Expect: { "roles": ["service_agent", ...] }
-```
-
-### 4.2 Call a protected KF endpoint (e.g., MCP base over HTTP)
-```bash
-BASE="http://<kf-host-or-ingress>/knowledge-flow/v1/mcp-opensearch-ops/"
-curl -v \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "MCP-Version: 2025-03-26" \
-  -H "Accept: application/json" \
-  "$BASE"
-# Expect: 200 OK; KF logs show roles incl. 'service_agent'
-```
-
----
-
-## 5) RBAC 
-
-The `RBACProvider` maps roles to resources:
-
+The `RBACProvider` defines permissions per role:
 ```python
 "admin":  { resource: ALL for resource in Resource },
-"editor": { ... CRUD on KF resources ... },
-"viewer": { READ-only defaults + chat/attachments/prompts },
-"service_agent": {
-    Resource.TAGS: READ_ONLY,
-    Resource.DOCUMENTS: READ_ONLY,
-}
+"editor": { ... },  # CRUD across Knowledge Flow resources
+"viewer": { ... },  # Read-only defaults + chat, attachments, prompts
 ```
-Note that this provided is used in both the agentic and knowledge flow backend. It is defined in the fred-core library. 
-
-
-Endpoints declare requirements, e.g.:
+Endpoints declare requirements:
 ```python
 @authorize(Action.READ, Resource.DOCUMENTS)
 def similarity_search_with_score(..., user: KeycloakUser, ...):
     ...
 ```
-
-If role missing:
+If a role is missing you will see:
 ```
 Authorization denied: user=<uid> roles=<[]> action=read resource=documents
 ```
 
 ---
 
-## 6) (Optiona) Audience strictness
-- Turn on in KF with `FRED_STRICT_AUDIENCE=true`.
-- Add **Audience mapper** so tokens include `knowledge-flow` in `aud`:
-  - For **service tokens** from `agentic` → include `knowledge-flow`.
-  - For **user tokens** (client `app`) → include each API audience you call.
+## 6) Service Account Operations (Optional)
+
+Keep the `agentic` service account ready for background maintenance jobs. When those jobs run, mint a token with client credentials and call the Keycloak Admin API.
+```bash
+KC="http://app-keycloak:8080/realms/app/protocol/openid-connect/token"
+SERVICE_TOKEN=$(curl -s -X POST "$KC" \
+  -d grant_type=client_credentials \
+  -d client_id=agentic \
+  -d client_secret="$KEYCLOAK_AGENTIC_CLIENT_SECRET" | jq -r .access_token)
+
+# Example: list users (requires the appropriate client role)
+curl -H "Authorization: Bearer $SERVICE_TOKEN" \
+     "http://app-keycloak:8080/admin/realms/app/users"
+```
+
+Assign only the minimal roles required for these administrative calls.
 
 ---
 
 ## 7) Troubleshooting
-
-- **`roles=[]` on service token** → you created a realm role instead of client role, or `roles` scope missing on `agentic`.
-- **User token has no roles** → user not in group/role, or `roles` scope missing on `app`.
-- **307 → 401** on MCP base → wrong trailing slash or ingress redirect; base **must end with `/`**.
-- **`aud` denied** (strict mode) → add Audience mapper for `knowledge-flow`.
-- **CORS errors** → add the UI origin under `security.authorized_origins` (Agentic and KF).
-- **KF calling others fails** → set `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET` and use `security.m2m` from KF.
+- **Forwarded call rejected (401/403)** → Verify the user token is passed unchanged from Agentic to Knowledge Flow and that both backends trust the same realm URL.
+- **`roles=[]` in tokens** → Ensure roles are defined as client roles on `app`, the `roles` client scope is attached, and the user belongs to the correct group.
+- **`aud` mismatch** → Configure the Audience mapper and enable `FRED_STRICT_AUDIENCE=true`.
+- **CORS issues** → Add the UI origin to `security.authorized_origins` in both backends.
+- **Service account admin call fails** → Grant the background role (e.g. `directory_reader`) to the `agentic` service account and confirm the token contains it.
 
 ---
 
-## 8) Diagrams (reference)
+## 8) Diagrams
 
-### 8.1 User login & API calls
+### 8.1 User Login & Forwarded Calls
 ```mermaid
 sequenceDiagram
     autonumber
@@ -242,25 +236,24 @@ sequenceDiagram
 
     U->>AG: UI loads → fetch /security.user bootstrap
     U->>KC: OIDC (Code + PKCE) for client 'app'
-    KC-->>U: tokens (access_token has realm_access.roles)
+    KC-->>U: access_token (includes realm_access.roles)
     U->>AG: API call with Bearer user token
-    AG->>AG: Validate JWT (iss/exp/aud) [if enforced]
-    U->>KF: (optional) direct API call with Bearer
-    KF->>KF: Validate JWT + RBAC → allowed
+    AG->>AG: Validate JWT (iss/exp/aud) + RBAC pre-checks
+    AG->>KF: Forward same user token with downstream call
+    KF->>KF: Validate JWT + enforce RBAC
+    KF-->>AG: Response scoped to user permissions
 ```
 
-### 8.2 Service-to-service (Agentic → KF)
+### 8.2 Service Account Maintenance (Optional)
 ```mermaid
 sequenceDiagram
     autonumber
-    participant AG as Agentic (client: agentic)
+    participant AG as Agentic (service account: agentic)
     participant KC as Keycloak (realm: app)
-    participant KF as Knowledge Flow (client: knowledge-flow)
+    participant ADM as Keycloak Admin API
 
-    AG->>KC: Client credentials (agentic + KEYCLOAK_AGENTIC_CLIENT_SECRET)
-    KC-->>AG: access_token (realm_access.roles includes "service_agent")
-    AG->>KF: HTTPS call with Bearer access_token
-    KF->>KF: Validate JWT (iss/exp/aud) + extract roles
-    KF->>KF: RBAC (@authorize READ/DOCUMENTS) → allowed
-    KF-->>AG: 200 OK
+    AG->>KC: Client credentials (agentic + secret)
+    KC-->>AG: access_token (roles: directory_reader, ...)
+    AG->>ADM: Admin REST call with Bearer access_token
+    ADM-->>AG: Data for user directory sync
 ```

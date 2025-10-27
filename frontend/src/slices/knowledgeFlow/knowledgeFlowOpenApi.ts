@@ -354,6 +354,9 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/search`, method: "POST", body: queryArg.searchRequest }),
     }),
+    testPostSuccess: build.mutation<TestPostSuccessApiResponse, TestPostSuccessApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/vector/test`, method: "POST" }),
+    }),
     queryKnowledgeFlowV1KpiQueryPost: build.mutation<
       QueryKnowledgeFlowV1KpiQueryPostApiResponse,
       QueryKnowledgeFlowV1KpiQueryPostApiArg
@@ -690,6 +693,8 @@ export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Succes
 export type SearchDocumentsUsingVectorizationApiArg = {
   searchRequest: SearchRequest;
 };
+export type TestPostSuccessApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
+export type TestPostSuccessApiArg = void;
 export type QueryKnowledgeFlowV1KpiQueryPostApiResponse = /** status 200 Successful Response */ KpiQueryResult;
 export type QueryKnowledgeFlowV1KpiQueryPostApiArg = {
   kpiQuery: KpiQuery;
@@ -1260,6 +1265,7 @@ export const {
   useDeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteMutation,
   useEchoSchemaKnowledgeFlowV1SchemasEchoPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
+  useTestPostSuccessMutation,
   useQueryKnowledgeFlowV1KpiQueryPostMutation,
   useOsHealthQuery,
   useLazyOsHealthQuery,

@@ -83,6 +83,17 @@
     "confirmDeleteTitle": "Confirm deletion",
     "confirmDeleteMessage": "Delete this asset? This action cannot be undone."
   },
+  "agentEditDrawer": {
+    "roleHelperText": "The agent's mandatory role for discovery (e.g., 'Financial Analyst')",
+    "descriptionHelperText": "The agent's mandatory description.",
+    "tagsHelperText": "Tags used for categorization and filtering.",
+    "noTunableFields": "This agent exposes no tunable fields.",
+    "coreFields": "Core Fields",
+    "tunableFields": "Tunable Fields",
+    "tagsLabel": "Tags",
+    "saveUser": "Apply to my profile",
+    "saveGlobal": "Apply to all users"
+  },
   "agentHub": {
     "title": "Agent Hub",
     "confirmDeleteTitle": "Confirm deletion",

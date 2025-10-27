@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from typing import Annotated, Dict, List, Literal, Optional, Union
 
 from fred_core import (
@@ -23,9 +24,11 @@ from fred_core import (
     StoreConfig,
 )
 from langchain_core.messages import SystemMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from agentic_backend.core.agents.agent_spec import AgentTuning
+from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerConfiguration
+
+logger = logging.getLogger(__name__)  # Logger definition added
 
 
 class StorageConfig(BaseModel):
@@ -50,30 +53,6 @@ class TimeoutSettings(BaseModel):
     )
 
 
-class MCPServerConfiguration(BaseModel):
-    name: str
-    transport: Optional[str] = Field(
-        "sse",
-        description="MCP server transport. Can be sse, stdio, websocket or streamable_http",
-    )
-    url: Optional[str] = Field(None, description="URL and endpoint of the MCP server")
-    sse_read_timeout: Optional[int] = Field(
-        60 * 5,
-        description="How long (in seconds) the client will wait for a new event before disconnecting",
-    )
-    command: Optional[str] = Field(
-        None,
-        description="Command to run for stdio transport. Can be uv, uvx, npx and so on.",
-    )
-    args: Optional[List[str]] = Field(
-        None,
-        description="Args to give the command as a list. ex:  ['--directory', '/directory/to/mcp', 'run', 'server.py']",
-    )
-    env: Optional[Dict[str, str]] = Field(
-        None, description="Environment variables to give the MCP server"
-    )
-
-
 class RecursionConfig(BaseModel):
     recursion_limit: int
 
@@ -86,6 +65,8 @@ class AgentChatOptions(BaseModel):
 
 
 # ---------------- Base: shared identity + UX + tuning ----------------
+
+
 class BaseAgent(BaseModel):
     """
     Fred rationale:
@@ -97,19 +78,29 @@ class BaseAgent(BaseModel):
     name: str
     enabled: bool = True
     class_path: Optional[str] = None  # None → dynamic/UI agent
-    model: Optional[ModelConfiguration] = None
-    # User-facing discovery (what leaders & UI filter on)
-    tags: List[str] = Field(default_factory=list)
-    role: str
-    description: str
-
-    # Optional: spec declares allowed tunables; values store overrides
     tuning: Optional[AgentTuning] = None
+    chat_options: AgentChatOptions = AgentChatOptions()
+    # Added for backward compatibility with older YAML files
     mcp_servers: List[MCPServerConfiguration] = Field(
         default_factory=list,
-        description="List of active MCP server configurations for this agent.",
+        deprecated=True,
+        description="DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead.",
     )
-    chat_options: AgentChatOptions = AgentChatOptions()
+
+    @field_validator("mcp_servers", mode="after")
+    @classmethod
+    def warn_on_deprecated_mcp_servers(cls, v: List[MCPServerConfiguration], info):
+        """Logs a warning if the deprecated agent-level mcp_servers field is used."""
+        # Only log if the deprecated field was actually provided with content and we can infer the agent name
+        if v and info.data.get("name"):
+            logger.warning(
+                "DEPRECATION WARNING for agent '%s': 'mcp_servers' is deprecated. "
+                "Please migrate the full MCP server configuration to the global 'mcp' "
+                "section in your configuration file and update the agent's tuning "
+                "to use 'mcp_servers' (references).",
+                info.data.get("name"),
+            )
+        return v
 
 
 # ---------------- Agent: a regular single agent ----------------
@@ -149,9 +140,20 @@ class AIConfig(BaseModel):
     timeout: TimeoutSettings = Field(
         ..., description="Timeout settings for the AI client."
     )
+    use_static_config_only: Optional[bool] = Field(
+        True,
+        description=(
+            "If true, only static agent configurations from YAML are used; "
+            "persistent configurations are ignored."
+        ),
+    )
     default_chat_model: ModelConfiguration = Field(
         ...,
-        description="Default model configuration for all agents and services.",
+        description="Default chat model configuration for all agents and services.",
+    )
+    default_language_model: Optional[ModelConfiguration] = Field(
+        None,
+        description="Default language model configuration for all agents and services (Optional).",
     )
     agents: List[AgentSettings] = Field(
         default_factory=list, description="List of AI agents."
@@ -183,11 +185,40 @@ class AppConfig(BaseModel):
     reload_dir: str = "."
 
 
+class McpConfiguration(BaseModel):
+    servers: List[MCPServerConfiguration] = Field(
+        default_factory=list,
+        description="List of MCP servers defined for this environment.",
+    )
+
+    def get_server(self, name: str) -> Optional[MCPServerConfiguration]:
+        """
+        Retrieve an MCP server by logical name.
+        Returns None if not found or disabled.
+        """
+        for s in self.servers:
+            if s.name == name and s.enabled:
+                return s
+        return None
+
+    def as_dict(self) -> Dict[str, MCPServerConfiguration]:
+        """
+        Fred rationale:
+        - Useful for fast lookup and resolver integration.
+        - Used by RuntimeContext → MCPRuntime to resolve URLs dynamically.
+        """
+        return {s.name: s for s in self.servers if s.enabled}
+
+
 class Configuration(BaseModel):
     app: AppConfig
     security: SecurityConfiguration
     frontend_settings: FrontendSettings
     ai: AIConfig
+    mcp: McpConfiguration = Field(
+        default_factory=McpConfiguration,
+        description="Microservice Communication Protocol (MCP) server configurations.",
+    )
     storage: StorageConfig
 
 

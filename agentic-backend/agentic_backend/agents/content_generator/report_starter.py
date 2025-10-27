@@ -12,12 +12,12 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional, Sequence
 
-from fred_core import get_model
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, START, MessagesState, StateGraph
 from pydantic import BaseModel, Field
 
+from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
@@ -98,6 +98,8 @@ BEHAVIOR_PROMPT = (
 )
 
 TUNING: AgentTuning = AgentTuning(
+    role="report_writer",
+    description="An agent that generates structured project status reports based on provided context.",
     fields=[
         # --- Prompt segments ---------------------------------------------------
         FieldSpec(
@@ -160,7 +162,7 @@ TUNING: AgentTuning = AgentTuning(
             default=False,
             ui=UIHints(group="Advanced"),
         ),
-    ]
+    ],
 )
 
 
@@ -238,7 +240,7 @@ class ReportWriter(AgentFlow):
         prompt = _build_prompt(self)
 
         # 2) Bind model with structured output (type-safe contract)
-        model = get_model(self.agent_settings.model)
+        model = get_default_chat_model()
         self._chain = prompt | model.with_structured_output(ProjectStatusReport)
 
         # 3) Single-node LangGraph

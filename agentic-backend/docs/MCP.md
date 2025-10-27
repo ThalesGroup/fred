@@ -6,9 +6,9 @@ This document explains **how to use** the `MCPRuntime`, `McpToolkit`, and the re
 
 ## TL;DR
 
-- Use **`MCPRuntime`** to create and refresh the MCP client + toolkit for an agent.  
-- Bind tools from **`McpToolkit`** to your model.  
-- Run tools via our **resilient ToolNode** so a 401/timeout never corrupts your chat turn (no “dangling tool calls”).  
+- Use **`MCPRuntime`** to create and refresh the MCP client + toolkit for an agent.
+- Bind tools from **`McpToolkit`** to your model.
+- Run tools via our **resilient ToolNode** so a 401/timeout never corrupts your chat turn (no “dangling tool calls”).
 - We automatically:
   - Inject outbound **OAuth** (headers or env for `stdio`).
   - **Retry once** on auth failures after refreshing the token.
@@ -22,20 +22,24 @@ Agents should not talk directly to `MultiServerMCPClient`. They should rely on `
 ## Why this is non-trivial (MCP + OAuth is tricky)
 
 1. **Multiple transports**: MCP servers may be `stdio`, `sse`, `streamable_http`, or `websocket`. Auth must be injected differently for each:
+
    - HTTP-like transports → **Authorization header**
    - `stdio` → **env variables** (no headers possible)
 
 2. **Expiring tokens**: First call after inactivity often returns **401**. We must:
+
    - Detect auth failures even when adapters don’t surface a structured status code.
    - Refresh the token and retry once.
    - Avoid breaking the LLM turn (OpenAI requires tool calls to be followed by tool results).
 
 3. **Model/tool-call contract**: If the model emits `tool_calls`, the API **must** receive a `ToolMessage` for each `tool_call_id`. If a tool fails or times out and we don’t return tool results, you get the infamous 400:
+
    > “An assistant message with 'tool_calls' must be followed by tool messages …”
 
    Our **resilient ToolNode** guarantees that—even on failure—we emit **fallback ToolMessages** so the turn stays valid.
 
 4. **HTTP quirks**: Redirects, timeouts, and server-specific expectations:
+
    - Some adapters require a **trailing slash** on base URLs.
    - `streamable_http` expects **`timedelta`** for SSE read timeouts.
    - Some servers 401 when terminating sessions (DELETE), which we ignore safely.
@@ -47,6 +51,7 @@ Agents should not talk directly to `MultiServerMCPClient`. They should rely on `
 ## Components
 
 ### `MCPRuntime`
+
 - **Owns** the `MultiServerMCPClient` and the `McpToolkit`.
 - **APIs**:
   - `await init()`: connect to all configured MCP servers, wrap tools.
@@ -58,10 +63,12 @@ Agents should not talk directly to `MultiServerMCPClient`. They should rely on `
 It centralizes client lifecycle, auth, and diagnostics so **agents don’t duplicate this logic**.
 
 ### `McpToolkit`
+
 - Thin wrapper that takes tools from the MCP client and **optionally wraps** each tool with `ContextAwareTool` (so tools can read the **runtime context**—e.g., current library/project—when invoked by the agent).
 - Exposes `get_tools()`.
 
 ### Resilient ToolNode (`make_resilient_tools_node(...)`)
+
 - Executes tools with a **per-call timeout**.
 - On **timeout / stream closed / 401**:
   - Calls your `refresh_cb()` (which should refresh the MCP client and re-bind tools).
@@ -86,7 +93,7 @@ class MyExpert(AgentFlow):
 
     async def async_init(self):
         # 2) Model first
-        self.model = get_model(self.agent_settings.model)
+        self.model = get_default_chat_model()
 
         # 3) Connect MCP & wrap tools
         await self.mcp_runtime.init()
@@ -116,3 +123,4 @@ class MyExpert(AgentFlow):
 
     async def aclose(self):
         await self.mcp_runtime.aclose()
+```

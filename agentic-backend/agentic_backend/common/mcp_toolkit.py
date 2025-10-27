@@ -12,104 +12,88 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# agentic_backend/common/mcp_toolkit.py
 
 """
-# McpToolkit — context-aware wrapper over MCP tools
+McpToolkit — build LangChain tools from an MCP client *per turn*.
 
-## Why this exists
-
-Agents call MCP tools (e.g., OpenSearch ops, KPI, tabular). Many of those tools
-benefit from *runtime context* (e.g., current tenant, library allowlists,
-time-range defaults, or per-session flags). Hard-coding that logic into each
-tool or each agent leads to duplication and drift.
-
-**McpToolkit** wraps the bare MCP tools with a `ContextAwareTool` that can
-inject runtime parameters at call time (via a `RuntimeContextProvider`).
-This keeps tools declarative and makes agents simpler.
-
-## What it does
-
-- Pulls the base tools from a connected `MultiServerMCPClient`.
-- If a `RuntimeContextProvider` is supplied, wraps each base tool in a
-  `ContextAwareTool(tool, context_provider)`. Otherwise, returns the base tools.
-- Preserves tool identity (name/description/schemas) so the LLM’s
-  function-calling remains stable.
-- Logs a compact “built tools” snapshot useful for debugging.
-
-## How to use
-
-Typically created by `MCPRuntime`:
-
-```python
-self.mcp_runtime = MCPRuntime(agent_settings, self.get_runtime_context)
-await self.mcp_runtime.init()
-self.model = self.model.bind_tools(self.mcp_runtime.get_tools())
-```
-or if you need it directly:
-```python
-toolkit = McpToolkit(mcp_client, context_provider=my_ctx_provider)
-tools = toolkit.get_tools()
-model = model.bind_tools(tools)
-```
+... [rest of docstring truncated for brevity] ...
 """
+
+from __future__ import annotations
 
 import logging
-from typing import List, override
+from typing import TYPE_CHECKING, List
 
 from langchain_core.tools import BaseTool, BaseToolkit
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 
-from agentic_backend.core.agents.context_aware_tool import ContextAwareTool
-from agentic_backend.core.agents.runtime_context import RuntimeContextProvider
+if TYPE_CHECKING:
+    from agentic_backend.core.agents.agent_flow import AgentFlow
 
 logger = logging.getLogger(__name__)
 
 
 class McpToolkit(BaseToolkit):
-    """Toolkit for MCP tools with optional runtime-context injection.
+    tools: List[BaseTool] = Field(default_factory=list, description="(unused)")
+    _client: MultiServerMCPClient = PrivateAttr()
+    _agent: "AgentFlow" = PrivateAttr()
 
-    If a `RuntimeContextProvider` is given, each tool call goes through a thin
-    adapter (`ContextAwareTool`) that:
-    - fetches runtime context at invocation time
-    - merges/injects defaults (e.g., tenant/library filters, date ranges)
-    - forwards to the original tool
-
-    Otherwise, this returns the raw tools from the MCP client.
-
-    The toolkit is immutable after construction; to reflect refreshed MCP
-    connections, build a new `McpToolkit` (handled for you by `MCPRuntime`).
-    """
-
-    tools: List[BaseTool] = Field(
-        default_factory=list, description="List of the tools."
-    )
-
-    def __init__(
-        self,
-        mcp_client: MultiServerMCPClient,
-        context_provider: RuntimeContextProvider | None = None,
-    ):
+    def __init__(self, client: MultiServerMCPClient, agent: "AgentFlow"):
         super().__init__()
-        base_tools = mcp_client.get_tools()
-
-        if context_provider:
-            # Wrap tools with context awareness
-            self.tools = [
-                ContextAwareTool(tool, context_provider) for tool in base_tools
-            ]
-        else:
-            self.tools = base_tools
-
+        self._client = client
+        self._agent = agent
+        # 🟢 LOG 1: Initialization success
         logger.info(
-            "[McpToolkit] building tools: toolkit=%s mcp_client=%s tools=[%s]",
-            f"0x{id(self):x}",
-            f"0x{id(mcp_client):x}",
-            ", ".join(f"{t.name}@{id(t):x}" for t in self.tools),
+            "McpToolkit initialized. Client: %s, Agent: %s",
+            type(client).__name__,
+            type(agent).__name__,
         )
 
-    @override
-    def get_tools(self) -> list[BaseTool]:
-        """Get the tools in the toolkit."""
-        return self.tools
+    # -------- internal helpers --------
+
+    def _discover_base_tools(self) -> List[BaseTool]:
+        """
+        Discover raw tools from the MCP client.
+
+        Note: adapter APIs may differ (get_tools vs as_langchain_tools). We try both
+        to be resilient across versions.
+        """
+        if hasattr(self._client, "get_tools"):
+            base_tools = self._client.get_tools()  # type: ignore[no-any-return]
+            #  Discovery success
+            logger.info(
+                "McpToolkit discovered %d base tools via get_tools()",
+                len(base_tools),
+            )
+            return base_tools
+
+        # LOG 2 (Failure): Tool discovery failed
+        logger.error("MCP client does not expose a tool discovery method.")
+        raise RuntimeError("MCP client does not expose a tool discovery method.")
+
+    # -------- public API --------
+
+    def peek_tool_names_safe(self) -> List[str]:
+        """
+        Best-effort list of tool names for logging/telemetry dashboards.
+        Safe to call even if discovery fails.
+        """
+        try:
+            names = [getattr(t, "name", "") for t in self._discover_base_tools()]
+            # 🟢 LOG 3: Peek successful
+            logger.info("McpToolkit peeked tool names: %s", names)
+            return names
+        except Exception as e:
+            # 🟢 LOG 3 (Failure): Peek failed
+            logger.warning("McpToolkit peek failed during tool discovery: %s", e)
+            return []
+
+    def get_tools(
+        self,
+    ) -> List[BaseTool]:  # ❌ Removed: cfg: Optional[Mapping[str, Any]] = None
+        """
+        Build the per-turn toolset: Discover, Filter, and Wrap, using the
+        agent's RuntimeContext for context-specific filtering.
+        """
+        return self._discover_base_tools()

@@ -19,7 +19,6 @@
 Entrypoint for the Agentic Backend App.
 """
 
-import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -38,6 +37,8 @@ from agentic_backend.common.structures import Configuration
 from agentic_backend.common.utils import parse_server_configuration
 from agentic_backend.core import logs_controller
 from agentic_backend.core.agents import agent_controller
+from agentic_backend.core.agents.agent_factory import AgentFactory
+from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.chatbot import chatbot_controller
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
@@ -95,30 +96,32 @@ def create_app() -> FastAPI:
 
         # Instantiate dependencies *within* the lifespan context
         app.state.configuration = configuration
-        agent_manager = AgentManager(configuration, get_agent_store())
-        session_orchestrator = SessionOrchestrator(get_session_store(), agent_manager)
+        agent_loader = AgentLoader(configuration, get_agent_store())
+        agent_manager = AgentManager(configuration, agent_loader, get_agent_store())
+        agent_factory = AgentFactory(agent_manager, agent_loader)
+        session_orchestrator = SessionOrchestrator(
+            get_session_store(),
+            agent_manager=agent_manager,
+            agent_factory=agent_factory,
+        )
+        try:
+            await agent_manager.bootstrap()
+        except Exception:
+            logger.critical(
+                "❌ AgentManager bootstrap FAILED! Application cannot proceed.",
+                exc_info=True,
+            )
+            # Depending on severity, you might re-raise the exception or use sys.exit()
+            # to prevent the server from starting in a broken state.
 
         # Store state on app.state for access via dependency injection
         app.state.agent_manager = agent_manager
         app.state.session_orchestrator = session_orchestrator
 
-        # Use asyncio to launch a background task that runs for the duration of the app's life.
-        # We remove the separate TaskGroup to prevent the race condition.
-        startup_task = asyncio.create_task(agent_manager.initialize_and_start_retries())
-
         try:
             yield  # Hand control to the FastAPI server, but keep the startup task running
         finally:
             logger.info("🧹 Lifespan exit: orderly shutdown.")
-            # Cancel the background task and wait for it to finish
-            startup_task.cancel()
-            try:
-                await startup_task
-            except asyncio.CancelledError:
-                pass  # Expected when a task is canceled
-
-            # Perform final cleanup
-            await agent_manager.aclose()
             logger.info("✅ Shutdown complete.")
 
     app = FastAPI(

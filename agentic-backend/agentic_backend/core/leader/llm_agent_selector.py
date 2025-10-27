@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json  # <-- ADDED (for objective serialization)
-import logging  # <-- ADDED
+import json
+import logging
 from typing import Any, Dict, Sequence, cast
 
 from fred_core import get_structured_chain
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)  # <-- ADDED
 def experts_markdown(names: Sequence[str], experts: Dict[str, AgentFlow]) -> str:
     """Creates a markdown list of expert names and descriptions."""
     return "\n".join(
-        f"- **{n}**: {experts[n].agent_settings.description or 'No description provided.'}"
+        f"- **{n}**: {experts[n].tuning.description or 'No description provided.'}"
         for n in names
         if n in experts
     )

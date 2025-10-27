@@ -25,6 +25,7 @@ from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 
 from agentic_backend.core.agents.agent_flow import AgentFlow
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ class SimpleAgentFlow(AgentFlow):
 
     # ------------------ Lifecycle ------------------
 
-    async def async_init(self):
+    async def async_init(self, runtime_context: RuntimeContext):
         """Initializes the internal graph structure."""
         self._graph = self._build_graph()
         # Compile the graph so it can be streamed/invoked

@@ -14,7 +14,6 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional, TypedDict
 
-from fred_core import get_model
 from langchain_core.messages import AIMessage, AnyMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
@@ -22,6 +21,7 @@ from pptx import Presentation
 from pptx.util import Pt
 from typing_extensions import Annotated
 
+from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.kf_agent_asset_client import AssetRetrievalError
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
@@ -38,6 +38,9 @@ logger = logging.getLogger(__name__)
 # --- Configuration & Tuning ---
 # ------------------------------
 TUNING = AgentTuning(
+    role="slide_maker",
+    description="An agent that generates PowerPoint slides with LLM content and provides a download link.",
+    tags=["academy"],
     fields=[
         FieldSpec(
             key="ppt.template_key",
@@ -55,7 +58,7 @@ TUNING = AgentTuning(
             default=14,
             ui=UIHints(group="PowerPoint"),
         ),
-    ]
+    ],
 )
 
 
@@ -82,7 +85,7 @@ class SlideMaker(AgentFlow):
     TARGET_PLACEHOLDER_INDEX = 1  # Hardcoded index for content insertion
 
     async def async_init(self):
-        self.model = get_model(self.agent_settings.model)
+        self.model = get_default_chat_model()
         self._graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:

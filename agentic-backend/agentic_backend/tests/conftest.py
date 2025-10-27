@@ -24,6 +24,7 @@ from agentic_backend.common.structures import (
     Configuration,
     FrontendFlags,
     FrontendSettings,
+    McpConfiguration,
     ModelConfiguration,
     Properties,
     StorageConfig,
@@ -66,9 +67,15 @@ def minimal_generalist_config() -> Configuration:
         ),
         security=fake_security_config,
         ai=AIConfig(
+            use_static_config_only=True,
             knowledge_flow_url="http://localhost:8000/agentic/v1",
             timeout=TimeoutSettings(connect=5, read=15),
             default_chat_model=ModelConfiguration(
+                provider="openai",
+                name="gpt-4o",
+                settings={"temperature": 0.0, "max_retries": 2, "request_timeout": 30},
+            ),
+            default_language_model=ModelConfiguration(
                 provider="openai",
                 name="gpt-4o",
                 settings={"temperature": 0.0, "max_retries": 2, "request_timeout": 30},
@@ -77,25 +84,12 @@ def minimal_generalist_config() -> Configuration:
                 # ⬇️ instantiate the concrete Agent (discriminator handled automatically)
                 Agent(
                     name="Georges",
-                    role="Generalist",
-                    description="Generalist",
                     class_path="agentic_backend.agents.generalist.generalist_expert.Georges",
                     enabled=True,
-                    model=ModelConfiguration(
-                        provider="openai",
-                        name="gpt-4o",
-                        settings={
-                            "temperature": 0.0,
-                            "max_retries": 2,
-                            "request_timeout": 30,
-                        },
-                    ),
-                    tags=["test"],  # optional; good to exercise schema
-                    # mcp_servers=[],  # optional; default ok
-                    # tuning=None,     # optional; default ok
                 ),
             ],
         ),
+        mcp=McpConfiguration(servers=[]),
         storage=StorageConfig(
             postgres=PostgresStoreConfig(
                 host="localhost",

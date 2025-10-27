@@ -1,14 +1,27 @@
-# agentic_backend/agents/rag/rag_expert.py
 # Copyright Thales 2025
-# Licensed under the Apache License, Version 2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 
 import logging
 from typing import List
 
-from fred_core import VectorSearchHit, get_model
+from fred_core import VectorSearchHit
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
+from agentic_backend.application_context import get_default_chat_model
+from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
 from agentic_backend.common.rags_utils import (
     attach_sources_to_llm_response,
     ensure_ranks,
@@ -16,10 +29,10 @@ from agentic_backend.common.rags_utils import (
     sort_hits,
 )
 from agentic_backend.common.structures import AgentChatOptions
-from agentic_backend.common.vector_search_client import VectorSearchClient
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.runtime_context import (
+    RuntimeContext,
     get_document_library_tags_ids,
     get_search_policy,
 )
@@ -34,6 +47,9 @@ logger = logging.getLogger(__name__)
 # - These are *UI schema fields* (spec). Live values come from AgentSettings.tuning
 #   and are applied by AgentFlow at runtime.
 RAG_TUNING = AgentTuning(
+    role="Document retrieval and QA expert",
+    description="An expert in retrieving and processing documents using retrieval-augmented generation techniques. Rico can help with tasks that involve understanding and utilizing large document collections.",
+    tags=["document"],
     fields=[
         FieldSpec(
             key="prompts.system",
@@ -68,7 +84,7 @@ RAG_TUNING = AgentTuning(
             default=False,
             ui=UIHints(group="Prompts"),
         ),
-    ]
+    ],
 )
 
 
@@ -89,10 +105,10 @@ class Rico(AgentFlow):
         libraries_selection=True,
     )
 
-    async def async_init(self):
+    async def async_init(self, runtime_context: RuntimeContext):
         """Bind the model, create the vector search client, and build the graph."""
-        self.model = get_model(self.agent_settings.model)
-        self.search_client = VectorSearchClient()
+        self.model = get_default_chat_model()
+        self.search_client = VectorSearchClient(agent=self)
         self._graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:

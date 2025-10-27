@@ -1,7 +1,7 @@
 # agentic_backend/common/tuning_spec.py
 from __future__ import annotations
 
-from typing import Any, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -45,12 +45,77 @@ class FieldSpec(BaseModel):
     ui: UIHints = UIHints()
 
 
-class McpServerSpec(BaseModel):
-    allow_user_add: bool = True
-    allowed_transports: List[str] = ["streamable_http", "sse", "http"]
-    required_fields: List[str] = ["name", "transport", "url"]
+class MCPServerConfiguration(BaseModel):
+    name: str
+    transport: Optional[str] = Field(
+        "sse",
+        description="MCP server transport. Can be sse, stdio, websocket or streamable_http",
+    )
+    url: Optional[str] = Field(None, description="URL and endpoint of the MCP server")
+    sse_read_timeout: Optional[int] = Field(
+        60 * 5,
+        description="How long (in seconds) the client will wait for a new event before disconnecting",
+    )
+    command: Optional[str] = Field(
+        None,
+        description="Command to run for stdio transport. Can be uv, uvx, npx and so on.",
+    )
+    args: Optional[List[str]] = Field(
+        None,
+        description="Args to give the command as a list. ex:  ['--directory', '/directory/to/mcp', 'run', 'server.py']",
+    )
+    env: Optional[Dict[str, str]] = Field(
+        None, description="Environment variables to give the MCP server"
+    )
+    enabled: bool = Field(True, description="If false, this MCP server is ignored.")
+
+
+class MCPServerRef(BaseModel):
+    """
+    Fred rationale:
+    - Agents reference logical servers by name.
+    - Resolution (URL/transport/env) is done at runtime per env/tenant/user.
+    """
+
+    name: str  # e.g., "knowledge-ops", "kubernetes"
+    require_tools: list[str] = []  # optional: "os.*", "kpi.*" capabilities
 
 
 class AgentTuning(BaseModel):
+    role: str = Field(..., description="The agent's mandatory role for discovery.")
+    description: str = Field(
+        ..., description="The agent's mandatory description for the UI."
+    )
+    tags: List[str] = Field(default_factory=list)
     fields: List[FieldSpec] = Field(default_factory=list)
-    mcp_servers: Optional[McpServerSpec] = None
+    legacy_mcp_servers: List[MCPServerConfiguration] = Field(default_factory=list)
+    mcp_servers: list[MCPServerRef] = Field(default_factory=list)
+
+    def dump(self) -> str:
+        """
+        Returns a human-readable, concise JSON string representation of the tuning
+        for logging purposes, excluding default and empty values.
+        """
+        # 1. Use model_dump to get a clean dictionary
+        #    - exclude_defaults=True removes empty lists and default values (like FieldSpec defaults)
+        data = self.model_dump(
+            exclude_defaults=True,
+            mode="json",  # ensures all fields are compatible with JSON serialization
+        )
+
+        # 2. Extract key tuning parameters for a concise summary
+        tuning_summary = {
+            "description": data.get("description", self.description),
+            "role": data.get("role", self.role),
+            "tags": data.get("tags", []),
+        }
+
+        # 3. Add field count instead of the full list
+        field_count = len(self.fields)
+        if field_count > 0:
+            tuning_summary["tunable_fields_count"] = field_count
+
+        # 4. Use json.dumps to format the dictionary nicely for the log file
+        import json
+
+        return json.dumps(tuning_summary, indent=2)

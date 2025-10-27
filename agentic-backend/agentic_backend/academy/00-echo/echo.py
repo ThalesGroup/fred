@@ -48,6 +48,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_SYSTEM = "You are Echo, a minimal echo agent."
 
 TUNING: AgentTuning = AgentTuning(
+    role="echo_agent",
+    description="A minimal echo agent that acknowledges configuration.",
+    tags=["academy"],
     fields=[
         FieldSpec(
             key="system.prompt",
@@ -58,7 +61,7 @@ TUNING: AgentTuning = AgentTuning(
             default=DEFAULT_SYSTEM,
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
-    ]
+    ],
 )
 
 

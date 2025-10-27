@@ -179,7 +179,7 @@ export default function MessageCard({
         {/* Assistant avatar on the left */}
         {side === "left" && agent && (
           <Grid2 size="auto" paddingTop={2}>
-            <Tooltip title={`${agent.name}: ${agent.role}`}>
+            <Tooltip title={`${agent.name}: ${agent.tuning.role}`}>
               <AgentChipMini agent={agent} />
             </Tooltip>
           </Grid2>

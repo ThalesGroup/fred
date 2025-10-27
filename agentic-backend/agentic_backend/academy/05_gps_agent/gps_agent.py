@@ -40,7 +40,11 @@ class GpsAgent(AgentFlow):
     Returns static GeoJSON data for demonstration purposes.
     """
 
-    tuning = AgentTuning()
+    tuning = AgentTuning(
+        role="gps_agent",
+        description="An agent that provides static GeoJSON vessel data for map visualization demo.",
+        tags=["academy"],
+    )
     _graph: Optional[StateGraph] = None
 
     async def async_init(self):

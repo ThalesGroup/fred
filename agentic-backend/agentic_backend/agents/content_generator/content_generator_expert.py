@@ -14,13 +14,12 @@
 
 import logging
 
-from fred_core import get_model
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
-from langgraph.prebuilt import tools_condition
+from langgraph.prebuilt import ToolNode, tools_condition
 
+from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
-from agentic_backend.common.resilient_tool_node import make_resilient_tools_node
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
@@ -76,6 +75,9 @@ GENERAL_BEHAVIOR_PROMPT = (
 
 
 TUNING = AgentTuning(
+    role="content_generator_expert",
+    description="An expert agent that creates and manages content resources (templates and prompts) via MCP tools.",
+    tags=["content"],
     fields=[
         FieldSpec(
             key="prompts.persona",
@@ -118,12 +120,9 @@ class ContentGeneratorExpert(AgentFlow):
 
     async def async_init(self):
         self.mcp = MCPRuntime(
-            agent_settings=self.agent_settings,
-            # If you expose runtime filtering (tenant/library/time window),
-            # pass a provider: lambda: self.get_runtime_context()
-            context_provider=(lambda: self.get_runtime_context()),
+            agent=self,
         )
-        self.model = get_model(self.agent_settings.model)
+        self.model = get_default_chat_model()
         await self.mcp.init()
         self.model = self.model.bind_tools(self.mcp.get_tools())
         self._graph = self._build_graph()
@@ -156,18 +155,9 @@ class ContentGeneratorExpert(AgentFlow):
         builder = StateGraph(MessagesState)
 
         builder.add_node("reasoner", self._reasoner)
-
-        async def _refresh_and_rebind():
-            # Refresh MCP (new client + toolkit) and rebind tools into the model.
-            # MCPRuntime handles snapshot logging + safe old-client close.
-            self.model = await self.mcp.refresh_and_bind(self.model)
-
-        tools_node = make_resilient_tools_node(
-            get_tools=self.mcp.get_tools,  # always returns the latest tool instances
-            refresh_cb=_refresh_and_rebind,  # on timeout/401/stream close, refresh + rebind
-        )
-
-        builder.add_node("tools", tools_node)
+        tools = self.mcp.get_tools()
+        tool_node = ToolNode(tools=tools)
+        builder.add_node("tools", tool_node)
         builder.add_edge(START, "reasoner")
         builder.add_conditional_edges("reasoner", tools_condition)
         builder.add_edge("tools", "reasoner")

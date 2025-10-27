@@ -49,7 +49,10 @@ LOG_INDEX_MAPPING: Dict[str, Any] = {
     "mappings": {
         "dynamic": "false",
         "properties": {
-            "@timestamp": {"type": "date", "format": "epoch_millis||strict_date_optional_time"},
+            "@timestamp": {
+                "type": "date",
+                "format": "epoch_millis||strict_date_optional_time",
+            },
             "level": {"type": "keyword"},  # DEBUG/INFO/...
             "severity": {"type": "byte"},  # 0..4 for fast >= filter
             "logger": {"type": "keyword"},
@@ -75,6 +78,7 @@ LEVEL_TO_SEVERITY: Dict[str, int] = {
 def _sev(level: LogLevel) -> int:
     return LEVEL_TO_SEVERITY.get(level, 1)
 
+
 def _to_epoch_millis(ts: Union[int, float, str]) -> int:
     # Accept seconds(float/int), millis(int > 1e12), or ISO string → epoch_millis int
     if isinstance(ts, (int, float)):
@@ -84,12 +88,23 @@ def _to_epoch_millis(ts: Union[int, float, str]) -> int:
         return int(dt.timestamp() * 1000)
     raise TypeError(f"Unsupported ts type: {type(ts)}")
 
+
 def _to_iso_utc(ts: Union[int, float, str]) -> str:
     # Always return ISO-8601 in UTC with trailing 'Z'
     if isinstance(ts, str):
-        return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        return (
+            datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            .astimezone(timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
     ms = _to_epoch_millis(ts)
-    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    return (
+        datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
 
 def _doc_from_event(ev: LogEventDTO) -> Dict[str, Any]:
     # Why both @timestamp and severity:
@@ -182,7 +197,7 @@ class OpenSearchLogStore(BaseLogStore):
         resp = self.client.search(index=self.index, body=body)
         hits = resp.get("hits", {}).get("hits", [])
         events: List[LogEventDTO] = []
-        #print(f"[DEBUG][OpenSearchLogStore] hits: {len(hits)}")
+        # print(f"[DEBUG][OpenSearchLogStore] hits: {len(hits)}")
         for h in hits:
             s = h.get("_source", {})
             raw_ts = s.get("@timestamp", 0)
@@ -217,12 +232,20 @@ class OpenSearchLogStore(BaseLogStore):
         - text_like: match_phrase on msg (fast, low-surprise). Switch to SQS if needed.
         Ordering + limit are applied at top level.
         """
-        def _opt_iso(v): return _to_iso_utc(v) if v is not None else None
+
+        def _opt_iso(v):
+            return _to_iso_utc(v) if v is not None else None
 
         since_iso = _opt_iso(q.since)
         until_iso = _opt_iso(q.until)
         filters: List[Dict[str, Any]] = [
-            {"range": {"@timestamp": {k: v for k, v in (("gte", since_iso), ("lte", until_iso)) if v}}}
+            {
+                "range": {
+                    "@timestamp": {
+                        k: v for k, v in (("gte", since_iso), ("lte", until_iso)) if v
+                    }
+                }
+            }
         ]
         f = q.filters or LogFilter()
         if f.level_at_least:

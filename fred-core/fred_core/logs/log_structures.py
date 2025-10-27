@@ -22,10 +22,15 @@ from fred_core.common.structures import OpenSearchIndexConfig
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
+
 class InMemoryLogStorageConfig(BaseModel):
     type: Literal["in_memory"]
 
-LogStorageConfig = Annotated[Union[InMemoryLogStorageConfig, OpenSearchIndexConfig], Field(discriminator="type")]
+
+LogStorageConfig = Annotated[
+    Union[InMemoryLogStorageConfig, OpenSearchIndexConfig], Field(discriminator="type")
+]
+
 
 class LogFilter(BaseModel):
     # Why these: they match what we actually filter by in prod incidents.
@@ -58,10 +63,12 @@ class LogEventDTO(BaseModel):
 class LogQueryResult(BaseModel):
     events: List[LogEventDTO] = Field(default_factory=list)
 
+
 class TailFileResponse(BaseModel):
     """
     Why a dedicated response:
     - Tail returns raw JSON lines (already formatted by our file handler).
     - The UI can decide to parse lazily or show plain text.
     """
+
     lines: list[str] = Field(default_factory=list)

@@ -11,25 +11,62 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import { Box, Button, Divider, Drawer, Stack, Typography } from "@mui/material";
+import { Box, Button, Divider, Drawer, Stack, TextField, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../common/agent";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
 import { FieldSpec } from "../../slices/agentic/agenticOpenApi";
+import { TagsInput } from "./AgentTagsInput";
 import { TuningForm } from "./TuningForm";
+
+// -----------------------------------------------------------
+// NEW TYPE FOR TUNING STATE
+// -----------------------------------------------------------
+type TopLevelTuningState = {
+  role: string;
+  description: string;
+  tags: string[];
+};
 
 type Props = { open: boolean; agent: AnyAgent | null; onClose: () => void; onSaved?: () => void };
 
 export function AgentEditDrawer({ open, agent, onClose, onSaved }: Props) {
   const { updateTuning, isLoading } = useAgentUpdater();
+  const { t } = useTranslation();
+  // State for dynamic fields
   const [fields, setFields] = useState<FieldSpec[]>([]);
+  // State for top-level Tuning properties
+  const [topLevelTuning, setTopLevelTuning] = useState<TopLevelTuningState>({
+    role: "",
+    description: "",
+    tags: [],
+  });
+
+  // --- Effects ---
 
   useEffect(() => {
-    const fs = agent?.tuning?.fields ?? [];
-    // deep clone
-    setFields(JSON.parse(JSON.stringify(fs)));
+    if (agent?.tuning) {
+      // 1. Initialize dynamic fields (deep clone)
+      const fs = agent.tuning.fields ?? [];
+      setFields(JSON.parse(JSON.stringify(fs)));
+
+      // 2. Initialize top-level tuning fields
+      setTopLevelTuning({
+        role: agent.tuning.role,
+        description: agent.tuning.description,
+        tags: agent.tuning.tags ?? [],
+      });
+    } else {
+      // Reset state if agent is null or has no tuning
+      setFields([]);
+      setTopLevelTuning({ role: "", description: "", tags: [] });
+    }
   }, [agent]);
 
+  // --- Handlers ---
+
+  // Handler for dynamic fields (TuningForm)
   const onChange = (i: number, next: any) => {
     setFields((prev) => {
       const copy = [...prev];
@@ -38,13 +75,37 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved }: Props) {
     });
   };
 
-  const handleSave = async () => {
+  // Handler for top-level fields (Role, Description)
+  const onTopLevelChange = (key: keyof TopLevelTuningState, value: string | string[]) => {
+    setTopLevelTuning((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  const handleSave = async (isGlobal: boolean) => {
     if (!agent) return;
-    const newTuning = { ...(agent.tuning || {}), fields };
-    await updateTuning(agent, newTuning);
+
+    // 1. Construct the new AgentTuning object by merging all parts
+    const newTuning = {
+      // Retain other properties like mcp_servers
+      ...(agent.tuning || {}),
+      // Overwrite/set top-level fields
+      role: topLevelTuning.role,
+      description: topLevelTuning.description,
+      tags: topLevelTuning.tags,
+      // Overwrite/set dynamic fields
+      fields: fields,
+    };
+
+    console.log("Saving agent tuning", newTuning, "with global scope:", isGlobal);
+
+    await updateTuning(agent, newTuning, isGlobal);
     onSaved?.();
     onClose();
   };
+
+  const isSaveDisabled = isLoading || !agent || !topLevelTuning.role || !topLevelTuning.description;
 
   return (
     <Drawer
@@ -54,26 +115,67 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved }: Props) {
       PaperProps={{ sx: { width: { xs: "100%", sm: 720, md: 880 } } }}
     >
       <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-        {/* Header */}
+        {/* Header - Remains mostly the same, shows name */}
         <Box sx={{ p: 2 }}>
           <Typography variant="h6">{agent?.name ?? "—"}</Typography>
-          {agent && (
-            <Typography variant="body2" color="text.secondary">
-              {agent.role} — {agent.description}
-            </Typography>
-          )}
         </Box>
         <Divider />
 
         {/* Body (scrollable) */}
         <Box sx={{ p: 2, flex: 1, overflow: "auto" }}>
-          {fields.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              This agent exposes no tunable fields.
-            </Typography>
-          ) : (
-            <TuningForm fields={fields} onChange={onChange} />
-          )}
+          <Stack spacing={3}>
+            {/* Tuning Core Fields */}
+            <TextField
+              label="Role"
+              size="small"
+              value={topLevelTuning.role}
+              onChange={(e) => onTopLevelChange("role", e.target.value)}
+              required
+              fullWidth
+              slotProps={{
+                input: {
+                  sx: (theme) => ({
+                    fontSize: theme.typography.body2.fontSize,
+                  }),
+                },
+              }}
+              helperText={t("agentEditDrawer.roleHelperText")}
+            />
+            <TextField
+              label="Description"
+              size="small"
+              value={topLevelTuning.description}
+              onChange={(e) => onTopLevelChange("description", e.target.value)}
+              required
+              multiline
+              rows={3}
+              fullWidth
+              slotProps={{
+                input: {
+                  sx: (theme) => ({
+                    fontSize: theme.typography.body2.fontSize,
+                  }),
+                },
+              }}
+              helperText={t("agentEditDrawer.descriptionHelperText")}
+            />
+
+            <TagsInput
+              label={t("agentEditDrawer.tagsLabel")}
+              helperText={t("agentEditDrawer.tagsHelperText")}
+              value={topLevelTuning.tags}
+              onChange={(next) => onTopLevelChange("tags", next)}
+            />
+
+            {/* Dynamic Fields */}
+            {fields.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                {t("agentEditDrawer.noTunableFields")}
+              </Typography>
+            ) : (
+              <TuningForm fields={fields} onChange={onChange} />
+            )}
+          </Stack>
         </Box>
 
         {/* Sticky footer */}
@@ -81,10 +183,23 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved }: Props) {
         <Box sx={{ p: 1.5, position: "sticky", bottom: 0, bgcolor: "background.paper" }}>
           <Stack direction="row" gap={1} justifyContent="flex-end">
             <Button variant="outlined" onClick={onClose}>
-              Cancel
+              {t("common.cancel", "Cancel")}
             </Button>
-            <Button variant="contained" disabled={isLoading} onClick={handleSave}>
-              Save
+            <Button
+              variant="contained"
+              disabled={isSaveDisabled}
+              onClick={() => handleSave(false)} // Pass false for user-specific
+            >
+              {t("agentEditDrawer.saveUser", "Save (User Only)")}
+            </Button>
+            {/* 🆕 NEW BUTTON: Global Save */}
+            <Button
+              variant="contained"
+              color="secondary" // Use a different color to highlight global scope
+              disabled={isSaveDisabled}
+              onClick={() => handleSave(true)} // Pass true for global scope
+            >
+              {t("agentEditDrawer.saveGlobal", "Save (Global)")}
             </Button>
           </Stack>
         </Box>
