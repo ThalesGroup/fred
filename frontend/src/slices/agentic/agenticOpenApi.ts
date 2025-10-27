@@ -276,6 +276,8 @@ export type McpServerConfiguration = {
   env?: {
     [key: string]: string;
   } | null;
+  /** If false, this MCP server is ignored. */
+  enabled?: boolean;
 };
 export type CreateMcpAgentRequest = {
   name: string;
@@ -333,10 +335,9 @@ export type FieldSpec = {
     | null;
   ui?: UiHints;
 };
-export type McpServerSpec = {
-  allow_user_add?: boolean;
-  allowed_transports?: string[];
-  required_fields?: string[];
+export type McpServerRef = {
+  name: string;
+  require_tools?: string[];
 };
 export type AgentTuning = {
   /** The agent's mandatory role for discovery. */
@@ -345,7 +346,8 @@ export type AgentTuning = {
   description: string;
   tags?: string[];
   fields?: FieldSpec[];
-  mcp_servers?: McpServerSpec | null;
+  legacy_mcp_servers?: McpServerConfiguration[];
+  mcp_servers?: McpServerRef[];
 };
 export type AgentChatOptions = {
   search_policy_selection?: boolean;
@@ -359,6 +361,8 @@ export type Agent = {
   class_path?: string | null;
   tuning?: AgentTuning | null;
   chat_options?: AgentChatOptions;
+  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "agent";
 };
 export type Leader = {
@@ -367,6 +371,8 @@ export type Leader = {
   class_path?: string | null;
   tuning?: AgentTuning | null;
   chat_options?: AgentChatOptions;
+  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "leader";
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];
@@ -633,7 +639,8 @@ export type AgentTuning2 = {
   description: string;
   tags?: string[];
   fields?: FieldSpec[];
-  mcp_servers?: McpServerSpec | null;
+  legacy_mcp_servers?: McpServerConfiguration[];
+  mcp_servers?: McpServerRef[];
 };
 export type Agent2 = {
   name: string;
@@ -641,6 +648,8 @@ export type Agent2 = {
   class_path?: string | null;
   tuning?: AgentTuning2 | null;
   chat_options?: AgentChatOptions;
+  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "agent";
 };
 export type Leader2 = {
@@ -649,6 +658,8 @@ export type Leader2 = {
   class_path?: string | null;
   tuning?: AgentTuning2 | null;
   chat_options?: AgentChatOptions;
+  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "leader";
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];

@@ -94,7 +94,7 @@ mcp:
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
       sse_read_timeout: 2000
-    - name: "kubernetes"
+    - name: "mcp-kubernetes-server"
       transport: "streamable_http"
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000

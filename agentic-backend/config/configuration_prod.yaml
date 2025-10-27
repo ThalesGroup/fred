@@ -43,11 +43,19 @@ frontend_settings:
     siteDisplayName: "Fred"
 
 ai:
+  # In production we activate the configuration persistence mechanism
+  # that allow users to create/update agents at runtime and change
+  # their configuration without redeploying the application.
+  use_static_config_only: false
+
+  # Base URL for the Knowledge Flow service
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
+
   # Timeout settings for the client
   timeout:
     connect: 5 # Time to wait for a connection in seconds
     read: 15 # Time to wait for a response in seconds
+
   default_chat_model:
     # Required in .env:
     # - OPENAI_API_KEY
@@ -71,6 +79,9 @@ ai:
       temperature: 0.0
       max_retries: 2
       request_timeout: 30
+
+  # Default language model used for non-chat interactions. This one is optional
+  # and if not set, the default_chat_model will be used as fallback.
   default_language_model:
     # Required in .env:
     # - OPENAI_API_KEY
@@ -111,7 +122,7 @@ mcp:
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
       sse_read_timeout: 2000
-    - name: "kubernetes"
+    - name: "mcp-kubernetes-server"
       transport: "streamable_http"
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000

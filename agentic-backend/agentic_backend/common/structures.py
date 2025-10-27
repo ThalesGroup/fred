@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from typing import Annotated, Dict, List, Literal, Optional, Union
 
 from fred_core import (
@@ -23,9 +24,11 @@ from fred_core import (
     StoreConfig,
 )
 from langchain_core.messages import SystemMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerConfiguration
+
+logger = logging.getLogger(__name__)  # Logger definition added
 
 
 class StorageConfig(BaseModel):
@@ -77,6 +80,27 @@ class BaseAgent(BaseModel):
     class_path: Optional[str] = None  # None → dynamic/UI agent
     tuning: Optional[AgentTuning] = None
     chat_options: AgentChatOptions = AgentChatOptions()
+    # Added for backward compatibility with older YAML files
+    mcp_servers: List[MCPServerConfiguration] = Field(
+        default_factory=list,
+        deprecated=True,
+        description="DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead.",
+    )
+
+    @field_validator("mcp_servers", mode="after")
+    @classmethod
+    def warn_on_deprecated_mcp_servers(cls, v: List[MCPServerConfiguration], info):
+        """Logs a warning if the deprecated agent-level mcp_servers field is used."""
+        # Only log if the deprecated field was actually provided with content and we can infer the agent name
+        if v and info.data.get("name"):
+            logger.warning(
+                "DEPRECATION WARNING for agent '%s': 'mcp_servers' is deprecated. "
+                "Please migrate the full MCP server configuration to the global 'mcp' "
+                "section in your configuration file and update the agent's tuning "
+                "to use 'mcp_servers' (references).",
+                info.data.get("name"),
+            )
+        return v
 
 
 # ---------------- Agent: a regular single agent ----------------
@@ -116,13 +140,17 @@ class AIConfig(BaseModel):
     timeout: TimeoutSettings = Field(
         ..., description="Timeout settings for the AI client."
     )
+    use_static_config_only: bool = Field(
+        True,
+        description="If true, only static agent configurations from YAML are used; persistent configurations are ignored.",
+    )
     default_chat_model: ModelConfiguration = Field(
         ...,
         description="Default chat model configuration for all agents and services.",
     )
-    default_language_model: ModelConfiguration = Field(
-        ...,
-        description="Default language model configuration for all agents and services.",
+    default_language_model: Optional[ModelConfiguration] = Field(
+        None,
+        description="Default language model configuration for all agents and services (Optional).",
     )
     agents: List[AgentSettings] = Field(
         default_factory=list, description="List of AI agents."
@@ -184,7 +212,10 @@ class Configuration(BaseModel):
     security: SecurityConfiguration
     frontend_settings: FrontendSettings
     ai: AIConfig
-    mcp: McpConfiguration
+    mcp: McpConfiguration = Field(
+        default_factory=McpConfiguration,
+        description="Microservice Communication Protocol (MCP) server configurations.",
+    )
     storage: StorageConfig
 
 

@@ -320,6 +320,14 @@ class ApplicationContext:
         """
         Retrieves the default AI model instance.
         """
+        if self.configuration.ai.default_language_model is None:
+            logger.warning(
+                "[DEPRECATION] No default language model configured; falling back to default chat model."
+            )
+            logger.info(
+                "Please set 'default_language_model' in the AI configuration to avoid this warning."
+            )
+            return self.get_default_chat_model()
         return get_model(self.configuration.ai.default_language_model)
 
     # --- Agent classes ---

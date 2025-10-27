@@ -167,6 +167,11 @@ applications:
         properties:
           logoName: "fred"
       ai:
+        # In production we activate the configuration persistence mechanism
+        # that allow users to create/update agents at runtime and change
+        # their configuration without redeploying the application.
+        use_static_config_only: false
+        # Base URL for the Knowledge Flow service
         knowledge_flow_url: "http://knowledge-flow-backend:8111/knowledge-flow/v1"
         # Timeout settings for the client
         timeout:
@@ -188,11 +193,6 @@ applications:
             type: "agent"
             class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
             enabled: false
-            mcp_servers:
-              - name: knowledge-flow-mcp-server
-                transport: streamable_http
-                url: http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops
-                sse_read_timeout: 2000
           - name: "Georges"
             type: "agent"
             class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
@@ -210,7 +210,6 @@ applications:
             role: "Advanced Document Retrieval Expert"
             class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
             enabled: false
-            tags: ["documents"]
       mcp:
         servers:
           - name: "knowledge-flow-mcp-tabular"
@@ -221,9 +220,9 @@ applications:
             transport: "streamable_http"
             url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops"
             sse_read_timeout: 2000
-          - name: "kubernetes"
+          - name: "mcp-kubernetes-server"
             transport: "streamable_http"
-            url: "http://localhost:8081/mcp"
+            url: "http://mcp-kubernetes-server:8081/mcp"
             sse_read_timeout: 2000
 
       storage:
