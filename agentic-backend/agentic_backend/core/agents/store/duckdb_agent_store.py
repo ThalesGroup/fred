@@ -92,7 +92,10 @@ class DuckDBAgentStore(BaseAgentStore):
             try:
                 payload["tuning"] = tuning.model_dump(exclude_none=True)
             except Exception:
-                # If already embedded / incompatible, ignore silently
+                logger.warning(
+                    "[STORE][DUCKDB][AGENTS] Could not embed tuning into AgentSettings for '%s'",
+                    settings.name,
+                )
                 pass
 
         payload_json = json.dumps(payload)
@@ -112,11 +115,15 @@ class DuckDBAgentStore(BaseAgentStore):
                     (doc_id, settings.name, scope, scope_id, payload_json),
                 )
                 conn.execute("COMMIT")
-                logger.info("[AGENTS] Saved agent '%s' (ID: %s)", settings.name, doc_id)
+                logger.debug(
+                    "[STORE][DUCKDB][AGENTS] Saved agent '%s' (ID: %s)",
+                    settings.name,
+                    doc_id,
+                )
             except Exception as e:
                 conn.execute("ROLLBACK")
                 logger.error(
-                    "[AGENTS] Failed to save '%s' (ID: %s): %s",
+                    "[STORE][DUCKDB][AGENTS] Failed to save '%s' (ID: %s): %s",
                     settings.name,
                     doc_id,
                     e,
@@ -146,7 +153,9 @@ class DuckDBAgentStore(BaseAgentStore):
                 payload = json.loads(payload_json) if payload_json else {}
                 out.append(AgentSettingsAdapter.validate_python(payload))
             except Exception as e:
-                logger.error("[AGENTS] Failed to parse AgentSettings: %s", e)
+                logger.error(
+                    "[STORE][DUCKDB][AGENTS] Failed to parse AgentSettings: %s", e
+                )
         return out
 
     def load_all_global_scope(self) -> List[AgentSettings]:
@@ -170,7 +179,11 @@ class DuckDBAgentStore(BaseAgentStore):
             payload = json.loads(row[0]) if row[0] else {}
             return AgentSettingsAdapter.validate_python(payload)
         except Exception as e:
-            logger.error("[AGENTS] Failed to parse AgentSettings for '%s': %s", name, e)
+            logger.error(
+                "[STORE][DUCKDB][AGENTS] Failed to parse AgentSettings for '%s': %s",
+                name,
+                e,
+            )
             return None
 
     def delete(
@@ -185,4 +198,4 @@ class DuckDBAgentStore(BaseAgentStore):
                 f"DELETE FROM {self.TABLE} WHERE doc_id = ?",
                 (doc_id,),
             )
-        logger.info("[AGENTS] Deleted agent '%s' (ID: %s)", name, doc_id)
+        logger.info("[STORE][DUCKDB][AGENTS] Deleted agent '%s' (ID: %s)", name, doc_id)
