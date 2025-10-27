@@ -159,7 +159,7 @@ def _get_jwks_client() -> PyJWKClient:
 def decode_jwt(token: str) -> KeycloakUser:
     """Decodes a JWT token using PyJWT and retrieves user information with rich diagnostics."""
     if not KEYCLOAK_ENABLED:
-        logger.warning("Authentication is DISABLED. Returning a mock user.")
+        logger.debug("Authentication is DISABLED. Returning a mock user.")
         return KeycloakUser(
             uid="admin", username="admin", roles=["admin"], email="dev@localhost"
         )

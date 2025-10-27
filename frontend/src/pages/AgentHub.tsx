@@ -195,7 +195,7 @@ export const AgentHub = () => {
     if (tabValue === 1) return agents.filter((a) => favoriteAgents.includes(a.name));
     if (categories.length > 2 && tabValue >= 2) {
       const tagName = categories[tabValue].name;
-      return agents.filter((a) => a.tags?.includes(tagName));
+      return agents.filter((a) => a.tuning.tags?.includes(tagName));
     }
     return agents;
   }, [tabValue, agents, favoriteAgents, categories]);
@@ -318,7 +318,7 @@ export const AgentHub = () => {
                   const isFav = category.name === "favorites";
                   const count = isFav
                     ? favoriteAgents.length
-                    : agents.filter((a) => a.tags?.includes(category.name)).length;
+                    : agents.filter((a) => a.tuning.tags?.includes(category.name)).length;
 
                   return (
                     <Tab
@@ -561,8 +561,8 @@ export const AgentHub = () => {
 function extractUniqueTags(agents: AnyAgent[]): string[] {
   const tagsSet = new Set<string>();
   agents.forEach((agent) => {
-    if (agent.tags && Array.isArray(agent.tags)) {
-      agent.tags.forEach((tag) => {
+    if (agent.tuning.tags && Array.isArray(agent.tuning.tags)) {
+      agent.tuning.tags.forEach((tag) => {
         if (typeof tag === "string" && tag.trim() !== "") {
           tagsSet.add(tag);
         }

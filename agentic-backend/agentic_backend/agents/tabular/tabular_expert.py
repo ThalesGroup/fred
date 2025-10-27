@@ -17,12 +17,12 @@ import json
 import logging
 from typing import Any, Dict
 
-from fred_core import get_model
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
+from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_flow import AgentFlow
@@ -36,6 +36,9 @@ logger = logging.getLogger(__name__)
 # Tuning spec (UI-editable)
 # ---------------------------
 TABULAR_TUNING = AgentTuning(
+    role="Structured Data Analyst",
+    description="searches and analyzes tabular documents via MCP tools (CSV, Excel)",
+    tags=["data"],
     fields=[
         FieldSpec(
             key="prompts.system",
@@ -64,7 +67,7 @@ TABULAR_TUNING = AgentTuning(
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
-    ]
+    ],
 )
 
 
@@ -120,7 +123,7 @@ class Tessa(AgentFlow):
     # ---------------------------
     async def async_init(self, runtime_context: RuntimeContext):
         await super().async_init(runtime_context)
-        self.model = get_model(self.agent_settings.model)
+        self.model = get_default_chat_model()
         await self.mcp.init()  # start MCP + toolkit
         self.model = self.model.bind_tools(self.mcp.get_tools())
         self._graph = self._build_graph()

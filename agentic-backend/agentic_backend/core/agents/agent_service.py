@@ -16,7 +16,7 @@ import logging
 
 from fred_core import Action, KeycloakUser, Resource, authorize
 
-from agentic_backend.application_context import get_agent_store, get_app_context
+from agentic_backend.application_context import get_agent_store
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.mcp_agent import MCPAgent
@@ -60,17 +60,6 @@ class AgentService:
         if not agent_settings.class_path:
             agent_settings.class_path = _class_path(MCPAgent)
 
-        # Apply default model if not provided (let app context choose)
-        try:
-            appctx = get_app_context()
-            agent_settings = appctx.apply_default_model_to_agent(
-                agent_settings
-            )  # no-op if already set
-        except Exception:
-            logger.debug(
-                "No default model applicator available; keeping provided model."
-            )
-
         # Instantiate and init the runtime agent
         # agent_instance = MCPAgent(agent_settings=agent_settings)
         # await agent_instance.async_init()
@@ -87,14 +76,19 @@ class AgentService:
         )
 
     @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
-    async def update_agent(self, user: KeycloakUser, agent_settings: AgentSettings):
+    async def update_agent(
+        self, user: KeycloakUser, agent_settings: AgentSettings, is_global: bool
+    ):
         # Delete existing agent (if any)
         # await self.agent_manager.unregister_agent(agent_settings)
         # self.store.delete(agent_settings.name)
 
         # Recreate it using the same logic as in create
         # return await self.build_and_register_mcp_agent(user, agent_settings)
-        await self.agent_manager.update_agent(agent_settings)
+        await self.agent_manager.update_agent(
+            new_settings=agent_settings, is_global=is_global
+        )
+        self.agent_manager.log_current_settings()
 
     @authorize(action=Action.DELETE, resource=Resource.AGENTS)
     async def delete_agent(self, user: KeycloakUser, agent_name: str):

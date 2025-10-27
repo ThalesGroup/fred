@@ -104,13 +104,13 @@ const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense 
                 <Typography
                   variant="body2"
                   color="text.secondary"
-                  sx={{ fontStyle: "italic", mb: agent.description ? 0.25 : 0 }}
+                  sx={{ fontStyle: "italic", mb: agent.tuning.description ? 0.25 : 0 }}
                 >
-                  {agent.role}
+                  {agent.tuning.role}
                 </Typography>
-                {agent.description && (
+                {agent.tuning.description && (
                   <Typography variant="body2" color="text.secondary">
-                    {agent.description}
+                    {agent.tuning.description}
                   </Typography>
                 )}
               </Box>
@@ -142,7 +142,7 @@ const AgentsList = memo(function AgentsList({ agents, selected, onSelect, dense 
                     sx={{ mr: 1 }} // You can keep the margin-right here
                   />
                   <ListItemText
-                    secondary={agent.role}
+                    secondary={agent.tuning.role}
                     slotProps={{
                       primary: {
                         variant: "body2",

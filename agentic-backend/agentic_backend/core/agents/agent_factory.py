@@ -48,7 +48,7 @@ class AgentFactory:
         Creates a new AgentFlow instance, applies the latest settings,
         and runs its full async initialization (including MCP connection).
         """
-
+        # self.manager.log_current_settings()
         # 1. Get the latest authoritative settings from the Manager's catalog.
         settings = self.manager.get_agent_settings(agent_name)
         if not settings:
@@ -73,10 +73,10 @@ class AgentFactory:
         # 5. Run async initialization (This is where the token is used for MCP connection)
         if iscoroutinefunction(getattr(instance, "async_init", None)):
             logger.info(
-                "AGENT: '%s' with user config (contains token).",
+                "[AGENTS] agent='%s' async_init invoked.",
                 agent_name,
             )
             await instance.async_init(runtime_context=runtime_context)
 
-        logger.debug("✅ Transient agent '%s' fully initialized.", agent_name)
+        logger.debug("[AGENTS] agent='%s' fully initialized.", agent_name)
         return instance

@@ -8,52 +8,47 @@ import logging
 from typing import List, Optional
 
 from fred_core import validate_index_mapping
-from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection
+from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection, exceptions
 from pydantic import TypeAdapter
 
-# ⬇️ IMPORTANT: new location that defines the union AgentSettings = Annotated[Union[Agent, Leader], ...]
 from agentic_backend.common.structures import AgentSettings
-from agentic_backend.core.agents.store.base_agent_store import BaseAgentStore
+from agentic_backend.core.agents.store.base_agent_store import (
+    SCOPE_GLOBAL,
+    BaseAgentStore,
+)
 
 logger = logging.getLogger(__name__)
 
-# Why this mapping:
-# - We keep only fields present in the new BaseAgent/Agent/Leader model tree.
-# - Strings we filter on (name, type, role, tags) are keywords.
-# - Human text (description) is text.
-# - Complex configs (model, tuning, mcp_servers) stay enabled objects for retrieval.
+# --- NEW MAPPING FIELDS ---
 AGENTS_INDEX_MAPPING = {
     "mappings": {
         "dynamic": False,
         "properties": {
+            # New Scope Fields
+            "scope": {"type": "keyword"},
+            "scope_id": {"type": "keyword", "null_value": "null"},
+            # Existing Fields (Rest of the Pydantic model is stored in _source)
             "name": {"type": "keyword"},
-            "type": {"type": "keyword"},  # "agent" | "leader" (discriminator)
+            "type": {"type": "keyword"},
             "enabled": {"type": "boolean"},
-            "tags": {
-                "type": "keyword"
-            },  # replaces previous singular "tag"/"categories"
-            "role": {"type": "keyword"},  # user-facing “what it is”
-            "description": {"type": "text"},  # human text
+            "tags": {"type": "keyword"},
+            "role": {"type": "keyword"},
+            "description": {"type": "text"},
             "class_path": {"type": "keyword", "null_value": "null"},
             "model": {"type": "object", "enabled": True},
             "tuning": {"type": "object", "enabled": True},
-            "mcp_servers": {
-                "type": "object",
-                "enabled": True,
-            },  # not nested until we need nested queries
+            "mcp_servers": {"type": "object", "enabled": True},
         },
     }
 }
 
-# Discriminated-union (de)serializer
 AgentSettingsAdapter = TypeAdapter(AgentSettings)
 
 
 class OpenSearchAgentStore(BaseAgentStore):
     """
-    Fred rationale:
-    - Agents are keyed by `name` (document ID).
-    - We store the Pydantic-union payload as-is; mapping exposes only filter/search fields.
+    Agent store using OpenSearch, now supporting GLOBAL and USER scopes.
+    Documents are keyed by a composite ID: '<agent_name>:<scope>:<scope_id>'
     """
 
     def __init__(
@@ -74,69 +69,190 @@ class OpenSearchAgentStore(BaseAgentStore):
         )
         self.index_name = index
 
-        if not self.client.indices.exists(index=self.index_name):
+        # --- Backward Compatibility: Update Mapping on Existing Index ---
+        if self.client.indices.exists(index=self.index_name):
+            logger.info(
+                f"[AGENTS] OpenSearch index '{self.index_name}' exists. Validating/Updating mapping..."
+            )
+
+            # The key is to only PUT the new properties, allowing OpenSearch to merge
+            new_properties = {
+                "scope": AGENTS_INDEX_MAPPING["mappings"]["properties"]["scope"],
+                "scope_id": AGENTS_INDEX_MAPPING["mappings"]["properties"]["scope_id"],
+            }
+            try:
+                self.client.indices.put_mapping(
+                    index=self.index_name, body={"properties": new_properties}
+                )
+                logger.warning(
+                    "🆕 Added 'scope' and 'scope_id' to existing index mapping."
+                )
+            except exceptions.RequestError as e:
+                # This often happens if the index is managed or if a field already exists
+                if "MergeMappingException" in str(e):
+                    logger.debug(
+                        "Mapping merge failed, assuming fields already exist or conflict."
+                    )
+                else:
+                    logger.error(
+                        f"Failed to update mapping for index '{self.index_name}': {e}"
+                    )
+
+            # Ensure the rest of the mapping is consistent
+            validate_index_mapping(self.client, self.index_name, AGENTS_INDEX_MAPPING)
+        else:
             self.client.indices.create(index=self.index_name, body=AGENTS_INDEX_MAPPING)
             logger.info(f"[AGENTS] OpenSearch index '{self.index_name}' created.")
-        else:
-            logger.info(
-                f"[AGENTS] OpenSearch index '{self.index_name}' already exists."
-            )
-            validate_index_mapping(self.client, self.index_name, AGENTS_INDEX_MAPPING)
 
-    # ---------------- CRUD ----------------
+    # --- Utility Methods ---
+    def _create_doc_id(self, name: str, scope: str, scope_id: Optional[str]) -> str:
+        """Creates a composite document ID: <name>:<scope>:<scope_id or 'NULL'>"""
+        scope_id_part = scope_id if scope_id is not None else "NULL"
+        return f"{name}:{scope}:{scope_id_part}"
 
-    def save(self, settings: AgentSettings) -> None:
-        """
-        Why model_dump(mode='json'):
-        - Ensures union payload (with 'type' discriminator) is serialized consistently
-          and excludes pydantic internals.
-        """
+    # ---------------- CRUD with Scoping ----------------
+
+    def save(
+        self,
+        settings: AgentSettings,
+        scope: str = SCOPE_GLOBAL,
+        scope_id: Optional[str] = None,
+    ) -> None:
+        doc_id = self._create_doc_id(settings.name, scope, scope_id)
+
+        # OpenSearch stores the entire document, so we embed scope/scope_id in the saved payload
+        # This is a key difference from DuckDB where they are separate columns.
+
+        # 1. Prepare base document body from Pydantic settings
+        body: dict = AgentSettingsAdapter.dump_python(
+            settings, mode="json", exclude_none=True
+        )
+
+        # 2. Add scope fields for indexing/querying
+        body["scope"] = scope
+        body["scope_id"] = scope_id
+
         try:
-            body = AgentSettingsAdapter.dump_python(
-                settings, mode="json", exclude_none=True
-            )
-            self.client.index(index=self.index_name, id=settings.name, body=body)
-            logger.info(f"[AGENTS] Agent '{settings.name}' saved")
+            self.client.index(index=self.index_name, id=doc_id, body=body)
+            logger.info(f"[AGENTS] Agent '{settings.name}' saved (ID: {doc_id})")
         except Exception as e:
-            logger.error(f"[AGENTS] Failed to save agent '{settings.name}': {e}")
+            logger.error(
+                f"[AGENTS] Failed to save agent '{settings.name}' (ID: {doc_id}): {e}"
+            )
             raise
 
-    def load_all(self) -> List[AgentSettings]:
+    def save_all(
+        self,
+        settings_list: List[AgentSettings],
+        scope: str = SCOPE_GLOBAL,
+        scope_id: Optional[str] = None,
+    ) -> None:
         """
-        We keep it simple (<=1000). If you expect more, switch to scroll or search_after.
+        Efficient batch save using the OpenSearch Bulk API.
         """
+        if not settings_list:
+            return
+
+        actions = []
+        for settings in settings_list:
+            doc_id = self._create_doc_id(settings.name, scope, scope_id)
+
+            # 1. Prepare base document body
+            body: dict = AgentSettingsAdapter.dump_python(
+                settings, mode="json", exclude_none=True
+            )
+            # 2. Add scope fields
+            body["scope"] = scope
+            body["scope_id"] = scope_id
+
+            actions.append({"index": {"_id": doc_id, "_index": self.index_name}})
+            actions.append(body)
+
+        try:
+            self.client.bulk(actions)
+            logger.info(
+                f"[AGENTS] Batch saved {len(settings_list)} agents (Scope: {scope})"
+            )
+        except Exception as e:
+            logger.error(f"[AGENTS] Failed to perform bulk save: {e}")
+            raise
+
+    def load_by_scope(
+        self,
+        scope: str,
+        scope_id: Optional[str] = None,
+    ) -> List[AgentSettings]:
+        """
+        Retrieves all persisted agent definitions for a specific scope.
+        """
+        must_clauses: List[dict] = [{"term": {"scope": scope}}]
+
+        if scope_id is None:
+            # Match documents where scope_id field is explicitly missing or NULL
+            must_clauses.append({"term": {"scope_id": "null"}})
+        else:
+            must_clauses.append({"term": {"scope_id": scope_id}})
+
+        query = {"query": {"bool": {"must": must_clauses}}}
+
         try:
             result = self.client.search(
                 index=self.index_name,
-                body={"query": {"match_all": {}}},
+                body=query,
                 params={"size": 1000},
             )
             docs = [hit["_source"] for hit in result["hits"]["hits"]]
-            # ⬇️ Union-safe validation
+
+            # Remove transient scope fields before pydantic validation,
+            # as they are not part of AgentSettings structure
+            for doc in docs:
+                doc.pop("scope", None)
+                doc.pop("scope_id", None)
+
             return [AgentSettingsAdapter.validate_python(doc) for doc in docs]
         except Exception as e:
-            logger.error(f"[AGENTS] Failed to list agents: {e}")
+            logger.error(f"[AGENTS] Failed to list agents for scope {scope}: {e}")
             raise
 
-    def get(self, name: str) -> Optional[AgentSettings]:
-        """
-        Union-safe load using TypeAdapter.
-        """
+    def load_all_global_scope(self) -> List[AgentSettings]:
+        """Backward compatibility: loads all GLOBAL scope agents."""
+        return self.load_by_scope(scope=SCOPE_GLOBAL)
+
+    def get(
+        self,
+        name: str,
+        scope: str = SCOPE_GLOBAL,
+        scope_id: Optional[str] = None,
+    ) -> Optional[AgentSettings]:
+        doc_id = self._create_doc_id(name, scope, scope_id)
         try:
-            result = self.client.get(index=self.index_name, id=name)
-            return AgentSettingsAdapter.validate_python(result["_source"])
+            result = self.client.get(index=self.index_name, id=doc_id)
+            source = result["_source"]
+            source.pop("scope", None)
+            source.pop("scope_id", None)
+            return AgentSettingsAdapter.validate_python(source)
         except NotFoundError:
             return None
         except Exception as e:
-            logger.error(f"[AGENTS] Failed to get agent '{name}': {e}")
+            logger.error(f"[AGENTS] Failed to get agent '{name}' (ID: {doc_id}): {e}")
             raise
 
-    def delete(self, name: str) -> None:
+    def delete(
+        self,
+        name: str,
+        scope: str = SCOPE_GLOBAL,
+        scope_id: Optional[str] = None,
+    ) -> None:
+        doc_id = self._create_doc_id(name, scope, scope_id)
         try:
-            self.client.delete(index=self.index_name, id=name)
-            logger.info(f"[AGENTS] Deleted agent '{name}'")
+            self.client.delete(index=self.index_name, id=doc_id)
+            logger.info(f"[AGENTS] Deleted agent '{name}' (ID: {doc_id})")
         except NotFoundError:
-            logger.warning(f"[AGENTS] Agent '{name}' not found for deletion")
+            logger.warning(
+                f"[AGENTS] Agent '{name}' (ID: {doc_id}) not found for deletion"
+            )
         except Exception as e:
-            logger.error(f"[AGENTS] Failed to delete agent '{name}': {e}")
+            logger.error(
+                f"[AGENTS] Failed to delete agent '{name}' (ID: {doc_id}): {e}"
+            )
             raise

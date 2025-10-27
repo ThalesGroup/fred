@@ -35,12 +35,12 @@ from __future__ import annotations
 import logging
 import time
 from datetime import timedelta
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, List
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from agentic_backend.common.error import UnsupportedTransportError
-from agentic_backend.common.structures import AgentSettings
+from agentic_backend.core.agents.agent_spec import MCPServerConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +137,8 @@ async def _cleanup_client_quiet(client: MultiServerMCPClient) -> None:
 
 
 async def get_connected_mcp_client_for_agent(
-    agent_settings: AgentSettings,
+    agent_name: str,
+    mcp_servers: List[MCPServerConfiguration],
     access_token_provider: Callable[[], str | None] | None = None,
     # -----------------------------------------------
 ) -> MultiServerMCPClient:
@@ -145,22 +146,14 @@ async def get_connected_mcp_client_for_agent(
     Streamable HTTP ONLY. Creates and connects the MultiServerMCPClient using
     the token provided by `access_token_provider`.
     """
-    # 🟢 LOG 2: Start of connection process
-    logger.info(
-        "MCP connect init: Starting connection process for %d server(s).",
-        len(agent_settings.mcp_servers or []),
-    )
-
-    if not agent_settings.mcp_servers:
-        logger.info("MCP connect init: No MCP server configuration found.")
-        raise ValueError("No MCP server configuration")
 
     # Enforce streamable_http-only for this slim version
-    for s in agent_settings.mcp_servers:
+    for s in mcp_servers:
         if s.transport != "streamable_http":
             # 🟢 LOG 3: Unsupported transport failure
             logger.info(
-                "MCP connect init: Unsupported transport '%s' found. Only 'streamable_http' is allowed.",
+                "[MCP][%s] connect init: Unsupported transport '%s' found. Only 'streamable_http' is allowed.",
+                agent_name,
                 s.transport,
             )
             raise UnsupportedTransportError(
@@ -189,7 +182,7 @@ async def get_connected_mcp_client_for_agent(
     client = MultiServerMCPClient()
     exceptions: list[Exception] = []
 
-    for server in agent_settings.mcp_servers:
+    for server in mcp_servers:
         # Build kwargs
         try:
             connect_kwargs = _build_streamable_http_kwargs(
@@ -198,7 +191,8 @@ async def get_connected_mcp_client_for_agent(
         except Exception as e:
             # 🟢 LOG 6: Kwargs build failure
             logger.warning(
-                "MCP connect pre-fail name=%s: Failed to build connection kwargs: %s",
+                "[MCP][%s] connect pre-fail for server=%s: Failed to build connection kwargs: %s",
+                agent_name,
                 server.name,
                 e,
             )
@@ -211,8 +205,9 @@ async def get_connected_mcp_client_for_agent(
         # ---- first (and only) attempt --------------------------------------
         try:
             # 🟢 LOG 7: Connection attempt start
-            logger.info(
-                "MCP connect attempt name=%s transport=streamable_http url=%s auth=%s timeout=%.0fs",
+            logger.debug(
+                "[MCP][%s] connect attempt name=%s transport=streamable_http url=%s auth=%s timeout=%.0fs",
+                agent_name,
                 server.name,
                 url_for_log,
                 auth_label,
@@ -221,8 +216,9 @@ async def get_connected_mcp_client_for_agent(
             await client.connect_to_server(**connect_kwargs)
 
             # This log is redundant but kept for clarity/flow inspection:
-            logger.info(
-                "MCP connect established name=%s transport=streamable_http url=%s auth=%s",
+            logger.debug(
+                "[MCP][%s] connect established name=%s transport=streamable_http url=%s auth=%s",
+                agent_name,
                 server.name,
                 url_for_log,
                 auth_label,
@@ -235,7 +231,8 @@ async def get_connected_mcp_client_for_agent(
             tools = client.server_name_to_tools.get(server.name, [])
             # 🟢 LOG 8: Connection success
             logger.info(
-                "MCP connect ok name=%s transport=streamable_http url=%s tools=%d dur_ms=%.0f",
+                "[MCP][%s] connected name=%s transport=streamable_http url=%s tools=%d dur_ms=%.0f",
+                agent_name,
                 server.name,
                 url_for_log,
                 len(tools),
@@ -247,7 +244,8 @@ async def get_connected_mcp_client_for_agent(
             dur_ms = (time.perf_counter() - start) * 1000
             # 🟢 LOG 9: Connection failure
             logger.warning(
-                "MCP connect fail name=%s url=%s err=%s dur_ms=%.0f: %s",
+                "[MCP][%s] connect fail name=%s url=%s err=%s dur_ms=%.0f: %s",
+                agent_name,
                 server.name,
                 url_for_log,
                 e1.__class__.__name__,
@@ -263,13 +261,17 @@ async def get_connected_mcp_client_for_agent(
     # ---- finalize ---------------------------------------------------------
     if exceptions:
         # 🟢 LOG 10: Summary failure
-        logger.info("MCP summary: %d server(s) failed to connect.", len(exceptions))
+        logger.error("MCP summary: %d server(s) failed to connect.", len(exceptions))
         for i, exc in enumerate(exceptions, 1):
-            logger.info("  [%d] %s: %s", i, exc.__class__.__name__, str(exc))
+            logger.error("  [%d] %s: %s", i, exc.__class__.__name__, str(exc))
         await _cleanup_client_quiet(client)
         raise MCPConnectionError("Some MCP connections failed", exceptions)
 
     total_tools = sum(len(v) for v in client.server_name_to_tools.values())
     # 🟢 LOG 11: Summary success
-    logger.info("MCP summary: all servers connected, total tools=%d", total_tools)
+    logger.debug(
+        "[MCP][%s] summary: all servers connected, total tools=%d",
+        agent_name,
+        total_tools,
+    )
     return client

@@ -104,6 +104,16 @@ def create_app() -> FastAPI:
             agent_manager=agent_manager,
             agent_factory=agent_factory,
         )
+        try:
+            await agent_manager.bootstrap()
+        except Exception:
+            logger.critical(
+                "❌ AgentManager bootstrap FAILED! Application cannot proceed.",
+                exc_info=True,
+            )
+            # Depending on severity, you might re-raise the exception or use sys.exit()
+            # to prevent the server from starting in a broken state.
+
         # Store state on app.state for access via dependency injection
         app.state.agent_manager = agent_manager
         app.state.session_orchestrator = session_orchestrator

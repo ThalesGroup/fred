@@ -16,12 +16,12 @@ import json
 import logging
 from typing import Any, Dict
 
-from fred_core import get_model
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
+from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 # Tuning spec (UI-editable)
 # ---------------------------
 MCP_TUNING = AgentTuning(
+    role="Define here the high-level role of the MCP agent.",
+    description="Define here a detailed description of the MCP agent's purpose and behavior.",
     fields=[
         FieldSpec(
             key="prompts.system",
@@ -52,7 +54,7 @@ MCP_TUNING = AgentTuning(
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
-    ]
+    ],
 )
 
 
@@ -74,7 +76,7 @@ class MCPAgent(AgentFlow):
         self.mcp = MCPRuntime(
             agent=self,
         )
-        self.model = get_model(self.agent_settings.model)
+        self.model = get_default_chat_model()
         await self.mcp.init()
         self.model = self.model.bind_tools(self.mcp.get_tools())
         self._graph = self._build_graph()

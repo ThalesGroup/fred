@@ -16,16 +16,20 @@ import json
 import logging
 from typing import Any, Dict
 
-from fred_core import get_model
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
+from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
-from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_flow import AgentFlow
-from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from agentic_backend.core.agents.agent_spec import (
+    AgentTuning,
+    FieldSpec,
+    MCPServerRef,
+    UIHints,
+)
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
@@ -34,6 +38,9 @@ logger = logging.getLogger(__name__)
 # Tuning spec (UI-editable)
 # ---------------------------
 SENTINEL_TUNING = AgentTuning(
+    role="sentinel_expert",
+    description="Sentinel expert for operations and monitoring using MCP tools (OpenSearch and KPIs).",
+    tags=["monitoring"],
     fields=[
         FieldSpec(
             key="prompts.system",
@@ -56,7 +63,11 @@ SENTINEL_TUNING = AgentTuning(
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
-    ]
+    ],
+    mcp_servers=[
+        MCPServerRef(name="kubernetes")
+        # MCPServerRef(name="knowledge-ops"),
+    ],
 )
 
 
@@ -72,20 +83,18 @@ class SentinelExpert(AgentFlow):
 
     tuning = SENTINEL_TUNING
 
-    def __init__(self, agent_settings: AgentSettings):
-        super().__init__(agent_settings=agent_settings)
-        self.mcp = MCPRuntime(agent=self)
-
     # ---------------------------
     # Bootstrap
     # ---------------------------
     async def async_init(self, runtime_context: RuntimeContext):
         await super().async_init(runtime_context)
 
-        # 1) LLM
-        self.model = get_model(self.agent_settings.model)
+        # 1) LLM. Here we use the default chat model from backend application context.
+        # In a real setup, you might want to allow tuning this per-agent.
+        self.model = get_default_chat_model()
 
         # 2) Tools
+        self.mcp = MCPRuntime(agent=self)
         await self.mcp.init()  # start MCP + toolkit
         self.model = self.model.bind_tools(self.mcp.get_tools())
 
@@ -93,7 +102,6 @@ class SentinelExpert(AgentFlow):
         self._graph = self._build_graph()
 
     async def aclose(self):
-        # Let AgentManager call this on shutdown.
         await self.mcp.aclose()
 
     # ---------------------------

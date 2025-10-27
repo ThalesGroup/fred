@@ -16,10 +16,11 @@
 import logging
 from typing import List
 
-from fred_core import VectorSearchHit, get_model
+from fred_core import VectorSearchHit
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
+from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
 from agentic_backend.common.rags_utils import (
     attach_sources_to_llm_response,
@@ -46,6 +47,9 @@ logger = logging.getLogger(__name__)
 # - These are *UI schema fields* (spec). Live values come from AgentSettings.tuning
 #   and are applied by AgentFlow at runtime.
 RAG_TUNING = AgentTuning(
+    role="Document retrieval and QA expert",
+    description="An expert in retrieving and processing documents using retrieval-augmented generation techniques. Rico can help with tasks that involve understanding and utilizing large document collections.",
+    tags=["document"],
     fields=[
         FieldSpec(
             key="prompts.system",
@@ -80,7 +84,7 @@ RAG_TUNING = AgentTuning(
             default=False,
             ui=UIHints(group="Prompts"),
         ),
-    ]
+    ],
 )
 
 
@@ -103,7 +107,7 @@ class Rico(AgentFlow):
 
     async def async_init(self, runtime_context: RuntimeContext):
         """Bind the model, create the vector search client, and build the graph."""
-        self.model = get_model(self.agent_settings.model)
+        self.model = get_default_chat_model()
         self.search_client = VectorSearchClient(agent=self)
         self._graph = self._build_graph()
 

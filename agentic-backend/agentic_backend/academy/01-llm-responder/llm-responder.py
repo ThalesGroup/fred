@@ -22,10 +22,10 @@ from __future__ import annotations
 import logging
 
 # If your project exposes a model factory, import it here:
-from fred_core import get_model  # <- adjust to your codebase
 from langchain_core.messages import AnyMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
+from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.runtime_source import expose_runtime_source
@@ -35,17 +35,19 @@ logger = logging.getLogger(__name__)
 DEFAULT_SYSTEM = "You are a helpful, concise assistant."
 
 TUNING = AgentTuning(
+    role="llm_responder",
+    description="A simple LLM-based responder agent that uses a tuned system prompt to guide its behavior.",
+    tags=["academy"],
     fields=[
         FieldSpec(
             key="system.prompt",
             type="prompt",
             title="System Prompt",
-            description="High-level persona/constraints for the agent.",
             required=True,
             default=DEFAULT_SYSTEM,
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
-    ]
+    ],
 )
 
 
@@ -56,7 +58,7 @@ class Responder(AgentFlow):
     async def async_init(self):
         # 1) Choose a model for this agent (keep it simple at first).
         # If you have per-agent config, pass an id/name to get_model(...).
-        self.model = get_model(self.agent_settings.model)
+        self.model = get_default_chat_model()
         # 2) Build the graph (compilation is deferred to the framework).
         self._graph = self._build_graph()
         logger.info("Responder initialized. Graph built and model ready.")

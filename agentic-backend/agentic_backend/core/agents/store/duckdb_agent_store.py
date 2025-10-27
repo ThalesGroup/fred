@@ -6,116 +6,403 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional, Tuple, TypeVar
 
 from fred_core.store.duckdb_store import DuckDBTableStore
-from pydantic import TypeAdapter, ValidationError
+from pydantic import (  # BaseModel is needed for TypeVar
+    BaseModel,
+    TypeAdapter,
+    ValidationError,
+)
 
-# ⬇️ New source of truth: AgentSettings = Annotated[Union[Agent, Leader], ...]
+# ⬇️ Assuming these are now two separate, distinct Pydantic models
 from agentic_backend.common.structures import AgentSettings
-from agentic_backend.core.agents.store.base_agent_store import BaseAgentStore
+from agentic_backend.core.agents.agent_spec import AgentTuning
+from agentic_backend.core.agents.store.base_agent_store import (
+    SCOPE_GLOBAL,
+    BaseAgentStore,
+)
 
 logger = logging.getLogger(__name__)
 
-# Union (de)serializer for Pydantic v2
+# Union (de)serializers for Pydantic v2
 AgentSettingsAdapter = TypeAdapter(AgentSettings)
+AgentTuningAdapter = TypeAdapter(AgentTuning)
+
+# Define a TypeVar to handle generic Pydantic models for type safety in helper methods
+T = TypeVar("T", bound=BaseModel)
 
 
 class DuckdbAgentStore(BaseAgentStore):
     """
-    Fred rationale:
-    - DuckDB is our **dev/test** backend; same contract as OpenSearch so switching is trivial.
-    - We persist the whole Pydantic union payload as JSON; schema stays stable across migrations.
+    DuckDB persistent storage for agent data, using two separate tables:
+    agents_settings (for immutable metadata) and agents_tuning (for mutable configuration).
+    The retrieval methods (get, load_by_scope) merge the data back into a single AgentSettings object.
     """
 
     def __init__(self, db_path: Path):
-        self.table_name = "agents"
+        self.settings_table_name = "agents_settings"
+        self.tuning_table_name = "agents_tuning"
         self.store = DuckDBTableStore(prefix="agent_", db_path=db_path)
-        self._ensure_schema()
 
-    def _ensure_schema(self) -> None:
-        # Minimal schema: natural key + raw JSON payload
+        # Ensure both tables exist with the correct, final schema
+        self._ensure_schema(self.settings_table_name)
+        self._ensure_schema(self.tuning_table_name)
+        logger.info(
+            f"[STORE] DuckdbAgentStore initialized with two tables: {self.settings_table_name}, {self.tuning_table_name}"
+        )
+
+    # ----------------------------------------------------------------------
+    # SCHEMA MANAGEMENT (CLEAN ENFORCEMENT)
+    # ----------------------------------------------------------------------
+
+    def _ensure_schema(self, table_name: str) -> None:
+        """
+        Enforces the exact required schema: (name, scope, scope_id, data_json).
+        Drops and recreates the table if non-conformant or missing.
+        """
+        table_full_name = self.store._prefixed(table_name)
+        required_column_count = 4
+
         with self.store._connect() as conn:
-            conn.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS "{self.store._prefixed(self.table_name)}" (
-                    name TEXT PRIMARY KEY,
-                    settings_json TEXT
-                )
-                """
+            current_column_count = 0
+            table_exists = False
+
+            try:
+                columns = conn.execute(
+                    f"PRAGMA table_info('{table_full_name}')"
+                ).fetchall()
+                current_column_count = len(columns)
+                table_exists = True
+            except Exception as e:
+                if "Catalog Error" not in str(e):
+                    raise
+
+            needs_recreation = not table_exists or (
+                table_exists and current_column_count != required_column_count
             )
 
-    def save(self, settings: AgentSettings) -> None:
-        """
-        Why TypeAdapter.dump_json:
-        - `AgentSettings` is a discriminated union, not a BaseModel type.
-        - Dump via adapter guarantees the discriminator and nested models are serialized consistently.
-        """
+            if needs_recreation:
+                if table_exists:
+                    conn.execute(f'DROP TABLE IF EXISTS "{table_full_name}"')
+                    logger.warning(
+                        f"🗑️ Detected non-conformant schema in '{table_full_name}'. Dropped table."
+                    )
+
+                conn.execute(
+                    f"""
+                    CREATE TABLE "{table_full_name}" (
+                        name TEXT NOT NULL,
+                        scope TEXT NOT NULL DEFAULT '{SCOPE_GLOBAL}', 
+                        scope_id TEXT,                               
+                        data_json TEXT,
+                        PRIMARY KEY (name, scope, scope_id)
+                    )
+                    """
+                )
+                logger.info(
+                    f"[STORE][DUCKDB] Created fresh table '{table_full_name}' with composite PRIMARY KEY."
+                )
+            else:
+                logger.debug(
+                    f"[STORE][DUCKDB] Schema for '{table_full_name}' is verified and up to date."
+                )
+
+    # ----------------------------------------------------------------------
+    # INTERNAL HELPERS
+    # ----------------------------------------------------------------------
+
+    def _save_data(
+        self,
+        name: str,
+        data: Any,
+        adapter: TypeAdapter,
+        table_name: str,
+        scope: str,
+        scope_id: Optional[str],
+    ) -> None:
+        """Helper to serialize and save a Pydantic object to a specific table."""
+        db_scope_id = scope_id if scope_id is not None else ""
         try:
-            json_bytes = AgentSettingsAdapter.dump_json(settings, exclude_none=True)
+            json_bytes = adapter.dump_json(data, exclude_none=True)
             json_str = json_bytes.decode("utf-8")
         except Exception as e:
             raise ValueError(
-                f"Failed to serialize AgentSettings for {getattr(settings, 'name', '?')}: {e}"
+                f"Failed to serialize {type(data).__name__} for '{name}': {e}"
             )
 
         with self.store._connect() as conn:
             conn.execute(
                 f"""
-                INSERT OR REPLACE INTO "{self.store._prefixed(self.table_name)}" (name, settings_json)
-                VALUES (?, ?)
+                INSERT OR REPLACE INTO "{self.store._prefixed(table_name)}" 
+                (name, scope, scope_id, data_json)
+                VALUES (?, ?, ?, ?)
                 """,
-                (settings.name, json_str),
+                (name, scope, db_scope_id, json_str),
             )
-        logger.info(f"[AGENTS] ✅ AgentSettings for '{settings.name}' saved to DuckDB")
+        logger.debug(f"Saved {table_name} for '{name}' (Scope: {scope})")
 
-    def get(self, name: str) -> Optional[AgentSettings]:
-        """
-        Union-safe load:
-        - Do NOT call `AgentSettings(**data)`; `Annotated[Union[...]]` is not callable.
-        - Use `TypeAdapter(AgentSettings).validate_json(...)`.
-        """
+    # 💡 FIX 1: Use TypeVar T for robust type checking
+    def _get_data(
+        self,
+        name: str,
+        adapter: TypeAdapter[T],
+        table_name: str,
+        scope: str,
+        scope_id: Optional[str],
+    ) -> Optional[T]:
+        """Helper to retrieve and deserialize a single Pydantic object."""
+        where_clause = f"WHERE name = ? AND scope = ? AND scope_id {'IS NULL' if scope_id is None else '= ?'}"
+        params = (name, scope) if scope_id is None else (name, scope, scope_id)
+
         with self.store._connect() as conn:
             row = conn.execute(
-                f'SELECT settings_json FROM "{self.store._prefixed(self.table_name)}" WHERE name = ?',
-                (name,),
+                f'SELECT data_json FROM "{self.store._prefixed(table_name)}" {where_clause}',
+                params,
             ).fetchone()
 
         if not row:
             return None
 
         try:
-            return AgentSettingsAdapter.validate_json(row[0])
+            return adapter.validate_json(row[0])
         except ValidationError as e:
-            logger.error(f"[AGENTS] ❌ Failed to parse AgentSettings for '{name}': {e}")
+            logger.error(
+                f"❌ Failed to validate JSON for '{name}' (Scope: {scope}): {e}"
+            )
             return None
 
-    def load_all(self) -> List[AgentSettings]:
+    def _load_data_by_scope(
+        self,
+        adapter: TypeAdapter[T],
+        table_name: str,
+        scope: str,
+        scope_id: Optional[str],
+    ) -> List[Tuple[str, T]]:
         """
-        Keep it simple (dev-scale). If this grows, add pagination.
+        Helper to load all Pydantic objects for a specific scope.
+        Returns a list of tuples: (agent_name, deserialized_pydantic_object).
         """
+
+        # 💡 FIX: When scope_id is None in Python (global scope), check for the
+        #         empty string ("") that was inserted to satisfy the NOT NULL constraint.
+        if scope_id is None:
+            where_clause = "WHERE scope = ? AND scope_id = ''"  # Check for empty string
+            params = (scope,)
+        else:
+            where_clause = "WHERE scope = ? AND scope_id = ?"
+            params = (scope, scope_id)
+
+        data_list: List[Tuple[str, T]] = []
         with self.store._connect() as conn:
+            # Select name along with data_json
             rows = conn.execute(
-                f'SELECT settings_json FROM "{self.store._prefixed(self.table_name)}"'
+                f'SELECT name, data_json FROM "{self.store._prefixed(table_name)}" {where_clause}',
+                params,
             ).fetchall()
 
-        settings_list: List[AgentSettings] = []
-        for (json_str,) in rows:
+        for name, json_str in rows:
             try:
-                settings = AgentSettingsAdapter.validate_json(json_str)
-                settings_list.append(settings)
+                data = adapter.validate_json(json_str)
+                data_list.append((name, data))
             except ValidationError as e:
-                logger.error(f"[AGENTS] ❌ Skipping malformed AgentSettings row: {e}")
+                logger.error(
+                    f"❌ Skipping malformed row for agent '{name}' in {table_name} (Scope: {scope}): {e}"
+                )
+
+        return data_list
+
+    # ----------------------------------------------------------------------
+    # BASE AGENT STORE IMPLEMENTATION (Merge on Retrieve)
+    # ----------------------------------------------------------------------
+
+    def save(
+        self,
+        settings: AgentSettings,
+        tuning: AgentTuning,
+        scope: str = SCOPE_GLOBAL,
+        scope_id: Optional[str] = None,
+    ) -> None:
+        """Saves AgentSettings and AgentTuning to separate tables."""
+
+        self._save_data(
+            settings.name,
+            settings,
+            AgentSettingsAdapter,
+            self.settings_table_name,
+            scope,
+            scope_id,
+        )
+
+        self._save_data(
+            settings.name,
+            tuning,
+            AgentTuningAdapter,
+            self.tuning_table_name,
+            scope,
+            scope_id,
+        )
 
         logger.info(
-            f"[AGENTS] ✅ Loaded {len(settings_list)} agent settings from DuckDB"
+            f"[AGENTS] ✅ Agent '{settings.name}' settings and tuning saved to DuckDB (Scope: {scope})"
         )
-        return settings_list
 
-    def delete(self, name: str) -> None:
+    def save_all(
+        self,
+        settings_tuning_list: List[Tuple[AgentSettings, AgentTuning]],
+        scope: str = SCOPE_GLOBAL,
+        scope_id: Optional[str] = None,
+    ) -> None:
+        """
+        Batch save implementation for both settings and tuning.
+        """
+        settings_to_insert = []
+        tuning_to_insert = []
+
+        for settings, tuning in settings_tuning_list:
+            try:
+                s_json_bytes = AgentSettingsAdapter.dump_json(
+                    settings, exclude_none=True
+                )
+                settings_to_insert.append(
+                    (settings.name, scope, scope_id, s_json_bytes.decode("utf-8"))
+                )
+
+                t_json_bytes = AgentTuningAdapter.dump_json(tuning, exclude_none=True)
+                tuning_to_insert.append(
+                    (settings.name, scope, scope_id, t_json_bytes.decode("utf-8"))
+                )
+
+            except Exception as e:
+                logger.error(
+                    f"[STORE][DUCKDB] Failed to serialize Agent data for batch save {settings.name}: {e}"
+                )
+
+        def _bulk_insert(
+            data_list: List[Tuple[str, str, Optional[str], str]], table_name: str
+        ):
+            if not data_list:
+                return
+
+            with self.store._connect() as conn:
+                conn.execute(
+                    f"""
+                    INSERT OR REPLACE INTO "{self.store._prefixed(table_name)}" 
+                    (name, scope, scope_id, data_json)
+                    SELECT * FROM UNNEST(?, ?, ?, ?)
+                    """,
+                    (
+                        [d[0] for d in data_list],
+                        [d[1] for d in data_list],
+                        [d[2] for d in data_list],
+                        [d[3] for d in data_list],
+                    ),
+                )
+            logger.debug(f"Batch saved {len(data_list)} items to {table_name}")
+
+        _bulk_insert(settings_to_insert, self.settings_table_name)
+        _bulk_insert(tuning_to_insert, self.tuning_table_name)
+
+        logger.debug(
+            f"[STORE][DUCKDB] Batch saved {len(settings_to_insert)} agent data sets to DuckDB (Scope: {scope})"
+        )
+
+    def get(
+        self,
+        name: str,
+        scope: str = SCOPE_GLOBAL,
+        scope_id: Optional[str] = None,
+    ) -> Optional[AgentSettings]:
+        """
+        Retrieves AgentSettings and its AgentTuning, merging them into a single AgentSettings object.
+        """
+        # 1. Load Settings (T is inferred as AgentSettings)
+        settings_loaded: Optional[AgentSettings] = self._get_data(
+            name, AgentSettingsAdapter, self.settings_table_name, scope, scope_id
+        )
+        if not settings_loaded:
+            return None
+
+        # 2. Load Tuning (T is inferred as AgentTuning)
+        tuning_loaded: Optional[AgentTuning] = self._get_data(
+            name, AgentTuningAdapter, self.tuning_table_name, scope, scope_id
+        )
+
+        # 3. Merge and return the complete object
+        if tuning_loaded:
+            return settings_loaded.model_copy(update={"tuning": tuning_loaded})
+
+        logger.warning(
+            f"[STORE][DUCKDB] AgentTuning missing for '{name}' (Scope: {scope}). Returning base settings."
+        )
+        # settings_loaded already contains tuning=None by default
+        return settings_loaded
+
+    def load_by_scope(
+        self,
+        scope: str,
+        scope_id: Optional[str] = None,
+    ) -> List[AgentSettings]:
+        """
+        Loads and merges all AgentSettings and their Tunings for a given scope.
+        """
+        # 1. Load all settings (returns List[Tuple[name, AgentSettings]])
+        named_settings_list: List[Tuple[str, AgentSettings]] = self._load_data_by_scope(
+            AgentSettingsAdapter, self.settings_table_name, scope, scope_id
+        )
+
+        # 2. Load all tunings (returns List[Tuple[name, AgentTuning]])
+        named_tuning_list: List[Tuple[str, AgentTuning]] = self._load_data_by_scope(
+            AgentTuningAdapter, self.tuning_table_name, scope, scope_id
+        )
+
+        # 💡 FIX 3: Use tuple unpacking to create a map: {agent_name: AgentTuning object}
+        tuning_map = {name: tuning for name, tuning in named_tuning_list}
+
+        final_list: List[AgentSettings] = []
+        for name, settings in named_settings_list:
+            tuning = tuning_map.get(name)
+
+            # Merge settings and tuning
+            if tuning:
+                final_list.append(settings.model_copy(update={"tuning": tuning}))
+            else:
+                logger.warning(
+                    f"⚠️ Missing tuning data for agent '{name}' in scope {scope}. Loading with tuning=None."
+                )
+                final_list.append(settings)
+
+        logger.info(
+            f"[STORE][DUCKDB] Loaded {len(final_list)} complete agent configurations from DuckDB (Scope: {scope})"
+        )
+        return final_list
+
+    def load_all_global_scope(self) -> List[AgentSettings]:
+        """Loads all GLOBAL scope agents (same as load_by_scope(SCOPE_GLOBAL))."""
+        return self.load_by_scope(scope=SCOPE_GLOBAL)
+
+    def delete(
+        self,
+        name: str,
+        scope: str = SCOPE_GLOBAL,
+        scope_id: Optional[str] = None,
+    ) -> None:
+        """Deletes both settings and tuning entries for the composite key."""
+        where_clause = f"WHERE name = ? AND scope = ? AND scope_id {'IS NULL' if scope_id is None else '= ?'}"
+        params = (name, scope) if scope_id is None else (name, scope, scope_id)
+
         with self.store._connect() as conn:
+            # Delete from settings table
             conn.execute(
-                f'DELETE FROM "{self.store._prefixed(self.table_name)}" WHERE name = ?',
-                (name,),
+                f'DELETE FROM "{self.store._prefixed(self.settings_table_name)}" {where_clause}',
+                params,
             )
-        logger.info(f"[AGENTS] 🗑️ AgentSettings for '{name}' deleted from DuckDB")
+            # Delete from tuning table
+            conn.execute(
+                f'DELETE FROM "{self.store._prefixed(self.tuning_table_name)}" {where_clause}',
+                params,
+            )
+
+        logger.info(
+            f"[STORE][DUCKDB] Agent data for '{name}' deleted from both DuckDB tables (Scope: {scope})"
+        )

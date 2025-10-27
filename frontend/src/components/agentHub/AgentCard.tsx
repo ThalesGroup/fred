@@ -65,7 +65,7 @@ export const AgentCard = ({
 }: AgentCardProps) => {
   const { t } = useTranslation();
   const theme = useTheme();
-  const tags = agent.tags ?? [];
+  const tags = agent.tuning.tags ?? [];
   const tagLabel = tags.join(", ");
 
   return (
@@ -153,7 +153,7 @@ export const AgentCard = ({
         {/* ROW 2: Agent Role (Moved here) */}
         <Box sx={{ minWidth: 0, pt: 0.5 }}>
           <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.25, fontWeight: 500 }}>
-            {agent.role}
+            {agent.tuning.role}
           </Typography>
         </Box>
       </Box>
@@ -183,9 +183,9 @@ export const AgentCard = ({
             flexGrow: 1,
             opacity: agent.enabled ? 1 : 0.5,
           }}
-          title={agent.description || ""}
+          title={agent.tuning.description || ""}
         >
-          {agent.description}
+          {agent.tuning.description}
         </Typography>
         {/* Footer actions (unchanged) */}
         <Stack direction="row" gap={0.5} sx={{ ml: "auto" }}>

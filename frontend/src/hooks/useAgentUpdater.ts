@@ -14,12 +14,16 @@ export function useAgentUpdater() {
     return mutate({ agentSettings: payload }).unwrap();
   };
 
-  const updateTuning = async (agent: AnyAgent, newTuning: NonNullable<AnyAgent["tuning"]>) => {
+  const updateTuning = async (
+    agent: AnyAgent,
+    newTuning: NonNullable<AnyAgent["tuning"]>,
+    isGlobal: boolean = false,
+  ) => {
     const payload =
       agent.type === "leader"
         ? ({ ...agent, tuning: newTuning, type: "leader" } as { type: "leader" } & Leader)
         : ({ ...agent, tuning: newTuning, type: "agent" } as { type: "agent" } & Agent);
-    return mutate({ agentSettings: payload }).unwrap();
+    return mutate({ agentSettings: payload, isGlobal }).unwrap();
   };
 
   const updateLeaderCrew = async (leader: Leader & { type: "leader" }, crew: string[]) => {

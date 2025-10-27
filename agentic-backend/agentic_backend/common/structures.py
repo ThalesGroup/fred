@@ -25,7 +25,7 @@ from fred_core import (
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, Field
 
-from agentic_backend.core.agents.agent_spec import AgentTuning
+from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerConfiguration
 
 
 class StorageConfig(BaseModel):
@@ -50,30 +50,6 @@ class TimeoutSettings(BaseModel):
     )
 
 
-class MCPServerConfiguration(BaseModel):
-    name: str
-    transport: Optional[str] = Field(
-        "sse",
-        description="MCP server transport. Can be sse, stdio, websocket or streamable_http",
-    )
-    url: Optional[str] = Field(None, description="URL and endpoint of the MCP server")
-    sse_read_timeout: Optional[int] = Field(
-        60 * 5,
-        description="How long (in seconds) the client will wait for a new event before disconnecting",
-    )
-    command: Optional[str] = Field(
-        None,
-        description="Command to run for stdio transport. Can be uv, uvx, npx and so on.",
-    )
-    args: Optional[List[str]] = Field(
-        None,
-        description="Args to give the command as a list. ex:  ['--directory', '/directory/to/mcp', 'run', 'server.py']",
-    )
-    env: Optional[Dict[str, str]] = Field(
-        None, description="Environment variables to give the MCP server"
-    )
-
-
 class RecursionConfig(BaseModel):
     recursion_limit: int
 
@@ -86,6 +62,8 @@ class AgentChatOptions(BaseModel):
 
 
 # ---------------- Base: shared identity + UX + tuning ----------------
+
+
 class BaseAgent(BaseModel):
     """
     Fred rationale:
@@ -97,18 +75,7 @@ class BaseAgent(BaseModel):
     name: str
     enabled: bool = True
     class_path: Optional[str] = None  # None → dynamic/UI agent
-    model: Optional[ModelConfiguration] = None
-    # User-facing discovery (what leaders & UI filter on)
-    tags: List[str] = Field(default_factory=list)
-    role: str
-    description: str
-
-    # Optional: spec declares allowed tunables; values store overrides
     tuning: Optional[AgentTuning] = None
-    mcp_servers: List[MCPServerConfiguration] = Field(
-        default_factory=list,
-        description="List of active MCP server configurations for this agent.",
-    )
     chat_options: AgentChatOptions = AgentChatOptions()
 
 
@@ -151,7 +118,11 @@ class AIConfig(BaseModel):
     )
     default_chat_model: ModelConfiguration = Field(
         ...,
-        description="Default model configuration for all agents and services.",
+        description="Default chat model configuration for all agents and services.",
+    )
+    default_language_model: ModelConfiguration = Field(
+        ...,
+        description="Default language model configuration for all agents and services.",
     )
     agents: List[AgentSettings] = Field(
         default_factory=list, description="List of AI agents."
@@ -183,11 +154,37 @@ class AppConfig(BaseModel):
     reload_dir: str = "."
 
 
+class McpConfiguration(BaseModel):
+    servers: List[MCPServerConfiguration] = Field(
+        default_factory=list,
+        description="List of MCP servers defined for this environment.",
+    )
+
+    def get_server(self, name: str) -> Optional[MCPServerConfiguration]:
+        """
+        Retrieve an MCP server by logical name.
+        Returns None if not found or disabled.
+        """
+        for s in self.servers:
+            if s.name == name and s.enabled:
+                return s
+        return None
+
+    def as_dict(self) -> Dict[str, MCPServerConfiguration]:
+        """
+        Fred rationale:
+        - Useful for fast lookup and resolver integration.
+        - Used by RuntimeContext → MCPRuntime to resolve URLs dynamically.
+        """
+        return {s.name: s for s in self.servers if s.enabled}
+
+
 class Configuration(BaseModel):
     app: AppConfig
     security: SecurityConfiguration
     frontend_settings: FrontendSettings
     ai: AIConfig
+    mcp: McpConfiguration
     storage: StorageConfig
 
 

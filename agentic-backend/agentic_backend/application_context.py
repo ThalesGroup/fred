@@ -52,12 +52,12 @@ from fred_core import (
     split_realm_url,
 )
 from langchain_core.language_models.base import BaseLanguageModel
+from langchain_core.language_models.chat_models import BaseChatModel
 from requests.auth import AuthBase
 
 from agentic_backend.common.structures import (
-    AgentSettings,
     Configuration,
-    ModelConfiguration,
+    McpConfiguration,
 )
 from agentic_backend.core.agents.store.base_agent_store import BaseAgentStore
 from agentic_backend.core.feedback.store.base_feedback_store import BaseFeedbackStore
@@ -120,6 +120,10 @@ def get_session_store() -> BaseSessionStore:
     return get_app_context().get_session_store()
 
 
+def get_mcp_configuration() -> McpConfiguration:
+    return get_app_context().get_mcp_configuration()
+
+
 def get_knowledge_flow_base_url() -> str:
     return get_app_context().get_knowledge_flow_base_url()
 
@@ -176,6 +180,19 @@ def get_default_model() -> BaseLanguageModel:
         BaseLanguageModel: The AI model configured for the agent.
     """
     return get_app_context().get_default_model()
+
+
+def get_default_chat_model() -> BaseChatModel:
+    """
+    Retrieves the default chat model instance.
+
+    You can use this function in agents that always want to use the globally configured chat model.
+    If this is not desired, use get_model() with the agent's specific model tunings.
+
+    Returns:
+        BaseChatModel: The global chat model.
+    """
+    return get_app_context().get_default_chat_model()
 
 
 # -------------------------------
@@ -250,7 +267,6 @@ class ApplicationContext:
                 cls._instance.configuration = configuration
                 cls._instance.status = RuntimeStatus()
                 cls._instance._service_instances = {}  # Cache for service instances
-                cls._instance.apply_default_models()
                 cls._instance._log_config_summary()
                 cls._instance._io_executor = ThreadPoolExecutor(max_workers=10)
 
@@ -286,35 +302,6 @@ class ApplicationContext:
             self._io_executor.shutdown(wait=True)
             self._io_executor = None
 
-    def apply_default_models(self):
-        """
-        Apply the default model configuration to all agents and services if not explicitly set.
-        This merges the default settings into each component's model config.
-        """
-
-        # Apply to agents
-        for agent in self.configuration.ai.agents:
-            agent.model = self._merge_with_default_model(agent.model)
-
-    def _merge_with_default_model(
-        self, model: Optional[ModelConfiguration]
-    ) -> ModelConfiguration:
-        default_model = self.configuration.ai.default_chat_model.model_dump(
-            exclude_unset=True
-        )
-        model_dict = model.model_dump(exclude_unset=True) if model else {}
-        merged = {**default_model, **model_dict}
-        return ModelConfiguration(**merged)
-
-    def apply_default_model_to_agent(
-        self, agent_settings: AgentSettings
-    ) -> AgentSettings:
-        """
-        Returns a new AgentSettings with the default model merged in, unless already fully specified.
-        """
-        merged_model = self._merge_with_default_model(agent_settings.model)
-        return agent_settings.model_copy(update={"model": merged_model})
-
     def get_knowledge_flow_base_url(self) -> str:
         """
         Retrieves the base URL for the knowledge flow service.
@@ -323,11 +310,17 @@ class ApplicationContext:
 
     # --- AI Models ---
 
+    def get_default_chat_model(self) -> BaseChatModel:
+        """
+        Retrieves the default chat model instance.
+        """
+        return get_model(self.configuration.ai.default_chat_model)
+
     def get_default_model(self) -> BaseLanguageModel:
         """
         Retrieves the default AI model instance.
         """
-        return get_model(self.configuration.ai.default_chat_model)
+        return get_model(self.configuration.ai.default_language_model)
 
     # --- Agent classes ---
 
@@ -529,6 +522,9 @@ class ApplicationContext:
             )
         else:
             raise ValueError("Unsupported sessions storage backend")
+
+    def get_mcp_configuration(self) -> McpConfiguration:
+        return self.configuration.mcp
 
     def get_kpi_writer(self) -> KPIWriter:
         if self._kpi_writer is not None:

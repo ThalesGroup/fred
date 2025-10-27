@@ -32,7 +32,6 @@ from typing import (
 )
 
 from fred_core import get_keycloak_client_id, get_keycloak_url
-from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
@@ -93,12 +92,13 @@ class AgentFlow:
     and for calling `get_compiled_graph()` when they are ready to execute the agent.
     """
 
-    # Subclasses MUST override this with a concrete AgentTuning
-    tuning: ClassVar[Optional[AgentTuning]] = None
+    # ------------------------------------------------
+    # 1. CLASS VARIABLES (Schema/Defaults, required by all instances)
+    # ------------------------------------------------
+    tuning: ClassVar[AgentTuning]
     default_chat_options: ClassVar[Optional[AgentChatOptions]] = None
-    # LangGraph/LangChain injects this dynamically, but we define it here
-    # for type checking. It will hold in particular the 'configurable' dict
-    # with the end_user_id when the node is executed.
+
+    _tuning: AgentTuning
     run_config: RunnableConfig = {}  # Use an empty dict as the default/initial value
 
     def __init__(self, agent_settings: AgentSettings):
@@ -122,7 +122,17 @@ class AgentFlow:
         self._graph = None  # Will be built in async_init
         self.streaming_memory = MemorySaver()
         self.compiled_graph: Optional[CompiledStateGraph] = None
-        self._model: BaseChatModel | Any | None = None
+
+    def apply_settings(self, new_settings: AgentSettings) -> None:
+        """
+        Apply the authoritative settings resolved by AgentManager.
+        No runtime merging with class defaults happens here.
+        """
+        self.agent_settings = new_settings.model_copy(deep=True)
+        # Use the resolved tuning from Manager; if missing, allow class-level as a hard fallback.
+        self._tuning = self.agent_settings.tuning or type(self).tuning
+        # Keep .tuning coherent on the settings object held by the instance
+        self.agent_settings.tuning = self._tuning
 
     async def async_init(self, runtime_context: RuntimeContext):
         """
@@ -227,26 +237,6 @@ class AgentFlow:
         ):
             yield event
 
-    def apply_settings(self, new_settings: AgentSettings) -> None:
-        """
-        Live update (hot-swap) the effective configuration of this instance.
-
-        Why:
-        - The user may edit tuning fields from the UI; the controller persists and
-          calls this so the running instance reflects the latest values.
-
-        Behavior:
-        - Replace in-memory `AgentSettings`.
-        - Re-resolve `_tuning`: use `new_settings.tuning` when available, otherwise fall
-          back to the class-level `tuning` defaults.
-        - Note: this does not recompile the graph or rebuild models; call your own
-          re-init logic if tuneables require it.
-        """
-        merged_settings = type(self).merge_settings_with_class_defaults(new_settings)
-        self.agent_settings = merged_settings
-        self._tuning = merged_settings.tuning or type(self).tuning
-        self.agent_settings.tuning = self._tuning
-
     @staticmethod
     def ensure_any_message(msg: object) -> AnyMessage:
         """
@@ -313,26 +303,6 @@ class AgentFlow:
         }
 
     @classmethod
-    def merge_settings_with_class_defaults(
-        cls, settings: AgentSettings
-    ) -> AgentSettings:
-        merged = settings.model_copy(deep=True)
-
-        # Ensure tuning exists
-        if not merged.tuning:
-            merged.tuning = cls.tuning.model_copy(deep=True) if cls.tuning else None
-        else:
-            # Merge missing fields from class tuning
-            if cls.tuning and getattr(cls.tuning, "fields", None):
-                existing_keys = {f.key for f in (merged.tuning.fields or [])}
-                for f in cls.tuning.fields:
-                    if f.key not in existing_keys:
-                        merged.tuning.fields.append(f)
-
-        merged.chat_options = cls._merge_chat_options(merged.chat_options)
-        return merged
-
-    @classmethod
     def _merge_chat_options(
         cls, current: Optional[AgentChatOptions]
     ) -> AgentChatOptions:
@@ -367,6 +337,10 @@ class AgentFlow:
         """Return the current effective AgentSettings for this instance."""
         return self.agent_settings
 
+    def get_agent_tunings(self) -> AgentTuning:
+        """Return the current effective AgentTuning for this instance."""
+        return self._tuning
+
     def get_name(self) -> str:
         """
         Return the agent's name.
@@ -380,14 +354,14 @@ class AgentFlow:
         Return the agent's description. This is key for the leader to decide
         which agent to delegate to.
         """
-        return self.agent_settings.description
+        return self._tuning.description if self._tuning else ""
 
     def get_role(self) -> str:
         """
         Return the agent's role. This defines the agent's primary function and
         responsibilities within the system.
         """
-        return self.agent_settings.role
+        return self._tuning.role if self._tuning else ""
 
     def get_tags(self) -> List[str]:
         """
@@ -395,7 +369,7 @@ class AgentFlow:
         discovery in the UI. It is also used by leaders to select agents
         for their crew based on required skills.
         """
-        return self.agent_settings.tags or []
+        return self._tuning.tags if self._tuning else []
 
     def get_tuning_spec(self) -> Optional[AgentTuning]:
         """

@@ -634,7 +634,7 @@ const ChatBot = ({
                 }}
               >
                 <Typography variant="body2" sx={{ fontStyle: "italic" }}>
-                  {currentAgent.role}
+                  {currentAgent.tuning.role}
                 </Typography>
 
                 <Box

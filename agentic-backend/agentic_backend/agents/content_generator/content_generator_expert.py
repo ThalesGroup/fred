@@ -14,11 +14,11 @@
 
 import logging
 
-from fred_core import get_model
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
+from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
@@ -75,6 +75,9 @@ GENERAL_BEHAVIOR_PROMPT = (
 
 
 TUNING = AgentTuning(
+    role="content_generator_expert",
+    description="An expert agent that creates and manages content resources (templates and prompts) via MCP tools.",
+    tags=["content"],
     fields=[
         FieldSpec(
             key="prompts.persona",
@@ -119,7 +122,7 @@ class ContentGeneratorExpert(AgentFlow):
         self.mcp = MCPRuntime(
             agent=self,
         )
-        self.model = get_model(self.agent_settings.model)
+        self.model = get_default_chat_model()
         await self.mcp.init()
         self.model = self.model.bind_tools(self.mcp.get_tools())
         self._graph = self._build_graph()

@@ -16,7 +16,7 @@
 import logging
 from typing import Any, Dict, List, Optional, cast
 
-from fred_core import VectorSearchHit, get_model
+from fred_core import VectorSearchHit
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.graph import END, StateGraph
@@ -27,6 +27,7 @@ from agentic_backend.agents.rags.structures import (
     RagGraphState,
     RephraseQueryOutput,
 )
+from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
 from agentic_backend.common.rags_utils import attach_sources_to_llm_response
 from agentic_backend.common.structures import AgentChatOptions, AgentSettings
@@ -140,7 +141,7 @@ class AdvancedRico(AgentFlow):
         super().__init__(agent_settings=agent_settings)
 
     async def async_init(self):
-        self.model = get_model(self.agent_settings.model)
+        self.model = get_default_chat_model()
         self.search_client = VectorSearchClient(agent=self)
         self.base_prompt = self._generate_prompt()
         self._graph = self._build_graph()

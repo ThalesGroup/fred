@@ -12,31 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-AgentLoader — creates AgentFlow instances from multiple sources
-(static config, persisted store, and Knowledge-Flow resources) and runs
-their bounded async setup (`async_init()`).
-
-Design contract:
-- Loader is **pure creation** + **bounded init** only.
-- Loader never starts long-lived work (streams/pollers) — that’s Supervisor’s job.
-- Loader never mutates the registry — AgentManager (or a Registry) decides
-  how to register/unregister/replace after instances are returned.
-
-Public API:
-- load_static() -> (instances, failed_map)
-- load_persisted() -> instances
-- load_resource_agents(...) -> (instances_to_add_or_update, names_to_replace)
-"""
-
 from __future__ import annotations
 
 import importlib
 import logging
-from typing import Dict, Type
+from typing import List, Type
 
 from agentic_backend.common.structures import (
-    AgentSettings,
     Configuration,
 )
 from agentic_backend.core.agents.agent_flow import AgentFlow
@@ -44,14 +26,15 @@ from agentic_backend.core.agents.store.base_agent_store import BaseAgentStore
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_TRANSPORTS = ["sse", "stdio", "streamable_http", "websocket"]
-
 
 class AgentLoader:
     """
-    Loads agents from static configuration and persistent storage. This
+    Loads agents from startu configuration.yaml and persistent storage. This
     class does not create or activate any agent instance, it only loads and check
-    that configured or persisted agent settings are correct and still valid
+    that configured or persisted agent settings are correct and still valid.
+
+    Instances are only created to provide the agent manager with easy access to
+    their class defaults (tunings) as well as the settings defined in the configuration.yaml
     """
 
     def __init__(self, config: Configuration, store: BaseAgentStore):
@@ -62,15 +45,14 @@ class AgentLoader:
     # Public API
     # ---------------------------------------------------------------------
 
-    def load_static(self) -> Dict[str, AgentSettings]:
+    def load_static(self) -> List[AgentFlow]:
         """
         Build agents declared in configuration (enabled only), run `async_init()`,
         and return `(instances, failed_map)`. `failed_map` contains AgentSettings
         for static agents that failed to import/instantiate/init (so a retry loop
         can attempt later).
         """
-        failed: Dict[str, AgentSettings] = {}
-        successful: Dict[str, AgentSettings] = {}
+        instances: List[AgentFlow] = []
         for agent_cfg in self.config.ai.agents:
             if not agent_cfg.enabled:
                 continue
@@ -79,7 +61,6 @@ class AgentLoader:
                     "No class_path for static agent '%s' — skipping.",
                     agent_cfg.name,
                 )
-                failed[agent_cfg.name] = agent_cfg
                 continue
             try:
                 cls = self._import_agent_class(agent_cfg.class_path)
@@ -89,35 +70,27 @@ class AgentLoader:
                         agent_cfg.class_path,
                         agent_cfg.name,
                     )
-                    failed[agent_cfg.name] = agent_cfg
                     continue
-                logger.info("✅ Static agent ready: %s", agent_cfg.name)
-                successful[agent_cfg.name] = agent_cfg
+                inst: AgentFlow = cls(agent_settings=agent_cfg)
+                instances.append(inst)
             except Exception as e:
                 logger.exception(
                     "❌ Failed to construct static agent '%s': %s", agent_cfg.name, e
                 )
-                failed[agent_cfg.name] = agent_cfg
 
-        return successful
+        return instances
 
-    def load_persisted(self) -> Dict[str, AgentSettings]:
+    def load_persisted(self) -> List[AgentFlow]:
         """
         Build agents from persistent storage (e.g., DuckDB), run `async_init()`,
         and return ready instances. Agents with missing/invalid class_path are skipped.
         """
-        out: Dict[str, AgentSettings] = {}
+        out: List[AgentFlow] = []
 
-        for agent_settings in self.store.load_all():
+        for agent_settings in self.store.load_all_global_scope():
             if not agent_settings.class_path:
                 logger.warning(
-                    "No class_path for agent '%s' — skipping.", agent_settings.name
-                )
-                continue
-
-            if not agent_settings.enabled:
-                logger.info(
-                    "↪️ Skipping disabled persisted agent: %s", agent_settings.name
+                    "agent=%s No class_path found — skipping.", agent_settings.name
                 )
                 continue
 
@@ -125,37 +98,38 @@ class AgentLoader:
                 cls = self._import_agent_class(agent_settings.class_path)
                 if not issubclass(cls, AgentFlow):
                     logger.error(
-                        "Class '%s' is not AgentFlow for '%s'",
-                        agent_settings.class_path,
+                        "agent=%s class=%s is not AgentFlow",
                         agent_settings.name,
+                        agent_settings.class_path,
                     )
                     continue
 
-                logger.info(
-                    "✅ Persisted agent loaded: %s (%s)",
+                logger.debug(
+                    "agent=%s class=%s loaded",
                     agent_settings.name,
                     agent_settings.class_path,
                 )
-                out[agent_settings.name] = agent_settings
+                inst: AgentFlow = cls(agent_settings=agent_settings)
+                out.append(inst)
             except ModuleNotFoundError:
                 logger.error(
-                    "❌ Failed to load persisted agent '%s' (ModuleNotFoundError). Removing stale entry from store.",
+                    "agent=%s Failed to load persisted agent (ModuleNotFoundError). Removing stale entry from store.",
                     agent_settings.name,
                 )
                 try:
                     self.store.delete(agent_settings.name)
                     logger.info(
-                        "🗑️ Successfully deleted stale agent '%s' from persistent store.",
+                        "agent=%s Successfully deleted stale agent from persistent store.",
                         agent_settings.name,
                     )
                 except Exception:
                     logger.exception(
-                        "⚠️ Failed to delete stale agent '%s' from persistent store.",
+                        "agent=%s Failed to delete stale agent from persistent store.",
                         agent_settings.name,
                     )
             except Exception as e:
                 logger.exception(
-                    "❌ Failed to load persisted agent '%s': %s",
+                    "agent=%s Failed to load persisted agent: %s",
                     agent_settings.name,
                     e,
                 )
