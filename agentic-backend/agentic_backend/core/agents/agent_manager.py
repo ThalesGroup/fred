@@ -131,10 +131,10 @@ class AgentManager:
             logger.warning(
                 "[AGENTS] 'use_static_config_only' is ENABLED. Skipping all persistent agent configuration (DB)."
             )
+            persisted_instances = []
         else:
             persisted_instances = self.loader.load_persisted()
 
-        persisted_instances = self.loader.load_persisted()
         static_catalogue: Dict[str, Tuple[AgentSettings, AgentTuning]] = {}
         persisted_state: Dict[str, Tuple[AgentSettings, AgentTuning]] = {}
         agents_to_load: Dict[str, AgentSettings] = {}
