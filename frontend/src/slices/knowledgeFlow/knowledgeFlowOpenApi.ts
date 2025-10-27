@@ -228,6 +228,11 @@ const injectedRtkApi = api.injectEndpoints({
     getAllSchemas: build.query<GetAllSchemasApiResponse, GetAllSchemasApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/schemas` }),
     }),
+    getTableSchema: build.query<GetTableSchemaApiResponse, GetTableSchemaApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/tables/${queryArg.tableName}/schema`,
+      }),
+    }),
     rawSqlQueryRead: build.mutation<RawSqlQueryReadApiResponse, RawSqlQueryReadApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/sql/read`,
@@ -606,6 +611,13 @@ export type GetAllSchemasApiArg = {
   /** Name of the tabular database */
   dbName: string;
 };
+export type GetTableSchemaApiResponse = /** status 200 Successful Response */ TabularSchemaResponse;
+export type GetTableSchemaApiArg = {
+  /** Name of the tabular database */
+  dbName: string;
+  /** Name of the table */
+  tableName: string;
+};
 export type RawSqlQueryReadApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
 export type RawSqlQueryReadApiArg = {
   /** Name of the tabular database */
@@ -939,7 +951,7 @@ export type TabularColumnSchema = {
   dtype: "string" | "integer" | "float" | "boolean" | "datetime" | "unknown";
 };
 export type TabularSchemaResponse = {
-  document_name: string;
+  table_name: string;
   columns: TabularColumnSchema[];
   row_count?: number | null;
 };
@@ -1244,6 +1256,8 @@ export const {
   useLazyListTableNamesQuery,
   useGetAllSchemasQuery,
   useLazyGetAllSchemasQuery,
+  useGetTableSchemaQuery,
+  useLazyGetTableSchemaQuery,
   useRawSqlQueryReadMutation,
   useRawSqlQueryWriteMutation,
   useDeleteTableMutation,

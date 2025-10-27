@@ -19,6 +19,7 @@ from typing import Dict, List, Optional
 from fred_core import Action, KeycloakUser, Resource, authorize
 from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo
+
 from knowledge_flow_backend.features.tabular.structures import (
     DTypes,
     RawSQLRequest,
@@ -48,9 +49,7 @@ class TabularService:
         Falls back to the default database if db_name is unknown.
         """
         if db_name not in self.stores_info:
-            logger.warning(
-                f"Unknown database '{db_name}', falling back to default database '{self.default_db}'"
-            )
+            logger.warning(f"Unknown database '{db_name}', falling back to default database '{self.default_db}'")
             if not self.default_db or self.default_db not in self.stores_info:
                 raise ValueError(f"Unknown database: {db_name} and no valid fallback configured")
             db_name = self.default_db
@@ -96,12 +95,9 @@ class TabularService:
         table_name = self._sanitize_table_name(table_name)
         store = self._get_store(db_name)
         schema = store.get_table_schema(table_name)
-        columns = [
-            TabularColumnSchema(name=col, dtype=self._map_sql_type_to_literal(dtype))
-            for col, dtype in schema
-        ]
+        columns = [TabularColumnSchema(name=col, dtype=self._map_sql_type_to_literal(dtype)) for col, dtype in schema]
         count_df = store.execute_sql_query(f'SELECT COUNT(*) AS count FROM "{table_name}"')
-        row_count = count_df["count"][0]
+        row_count = int(count_df["count"].iloc[0])
         return TabularSchemaResponse(table_name=table_name, columns=columns, row_count=row_count)
 
     @authorize(action=Action.READ, resource=Resource.TABLES)
@@ -112,12 +108,9 @@ class TabularService:
         for table in table_names:
             try:
                 schema_info = store.get_table_schema(table)
-                columns = [
-                    TabularColumnSchema(name=col_name, dtype=self._map_sql_type_to_literal(col_type))
-                    for col_name, col_type in schema_info
-                ]
+                columns = [TabularColumnSchema(name=col_name, dtype=self._map_sql_type_to_literal(col_type)) for col_name, col_type in schema_info]
                 count_df = store.execute_sql_query(f'SELECT COUNT(*) AS count FROM "{table}"')
-                row_count = count_df["count"][0]
+                row_count = int(count_df["count"].iloc[0])
                 responses.append(TabularSchemaResponse(table_name=table, columns=columns, row_count=row_count))
             except Exception as e:
                 logger.warning(f"[{db_name}] Failed to load schema for {table}: {e}")
