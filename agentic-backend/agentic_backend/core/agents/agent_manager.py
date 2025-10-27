@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from agentic_backend.common.structures import AgentSettings, Configuration
 from agentic_backend.core.agents.agent_flow import AgentFlow
