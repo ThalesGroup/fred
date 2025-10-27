@@ -21,7 +21,7 @@ from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_cu
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.tabular.service import TabularService
-from knowledge_flow_backend.features.tabular.structures import RawSQLRequest, TabularQueryResponse, TabularSchemaResponse, ListTableResponse
+from knowledge_flow_backend.features.tabular.structures import ListTableResponse, RawSQLRequest, TabularQueryResponse, TabularSchemaResponse
 
 logger = logging.getLogger(__name__)
 

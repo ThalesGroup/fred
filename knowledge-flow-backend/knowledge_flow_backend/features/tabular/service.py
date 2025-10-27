@@ -22,9 +22,9 @@ from fred_core.store.structures import StoreInfo
 
 from knowledge_flow_backend.features.tabular.structures import (
     DTypes,
+    ListTableResponse,
     RawSQLRequest,
     TabularColumnSchema,
-    ListTableResponse,
     TabularQueryResponse,
     TabularSchemaResponse,
 )
