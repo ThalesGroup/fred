@@ -62,7 +62,7 @@ Always remember: **tool binding is not automatic**. It must be done explicitly i
 
 ```python
 async def async_init(self):
-        self.model = get_model(self.agent_settings.model)
+        self.model = get_default_chat_model()
         self.mcp_client = await get_mcp_client_for_agent(self.agent_settings)
         self.toolkit = TabularToolkit(self.mcp_client)
         self.model = self.model.bind_tools(self.toolkit.get_tools())
@@ -97,7 +97,7 @@ class Georges(AgentFlow):
         super().__init__(agent_settings = agent_settings)
 
     async def async_init(self):
-        self.model = get_model(self.agent_settings.model)
+        self.model = get_default_chat_model()
         self.base_prompt = self._generate_prompt()
         self._graph = self._build_graph()
 

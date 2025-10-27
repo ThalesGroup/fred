@@ -1,19 +1,28 @@
-# agentic_backend/agents/mcp/mcp_agent.py
 # Copyright Thales 2025
-# Licensed under the Apache License, Version 2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import json
 import logging
 from typing import Any, Dict
 
-from fred_core import get_model
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
-from langgraph.prebuilt import tools_condition
+from langgraph.prebuilt import ToolNode, tools_condition
 
+from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
-from agentic_backend.common.resilient_tool_node import make_resilient_tools_node
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
@@ -23,6 +32,8 @@ logger = logging.getLogger(__name__)
 # Tuning spec (UI-editable)
 # ---------------------------
 MCP_TUNING = AgentTuning(
+    role="Define here the high-level role of the MCP agent.",
+    description="Define here a detailed description of the MCP agent's purpose and behavior.",
     fields=[
         FieldSpec(
             key="prompts.system",
@@ -43,7 +54,7 @@ MCP_TUNING = AgentTuning(
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
-    ]
+    ],
 )
 
 
@@ -63,11 +74,9 @@ class MCPAgent(AgentFlow):
     # ---------------------------
     async def async_init(self):
         self.mcp = MCPRuntime(
-            agent_settings=self.agent_settings,
-            # If you expose runtime scoping (tenant/library/time), keep this provider:
-            context_provider=lambda: self.get_runtime_context(),
+            agent=self,
         )
-        self.model = get_model(self.agent_settings.model)
+        self.model = get_default_chat_model()
         await self.mcp.init()
         self.model = self.model.bind_tools(self.mcp.get_tools())
         self._graph = self._build_graph()
@@ -88,16 +97,9 @@ class MCPAgent(AgentFlow):
 
         # LLM node
         builder.add_node("reasoner", self.reasoner)
-
-        # Tools node with resilient refresh/rebind on transient failures
-        async def _refresh_and_rebind():
-            self.model = await self.mcp.refresh_and_bind(self.model)
-
-        tools_node = make_resilient_tools_node(
-            get_tools=self.mcp.get_tools,
-            refresh_cb=_refresh_and_rebind,
-        )
-        builder.add_node("tools", tools_node)
+        tools = self.mcp.get_tools()
+        tool_node = ToolNode(tools=tools)
+        builder.add_node("tools", tool_node)
 
         builder.add_edge(START, "reasoner")
         builder.add_conditional_edges(

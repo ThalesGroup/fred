@@ -62,6 +62,12 @@ DEFAULT_PROVIDER = "openai"
 
 # (TUNING block defines configurable fields for BOTH models)
 TUNING = AgentTuning(
+    role="dual_model_responder",
+    description=(
+        "An agent using a fast Router model for classification and a powerful "
+        "Generator model for final responses."
+    ),
+    tags=["academy"],
     fields=[
         # Router Model Configuration
         FieldSpec(
@@ -91,7 +97,7 @@ TUNING = AgentTuning(
             ui=UIHints(group="Generator Model"),
         ),
         # ... (other tuning fields follow) ...
-    ]
+    ],
 )
 
 

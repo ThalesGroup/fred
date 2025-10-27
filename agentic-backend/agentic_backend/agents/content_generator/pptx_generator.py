@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fred_core import VectorSearchHit, get_model
+from fred_core import VectorSearchHit
 from langchain.output_parsers import ResponseSchema, StructuredOutputParser
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -30,7 +30,9 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.util import Pt
 
+from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.kf_agent_asset_client import AssetRetrievalError
+from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
 from agentic_backend.common.rags_utils import (
     attach_sources_to_llm_response,
     ensure_ranks,
@@ -38,7 +40,6 @@ from agentic_backend.common.rags_utils import (
     sort_hits,
 )
 from agentic_backend.common.structures import AgentChatOptions
-from agentic_backend.common.vector_search_client import VectorSearchClient
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.runtime_context import (
@@ -59,6 +60,8 @@ logger = logging.getLogger(__name__)
 # Tuning (UI schema)
 # -----------------------------
 RAG_TUNING = AgentTuning(
+    role="slide_maker",
+    description="An agent that generates PowerPoint slides with LLM content and provides a download link.",
     fields=[
         FieldSpec(
             key="prompts.system",
@@ -150,7 +153,7 @@ Structured data:
             default="template_fiche_ref_projet.pptx",
             ui=UIHints(group="PowerPoint"),
         ),
-    ]
+    ],
 )
 
 
@@ -180,8 +183,8 @@ class Sloan(AgentFlow):
 
     async def async_init(self):
         """Initialize model, search client, parser, and prompt."""
-        self.model = get_model(self.agent_settings.model)
-        self.search_client = VectorSearchClient()
+        self.model = get_default_chat_model()
+        self.search_client = VectorSearchClient(agent=self)
         self._graph = self._build_graph()
 
         # Structured output schema (header + body)

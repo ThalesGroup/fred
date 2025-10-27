@@ -66,15 +66,26 @@ export function useChatSocket(params: {
   // --- Connect / Close ---
 
   const connect = useCallback(async (): Promise<WebSocket> => {
-    const existing = webSocketRef.current;
-    if (existing && existing.readyState === WebSocket.OPEN) return existing;
-
-    if (existing && (existing.readyState === WebSocket.CLOSING || existing.readyState === WebSocket.CLOSED)) {
-      webSocketRef.current = null;
-    }
-
     await KeyCloakService.ensureFreshToken(30);
     const token = KeyCloakService.GetToken();
+
+    const existing = webSocketRef.current;
+    // Reconnect whenever Keycloak rotates the access token so backend calls use the fresh identity.
+    const tokenChanged = Boolean(token && wsTokenRef.current && wsTokenRef.current !== token);
+
+    if (existing) {
+      if (existing.readyState === WebSocket.OPEN && !tokenChanged) {
+        return existing;
+      }
+
+      try {
+        existing.close();
+      } catch (err) {
+        console.warn("[ChatSocket] error closing stale WebSocket:", err);
+      } finally {
+        webSocketRef.current = null;
+      }
+    }
 
     const rawWs = toWsUrl(getConfig().backend_url_api, "/agentic/v1/chatbot/query/ws");
     const url = new URL(rawWs);
@@ -95,6 +106,7 @@ export function useChatSocket(params: {
 
       socket.onclose = () => {
         webSocketRef.current = null;
+        wsTokenRef.current = null;
         setWaitResponse(false);
       };
 
@@ -153,6 +165,7 @@ export function useChatSocket(params: {
     const ws = webSocketRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) ws.close();
     webSocketRef.current = null;
+    wsTokenRef.current = null;
   }, []);
 
   useEffect(() => {

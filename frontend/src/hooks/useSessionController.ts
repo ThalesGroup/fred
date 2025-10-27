@@ -13,13 +13,13 @@
 // limitations under the License.
 
 import { useEffect, useMemo, useState } from "react";
+import { AnyAgent } from "../common/agent";
 import {
   SessionSchema,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
   useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
 } from "../slices/agentic/agenticOpenApi";
-import { AnyAgent } from "../common/agent";
 
 type AgentBySessionMap = Record<string, string>;
 
@@ -95,8 +95,7 @@ export function useSessionController() {
       sessionId: currentSession.id,
       mappedName,
       resolved: resolved ? { name: resolved.name, nickname: resolved.name } : null,
-      fallback:
-        !resolved && agents[0] ? { name: agents[0].name, nickname: agents[0].name } : null,
+      fallback: !resolved && agents[0] ? { name: agents[0].name, nickname: agents[0].name } : null,
       final: finalFlow ? { name: finalFlow.name, nickname: finalFlow.name } : null,
     });
 
@@ -109,7 +108,7 @@ export function useSessionController() {
       setAgents(flowsData);
       L.group(
         "HYDRATE flows",
-        flowsData.map((f) => ({ name: f.name, role: f.role })),
+        flowsData.map((f) => ({ name: f.name, role: f.tuning.role })),
       );
     }
   }, [flowsLoading, flowsData]);

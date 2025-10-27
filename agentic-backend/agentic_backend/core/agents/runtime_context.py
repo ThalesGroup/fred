@@ -31,6 +31,9 @@ class RuntimeContext(BaseModel):
     selected_template_ids: list[str] | None = None
     selected_chat_context_ids: list[str] | None = None
     search_policy: str | None = None
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
+    access_token_expires_at: Optional[int] = None
 
 
 # Type alias for context provider functions
@@ -70,3 +73,17 @@ def get_chat_context_libraries_ids(context: RuntimeContext | None) -> list[str] 
     if not context:
         return None
     return context.selected_chat_context_ids
+
+
+def get_access_token(context: RuntimeContext | None) -> Optional[str]:
+    """Helper to extract access token from context."""
+    if not context:
+        return None
+    return context.access_token
+
+
+def get_refresh_token(context: RuntimeContext | None) -> Optional[str]:
+    """Helper to extract refresh token from context."""
+    if not context:
+        return None
+    return context.refresh_token

@@ -31,6 +31,7 @@ from typing import (
     cast,
 )
 
+from fred_core import get_keycloak_client_id, get_keycloak_url
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
@@ -58,6 +59,9 @@ from agentic_backend.common.structures import (
     AgentChatOptions,
     AgentSettings,
     ChatContextMessage,
+)
+from agentic_backend.common.user_token_refresher import (
+    refresh_user_access_token_from_keycloak,
 )
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec
 from agentic_backend.core.agents.agent_state import Prepared, resolve_prepared
@@ -88,12 +92,13 @@ class AgentFlow:
     and for calling `get_compiled_graph()` when they are ready to execute the agent.
     """
 
-    # Subclasses MUST override this with a concrete AgentTuning
-    tuning: ClassVar[Optional[AgentTuning]] = None
+    # ------------------------------------------------
+    # 1. CLASS VARIABLES (Schema/Defaults, required by all instances)
+    # ------------------------------------------------
+    tuning: ClassVar[AgentTuning]
     default_chat_options: ClassVar[Optional[AgentChatOptions]] = None
-    # LangGraph/LangChain injects this dynamically, but we define it here
-    # for type checking. It will hold in particular the 'configurable' dict
-    # with the end_user_id when the node is executed.
+
+    _tuning: AgentTuning
     run_config: RunnableConfig = {}  # Use an empty dict as the default/initial value
 
     def __init__(self, agent_settings: AgentSettings):
@@ -117,8 +122,87 @@ class AgentFlow:
         self._graph = None  # Will be built in async_init
         self.streaming_memory = MemorySaver()
         self.compiled_graph: Optional[CompiledStateGraph] = None
-        self.runtime_context: Optional[RuntimeContext] = None
-        self.asset_client = KfAgentAssetClient()
+
+    def apply_settings(self, new_settings: AgentSettings) -> None:
+        """
+        Apply the authoritative settings resolved by AgentManager.
+        No runtime merging with class defaults happens here.
+        """
+        self.agent_settings = new_settings.model_copy(deep=True)
+        # Use the resolved tuning from Manager; if missing, allow class-level as a hard fallback.
+        self._tuning = self.agent_settings.tuning or type(self).tuning
+        # Keep .tuning coherent on the settings object held by the instance
+        self.agent_settings.tuning = self._tuning
+
+    async def async_init(self, runtime_context: RuntimeContext):
+        """
+        Asynchronous initialization routine that must be implemented by subclasses.
+        """
+        self.runtime_context: RuntimeContext = runtime_context
+        self.asset_client = KfAgentAssetClient(agent=self)
+
+    def refresh_user_access_token(self) -> str:
+        """
+        Refreshes the user's access token and updates the session's run_config.
+        Returns the newly acquired access token.
+        """
+        refresh_token = self.runtime_context.refresh_token
+        if not refresh_token:
+            raise RuntimeError(
+                "Cannot refresh user access token: refresh_token missing from run_config."
+            )
+
+        keycloak_url = get_keycloak_url()
+        client_id = get_keycloak_client_id()
+        if not keycloak_url:
+            raise RuntimeError(
+                "User security realm_url is not configured for Keycloak."
+            )
+        if not client_id:
+            raise RuntimeError(
+                "User security client_id is not configured for Keycloak."
+            )
+
+        logger.info(
+            "SECURITY: Refreshing user access token via Keycloak realm %s", keycloak_url
+        )
+        payload = refresh_user_access_token_from_keycloak(
+            keycloak_url=keycloak_url,
+            client_id=client_id,
+            refresh_token=refresh_token,
+        )
+
+        new_access_token = payload.get("access_token")
+        new_refresh_token = payload.get("refresh_token") or refresh_token
+        if not new_access_token:
+            raise RuntimeError(
+                "Keycloak refresh response did not include access_token."
+            )
+
+        # Update RuntimeContext attributes (RuntimeContext does not implement item assignment).
+        try:
+            setattr(self.runtime_context, "access_token", new_access_token)
+            setattr(self.runtime_context, "refresh_token", new_refresh_token)
+        except Exception:
+            logger.debug(
+                "Could not set attributes on runtime_context; skipping attribute assignment."
+            )
+
+        expires_at = payload.get("expires_at_timestamp")
+        if expires_at:
+            try:
+                setattr(self.runtime_context, "access_token_expires_at", expires_at)
+            except Exception:
+                logger.debug(
+                    "Could not set access_token_expires_at on runtime_context; skipping attribute assignment."
+                )
+
+        logger.info(
+            "SECURITY: User access token refreshed successfully [token=%s] [expires_at=%s]",
+            new_access_token,
+            expires_at,
+        )
+        return new_access_token
 
     async def astream_updates(
         self,
@@ -140,9 +224,8 @@ class AgentFlow:
         (we just inject self.run_config first).
         - Accepts **kwargs in case you want to forward additional astream options later.
         """
-        # Make config available to node methods (e.g., get_end_user_id()).
+        # Make config available to node methods
         self.run_config = config or {}
-
         compiled = self.get_compiled_graph()
 
         # Preserve the exact streaming semantics you had before.
@@ -153,32 +236,6 @@ class AgentFlow:
             **kwargs,
         ):
             yield event
-
-    async def async_init(self):
-        """
-        Asynchronous initialization routine that must be implemented by subclasses.
-        """
-        pass
-
-    def apply_settings(self, new_settings: AgentSettings) -> None:
-        """
-        Live update (hot-swap) the effective configuration of this instance.
-
-        Why:
-        - The user may edit tuning fields from the UI; the controller persists and
-          calls this so the running instance reflects the latest values.
-
-        Behavior:
-        - Replace in-memory `AgentSettings`.
-        - Re-resolve `_tuning`: use `new_settings.tuning` when available, otherwise fall
-          back to the class-level `tuning` defaults.
-        - Note: this does not recompile the graph or rebuild models; call your own
-          re-init logic if tuneables require it.
-        """
-        merged_settings = type(self).merge_settings_with_class_defaults(new_settings)
-        self.agent_settings = merged_settings
-        self._tuning = merged_settings.tuning or type(self).tuning
-        self.agent_settings.tuning = self._tuning
 
     @staticmethod
     def ensure_any_message(msg: object) -> AnyMessage:
@@ -207,6 +264,23 @@ class AgentFlow:
         raw = await runnable.ainvoke(messages, **kwargs)
         return self.ensure_any_message(raw)
 
+    def recent_messages(
+        self,
+        messages: Sequence[AnyMessage],
+        *,
+        max_messages: int = 8,
+    ) -> List[AnyMessage]:
+        """
+        Return a shallow copy of the latest `max_messages` items.
+        Call this before invoking the LLM to keep prompts short while
+        the full dialogue remains in MessagesState for other nodes.
+        """
+        if max_messages is None or max_messages <= 0:
+            return []
+        if len(messages) <= max_messages:
+            return list(messages)
+        return list(messages[-max_messages:])
+
     @staticmethod
     def delta(*msgs: AnyMessage) -> MessagesState:
         """Return a MessagesState-compatible state update."""
@@ -227,26 +301,6 @@ class AgentFlow:
             "step_index": 0,
             # keep 'objective' unset; `plan()` will set it from latest human
         }
-
-    @classmethod
-    def merge_settings_with_class_defaults(
-        cls, settings: AgentSettings
-    ) -> AgentSettings:
-        merged = settings.model_copy(deep=True)
-
-        # Ensure tuning exists
-        if not merged.tuning:
-            merged.tuning = cls.tuning.model_copy(deep=True) if cls.tuning else None
-        else:
-            # Merge missing fields from class tuning
-            if cls.tuning and getattr(cls.tuning, "fields", None):
-                existing_keys = {f.key for f in (merged.tuning.fields or [])}
-                for f in cls.tuning.fields:
-                    if f.key not in existing_keys:
-                        merged.tuning.fields.append(f)
-
-        merged.chat_options = cls._merge_chat_options(merged.chat_options)
-        return merged
 
     @classmethod
     def _merge_chat_options(
@@ -279,6 +333,14 @@ class AgentFlow:
 
         return str(user_id)
 
+    def get_agent_settings(self) -> AgentSettings:
+        """Return the current effective AgentSettings for this instance."""
+        return self.agent_settings
+
+    def get_agent_tunings(self) -> AgentTuning:
+        """Return the current effective AgentTuning for this instance."""
+        return self._tuning
+
     def get_name(self) -> str:
         """
         Return the agent's name.
@@ -292,14 +354,14 @@ class AgentFlow:
         Return the agent's description. This is key for the leader to decide
         which agent to delegate to.
         """
-        return self.agent_settings.description
+        return self._tuning.description if self._tuning else ""
 
     def get_role(self) -> str:
         """
         Return the agent's role. This defines the agent's primary function and
         responsibilities within the system.
         """
-        return self.agent_settings.role
+        return self._tuning.role if self._tuning else ""
 
     def get_tags(self) -> List[str]:
         """
@@ -307,7 +369,7 @@ class AgentFlow:
         discovery in the UI. It is also used by leaders to select agents
         for their crew based on required skills.
         """
-        return self.agent_settings.tags or []
+        return self._tuning.tags if self._tuning else []
 
     def get_tuning_spec(self) -> Optional[AgentTuning]:
         """

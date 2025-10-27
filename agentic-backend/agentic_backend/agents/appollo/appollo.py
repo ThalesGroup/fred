@@ -13,21 +13,63 @@
 # limitations under the License.
 
 import logging
-from typing import Any, Dict, Sequence, TypedDict
+from typing import Any, Dict, Sequence, TypedDict, cast
 
-from fred_core import get_model
+from fred_core import ModelConfiguration, get_model
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.constants import END, START
 from langgraph.graph.state import CompiledStateGraph, StateGraph
 
 # Import your core leader components
 from agentic_backend.core.agents.agent_flow import AgentFlow
+from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.leader.base_agent_selector import RoutingDecision
 from agentic_backend.core.leader.leader_flow import LeaderFlow
 from agentic_backend.core.leader.llm_agent_selector import LLMAgentSelector
 from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_ROUTER_MODEL = "gpt-4o"
+DEFAULT_ROUTER_TEMP = 0.3
+
+DEFAULT_PROVIDER = "openai"
+
+TUNING = AgentTuning(
+    role="mini_llm_orchestrator",
+    description=(
+        "A minimal leader agent that routes tasks to experts using an LLM-based selector."
+    ),
+    tags=["orchestrator"],
+    fields=[
+        # Router Model Configuration
+        FieldSpec(
+            key="router.provider",
+            type="select",
+            title="Router Provider",
+            description="The model vendor for the fast classification model.",
+            default=DEFAULT_PROVIDER,
+            enum=["openai", "azure_openai", "ollama"],
+            ui=UIHints(group="Router Model"),
+        ),
+        FieldSpec(
+            key="router.model_name",
+            type="text",
+            title="Router Model ID",
+            description="Fast model ID for routing (e.g., gpt-4o-mini).",
+            default=DEFAULT_ROUTER_MODEL,
+            ui=UIHints(group="Router Model"),
+        ),
+        FieldSpec(
+            key="router.temperature",
+            type="number",
+            title="Router Temperature",
+            description="Temperature setting for the routing model.",
+            default=DEFAULT_ROUTER_TEMP,
+            ui=UIHints(group="Router Model"),
+        ),
+    ],
+)
 
 
 # ----------------------------------------------------------------------
@@ -52,35 +94,40 @@ class Appollo(LeaderFlow):
     and provides a final Answer.
     """
 
+    tuning = TUNING
+
     # --- Lifecycle / Bootstrap ------------------------------------------------
     async def async_init(self):
-        logger.info("Initializing Appollo...")
-
-        model_config = self.agent_settings.model
-        if model_config is None:
-            logger.error("Configuration error: agent_settings.model is missing.")
-            raise ValueError(
-                "agent_settings.model must be set to a valid ModelConfiguration."
-            )
+        router_provider = self.get_tuned_text("router.provider")
+        router_name = self.get_tuned_text("router.model_name")
+        router_temp = self.get_tuned_number("router.temperature")
+        router_cfg = ModelConfiguration(
+            name=cast(str, router_name or DEFAULT_ROUTER_MODEL),
+            provider=cast(str, router_provider or DEFAULT_PROVIDER),
+            settings={"temperature": router_temp or DEFAULT_ROUTER_TEMP},
+        )
+        self.router_model = get_model(router_cfg)
 
         logger.info(
-            f"Model configured: {model_config.name} (Provider: {model_config.provider})"
+            f"[AGENTS] agent=appollo "
+            f"model_provider={router_cfg.provider} "
+            f"modelname={router_cfg.name} settings={router_cfg.settings}"
         )
 
         # Primary model for final response (if needed)
-        self.model = get_model(model_config).bind(temperature=0, top_p=1)
+        self.model = get_model(router_cfg).bind(
+            temperature=self.get_tuned_number("router.temperature"), top_p=1
+        )
 
         # Expert registries
         self.experts: dict[str, AgentFlow] = {}
         self.compiled_expert_graphs: dict[str, CompiledStateGraph] = {}
 
         # Initialize the LLM-based AgentSelector (the core routing logic)
-        self.selector = LLMAgentSelector(model_config)
-        logger.info("LLMAgentSelector initialized successfully.")
+        self.selector = LLMAgentSelector(router_cfg)
 
         # Build the graph
         self._graph = self._build_graph()
-        logger.info("LangGraph structure built: [route] -> [execute] -> [respond].")
 
     # --- Expert Registry (Standard LeaderFlow functionality) -------------------
     def reset_crew(self) -> None:

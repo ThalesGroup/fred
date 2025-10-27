@@ -649,7 +649,10 @@ class ApplicationContext:
                 try:
                     database_name = cfg.database
                     if cfg.path is not None:
-                        store = SQLTableStore(driver=cfg.driver, path=Path(cfg.path))
+                        path = Path(cfg.path).expanduser()
+                        # ensure the path's parent directory exists
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        store = SQLTableStore(driver=cfg.driver, path=path)
                     else:
                         raise ValueError("The path must not be None")
 

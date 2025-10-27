@@ -21,10 +21,10 @@ from __future__ import annotations
 import logging
 from typing import List, TypedDict
 
-from fred_core import get_model
 from langchain_core.messages import AIMessage, AnyMessage
 from langgraph.graph import END, START, StateGraph
 
+from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
@@ -48,6 +48,9 @@ class AssetResponderState(TypedDict):
 
 # 2. Declare tunables: allow the user to specify which asset key to use.
 TUNING = AgentTuning(
+    role="asset_responder",
+    description="An agent that fetches user-uploaded assets and includes their content in responses.",
+    tags=["academy"],
     fields=[
         FieldSpec(
             key="asset.key",
@@ -57,7 +60,7 @@ TUNING = AgentTuning(
             default=DEFAULT_ASSET_KEY,
             ui=UIHints(group="User Assets"),
         ),
-    ]
+    ],
 )
 
 
@@ -68,7 +71,7 @@ class AssetResponder(AgentFlow):
 
     # 2. Runtime init: Initialize the asset service and graph
     async def async_init(self):
-        self.model = get_model(self.agent_settings.model)
+        self.model = get_default_chat_model()
         self._graph = self._build_graph()
         logger.info("AssetResponderAgent initialized with asset access.")
 

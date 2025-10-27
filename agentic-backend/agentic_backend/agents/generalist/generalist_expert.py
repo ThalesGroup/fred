@@ -16,12 +16,12 @@
 import logging
 from typing import Sequence
 
-from fred_core import get_model
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
 )
 
+from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.simple_agent_flow import SimpleAgentFlow
 from agentic_backend.core.runtime_source import expose_runtime_source
@@ -29,7 +29,9 @@ from agentic_backend.core.runtime_source import expose_runtime_source
 logger = logging.getLogger(__name__)
 
 TUNING = AgentTuning(
-    # ... (TUNING definition remains the same)
+    role="generalist",
+    description="Fallback generalist expert used to handle broad queries when no specialist applies.",
+    tags=["fallback"],
     fields=[
         FieldSpec(
             key="prompts.system",
@@ -67,8 +69,7 @@ class Georges(SimpleAgentFlow):
         super().__init__(*args, **kwargs)
         # Bind the model directly in __init__ if it's not resource-heavy,
         # or rely on SimpleAgentFlow's initialization
-        self.model = get_model(self.agent_settings.model)
-        logger.info(f"Georges initialized with model: {self.agent_settings.model}")
+        self.model = get_default_chat_model()
 
     async def arun(self, messages: Sequence[AnyMessage]) -> AIMessage:
         """
@@ -102,9 +103,6 @@ class Georges(SimpleAgentFlow):
         )
 
         # 5) Invoke the model
-        logger.info(
-            f"Georges: Invoking model {self.agent_settings.model} asynchronously..."
-        )
         try:
             response = await self.model.ainvoke(llm_messages)
             logger.info("Georges: LLM call successful (await complete).")

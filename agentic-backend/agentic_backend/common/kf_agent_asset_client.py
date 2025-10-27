@@ -1,15 +1,31 @@
-# agentic_backend/core/http/asset_client.py (Derived from base client)
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from __future__ import annotations
 
 import logging
 import re
 from dataclasses import dataclass
-from typing import BinaryIO, Optional
+from typing import TYPE_CHECKING, BinaryIO, Optional
 
 import requests
 
 from agentic_backend.common.kf_base_client import KfBaseClient
+
+if TYPE_CHECKING:
+    from agentic_backend.core.agents.agent_flow import AgentFlow
+
 
 logger = logging.getLogger(__name__)
 
@@ -50,37 +66,49 @@ class AssetUploadResult:
 class KfAgentAssetClient(KfBaseClient):
     """
     Client for fetching user-uploaded assets, inheriting security and retry logic.
+
+    Requires an access_token for all requests.
     """
 
-    def __init__(self):
-        # Initialize the base client, specifying the methods we allow (GET only)
-        super().__init__(allowed_methods=frozenset({"GET"}))
+    def __init__(self, agent: "AgentFlow"):
+        # Initialize the base client, specifying the methods we allow (GET and POST)
+        super().__init__(
+            agent=agent,
+            allowed_methods=frozenset({"GET", "POST"}),
+        )
 
-    def _get_asset_stream(self, agent: str, key: str) -> requests.Response:
+    def _get_asset_stream(
+        self, agent: str, key: str, access_token: str
+    ) -> requests.Response:
         """
         Fetches an asset from the backend. Returns a requests.Response object
         with stream=True set, allowing iteration over content chunks.
         Caller is responsible for closing the response stream.
+        Requires access_token for authorization.
         """
         # Endpoint: /agent-assets/{agent}/{key}
         path = f"/agent-assets/{agent}/{key}"
 
         # Use the base class's authenticated retry mechanism for a GET request.
-        # Setting stream=True is required for downloading file content.
-        r = self._request_with_auth_retry("GET", path, stream=True)
+        r = self._request_with_token_refresh(
+            "GET", path, access_token=access_token, stream=True
+        )
         r.raise_for_status()  # Raise HTTPError for bad status codes (4xx, 5xx)
         return r
 
-    def fetch_asset_content_text(self, agent: str, key: str) -> str:
+    def fetch_asset_content_text(self, agent: str, key: str, access_token: str) -> str:
         """
         Fetches the complete content of an asset, handles streaming/chunking,
         and returns the decoded content as a string.
 
         On failure (network, 404, etc.), raises AssetRetrievalError.
+        Requires access_token for authorization.
         """
         try:
-            # 1. Get the streamed response
-            response = self._get_asset_stream(agent=agent, key=key)
+            # 1. Get the streamed response, passing the required token
+            response = self._get_asset_stream(
+                agent=agent, key=key, access_token=access_token
+            )
 
             # 2. Read all content from the stream in chunks
             content_bytes = b""
@@ -93,8 +121,7 @@ class KfAgentAssetClient(KfBaseClient):
             # 4. Decode as UTF-8 text (assuming text asset)
             return content_bytes.decode("utf-8")
 
-        # --- Exception Handling ---
-
+        # ... (Exception Handling remains the same) ...
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code
             logger.error(
@@ -120,14 +147,18 @@ class KfAgentAssetClient(KfBaseClient):
                 f"Failed to read/decode asset '{key}' ({type(e).__name__})."
             ) from e
 
-    def fetch_asset_blob(self, agent: str, key: str) -> AssetBlob:
+    def fetch_asset_blob(self, agent: str, key: str, access_token: str) -> AssetBlob:
         """
         Why: Return raw bytes + HTTP metadata. The agent decides if it will:
              - inline a small text preview, or
              - emit an attachment for the UI to download/preview.
+
+        Requires access_token for authorization.
         """
         try:
-            resp = self._get_asset_stream(agent=agent, key=key)
+            resp = self._get_asset_stream(
+                agent=agent, key=key, access_token=access_token
+            )
             try:
                 chunks = []
                 total = 0
@@ -176,6 +207,7 @@ class KfAgentAssetClient(KfBaseClient):
         key: str,
         file_content: bytes | BinaryIO,
         filename: str,
+        access_token: str,  # --- NEW: Required access token
         content_type: Optional[str] = None,
         # NEW ARGUMENT: Explicit ID for the end-user (if the agent knows it)
         user_id_override: Optional[str] = None,
@@ -184,7 +216,7 @@ class KfAgentAssetClient(KfBaseClient):
         Uploads a file (generated by the agent) to the user's personal asset storage,
         optionally specifying the target user via user_id_override.
 
-        ... (Docstring updated for new argument) ...
+        Requires access_token for authorization.
         """
         # Endpoint: /user-assets/upload
         path = "/user-assets/upload"
@@ -205,9 +237,10 @@ class KfAgentAssetClient(KfBaseClient):
 
         # 3. Perform the POST request
         try:
-            r = self._request_with_auth_retry(
+            r = self._request_with_token_refresh(
                 "POST",
                 path,
+                access_token=access_token,  # Pass the required user token
                 files=files,
                 data=data,  # This now includes the user_id_override if present
             )
@@ -225,8 +258,8 @@ class KfAgentAssetClient(KfBaseClient):
                 document_uid=meta.get("document_uid", 0),
             )
 
+        # ... (Exception handling remains the same) ...
         except requests.exceptions.HTTPError as e:
-            # ... (Exception handling remains the same) ...
             status = e.response.status_code
             detail = (
                 e.response.json().get("detail", "No detail provided")
@@ -242,7 +275,6 @@ class KfAgentAssetClient(KfBaseClient):
             ) from e
 
         except Exception as e:
-            # ... (General exception handling remains the same) ...
             logger.error(f"General error uploading asset {key}: {e}", exc_info=True)
             raise AssetUploadError(
                 f"Failed to upload asset '{key}' ({type(e).__name__})."

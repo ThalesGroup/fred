@@ -63,3 +63,22 @@ class VectorSearchController:
             )
             # hits is expected to be List[VectorSearchHit]
             return hits
+
+        @router.post(
+            "/vector/test",
+            tags=["Vector Search"],
+            summary="Test endpoint that always returns a successful dummy response.",
+            description="A simple test endpoint for POST requests. Returns a fixed list of VectorSearchHit.",
+            response_model=list[VectorSearchHit],
+            operation_id="test_post_success",
+        )
+        def test_post_success(
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> List[VectorSearchHit]:
+            """Always succeeds and returns a dummy VectorSearchHit."""
+            logger.info("SECURITY: test_post_success called by user: %s", user.username)
+
+            # Construct a dummy hit to ensure the return type matches the schema
+            dummy_hit = VectorSearchHit(content="This is a test document chunk.", uid="test-doc-001", title="Dummy Test Document", score=0.99, rank=1, type="test")
+
+            return [dummy_hit]

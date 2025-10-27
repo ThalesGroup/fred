@@ -1,23 +1,36 @@
-# agentic_backend/agents/sentinel/sentinel.py
 # Copyright Thales 2025
-# Licensed under the Apache License, Version 2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict
 
-from fred_core import get_model
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
-from langgraph.prebuilt import tools_condition
-from pydantic import TypeAdapter
+from langgraph.prebuilt import ToolNode, tools_condition
 
+from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
-from agentic_backend.common.resilient_tool_node import make_resilient_tools_node
-from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_flow import AgentFlow
-from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from agentic_backend.core.agents.agent_spec import (
+    AgentTuning,
+    FieldSpec,
+    MCPServerRef,
+    UIHints,
+)
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +38,9 @@ logger = logging.getLogger(__name__)
 # Tuning spec (UI-editable)
 # ---------------------------
 SENTINEL_TUNING = AgentTuning(
+    role="sentinel_expert",
+    description="Sentinel expert for operations and monitoring using MCP tools (OpenSearch and KPIs).",
+    tags=["monitoring"],
     fields=[
         FieldSpec(
             key="prompts.system",
@@ -47,7 +63,11 @@ SENTINEL_TUNING = AgentTuning(
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
-    ]
+    ],
+    mcp_servers=[
+        MCPServerRef(name="mcp-kubernetes-server"),
+        # MCPServerRef(name="knowledge-ops"),
+    ],
 )
 
 
@@ -63,24 +83,18 @@ class SentinelExpert(AgentFlow):
 
     tuning = SENTINEL_TUNING
 
-    def __init__(self, agent_settings: AgentSettings):
-        super().__init__(agent_settings=agent_settings)
-        # MCP runtime keeps the tool client fresh and provides a current toolkit.
-        self.mcp = MCPRuntime(
-            agent_settings=self.agent_settings,
-            context_provider=lambda: self.get_runtime_context(),
-        )
-        # Accept list/dict tool payloads and raw strings (we’ll normalize)
-        self._any_list_adapter: TypeAdapter[List[Any]] = TypeAdapter(List[Any])
-
     # ---------------------------
     # Bootstrap
     # ---------------------------
-    async def async_init(self):
-        # 1) LLM
-        self.model = get_model(self.agent_settings.model)
+    async def async_init(self, runtime_context: RuntimeContext):
+        await super().async_init(runtime_context)
+
+        # 1) LLM. Here we use the default chat model from backend application context.
+        # In a real setup, you might want to allow tuning this per-agent.
+        self.model = get_default_chat_model()
 
         # 2) Tools
+        self.mcp = MCPRuntime(agent=self)
         await self.mcp.init()  # start MCP + toolkit
         self.model = self.model.bind_tools(self.mcp.get_tools())
 
@@ -88,7 +102,6 @@ class SentinelExpert(AgentFlow):
         self._graph = self._build_graph()
 
     async def aclose(self):
-        # Let AgentManager call this on shutdown.
         await self.mcp.aclose()
 
     # ---------------------------
@@ -105,18 +118,9 @@ class SentinelExpert(AgentFlow):
         # LLM node
         builder.add_node("reasoner", self.reasoner)
 
-        # Tools node, with resilient refresh
-        async def _refresh_and_rebind():
-            # On transient tool errors (401/timeout/stream close) refresh client & rebind.
-            self.model = await self.mcp.refresh_and_bind(self.model)
-
-        tools_node = make_resilient_tools_node(
-            get_tools=self.mcp.get_tools,
-            refresh_cb=_refresh_and_rebind,
-        )
-        builder.add_node("tools", tools_node)
-
-        # Flow: START → reasoner → (tools?) → reasoner → …
+        tools = self.mcp.get_tools()
+        tool_node = ToolNode(tools=tools)
+        builder.add_node("tools", tool_node)
         builder.add_edge(START, "reasoner")
         builder.add_conditional_edges("reasoner", tools_condition)
         builder.add_edge("tools", "reasoner")

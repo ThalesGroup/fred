@@ -14,11 +14,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import Mapping
 from inspect import iscoroutinefunction
-from typing import Awaitable, Callable, Iterable
+from typing import Iterable
 
 # ❌ remove anyio.abc TaskGroup import; we won't accept a TG anymore
 # import anyio
@@ -57,36 +56,6 @@ class AgentSupervisor:
                         "Agent %s aclose() failed (ignored).",
                         getattr(agent, "name", "<unnamed>"),
                     )
-
-    # ------------
-    # Retry engine
-    # ------------
-
-    # ✅ Drop the TaskGroup parameter; the caller just schedules this as an asyncio task.
-    async def run_retry_loop(self, retry_fn: Callable[[], Awaitable[None]]):
-        """
-        Long-lived retry loop. Caller is responsible for task lifecycle
-        (start with asyncio.create_task; cancel on shutdown).
-        """
-        try:
-            while True:
-                await asyncio.sleep(10)
-                try:
-                    await retry_fn()
-                except asyncio.CancelledError:
-                    # graceful shutdown
-                    raise
-                except Exception:
-                    logger.exception("Retry loop threw; continuing.")
-        except asyncio.CancelledError:
-            logger.info("Retry loop cancelled; exiting cleanly.")
-
-    def stop_retry_loop(self) -> None:
-        """
-        No-op in the current design: the AgentManager cancels the task that runs
-        `run_retry_loop`. Kept for API compatibility.
-        """
-        return
 
     # --------------------------
     # Leader–expert integration
