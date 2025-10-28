@@ -1265,6 +1265,7 @@
           "Tabular"
         ],
         "summary": "List available databases",
+        "description": "Return all available database names.",
         "operationId": "list_tabular_databases",
         "responses": {
           "200": {
@@ -1289,13 +1290,14 @@
         ]
       }
     },
-    "/knowledge-flow/v1/tabular/{db_name}/tables": {
-      "get": {
+    "/knowledge-flow/v1/tabular/load/{db_name}": {
+      "post": {
         "tags": [
           "Tabular"
         ],
-        "summary": "List tables in a database",
-        "operationId": "list_table_names",
+        "summary": "Load a specific database to be used in subsequent operations",
+        "description": "Explicitly load the database to be used for next queries.",
+        "operationId": "load_tabular_database",
         "security": [
           {
             "OAuth2PasswordBearer": []
@@ -1308,12 +1310,42 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "Name of the tabular database",
+              "description": "Name of the database to load",
               "title": "Db Name"
             },
-            "description": "Name of the tabular database"
+            "description": "Name of the database to load"
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/tabular/tables": {
+      "get": {
+        "tags": [
+          "Tabular"
+        ],
+        "summary": "List tables in the loaded database",
+        "description": "List all tables in the currently loaded database.",
+        "operationId": "list_tables_loaded_db",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1324,97 +1356,59 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
-      }
-    },
-    "/knowledge-flow/v1/tabular/{db_name}/schemas": {
-      "get": {
-        "tags": [
-          "Tabular"
-        ],
-        "summary": "Get schemas of all tables in a database",
-        "operationId": "get_all_schemas",
+        },
         "security": [
           {
             "OAuth2PasswordBearer": []
           }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/tabular/schemas": {
+      "get": {
+        "tags": [
+          "Tabular"
         ],
-        "parameters": [
-          {
-            "name": "db_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "description": "Name of the tabular database",
-              "title": "Db Name"
-            },
-            "description": "Name of the tabular database"
-          }
-        ],
+        "summary": "List schemas of all tables in the loaded database",
+        "description": "Return schemas for all tables in the currently loaded database.",
+        "operationId": "list_all_table_schemas_loaded_db",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/TabularSchemaResponse"
                   },
-                  "title": "Response Get All Schemas"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "type": "array",
+                  "title": "Response List All Table Schemas Loaded Db"
                 }
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
-    "/knowledge-flow/v1/tabular/{db_name}/tables/{table_name}/schema": {
+    "/knowledge-flow/v1/tabular/tables/{table_name}/schema": {
       "get": {
         "tags": [
           "Tabular"
         ],
-        "summary": "Get schema of a single table",
-        "operationId": "get_table_schema",
+        "summary": "Get schema of a specific table in the loaded database",
+        "operationId": "get_table_schema_loaded_db",
         "security": [
           {
             "OAuth2PasswordBearer": []
           }
         ],
         "parameters": [
-          {
-            "name": "db_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "description": "Name of the tabular database",
-              "title": "Db Name"
-            },
-            "description": "Name of the tabular database"
-          },
           {
             "name": "table_name",
             "in": "path",
@@ -1451,40 +1445,22 @@
         }
       }
     },
-    "/knowledge-flow/v1/tabular/{db_name}/sql/read": {
+    "/knowledge-flow/v1/tabular/sql/read": {
       "post": {
         "tags": [
           "Tabular"
         ],
-        "summary": "Execute a read-only SQL query",
-        "operationId": "raw_sql_query_read",
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "db_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "description": "Name of the tabular database",
-              "title": "Db Name"
-            },
-            "description": "Name of the tabular database"
-          }
-        ],
+        "summary": "Execute a read-only SQL query on the loaded database",
+        "operationId": "tabular_sql_read_loaded_db",
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RawSQLRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1507,43 +1483,30 @@
               }
             }
           }
-        }
-      }
-    },
-    "/knowledge-flow/v1/tabular/{db_name}/sql/write": {
-      "post": {
-        "tags": [
-          "Tabular"
-        ],
-        "summary": "Execute a write SQL query",
-        "operationId": "raw_sql_query_write",
+        },
         "security": [
           {
             "OAuth2PasswordBearer": []
           }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/tabular/sql/write": {
+      "post": {
+        "tags": [
+          "Tabular"
         ],
-        "parameters": [
-          {
-            "name": "db_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "description": "Name of the tabular database",
-              "title": "Db Name"
-            },
-            "description": "Name of the tabular database"
-          }
-        ],
+        "summary": "Execute a write SQL query on the loaded database",
+        "operationId": "tabular_sql_write_loaded_db",
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RawSQLRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1566,33 +1529,27 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
-    "/knowledge-flow/v1/tabular/{db_name}/tables/{table_name}": {
+    "/knowledge-flow/v1/tabular/tables/{table_name}": {
       "delete": {
         "tags": [
           "Tabular"
         ],
-        "summary": "Delete a table from a database",
-        "operationId": "delete_table",
+        "summary": "Delete a table from the loaded database",
+        "operationId": "delete_table_loaded_db",
         "security": [
           {
             "OAuth2PasswordBearer": []
           }
         ],
         "parameters": [
-          {
-            "name": "db_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "description": "Name of the tabular database",
-              "title": "Db Name"
-            },
-            "description": "Name of the tabular database"
-          },
           {
             "name": "table_name",
             "in": "path",

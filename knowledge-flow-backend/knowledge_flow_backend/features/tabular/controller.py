@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import logging
 from typing import List
 
@@ -21,14 +20,20 @@ from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_cu
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.tabular.service import TabularService
-from knowledge_flow_backend.features.tabular.structures import ListTableResponse, RawSQLRequest, TabularQueryResponse, TabularSchemaResponse
+from knowledge_flow_backend.features.tabular.structures import (
+    ListTableResponse,
+    RawSQLRequest,
+    TabularQueryResponse,
+    TabularSchemaResponse,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class TabularController:
     """
-    API controller to expose tabular tools (read and write) for multiple databases.
+    API controller exposing tabular operations for multiple databases.
+    The controller now supports explicit database loading before operations.
     """
 
     def __init__(self, router: APIRouter):
@@ -38,103 +43,220 @@ class TabularController:
         self._register_routes(router)
 
     def _register_routes(self, router: APIRouter):
-        @router.get("/tabular/databases", response_model=List[str], tags=["Tabular"], summary="List available databases", operation_id="list_tabular_databases")
+        # -------------------------------------------------------------
+        # DATABASE MANAGEMENT
+        # -------------------------------------------------------------
+
+        @router.get(
+            "/tabular/databases",
+            response_model=List[str],
+            tags=["Tabular"],
+            summary="List available databases",
+            operation_id="list_tabular_databases",
+        )
         async def list_databases(user: KeycloakUser = Depends(get_current_user)):
+            """Return all available database names."""
             try:
                 return self.service.list_databases(user)
             except Exception as e:
                 logger.exception("Failed to list databases")
-                raise e
+                raise HTTPException(status_code=500, detail=str(e))
 
-        @router.get("/tabular/{db_name}/tables", response_model=ListTableResponse, tags=["Tabular"], summary="List tables in a database", operation_id="list_table_names")
-        async def list_tables(db_name: str = Path(..., description="Name of the tabular database"), user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.TABLES)
-            try:
-                return self.service.list_tables(user, db_name)
-            except Exception as e:
-                logger.exception(f"Failed to list tables for {db_name}")
-                raise e
-
-        @router.get("/tabular/{db_name}/schemas", response_model=List[TabularSchemaResponse], tags=["Tabular"], summary="Get schemas of all tables in a database", operation_id="get_all_schemas")
-        async def get_schemas(db_name: str = Path(..., description="Name of the tabular database"), user: KeycloakUser = Depends(get_current_user)):
-            try:
-                return self.service.list_tables_with_schema(user, db_name)
-            except Exception as e:
-                logger.exception(f"Failed to get schemas for {db_name}")
-                raise e
-
-        @router.get("/tabular/{db_name}/tables/{table_name}/schema", response_model=TabularSchemaResponse, tags=["Tabular"], summary="Get schema of a single table", operation_id="get_table_schema")
-        async def get_table_schema(
-            db_name: str = Path(..., description="Name of the tabular database"), table_name: str = Path(..., description="Name of the table"), user: KeycloakUser = Depends(get_current_user)
+        @router.post(
+            "/tabular/load/{db_name}",
+            tags=["Tabular"],
+            summary="Load a specific database to be used in subsequent operations",
+            operation_id="load_tabular_database",
+        )
+        async def load_database(
+            db_name: str = Path(..., description="Name of the database to load"),
+            user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.TABLES)
+            """Explicitly load the database to be used for next queries."""
+            authorize_or_raise(user, Action.READ, Resource.TABLES_DATABASES)
             try:
-                return self.service.get_schema(user, db_name, table_name)
-            except ValueError as ve:
-                logger.warning(f"Database or table not found: {ve}")
-                raise HTTPException(status_code=404, detail=str(ve))
+                self.service.load_store(db_name)
+                return {"status": "ok", "loaded_db": db_name}
+            except ValueError as e:
+                logger.warning(f"Failed to load database '{db_name}': {e}")
+                raise HTTPException(status_code=404, detail=str(e))
             except Exception as e:
-                logger.exception(f"Failed to get schema for table '{table_name}' in database '{db_name}' exception : {e}")
+                logger.exception(f"Unexpected error while loading database '{db_name}', error: {e}")
                 raise HTTPException(status_code=500, detail="Internal server error")
 
-        @router.post(
-            "/tabular/{db_name}/sql/read",
-            response_model=TabularQueryResponse,
+        # -------------------------------------------------------------
+        # TABLE OPERATIONS
+        # -------------------------------------------------------------
+
+        @router.get(
+            "/tabular/tables",
+            response_model=ListTableResponse,
             tags=["Tabular"],
-            summary="Execute a read-only SQL query",
-            operation_id="raw_sql_query_read",
+            summary="List tables in the loaded database",
+            operation_id="list_tables_loaded_db",
         )
-        async def raw_sql_query_read(
-            db_name: str = Path(..., description="Name of the tabular database"),
-            request: RawSQLRequest = Body(...),
+        async def list_tables(user: KeycloakUser = Depends(get_current_user)):
+            """List all tables in the currently loaded database."""
+            authorize_or_raise(user, Action.READ, Resource.TABLES)
+            try:
+                return self.service.list_tables(user)
+            except RuntimeError as e:
+                logger.warning(f"No database loaded: {e}")
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": "no_database_loaded",
+                        "message": str(e),
+                        "available_databases": self.service.list_databases(user),
+                    },
+                )
+            except Exception as e:
+                logger.exception("Failed to list tables")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @router.get(
+            "/tabular/schemas",
+            response_model=List[TabularSchemaResponse],
+            tags=["Tabular"],
+            summary="List schemas of all tables in the loaded database",
+            operation_id="list_all_table_schemas_loaded_db",
+        )
+        async def get_all_schemas(user: KeycloakUser = Depends(get_current_user)):
+            """Return schemas for all tables in the currently loaded database."""
+            try:
+                return self.service.list_tables_with_schema(user)
+            except RuntimeError as e:
+                logger.warning(f"No database loaded: {e}")
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": "no_database_loaded",
+                        "message": str(e),
+                        "available_databases": self.service.list_databases(user),
+                    },
+                )
+            except Exception as e:
+                logger.exception("Failed to retrieve schemas")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @router.get(
+            "/tabular/tables/{table_name}/schema",
+            response_model=TabularSchemaResponse,
+            tags=["Tabular"],
+            summary="Get schema of a specific table in the loaded database",
+            operation_id="get_table_schema_loaded_db",
+        )
+        async def get_table_schema(
+            table_name: str = Path(..., description="Name of the table"),
             user: KeycloakUser = Depends(get_current_user),
         ):
+            authorize_or_raise(user, Action.READ, Resource.TABLES)
             try:
-                return self.service.query_read(user, db_name=db_name, request=request)
+                return self.service.get_schema(user, table_name)
+            except RuntimeError as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": "no_database_loaded",
+                        "message": str(e),
+                        "available_databases": self.service.list_databases(user),
+                    },
+                )
             except Exception as e:
-                logger.exception(f"[{db_name}] Read-only SQL execution failed")
-                raise e
+                logger.exception(f"Failed to get schema for {table_name}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        # -------------------------------------------------------------
+        # SQL QUERIES
+        # -------------------------------------------------------------
 
         @router.post(
-            "/tabular/{db_name}/sql/write",
+            "/tabular/sql/read",
             response_model=TabularQueryResponse,
             tags=["Tabular"],
-            summary="Execute a write SQL query",
-            operation_id="raw_sql_query_write",
+            summary="Execute a read-only SQL query on the loaded database",
+            operation_id="tabular_sql_read_loaded_db",
         )
-        async def raw_sql_query_write(
-            db_name: str = Path(..., description="Name of the tabular database"),
+        async def raw_sql_read(
             request: RawSQLRequest = Body(...),
             user: KeycloakUser = Depends(get_current_user),
         ):
             try:
-                return self.service.query_write(user, db_name=db_name, request=request)
+                return self.service.query_read(user, request=request)
+            except RuntimeError as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": "no_database_loaded",
+                        "message": str(e),
+                        "available_databases": self.service.list_databases(user),
+                    },
+                )
+            except Exception as e:
+                logger.exception("Read SQL query failed")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @router.post(
+            "/tabular/sql/write",
+            response_model=TabularQueryResponse,
+            tags=["Tabular"],
+            summary="Execute a write SQL query on the loaded database",
+            operation_id="tabular_sql_write_loaded_db",
+        )
+        async def raw_sql_write(
+            request: RawSQLRequest = Body(...),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                return self.service.query_write(user, request=request)
             except PermissionError as e:
-                logger.warning(f"[{db_name}] Forbidden write attempt: {e}")
+                logger.warning(f"Write attempt forbidden: {e}")
                 raise HTTPException(status_code=403, detail=str(e))
+            except RuntimeError as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": "no_database_loaded",
+                        "message": str(e),
+                        "available_databases": self.service.list_databases(user),
+                    },
+                )
             except Exception as e:
-                logger.exception(f"[{db_name}] Write SQL execution failed")
-                raise e
+                logger.exception("Write SQL query failed")
+                raise HTTPException(status_code=500, detail=str(e))
 
-        @router.delete("/tabular/{db_name}/tables/{table_name}", status_code=204, tags=["Tabular"], summary="Delete a table from a database", operation_id="delete_table")
+        # -------------------------------------------------------------
+        # DELETE TABLE
+        # -------------------------------------------------------------
+
+        @router.delete(
+            "/tabular/tables/{table_name}",
+            status_code=204,
+            tags=["Tabular"],
+            summary="Delete a table from the loaded database",
+            operation_id="delete_table_loaded_db",
+        )
         async def delete_table(
-            db_name: str = Path(..., description="Name of the tabular database"), table_name: str = Path(..., description="Table name to delete"), user: KeycloakUser = Depends(get_current_user)
+            table_name: str = Path(..., description="Table name to delete"),
+            user: KeycloakUser = Depends(get_current_user),
         ):
             authorize_or_raise(user, Action.DELETE, Resource.TABLES)
-
             try:
-                self.service._check_write_allowed(db_name)
-
                 if not table_name.isidentifier():
                     raise HTTPException(status_code=400, detail="Invalid table name")
-
-                self.service.delete_table(user=user, db_name=db_name, table_name=table_name)
-                logger.info(f"[{db_name}] Table '{table_name}' deleted successfully.")
-            except PermissionError as pe:
-                logger.warning(f"[{db_name}] Forbidden delete attempt: {pe}")
-                raise HTTPException(status_code=403, detail=str(pe))
-            except ValueError as ve:
-                raise HTTPException(status_code=400, detail=str(ve))
+                self.service.delete_table(user=user, table_name=table_name)
+                logger.info(f"Table '{table_name}' deleted successfully.")
+            except PermissionError as e:
+                raise HTTPException(status_code=403, detail=str(e))
+            except RuntimeError as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": "no_database_loaded",
+                        "message": str(e),
+                        "available_databases": self.service.list_databases(user),
+                    },
+                )
             except Exception as e:
-                logger.exception(f"[{db_name}] Failed to delete table '{table_name}'")
-                raise e
+                logger.exception(f"Failed to delete table '{table_name}'")
+                raise HTTPException(status_code=500, detail=str(e))
