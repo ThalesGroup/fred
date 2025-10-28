@@ -28,7 +28,17 @@ from typing import Sequence
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 
+from agentic_backend.core.agents.agent_spec import AgentTuning
 from agentic_backend.core.agents.simple_agent_flow import SimpleAgentFlow
+
+TUNING = AgentTuning(
+    role="Mini Doc Expert",
+    description=(
+        "A mock document-grounded expert that simulates answering questions "
+        "using retrieved documents. Returns a hard-coded answer with fake sources."
+    ),
+    tags=["academy"],
+)
 
 
 class MiniRagExpert(SimpleAgentFlow):
@@ -37,6 +47,8 @@ class MiniRagExpert(SimpleAgentFlow):
     - This expert simulates a grounded doc answer so LeaderFlow integration
       and UI rendering (sources, metadata) can be tested safely.
     """
+
+    tuning = TUNING
 
     async def arun(self, *, messages: Sequence[AnyMessage]) -> AIMessage:
         # Why a trivial read of the last user message:

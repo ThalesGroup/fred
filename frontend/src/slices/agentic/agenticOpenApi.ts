@@ -26,6 +26,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/agents/${queryArg.name}`, method: "DELETE" }),
     }),
+    listMcpServersAgenticV1AgentsMcpServersGet: build.query<
+      ListMcpServersAgenticV1AgentsMcpServersGetApiResponse,
+      ListMcpServersAgenticV1AgentsMcpServersGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/agents/mcp-servers` }),
+    }),
     listRuntimeSourceKeysAgenticV1AgentsSourceKeysGet: build.query<
       ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiResponse,
       ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiArg
@@ -175,6 +181,8 @@ export type DeleteAgentAgenticV1AgentsNameDeleteApiResponse = /** status 200 Suc
 export type DeleteAgentAgenticV1AgentsNameDeleteApiArg = {
   name: string;
 };
+export type ListMcpServersAgenticV1AgentsMcpServersGetApiResponse = /** status 200 Successful Response */ any;
+export type ListMcpServersAgenticV1AgentsMcpServersGetApiArg = void;
 export type ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiResponse = /** status 200 Successful Response */ any;
 export type ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiArg = void;
 export type RuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetApiResponse =
@@ -260,31 +268,8 @@ export type ValidationError = {
 export type HttpValidationError = {
   detail?: ValidationError[];
 };
-export type McpServerConfiguration = {
-  name: string;
-  /** MCP server transport. Can be sse, stdio, websocket or streamable_http */
-  transport?: string | null;
-  /** URL and endpoint of the MCP server */
-  url?: string | null;
-  /** How long (in seconds) the client will wait for a new event before disconnecting */
-  sse_read_timeout?: number | null;
-  /** Command to run for stdio transport. Can be uv, uvx, npx and so on. */
-  command?: string | null;
-  /** Args to give the command as a list. ex:  ['--directory', '/directory/to/mcp', 'run', 'server.py'] */
-  args?: string[] | null;
-  /** Environment variables to give the MCP server */
-  env?: {
-    [key: string]: string;
-  } | null;
-  /** If false, this MCP server is ignored. */
-  enabled?: boolean;
-};
 export type CreateMcpAgentRequest = {
   name: string;
-  mcp_servers: McpServerConfiguration[];
-  role: string;
-  description: string;
-  tags?: string[] | null;
 };
 export type UiHints = {
   multiline?: boolean;
@@ -346,7 +331,6 @@ export type AgentTuning = {
   description: string;
   tags?: string[];
   fields?: FieldSpec[];
-  legacy_mcp_servers?: McpServerConfiguration[];
   mcp_servers?: McpServerRef[];
 };
 export type AgentChatOptions = {
@@ -354,6 +338,25 @@ export type AgentChatOptions = {
   libraries_selection?: boolean;
   record_audio_files?: boolean;
   attach_files?: boolean;
+};
+export type McpServerConfiguration = {
+  name: string;
+  /** MCP server transport. Can be sse, stdio, websocket or streamable_http */
+  transport?: string | null;
+  /** URL and endpoint of the MCP server */
+  url?: string | null;
+  /** How long (in seconds) the client will wait for a new event before disconnecting */
+  sse_read_timeout?: number | null;
+  /** Command to run for stdio transport. Can be uv, uvx, npx and so on. */
+  command?: string | null;
+  /** Args to give the command as a list. ex:  ['--directory', '/directory/to/mcp', 'run', 'server.py'] */
+  args?: string[] | null;
+  /** Environment variables to give the MCP server */
+  env?: {
+    [key: string]: string;
+  } | null;
+  /** If false, this MCP server is ignored. */
+  enabled?: boolean;
 };
 export type Agent = {
   name: string;
@@ -639,7 +642,6 @@ export type AgentTuning2 = {
   description: string;
   tags?: string[];
   fields?: FieldSpec[];
-  legacy_mcp_servers?: McpServerConfiguration[];
   mcp_servers?: McpServerRef[];
 };
 export type Agent2 = {
@@ -758,6 +760,8 @@ export const {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
   useDeleteAgentAgenticV1AgentsNameDeleteMutation,
+  useListMcpServersAgenticV1AgentsMcpServersGetQuery,
+  useLazyListMcpServersAgenticV1AgentsMcpServersGetQuery,
   useListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetQuery,
   useLazyListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetQuery,
   useRuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetQuery,
