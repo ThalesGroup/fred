@@ -141,6 +141,9 @@
       "add_mcp_server": "+ Ajouter un Serveur MCP"
     },
     "errors": {
+      "updateFailed": "Échec de la mise à jour de l'agent",
+      "crewUpdateFailed": "Échec de la mise à jour de l'équipe",
+      "tuningUpdateFailed": "Échec de la mise à jour des réglages de l'agent",
       "creationFailedSummary": "Échec de la création de l'agent",
       "creationFailedDetailFallback": "Une erreur inattendue s'est produite lors de la création de l'agent."
     },

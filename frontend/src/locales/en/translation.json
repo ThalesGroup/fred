@@ -109,6 +109,7 @@
     "filter": "Filter",
     "create": "Create",
     "createMcpAgent": "Create New MCP Agent",
+    "createMcpAgentNote": "Create a new MCP agent with default configuration.",
     "noAgents": "No agents found",
     "noFavorites": "You haven't added any agents to your favorites yet",
     "noTag": "No agents with tag \"{{tag}}\"",
@@ -140,6 +141,9 @@
       "add_mcp_server": "+ Add a MCP server"
     },
     "errors": {
+      "updateFailed": "Failed to update agent",
+      "tuningUpdateFailed": "Failed to update agent tuning",
+      "crewUpdateFailed": "Failed to update leader crew",
       "creationFailedSummary": "Agent creation failed",
       "creationFailedDetailFallback": "An unexpected error occurred while creating the agent."
     },

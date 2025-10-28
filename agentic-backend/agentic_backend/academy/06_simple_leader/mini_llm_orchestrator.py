@@ -22,6 +22,7 @@ from langgraph.graph.state import CompiledStateGraph, StateGraph
 
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.leader.base_agent_selector import RoutingDecision
 from agentic_backend.core.leader.leader_flow import LeaderFlow
 from agentic_backend.core.leader.llm_agent_selector import LLMAgentSelector
@@ -93,8 +94,15 @@ class MiniLLMOrchestrator(LeaderFlow):
     and provides a final Answer.
     """
 
+    tuning = TUNING
+
     # --- Lifecycle / Bootstrap ------------------------------------------------
-    async def async_init(self):
+    async def async_init(
+        self, runtime_context: RuntimeContext, expert_agents: dict[str, AgentFlow]
+    ):
+        await super().async_init(
+            runtime_context=runtime_context, expert_agents=expert_agents
+        )
         router_provider = self.get_tuned_text("router.provider")
         router_name = self.get_tuned_text("router.model_name")
         router_temp = self.get_tuned_number("router.temperature")
@@ -104,7 +112,7 @@ class MiniLLMOrchestrator(LeaderFlow):
             settings={"temperature": router_temp or DEFAULT_ROUTER_TEMP},
         )
         self.router_model = get_model(router_cfg)
-
+        self.experts_agents = expert_agents
         logger.info(
             f"[AGENTS] agent=mini_llm_orchestrator "
             f"model_provider={router_cfg.provider} "
@@ -116,44 +124,53 @@ class MiniLLMOrchestrator(LeaderFlow):
             temperature=self.get_tuned_number("router.temperature"), top_p=1
         )
 
-        # Expert registries
-        self.experts: dict[str, AgentFlow] = {}
-        self.compiled_expert_graphs: dict[str, CompiledStateGraph] = {}
-
         # Initialize the LLM-based AgentSelector (the core routing logic)
         self.selector = LLMAgentSelector(router_cfg)
         logger.info("LLMAgentSelector initialized successfully.")
 
         # Build the graph
         self._graph = self._build_graph()
+        self.get_compiled_graph()
         logger.info("LangGraph structure built: [route] -> [execute] -> [respond].")
 
-    # --- Expert Registry (Standard LeaderFlow functionality) -------------------
-    def reset_crew(self) -> None:
-        logger.info("Resetting crew: clearing expert registries.")
-        self.experts.clear()
-        self.compiled_expert_graphs.clear()
-
-    def add_expert(
-        self, name: str, instance: AgentFlow, compiled_graph: CompiledStateGraph
-    ) -> None:
-        self.experts[name] = instance
-        self.compiled_expert_graphs[name] = compiled_graph
-        logger.info(f"Expert added to crew: {name}.")
-
     # --- Graph Definition (Route -> Execute -> Respond) -----------------------
+
+    # NEW: Conditional function to decide the next step
+    def _decide_next_step(self, state: OrchestratorState) -> str:
+        """Determines if execution is possible based on the routing decision."""
+        # The 'route' node sets decision to None if the crew is empty.
+        decision = state.get("decision")
+
+        # If decision is present AND the expert_name is non-empty, proceed to execute
+        if decision and decision.expert_name:
+            return "execute"
+
+        # Otherwise, skip execution and jump to respond (which handles the error message)
+        return "respond_error"
+
     def _build_graph(self) -> StateGraph:
-        # ... (Graph construction logic remains the same) ...
+        """Builds the LangGraph structure with conditional routing."""
         builder = StateGraph(OrchestratorState)
         builder.add_node("route", self.route)
         builder.add_node("execute", self.execute)
         builder.add_node("respond", self.respond)
 
         builder.add_edge(START, "route")
-        builder.add_edge("route", "execute")
+
+        # CHANGED: Conditional edge based on the outcome of the 'route' node
+        builder.add_conditional_edges(
+            "route",
+            self._decide_next_step,
+            {
+                "execute": "execute",  # Go to execute node
+                "respond_error": "respond",  # Jump to respond node for error message
+            },
+        )
+
         builder.add_edge("execute", "respond")
         builder.add_edge("respond", END)
 
+        # NOTE: We return the builder here, and call .compile() in async_init
         return builder
 
     # ----------------------------------------------------------------------
@@ -163,6 +180,34 @@ class MiniLLMOrchestrator(LeaderFlow):
     async def route(self, state: OrchestratorState) -> Dict[str, Any]:
         """Node 1: Use the LLMAgentSelector to choose the expert and rephrase the task."""
         logger.info("NODE: route - Starting routing step.")
+
+        # --- A. Check for available experts (NEW LOGIC) ---
+        if not self.experts:
+            error_message = f"Agent **{self.get_name()}** cannot route because its crew is empty. Please add experts to its crew configuration."
+            logger.error(
+                f"NODE: route - Crew is empty. Aborting execution: {error_message}"
+            )
+
+            # Prepare a final AIMessage with the error/guidance
+            final_error = AIMessage(
+                content=error_message,
+                response_metadata={
+                    "thought": "No experts found in crew. Skipping routing and execution.",
+                    "extras": {
+                        "node": "route",
+                        "task": "crew_check_failure",
+                    },  # Tag the message as an error
+                },
+            )
+
+            # Return state to trigger the conditional jump
+            return {
+                "decision": None,  # Signal the conditional edge to jump
+                "expert_result": final_error,  # Store the error message in expert_result
+                "messages": [final_error],
+                "objective": "No action taken due to empty crew.",
+            }
+        # --- End of NEW LOGIC ---
 
         # Get the latest HumanMessage (the objective)
         objective_msg = next(
@@ -214,6 +259,7 @@ class MiniLLMOrchestrator(LeaderFlow):
 
         decision = state.get("decision")
         if decision is None:
+            # This should now only happen if the state was corrupted elsewhere
             logger.error("NODE: execute - Critical error: Routing decision is missing.")
             raise ValueError("Routing decision is missing in state.")
 
@@ -280,22 +326,43 @@ class MiniLLMOrchestrator(LeaderFlow):
         expert_result = state.get("expert_result")
         objective = state.get("objective")
 
-        # This minimal step just relays the expert's content with context
-        if expert_result is None:
-            final_content = "I could not retrieve a definitive answer from the expert."
-            logger.warning("NODE: respond - Expert result was missing in state.")
+        # Check for the crew_check_failure tag, indicating the error message is ready to be delivered
+        is_error_message = (
+            "crew_check_failure"
+            in (expert_result.response_metadata or {}).get("extras", {}).values()
+            if expert_result
+            else False
+        )
+
+        if expert_result is None or is_error_message:
+            if is_error_message and expert_result:
+                # If it's the specific error message from 'route', deliver it directly
+                final_answer = expert_result
+            else:
+                # Default failure message
+                final_answer = AIMessage(
+                    content="I could not retrieve a definitive answer from the expert.",
+                    response_metadata={
+                        "extras": {"node": "respond", "task": "deliver_final_answer"}
+                    },
+                )
+
+            logger.info("NODE: respond - Delivering error/missing result.")
+
         else:
+            # Normal completion path: Frame the final answer using the objective and expert content
             final_content = f"**Query:** '{objective}'\n\n{expert_result.content}"
             logger.info(
                 "NODE: respond - Expert result is available. Framing final content."
             )
 
-        final_answer = AIMessage(
-            content=final_content,
-            response_metadata={
-                "extras": {"node": "respond", "task": "deliver_final_answer"}
-            },
-        )
+            final_answer = AIMessage(
+                content=final_content,
+                response_metadata={
+                    "extras": {"node": "respond", "task": "deliver_final_answer"}
+                },
+            )
+
         logger.info("NODE: respond - Final AIMessage constructed. Flow complete.")
 
         return {"messages": [final_answer]}

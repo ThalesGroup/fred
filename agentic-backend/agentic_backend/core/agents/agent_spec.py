@@ -1,4 +1,17 @@
-# agentic_backend/common/tuning_spec.py
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
@@ -22,6 +35,8 @@ FieldType = Literal[
 
 
 class UIHints(BaseModel):
+    """UI hints for rendering the field in a user interface."""
+
     multiline: bool = False
     max_lines: int = 6
     placeholder: Optional[str] = None
@@ -31,6 +46,8 @@ class UIHints(BaseModel):
 
 
 class FieldSpec(BaseModel):
+    """Specification for a tunable field in an agent."""
+
     key: str  # dotted path under agent.settings (e.g., "prompts.system")
     type: FieldType
     title: str
@@ -46,6 +63,10 @@ class FieldSpec(BaseModel):
 
 
 class MCPServerConfiguration(BaseModel):
+    """
+    Configuration for an MCP server.
+    """
+
     name: str
     transport: Optional[str] = Field(
         "sse",
@@ -72,6 +93,7 @@ class MCPServerConfiguration(BaseModel):
 
 class MCPServerRef(BaseModel):
     """
+    Reference to an MCP server.
     Fred rationale:
     - Agents reference logical servers by name.
     - Resolution (URL/transport/env) is done at runtime per env/tenant/user.

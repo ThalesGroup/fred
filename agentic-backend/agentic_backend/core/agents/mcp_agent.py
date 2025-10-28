@@ -25,6 +25,7 @@ from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ class MCPAgent(AgentFlow):
     # ---------------------------
     # Bootstrap
     # ---------------------------
-    async def async_init(self):
+    async def async_init(self, runtime_context: RuntimeContext):
         self.mcp = MCPRuntime(
             agent=self,
         )

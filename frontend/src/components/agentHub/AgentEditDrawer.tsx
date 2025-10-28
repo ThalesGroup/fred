@@ -243,6 +243,7 @@ export function AgentEditDrawer({
               }}
               isOptionEqualToValue={(option, value) => option.name === value.name}
               getOptionLabel={(option) => option.name}
+              disablePortal
               renderOption={(props, option) => (
                 <li {...props} key={option.name}>
                   <Box sx={{ display: "flex", flexDirection: "column" }}>
@@ -266,20 +267,19 @@ export function AgentEditDrawer({
                 <TextField
                   {...params}
                   size="small"
-                  label={t("agentHub.fields.mcp_servers", "MCP Servers")}
-                  placeholder={t("agentEditDrawer.selectMcpServers", "Select MCP servers")}
-                  helperText={
-                    normalizedKnownServers.length === 0
-                      ? t("agentEditDrawer.noMcpServers", "No MCP servers are currently available.")
-                      : undefined
-                  }
+                  label={t("agentHub.fields.mcp_servers")}
+                  placeholder={t("agentEditDrawer.selectMcpServers")}
+                  helperText={normalizedKnownServers.length === 0 ? t("agentEditDrawer.noMcpServers") : undefined}
+                  slotProps={{
+                    input: {
+                      sx: (theme) => ({
+                        fontSize: theme.typography.body2.fontSize,
+                      }),
+                    },
+                  }}
                 />
               )}
-              noOptionsText={
-                isLoadingKnownMcpServers
-                  ? t("common.loading", "Loading…")
-                  : t("agentEditDrawer.noMcpServers", "No MCP servers are currently available.")
-              }
+              noOptionsText={isLoadingKnownMcpServers ? t("common.loading") : t("agentEditDrawer.noMcpServers")}
             />
 
             {/* Dynamic Fields */}
@@ -298,23 +298,23 @@ export function AgentEditDrawer({
         <Box sx={{ p: 1.5, position: "sticky", bottom: 0, bgcolor: "background.paper" }}>
           <Stack direction="row" gap={1} justifyContent="flex-end">
             <Button variant="outlined" onClick={onClose}>
-              {t("common.cancel", "Cancel")}
+              {t("dialogs.cancel")}
             </Button>
             <Button
               variant="contained"
               disabled={isSaveDisabled}
               onClick={() => handleSave(false)} // Pass false for user-specific
             >
-              {t("agentEditDrawer.saveUser", "Save (User Only)")}
+              {t("agentEditDrawer.saveUser")}
             </Button>
-            {/* 🆕 NEW BUTTON: Global Save */}
+
             <Button
               variant="contained"
               color="secondary" // Use a different color to highlight global scope
               disabled={isSaveDisabled}
               onClick={() => handleSave(true)} // Pass true for global scope
             >
-              {t("agentEditDrawer.saveGlobal", "Save (Global)")}
+              {t("agentEditDrawer.saveGlobal")}
             </Button>
           </Stack>
         </Box>

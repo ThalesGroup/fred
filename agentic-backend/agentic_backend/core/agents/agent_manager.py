@@ -13,10 +13,10 @@
 # limitations under the License.
 
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, cast
 
 from agentic_backend.application_context import get_mcp_configuration
-from agentic_backend.common.structures import AgentSettings, Configuration
+from agentic_backend.common.structures import AgentSettings, Configuration, Leader
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_spec import (
@@ -127,6 +127,23 @@ class AgentManager:
         """
         if self.use_static_config_only:
             raise AgentUpdatesDisabled()
+
+        if new_settings.type == "leader":
+            new_leader_settings = cast(Leader, new_settings)
+            old_leader_settings = cast(
+                Leader, self.agent_settings.get(new_settings.name)
+            )
+            if old_leader_settings:
+                old_crew = set(old_leader_settings.crew or [])
+                new_crew = set(new_leader_settings.crew or [])
+                if old_crew != new_crew:
+                    logger.info(
+                        "[AGENTS] leader=%s crew changed from %s to %s",
+                        new_settings.name,
+                        old_crew,
+                        new_crew,
+                    )
+                    # If the crew has changed, we need to rewire the agent's connections
 
         name = new_settings.name
         tunings = new_settings.tuning

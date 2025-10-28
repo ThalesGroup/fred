@@ -46,6 +46,11 @@ class SimpleAgentFlow(AgentFlow):
     Developers only need to implement the asynchronous 'arun' method.
     """
 
+    async def async_init(self, runtime_context: RuntimeContext):
+        """Initializes the internal graph structure."""
+        self._graph = self._build_graph()
+        self.get_compiled_graph()
+
     # ------------------ Developer must override ------------------
     async def arun(self, *, messages: Sequence[AnyMessage]) -> AIMessage:
         """
@@ -85,12 +90,6 @@ class SimpleAgentFlow(AgentFlow):
         return {"messages": [result_message]}
 
     # ------------------ Lifecycle ------------------
-
-    async def async_init(self, runtime_context: RuntimeContext):
-        """Initializes the internal graph structure."""
-        self._graph = self._build_graph()
-        # Compile the graph so it can be streamed/invoked
-        self.compiled = self._graph.compile()
 
     # We can also add a placeholder for synchronous calls to prevent accidental use
     def invoke(self, *args, **kwargs):
