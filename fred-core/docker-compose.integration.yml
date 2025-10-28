@@ -12,3 +12,16 @@ services:
     ports:
       - "60051:60051"
       - "60052:60052"
+
+  openfga:
+    image: openfga/openfga:latest
+    command:
+      - "run"
+    environment:
+      OPENFGA_HTTP_ADDR: 0.0.0.0:7080
+      OPENFGA_GRPC_ADDR: 0.0.0.0:7081
+      OPENFGA_PLAYGROUND_ENABLED: false
+      FGA_API_TOKEN: test-token
+    ports:
+      - "7080:7080"
+      - "7081:7081"

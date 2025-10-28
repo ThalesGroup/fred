@@ -63,7 +63,44 @@ class SpiceDbRebacConfig(BaseModel):
     )
 
 
-RebacConfiguration = Annotated[Union[SpiceDbRebacConfig], Field(discriminator="type")]
+class OpenFgaRebacConfig(BaseModel):
+    """Configuration for an OpenFGA-backed relationship engine."""
+
+    type: Literal["openfga"] = "openfga"
+    api_url: AnyHttpUrl = Field(
+        ...,
+        description="Base URL for the OpenFGA HTTP API (e.g. https://fga.example.com)",
+    )
+    store_id: str = Field(..., description="Identifier of the OpenFGA store to target")
+    authorization_model_id: str | None = Field(
+        default=None,
+        description="Optional authorization model ID to use for read operations",
+    )
+    create_store_if_needed: bool = Field(
+        default=True,
+        description="Create the OpenFGA store if it does not already exist",
+    )
+    sync_schema_on_init: bool = Field(
+        default=True,
+        description="Synchronize the authorization model when creating the engine",
+    )
+    token_env_var: str = Field(
+        default="OPENFGA_API_TOKEN",
+        description="Environment variable that stores the OpenFGA API token",
+    )
+    timeout_millisec: int | None = Field(
+        default=None,
+        description="Optional timeout in milliseconds for OpenFGA API requests",
+    )
+    headers: dict[str, str] | None = Field(
+        default=None,
+        description="Static HTTP headers to send with each OpenFGA API request",
+    )
+
+
+RebacConfiguration = Annotated[
+    Union[SpiceDbRebacConfig, OpenFgaRebacConfig], Field(discriminator="type")
+]
 
 
 class SecurityConfiguration(BaseModel):
