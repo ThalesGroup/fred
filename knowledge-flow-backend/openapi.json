@@ -1320,15 +1320,7 @@
             "content": {
               "application/json": {
                 "schema": {
-<<<<<<< HEAD
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "title": "Response List Table Names"
-=======
                   "$ref": "#/components/schemas/ListTableResponse"
->>>>>>> main
                 }
               }
             }
@@ -1399,8 +1391,6 @@
         }
       }
     },
-<<<<<<< HEAD
-=======
     "/knowledge-flow/v1/tabular/{db_name}/tables/{table_name}/schema": {
       "get": {
         "tags": [
@@ -1461,7 +1451,6 @@
         }
       }
     },
->>>>>>> main
     "/knowledge-flow/v1/tabular/{db_name}/sql/read": {
       "post": {
         "tags": [
@@ -1633,7 +1622,6 @@
         }
       }
     },
-<<<<<<< HEAD
     "/knowledge-flow/v1/stat/list_datasets": {
       "get": {
         "tags": [
@@ -2285,8 +2273,6 @@
         ]
       }
     },
-=======
->>>>>>> main
     "/knowledge-flow/v1/tags": {
       "get": {
         "tags": [
@@ -2950,8 +2936,6 @@
         ]
       }
     },
-<<<<<<< HEAD
-=======
     "/knowledge-flow/v1/vector/test": {
       "post": {
         "tags": [
@@ -2983,7 +2967,6 @@
         ]
       }
     },
->>>>>>> main
     "/knowledge-flow/v1/kpi/query": {
       "post": {
         "tags": [
@@ -3996,7 +3979,6 @@
         ],
         "title": "BrowseDocumentsRequest"
       },
-<<<<<<< HEAD
       "DetectOutliersMLRequest": {
         "properties": {
           "features": {
@@ -4042,8 +4024,6 @@
         "type": "object",
         "title": "DetectOutliersRequest"
       },
-=======
->>>>>>> main
       "DocSummary": {
         "properties": {
           "abstract": {
@@ -4705,13 +4685,6 @@
         ],
         "title": "KPIQueryResultRow"
       },
-<<<<<<< HEAD
-      "LoadModelRequest": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-=======
       "ListTableResponse": {
         "properties": {
           "db_name": {
@@ -4724,21 +4697,27 @@
             },
             "type": "array",
             "title": "Tables"
->>>>>>> main
           }
         },
         "type": "object",
         "required": [
-<<<<<<< HEAD
-          "name"
-        ],
-        "title": "LoadModelRequest"
-=======
           "db_name",
           "tables"
         ],
         "title": "ListTableResponse"
->>>>>>> main
+      },
+      "LoadModelRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "LoadModelRequest"
       },
       "LogEventDTO": {
         "properties": {
@@ -4970,7 +4949,6 @@
         "type": "object",
         "title": "OrderBy"
       },
-<<<<<<< HEAD
       "PCARequest": {
         "properties": {
           "features": {
@@ -5042,8 +5020,6 @@
         ],
         "title": "PredictRowRequest"
       },
-=======
->>>>>>> main
       "ProcessDocumentsRequest": {
         "properties": {
           "files": {
@@ -5380,7 +5356,6 @@
         "type": "object",
         "title": "ResourceUpdate"
       },
-<<<<<<< HEAD
       "SaveModelRequest": {
         "properties": {
           "name": {
@@ -5394,8 +5369,6 @@
         ],
         "title": "SaveModelRequest"
       },
-=======
->>>>>>> main
       "SearchPolicy": {
         "properties": {
           "k_final": {
@@ -5550,7 +5523,6 @@
         ],
         "title": "SelectMetric"
       },
-<<<<<<< HEAD
       "SetDatasetRequest": {
         "properties": {
           "dataset_name": {
@@ -5564,8 +5536,6 @@
         ],
         "title": "SetDatasetRequest"
       },
-=======
->>>>>>> main
       "SortOption": {
         "properties": {
           "field": {
@@ -5755,11 +5725,6 @@
       },
       "TabularSchemaResponse": {
         "properties": {
-<<<<<<< HEAD
-          "document_name": {
-            "type": "string",
-            "title": "Document Name"
-=======
           "db_name": {
             "type": "string",
             "title": "Db Name"
@@ -5767,7 +5732,6 @@
           "table_name": {
             "type": "string",
             "title": "Table Name"
->>>>>>> main
           },
           "columns": {
             "items": {
@@ -5790,12 +5754,8 @@
         },
         "type": "object",
         "required": [
-<<<<<<< HEAD
-          "document_name",
-=======
           "db_name",
           "table_name",
->>>>>>> main
           "columns"
         ],
         "title": "TabularSchemaResponse"
@@ -6023,7 +5983,6 @@
         ],
         "title": "TimeBucket"
       },
-<<<<<<< HEAD
       "TrainModelRequest": {
         "properties": {
           "target": {
@@ -6054,8 +6013,6 @@
         ],
         "title": "TrainModelRequest"
       },
-=======
->>>>>>> main
       "ValidationError": {
         "properties": {
           "loc": {
