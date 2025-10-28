@@ -22,7 +22,6 @@ from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_spec import (
     AgentTuning,
     MCPServerConfiguration,
-    MCPServerRef,
 )
 from agentic_backend.core.agents.store.base_agent_store import (
     SCOPE_GLOBAL,

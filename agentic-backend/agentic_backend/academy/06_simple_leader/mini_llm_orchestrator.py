@@ -18,7 +18,7 @@ from typing import Any, Dict, Sequence, TypedDict, cast
 from fred_core import ModelConfiguration, get_model
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.constants import END, START
-from langgraph.graph.state import CompiledStateGraph, StateGraph
+from langgraph.graph.state import StateGraph
 
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
