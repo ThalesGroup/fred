@@ -79,6 +79,8 @@ from fred_core.security.backend_to_backend_auth import (
 from fred_core.security.keycloak import (
     decode_jwt,
     get_current_user,
+    get_keycloak_client_id,
+    get_keycloak_url,
     initialize_user_security,
     split_realm_url,
 )
@@ -167,4 +169,6 @@ __all__ = [
     "SQLTableStore",
     "StoreInfo",
     "ModelProvider",
+    "get_keycloak_url",
+    "get_keycloak_client_id",
 ]

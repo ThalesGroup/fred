@@ -11,7 +11,14 @@ const injectedRtkApi = api.injectEndpoints({
       UpdateAgentAgenticV1AgentsUpdatePutApiResponse,
       UpdateAgentAgenticV1AgentsUpdatePutApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/agents/update`, method: "PUT", body: queryArg.agentSettings }),
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/update`,
+        method: "PUT",
+        body: queryArg.agentSettings,
+        params: {
+          is_global: queryArg.isGlobal,
+        },
+      }),
     }),
     deleteAgentAgenticV1AgentsNameDelete: build.mutation<
       DeleteAgentAgenticV1AgentsNameDeleteApiResponse,
@@ -155,6 +162,7 @@ export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
 };
 export type UpdateAgentAgenticV1AgentsUpdatePutApiResponse = /** status 200 Successful Response */ any;
 export type UpdateAgentAgenticV1AgentsUpdatePutApiArg = {
+  isGlobal?: boolean;
   agentSettings:
     | ({
         type: "agent";
@@ -268,6 +276,8 @@ export type McpServerConfiguration = {
   env?: {
     [key: string]: string;
   } | null;
+  /** If false, this MCP server is ignored. */
+  enabled?: boolean;
 };
 export type CreateMcpAgentRequest = {
   name: string;
@@ -275,16 +285,6 @@ export type CreateMcpAgentRequest = {
   role: string;
   description: string;
   tags?: string[] | null;
-};
-export type ModelConfiguration = {
-  /** Provider of the AI model, e.g., openai, ollama, azure. */
-  provider?: string | null;
-  /** Model name, e.g., gpt-4o, llama2. */
-  name?: string | null;
-  /** Additional provider-specific settings, e.g., Azure deployment name. */
-  settings?: {
-    [key: string]: any;
-  } | null;
 };
 export type UiHints = {
   multiline?: boolean;
@@ -335,14 +335,19 @@ export type FieldSpec = {
     | null;
   ui?: UiHints;
 };
-export type McpServerSpec = {
-  allow_user_add?: boolean;
-  allowed_transports?: string[];
-  required_fields?: string[];
+export type McpServerRef = {
+  name: string;
+  require_tools?: string[];
 };
 export type AgentTuning = {
+  /** The agent's mandatory role for discovery. */
+  role: string;
+  /** The agent's mandatory description for the UI. */
+  description: string;
+  tags?: string[];
   fields?: FieldSpec[];
-  mcp_servers?: McpServerSpec | null;
+  legacy_mcp_servers?: McpServerConfiguration[];
+  mcp_servers?: McpServerRef[];
 };
 export type AgentChatOptions = {
   search_policy_selection?: boolean;
@@ -354,28 +359,20 @@ export type Agent = {
   name: string;
   enabled?: boolean;
   class_path?: string | null;
-  model?: ModelConfiguration | null;
-  tags?: string[];
-  role: string;
-  description: string;
   tuning?: AgentTuning | null;
-  /** List of active MCP server configurations for this agent. */
-  mcp_servers?: McpServerConfiguration[];
   chat_options?: AgentChatOptions;
+  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "agent";
 };
 export type Leader = {
   name: string;
   enabled?: boolean;
   class_path?: string | null;
-  model?: ModelConfiguration | null;
-  tags?: string[];
-  role: string;
-  description: string;
   tuning?: AgentTuning | null;
-  /** List of active MCP server configurations for this agent. */
-  mcp_servers?: McpServerConfiguration[];
   chat_options?: AgentChatOptions;
+  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "leader";
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];
@@ -534,6 +531,9 @@ export type RuntimeContext = {
   selected_template_ids?: string[] | null;
   selected_chat_context_ids?: string[] | null;
   search_policy?: string | null;
+  access_token?: string | null;
+  refresh_token?: string | null;
+  access_token_expires_at?: number | null;
   [key: string]: any;
 };
 export type ChatAskInput = {
@@ -542,6 +542,8 @@ export type ChatAskInput = {
   agent_name: string;
   runtime_context?: RuntimeContext | null;
   client_exchange_id?: string | null;
+  access_token?: string | null;
+  refresh_token?: string | null;
 };
 export type StreamEvent = {
   type?: "stream";
@@ -631,35 +633,33 @@ export type FrontendConfigDto = {
   user_auth: UserSecurity;
 };
 export type AgentTuning2 = {
+  /** The agent's mandatory role for discovery. */
+  role: string;
+  /** The agent's mandatory description for the UI. */
+  description: string;
+  tags?: string[];
   fields?: FieldSpec[];
-  mcp_servers?: McpServerSpec | null;
+  legacy_mcp_servers?: McpServerConfiguration[];
+  mcp_servers?: McpServerRef[];
 };
 export type Agent2 = {
   name: string;
   enabled?: boolean;
   class_path?: string | null;
-  model?: ModelConfiguration | null;
-  tags?: string[];
-  role: string;
-  description: string;
   tuning?: AgentTuning2 | null;
-  /** List of active MCP server configurations for this agent. */
-  mcp_servers?: McpServerConfiguration[];
   chat_options?: AgentChatOptions;
+  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "agent";
 };
 export type Leader2 = {
   name: string;
   enabled?: boolean;
   class_path?: string | null;
-  model?: ModelConfiguration | null;
-  tags?: string[];
-  role: string;
-  description: string;
   tuning?: AgentTuning2 | null;
-  /** List of active MCP server configurations for this agent. */
-  mcp_servers?: McpServerConfiguration[];
   chat_options?: AgentChatOptions;
+  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "leader";
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];

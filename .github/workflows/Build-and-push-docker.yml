@@ -2,7 +2,7 @@ name: Build and Push Docker Image
 
 on:
   push:
-    tags: [ 'code/v*' ]
+    tags: ["code/v*"]
 
 env:
   REGISTRY: ghcr.io
@@ -21,11 +21,11 @@ jobs:
         include:
           - name: agentic-backend
             context: ./
-            dockerfile: ./agentic_backend/dockerfiles/Dockerfile-prod
+            dockerfile: ./agentic-backend/dockerfiles/Dockerfile-prod
             image: agentic-backend
           - name: knowledge-flow-backend
             context: ./
-            dockerfile: ./knowledge_flow_backend/dockerfiles/Dockerfile-prod
+            dockerfile: ./knowledge-flow-backend/dockerfiles/Dockerfile-prod
             image: knowledge-flow-backend
           - name: frontend
             context: ./
@@ -49,7 +49,7 @@ jobs:
       # the next step define an "meta" variable
       # containing the image path with associated tags
       # Here only one tag : oci://registry/image:tag
-      
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -65,8 +65,8 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}      # oci://<registry>/<image>:<version>
-          labels: ${{ steps.meta.outputs.labels }}  # many various informations
+          tags: ${{ steps.meta.outputs.tags }} # oci://<registry>/<image>:<version>
+          labels: ${{ steps.meta.outputs.labels }} # many various informations
 
   create-release:
     needs: build-and-push
@@ -74,12 +74,11 @@ jobs:
     permissions:
       contents: write
     steps:
-
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: dummy                           # we do not care about the image, we only want to extract the version
+          images: dummy # we do not care about the image, we only want to extract the version
           tags: |
             type=match,pattern=code/(v.*),group=1
 
@@ -97,4 +96,3 @@ jobs:
             ```
           draft: false
           prerelease: false
-

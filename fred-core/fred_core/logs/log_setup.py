@@ -29,6 +29,7 @@ except Exception:  # optional in prod images
 
 logger = logging.getLogger(__name__)
 
+
 # --- JSON formatter kept tiny and portable ---
 class CompactJsonFormatter(logging.Formatter):
     def __init__(self, service_name: str):
@@ -81,10 +82,14 @@ class StoreEmitHandler(logging.Handler):
                 if payload
                 else record.levelname,  # type: ignore
                 logger=payload.get("logger", record.name) if payload else record.name,
-                file=payload.get("file", record.filename) if payload else record.filename,
+                file=payload.get("file", record.filename)
+                if payload
+                else record.filename,
                 line=payload.get("line", record.lineno) if payload else record.lineno,
                 msg=payload.get("msg", record.getMessage()) if payload else raw,
-                service=payload.get("service", self.service) if payload else self.service,
+                service=payload.get("service", self.service)
+                if payload
+                else self.service,
                 extra=payload.get("extra") if payload else None,
             )
 
@@ -111,7 +116,8 @@ def log_setup(
 ) -> None:
     root = logging.getLogger()
     root.setLevel(log_level.upper())
-
+    for h in list(root.handlers):
+        root.removeHandler(h)
     marker = f"_fred_handlers_{service_name}"
     if getattr(root, marker, False):
         return
@@ -122,9 +128,9 @@ def log_setup(
             rich_tracebacks=False,
             show_time=True,
             show_level=True,
-            show_path=True,                 # shows module/filename:line
+            show_path=True,  # shows module/filename:line
             log_time_format="%Y-%m-%d %H:%M:%S",
-            omit_repeated_times=False,      # ← force time on every line
+            omit_repeated_times=False,  # ← force time on every line
         )
         console.setLevel(log_level.upper())
         root.addHandler(console)
@@ -136,18 +142,23 @@ def log_setup(
     root.addHandler(store_h)
 
     # Fred: prevent client libraries from bouncing through our StoreEmitHandler.
-    for noisy in ("opensearch", "urllib3", "elastic_transport", "elasticsearch", "aiohttp"):
+    for noisy in (
+        "opensearch",
+        "urllib3",
+        "elastic_transport",
+        "elasticsearch",
+        "aiohttp",
+    ):
         lg = logging.getLogger(noisy)
-        lg.handlers.clear()        # their own handlers (if any) → gone
+        lg.handlers.clear()  # their own handlers (if any) → gone
         lg.setLevel(logging.WARNING)
-        lg.propagate = False       # <-- key: do NOT bubble up to root
+        lg.propagate = False  # <-- key: do NOT bubble up to root
 
     # 4) Make uvicorn loggers flow into our handlers (no duplicates)
     if include_uvicorn:
         for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
             lg = logging.getLogger(name)
-            lg.handlers.clear()     # remove uvicorn’s own console handlers
-            lg.propagate = True     # forward to our root handlers
+            lg.handlers.clear()  # remove uvicorn’s own console handlers
+            lg.propagate = True  # forward to our root handlers
 
     setattr(root, marker, True)
-

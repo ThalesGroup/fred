@@ -20,8 +20,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Enough needed to detect changes
-      
+          fetch-depth: 0 # Enough needed to detect changes
+
       - name: Detect changes
         uses: dorny/paths-filter@v2
         id: changes
@@ -30,7 +30,7 @@ jobs:
             frontend:
               - 'frontend/**'
             agentic:
-              - 'agentic_backend/**'
+              - 'agentic-backend/**'
             deploy-chart:
               - 'deploy/charts/**'
             knowledge-flow:
@@ -45,8 +45,8 @@ jobs:
     if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
     strategy:
       matrix:
-        directory: [agentic_backend, knowledge-flow-backend, fred-core]
-        check: 
+        directory: [agentic-backend, knowledge-flow-backend, fred-core]
+        check:
           - lint
           - format
           - import-order
@@ -55,28 +55,28 @@ jobs:
           - type-check
         include:
           # Agentic backend runs when agentic or fred-core changes
-          - directory: agentic_backend
+          - directory: agentic-backend
             condition: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.fred-core == 'true'
-          # Knowledge flow backend runs when knowledge-flow or fred-core changes  
+          # Knowledge flow backend runs when knowledge-flow or fred-core changes
           - directory: knowledge-flow-backend
             condition: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
           # Fred core runs when fred-core changes
           - directory: fred-core
             condition: needs.detect-changes.outputs.fred-core == 'true'
     name: Code Quality - ${{ matrix.directory }} - ${{ matrix.check }}
-    
+
     steps:
       - uses: actions/checkout@v4
         if: ${{ matrix.condition }}
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      
+
       - name: Setup Python environment
         if: ${{ matrix.condition }}
         uses: ./.github/actions/setup-python-env
         with:
           working-directory: ${{ matrix.directory }}
-      
+
       - name: Run ${{ matrix.check }}
         if: ${{ matrix.condition }}
         run: |
@@ -139,23 +139,23 @@ jobs:
     runs-on: ubuntu-latest
     needs: detect-changes
     if: needs.detect-changes.outputs.frontend == 'true'
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22.13.0'
+          node-version: "22.13.0"
 
       - name: Frontend build
         run: |
           cd frontend/
           make build
-  
+
       - name: Frontend run
         run: |
           cd frontend/
@@ -182,41 +182,40 @@ jobs:
     runs-on: ubuntu-latest
     needs: detect-changes
     if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.fred-core == 'true'
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      
+
       - name: Setup Python environment
         uses: ./.github/actions/setup-python-env
         with:
-          working-directory: agentic_backend
-      
+          working-directory: agentic-backend
+
       - name: Check route security
         run: |
-          cd agentic_backend/
+          cd agentic-backend/
           make check-route-security
 
       - name: Test backend startup
         run: |
-          cd agentic_backend/
+          cd agentic-backend/
           timeout 30s make run || true
-      
-  
+
   # Job for knownledge-flow
   knowledge-flow-backend-checks:
     runs-on: ubuntu-latest
     needs: detect-changes
     if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      
+
       - name: Setup Python environment
         uses: ./.github/actions/setup-python-env
         with:
@@ -237,30 +236,30 @@ jobs:
     runs-on: ubuntu-latest
     needs: detect-changes
     if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.frontend == 'true'
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22.13.0'
-      
+          node-version: "22.13.0"
+
       - name: Setup Python for backends
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12.8'
+          python-version: "3.12.8"
 
       - name: Setup agentic backend dependencies
         if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.frontend == 'true'
         run: |
-          cd agentic_backend/
+          cd agentic-backend/
           make dev
 
-      - name: Setup knowledge-flow backend dependencies  
+      - name: Setup knowledge-flow backend dependencies
         if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.frontend == 'true'
         run: |
           cd knowledge-flow-backend/
@@ -288,7 +287,7 @@ jobs:
         run: |
           echo "Checking for differences in generated OpenAPI files..."
           DRIFT_DETECTED=false
-          
+
           if [ "${{ needs.detect-changes.outputs.agentic }}" == "true" ] || [ "${{ needs.detect-changes.outputs.frontend }}" == "true" ]; then
             if ! diff -q /tmp/openapi-backup/agenticOpenApi.ts frontend/src/slices/agentic/agenticOpenApi.ts > /dev/null 2>&1; then
               echo "❌ DRIFT DETECTED: agentic OpenAPI slice has changed but wasn't updated in the PR"
@@ -298,7 +297,7 @@ jobs:
               echo "✅ Agentic OpenAPI slice is up to date"
             fi
           fi
-          
+
           if [ "${{ needs.detect-changes.outputs.knowledge-flow }}" == "true" ] || [ "${{ needs.detect-changes.outputs.frontend }}" == "true" ]; then
             if ! diff -q /tmp/openapi-backup/knowledgeFlowOpenApi.ts frontend/src/slices/knowledgeFlow/knowledgeFlowOpenApi.ts > /dev/null 2>&1; then
               echo "❌ DRIFT DETECTED: knowledge-flow OpenAPI slice has changed but wasn't updated in the PR"
@@ -308,12 +307,12 @@ jobs:
               echo "✅ Knowledge-flow OpenAPI slice is up to date"
             fi
           fi
-          
+
           if [ "$DRIFT_DETECTED" == "true" ]; then
             echo ""
             echo "Backend API changes detected that require frontend slice regeneration."
             echo "This ensures the frontend stays in sync with backend API changes."
             exit 1
           fi
-          
+
           echo "✅ No OpenAPI drift detected - all slices are up to date"

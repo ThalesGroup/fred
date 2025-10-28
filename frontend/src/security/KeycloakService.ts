@@ -275,7 +275,14 @@ const GetToken = (): string | null => {
   }
   return keycloakInstance?.token || localStorage.getItem("keycloak_token");
 };
-
+const GetRefreshToken = (): string | null => {
+  if (!isSecurityEnabled) {
+    // In dev mode, there is no real refresh token
+    return "dev-refresh-token-dummy";
+  }
+  // 🔑 Access the refreshToken property on the KeycloakInstance
+  return keycloakInstance?.refreshToken || null;
+};
 const GetTokenParsed = (): any => {
   if (!isSecurityEnabled) {
     const tok = GetToken(); // returns our dev token in insecure mode
@@ -296,4 +303,5 @@ export const KeyCloakService = {
   GetUserRoles,
   GetTokenParsed,
   ensureFreshToken,
+  GetRefreshToken,
 };

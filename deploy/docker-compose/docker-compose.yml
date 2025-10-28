@@ -9,7 +9,7 @@ services:
     container_name: agentic-backend
     build:
       context: ../../
-      dockerfile: agentic_backend/dockerfiles/Dockerfile-dev
+      dockerfile: agentic-backend/dockerfiles/Dockerfile-dev
     env_file: "~/.fred/openai-api-key.env"
     environment:
       NO_PROXY: "*"
@@ -20,7 +20,7 @@ services:
       - --server.baseUrlPath
       - /fred
     volumes:
-      - ../../agentic_backend:/app
+      - ../../agentic-backend:/app
       - vol-kubeconfig:/home/fred-user/.kube:ro
     networks:
       - app-network
