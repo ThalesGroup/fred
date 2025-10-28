@@ -75,6 +75,8 @@ class MCPAgent(AgentFlow):
     # Bootstrap
     # ---------------------------
     async def async_init(self, runtime_context: RuntimeContext):
+        await super().async_init(runtime_context=runtime_context)
+        # Initialize MCP runtime and bind tools to the model.
         self.mcp = MCPRuntime(
             agent=self,
         )
