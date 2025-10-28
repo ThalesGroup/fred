@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 MCP_TUNING = AgentTuning(
     role="Define here the high-level role of the MCP agent.",
     description="Define here a detailed description of the MCP agent's purpose and behavior.",
+    tags=["mcp"],
     fields=[
         FieldSpec(
             key="prompts.system",

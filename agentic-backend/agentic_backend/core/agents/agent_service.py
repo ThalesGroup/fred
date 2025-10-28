@@ -17,16 +17,14 @@ import logging
 from fred_core import Action, KeycloakUser, Resource, authorize
 
 from agentic_backend.application_context import get_agent_store
-from agentic_backend.common.structures import AgentSettings
-from agentic_backend.core.agents.agent_manager import AgentManager
-from agentic_backend.core.agents.mcp_agent import MCPAgent
+from agentic_backend.common.structures import Agent, AgentSettings
+from agentic_backend.core.agents.agent_manager import (
+    AgentAlreadyExistsException,
+    AgentManager,
+)
+from agentic_backend.core.agents.mcp_agent import MCP_TUNING, MCPAgent
 
 logger = logging.getLogger(__name__)
-
-
-# --- Domain Exceptions ---
-class AgentAlreadyExistsException(Exception):
-    pass
 
 
 def _class_path(obj_or_type) -> str:
@@ -45,8 +43,6 @@ class AgentService:
         """
         Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
         """
-        name = agent_settings.name
-
         # Guard: disallow duplicates at the store level
         try:
             existing = self.store.get(name)
@@ -57,23 +53,14 @@ class AgentService:
             raise e
 
         # Ensure class_path points to MCPAgent
-        if not agent_settings.class_path:
-            agent_settings.class_path = _class_path(MCPAgent)
-
-        # Instantiate and init the runtime agent
-        # agent_instance = MCPAgent(agent_settings=agent_settings)
-        # await agent_instance.async_init()
-
-        # # Persist first (source of truth)
-        # self.store.save(agent_settings)
-
-        # # Register live (so UI/routing sees it immediately)
-        # self.agent_manager.register_dynamic_agent(agent_instance, agent_settings)
-
-        # logger.info("✅ Created MCP agent '%s'", name)
-        logger.error(
-            "⚠️ TODO AgentService.create_agent() incomplete; agent not created or stored."
+        agent_settings = Agent(
+            name=name,
+            class_path=_class_path(MCPAgent),
+            enabled=False,  # Start disabled until fully initialized
+            tuning=MCP_TUNING,  # default tuning
+            mcp_servers=[],  # Empty list by default; to be configured later
         )
+        self.agent_manager.create_dynamic_agent(agent_settings, MCP_TUNING)
 
     @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
     async def update_agent(

@@ -40,6 +40,10 @@ class AgentUpdatesDisabled(Exception):
         )
 
 
+class AgentAlreadyExistsException(Exception):
+    pass
+
+
 class AgentManager:
     """
     Manages the full lifecycle of AI agents (leaders and experts), including:
@@ -82,6 +86,29 @@ class AgentManager:
                 name,
                 tuning.dump() if tuning else "N/A",
             )
+
+    def create_dynamic_agent(
+        self, agent_settings: AgentSettings, agent_tuning: AgentTuning
+    ) -> None:
+        """
+        Registers a new dynamic agent into the runtime catalog.
+        Note: This does not persist the agent; use the AgentService for that.
+        """
+        if self.use_static_config_only:
+            raise AgentUpdatesDisabled()
+
+        existing = self.store.get(agent_settings.name)
+        if existing:
+            raise AgentAlreadyExistsException(
+                f"Agent '{agent_settings.name}' already exists."
+            )
+
+        self.store.save(agent_settings, agent_tuning)
+
+        self.agent_settings[agent_settings.name] = agent_settings
+        logger.info(
+            "[AGENTS] agent=%s registered as dynamic agent.", agent_settings.name
+        )
 
     async def update_agent(self, new_settings: AgentSettings, is_global: bool) -> bool:
         """

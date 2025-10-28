@@ -40,6 +40,11 @@ frontend_settings:
     logoName: "fred"
     siteDisplayName: "Fred"
 ai:
+  # In production we activate the configuration persistence mechanism
+  # that allow users to create/update agents at runtime and change
+  # their configuration without redeploying the application.
+  use_static_config_only: false
+
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
   # Timeout settings for the client
   timeout:

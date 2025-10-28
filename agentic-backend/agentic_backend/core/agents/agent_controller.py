@@ -28,9 +28,12 @@ from agentic_backend.common.structures import (
     AgentSettings,
 )
 from agentic_backend.common.utils import log_exception
-from agentic_backend.core.agents.agent_manager import AgentManager, AgentUpdatesDisabled
-from agentic_backend.core.agents.agent_service import (
+from agentic_backend.core.agents.agent_manager import (
     AgentAlreadyExistsException,
+    AgentManager,
+    AgentUpdatesDisabled,
+)
+from agentic_backend.core.agents.agent_service import (
     AgentService,
 )
 from agentic_backend.core.runtime_source import get_runtime_source_registry
