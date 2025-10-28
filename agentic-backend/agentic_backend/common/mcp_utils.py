@@ -41,6 +41,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from agentic_backend.common.error import UnsupportedTransportError
 from agentic_backend.core.agents.agent_spec import MCPServerConfiguration
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +140,7 @@ async def _cleanup_client_quiet(client: MultiServerMCPClient) -> None:
 async def get_connected_mcp_client_for_agent(
     agent_name: str,
     mcp_servers: List[MCPServerConfiguration],
-    access_token_provider: Callable[[], str | None] | None = None,
+    runtime_context: RuntimeContext,
     # -----------------------------------------------
 ) -> MultiServerMCPClient:
     """
@@ -160,13 +161,15 @@ async def get_connected_mcp_client_for_agent(
                 "This build supports only 'streamable_http'."
             )
 
-    # --- Fetch the required user token BEFORE connection attempts ---
-    access_token = access_token_provider() if access_token_provider else None
+    # --- Fetch the user token ONCE from the context ---
+    # This token is the candidate for all OAuth connections.
+    access_token = runtime_context.access_token
+    # --------------------------------------------------
+
     if not access_token:
         # 🟢 LOG 4: Missing token failure
-        logger.info("MCP connect init: Access token provider did not supply a token.")
-        raise ValueError(
-            "Access token provider did not supply a token. MCP access requires user identity."
+        logger.warning(
+            "MCP connect init: Access token provider did not supply a token."
         )
 
     # Build auth once for all servers
@@ -183,7 +186,33 @@ async def get_connected_mcp_client_for_agent(
     exceptions: list[Exception] = []
 
     for server in mcp_servers:
-        # Build kwargs
+        auth_mode = server.auth_mode
+        should_send_client_token = auth_mode != "no_token"
+        token_to_use = None
+        if should_send_client_token:
+            # If the server requires a user token, use the fetched access_token (which might still be None).
+            token_to_use = access_token
+        # Log a warning if a server requires a token, but none is available.
+        if should_send_client_token and not token_to_use:
+            logger.warning(
+                "[MCP] server=%s: Auth mode is '%s', but no user token is available. Connection may fail 401.",
+                server.name,
+                auth_mode,
+            )
+
+        # Build AUTH for this specific connection
+        base_headers = _auth_headers(token_to_use)
+        stdio_env = _auth_stdio_env(token_to_use)
+        auth_label = _mask_auth_value(base_headers.get("Authorization"))
+
+        # 🟢 LOG A: Per-server auth status
+        logger.info(
+            "MCP connect server=%s: Auth mode='%s', Auth status: %s (Client token used: %s)",
+            server.name,
+            auth_mode,
+            auth_label,
+            "Yes" if token_to_use else "No",
+        )
         try:
             connect_kwargs = _build_streamable_http_kwargs(
                 server, base_headers, stdio_env
