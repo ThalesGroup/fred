@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
 from contextlib import contextmanager
 from typing import Iterator, cast
 
@@ -55,7 +54,7 @@ class LeaderFlow(AgentFlow):
         await super().async_init(runtime_context=runtime_context)
         # Fill the crew from the defined experts in the tuning. Tunings have been updated
         # with the latest settings at this point.
-        self.experts: dict[str, AgentFlow] = expert_agents
+        self.experts = expert_agents
         for name, expert in self.experts.items():
             # CRITICAL: Use the standardized compilation method from AgentFlow.
             # This honors the base class contract and ensures memory/checkpointer is set.
@@ -106,19 +105,3 @@ class LeaderFlow(AgentFlow):
         """
         cfg = self.apply_run_context(child)
         yield cfg
-
-    # -------------------------------
-    # Crew management (abstract API)
-    # -------------------------------
-
-    @abstractmethod
-    def add_expert(
-        self, name: str, instance: AgentFlow, compiled_graph: CompiledStateGraph
-    ) -> None:
-        """Register a compiled expert graph under a stable name."""
-        ...
-
-    @abstractmethod
-    def reset_crew(self) -> None:
-        """Clear all experts from this leader."""
-        ...
