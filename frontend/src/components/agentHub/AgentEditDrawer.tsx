@@ -267,16 +267,22 @@ export function AgentEditDrawer({
                 <TextField
                   {...params}
                   size="small"
-                  label={t("agentHub.fields.mcp_servers")}
+                  label={t("agentHub.fields.mcp_servers", "MCP Servers")}
                   placeholder={t("agentEditDrawer.selectMcpServers")}
-                  helperText={normalizedKnownServers.length === 0 ? t("agentEditDrawer.noMcpServers") : undefined}
-                  slotProps={{
-                    input: {
-                      sx: (theme) => ({
-                        fontSize: theme.typography.body2.fontSize,
-                      }),
-                    },
+                  sx={{
+                    // Label (normal + shrunk)
+                    "& .MuiInputLabel-root": (theme) => ({
+                      fontSize: theme.typography.body2.fontSize,
+                    }),
+                    "& .MuiInputLabel-shrink": (theme) => ({
+                      fontSize: theme.typography.body2.fontSize,
+                    }),
+                    // Input text (for consistency)
+                    "& .MuiInputBase-input": (theme) => ({
+                      fontSize: theme.typography.body2.fontSize,
+                    }),
                   }}
+                  helperText={normalizedKnownServers.length === 0 ? t("agentEditDrawer.noMcpServers") : undefined}
                 />
               )}
               noOptionsText={isLoadingKnownMcpServers ? t("common.loading") : t("agentEditDrawer.noMcpServers")}
