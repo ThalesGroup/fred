@@ -88,7 +88,6 @@ class AgentTuning(BaseModel):
     )
     tags: List[str] = Field(default_factory=list)
     fields: List[FieldSpec] = Field(default_factory=list)
-    legacy_mcp_servers: List[MCPServerConfiguration] = Field(default_factory=list)
     mcp_servers: list[MCPServerRef] = Field(default_factory=list)
 
     def dump(self) -> str:

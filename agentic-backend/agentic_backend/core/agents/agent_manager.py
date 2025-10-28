@@ -15,10 +15,15 @@
 import logging
 from typing import Dict, List, Tuple
 
+from agentic_backend.application_context import get_mcp_configuration
 from agentic_backend.common.structures import AgentSettings, Configuration
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_loader import AgentLoader
-from agentic_backend.core.agents.agent_spec import AgentTuning
+from agentic_backend.core.agents.agent_spec import (
+    AgentTuning,
+    MCPServerConfiguration,
+    MCPServerRef,
+)
 from agentic_backend.core.agents.store.base_agent_store import (
     SCOPE_GLOBAL,
     SCOPE_USER,
@@ -77,6 +82,9 @@ class AgentManager:
 
     def get_agentic_flows(self) -> List[AgentSettings]:
         return list(self.agent_settings.values())
+
+    def get_mcp_servers_configuration(self) -> List[MCPServerConfiguration]:
+        return get_mcp_configuration().servers
 
     def log_current_settings(self):
         for name, settings in self.agent_settings.items():

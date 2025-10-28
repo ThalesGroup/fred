@@ -147,6 +147,21 @@ async def delete_agent(
 
 
 @router.get(
+    "/agents/mcp-servers",
+    summary="List MCP servers known to all agents",
+)
+async def list_mcp_servers(
+    user: KeycloakUser = Depends(get_current_user),
+    agent_manager: AgentManager = Depends(get_agent_manager),
+):
+    try:
+        return agent_manager.get_mcp_servers_configuration()
+    except Exception as e:
+        log_exception(e)
+        raise handle_exception(e)
+
+
+@router.get(
     "/agents/source/keys",
     summary="List keys registered for runtime source inspection",
 )

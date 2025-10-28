@@ -1,7 +1,8 @@
 {
   "common": {
     "add": "Ajouter",
-    "noneSelected": "Aucune sélection"
+    "noneSelected": "Aucune sélection",
+    "loading": "Chargement…"
   },
   "resource": {
     "kind": {
@@ -92,7 +93,9 @@
     "tunableFields": "Champs réglables",
     "tagsLabel": "Tags",
     "saveUser": "Appliquer les modifications pour mon profil",
-    "saveGlobal": "Appliquer les modifications pour tous les utilisateurs"
+    "saveGlobal": "Appliquer les modifications pour tous les utilisateurs",
+    "selectMcpServers": "Sélectionnez des serveurs MCP",
+    "noMcpServers": "Aucun serveur MCP disponible pour le moment."
   },
   "agentHub": {
     "title": "Centre des Agents",
@@ -105,6 +108,8 @@
     "search": "Rechercher",
     "filter": "Filtrer",
     "create": "Créer",
+    "createMcpAgent": "Créer un Nouvel Agent MCP",
+    "createMcpAgentNote": "Créer un nouvel agent MCP avec la configuration par défaut.",
     "noAgents": "Aucun agent trouvé",
     "noFavorites": "Vous n'avez pas encore ajouté d'agents à vos favoris",
     "noTag": "Aucun agent avec le tag \"{{tag}}\"",
@@ -138,6 +143,10 @@
     "errors": {
       "creationFailedSummary": "Échec de la création de l'agent",
       "creationFailedDetailFallback": "Une erreur inattendue s'est produite lors de la création de l'agent."
+    },
+    "success": {
+      "summary": "Agent créé",
+      "detail": "L'agent a été créé avec succès."
     }
   },
   "chatbot": {

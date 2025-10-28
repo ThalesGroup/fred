@@ -11,12 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import { Box, Button, Divider, Drawer, Stack, TextField, Typography } from "@mui/material";
-import { useEffect, useState } from "react";
+import { Autocomplete, Box, Button, Chip, Divider, Drawer, Stack, TextField, Typography } from "@mui/material";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../common/agent";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
-import { FieldSpec } from "../../slices/agentic/agenticOpenApi";
+import { FieldSpec, McpServerConfiguration, McpServerRef } from "../../slices/agentic/agenticOpenApi";
 import { TagsInput } from "./AgentTagsInput";
 import { TuningForm } from "./TuningForm";
 
@@ -29,9 +29,25 @@ type TopLevelTuningState = {
   tags: string[];
 };
 
-type Props = { open: boolean; agent: AnyAgent | null; onClose: () => void; onSaved?: () => void };
+type KnownMcpServer = McpServerConfiguration & McpServerRef;
 
-export function AgentEditDrawer({ open, agent, onClose, onSaved }: Props) {
+type Props = {
+  open: boolean;
+  agent: AnyAgent | null;
+  onClose: () => void;
+  onSaved?: () => void;
+  knownMcpServers: McpServerConfiguration[];
+  isLoadingKnownMcpServers?: boolean;
+};
+
+export function AgentEditDrawer({
+  open,
+  agent,
+  onClose,
+  onSaved,
+  knownMcpServers,
+  isLoadingKnownMcpServers = false,
+}: Props) {
   const { updateTuning, isLoading } = useAgentUpdater();
   const { t } = useTranslation();
   // State for dynamic fields
@@ -42,6 +58,7 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved }: Props) {
     description: "",
     tags: [],
   });
+  const [mcpServerRefs, setMcpServerRefs] = useState<McpServerRef[]>([]);
 
   // --- Effects ---
 
@@ -57,12 +74,53 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved }: Props) {
         description: agent.tuning.description,
         tags: agent.tuning.tags ?? [],
       });
+      setMcpServerRefs(agent.tuning.mcp_servers ?? []);
     } else {
       // Reset state if agent is null or has no tuning
       setFields([]);
       setTopLevelTuning({ role: "", description: "", tags: [] });
+      setMcpServerRefs([]);
     }
   }, [agent]);
+
+  const normalizedKnownServers = useMemo<KnownMcpServer[]>(() => {
+    const seen = new Set<string>();
+    const result: KnownMcpServer[] = [];
+
+    knownMcpServers.forEach((server) => {
+      if (!server) return;
+      const name = typeof server.name === "string" ? server.name.trim() : "";
+      if (!name || seen.has(name)) return;
+
+      const requireTools =
+        Array.isArray((server as Partial<McpServerRef>).require_tools) &&
+        (server as Partial<McpServerRef>).require_tools!.length > 0
+          ? (server as Partial<McpServerRef>).require_tools
+          : undefined;
+
+      result.push({ ...server, name, require_tools: requireTools });
+      seen.add(name);
+    });
+
+    return result;
+  }, [knownMcpServers]);
+
+  const selectedKnownServers = useMemo<KnownMcpServer[]>(() => {
+    if (mcpServerRefs.length === 0) return [];
+
+    const byName = new Map(normalizedKnownServers.map((server) => [server.name, server]));
+
+    return mcpServerRefs.map((ref) => {
+      const base = byName.get(ref.name);
+      if (!base) {
+        return { name: ref.name, require_tools: ref.require_tools } as KnownMcpServer;
+      }
+      return {
+        ...base,
+        require_tools: ref.require_tools ?? base.require_tools,
+      };
+    });
+  }, [mcpServerRefs, normalizedKnownServers]);
 
   // --- Handlers ---
 
@@ -96,6 +154,7 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved }: Props) {
       tags: topLevelTuning.tags,
       // Overwrite/set dynamic fields
       fields: fields,
+      mcp_servers: mcpServerRefs,
     };
 
     console.log("Saving agent tuning", newTuning, "with global scope:", isGlobal);
@@ -165,6 +224,62 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved }: Props) {
               helperText={t("agentEditDrawer.tagsHelperText")}
               value={topLevelTuning.tags}
               onChange={(next) => onTopLevelChange("tags", next)}
+            />
+
+            <Autocomplete<KnownMcpServer, true, false, false>
+              multiple
+              disableCloseOnSelect
+              options={normalizedKnownServers}
+              value={selectedKnownServers}
+              loading={isLoadingKnownMcpServers}
+              onChange={(_event, value) => {
+                setMcpServerRefs(
+                  value.map((server) => ({
+                    name: server.name,
+                    require_tools:
+                      server.require_tools && server.require_tools.length > 0 ? server.require_tools : undefined,
+                  })),
+                );
+              }}
+              isOptionEqualToValue={(option, value) => option.name === value.name}
+              getOptionLabel={(option) => option.name}
+              renderOption={(props, option) => (
+                <li {...props} key={option.name}>
+                  <Box sx={{ display: "flex", flexDirection: "column" }}>
+                    <Typography variant="body2">{option.name}</Typography>
+                    {(option.transport || option.url) && (
+                      <Typography variant="caption" color="text.secondary">
+                        {option.transport}
+                        {option.transport && option.url ? " · " : ""}
+                        {option.url}
+                      </Typography>
+                    )}
+                  </Box>
+                </li>
+              )}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip {...getTagProps({ index })} key={option.name} label={option.name} size="small" />
+                ))
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  size="small"
+                  label={t("agentHub.fields.mcp_servers", "MCP Servers")}
+                  placeholder={t("agentEditDrawer.selectMcpServers", "Select MCP servers")}
+                  helperText={
+                    normalizedKnownServers.length === 0
+                      ? t("agentEditDrawer.noMcpServers", "No MCP servers are currently available.")
+                      : undefined
+                  }
+                />
+              )}
+              noOptionsText={
+                isLoadingKnownMcpServers
+                  ? t("common.loading", "Loading…")
+                  : t("agentEditDrawer.noMcpServers", "No MCP servers are currently available.")
+              }
             />
 
             {/* Dynamic Fields */}

@@ -1,7 +1,8 @@
 {
   "common": {
     "add": "Add",
-    "noneSelected": "None selected"
+    "noneSelected": "None selected",
+    "loading": "Loading…"
   },
   "resource": {
     "kind": {
@@ -92,7 +93,9 @@
     "tunableFields": "Tunable Fields",
     "tagsLabel": "Tags",
     "saveUser": "Apply to my profile",
-    "saveGlobal": "Apply to all users"
+    "saveGlobal": "Apply to all users",
+    "selectMcpServers": "Select MCP servers",
+    "noMcpServers": "No MCP servers are currently available."
   },
   "agentHub": {
     "title": "Agent Hub",
@@ -105,6 +108,7 @@
     "search": "Search",
     "filter": "Filter",
     "create": "Create",
+    "createMcpAgent": "Create New MCP Agent",
     "noAgents": "No agents found",
     "noFavorites": "You haven't added any agents to your favorites yet",
     "noTag": "No agents with tag \"{{tag}}\"",
@@ -138,6 +142,10 @@
     "errors": {
       "creationFailedSummary": "Agent creation failed",
       "creationFailedDetailFallback": "An unexpected error occurred while creating the agent."
+    },
+    "success": {
+      "summary": "Agent created",
+      "detail": "The agent has been successfully created."
     }
   },
   "chatbot": {
