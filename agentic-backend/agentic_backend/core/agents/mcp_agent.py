@@ -25,6 +25,7 @@ from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ logger = logging.getLogger(__name__)
 MCP_TUNING = AgentTuning(
     role="Define here the high-level role of the MCP agent.",
     description="Define here a detailed description of the MCP agent's purpose and behavior.",
+    tags=["mcp"],
     fields=[
         FieldSpec(
             key="prompts.system",
@@ -72,7 +74,9 @@ class MCPAgent(AgentFlow):
     # ---------------------------
     # Bootstrap
     # ---------------------------
-    async def async_init(self):
+    async def async_init(self, runtime_context: RuntimeContext):
+        await super().async_init(runtime_context=runtime_context)
+        # Initialize MCP runtime and bind tools to the model.
         self.mcp = MCPRuntime(
             agent=self,
         )
