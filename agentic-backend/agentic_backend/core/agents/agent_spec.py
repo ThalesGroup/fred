@@ -1,6 +1,20 @@
-# agentic_backend/common/tuning_spec.py
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -22,6 +36,8 @@ FieldType = Literal[
 
 
 class UIHints(BaseModel):
+    """UI hints for rendering the field in a user interface."""
+
     multiline: bool = False
     max_lines: int = 6
     placeholder: Optional[str] = None
@@ -31,6 +47,8 @@ class UIHints(BaseModel):
 
 
 class FieldSpec(BaseModel):
+    """Specification for a tunable field in an agent."""
+
     key: str  # dotted path under agent.settings (e.g., "prompts.system")
     type: FieldType
     title: str
@@ -45,7 +63,20 @@ class FieldSpec(BaseModel):
     ui: UIHints = UIHints()
 
 
+class ClientAuthMode(str, Enum):
+    # Sends the Authorization: Bearer token (standard OAuth flow)
+    USER_TOKEN = "user_token"  # nosec B105
+    # Suppresses the Authorization header (Forces server to use global auth/PAT)
+    NO_TOKEN = "no_token"  # nosec B105
+    # Use the token if available, otherwise no token (similar to 'no_token' logic but explicit)
+    # The current code only supports 'user_token' or 'no_token' logic for simplicity.
+
+
 class MCPServerConfiguration(BaseModel):
+    """
+    Configuration for an MCP server.
+    """
+
     name: str
     transport: Optional[str] = Field(
         "sse",
@@ -68,10 +99,14 @@ class MCPServerConfiguration(BaseModel):
         None, description="Environment variables to give the MCP server"
     )
     enabled: bool = Field(True, description="If false, this MCP server is ignored.")
+    auth_mode: ClientAuthMode = Field(
+        ClientAuthMode.USER_TOKEN, description="Client authentication mode."
+    )
 
 
 class MCPServerRef(BaseModel):
     """
+    Reference to an MCP server.
     Fred rationale:
     - Agents reference logical servers by name.
     - Resolution (URL/transport/env) is done at runtime per env/tenant/user.
@@ -88,7 +123,6 @@ class AgentTuning(BaseModel):
     )
     tags: List[str] = Field(default_factory=list)
     fields: List[FieldSpec] = Field(default_factory=list)
-    legacy_mcp_servers: List[MCPServerConfiguration] = Field(default_factory=list)
     mcp_servers: list[MCPServerRef] = Field(default_factory=list)
 
     def dump(self) -> str:

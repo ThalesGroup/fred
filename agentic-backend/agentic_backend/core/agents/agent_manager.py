@@ -13,12 +13,16 @@
 # limitations under the License.
 
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, cast
 
-from agentic_backend.common.structures import AgentSettings, Configuration
+from agentic_backend.application_context import get_mcp_configuration
+from agentic_backend.common.structures import AgentSettings, Configuration, Leader
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_loader import AgentLoader
-from agentic_backend.core.agents.agent_spec import AgentTuning
+from agentic_backend.core.agents.agent_spec import (
+    AgentTuning,
+    MCPServerConfiguration,
+)
 from agentic_backend.core.agents.store.base_agent_store import (
     SCOPE_GLOBAL,
     SCOPE_USER,
@@ -38,6 +42,10 @@ class AgentUpdatesDisabled(Exception):
         super().__init__(
             message or "Agent updates are disabled in static-config-only mode."
         )
+
+
+class AgentAlreadyExistsException(Exception):
+    pass
 
 
 class AgentManager:
@@ -74,6 +82,9 @@ class AgentManager:
     def get_agentic_flows(self) -> List[AgentSettings]:
         return list(self.agent_settings.values())
 
+    def get_mcp_servers_configuration(self) -> List[MCPServerConfiguration]:
+        return get_mcp_configuration().servers
+
     def log_current_settings(self):
         for name, settings in self.agent_settings.items():
             tuning = settings.tuning
@@ -82,6 +93,29 @@ class AgentManager:
                 name,
                 tuning.dump() if tuning else "N/A",
             )
+
+    def create_dynamic_agent(
+        self, agent_settings: AgentSettings, agent_tuning: AgentTuning
+    ) -> None:
+        """
+        Registers a new dynamic agent into the runtime catalog.
+        Note: This does not persist the agent; use the AgentService for that.
+        """
+        if self.use_static_config_only:
+            raise AgentUpdatesDisabled()
+
+        existing = self.store.get(agent_settings.name)
+        if existing:
+            raise AgentAlreadyExistsException(
+                f"Agent '{agent_settings.name}' already exists."
+            )
+
+        self.store.save(agent_settings, agent_tuning)
+
+        self.agent_settings[agent_settings.name] = agent_settings
+        logger.info(
+            "[AGENTS] agent=%s registered as dynamic agent.", agent_settings.name
+        )
 
     async def update_agent(self, new_settings: AgentSettings, is_global: bool) -> bool:
         """
@@ -92,6 +126,23 @@ class AgentManager:
         """
         if self.use_static_config_only:
             raise AgentUpdatesDisabled()
+
+        if new_settings.type == "leader":
+            new_leader_settings = cast(Leader, new_settings)
+            old_leader_settings = cast(
+                Leader, self.agent_settings.get(new_settings.name)
+            )
+            if old_leader_settings:
+                old_crew = set(old_leader_settings.crew or [])
+                new_crew = set(new_leader_settings.crew or [])
+                if old_crew != new_crew:
+                    logger.info(
+                        "[AGENTS] leader=%s crew changed from %s to %s",
+                        new_settings.name,
+                        old_crew,
+                        new_crew,
+                    )
+                    # If the crew has changed, we need to rewire the agent's connections
 
         name = new_settings.name
         tunings = new_settings.tuning

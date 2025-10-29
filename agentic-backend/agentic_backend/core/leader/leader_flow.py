@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
 from contextlib import contextmanager
 from typing import Iterator, cast
 
@@ -25,6 +24,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_flow import AgentFlow
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 
 
 class LeaderFlow(AgentFlow):
@@ -41,6 +41,24 @@ class LeaderFlow(AgentFlow):
 
     def __init__(self, agent_settings: AgentSettings):
         super().__init__(agent_settings)
+        # Initialize containers for experts and their compiled graphs.
+        self.experts: dict[str, AgentFlow] = {}
+        self.compiled_expert_graphs: dict[str, CompiledStateGraph] = {}
+
+    async def async_init(
+        self, runtime_context: RuntimeContext, expert_agents: dict[str, AgentFlow]
+    ):
+        """
+        Asynchronous initialization routine that must be implemented by subclasses.
+        """
+        await super().async_init(runtime_context=runtime_context)
+        # Fill the crew from the defined experts in the tuning. Tunings have been updated
+        # with the latest settings at this point.
+        self.experts = expert_agents
+        for name, expert in self.experts.items():
+            # CRITICAL: Use the standardized compilation method from AgentFlow.
+            # This honors the base class contract and ensures memory/checkpointer is set.
+            self.compiled_expert_graphs[name] = expert.get_compiled_graph()
 
     # -------------------------------
     # Delegation utilities (core idea)
@@ -87,19 +105,3 @@ class LeaderFlow(AgentFlow):
         """
         cfg = self.apply_run_context(child)
         yield cfg
-
-    # -------------------------------
-    # Crew management (abstract API)
-    # -------------------------------
-
-    @abstractmethod
-    def add_expert(
-        self, name: str, instance: AgentFlow, compiled_graph: CompiledStateGraph
-    ) -> None:
-        """Register a compiled expert graph under a stable name."""
-        ...
-
-    @abstractmethod
-    def reset_crew(self) -> None:
-        """Clear all experts from this leader."""
-        ...

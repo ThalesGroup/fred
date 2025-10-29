@@ -14,13 +14,16 @@
 
 import logging
 from inspect import iscoroutinefunction
+from typing import cast
 
+from agentic_backend.common.structures import Leader
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_manager import (
     AgentManager,  # Import the new version
 )
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.leader.leader_flow import LeaderFlow
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +41,9 @@ class AgentFactory:
     def __init__(self, manager: AgentManager, loader: AgentLoader):
         self.manager = manager
         self.loader = loader
+
+    def _import_agent_class(self, class_path: str):
+        return self.loader._import_agent_class(class_path)
 
     async def create_and_init(
         self,
@@ -70,13 +76,41 @@ class AgentFactory:
         if runtime_context:
             instance.set_runtime_context(runtime_context)
 
-        # 5. Run async initialization (This is where the token is used for MCP connection)
-        if iscoroutinefunction(getattr(instance, "async_init", None)):
+        # Check if the instance is of type LeaderFlow. If so we must create its crew agents
+        if isinstance(instance, LeaderFlow):
+            leader_settings = cast(Leader, settings)
+            expert_agents = {}
+            for expert_name in leader_settings.crew:
+                expert_settings = self.manager.get_agent_settings(expert_name)
+                if not expert_settings:
+                    raise ValueError(
+                        f"Expert agent '{expert_name}' not found in catalog."
+                    )
+                if not expert_settings.class_path:
+                    raise ValueError(
+                        f"Expert agent '{expert_name}' has no class_path defined."
+                    )
+                expert_cls = self.loader._import_agent_class(expert_settings.class_path)
+                expert_instance = expert_cls(agent_settings=expert_settings)
+                expert_instance.apply_settings(expert_settings)
+                expert_instance.set_runtime_context(runtime_context)
+                if iscoroutinefunction(getattr(expert_instance, "async_init", None)):
+                    logger.info(
+                        "[AGENTS] agent='%s' async_init invoked.",
+                        expert_name,
+                    )
+                    await expert_instance.async_init(runtime_context=runtime_context)
+                expert_agents[expert_name] = expert_instance
+            # TODO call the LeaderFlow instance async_init with the runtime_context AND the list of AgentFlow experts
+            await instance.async_init(runtime_context, expert_agents)
+        elif isinstance(instance, AgentFlow):
+            # 5. Run async initialization (This is where the token is used for MCP connection)
             logger.info(
                 "[AGENTS] agent='%s' async_init invoked.",
                 agent_name,
             )
-            await instance.async_init(runtime_context=runtime_context)
+            if iscoroutinefunction(getattr(instance, "async_init", None)):
+                await instance.async_init(runtime_context=runtime_context)
 
         logger.debug("[AGENTS] agent='%s' fully initialized.", agent_name)
         return instance

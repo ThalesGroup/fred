@@ -95,6 +95,10 @@ ai:
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:
+    - name: "Appollo"
+      type: "leader"
+      class_path: "agentic_backend.academy.06_simple_leader.mini_llm_orchestrator.MiniLLMOrchestrator"
+      enabled: true
     - name: "Georges"
       type: "agent"
       class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
@@ -118,14 +122,22 @@ mcp:
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-tabular"
       sse_read_timeout: 2000
+      auth_mode: "user_token"
     - name: "knowledge-flow-mcp-opensearch-ops"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
       sse_read_timeout: 2000
+      auth_mode: "user_token"
     - name: "mcp-kubernetes-server"
       transport: "streamable_http"
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000
+      auth_mode: "user_token"
+    - name: "mcp-atlassian-jira-server"
+      transport: "streamable_http"
+      url: "http://localhost:8885/mcp"
+      sse_read_timeout: 2000
+      auth_mode: "no_token"
 
 storage:
   postgres:

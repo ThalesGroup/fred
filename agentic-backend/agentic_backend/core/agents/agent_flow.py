@@ -123,6 +123,21 @@ class AgentFlow:
         self.streaming_memory = MemorySaver()
         self.compiled_graph: Optional[CompiledStateGraph] = None
 
+    def get_compiled_graph(self) -> CompiledStateGraph:
+        """
+        Compile and return the agent's graph (idempotent).
+        Subclasses must set `self._graph` in async_init().
+        """
+        if self.compiled_graph is not None:
+            return self.compiled_graph
+        if self._graph is None:
+            # Strong, early signal to devs wiring the agent: you must build the graph in async_init()
+            raise RuntimeError(
+                f"{type(self).__name__}: _graph is None. Did you forget to set it in async_init()?"
+            )
+        self.compiled_graph = self._graph.compile(checkpointer=self.streaming_memory)
+        return self.compiled_graph
+
     def apply_settings(self, new_settings: AgentSettings) -> None:
         """
         Apply the authoritative settings resolved by AgentManager.
@@ -649,21 +664,6 @@ class AgentFlow:
             return list(messages)
         messages.append(ChatContextMessage(content=chat_context))
         return messages
-
-    def get_compiled_graph(self) -> CompiledStateGraph:
-        """
-        Compile and return the agent's graph (idempotent).
-        Subclasses must set `self._graph` in async_init().
-        """
-        if self.compiled_graph is not None:
-            return self.compiled_graph
-        if self._graph is None:
-            # Strong, early signal to devs wiring the agent: you must build the graph in async_init()
-            raise RuntimeError(
-                f"{type(self).__name__}: _graph is None. Did you forget to set it in async_init()?"
-            )
-        self.compiled_graph = self._graph.compile(checkpointer=self.streaming_memory)
-        return self.compiled_graph
 
     def set_runtime_context(self, context: RuntimeContext) -> None:
         """Set the runtime context for this agent."""
