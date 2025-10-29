@@ -64,10 +64,7 @@ SENTINEL_TUNING = AgentTuning(
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
     ],
-    mcp_servers=[
-        MCPServerRef(name="mcp-kubernetes-server"),
-        # MCPServerRef(name="knowledge-ops"),
-    ],
+    mcp_servers=[MCPServerRef(name="mcp-knowledge-flow-opensearch-ops")],
 )
 
 

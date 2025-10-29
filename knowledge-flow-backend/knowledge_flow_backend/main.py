@@ -256,7 +256,7 @@ def create_app() -> FastAPI:
             dependencies=[Depends(get_current_user)]
         ),
     )
-    mcp_statistical.mount_http(mount_path=f"{mcp_prefix}/mcp-statistic")
+    mcp_statistical.mount_http(mount_path=f"{mcp_prefix}/mcp-statistics")
 
     mcp_text = FastApiMCP(
         app,
