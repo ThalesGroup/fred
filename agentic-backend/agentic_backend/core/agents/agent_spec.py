@@ -65,7 +65,7 @@ class FieldSpec(BaseModel):
 
 class ClientAuthMode(str, Enum):
     # Sends the Authorization: Bearer token (standard OAuth flow)
-    USER_TOKEN = "user_token"
+    USER_TOKEN = "user_token"  # nosec B105
     # Suppresses the Authorization header (Forces server to use global auth/PAT)
     NO_TOKEN = "no_token"  # nosec B105
     # Use the token if available, otherwise no token (similar to 'no_token' logic but explicit)
