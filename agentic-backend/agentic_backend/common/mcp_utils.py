@@ -35,7 +35,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import timedelta
-from typing import Any, Callable, Dict, List
+from typing import Any, Dict, List
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
