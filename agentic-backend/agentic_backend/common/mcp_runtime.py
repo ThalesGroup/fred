@@ -135,27 +135,12 @@ class MCPRuntime:
 
         # 1. Get the RuntimeContext from the agent (guaranteed to be set by the factory)
         runtime_context: RuntimeContext = self.agent_instance.runtime_context
-        access_token = runtime_context.access_token
-
-        if not access_token:
-            logger.warning(
-                "[MCP] agent=%s init: No access_token found in RuntimeContext. Skipping MCP client connection.",
-                self.agent_instance.get_name(),
-            )
-            # We allow the agent to run, but without MCP tools.
-            return
-
-        # 2. Define the minimal, token-aware provider function
-        def access_token_provider() -> str | None:
-            # We can use the agent's live context to support future token refresh
-            return self.agent_instance.runtime_context.access_token
-
         try:
             # 3. Build and connect the client
             new_client = await get_connected_mcp_client_for_agent(
                 agent_name=self.agent_instance.get_name(),
                 mcp_servers=self.available_servers,
-                access_token_provider=access_token_provider,
+                runtime_context=runtime_context,
             )
 
             # 4. Set final state

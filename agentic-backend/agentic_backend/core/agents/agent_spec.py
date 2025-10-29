@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -62,6 +63,15 @@ class FieldSpec(BaseModel):
     ui: UIHints = UIHints()
 
 
+class ClientAuthMode(str, Enum):
+    # Sends the Authorization: Bearer token (standard OAuth flow)
+    USER_TOKEN = "user_token"  # nosec B105
+    # Suppresses the Authorization header (Forces server to use global auth/PAT)
+    NO_TOKEN = "no_token"  # nosec B105
+    # Use the token if available, otherwise no token (similar to 'no_token' logic but explicit)
+    # The current code only supports 'user_token' or 'no_token' logic for simplicity.
+
+
 class MCPServerConfiguration(BaseModel):
     """
     Configuration for an MCP server.
@@ -89,6 +99,9 @@ class MCPServerConfiguration(BaseModel):
         None, description="Environment variables to give the MCP server"
     )
     enabled: bool = Field(True, description="If false, this MCP server is ignored.")
+    auth_mode: ClientAuthMode = Field(
+        ClientAuthMode.USER_TOKEN, description="Client authentication mode."
+    )
 
 
 class MCPServerRef(BaseModel):
