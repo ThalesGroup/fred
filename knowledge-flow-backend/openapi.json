@@ -1579,6 +1579,657 @@
         }
       }
     },
+    "/knowledge-flow/v1/stat/list_datasets": {
+      "get": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "View the available datasets",
+        "operationId": "list_datasets",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/set_dataset": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Select a dataset",
+        "operationId": "set_dataset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetDatasetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/head": {
+      "get": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Preview the dataset",
+        "operationId": "head",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "n",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 5,
+              "title": "N"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/stat/describe": {
+      "get": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Describe the dataset",
+        "operationId": "describe",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/detect_outliers": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Detect outliers values in numeric columns",
+        "operationId": "detect_outliers",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectOutliersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/correlations": {
+      "get": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Get top correlations in the dataset",
+        "operationId": "correlations",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/plot/histogram": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Plot histogram for a column",
+        "operationId": "plot_histogram",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlotHistogramRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/plot/scatter": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Plot scatter plot",
+        "operationId": "plot_scatter",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlotScatterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/train": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Train a model",
+        "operationId": "train_model",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrainModelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/evaluate": {
+      "get": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Evaluate last trained model",
+        "operationId": "evaluate_model",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/predict_row": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Predict a single row of data",
+        "operationId": "predict_row",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictRowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/save_model": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Save trained model",
+        "operationId": "save_model",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveModelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/list_models": {
+      "get": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "List saved models",
+        "operationId": "list_models",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/load_model": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Load a previously saved model",
+        "operationId": "load_model",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoadModelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/test_distribution": {
+      "get": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Test if column fits normal, uniform or exponential distribution",
+        "operationId": "test_distribution",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "column",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Column"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/stat/detect_outliers_ml": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Detect outliers using ML method",
+        "operationId": "detect_outliers_ml",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectOutliersMLRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/pca": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Run PCA on selected features",
+        "operationId": "run_pca",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PCARequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/knowledge-flow/v1/tags": {
       "get": {
         "tags": [
@@ -3285,6 +3936,51 @@
         ],
         "title": "BrowseDocumentsRequest"
       },
+      "DetectOutliersMLRequest": {
+        "properties": {
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Features"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "isolation_forest",
+              "lof"
+            ],
+            "title": "Method",
+            "default": "isolation_forest"
+          }
+        },
+        "type": "object",
+        "required": [
+          "features"
+        ],
+        "title": "DetectOutliersMLRequest"
+      },
+      "DetectOutliersRequest": {
+        "properties": {
+          "method": {
+            "type": "string",
+            "enum": [
+              "zscore",
+              "iqr"
+            ],
+            "title": "Method",
+            "default": "zscore"
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold",
+            "default": 3.0
+          }
+        },
+        "type": "object",
+        "title": "DetectOutliersRequest"
+      },
       "DocSummary": {
         "properties": {
           "abstract": {
@@ -3967,6 +4663,19 @@
         ],
         "title": "ListTableResponse"
       },
+      "LoadModelRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "LoadModelRequest"
+      },
       "LogEventDTO": {
         "properties": {
           "ts": {
@@ -4196,6 +4905,77 @@
         },
         "type": "object",
         "title": "OrderBy"
+      },
+      "PCARequest": {
+        "properties": {
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Features"
+          },
+          "n_components": {
+            "type": "integer",
+            "title": "N Components",
+            "default": 2
+          }
+        },
+        "type": "object",
+        "required": [
+          "features"
+        ],
+        "title": "PCARequest"
+      },
+      "PlotHistogramRequest": {
+        "properties": {
+          "column": {
+            "type": "string",
+            "title": "Column"
+          },
+          "bins": {
+            "type": "integer",
+            "title": "Bins",
+            "default": 30
+          }
+        },
+        "type": "object",
+        "required": [
+          "column"
+        ],
+        "title": "PlotHistogramRequest"
+      },
+      "PlotScatterRequest": {
+        "properties": {
+          "x_col": {
+            "type": "string",
+            "title": "X Col"
+          },
+          "y_col": {
+            "type": "string",
+            "title": "Y Col"
+          }
+        },
+        "type": "object",
+        "required": [
+          "x_col",
+          "y_col"
+        ],
+        "title": "PlotScatterRequest"
+      },
+      "PredictRowRequest": {
+        "properties": {
+          "row": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Row"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row"
+        ],
+        "title": "PredictRowRequest"
       },
       "ProcessDocumentsRequest": {
         "properties": {
@@ -4533,6 +5313,19 @@
         "type": "object",
         "title": "ResourceUpdate"
       },
+      "SaveModelRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "SaveModelRequest"
+      },
       "SearchPolicy": {
         "properties": {
           "k_final": {
@@ -4686,6 +5479,19 @@
           "op"
         ],
         "title": "SelectMetric"
+      },
+      "SetDatasetRequest": {
+        "properties": {
+          "dataset_name": {
+            "type": "string",
+            "title": "Dataset Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset_name"
+        ],
+        "title": "SetDatasetRequest"
       },
       "SortOption": {
         "properties": {
@@ -5133,6 +5939,36 @@
           "interval"
         ],
         "title": "TimeBucket"
+      },
+      "TrainModelRequest": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Features"
+          },
+          "model_type": {
+            "type": "string",
+            "enum": [
+              "linear",
+              "random_forest"
+            ],
+            "title": "Model Type",
+            "default": "linear"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target",
+          "features"
+        ],
+        "title": "TrainModelRequest"
       },
       "ValidationError": {
         "properties": {

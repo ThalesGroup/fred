@@ -36,6 +36,7 @@ from agentic_backend.core.agents.agent_flow import (
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
 # Fred base types
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
@@ -80,7 +81,8 @@ class Echo(AgentFlow):
     # -----------------------------------------------------------------------------
     # STEP 1: async_init — one-time setup (build the graph here, not compile)
     # -----------------------------------------------------------------------------
-    async def async_init(self):
+    async def async_init(self, runtime_context: RuntimeContext):
+        await super().async_init(runtime_context)
         # Why only build here: Fred compiles/attaches memory later to ensure
         # consistent setup across environments and hot-reloads.
         self._graph = self._build_graph()

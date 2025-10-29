@@ -1,17 +1,17 @@
 {
   "errors": [],
-  "generated_at": "2025-10-03T14:17:04Z",
+  "generated_at": "2025-10-21T13:10:09Z",
   "metrics": {
     "_totals": {
       "CONFIDENCE.HIGH": 5,
       "CONFIDENCE.LOW": 2,
-      "CONFIDENCE.MEDIUM": 25,
+      "CONFIDENCE.MEDIUM": 24,
       "CONFIDENCE.UNDEFINED": 0,
       "SEVERITY.HIGH": 0,
       "SEVERITY.LOW": 5,
-      "SEVERITY.MEDIUM": 27,
+      "SEVERITY.MEDIUM": 26,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 11003,
+      "loc": 12305,
       "nosec": 0,
       "skipped_tests": 2
     },
@@ -37,7 +37,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 748,
+      "loc": 756,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -50,7 +50,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 86,
+      "loc": 85,
       "nosec": 0,
       "skipped_tests": 1
     },
@@ -128,7 +128,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 217,
+      "loc": 219,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -142,6 +142,32 @@
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
       "loc": 95,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/contrib/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/contrib/eliccir/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -171,6 +197,32 @@
       "nosec": 0,
       "skipped_tests": 0
     },
+    "knowledge_flow_backend/core/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/core/monitoring/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
     "knowledge_flow_backend/core/monitoring/monitoring_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -184,7 +236,33 @@
       "nosec": 0,
       "skipped_tests": 0
     },
+    "knowledge_flow_backend/core/processors/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
     "knowledge_flow_backend/core/processors/input/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/core/processors/input/common/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -219,7 +297,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 187,
+      "loc": 188,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -275,32 +353,6 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "knowledge_flow_backend/core/processors/input/csv_tabular_processor/tests/__init__.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 0,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "knowledge_flow_backend/core/processors/input/csv_tabular_processor/tests/sample_tabular_processor_test.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 18,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
     "knowledge_flow_backend/core/processors/input/docx_markdown_processor/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -324,19 +376,6 @@
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
       "loc": 70,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "knowledge_flow_backend/core/processors/input/docx_markdown_processor/tests/docx_markdown_processor_test.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 25,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -392,32 +431,6 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "knowledge_flow_backend/core/processors/input/markdown_markdown_processor/tests/__init__.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 0,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "knowledge_flow_backend/core/processors/input/markdown_markdown_processor/tests/markdown_markdown_processor_test.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 33,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
     "knowledge_flow_backend/core/processors/input/pdf_markdown_processor/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -444,32 +457,6 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "knowledge_flow_backend/core/processors/input/pdf_markdown_processor/tests/__init__.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 0,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "knowledge_flow_backend/core/processors/input/pdf_markdown_processor/tests/pdf_markdown_processor_test.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 31,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
     "knowledge_flow_backend/core/processors/input/pps_tabular_processor/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -493,32 +480,6 @@
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
       "loc": 69,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "knowledge_flow_backend/core/processors/input/pps_tabular_processor/tests/__init__.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 0,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "knowledge_flow_backend/core/processors/input/pps_tabular_processor/tests/pps_tabular_processor_test.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 18,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -558,32 +519,6 @@
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
       "loc": 0,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "knowledge_flow_backend/core/processors/input/text_markdown_processor/tests/__init__.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 0,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "knowledge_flow_backend/core/processors/input/text_markdown_processor/tests/text_markdown_processor_test.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 18,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -639,6 +574,19 @@
       "nosec": 0,
       "skipped_tests": 0
     },
+    "knowledge_flow_backend/core/processors/output/summarizer/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
     "knowledge_flow_backend/core/processors/output/summarizer/base_summarizer.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -691,6 +639,19 @@
       "nosec": 0,
       "skipped_tests": 0
     },
+    "knowledge_flow_backend/core/processors/output/tabular_processor/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
     "knowledge_flow_backend/core/processors/output/tabular_processor/tabular_processor.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -700,7 +661,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 116,
+      "loc": 127,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/core/processors/output/vectorization_processor/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -782,6 +756,19 @@
       "nosec": 0,
       "skipped_tests": 0
     },
+    "knowledge_flow_backend/core/stores/catalog/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
     "knowledge_flow_backend/core/stores/catalog/base_catalog_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
@@ -791,20 +778,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 10,
+      "loc": 12,
       "nosec": 0,
       "skipped_tests": 0
     },
     "knowledge_flow_backend/core/stores/catalog/duckdb_catalog_store.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 3,
+      "CONFIDENCE.MEDIUM": 2,
       "CONFIDENCE.UNDEFINED": 0,
       "SEVERITY.HIGH": 0,
       "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 3,
+      "SEVERITY.MEDIUM": 2,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 51,
+      "loc": 90,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -817,7 +804,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 92,
+      "loc": 159,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/core/stores/catalog/sql_catalog_store.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 86,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -856,7 +856,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 70,
+      "loc": 150,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -882,7 +882,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 103,
+      "loc": 296,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -895,7 +895,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 82,
+      "loc": 81,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -908,7 +908,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 191,
+      "loc": 347,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -922,6 +922,19 @@
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
       "loc": 74,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/core/stores/files/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1026,6 +1039,19 @@
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
       "loc": 393,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/core/stores/resources/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1181,7 +1207,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 183,
+      "loc": 187,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1207,7 +1233,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 207,
+      "loc": 367,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1221,6 +1247,32 @@
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
       "loc": 59,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/features/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/features/catalog/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1246,7 +1298,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 35,
+      "loc": 60,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1263,7 +1315,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "knowledge_flow_backend/features/content/controller.py": {
+    "knowledge_flow_backend/features/content/asset_controller.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1272,7 +1324,46 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 127,
+      "loc": 239,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/features/content/asset_service.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 177,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/features/content/content_controller.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 220,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/features/content/content_service.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 87,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1315,7 +1406,7 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "knowledge_flow_backend/features/content/service.py": {
+    "knowledge_flow_backend/features/ingestion/__init__.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,
       "CONFIDENCE.MEDIUM": 0,
@@ -1324,7 +1415,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 67,
+      "loc": 0,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1337,7 +1428,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 178,
+      "loc": 163,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1351,6 +1442,19 @@
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
       "loc": 136,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/features/kpi/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1441,7 +1545,20 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 162,
+      "loc": 167,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/features/pull/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1468,6 +1585,19 @@
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
       "loc": 32,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/features/resources/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1520,6 +1650,19 @@
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
       "loc": 101,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/features/scheduler/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1585,6 +1728,58 @@
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
       "loc": 73,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/features/statistic/controller.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 153,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/features/statistic/service.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 246,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/features/statistic/structures.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 29,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "knowledge_flow_backend/features/statistic/utils.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 10,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1688,7 +1883,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 209,
+      "loc": 211,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1740,7 +1935,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 224,
+      "loc": 236,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1779,7 +1974,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 89,
+      "loc": 96,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1792,7 +1987,7 @@
       "SEVERITY.LOW": 0,
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
-      "loc": 225,
+      "loc": 256,
       "nosec": 0,
       "skipped_tests": 0
     },
@@ -1806,84 +2001,6 @@
       "SEVERITY.MEDIUM": 0,
       "SEVERITY.UNDEFINED": 0,
       "loc": 63,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "knowledge_flow_backend/tests/__init__.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 0,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "knowledge_flow_backend/tests/conftest.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 138,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "knowledge_flow_backend/tests/services/test_ingestion_service.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 54,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "knowledge_flow_backend/tests/services/test_vector_search_service.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 61,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "knowledge_flow_backend/tests/stores/content/test_local_content_store.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 119,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "knowledge_flow_backend/tests/test_utils/test_processors.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 24,
       "nosec": 0,
       "skipped_tests": 0
     }
@@ -2014,26 +2131,6 @@
       "test_name": "subprocess_without_shell_equals_true"
     },
     {
-      "code": "51         with self.store._connect() as conn:\n52             conn.execute(f'DELETE FROM \"{full_table}\" WHERE source_tag = ?', [source_tag])\n53             for entry in entries:\n",
-      "col_offset": 27,
-      "end_col_offset": 40,
-      "filename": "knowledge_flow_backend/core/stores/catalog/duckdb_catalog_store.py",
-      "issue_confidence": "MEDIUM",
-      "issue_cwe": {
-        "id": 89,
-        "link": "https://cwe.mitre.org/data/definitions/89.html"
-      },
-      "issue_severity": "MEDIUM",
-      "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 52,
-      "line_range": [
-        52
-      ],
-      "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
-      "test_id": "B608",
-      "test_name": "hardcoded_sql_expressions"
-    },
-    {
       "code": "54                 conn.execute(\n55                     f\"\"\"\n56                     INSERT INTO \"{full_table}\" (source_tag, path, size, modified_time, hash)\n57                     VALUES (?, ?, ?, ?, ?)\n58                     \"\"\",\n59                     [source_tag, entry.path, entry.size, entry.modified_time, entry.hash],\n",
       "col_offset": 24,
       "end_col_offset": 33,
@@ -2057,9 +2154,9 @@
       "test_name": "hardcoded_sql_expressions"
     },
     {
-      "code": "65             result = conn.execute(\n66                 f\"\"\"\n67                 SELECT path, size, modified_time, hash\n68                 FROM \"{full_table}\"\n69                 WHERE source_tag = ?\n70                 \"\"\",\n71                 [source_tag],\n",
+      "code": "98             conn.execute(\n99                 f\"\"\"\n100                 DELETE FROM \"{full_table}\"\n101                 WHERE source_tag = ?\n102                 AND path IN ({placeholders})\n103                 \"\"\",\n104                 params,\n",
       "col_offset": 20,
-      "end_col_offset": 22,
+      "end_col_offset": 29,
       "filename": "knowledge_flow_backend/core/stores/catalog/duckdb_catalog_store.py",
       "issue_confidence": "MEDIUM",
       "issue_cwe": {
@@ -2068,13 +2165,13 @@
       },
       "issue_severity": "MEDIUM",
       "issue_text": "Possible SQL injection vector through string-based query construction.",
-      "line_number": 66,
+      "line_number": 99,
       "line_range": [
-        66,
-        67,
-        68,
-        69,
-        70
+        99,
+        100,
+        101,
+        102,
+        103
       ],
       "more_info": "https://bandit.readthedocs.io/en/1.8.5/plugins/b608_hardcoded_sql_expressions.html",
       "test_id": "B608",
