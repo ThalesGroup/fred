@@ -71,7 +71,9 @@ class OpenFgaRebacConfig(BaseModel):
         ...,
         description="Base URL for the OpenFGA HTTP API (e.g. https://fga.example.com)",
     )
-    store_id: str = Field(..., description="Identifier of the OpenFGA store to target")
+    store_name: str = Field(
+        default="fred", description="Name of the OpenFGA store to use"
+    )
     authorization_model_id: str | None = Field(
         default=None,
         description="Optional authorization model ID to use for read operations",

@@ -47,13 +47,13 @@ from fred_core import (
     OpenSearchKPIStore,
     OpenSearchLogStore,
     RamLogStore,
+    RebacEngine,
     SpiceDbRebacConfig,
     SQLStorageConfig,
     get_model,
+    rebac_factory,
     split_realm_url,
 )
-from fred_core.security.rebac.rebac_engine import RebacEngine
-from fred_core.security.rebac.spicedb_engine import SpiceDbRebacEngine
 from langchain_core.language_models.base import BaseLanguageModel
 from requests.auth import AuthBase
 
@@ -610,28 +610,9 @@ class ApplicationContext:
         return self._outbound_auth
 
     def get_rebac_engine(self) -> RebacEngine:
-        if self._rebac_engine is not None:
-            return self._rebac_engine
-
-        rebac_config = self.configuration.security.rebac
-        if isinstance(rebac_config, SpiceDbRebacConfig):
-            token_env_var = rebac_config.token_env_var
-            token = os.getenv(token_env_var)
-            if not token:
-                raise ValueError(
-                    f"Missing SpiceDB token environment variable: {token_env_var}"
-                )
-
-            logger.info(
-                "Initializing SpiceDB ReBAC engine (endpoint=%s, insecure=%s)",
-                rebac_config.endpoint,
-                rebac_config.insecure,
-            )
-            self._rebac_engine = SpiceDbRebacEngine(rebac_config, token=token)
-        else:
-            raise ValueError(
-                f"Unsupported ReBAC engine type: {getattr(rebac_config, 'type', rebac_config)}"
-            )
+        if self._rebac_engine is None:
+            rebac_config = self.configuration.security.rebac
+            self._rebac_engine = rebac_factory(rebac_config)
 
         return self._rebac_engine
 

@@ -20,8 +20,10 @@ services:
     environment:
       OPENFGA_HTTP_ADDR: 0.0.0.0:7080
       OPENFGA_GRPC_ADDR: 0.0.0.0:7081
-      OPENFGA_PLAYGROUND_ENABLED: false
+      # OPENFGA_PLAYGROUND_ENABLED: false
+      OPENFGA_PLAYGROUND_PORT: 4000
       FGA_API_TOKEN: test-token
     ports:
       - "7080:7080"
       - "7081:7081"
+      - "4000:4000"

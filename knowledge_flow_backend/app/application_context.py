@@ -33,13 +33,12 @@ from fred_core import (
     OpenSearchLogStore,
     RamLogStore,
     RebacEngine,
-    SpiceDbRebacConfig,
-    SpiceDbRebacEngine,
     SQLStorageConfig,
     SQLTableStore,
     StoreInfo,
     get_embeddings,
     get_model,
+    rebac_factory,
     split_realm_url,
 )
 from langchain_core.embeddings import Embeddings
@@ -574,27 +573,10 @@ class ApplicationContext:
         return self._kpi_writer
 
     def get_rebac_engine(self) -> RebacEngine:
-        if self._rebac_engine is not None:
-            return self._rebac_engine
+        if self._rebac_engine is None:
+            rebac_config = self.configuration.security.rebac
+            self._rebac_engine = rebac_factory(rebac_config)
 
-        rebac_config = self.configuration.security.rebac
-        if isinstance(rebac_config, SpiceDbRebacConfig):
-            token_env_var = rebac_config.token_env_var
-            token = os.getenv(token_env_var)
-            if not token:
-                raise ValueError(f"Missing SpiceDB token environment variable: {token_env_var}")
-
-            logger.info(
-                "Initializing SpiceDB ReBAC engine (endpoint=%s, insecure=%s)",
-                rebac_config.endpoint,
-                rebac_config.insecure,
-            )
-            self._rebac_engine = SpiceDbRebacEngine(
-                rebac_config,
-                token=token,
-            )
-        else:
-            raise ValueError(f"Unsupported ReBAC engine type: {getattr(rebac_config, 'type', rebac_config)}")
         return self._rebac_engine
 
     def get_kpi_store(self) -> BaseKPIStore:

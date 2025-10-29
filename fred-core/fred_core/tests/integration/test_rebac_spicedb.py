@@ -97,7 +97,7 @@ async def _load_openfga_engine() -> RebacEngine:
     try:
         config = OpenFgaRebacConfig(
             api_url=api_url,
-            store_id=store,
+            store_name=store,
             sync_schema_on_init=True,
         )
     except ValidationError as exc:
@@ -109,11 +109,6 @@ async def _load_openfga_engine() -> RebacEngine:
         engine = OpenFgaRebacEngine(config, token=store)
     except Exception as exc:
         pytest.skip(f"Failed to create OpenFGA engine: {exc}")
-
-    try:
-        await engine.initialize()
-    except Exception as exc:
-        pytest.skip(f"Failed to initialize OpenFGA engine: {exc}")
 
     return engine
 

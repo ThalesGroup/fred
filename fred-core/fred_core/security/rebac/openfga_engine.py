@@ -2,29 +2,18 @@
 
 from __future__ import annotations
 
-import asyncio
+import json
 import os
-import re
-from typing import Any, Awaitable
 
 from openfga_sdk.client.client import OpenFgaClient
 from openfga_sdk.client.configuration import ClientConfiguration
 from openfga_sdk.credentials import CredentialConfiguration, Credentials
-from openfga_sdk.exceptions import FgaValidationException
-from openfga_sdk.models.metadata import Metadata
-from openfga_sdk.models.object_relation import ObjectRelation
-from openfga_sdk.models.relation_metadata import RelationMetadata
-from openfga_sdk.models.relation_reference import RelationReference
-from openfga_sdk.models.tuple_to_userset import TupleToUserset
-from openfga_sdk.models.type_definition import TypeDefinition
-from openfga_sdk.models.userset import Userset
-from openfga_sdk.models.usersets import Usersets
-from openfga_sdk.models.write_authorization_model_request import (
-    WriteAuthorizationModelRequest,
-)
+from openfga_sdk.models.create_store_request import CreateStoreRequest
 
 from fred_core.security.models import Resource
-from fred_core.security.rebac.openfga_schema import DEFAULT_SCHEMA
+from fred_core.security.rebac.openfga_schema import (
+    DEFAULT_SCHEMA,
+)
 from fred_core.security.rebac.rebac_engine import (
     RebacEngine,
     RebacPermission,
@@ -37,6 +26,11 @@ from fred_core.security.structure import OpenFgaRebacConfig
 
 class OpenFgaRebacEngine(RebacEngine):
     """Evaluates permissions by delegating to an OpenFGA instance."""
+
+    _config: OpenFgaRebacConfig
+    _client_credentials: Credentials
+    _schema: str
+    _cached_client: OpenFgaClient | None = None
 
     def __init__(
         self,
@@ -52,31 +46,17 @@ class OpenFgaRebacEngine(RebacEngine):
                 f"({config.token_env_var})"
             )
 
-        credentials = Credentials(
+        self._client_credentials = Credentials(
             method="api_token",
             configuration=CredentialConfiguration(api_token=resolved_token),
         )
 
-        client_config = ClientConfiguration(
-            api_url=str(config.api_url),
-            store_id=config.store_id,
-            authorization_model_id=config.authorization_model_id,
-            credentials=credentials,
-            timeout_millisec=config.timeout_millisec,
-            headers=config.headers,
-        )
-
-        self._client = OpenFgaClient(client_config)
         self._config = config
-        self._last_model_id: str | None = None
+        self._schema = schema
 
-    async def initialize(self) -> None:
-        ...
-        # if self._config.create_store_if_needed:
-        #     await self._create_store_if_not_exists(self._config.store_id)
-
-        # if self._config.sync_schema_on_init:
-        #     await self._sync_schema()
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Public RebacEngine methods
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     async def add_relation(self, relation: Relation) -> str | None:
         raise NotImplementedError("OpenFGA relation writes are not implemented yet")
@@ -128,3 +108,72 @@ class OpenFgaRebacEngine(RebacEngine):
         consistency_token: str | None = None,
     ) -> bool:
         raise NotImplementedError("OpenFGA permission checks are not implemented yet")
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Client and initialization helpers
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def _create_client_with_no_store(self) -> OpenFgaClient:
+        """Create an OpenFGA client without a store ID (needed to list stores or create one)."""
+        client_config = ClientConfiguration(
+            api_url=str(self._config.api_url).rstrip("/"),
+            credentials=self._client_credentials,
+            timeout_millisec=self._config.timeout_millisec,
+            headers=self._config.headers,
+        )
+        return OpenFgaClient(client_config)
+
+    def _create_client_with_store_id(self, store_id: str) -> OpenFgaClient:
+        """Create an OpenFGA client configured with the given store ID."""
+        client = self._create_client_with_no_store()
+        client.set_store_id(store_id)
+        return client
+
+    async def _get_store_id(self, store_name: str) -> str | None:
+        async with self._create_client_with_no_store() as client:
+            response = await client.list_stores()
+
+        for store in response.stores:
+            if store.name == store_name:
+                return store.id
+
+        return None
+
+    async def _create_store(self, store_name: str) -> str:
+        async with self._create_client_with_no_store() as client:
+            response = await client.create_store(CreateStoreRequest(name=store_name))
+        return response.id
+
+    async def sync_schema(self, fga_client_with_store: OpenFgaClient) -> str:
+        response = await fga_client_with_store.write_authorization_model(
+            json.loads(self._schema)
+        )
+        return response.authorization_model_id
+
+    async def _initialize_client_and_store(self) -> None:
+        """If needed, create store, sync schema, and return client."""
+        # Try to retrieve store id
+        store_id = await self._get_store_id(self._config.store_name)
+        if store_id is None:
+            if not self._config.create_store_if_needed:
+                raise ValueError(
+                    f"OpenFGA store '{self._config.store_name}' does not exist"
+                )
+
+            # If it does not exist, create it
+            store_id = await self._create_store(self._config.store_name)
+
+        client = self._create_client_with_store_id(store_id)
+
+        # Sync the schema
+        if self._config.sync_schema_on_init:
+            await self.sync_schema(client)
+
+        return client
+
+    async def get_client(self) -> OpenFgaClient:
+        """Lazily initialize and cache an OpenFGA client with store ID."""
+        if self._cached_client is None:
+            self._cached_client = await self._initialize_client_and_store()
+
+        return self._cached_client
