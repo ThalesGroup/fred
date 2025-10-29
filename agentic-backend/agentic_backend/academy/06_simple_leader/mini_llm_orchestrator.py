@@ -93,6 +93,8 @@ class MiniLLMOrchestrator(LeaderFlow):
     and provides a final Answer.
     """
 
+    tuning = TUNING
+
     # --- Lifecycle / Bootstrap ------------------------------------------------
     async def async_init(self):
         router_provider = self.get_tuned_text("router.provider")

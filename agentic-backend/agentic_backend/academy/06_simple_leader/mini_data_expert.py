@@ -26,8 +26,16 @@ from __future__ import annotations
 from typing import Sequence
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from agentic_backend.core.agents.agent_spec import AgentTuning
 
 from agentic_backend.core.agents.simple_agent_flow import SimpleAgentFlow
+
+TUNING = AgentTuning(
+    role="mini_data_expert",
+    description=(
+        "A minimal document expert, it simulates a retrieval of KPIs by returning a short, deterministic response with mock data."
+    ),
+)
 
 
 class MiniDataExpert(SimpleAgentFlow):
@@ -36,6 +44,8 @@ class MiniDataExpert(SimpleAgentFlow):
     - This expert simulates a tool-backed response (e.g., KPI lookup).
     - Keeps the same surface as a real tool expert for easy later swap.
     """
+
+    tuning = TUNING
 
     async def arun(self, *, messages: Sequence[AnyMessage]) -> AIMessage:
         last_user = next(
