@@ -32,6 +32,7 @@ from langgraph.graph import END, START, StateGraph
 from agentic_backend.common.structures import ModelConfiguration
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
@@ -108,7 +109,8 @@ class DualModelResponder(AgentFlow):
     router_model: Runnable | None = None
     generator_model: Runnable | None = None
 
-    async def async_init(self):
+    async def async_init(self, runtime_context: RuntimeContext):
+        await super().async_init(runtime_context)
         # 1. Initialize the Router Model (Fast, Cheap)
         # Uses fully-tuned values for maximum control over behavior.
         router_provider = self.get_tuned_text("router.provider")
