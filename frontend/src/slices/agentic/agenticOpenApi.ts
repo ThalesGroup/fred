@@ -339,6 +339,7 @@ export type AgentChatOptions = {
   record_audio_files?: boolean;
   attach_files?: boolean;
 };
+export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
   name: string;
   /** MCP server transport. Can be sse, stdio, websocket or streamable_http */
@@ -357,6 +358,8 @@ export type McpServerConfiguration = {
   } | null;
   /** If false, this MCP server is ignored. */
   enabled?: boolean;
+  /** Client authentication mode. */
+  auth_mode?: ClientAuthMode;
 };
 export type Agent = {
   name: string;
