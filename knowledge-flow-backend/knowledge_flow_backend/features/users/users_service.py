@@ -7,8 +7,8 @@ from fred_core import Action, KeycloakUser, Resource, authorize
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakGetError
 
-from app.features.users.users_structures import UserSummary
-from app.security.keycloack_admin_client import create_keycloak_admin
+from knowledge_flow_backend.features.users.users_structures import UserSummary
+from knowledge_flow_backend.security.keycloack_admin_client import create_keycloak_admin
 
 logger = logging.getLogger(__name__)
 

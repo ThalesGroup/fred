@@ -6,8 +6,8 @@ from typing import cast
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakGetError
 
-from app.features.groups.groups_structures import GroupSummary
-from app.security.keycloack_admin_client import create_keycloak_admin
+from knowledge_flow_backend.features.groups.groups_structures import GroupSummary
+from knowledge_flow_backend.security.keycloack_admin_client import create_keycloak_admin
 
 logger = logging.getLogger(__name__)
 

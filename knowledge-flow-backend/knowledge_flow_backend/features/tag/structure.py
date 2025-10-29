@@ -19,8 +19,8 @@ from typing import Literal, Optional
 from fred_core import BaseModelWithId, RelationType, Resource, TagPermission
 from pydantic import BaseModel, Field, field_validator
 
-from app.features.groups.groups_structures import GroupSummary
-from app.features.users.users_structures import UserSummary
+from knowledge_flow_backend.features.groups.groups_structures import GroupSummary
+from knowledge_flow_backend.features.users.users_structures import UserSummary
 
 
 class TagType(str, Enum):

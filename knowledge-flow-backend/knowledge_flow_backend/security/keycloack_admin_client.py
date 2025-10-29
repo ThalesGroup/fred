@@ -4,7 +4,7 @@ import os
 from fred_core import split_realm_url
 from keycloak import KeycloakAdmin
 
-from app.application_context import get_configuration
+from knowledge_flow_backend.application_context import get_configuration
 
 logger = logging.getLogger(__name__)
 

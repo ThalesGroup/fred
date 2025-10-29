@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 from fred_core import KeycloakUser, get_current_user
 
-from app.features.groups.groups_service import list_groups as list_groups_from_service
-from app.features.groups.groups_structures import GroupSummary
+from knowledge_flow_backend.features.groups.groups_service import list_groups as list_groups_from_service
+from knowledge_flow_backend.features.groups.groups_structures import GroupSummary
 
 router = APIRouter(tags=["Groups"])
 

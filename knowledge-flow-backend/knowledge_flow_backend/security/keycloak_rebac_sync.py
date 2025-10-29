@@ -5,8 +5,8 @@ from typing import NamedTuple
 from fred_core import RebacEngine, RebacReference, Relation, RelationType, Resource
 from keycloak import KeycloakAdmin
 
-from app.application_context import ApplicationContext
-from app.security.keycloack_admin_client import create_keycloak_admin
+from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.security.keycloack_admin_client import create_keycloak_admin
 
 logger = logging.getLogger(__name__)
 

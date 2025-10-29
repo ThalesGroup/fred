@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 from fred_core import KeycloakUser, get_current_user
 
-from app.features.users.users_service import UserSummary
-from app.features.users.users_service import list_users as list_users_from_service
+from knowledge_flow_backend.features.users.users_service import UserSummary
+from knowledge_flow_backend.features.users.users_service import list_users as list_users_from_service
 
 router = APIRouter(tags=["Users"])
 
