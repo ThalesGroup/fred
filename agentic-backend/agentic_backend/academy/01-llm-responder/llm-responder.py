@@ -28,6 +28,9 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+
+# Import Fred base classes and types
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
@@ -54,12 +57,11 @@ TUNING = AgentTuning(
 @expose_runtime_source("agent.Responder")
 class Responder(AgentFlow):
     tuning = TUNING
+    graph: StateGraph | None = None
 
-    async def async_init(self):
-        # 1) Choose a model for this agent (keep it simple at first).
-        # If you have per-agent config, pass an id/name to get_model(...).
+    async def async_init(self, runtime_context: RuntimeContext):
+        await super().async_init(runtime_context)
         self.model = get_default_chat_model()
-        # 2) Build the graph (compilation is deferred to the framework).
         self._graph = self._build_graph()
         logger.info("Responder initialized. Graph built and model ready.")
 

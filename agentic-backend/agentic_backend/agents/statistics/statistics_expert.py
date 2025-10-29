@@ -22,8 +22,14 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
+from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_flow import AgentFlow
-from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from agentic_backend.core.agents.agent_spec import (
+    AgentTuning,
+    FieldSpec,
+    MCPServerRef,
+    UIHints,
+)
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.runtime_source import expose_runtime_source
 
@@ -66,6 +72,9 @@ STATISTIC_TUNING = AgentTuning(
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
     ],
+    mcp_servers=[
+        MCPServerRef(name="knowledge-flow-mcp-statistic"),
+    ],
 )
 
 
@@ -81,26 +90,19 @@ class Sage(AgentFlow):
 
     tuning = STATISTIC_TUNING
 
-    # Optional UX metadata (your system may read these from AgentSettings instead)
-    name: str = "Statistic Expert"
-    nickname: str = "Sage"
-    role: str = "Data Scientist Expert"
-    description: str = (
-        "analyse data, plot graphs and train classic ML models. "
-        "Ideal for analyzing tabular data ingested into the platform."
-    )
-    icon: str = "statistic_agent"
-    categories: list[str] = ["statistic", "sql"]
-    tag: str = "data"
+    def __init__(self, agent_settings: AgentSettings):
+        super().__init__(agent_settings=agent_settings)
+        self.mcp = MCPRuntime(agent=self)
+        self._recent_table_names: list[str] = []
 
     # ---------------------------
     # Bootstrap
     # ---------------------------
+
     async def async_init(self, runtime_context: RuntimeContext):
         await super().async_init(runtime_context)
-        self.mcp = MCPRuntime(agent=self)
         self.model = get_default_chat_model()
-        await self.mcp.init()
+        await self.mcp.init()  # start MCP + toolkit
         self.model = self.model.bind_tools(self.mcp.get_tools())
         self._graph = self._build_graph()
 
