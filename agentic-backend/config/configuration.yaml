@@ -103,6 +103,10 @@ mcp:
       transport: "streamable_http"
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000
+    - name: "knowledge-flow-mcp-statistic"
+      transport: "streamable_http"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-statistic"
+      sse_read_timeout: 2000
 
 storage:
   postgres:

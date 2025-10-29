@@ -20,6 +20,7 @@ from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning
 
 # Import GeoPart and TextPart
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.chatbot.chat_schema import GeoPart, MessagePart, TextPart
 from agentic_backend.core.runtime_source import expose_runtime_source
 
@@ -47,7 +48,8 @@ class GpsAgent(AgentFlow):
     )
     _graph: Optional[StateGraph] = None
 
-    async def async_init(self):
+    async def async_init(self, runtime_context: RuntimeContext):
+        await super().async_init(runtime_context)
         # We can remove self.model initialization
         self._graph = self._build_graph()
 

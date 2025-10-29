@@ -29,6 +29,7 @@ from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 
 # Import Fred base classes and types
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,8 @@ class AssetResponder(AgentFlow):
     _graph: StateGraph | None = None
 
     # 2. Runtime init: Initialize the asset service and graph
-    async def async_init(self):
+    async def async_init(self, runtime_context: RuntimeContext):
+        await super().async_init(runtime_context)
         self.model = get_default_chat_model()
         self._graph = self._build_graph()
         logger.info("AssetResponderAgent initialized with asset access.")
