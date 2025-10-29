@@ -71,7 +71,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
 
   // Here we set the "can" action to "create" since we want the viewer role not to see kpis and logs.
   // We also can remove the read_only allowed action to the viewer; to: kpi, opensearch & logs in rbac.py in fred_core/security
-  // but for now we can leave it like that. 
+  // but for now we can leave it like that.
   const canReadKpis = can("kpi", "create");
   const canReadOpenSearch = can("opensearch", "create");
   const canReadLogs = can("logs", "create");
@@ -123,7 +123,8 @@ export default function SideBar({ darkMode, onThemeChange }) {
             ],
           },
         ]
-      : []),    {
+      : []),
+    {
       key: "knowledge",
       label: t("sidebar.knowledge"),
       icon: <MenuBookIcon />,
@@ -250,9 +251,9 @@ export default function SideBar({ darkMode, onThemeChange }) {
         sx={{
           pt: 3,
           px: isSidebarSmall ? 1 : 2,
-          flexGrow: 1,
+          flexGrow: 1, // Crucial: makes the list fill remaining height
           overflowX: "hidden",
-          overflowY: "auto",
+          overflowY: "auto", // Crucial: enables internal list scrolling
         }}
       >
         {menuItems.map((item) => {
@@ -265,9 +266,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
               <Tooltip key={item.key} title={item.tooltip} placement="right" arrow>
                 <ListItem
                   component="div"
-                  onClick={() =>
-                    item.url ? navigate(item.url) : setOpenKeys((s) => ({ ...s, [item.key]: !opened }))
-                  }
+                  onClick={() => (item.url ? navigate(item.url) : setOpenKeys((s) => ({ ...s, [item.key]: !opened })))}
                   sx={{
                     borderRadius: "8px",
                     mb: 0.8,
@@ -321,9 +320,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
                     cursor: "pointer",
                   }}
                 >
-                  <ListItemIcon sx={{ color: "inherit", minWidth: 40, fontSize: "1.2rem" }}>
-                    {item.icon}
-                  </ListItemIcon>
+                  <ListItemIcon sx={{ color: "inherit", minWidth: 40, fontSize: "1.2rem" }}>{item.icon}</ListItemIcon>
                   <ListItemText
                     primary={
                       <Typography variant="sidebar" fontWeight={active ? 500 : 300}>
@@ -415,11 +412,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
               {darkMode ? t("sidebar.theme.dark") : t("sidebar.theme.light")}
             </Typography>
           )}
-          <IconButton
-            size="small"
-            onClick={onThemeChange}
-            sx={{ p: 1, "&:hover": { backgroundColor: hoverColor } }}
-          >
+          <IconButton size="small" onClick={onThemeChange} sx={{ p: 1, "&:hover": { backgroundColor: hoverColor } }}>
             {darkMode ? (
               <LightModeIcon sx={{ fontSize: "1rem", color: "text.secondary" }} />
             ) : (

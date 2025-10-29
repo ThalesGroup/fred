@@ -1,5 +1,5 @@
 {
-  "schemaFile": "../../../../knowledge_flow_backend/openapi.json",
+  "schemaFile": "../../../../knowledge-flow-backend/openapi.json",
   "apiFile": "./knowledgeFlowApi.ts",
   "apiImport": "knowledgeFlowApi",
   "outputFile": "knowledgeFlowOpenApi.ts",

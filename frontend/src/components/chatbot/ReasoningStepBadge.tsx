@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from "react";
-import { Box, Chip, ListItemButton, Stack, Typography } from "@mui/material";
-import type { Channel, ChatMessage } from "../../slices/agentic/agenticOpenApi";
+import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import TerminalIcon from "@mui/icons-material/Terminal";
+import { Box, Chip, Collapse, IconButton, ListItemButton, Stack, Tooltip, Typography } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
+import React, { useState } from "react";
+import type { Channel, ChatMessage } from "../../slices/agentic/agenticOpenApi";
 
 const channelColor = (c: Channel): "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
   switch (c) {
@@ -42,8 +44,12 @@ export default function ReasoningStepBadge({
   message: m,
   indexLabel,
   numberColWidth,
-  onClick,
+  onToggleDetails,
+  statusLabel,
   primaryText,
+  primaryTooltip,
+  secondaryText,
+  secondaryTooltip,
   chipChannel,
   chipNode,
   chipTask,
@@ -53,86 +59,241 @@ export default function ReasoningStepBadge({
   message: ChatMessage;
   indexLabel: React.ReactNode;
   numberColWidth: string;
-  onClick: () => void;
-  primaryText: string;
+  onToggleDetails?: () => void;
+  statusLabel?: string;
+  primaryText?: string;
+  primaryTooltip?: string;
+  secondaryText?: string;
+  secondaryTooltip?: string;
   chipChannel: string;
   chipNode?: string;
   chipTask?: string;
   toolName?: string;
   resultOk?: boolean;
 }) {
+  const theme = useTheme();
   const color = channelColor(m.channel);
+  const [expanded, setExpanded] = useState(false);
+
+  const baseAccent = (() => {
+    switch (color) {
+      case "primary":
+        return theme.palette.primary.main;
+      case "secondary":
+        return theme.palette.secondary.main;
+      case "error":
+        return theme.palette.error.main;
+      case "info":
+        return theme.palette.info.main;
+      case "success":
+        return theme.palette.success.main;
+      case "warning":
+        return theme.palette.warning.main;
+      default:
+        return theme.palette.divider;
+    }
+  })();
+
+  const accentMain =
+    typeof resultOk !== "undefined"
+      ? resultOk
+        ? theme.palette.success.main
+        : theme.palette.error.main
+      : baseAccent;
+
+  const hasResult = typeof resultOk !== "undefined";
+  const baseIntensity = theme.palette.mode === "dark" ? 0.15 : 0.05;
+  const tintedBg = alpha(accentMain, hasResult ? baseIntensity : baseIntensity * 0.35);
+  const tintedHover = alpha(accentMain, hasResult ? baseIntensity + 0.06 : baseIntensity * 0.6);
+  const borderColor = alpha(accentMain, hasResult ? 0.2 : 0.12);
+  const hoverBorderColor = alpha(accentMain, hasResult ? 0.28 : 0.18);
+  const accentBarColor = alpha(accentMain, hasResult ? 0.5 : 0.28);
+  const transitionValue = theme.transitions.create(["background-color", "border-color", "box-shadow", "transform"], {
+    duration: theme.transitions.duration.shorter,
+  });
+
+  const stepBubbleBg = alpha(accentMain, theme.palette.mode === "dark" ? 0.2 : 0.08);
+  const stepBubbleFg = theme.palette.mode === "dark" ? theme.palette.getContrastText(stepBubbleBg) : accentMain;
+
+  const derivedStatus =
+    statusLabel ??
+    (typeof resultOk === "boolean" ? (resultOk ? "ok" : "error") : resultOk === undefined ? undefined : undefined);
+  const statusChipColor =
+    typeof resultOk === "boolean"
+      ? resultOk
+        ? "success"
+        : "error"
+      : derivedStatus === "pending"
+        ? "warning"
+        : "default";
+
+  const toggleExpanded = () => setExpanded((prev) => !prev);
 
   return (
     <ListItemButton
-      onClick={onClick}
+      component="div"
+      onClick={toggleExpanded}
+      disableRipple
+      disableTouchRipple
       sx={{
+        borderRadius: 2,
+        px: 1.4,
         py: 0.9,
-        display: "grid",
-        gridTemplateColumns: `${numberColWidth} 1fr`, // number | content
-        columnGap: 1,
-        alignItems: "center",
+        display: "flex",
+        alignItems: "stretch",
+        gap: 1,
         position: "relative",
+        overflow: "hidden",
+        backgroundColor: tintedBg,
+        border: `1px solid ${borderColor}`,
+        boxShadow: hasResult ? theme.shadows[1] : theme.shadows[0],
+        transition: transitionValue,
         "&::before": {
           content: '""',
-          display: "block",
           position: "absolute",
-          left: 0,
           top: 0,
           bottom: 0,
-          width: 2,
-          bgcolor: (t) =>
-            color === "default"
-              ? t.palette.divider // or t.palette.grey[400]
-              : t.palette[color].main,
-          opacity: 0.35,
+          left: 0,
+          width: 3,
+          bgcolor: accentBarColor,
         },
-        pl: 1.5,
+        "&:hover": {
+          backgroundColor: tintedHover,
+          borderColor: hoverBorderColor,
+          transform: "translateY(-1px)",
+          boxShadow: hasResult ? theme.shadows[3] : theme.shadows[1],
+        },
       }}
     >
-      {/* Number rail */}
       <Box
         sx={{
-          textAlign: "right",
-          pr: 1,
-          color: "text.disabled",
-          fontVariantNumeric: "tabular-nums",
-          whiteSpace: "nowrap",
-          fontFamily:
-            "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+          flexShrink: 0,
+          minWidth: numberColWidth || "24px",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
         }}
       >
-        {indexLabel}
+        <Box
+          sx={{
+            width: 26,
+            height: 26,
+            borderRadius: "999px",
+            backgroundColor: stepBubbleBg,
+            color: stepBubbleFg,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontWeight: 500,
+            fontVariantNumeric: "tabular-nums",
+            fontSize: "0.8rem",
+            border: `1px solid ${alpha(accentMain, 0.35)}`,
+            boxShadow: theme.shadows[1],
+          }}
+        >
+          {indexLabel}
+        </Box>
       </Box>
 
-      {/* Content: chips left, text right */}
-      <Box sx={{ minWidth: 0 }}>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
-          {/* Chips group (left, can wrap within its own box if needed) */}
-          <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center" }}>
-            <Chip label={chipChannel} size="small" variant="outlined" color={color} />
-            {chipNode && <Chip label={chipNode} size="small" />}
-            {chipTask && <Chip label={chipTask} size="small" />}
-            {toolName && (
-              <Chip icon={<TerminalIcon sx={{ fontSize: 16 }} />} label={toolName} size="small" variant="outlined" />
-            )}
-            {m.channel === "tool_result" && typeof resultOk !== "undefined" && (
-              <Chip
-                label={resultOk ? "ok" : "error"}
-                size="small"
-                color={resultOk ? "success" : "error"}
-                variant={resultOk ? "outlined" : "filled"}
-              />
-            )}
-            {m.metadata?.agent_name && <Chip label={m.metadata.agent_name} size="small" variant="outlined" />}
-          </Box>
-
-          {/* Preview text (right, single line, ellipsis) */}
-          <Typography variant="body2" noWrap sx={{ ml: "auto", minWidth: 0, flex: 1, textAlign: "right" }}>
-            {primaryText}
-          </Typography>
+      <Stack spacing={0.75} sx={{ minWidth: 0, flex: 1, pr: 1 }}>
+        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" sx={{ opacity: 0.95 }}>
+          <Chip label={chipChannel} size="small" variant="outlined" color={color} sx={{ fontWeight: 600 }} />
+          {toolName && (
+            <Chip
+              icon={<TerminalIcon sx={{ fontSize: 16 }} />}
+              label={toolName}
+              size="small"
+              variant="outlined"
+              sx={{
+                backgroundColor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.2 : 0.08),
+              }}
+            />
+          )}
+          {!toolName && chipNode && <Chip label={chipNode} size="small" variant="outlined" />}
+          {derivedStatus && (
+            <Chip
+              label={
+                derivedStatus === "pending"
+                  ? (theme.palette.mode === "dark" ? "pending" : "pending")
+                  : derivedStatus
+              }
+              size="small"
+              color={statusChipColor as "default" | "success" | "error" | "warning"}
+              variant={statusChipColor === "default" ? "outlined" : "filled"}
+              sx={{ fontWeight: 600, textTransform: "lowercase" }}
+            />
+          )}
         </Stack>
-      </Box>
+
+        {(primaryText || secondaryText) && (
+          <Collapse in={expanded} timeout="auto" unmountOnExit sx={{ minWidth: 0 }}>
+            <Stack direction="column" spacing={0.75} sx={{ minWidth: 0, pr: 1 }}>
+              {chipTask && chipTask !== chipNode && (
+                <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap">
+                  <Chip label={chipTask} size="small" />
+                </Stack>
+              )}
+              {primaryText && (
+                <Tooltip title={primaryTooltip ?? ""} enterTouchDelay={0} disableHoverListener={!primaryTooltip}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      minWidth: 0,
+                      maxWidth: "100%",
+                      fontWeight: 500,
+                      color: theme.palette.text.primary,
+                      whiteSpace: "nowrap",
+                      textOverflow: "ellipsis",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {primaryText}
+                  </Typography>
+                </Tooltip>
+              )}
+              {secondaryText && (
+                <Tooltip title={secondaryTooltip ?? ""} enterTouchDelay={0} disableHoverListener={!secondaryTooltip}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      minWidth: 0,
+                      maxWidth: "100%",
+                      color:
+                        typeof resultOk === "undefined"
+                          ? theme.palette.text.secondary
+                          : resultOk
+                            ? theme.palette.success.dark
+                            : theme.palette.error.main,
+                      fontWeight: resultOk === false ? 600 : 500,
+                      whiteSpace: "nowrap",
+                      textOverflow: "ellipsis",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {secondaryText}
+                  </Typography>
+                </Tooltip>
+              )}
+            </Stack>
+          </Collapse>
+        )}
+      </Stack>
+
+      <Stack direction="row" spacing={0.25} alignItems="center" sx={{ flexShrink: 0, pr: 0.25 }}>
+        {onToggleDetails && (
+          <Tooltip title="Ouvrir les détails">
+            <IconButton
+              size="small"
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleDetails();
+              }}
+            >
+              <LaunchRoundedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Stack>
     </ListItemButton>
   );
 }

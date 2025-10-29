@@ -1,0 +1,6436 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FastAPI",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/knowledge-flow/v1/healthz": {
+      "get": {
+        "summary": "Healthz",
+        "operationId": "healthz_knowledge_flow_v1_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/ready": {
+      "get": {
+        "summary": "Ready",
+        "operationId": "ready_knowledge_flow_v1_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/documents/metadata/search": {
+      "post": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "List metadata for all ingested documents (optional filters)",
+        "description": "Returns metadata for all ingested documents in the knowledge base. You can optionally filter by metadata fields such as tags, title, source_tag, or retrievability.\n\n**Note:** Only ingested documents have persisted metadata. Discovered files (e.g., in pull-mode) are not returned by this endpoint \u2014 see `/documents/pull`.",
+        "operationId": "search_document_metadata_knowledge_flow_v1_documents_metadata_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Filters",
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentMetadata"
+                  },
+                  "type": "array",
+                  "title": "Response Search Document Metadata Knowledge Flow V1 Documents Metadata Search Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/documents/metadata/{document_uid}": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Fetch metadata for an ingested document",
+        "description": "Returns full metadata for a document that has already been ingested, either via push or pull. This endpoint does not support transient/discovered documents that haven't been ingested yet. Use `/documents/pull` to inspect discovered-but-unprocessed files.",
+        "operationId": "get_document_metadata_knowledge_flow_v1_documents_metadata__document_uid__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Uid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentMetadata"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/document/metadata/{document_uid}": {
+      "put": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Toggle document retrievability (indexed for search)",
+        "description": "Updates the `retrievable` flag for an ingested document. This affects whether the document is considered by vector search and agent responses.\n\nThis endpoint applies only to ingested documents. For discovered files not yet ingested, the flag has no effect.",
+        "operationId": "update_document_metadata_retrievable_knowledge_flow_v1_document_metadata__document_uid__put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Uid"
+            }
+          },
+          {
+            "name": "retrievable",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "boolean",
+              "title": "Retrievable"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/documents/browse": {
+      "post": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Unified endpoint to browse documents from any source (push or pull)",
+        "description": "Returns a paginated list of documents from any configured source.\n\n            - If the source is **push**, returns metadata for ingested documents (with filters).\n            - If the source is **pull**, returns both ingested and discovered-but-not-ingested documents.\n            - Supports optional filtering and pagination.\n\n            **Example filters:** `tags`, `retrievable`, `title`, etc.",
+        "operationId": "browse_documents_knowledge_flow_v1_documents_browse_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowseDocumentsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PullDocumentsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/pull/catalog/files": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "List cataloged files (pull sources only)",
+        "description": "Only works for sources of type `pull`. Use `/documents/sources` to discover available tags.",
+        "operationId": "list_catalog_files_knowledge_flow_v1_pull_catalog_files_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_tag",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The source tag for the cataloged files",
+              "title": "Source Tag"
+            },
+            "description": "The source tag for the cataloged files"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of entries to skip",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Number of entries to skip"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "exclusiveMinimum": 0,
+              "description": "Max number of entries to return",
+              "default": 100,
+              "title": "Limit"
+            },
+            "description": "Max number of entries to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PullFileEntry"
+                  },
+                  "title": "Response List Catalog Files Knowledge Flow V1 Pull Catalog Files Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/pull/catalog/rescan/{source_tag}": {
+      "post": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Rescan a pull-mode source and update its catalog",
+        "description": "Only supported for sources with `type: pull` and a compatible `provider`. Returns 404 if the source tag is unknown or not a pull-mode source.",
+        "operationId": "rescan_catalog_source_knowledge_flow_v1_pull_catalog_rescan__source_tag__post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Tag"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/documents/sources": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "List the configured document sources",
+        "description": "Returns all configured document sources (push or pull).\nPull-mode sources may support catalog operations depending on the provider.",
+        "operationId": "list_document_sources_knowledge_flow_v1_documents_sources_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentSourceInfo"
+                  },
+                  "type": "array",
+                  "title": "Response List Document Sources Knowledge Flow V1 Documents Sources Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/pull/documents": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "List documents available from a pull-mode source",
+        "description": "Returns a paginated list of documents discovered from the specified pull source.\n\n- If a document has already been ingested, its full metadata is returned.\n- If a document has only been discovered (e.g., scanned but not processed), a synthetic metadata entry is returned to help preview what can be ingested.\n\nThis endpoint **does not trigger ingestion**, it only provides visibility into what is available. Use `/documents/sources` to discover the configured document sources.",
+        "operationId": "list_pull_documents_knowledge_flow_v1_pull_documents_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_tag",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The pull source tag to list documents from",
+              "title": "Source Tag"
+            },
+            "description": "The pull source tag to list documents from"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Start offset for pagination",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Start offset for pagination"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "exclusiveMinimum": 0,
+              "description": "Maximum number of documents to return",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Maximum number of documents to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PullDocumentsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/markdown/{document_uid}": {
+      "get": {
+        "tags": [
+          "Content"
+        ],
+        "summary": "Get markdown preview of a processed document",
+        "description": "Returns the full Markdown preview of a document that has been successfully ingested and processed (either via push or pull mode).\n\n        This preview is only available if the document passed through the chunking or parsing pipeline that generated Markdown content.\n\n        ### When this works:\n        - The document was uploaded (push) or discovered and processed (pull)\n        - A Markdown preview was created during ingestion\n\n        ### When this fails:\n        - The document has not been processed yet\n        - The ingestion failed before preview generation",
+        "operationId": "get_markdown_preview_knowledge_flow_v1_markdown__document_uid__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Uid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkdownContentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/markdown/{document_uid}/media/{media_id}": {
+      "get": {
+        "tags": [
+          "Content"
+        ],
+        "summary": "Download an embedded media asset from a processed document",
+        "description": "Fetches an embedded media resource (e.g., image or attachment) that was extracted during the ingestion of a processed document.\n\n        This is only available for documents that had media assets linked or embedded (e.g., PDFs with images).\n\n        ### Usage:\n        Used by the frontend when rendering previews that link to original embedded media.",
+        "operationId": "download_document_media_knowledge_flow_v1_markdown__document_uid__media__media_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Uid"
+            }
+          },
+          {
+            "name": "media_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Media Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/raw_content/{document_uid}": {
+      "get": {
+        "tags": [
+          "Content"
+        ],
+        "summary": "Download the original raw document content",
+        "operationId": "download_document_knowledge_flow_v1_raw_content__document_uid__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Uid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Binary file stream",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/raw_content/stream/{document_uid}": {
+      "get": {
+        "tags": [
+          "Content"
+        ],
+        "summary": "Stream original document content (optimized for PDF Viewer and Range Requests)",
+        "operationId": "stream_document_knowledge_flow_v1_raw_content_stream__document_uid__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Uid"
+            }
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Range"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Full binary file stream (no Range header)"
+          },
+          "206": {
+            "description": "Partial binary file stream (Range Request)"
+          },
+          "416": {
+            "description": "Range Not Satisfiable"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/agent-assets/{agent}/upload": {
+      "post": {
+        "tags": [
+          "Agent Assets"
+        ],
+        "summary": "Upload or replace a per-user asset for an agent",
+        "operationId": "upload_agent_asset_knowledge_flow_v1_agent_assets__agent__upload_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Agent"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_agent_asset_knowledge_flow_v1_agent_assets__agent__upload_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetMeta"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/agent-assets/{agent}": {
+      "get": {
+        "tags": [
+          "Agent Assets"
+        ],
+        "summary": "List user's assets for an agent",
+        "operationId": "list_agent_assets_knowledge_flow_v1_agent_assets__agent__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Agent"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/agent-assets/{agent}/{key}": {
+      "get": {
+        "tags": [
+          "Agent Assets"
+        ],
+        "summary": "Stream or download an asset (supports Range)",
+        "operationId": "get_agent_asset_knowledge_flow_v1_agent_assets__agent___key__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Agent"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Range"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Agent Assets"
+        ],
+        "summary": "Delete a user's asset",
+        "operationId": "delete_agent_asset_knowledge_flow_v1_agent_assets__agent___key__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Agent"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Agent Asset Knowledge Flow V1 Agent Assets  Agent   Key  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/user-assets/upload": {
+      "post": {
+        "tags": [
+          "User Assets"
+        ],
+        "summary": "Upload or replace a per-user result asset",
+        "operationId": "upload_user_asset_knowledge_flow_v1_user_assets_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_user_asset_knowledge_flow_v1_user_assets_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetMeta"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/user-assets": {
+      "get": {
+        "tags": [
+          "User Assets"
+        ],
+        "summary": "List user's personal assets/results",
+        "operationId": "list_user_assets_knowledge_flow_v1_user_assets_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Asset-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "[AGENT USE ONLY] Explicit user ID of the asset owner (Header)",
+              "title": "X-Asset-User-Id"
+            },
+            "description": "[AGENT USE ONLY] Explicit user ID of the asset owner (Header)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/user-assets/{key}": {
+      "get": {
+        "tags": [
+          "User Assets"
+        ],
+        "summary": "Stream or download a user asset (supports Range)",
+        "operationId": "get_user_asset_knowledge_flow_v1_user_assets__key__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Range"
+            }
+          },
+          {
+            "name": "X-Asset-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "[AGENT USE ONLY] Explicit user ID of the asset owner (Header)",
+              "title": "X-Asset-User-Id"
+            },
+            "description": "[AGENT USE ONLY] Explicit user ID of the asset owner (Header)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "User Assets"
+        ],
+        "summary": "Delete a user's asset/result",
+        "operationId": "delete_user_asset_knowledge_flow_v1_user_assets__key__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          },
+          {
+            "name": "X-Asset-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "[AGENT USE ONLY] Explicit user ID of the asset owner (Header)",
+              "title": "X-Asset-User-Id"
+            },
+            "description": "[AGENT USE ONLY] Explicit user ID of the asset owner (Header)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete User Asset Knowledge Flow V1 User Assets  Key  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/upload-documents": {
+      "post": {
+        "tags": [
+          "Processing"
+        ],
+        "summary": "Upload documents only \u2014 defer processing to backend (e.g., Temporal)",
+        "operationId": "upload_documents_sync_knowledge_flow_v1_upload_documents_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_documents_sync_knowledge_flow_v1_upload_documents_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/upload-process-documents": {
+      "post": {
+        "tags": [
+          "Processing"
+        ],
+        "summary": "Upload and process documents immediately (end-to-end)",
+        "description": "Ingest and process one or more documents synchronously in a single step.",
+        "operationId": "process_documents_sync_knowledge_flow_v1_upload_process_documents_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_process_documents_sync_knowledge_flow_v1_upload_process_documents_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/tabular/databases": {
+      "get": {
+        "tags": [
+          "Tabular"
+        ],
+        "summary": "List available databases",
+        "description": "Return all available database names.",
+        "operationId": "list_tabular_databases",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "title": "Response List Tabular Databases"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/tabular/load/{db_name}": {
+      "post": {
+        "tags": [
+          "Tabular"
+        ],
+        "summary": "Load a specific database to be used in subsequent operations",
+        "description": "Explicitly load the database to be used for next queries.",
+        "operationId": "load_tabular_database",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "db_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Name of the database to load",
+              "title": "Db Name"
+            },
+            "description": "Name of the database to load"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/tabular/tables": {
+      "get": {
+        "tags": [
+          "Tabular"
+        ],
+        "summary": "List tables in the loaded database",
+        "description": "List all tables in the currently loaded database.",
+        "operationId": "list_tables_loaded_db",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListTableResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/tabular/schemas": {
+      "get": {
+        "tags": [
+          "Tabular"
+        ],
+        "summary": "List schemas of all tables in the loaded database",
+        "description": "Return schemas for all tables in the currently loaded database.",
+        "operationId": "list_all_table_schemas_loaded_db",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TabularSchemaResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List All Table Schemas Loaded Db"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/tabular/tables/{table_name}/schema": {
+      "get": {
+        "tags": [
+          "Tabular"
+        ],
+        "summary": "Get schema of a specific table in the loaded database",
+        "operationId": "get_table_schema_loaded_db",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Name of the table",
+              "title": "Table Name"
+            },
+            "description": "Name of the table"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TabularSchemaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/tabular/sql/read": {
+      "post": {
+        "tags": [
+          "Tabular"
+        ],
+        "summary": "Execute a read-only SQL query on the loaded database",
+        "operationId": "tabular_sql_read_loaded_db",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RawSQLRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TabularQueryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/tabular/sql/write": {
+      "post": {
+        "tags": [
+          "Tabular"
+        ],
+        "summary": "Execute a write SQL query on the loaded database",
+        "operationId": "tabular_sql_write_loaded_db",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RawSQLRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TabularQueryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/tabular/tables/{table_name}": {
+      "delete": {
+        "tags": [
+          "Tabular"
+        ],
+        "summary": "Delete a table from the loaded database",
+        "operationId": "delete_table_loaded_db",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Table name to delete",
+              "title": "Table Name"
+            },
+            "description": "Table name to delete"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/stat/list_datasets": {
+      "get": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "View the available datasets",
+        "operationId": "list_datasets",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/set_dataset": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Select a dataset",
+        "operationId": "set_dataset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetDatasetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/head": {
+      "get": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Preview the dataset",
+        "operationId": "head",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "n",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 5,
+              "title": "N"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/stat/describe": {
+      "get": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Describe the dataset",
+        "operationId": "describe",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/detect_outliers": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Detect outliers values in numeric columns",
+        "operationId": "detect_outliers",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectOutliersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/correlations": {
+      "get": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Get top correlations in the dataset",
+        "operationId": "correlations",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/plot/histogram": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Plot histogram for a column",
+        "operationId": "plot_histogram",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlotHistogramRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/plot/scatter": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Plot scatter plot",
+        "operationId": "plot_scatter",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlotScatterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/train": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Train a model",
+        "operationId": "train_model",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrainModelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/evaluate": {
+      "get": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Evaluate last trained model",
+        "operationId": "evaluate_model",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/predict_row": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Predict a single row of data",
+        "operationId": "predict_row",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictRowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/save_model": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Save trained model",
+        "operationId": "save_model",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveModelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/list_models": {
+      "get": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "List saved models",
+        "operationId": "list_models",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/load_model": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Load a previously saved model",
+        "operationId": "load_model",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoadModelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/test_distribution": {
+      "get": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Test if column fits normal, uniform or exponential distribution",
+        "operationId": "test_distribution",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "column",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Column"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/stat/detect_outliers_ml": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Detect outliers using ML method",
+        "operationId": "detect_outliers_ml",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectOutliersMLRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/stat/pca": {
+      "post": {
+        "tags": [
+          "Statistic"
+        ],
+        "summary": "Run PCA on selected features",
+        "operationId": "run_pca",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PCARequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/tags": {
+      "get": {
+        "tags": [
+          "Tags"
+        ],
+        "summary": "List tags (optionally filter by type or path prefix). Supports pagination to avoid huge payloads.",
+        "operationId": "list_all_tags_knowledge_flow_v1_tags_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TagType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by tag type",
+              "title": "Type"
+            },
+            "description": "Filter by tag type"
+          },
+          {
+            "name": "path_prefix",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by hierarchical path prefix, e.g. 'Sales' or 'Sales/HR'",
+              "title": "Path Prefix"
+            },
+            "description": "Filter by hierarchical path prefix, e.g. 'Sales' or 'Sales/HR'"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "description": "Max items to return",
+              "default": 10000,
+              "title": "Limit"
+            },
+            "description": "Max items to return"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Items to skip",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Items to skip"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TagWithItemsId"
+                  },
+                  "title": "Response List All Tags Knowledge Flow V1 Tags Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Tags"
+        ],
+        "summary": "Create a new tag",
+        "operationId": "create_tag_knowledge_flow_v1_tags_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagWithItemsId"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/tags/{tag_id}": {
+      "get": {
+        "tags": [
+          "Tags"
+        ],
+        "summary": "Get a tag by ID",
+        "operationId": "get_tag_knowledge_flow_v1_tags__tag_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagWithItemsId"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Tags"
+        ],
+        "summary": "Update a tag (can rename/move via name/path)",
+        "operationId": "update_tag_knowledge_flow_v1_tags__tag_id__put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagWithItemsId"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Tags"
+        ],
+        "summary": "Delete a tag",
+        "operationId": "delete_tag_knowledge_flow_v1_tags__tag_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/resources/schema": {
+      "get": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Get the JSON schema for the resource creation payload.",
+        "description": "Returns the JSON schema for the ResourceCreate model.\n\nThis is useful for clients that need to dynamically build forms or validate data\nbefore sending it to the 'Create a resource' endpoint.",
+        "operationId": "get_create_res_schema_knowledge_flow_v1_resources_schema_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Create Res Schema Knowledge Flow V1 Resources Schema Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/resources": {
+      "post": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Create a resource (prompt/template) and attach it to a library.",
+        "operationId": "create_resource_knowledge_flow_v1_resources_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "library_tag_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Library tag id to attach this resource to",
+              "title": "Library Tag Id"
+            },
+            "description": "Library tag id to attach this resource to"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResourceCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Resource"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "List all resources for a kind (prompt|template).",
+        "operationId": "list_resources_by_kind_knowledge_flow_v1_resources_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ResourceKind",
+              "description": "prompt | template"
+            },
+            "description": "prompt | template"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Resource"
+                  },
+                  "title": "Response List Resources By Kind Knowledge Flow V1 Resources Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/resources/{resource_id}": {
+      "put": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Update a resource (content/metadata).",
+        "operationId": "update_resource_knowledge_flow_v1_resources__resource_id__put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Resource Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResourceUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Resource"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Get a resource by id.",
+        "operationId": "get_resource_knowledge_flow_v1_resources__resource_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Resource Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Resource"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Delete a resource by id.",
+        "operationId": "delete_resource_knowledge_flow_v1_resources__resource_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Resource Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/schemas/echo": {
+      "post": {
+        "tags": [
+          "Schemas"
+        ],
+        "summary": "Ignore. Not a real endpoint.",
+        "description": "Ignore. This endpoint is only used to include some types (mainly one used in websocket) in the OpenAPI spec, so they can be generated as typescript types for the UI. This endpoint is not really used, this is just a code generation hack.",
+        "operationId": "echo_schema_knowledge_flow_v1_schemas_echo_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EchoEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/vector/search": {
+      "post": {
+        "tags": [
+          "Vector Search"
+        ],
+        "summary": "Search documents using vectorization",
+        "description": "Returns ranked VectorSearchHit objects for the query.",
+        "operationId": "search_documents_using_vectorization",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VectorSearchHit"
+                  },
+                  "type": "array",
+                  "title": "Response Search Documents Using Vectorization"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/vector/test": {
+      "post": {
+        "tags": [
+          "Vector Search"
+        ],
+        "summary": "Test endpoint that always returns a successful dummy response.",
+        "description": "A simple test endpoint for POST requests. Returns a fixed list of VectorSearchHit.",
+        "operationId": "test_post_success",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VectorSearchHit"
+                  },
+                  "type": "array",
+                  "title": "Response Test Post Success"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/kpi/query": {
+      "post": {
+        "tags": [
+          "KPI"
+        ],
+        "summary": "Query",
+        "operationId": "query_knowledge_flow_v1_kpi_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KPIQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KPIQueryResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/os/health": {
+      "get": {
+        "tags": [
+          "OpenSearch"
+        ],
+        "summary": "Cluster health",
+        "operationId": "os_health",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/os/pending_tasks": {
+      "get": {
+        "tags": [
+          "OpenSearch"
+        ],
+        "summary": "Pending tasks",
+        "operationId": "os_pending_tasks",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/os/allocation/explain": {
+      "get": {
+        "tags": [
+          "OpenSearch"
+        ],
+        "summary": "Shard allocation explanation",
+        "description": "Fred rationale:\n- Case 1: (index, shard, primary) provided \u2192 call POST as-is.\n- Case 2: only index provided \u2192 auto-pick a shard then POST.\n- Case 3: nothing provided \u2192 emulate GET /_cluster/allocation/explain\n  (OS chooses a random unassigned shard if any).",
+        "operationId": "os_allocation_explain",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "index",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Index name (optional)",
+              "title": "Index"
+            },
+            "description": "Index name (optional)"
+          },
+          {
+            "name": "shard",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Shard number (optional)",
+              "title": "Shard"
+            },
+            "description": "Shard number (optional)"
+          },
+          {
+            "name": "primary",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Whether primary shard (optional)",
+              "title": "Primary"
+            },
+            "description": "Whether primary shard (optional)"
+          },
+          {
+            "name": "include_disk_info",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include disk info in explanation",
+              "default": true,
+              "title": "Include Disk Info"
+            },
+            "description": "Include disk info in explanation"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/os/nodes/stats": {
+      "get": {
+        "tags": [
+          "OpenSearch"
+        ],
+        "summary": "Node stats",
+        "operationId": "os_nodes_stats",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "metric",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "_all",
+              "title": "Metric"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/os/indices": {
+      "get": {
+        "tags": [
+          "OpenSearch"
+        ],
+        "summary": "List indices (cat.indices)",
+        "operationId": "os_indices",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pattern",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "*",
+              "title": "Pattern"
+            }
+          },
+          {
+            "name": "bytes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "mb",
+              "title": "Bytes"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/os/index/{index}/stats": {
+      "get": {
+        "tags": [
+          "OpenSearch"
+        ],
+        "summary": "Index stats",
+        "operationId": "os_index_stats",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Index"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/os/index/{index}/mapping": {
+      "get": {
+        "tags": [
+          "OpenSearch"
+        ],
+        "summary": "Index mapping",
+        "operationId": "os_index_mapping",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Index"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/os/index/{index}/settings": {
+      "get": {
+        "tags": [
+          "OpenSearch"
+        ],
+        "summary": "Index settings",
+        "operationId": "os_index_settings",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Index"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/os/shards": {
+      "get": {
+        "tags": [
+          "OpenSearch"
+        ],
+        "summary": "Shards overview (cat.shards)",
+        "operationId": "os_shards",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pattern",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "*",
+              "title": "Pattern"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/os/diagnostics": {
+      "get": {
+        "tags": [
+          "OpenSearch"
+        ],
+        "summary": "Simple green/yellow/red summary",
+        "operationId": "os_diagnostics",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/logs/query": {
+      "post": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "Query logs via the configured LogStore (RAM/OpenSearch)",
+        "description": "Fred rationale:\n- Controllers stay skinny; query is delegated to the store.\n- Store is chosen by ApplicationContext (RAM for dev, OpenSearch for prod).\n- Authorization aligns with KPI: READ on Resource.LOGS.",
+        "operationId": "query_logs_knowledge_flow_v1_logs_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogQueryResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/mcp/reports/write": {
+      "post": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Create a simple report (Markdown canonical) and return URLs",
+        "description": "Fred rationale:\n- Controllers stay skinny; all logic is inside ReportsService.\n- Markdown is canonical; HTML/PDF are optional synchronous exports.\n- Everything lands under source_tag='reports' and MinIO prefix 'reports/'.",
+        "operationId": "write_report_knowledge_flow_v1_mcp_reports_write_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteReportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/process-documents": {
+      "post": {
+        "tags": [
+          "Processing"
+        ],
+        "summary": "Submit processing for push/pull files via Temporal",
+        "description": "Accepts a list of files (document_uid or external_path) and launches the appropriate ingestion workflow",
+        "operationId": "process_documents_knowledge_flow_v1_process_documents_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcessDocumentsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/schedule-documents": {
+      "post": {
+        "tags": [
+          "Processing"
+        ],
+        "summary": "Submit processing for push/pull files via Temporal",
+        "description": "Accepts a list of files (document_uid or external_path) and launches the appropriate ingestion workflow",
+        "operationId": "schedule_documents_knowledge_flow_v1_schedule_documents_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcessDocumentsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccessInfo": {
+        "properties": {
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "confidential": {
+            "type": "boolean",
+            "title": "Confidential",
+            "default": false
+          },
+          "acl": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Acl"
+          }
+        },
+        "type": "object",
+        "title": "AccessInfo"
+      },
+      "AssetListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AssetMeta"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "AssetListResponse",
+        "description": "List wrapper."
+      },
+      "AssetMeta": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "agents",
+              "users"
+            ],
+            "title": "Scope"
+          },
+          "entity_id": {
+            "type": "string",
+            "title": "Entity Id"
+          },
+          "owner_user_id": {
+            "type": "string",
+            "title": "Owner User Id"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etag"
+          },
+          "modified": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified"
+          },
+          "document_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Uid",
+            "default": ""
+          },
+          "extra": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Extra"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope",
+          "entity_id",
+          "owner_user_id",
+          "key",
+          "file_name",
+          "content_type",
+          "size"
+        ],
+        "title": "AssetMeta",
+        "description": "Public metadata for any asset, inheriting file details and adding scope context."
+      },
+      "Body_process_documents_sync_knowledge_flow_v1_upload_process_documents_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "metadata_json": {
+            "type": "string",
+            "title": "Metadata Json"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "metadata_json"
+        ],
+        "title": "Body_process_documents_sync_knowledge_flow_v1_upload_process_documents_post"
+      },
+      "Body_upload_agent_asset_knowledge_flow_v1_agent_assets__agent__upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File",
+            "description": "Binary payload (e.g., .pptx)"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key",
+            "description": "Logical asset key (defaults to uploaded filename)"
+          },
+          "content_type_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type Override",
+            "description": "Force a content-type if needed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_agent_asset_knowledge_flow_v1_agent_assets__agent__upload_post"
+      },
+      "Body_upload_documents_sync_knowledge_flow_v1_upload_documents_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "metadata_json": {
+            "type": "string",
+            "title": "Metadata Json"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "metadata_json"
+        ],
+        "title": "Body_upload_documents_sync_knowledge_flow_v1_upload_documents_post"
+      },
+      "Body_upload_user_asset_knowledge_flow_v1_user_assets_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File",
+            "description": "Binary payload (e.g., .pptx, .pdf)"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key",
+            "description": "Logical asset key (defaults to uploaded filename)"
+          },
+          "content_type_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type Override",
+            "description": "Force a content-type if needed"
+          },
+          "user_id_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id Override",
+            "description": "[AGENT USE ONLY] Explicit user ID of the asset owner"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_user_asset_knowledge_flow_v1_user_assets_upload_post"
+      },
+      "BrowseDocumentsRequest": {
+        "properties": {
+          "source_tag": {
+            "type": "string",
+            "title": "Source Tag",
+            "description": "Tag of the document source to browse (pull or push)"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filters",
+            "description": "Optional metadata filters"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offset",
+            "default": 0
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 500.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Limit",
+            "default": 50
+          },
+          "sort_by": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SortOption"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_tag"
+        ],
+        "title": "BrowseDocumentsRequest"
+      },
+      "DetectOutliersMLRequest": {
+        "properties": {
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Features"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "isolation_forest",
+              "lof"
+            ],
+            "title": "Method",
+            "default": "isolation_forest"
+          }
+        },
+        "type": "object",
+        "required": [
+          "features"
+        ],
+        "title": "DetectOutliersMLRequest"
+      },
+      "DetectOutliersRequest": {
+        "properties": {
+          "method": {
+            "type": "string",
+            "enum": [
+              "zscore",
+              "iqr"
+            ],
+            "title": "Method",
+            "default": "zscore"
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold",
+            "default": 3.0
+          }
+        },
+        "type": "object",
+        "title": "DetectOutliersRequest"
+      },
+      "DocSummary": {
+        "properties": {
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract",
+            "description": "Concise doc abstract for humans (UI)."
+          },
+          "keywords": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keywords",
+            "description": "Top key terms for navigation and filters."
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name",
+            "description": "LLM/flow used to produce this summary."
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method",
+            "description": "Algorithm/flow id (e.g., 'SmartDocSummarizer@v1')."
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At",
+            "description": "UTC when this summary was computed."
+          }
+        },
+        "type": "object",
+        "title": "DocSummary",
+        "description": "Fred rationale:\n- Store *document-level* summarization once (avoid chunk bloat).\n- Keep provenance to make results auditable and cache-bustable.\n- UI reads this to show 'Abstract' and 'Key terms' on demand."
+      },
+      "DocumentMetadata": {
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/Identity"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceInfo"
+          },
+          "file": {
+            "$ref": "#/components/schemas/FileInfo"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "$ref": "#/components/schemas/Tagging"
+          },
+          "access": {
+            "$ref": "#/components/schemas/AccessInfo"
+          },
+          "processing": {
+            "$ref": "#/components/schemas/Processing"
+          },
+          "preview_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Url"
+          },
+          "viewer_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Viewer Url"
+          },
+          "extensions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extensions",
+            "description": "Processor-specific additional attributes (namespaced keys)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "identity",
+          "source"
+        ],
+        "title": "DocumentMetadata"
+      },
+      "DocumentSourceInfo": {
+        "properties": {
+          "tag": {
+            "type": "string",
+            "title": "Tag"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "push",
+              "pull"
+            ],
+            "title": "Type"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "catalog_supported": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Supported",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "tag",
+          "type",
+          "description"
+        ],
+        "title": "DocumentSourceInfo"
+      },
+      "EchoEnvelope": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "SearchPolicy",
+              "SearchPolicyName"
+            ],
+            "title": "Kind"
+          },
+          "payload": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchPolicy"
+              },
+              {
+                "$ref": "#/components/schemas/SearchPolicyName"
+              }
+            ],
+            "title": "Payload",
+            "description": "Schema payload being echoed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "payload"
+        ],
+        "title": "EchoEnvelope"
+      },
+      "FileInfo": {
+        "properties": {
+          "file_type": {
+            "$ref": "#/components/schemas/FileType",
+            "default": "other"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type"
+          },
+          "file_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Size Bytes"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          },
+          "row_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Count"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "md5": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Md5"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          }
+        },
+        "type": "object",
+        "title": "FileInfo"
+      },
+      "FileToProcessWithoutUser": {
+        "properties": {
+          "source_tag": {
+            "type": "string",
+            "title": "Source Tag"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "default": []
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "document_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Uid"
+          },
+          "external_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Path"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "modified_time": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified Time"
+          },
+          "hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hash"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_tag"
+        ],
+        "title": "FileToProcessWithoutUser"
+      },
+      "FileType": {
+        "type": "string",
+        "enum": [
+          "pdf",
+          "docx",
+          "pptx",
+          "xlsx",
+          "csv",
+          "md",
+          "html",
+          "txt",
+          "other"
+        ],
+        "title": "FileType"
+      },
+      "FilterTerm": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "metric.name",
+              "metric.type",
+              "dims.status",
+              "dims.user_id",
+              "dims.agent_id",
+              "dims.doc_uid",
+              "dims.file_type",
+              "dims.http_status",
+              "dims.error_code",
+              "dims.model"
+            ],
+            "title": "Field"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "value"
+        ],
+        "title": "FilterTerm"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Identity": {
+        "properties": {
+          "document_name": {
+            "type": "string",
+            "title": "Document Name",
+            "description": "Original file name incl. extension"
+          },
+          "document_uid": {
+            "type": "string",
+            "title": "Document Uid",
+            "description": "Stable unique id across the system"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Human-friendly title for UI"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "created": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created"
+          },
+          "modified": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified"
+          },
+          "last_modified_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Modified By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_name",
+          "document_uid"
+        ],
+        "title": "Identity"
+      },
+      "KPIQuery": {
+        "properties": {
+          "since": {
+            "type": "string",
+            "title": "Since",
+            "description": "ISO or 'now-24h'"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          },
+          "filters": {
+            "items": {
+              "$ref": "#/components/schemas/FilterTerm"
+            },
+            "type": "array",
+            "title": "Filters"
+          },
+          "select": {
+            "items": {
+              "$ref": "#/components/schemas/SelectMetric"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Select"
+          },
+          "group_by": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "dims.file_type",
+                "dims.doc_uid",
+                "dims.doc_source",
+                "dims.user_id",
+                "dims.agent_id",
+                "dims.tool_name",
+                "dims.model",
+                "dims.http_status",
+                "dims.error_code",
+                "dims.status"
+              ]
+            },
+            "type": "array",
+            "title": "Group By"
+          },
+          "time_bucket": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimeBucket"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 10
+          },
+          "order_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderBy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "since",
+          "select"
+        ],
+        "title": "KPIQuery"
+      },
+      "KPIQueryResult": {
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/KPIQueryResultRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "title": "KPIQueryResult"
+      },
+      "KPIQueryResultRow": {
+        "properties": {
+          "group": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Group"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Metrics"
+          },
+          "doc_count": {
+            "type": "integer",
+            "title": "Doc Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group",
+          "metrics",
+          "doc_count"
+        ],
+        "title": "KPIQueryResultRow"
+      },
+      "ListTableResponse": {
+        "properties": {
+          "db_name": {
+            "type": "string",
+            "title": "Db Name"
+          },
+          "tables": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tables"
+          }
+        },
+        "type": "object",
+        "required": [
+          "db_name",
+          "tables"
+        ],
+        "title": "ListTableResponse"
+      },
+      "LoadModelRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "LoadModelRequest"
+      },
+      "LogEventDTO": {
+        "properties": {
+          "ts": {
+            "type": "number",
+            "title": "Ts"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "DEBUG",
+              "INFO",
+              "WARNING",
+              "ERROR",
+              "CRITICAL"
+            ],
+            "title": "Level"
+          },
+          "logger": {
+            "type": "string",
+            "title": "Logger"
+          },
+          "file": {
+            "type": "string",
+            "title": "File"
+          },
+          "line": {
+            "type": "integer",
+            "title": "Line"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg"
+          },
+          "service": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service"
+          },
+          "extra": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ts",
+          "level",
+          "logger",
+          "file",
+          "line",
+          "msg"
+        ],
+        "title": "LogEventDTO"
+      },
+      "LogFilter": {
+        "properties": {
+          "level_at_least": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "DEBUG",
+                  "INFO",
+                  "WARNING",
+                  "ERROR",
+                  "CRITICAL"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level At Least"
+          },
+          "logger_like": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logger Like"
+          },
+          "service": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service"
+          },
+          "text_like": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Like"
+          }
+        },
+        "type": "object",
+        "title": "LogFilter"
+      },
+      "LogQuery": {
+        "properties": {
+          "since": {
+            "type": "string",
+            "title": "Since",
+            "description": "ISO or 'now-10m'"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/LogFilter"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 500
+          },
+          "order": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "title": "Order",
+            "default": "asc"
+          }
+        },
+        "type": "object",
+        "required": [
+          "since"
+        ],
+        "title": "LogQuery"
+      },
+      "LogQueryResult": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/LogEventDTO"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "title": "LogQueryResult"
+      },
+      "MarkdownContentResponse": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "MarkdownContentResponse"
+      },
+      "OrderBy": {
+        "properties": {
+          "by": {
+            "type": "string",
+            "enum": [
+              "doc_count",
+              "metric"
+            ],
+            "title": "By",
+            "default": "doc_count"
+          },
+          "metric_alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metric Alias"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "title": "Direction",
+            "default": "desc"
+          }
+        },
+        "type": "object",
+        "title": "OrderBy"
+      },
+      "PCARequest": {
+        "properties": {
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Features"
+          },
+          "n_components": {
+            "type": "integer",
+            "title": "N Components",
+            "default": 2
+          }
+        },
+        "type": "object",
+        "required": [
+          "features"
+        ],
+        "title": "PCARequest"
+      },
+      "PlotHistogramRequest": {
+        "properties": {
+          "column": {
+            "type": "string",
+            "title": "Column"
+          },
+          "bins": {
+            "type": "integer",
+            "title": "Bins",
+            "default": 30
+          }
+        },
+        "type": "object",
+        "required": [
+          "column"
+        ],
+        "title": "PlotHistogramRequest"
+      },
+      "PlotScatterRequest": {
+        "properties": {
+          "x_col": {
+            "type": "string",
+            "title": "X Col"
+          },
+          "y_col": {
+            "type": "string",
+            "title": "Y Col"
+          }
+        },
+        "type": "object",
+        "required": [
+          "x_col",
+          "y_col"
+        ],
+        "title": "PlotScatterRequest"
+      },
+      "PredictRowRequest": {
+        "properties": {
+          "row": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Row"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row"
+        ],
+        "title": "PredictRowRequest"
+      },
+      "ProcessDocumentsRequest": {
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileToProcessWithoutUser"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "pipeline_name": {
+            "type": "string",
+            "title": "Pipeline Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "pipeline_name"
+        ],
+        "title": "ProcessDocumentsRequest"
+      },
+      "Processing": {
+        "properties": {
+          "stages": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ProcessingStatus"
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/ProcessingStage"
+            },
+            "type": "object",
+            "title": "Stages"
+          },
+          "errors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/ProcessingStage"
+            },
+            "type": "object",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "title": "Processing",
+        "description": "Typed processing status per stage (+ optional error messages)."
+      },
+      "ProcessingStage": {
+        "type": "string",
+        "enum": [
+          "raw",
+          "preview",
+          "vector",
+          "sql",
+          "mcp"
+        ],
+        "title": "ProcessingStage"
+      },
+      "ProcessingStatus": {
+        "type": "string",
+        "enum": [
+          "not_started",
+          "in_progress",
+          "done",
+          "failed"
+        ],
+        "title": "ProcessingStatus"
+      },
+      "PullDocumentsResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentMetadata"
+            },
+            "type": "array",
+            "title": "Documents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "documents"
+        ],
+        "title": "PullDocumentsResponse"
+      },
+      "PullFileEntry": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "modified_time": {
+            "type": "number",
+            "title": "Modified Time"
+          },
+          "hash": {
+            "type": "string",
+            "title": "Hash"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "size",
+          "modified_time",
+          "hash"
+        ],
+        "title": "PullFileEntry"
+      },
+      "RawSQLRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "RawSQLRequest"
+      },
+      "Resource": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ResourceKind"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "labels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labels"
+          },
+          "author": {
+            "type": "string",
+            "title": "Author"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "Raw YAML text or other content"
+          },
+          "library_tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Library Tags",
+            "description": "List of tags associated with the resource"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "version",
+          "author",
+          "created_at",
+          "updated_at",
+          "content",
+          "library_tags"
+        ],
+        "title": "Resource"
+      },
+      "ResourceCreate": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ResourceKind"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "labels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labels"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "content"
+        ],
+        "title": "ResourceCreate"
+      },
+      "ResourceKind": {
+        "type": "string",
+        "enum": [
+          "prompt",
+          "template",
+          "chat-context"
+        ],
+        "title": "ResourceKind"
+      },
+      "ResourceUpdate": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "labels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labels"
+          }
+        },
+        "type": "object",
+        "title": "ResourceUpdate"
+      },
+      "SaveModelRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "SaveModelRequest"
+      },
+      "SearchPolicy": {
+        "properties": {
+          "k_final": {
+            "type": "integer",
+            "title": "K Final",
+            "default": 5
+          },
+          "fetch_k": {
+            "type": "integer",
+            "title": "Fetch K",
+            "default": 60
+          },
+          "vector_min_cosine": {
+            "type": "number",
+            "title": "Vector Min Cosine",
+            "default": 0.52
+          },
+          "bm25_min_score": {
+            "type": "number",
+            "title": "Bm25 Min Score",
+            "default": 3.0
+          },
+          "require_phrase_hit": {
+            "type": "boolean",
+            "title": "Require Phrase Hit",
+            "default": true
+          },
+          "use_mmr": {
+            "type": "boolean",
+            "title": "Use Mmr",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "SearchPolicy"
+      },
+      "SearchPolicyName": {
+        "type": "string",
+        "enum": [
+          "hybrid",
+          "strict",
+          "semantic"
+        ],
+        "title": "SearchPolicyName"
+      },
+      "SearchRequest": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "top_k": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "description": "Number of results to return.",
+            "default": 10
+          },
+          "document_library_tags_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Library Tags Ids",
+            "description": "Optional list of tag names to filter documents. Only chunks in a document with at least one of these tags will be returned."
+          },
+          "search_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchPolicyName"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional search policy preset. If omitted, defaults to 'hybrid'."
+          }
+        },
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "title": "SearchRequest",
+        "description": "Request schema for vector search.\nGenerated OpenAPI will expose enum for policy, making UI dropdown trivial."
+      },
+      "SelectMetric": {
+        "properties": {
+          "alias": {
+            "type": "string",
+            "title": "Alias",
+            "description": "name in response, e.g. 'p95' or 'cost_usd'"
+          },
+          "op": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "value_count",
+              "percentile"
+            ],
+            "title": "Op"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "metric.value",
+                  "cost.tokens_total",
+                  "cost.usd",
+                  "cost.tokens_prompt",
+                  "cost.tokens_completion"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field",
+            "description": "Required except for count/percentile"
+          },
+          "p": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P",
+            "description": "Percentile, e.g. 95"
+          }
+        },
+        "type": "object",
+        "required": [
+          "alias",
+          "op"
+        ],
+        "title": "SelectMetric"
+      },
+      "SetDatasetRequest": {
+        "properties": {
+          "dataset_name": {
+            "type": "string",
+            "title": "Dataset Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset_name"
+        ],
+        "title": "SetDatasetRequest"
+      },
+      "SortOption": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "title": "Direction"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "direction"
+        ],
+        "title": "SortOption"
+      },
+      "SourceInfo": {
+        "properties": {
+          "source_type": {
+            "$ref": "#/components/schemas/SourceType"
+          },
+          "source_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Tag",
+            "description": "Repository/connector id, e.g. 'uploads', 'github'"
+          },
+          "pull_location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pull Location",
+            "description": "Path or URI to the original pull file"
+          },
+          "retrievable": {
+            "type": "boolean",
+            "title": "Retrievable",
+            "description": "True if raw file can be re-fetched",
+            "default": false
+          },
+          "date_added_to_kb": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Date Added To Kb",
+            "description": "When the document was added to the system"
+          },
+          "repository_web": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Web",
+            "description": "Web base of the repository, e.g. https://git/org/repo"
+          },
+          "repo_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Ref",
+            "description": "Commit SHA or branch used when pulling"
+          },
+          "file_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Path",
+            "description": "Path within the repository (POSIX style)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_type"
+        ],
+        "title": "SourceInfo"
+      },
+      "SourceType": {
+        "type": "string",
+        "enum": [
+          "push",
+          "pull"
+        ],
+        "title": "SourceType"
+      },
+      "TabularColumnSchema": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "dtype": {
+            "type": "string",
+            "enum": [
+              "string",
+              "integer",
+              "float",
+              "boolean",
+              "datetime",
+              "unknown"
+            ],
+            "title": "Dtype"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "dtype"
+        ],
+        "title": "TabularColumnSchema"
+      },
+      "TabularQueryResponse": {
+        "properties": {
+          "db_name": {
+            "type": "string",
+            "title": "Db Name"
+          },
+          "sql_query": {
+            "type": "string",
+            "title": "Sql Query"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows",
+            "default": []
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "db_name",
+          "sql_query"
+        ],
+        "title": "TabularQueryResponse"
+      },
+      "TabularSchemaResponse": {
+        "properties": {
+          "db_name": {
+            "type": "string",
+            "title": "Db Name"
+          },
+          "table_name": {
+            "type": "string",
+            "title": "Table Name"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/TabularColumnSchema"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "row_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "db_name",
+          "table_name",
+          "columns"
+        ],
+        "title": "TabularSchemaResponse"
+      },
+      "TagCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "type": {
+            "$ref": "#/components/schemas/TagType"
+          },
+          "item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Item Ids",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "TagCreate",
+        "description": "name: leaf segment (e.g. 'HR')\npath: optional parent path (e.g. 'Sales'); full path becomes 'Sales/HR'"
+      },
+      "TagType": {
+        "type": "string",
+        "enum": [
+          "document",
+          "prompt",
+          "template",
+          "chat-context"
+        ],
+        "title": "TagType"
+      },
+      "TagUpdate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "type": {
+            "$ref": "#/components/schemas/TagType"
+          },
+          "item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Item Ids",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "TagUpdate"
+      },
+      "TagWithItemsId": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "owner_id": {
+            "type": "string",
+            "title": "Owner Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "type": {
+            "$ref": "#/components/schemas/TagType"
+          },
+          "item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Item Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "updated_at",
+          "owner_id",
+          "name",
+          "type",
+          "item_ids"
+        ],
+        "title": "TagWithItemsId"
+      },
+      "Tagging": {
+        "properties": {
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tag Ids",
+            "description": "Stable tag IDs (UUIDs)"
+          },
+          "tag_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tag Names",
+            "description": "Display names for chips"
+          }
+        },
+        "type": "object",
+        "title": "Tagging",
+        "description": "REBAC-ready: store stable tag ids and display names.\nOptionally store one canonical breadcrumb path for the UI."
+      },
+      "TimeBucket": {
+        "properties": {
+          "interval": {
+            "type": "string",
+            "title": "Interval",
+            "description": "e.g. '1h', '1d', '15m'"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone",
+            "description": "IANA TZ, e.g. 'Europe/Paris'"
+          }
+        },
+        "type": "object",
+        "required": [
+          "interval"
+        ],
+        "title": "TimeBucket"
+      },
+      "TrainModelRequest": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Features"
+          },
+          "model_type": {
+            "type": "string",
+            "enum": [
+              "linear",
+              "random_forest"
+            ],
+            "title": "Model Type",
+            "default": "linear"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target",
+          "features"
+        ],
+        "title": "TrainModelRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VectorSearchHit": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          },
+          "viewer_fragment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Viewer Fragment"
+          },
+          "uid": {
+            "type": "string",
+            "title": "Uid",
+            "description": "Document UID"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "created": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created"
+          },
+          "modified": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified"
+          },
+          "file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Name"
+          },
+          "file_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Path"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "pull_location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pull Location"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type",
+            "description": "File type/category"
+          },
+          "tag_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tag Ids",
+            "default": []
+          },
+          "tag_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tag Names",
+            "default": []
+          },
+          "tag_full_paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tag Full Paths",
+            "default": []
+          },
+          "preview_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Url"
+          },
+          "preview_at_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview At Url"
+          },
+          "repo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Url"
+          },
+          "citation_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citation Url"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "confidential": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidential"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score",
+            "description": "Similarity score from vector search"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank"
+          },
+          "embedding_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Model"
+          },
+          "vector_index": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Index"
+          },
+          "token_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Count"
+          },
+          "retrieved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieved At"
+          },
+          "retrieval_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content",
+          "uid",
+          "title",
+          "score"
+        ],
+        "title": "VectorSearchHit"
+      },
+      "WriteReportRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Report title shown in UI"
+          },
+          "markdown": {
+            "type": "string",
+            "title": "Markdown",
+            "description": "Canonical Markdown content (stored as-is)"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id",
+            "description": "Optional template identifier for traceability"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "UI tags (chips)"
+          },
+          "render_formats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Render Formats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "markdown"
+        ],
+        "title": "WriteReportRequest"
+      },
+      "WriteReportResponse": {
+        "properties": {
+          "document_uid": {
+            "type": "string",
+            "title": "Document Uid"
+          },
+          "md_url": {
+            "type": "string",
+            "title": "Md Url"
+          },
+          "html_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Html Url"
+          },
+          "pdf_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_uid",
+          "md_url"
+        ],
+        "title": "WriteReportResponse"
+      }
+    },
+    "securitySchemes": {
+      "OAuth2PasswordBearer": {
+        "type": "oauth2",
+        "flows": {
+          "password": {
+            "scopes": {},
+            "tokenUrl": "token"
+          }
+        }
+      }
+    }
+  }
+}

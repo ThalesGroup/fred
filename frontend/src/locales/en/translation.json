@@ -2,7 +2,8 @@
   "common": {
     "add": "Add",
     "noneSelected": "None selected",
-    "close": "Close"
+    "close": "Close",
+    "loading": "Loading…"
   },
   "resource": {
     "kind": {
@@ -93,6 +94,19 @@
     "confirmDeleteTitle": "Confirm deletion",
     "confirmDeleteMessage": "Delete this asset? This action cannot be undone."
   },
+  "agentEditDrawer": {
+    "roleHelperText": "The agent's mandatory role for discovery (e.g., 'Financial Analyst')",
+    "descriptionHelperText": "The agent's mandatory description.",
+    "tagsHelperText": "Tags used for categorization and filtering.",
+    "noTunableFields": "This agent exposes no tunable fields.",
+    "coreFields": "Core Fields",
+    "tunableFields": "Tunable Fields",
+    "tagsLabel": "Tags",
+    "saveUser": "Apply to my profile",
+    "saveGlobal": "Apply to all users",
+    "selectMcpServers": "Select MCP servers",
+    "noMcpServers": "No MCP servers are currently available."
+  },
   "agentHub": {
     "title": "Agent Hub",
     "confirmDeleteTitle": "Confirm deletion",
@@ -104,6 +118,8 @@
     "search": "Search",
     "filter": "Filter",
     "create": "Create",
+    "createMcpAgent": "Create New MCP Agent",
+    "createMcpAgentNote": "Create a new MCP agent with default configuration.",
     "noAgents": "No agents found",
     "noFavorites": "You haven't added any agents to your favorites yet",
     "noTag": "No agents with tag \"{{tag}}\"",
@@ -135,8 +151,15 @@
       "add_mcp_server": "+ Add a MCP server"
     },
     "errors": {
+      "updateFailed": "Failed to update agent",
+      "tuningUpdateFailed": "Failed to update agent tuning",
+      "crewUpdateFailed": "Failed to update leader crew",
       "creationFailedSummary": "Agent creation failed",
       "creationFailedDetailFallback": "An unexpected error occurred while creating the agent."
+    },
+    "success": {
+      "summary": "Agent created",
+      "detail": "The agent has been successfully created."
     }
   },
   "chatbot": {
@@ -151,6 +174,8 @@
       "count": "{{count}} attached"
     },
     "recordAudio": "Record audio",
+    "sendMessage": "Send message",
+    "stopResponse": "Stop response",
     "stopRecording": "Stop recording",
     "audioChip": "Audio recording",
     "hideAudio": "Hide audio controller",
@@ -181,6 +206,7 @@
     "newConversation": "New conversation",
     "noConversation": "No conversation",
     "delete": "Delete",
+    "deleteAll": "Delete all",
     "chatContext": "Chat context",
     "conversationSetup": "Conversation setup",
     "newConversationHelp": "Start a new conversation (not yet saved)",

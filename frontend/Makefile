@@ -64,14 +64,14 @@ format: ## Use prettier to format all codebase
 .PHONY: update-agentic-api
 update-agentic-api: ## update the generated hooks used in UI based on agentic backend openApi spec
 	@echo "🔧 Generating agentic backend OpenAPI specification..."
-	cd ../agentic_backend && make generate-openapi
+	cd ../agentic-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for agentic backend..."
 	npx -y @rtk-query/codegen-openapi src/slices/agentic/agenticOpenApiConfig.json
 
 .PHONY: update-knowledge-flow-api
 update-knowledge-flow-api: ## update the generated hooks used in UI based on knowledge-flow backend openApi spec
 	@echo "🔧 Generating knowledge-flow backend OpenAPI specification..."
-	cd ../knowledge_flow_backend && make generate-openapi
+	cd ../knowledge-flow-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for knowledge-flow backend..."
 	npx -y @rtk-query/codegen-openapi src/slices/knowledgeFlow/knowledgeFlowOpenApiConfig.json
 

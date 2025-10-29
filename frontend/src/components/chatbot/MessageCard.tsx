@@ -13,21 +13,22 @@
 // limitations under the License.
 
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import PreviewIcon from "@mui/icons-material/Preview";
 import RateReviewIcon from "@mui/icons-material/RateReview";
 import { Box, Chip, Grid2, IconButton, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useMemo, useState } from "react";
 //import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 //import ClearIcon from "@mui/icons-material/Clear";
+import { Download as DownloadIcon } from "@mui/icons-material";
 import { AnyAgent } from "../../common/agent.ts";
+import { AgentChipMini } from "../../common/AgentChip.tsx";
+import { usePdfDocumentViewer } from "../../common/usePdfDocumentViewer";
 import type { GeoPart, LinkPart } from "../../slices/agentic/agenticOpenApi.ts";
 import {
   ChatMessage,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
 } from "../../slices/agentic/agenticOpenApi.ts";
-
-import { Download as DownloadIcon } from "@mui/icons-material";
-import { getAgentBadge } from "../../utils/avatar.tsx";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
 import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
 import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
@@ -35,6 +36,7 @@ import { useToast } from "../ToastProvider.tsx";
 import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 import GeoMapRenderer from "./GeoMapRenderer.tsx";
 import { MessagePart, toCopyText, toMarkdown } from "./messageParts.ts";
+
 export default function MessageCard({
   message,
   agent,
@@ -61,6 +63,7 @@ export default function MessageCard({
   onCitationClick?: (uid: string | null) => void;
 }) {
   const theme = useTheme();
+  const { openPdfDocument } = usePdfDocumentViewer();
   const { showError, showInfo } = useToast();
 
   // const [postSpeechText] = usePostSpeechTextMutation();
@@ -127,40 +130,46 @@ export default function MessageCard({
   const isResult = isToolResult(message);
 
   // Build the markdown content once (optionally filtering out text parts)
-  const { mdContent, downloadLinkPart, geoPart } = useMemo(() => {
+  const { mdContent, downloadLinkPart, viewLinkPart, geoPart } = useMemo(() => {
     const allParts = message.parts || [];
     let linkPart: LinkPart | undefined = undefined;
-    let mapPart: GeoPart | undefined = undefined; // 👈 1. Declare the new variable
+    let viewPart: LinkPart | undefined = undefined;
+    let mapPart: GeoPart | undefined = undefined;
 
-    // Filter out the specific LinkPart and GeoPart we want to render separately
     const processedParts = allParts.filter((p: any) => {
-      // Check for DOWNLOAD link
+      // DOWNLOAD link
       if (p.type === "link" && p.kind === "download") {
         if (!linkPart) {
           linkPart = p as LinkPart;
-          return false; // Exclude it from the Markdown content
+          return false;
         }
       }
 
-      // 👈 2. Check for GEO part
+      // VIEW link (PDF preview)
+      if (p.type === "link" && p.kind === "view") {
+        if (!viewPart) {
+          viewPart = p as LinkPart;
+          return false;
+        }
+      }
+
+      // GEO part
       if (p.type === "geo") {
         if (!mapPart) {
           mapPart = p as GeoPart;
-          return false; // Exclude it from the Markdown content
+          return false;
         }
       }
 
-      // If suppressText is true, exclude all 'text' parts from the Markdown content
-      if (suppressText && p.type === "text") {
-        return false;
-      }
-      return true; // Include all other parts (text, code, citations, etc.)
+      if (suppressText && p.type === "text") return false;
+      return true;
     }) as MessagePart[];
 
     return {
-      mdContent: toMarkdown(processedParts), // Convert remaining parts to markdown
+      mdContent: toMarkdown(processedParts),
       downloadLinkPart: linkPart,
-      geoPart: mapPart, // 👈 3. Return the GeoPart
+      viewLinkPart: viewPart,
+      geoPart: mapPart,
     };
   }, [message.parts, suppressText]);
 
@@ -170,8 +179,8 @@ export default function MessageCard({
         {/* Assistant avatar on the left */}
         {side === "left" && agent && (
           <Grid2 size="auto" paddingTop={2}>
-            <Tooltip title={`${agent.name}: ${agent.role}`}>
-              <Box sx={{ mr: 2, mb: 2 }}>{getAgentBadge(agent.name, agent.type === "leader")}</Box>
+            <Tooltip title={`${agent.name}: ${agent.tuning.role}`}>
+              <AgentChipMini agent={agent} />
             </Tooltip>
           </Grid2>
         )}
@@ -253,29 +262,51 @@ export default function MessageCard({
                       <GeoMapRenderer part={geoPart} />
                     </Box>
                   )}
-                  {/* 🌟 NEW: RENDER DOWNLOAD LINK SEPARATELY 🌟 */}
-                  {downloadLinkPart && (
-                    <Box px={side === "right" ? 0 : 1} pt={0.5} pb={1}>
-                      <Tooltip title="Click to securely download asset. Requires valid authentication context.">
-                        <Chip
-                          icon={<DownloadIcon />}
-                          // Display the title (filename)
-                          label={downloadLinkPart.title || "Download File"}
-                          // Use an anchor tag <a> for the Chip
-                          component="a"
-                          href={downloadLinkPart.href}
-                          // Optional: open in new tab
-                          target="_blank"
-                          clickable
-                          color="primary"
-                          variant="filled"
-                          size="medium"
-                          sx={{ fontWeight: "bold" }}
-                        />
-                      </Tooltip>
+                  {/* 🌟 DOWNLOAD / VIEW LINKS 🌟 */}
+                  {(downloadLinkPart || viewLinkPart) && (
+                    <Box px={side === "right" ? 0 : 1} pt={0.5} pb={1} display="flex" gap={1} flexWrap="wrap">
+                      {downloadLinkPart && (
+                        <Tooltip title="Click to securely download the PowerPoint file">
+                          <Chip
+                            icon={<DownloadIcon />}
+                            label={downloadLinkPart.title || "Download File"}
+                            component="a"
+                            href={downloadLinkPart.href}
+                            target="_blank"
+                            clickable
+                            color="primary"
+                            variant="filled"
+                            size="medium"
+                            sx={{ fontWeight: "bold" }}
+                          />
+                        </Tooltip>
+                      )}
+                      {viewLinkPart && (
+                        <Tooltip title="Open PDF preview in viewer">
+                          <Chip
+                            icon={<PreviewIcon />}
+                            label={viewLinkPart.title || "View PDF"}
+                            clickable
+                            color="secondary"
+                            variant="outlined"
+                            size="medium"
+                            sx={{ fontWeight: "bold" }}
+                            onClick={() => {
+                              if (viewLinkPart.document_uid) {
+                                openPdfDocument({
+                                  document_uid: viewLinkPart.document_uid,
+                                  file_name: viewLinkPart.file_name,
+                                });
+                              } else if (viewLinkPart.href) {
+                                window.open(viewLinkPart.href, "_blank");
+                              }
+                            }}
+                          />
+                        </Tooltip>
+                      )}
                     </Box>
                   )}
-                  {/* 🌟 END NEW 🌟 */}
+                  {/* 🌟 END LINKS 🌟 */}
                 </Box>
               </Grid2>
 

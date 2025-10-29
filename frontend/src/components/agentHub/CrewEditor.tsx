@@ -51,7 +51,7 @@ export function CrewEditor({ open, leader, allAgents, onClose, onSaved }: Props)
   const removeMember = async (name: string) => {
     if (!leader) return;
     const next = crew.filter((n) => n !== name);
-    await updateLeaderCrew(leader, next);
+    await updateLeaderCrew(leader, next, true); // FIXME Mark as global update for now
     onSaved?.();
     onClose(); // Close after removing a member
   };
@@ -59,7 +59,7 @@ export function CrewEditor({ open, leader, allAgents, onClose, onSaved }: Props)
   const addMember = async () => {
     if (!leader || !newMember) return;
     const next = Array.from(new Set([...crew, newMember]));
-    await updateLeaderCrew(leader, next);
+    await updateLeaderCrew(leader, next, true); // FIXME Mark as global update for now
     setNewMember("");
     onSaved?.();
     onClose(); // Close after adding a member

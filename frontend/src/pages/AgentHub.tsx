@@ -40,8 +40,10 @@ import { CrewEditor } from "../components/agentHub/CrewEditor";
 // OpenAPI
 import {
   Leader,
+  McpServerConfiguration,
   useDeleteAgentAgenticV1AgentsNameDeleteMutation,
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
+  useListMcpServersAgenticV1AgentsMcpServersGetQuery,
 } from "../slices/agentic/agenticOpenApi";
 
 // UI union facade
@@ -114,6 +116,10 @@ export const AgentHub = () => {
   const [agentForAssetManagement, setAgentForAssetManagement] = useState<AnyAgent | null>(null);
 
   const [triggerGetFlows, { isFetching }] = useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
+  const {
+    data: mcpServersData,
+    isFetching: isFetchingMcpServers,
+  } = useListMcpServersAgenticV1AgentsMcpServersGetQuery();
   const { updateEnabled } = useAgentUpdater();
   const [triggerGetSource] = useLazyGetRuntimeSourceTextQuery();
 
@@ -190,12 +196,33 @@ export const AgentHub = () => {
 
   const handleTabChange = (_event: SyntheticEvent, newValue: number) => setTabValue(newValue);
 
+  const knownMcpServers = useMemo<McpServerConfiguration[]>(() => {
+    if (!mcpServersData) return [];
+
+    const ensureArray = Array.isArray(mcpServersData)
+      ? mcpServersData
+      : Array.isArray((mcpServersData as { items?: unknown }).items)
+        ? ((mcpServersData as { items?: unknown }).items as unknown[])
+        : [];
+
+    return ensureArray
+      .filter((server): server is McpServerConfiguration => {
+        if (!server || typeof server !== "object") return false;
+        const name = (server as { name?: unknown }).name;
+        return typeof name === "string" && name.trim().length > 0;
+      })
+      .map((server) => ({
+        ...(server as McpServerConfiguration),
+        name: ((server as { name: string }).name || "").trim(),
+      }));
+  }, [mcpServersData]);
+
   const filteredAgents = useMemo(() => {
     if (tabValue === 0) return agents;
     if (tabValue === 1) return agents.filter((a) => favoriteAgents.includes(a.name));
     if (categories.length > 2 && tabValue >= 2) {
       const tagName = categories[tabValue].name;
-      return agents.filter((a) => a.tags?.includes(tagName));
+      return agents.filter((a) => a.tuning.tags?.includes(tagName));
     }
     return agents;
   }, [tabValue, agents, favoriteAgents, categories]);
@@ -318,7 +345,7 @@ export const AgentHub = () => {
                   const isFav = category.name === "favorites";
                   const count = isFav
                     ? favoriteAgents.length
-                    : agents.filter((a) => a.tags?.includes(category.name)).length;
+                    : agents.filter((a) => a.tuning.tags?.includes(category.name)).length;
 
                   return (
                     <Tab
@@ -464,7 +491,14 @@ export const AgentHub = () => {
           </Card>
         </Fade>
         {/* Drawers / Modals */}
-        <AgentEditDrawer open={editOpen} agent={selected} onClose={() => setEditOpen(false)} onSaved={fetchAgents} />
+        <AgentEditDrawer
+          open={editOpen}
+          agent={selected}
+          onClose={() => setEditOpen(false)}
+          onSaved={fetchAgents}
+          knownMcpServers={knownMcpServers}
+          isLoadingKnownMcpServers={isFetchingMcpServers}
+        />
         <CrewEditor
           open={crewOpen}
           leader={selected && isLeader(selected) ? (selected as Leader & { type: "leader" }) : null}
@@ -561,8 +595,8 @@ export const AgentHub = () => {
 function extractUniqueTags(agents: AnyAgent[]): string[] {
   const tagsSet = new Set<string>();
   agents.forEach((agent) => {
-    if (agent.tags && Array.isArray(agent.tags)) {
-      agent.tags.forEach((tag) => {
+    if (agent.tuning.tags && Array.isArray(agent.tuning.tags)) {
+      agent.tuning.tags.forEach((tag) => {
         if (typeof tag === "string" && tag.trim() !== "") {
           tagsSet.add(tag);
         }

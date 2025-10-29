@@ -17,6 +17,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
+import { AgentChipWithIcon } from "../../common/AgentChip.tsx";
 import { getConfig } from "../../common/config.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
@@ -34,7 +35,6 @@ import {
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { getAgentBadge } from "../../utils/avatar.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import { keyOf, mergeAuthoritative, sortMessages, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import ChatKnowledge from "./ChatKnowledge.tsx";
@@ -124,6 +124,30 @@ const ChatBot = ({
   };
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
+  const stopStreaming = () => {
+    const socket = webSocketRef.current;
+    if (!socket) {
+      setWaitResponse(false);
+      return;
+    }
+
+    try {
+      if (
+        socket.readyState === WebSocket.OPEN ||
+        socket.readyState === WebSocket.CONNECTING ||
+        socket.readyState === WebSocket.CLOSING
+      ) {
+        socket.close(4000, "client_stop");
+      }
+    } catch (err) {
+      console.error("[❌ ChatBot] Failed to close WebSocket on stop:", err);
+    } finally {
+      webSocketRef.current = null;
+      wsTokenRef.current = null;
+      setWebSocket(null);
+      setWaitResponse(false);
+    }
+  };
 
   // === SINGLE scroll container ref (attach to the ONLY overflow element) ===
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -248,6 +272,8 @@ const ChatBot = ({
       socket.onclose = () => {
         console.warn("[❌ ChatBot] WebSocket closed");
         webSocketRef.current = null;
+        wsTokenRef.current = null;
+        setWebSocket(null);
         setWaitResponse(false);
       };
     });
@@ -282,9 +308,22 @@ const ChatBot = ({
   // Fetch messages when the session changes
   useEffect(() => {
     const id = currentChatBotSession?.id;
-    if (!id) return;
 
-    setAllMessages([]); // clear view while fetching
+    if (!id) {
+      messagesRef.current = [];
+      setAllMessages([]);
+      return;
+    }
+
+    const existingForSession = messagesRef.current.filter((msg) => msg.session_id === id);
+    if (existingForSession.length > 0) {
+      const sortedExisting = sortMessages(existingForSession);
+      messagesRef.current = sortedExisting;
+      setAllMessages(sortedExisting);
+    } else if (messagesRef.current.length > 0) {
+      messagesRef.current = [];
+      setAllMessages([]);
+    }
 
     fetchHistory({ sessionId: id })
       .unwrap()
@@ -294,7 +333,9 @@ const ChatBot = ({
         for (const msg of serverMessages) console.log(msg);
         console.groupEnd();
 
-        setAllMessages(sortMessages(serverMessages)); // layout effect will scroll
+        const sorted = sortMessages(serverMessages);
+        messagesRef.current = sorted;
+        setAllMessages(sorted); // layout effect will scroll
         // NEW — If this is the first time we "see" this id, bind draft now.
         console.log("[🔗 ChatBot] Binding draft agent to session id from history load:", id);
         onBindDraftAgentToSessionId?.(id);
@@ -452,12 +493,19 @@ const ChatBot = ({
    */
   const queryChatBot = async (input: string, agent?: AnyAgent, runtimeContext?: RuntimeContext) => {
     console.log(`[📤 ChatBot] Sending message: ${input}`);
-
+    // Get tokens for backend use. This proacively allows the backend to perform
+    // user-authenticated operations (e.g., vector search) on behalf of the user.
+    // The backend is then responsible for refreshing tokens as needed. Which will rarely be needed
+    // because tokens are refreshed often on the frontend.
+    const refreshToken = KeyCloakService.GetRefreshToken();
+    const accessToken = KeyCloakService.GetToken();
     const eventBase: ChatAskInput = {
       message: input,
       agent_name: agent ? agent.name : currentAgent.name,
       session_id: currentChatBotSession?.id,
       runtime_context: runtimeContext,
+      access_token: accessToken || undefined, // Now the backend can read the active token
+      refresh_token: refreshToken || undefined, // Now the backend can save and use the refresh token
     };
 
     const event = {
@@ -566,7 +614,8 @@ const ChatBot = ({
                   flexWrap: "nowrap",
                 }}
               >
-                {getAgentBadge(currentAgent.name, currentAgent.type === "leader")}
+                <AgentChipWithIcon agent={currentAgent} />
+
                 <Typography variant="h5" sx={{ fontWeight: 600, letterSpacing: 0.2 }}>
                   {t("chatbot.startNew", { name: currentAgent.name })}
                 </Typography>
@@ -585,7 +634,7 @@ const ChatBot = ({
                 }}
               >
                 <Typography variant="body2" sx={{ fontStyle: "italic" }}>
-                  {currentAgent.role}
+                  {currentAgent.tuning.role}
                 </Typography>
 
                 <Box
@@ -606,6 +655,7 @@ const ChatBot = ({
                 agentChatOptions={currentAgent.chat_options}
                 isWaiting={waitResponse}
                 onSend={handleSend}
+                onStop={stopStreaming}
                 onContextChange={setUserInputContext}
                 sessionId={currentChatBotSession?.id}
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
@@ -654,6 +704,7 @@ const ChatBot = ({
                 agentChatOptions={currentAgent.chat_options}
                 isWaiting={waitResponse}
                 onSend={handleSend}
+                onStop={stopStreaming}
                 onContextChange={setUserInputContext}
                 sessionId={currentChatBotSession?.id}
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}

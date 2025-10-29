@@ -1,0 +1,200 @@
+app:
+  name: "Knowledge Flow Backend"
+  base_url: "/knowledge-flow/v1"
+  address: "127.0.0.1"
+  port: 8112
+  log_level: "info"
+  reload: false
+  reload_dir: "."
+
+security:
+  m2m:
+    enabled: false
+    client_id: "knowledge-flow"
+    realm_url: "http://app-keycloak:8080/realms/app"
+  user:
+    enabled: false
+    client_id: "app"
+    realm_url: "http://app-keycloak:8080/realms/app"
+  authorized_origins:
+    - "http://localhost:5173"
+  rebac:
+    type: spicedb
+    endpoint: "http://localhost:50051"
+    insecure: true
+
+scheduler:
+  enabled: true
+  backend: "temporal"
+  temporal:
+    host: "localhost:7233"
+    namespace: "default"
+    task_queue: "ingestion"
+    workflow_prefix: "pipeline"
+    connect_timeout_seconds: 5
+
+# -----------------------------------------------------------------------------
+# INPUT PROCESSORS
+# -----------------------------------------------------------------------------
+# Mandatory: Input processors MUST be explicitly defined.
+# These classes parse incoming files (e.g., PDFs, DOCXs, CSVs) into structured documents.
+
+input_processors:
+  - prefix: ".pdf"
+    class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+  - prefix: ".docx"
+    class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+  - prefix: ".pptx"
+    class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+  - prefix: ".csv"
+    class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+  - prefix: ".txt"
+    class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+  - prefix: ".md"
+    class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+  - prefix: ".xlsm"
+    class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+
+# -----------------------------------------------------------------------------
+# OUTPUT PROCESSORS (Optional)
+# -----------------------------------------------------------------------------
+# Optional: You can override the default behavior for output processing.
+# If not defined, the system automatically selects based on input type:
+#   - Markdown files → VectorizationProcessor
+#   - Tabular files (CSV, XLSX) → TabularProcessor
+#
+# You can specialize behavior by mapping file extensions to custom classes.
+#
+# Example to OVERRIDE default behavior:
+#
+# output_processors:
+#   - prefix: ".docx"
+#     class_path: knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor
+#   - prefix: ".csv"
+#     class_path: knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor.TabularProcessor
+#   - prefix: ".xlsx"
+#     class_path: knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor.TabularProcessor
+#   - prefix: ".pptx"
+#     class_path: knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor
+#
+# To SKIP processing for a specific file type, you can specify an empty output processor.
+#
+# output_processors:
+#  - prefix: ".txt"
+#    class_path: knowledge_flow_backend.core.processors.output.empty_output_processor.EmptyOutputProcessor
+
+content_storage:
+  # The content store type can be either "local" or "minio" or "gcs"
+  # If you are using minio, make sure to set the following environment variables:
+  # - MINIO_SECRET_KEY
+  # If you are using gcs, make sure to set the following environment variables:
+  # - GCS_PROJECT_ID
+  # - GCS_BUCKET_NAME
+  # - GCS_CREDENTIALS_PATH
+  # If you are using local storage, make sure to set the following environment variable:
+  # - LOCAL_CONTENT_STORAGE_PATH default to '~/.knowledge-flow/content-store'
+  type: "local"
+  ################################################
+  # Example using MinIO as content storage backend
+  ################################################
+  # type: "minio"
+  # endpoint: localhost:9000
+  # access_key: minioadmin
+  # secret_key: minioadmin # Overrides the MINIO_SECRET_KEY environment variable
+  # secure: False
+  # bucket_name: app-bucket
+
+metadata_storage:
+  # Metadata Storage Configuration
+  #
+  # Available backends:
+  # - local       → stores metadata in a JSON file on disk
+  # - opensearch  → stores metadata in a persistent OpenSearch index (recommended for production)
+  #
+  # ✅ Default is "local" for easy startup. No external services are needed.
+  # If you are using local storage, make sure to set the following environment variable:
+  # - LOCAL_METADATA_STORAGE_PATH default to '~/.knowledge-flow/metadata-store.json'
+  type: "local"
+  root_path: ~/.fred/knowledge-flow/metadata-store.json
+
+  # --- Example: OpenSearch configuration
+  #
+  # type: opensearch
+  # host: https://localhost:9200              # OpenSearch host
+  # secure: true                              # Use HTTPS (set to false for HTTP)
+  # verify_certs: false                       # Whether to verify TLS certificates
+  # metadata_index: metadata-index            # Index for storing metadata
+  # vector_index: vector-index                # Vector index (required if reusing OpenSearch backend)
+  # ➤ Required environment variables (not stored in this file):
+  #   OPENSEARCH_USER=admin
+  #   OPENSEARCH_PASSWORD=xxx
+
+# --- Vector storage ---
+# type: one of [in_memory, opensearch, weaviate]
+vector_storage:
+  type: in_memory
+  # type: opensearch
+  # host: https://localhost:9200              # Opensearch HTTP URL
+  # secure: true                              # Use HTTPS (set to false for HTTP)
+  # verify_certs: false                       # Whether to verify TLS certificates
+  # index: vector-index                       # Index name for vectors
+
+tabular_storage:
+  type: "duckdb"
+  duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
+
+# --- Catalog storage ---
+# type: one of [duckdb]
+catalog_storage:
+  type: "duckdb"
+  duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
+
+# --- Embedding backend ---
+# type: string (e.g., openai, azure-openai, ollama, etc.)
+embedding_model:
+  type:
+    "openai"
+    # -----------------------------------------------------------------------------
+  # EMBEDDING BACKEND
+  # -----------------------------------------------------------------------------
+  # Set the embedding backend to use:
+  #   - "openai"      → Use OpenAI's public API
+  #   - "azure-openai" → Use Azure OpenAI service directly
+  #   - "azure-apim"   → Use Azure OpenAI via Azure APIM Gateway (OAuth2 + subscription key)
+  #   - "ollama"      → Use Ollama's API
+  #
+  # Required environment variables based on the selected backend:
+  #
+  # BACKEND: "openai"
+  # -------------------------------------
+  # - OPENAI_API_KEY
+  # - OPENAI_API_BASE (optional if using default)
+  # - OPENAI_API_VERSION (optional)
+  #
+  # BACKEND: "azure-openai"
+  # -------------------------------------
+  # - AZURE_OPENAI_API_KEY
+  # - AZURE_OPENAI_ENDPOINT
+  # - AZURE_OPENAI_API_VERSION
+  # - AZURE_DEPLOYMENT_EMBEDDING
+  #
+  # BACKEND: "azure-apim"
+  # -------------------------------------
+  # - AZURE_TENANT_ID
+  # - AZURE_AD_CLIENT_ID
+  # - AZURE_AD_CLIENT_SECRET
+  # - AZURE_AD_CLIENT_SCOPE
+  # - AZURE_APIM_BASE_URL
+  # - AZURE_APIM_SUBSCRIPTION_KEY
+  # - AZURE_OPENAI_API_VERSION
+  # - AZURE_DEPLOYMENT_EMBEDDING
+  #
+  # BACKEND: "ollama"
+  # -------------------------------------
+  # - OLLAMA_API_URL (optional)
+  # - OLLAMA_EMBEDDING_MODEL_NAME
+  # - OLLAMA_VISION_MODEL_NAME (optional, for vision tasks)
+  #
+  # All environment variables are expected to be present in the .env file
+  # pointed to by the ENV_FILE variable in your Makefile.
+  #

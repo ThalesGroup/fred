@@ -222,31 +222,129 @@ const injectedRtkApi = api.injectEndpoints({
     listTabularDatabases: build.query<ListTabularDatabasesApiResponse, ListTabularDatabasesApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/tabular/databases` }),
     }),
-    listTableNames: build.query<ListTableNamesApiResponse, ListTableNamesApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/tables` }),
+    loadTabularDatabase: build.mutation<LoadTabularDatabaseApiResponse, LoadTabularDatabaseApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/load/${queryArg.dbName}`, method: "POST" }),
     }),
-    getAllSchemas: build.query<GetAllSchemasApiResponse, GetAllSchemasApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/schemas` }),
+    listTablesLoadedDb: build.query<ListTablesLoadedDbApiResponse, ListTablesLoadedDbApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/tabular/tables` }),
     }),
-    rawSqlQueryRead: build.mutation<RawSqlQueryReadApiResponse, RawSqlQueryReadApiArg>({
+    listAllTableSchemasLoadedDb: build.query<ListAllTableSchemasLoadedDbApiResponse, ListAllTableSchemasLoadedDbApiArg>(
+      {
+        query: () => ({ url: `/knowledge-flow/v1/tabular/schemas` }),
+      },
+    ),
+    getTableSchemaLoadedDb: build.query<GetTableSchemaLoadedDbApiResponse, GetTableSchemaLoadedDbApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/tables/${queryArg.tableName}/schema` }),
+    }),
+    tabularSqlReadLoadedDb: build.mutation<TabularSqlReadLoadedDbApiResponse, TabularSqlReadLoadedDbApiArg>({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/sql/read`,
+        url: `/knowledge-flow/v1/tabular/sql/read`,
         method: "POST",
         body: queryArg.rawSqlRequest,
       }),
     }),
-    rawSqlQueryWrite: build.mutation<RawSqlQueryWriteApiResponse, RawSqlQueryWriteApiArg>({
+    tabularSqlWriteLoadedDb: build.mutation<TabularSqlWriteLoadedDbApiResponse, TabularSqlWriteLoadedDbApiArg>({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/sql/write`,
+        url: `/knowledge-flow/v1/tabular/sql/write`,
         method: "POST",
         body: queryArg.rawSqlRequest,
       }),
     }),
-    deleteTable: build.mutation<DeleteTableApiResponse, DeleteTableApiArg>({
+    deleteTableLoadedDb: build.mutation<DeleteTableLoadedDbApiResponse, DeleteTableLoadedDbApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/tables/${queryArg.tableName}`, method: "DELETE" }),
+    }),
+    listDatasets: build.query<ListDatasetsApiResponse, ListDatasetsApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/stat/list_datasets` }),
+    }),
+    setDataset: build.mutation<SetDatasetApiResponse, SetDatasetApiArg>({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular/${queryArg.dbName}/tables/${queryArg.tableName}`,
-        method: "DELETE",
+        url: `/knowledge-flow/v1/stat/set_dataset`,
+        method: "POST",
+        body: queryArg.setDatasetRequest,
       }),
+    }),
+    head: build.query<HeadApiResponse, HeadApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/head`,
+        params: {
+          n: queryArg.n,
+        },
+      }),
+    }),
+    describe: build.query<DescribeApiResponse, DescribeApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/stat/describe` }),
+    }),
+    detectOutliers: build.mutation<DetectOutliersApiResponse, DetectOutliersApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/detect_outliers`,
+        method: "POST",
+        body: queryArg.detectOutliersRequest,
+      }),
+    }),
+    correlations: build.query<CorrelationsApiResponse, CorrelationsApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/stat/correlations` }),
+    }),
+    plotHistogram: build.mutation<PlotHistogramApiResponse, PlotHistogramApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/plot/histogram`,
+        method: "POST",
+        body: queryArg.plotHistogramRequest,
+      }),
+    }),
+    plotScatter: build.mutation<PlotScatterApiResponse, PlotScatterApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/plot/scatter`,
+        method: "POST",
+        body: queryArg.plotScatterRequest,
+      }),
+    }),
+    trainModel: build.mutation<TrainModelApiResponse, TrainModelApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/stat/train`, method: "POST", body: queryArg.trainModelRequest }),
+    }),
+    evaluateModel: build.query<EvaluateModelApiResponse, EvaluateModelApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/stat/evaluate` }),
+    }),
+    predictRow: build.mutation<PredictRowApiResponse, PredictRowApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/predict_row`,
+        method: "POST",
+        body: queryArg.predictRowRequest,
+      }),
+    }),
+    saveModel: build.mutation<SaveModelApiResponse, SaveModelApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/save_model`,
+        method: "POST",
+        body: queryArg.saveModelRequest,
+      }),
+    }),
+    listModels: build.query<ListModelsApiResponse, ListModelsApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/stat/list_models` }),
+    }),
+    loadModel: build.mutation<LoadModelApiResponse, LoadModelApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/load_model`,
+        method: "POST",
+        body: queryArg.loadModelRequest,
+      }),
+    }),
+    testDistribution: build.query<TestDistributionApiResponse, TestDistributionApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/test_distribution`,
+        params: {
+          column: queryArg.column,
+        },
+      }),
+    }),
+    detectOutliersMl: build.mutation<DetectOutliersMlApiResponse, DetectOutliersMlApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/detect_outliers_ml`,
+        method: "POST",
+        body: queryArg.detectOutliersMlRequest,
+      }),
+    }),
+    runPca: build.mutation<RunPcaApiResponse, RunPcaApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/stat/pca`, method: "POST", body: queryArg.pcaRequest }),
     }),
     listAllTagsKnowledgeFlowV1TagsGet: build.query<
       ListAllTagsKnowledgeFlowV1TagsGetApiResponse,
@@ -387,6 +485,9 @@ const injectedRtkApi = api.injectEndpoints({
       SearchDocumentsUsingVectorizationApiArg
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/search`, method: "POST", body: queryArg.searchRequest }),
+    }),
+    testPostSuccess: build.mutation<TestPostSuccessApiResponse, TestPostSuccessApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/vector/test`, method: "POST" }),
     }),
     queryKnowledgeFlowV1KpiQueryPost: build.mutation<
       QueryKnowledgeFlowV1KpiQueryPostApiResponse,
@@ -639,34 +740,90 @@ export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiArg 
 };
 export type ListTabularDatabasesApiResponse = /** status 200 Successful Response */ string[];
 export type ListTabularDatabasesApiArg = void;
-export type ListTableNamesApiResponse = /** status 200 Successful Response */ string[];
-export type ListTableNamesApiArg = {
-  /** Name of the tabular database */
+export type LoadTabularDatabaseApiResponse = /** status 200 Successful Response */ any;
+export type LoadTabularDatabaseApiArg = {
+  /** Name of the database to load */
   dbName: string;
 };
-export type GetAllSchemasApiResponse = /** status 200 Successful Response */ TabularSchemaResponse[];
-export type GetAllSchemasApiArg = {
-  /** Name of the tabular database */
-  dbName: string;
+export type ListTablesLoadedDbApiResponse = /** status 200 Successful Response */ ListTableResponse;
+export type ListTablesLoadedDbApiArg = void;
+export type ListAllTableSchemasLoadedDbApiResponse = /** status 200 Successful Response */ TabularSchemaResponse[];
+export type ListAllTableSchemasLoadedDbApiArg = void;
+export type GetTableSchemaLoadedDbApiResponse = /** status 200 Successful Response */ TabularSchemaResponse;
+export type GetTableSchemaLoadedDbApiArg = {
+  /** Name of the table */
+  tableName: string;
 };
-export type RawSqlQueryReadApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
-export type RawSqlQueryReadApiArg = {
-  /** Name of the tabular database */
-  dbName: string;
+export type TabularSqlReadLoadedDbApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
+export type TabularSqlReadLoadedDbApiArg = {
   rawSqlRequest: RawSqlRequest;
 };
-export type RawSqlQueryWriteApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
-export type RawSqlQueryWriteApiArg = {
-  /** Name of the tabular database */
-  dbName: string;
+export type TabularSqlWriteLoadedDbApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
+export type TabularSqlWriteLoadedDbApiArg = {
   rawSqlRequest: RawSqlRequest;
 };
-export type DeleteTableApiResponse = unknown;
-export type DeleteTableApiArg = {
-  /** Name of the tabular database */
-  dbName: string;
+export type DeleteTableLoadedDbApiResponse = unknown;
+export type DeleteTableLoadedDbApiArg = {
   /** Table name to delete */
   tableName: string;
+};
+export type ListDatasetsApiResponse = /** status 200 Successful Response */ any;
+export type ListDatasetsApiArg = void;
+export type SetDatasetApiResponse = /** status 200 Successful Response */ any;
+export type SetDatasetApiArg = {
+  setDatasetRequest: SetDatasetRequest;
+};
+export type HeadApiResponse = /** status 200 Successful Response */ any;
+export type HeadApiArg = {
+  n?: number;
+};
+export type DescribeApiResponse = /** status 200 Successful Response */ any;
+export type DescribeApiArg = void;
+export type DetectOutliersApiResponse = /** status 200 Successful Response */ any;
+export type DetectOutliersApiArg = {
+  detectOutliersRequest: DetectOutliersRequest;
+};
+export type CorrelationsApiResponse = /** status 200 Successful Response */ any;
+export type CorrelationsApiArg = void;
+export type PlotHistogramApiResponse = /** status 200 Successful Response */ any;
+export type PlotHistogramApiArg = {
+  plotHistogramRequest: PlotHistogramRequest;
+};
+export type PlotScatterApiResponse = /** status 200 Successful Response */ any;
+export type PlotScatterApiArg = {
+  plotScatterRequest: PlotScatterRequest;
+};
+export type TrainModelApiResponse = /** status 200 Successful Response */ any;
+export type TrainModelApiArg = {
+  trainModelRequest: TrainModelRequest;
+};
+export type EvaluateModelApiResponse = /** status 200 Successful Response */ any;
+export type EvaluateModelApiArg = void;
+export type PredictRowApiResponse = /** status 200 Successful Response */ any;
+export type PredictRowApiArg = {
+  predictRowRequest: PredictRowRequest;
+};
+export type SaveModelApiResponse = /** status 200 Successful Response */ any;
+export type SaveModelApiArg = {
+  saveModelRequest: SaveModelRequest;
+};
+export type ListModelsApiResponse = /** status 200 Successful Response */ any;
+export type ListModelsApiArg = void;
+export type LoadModelApiResponse = /** status 200 Successful Response */ any;
+export type LoadModelApiArg = {
+  loadModelRequest: LoadModelRequest;
+};
+export type TestDistributionApiResponse = /** status 200 Successful Response */ any;
+export type TestDistributionApiArg = {
+  column: string;
+};
+export type DetectOutliersMlApiResponse = /** status 200 Successful Response */ any;
+export type DetectOutliersMlApiArg = {
+  detectOutliersMlRequest: DetectOutliersMlRequest;
+};
+export type RunPcaApiResponse = /** status 200 Successful Response */ any;
+export type RunPcaApiArg = {
+  pcaRequest: PcaRequest;
 };
 export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithItemsId[];
 export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
@@ -757,6 +914,8 @@ export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Succes
 export type SearchDocumentsUsingVectorizationApiArg = {
   searchRequest: SearchRequest;
 };
+export type TestPostSuccessApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
+export type TestPostSuccessApiArg = void;
 export type QueryKnowledgeFlowV1KpiQueryPostApiResponse = /** status 200 Successful Response */ KpiQueryResult;
 export type QueryKnowledgeFlowV1KpiQueryPostApiArg = {
   kpiQuery: KpiQuery;
@@ -966,6 +1125,7 @@ export type AssetMeta = {
   size: number;
   etag?: string | null;
   modified?: string | null;
+  document_uid?: string | null;
   extra?: {
     [key: string]: any;
   };
@@ -999,12 +1159,17 @@ export type BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost = 
   files: Blob[];
   metadata_json: string;
 };
+export type ListTableResponse = {
+  db_name: string;
+  tables: string[];
+};
 export type TabularColumnSchema = {
   name: string;
   dtype: "string" | "integer" | "float" | "boolean" | "datetime" | "unknown";
 };
 export type TabularSchemaResponse = {
-  document_name: string;
+  db_name: string;
+  table_name: string;
   columns: TabularColumnSchema[];
   row_count?: number | null;
 };
@@ -1020,6 +1185,45 @@ export type TabularQueryResponse = {
 };
 export type RawSqlRequest = {
   query: string;
+};
+export type SetDatasetRequest = {
+  dataset_name: string;
+};
+export type DetectOutliersRequest = {
+  method?: "zscore" | "iqr";
+  threshold?: number;
+};
+export type PlotHistogramRequest = {
+  column: string;
+  bins?: number;
+};
+export type PlotScatterRequest = {
+  x_col: string;
+  y_col: string;
+};
+export type TrainModelRequest = {
+  target: string;
+  features: string[];
+  model_type?: "linear" | "random_forest";
+};
+export type PredictRowRequest = {
+  row: {
+    [key: string]: any;
+  };
+};
+export type SaveModelRequest = {
+  name: string;
+};
+export type LoadModelRequest = {
+  name: string;
+};
+export type DetectOutliersMlRequest = {
+  features: string[];
+  method?: "isolation_forest" | "lof";
+};
+export type PcaRequest = {
+  features: string[];
+  n_components?: number;
 };
 export type TagType = "document" | "prompt" | "template" | "chat-context";
 export type TagWithItemsId = {
@@ -1343,13 +1547,40 @@ export const {
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
   useListTabularDatabasesQuery,
   useLazyListTabularDatabasesQuery,
-  useListTableNamesQuery,
-  useLazyListTableNamesQuery,
-  useGetAllSchemasQuery,
-  useLazyGetAllSchemasQuery,
-  useRawSqlQueryReadMutation,
-  useRawSqlQueryWriteMutation,
-  useDeleteTableMutation,
+  useLoadTabularDatabaseMutation,
+  useListTablesLoadedDbQuery,
+  useLazyListTablesLoadedDbQuery,
+  useListAllTableSchemasLoadedDbQuery,
+  useLazyListAllTableSchemasLoadedDbQuery,
+  useGetTableSchemaLoadedDbQuery,
+  useLazyGetTableSchemaLoadedDbQuery,
+  useTabularSqlReadLoadedDbMutation,
+  useTabularSqlWriteLoadedDbMutation,
+  useDeleteTableLoadedDbMutation,
+  useListDatasetsQuery,
+  useLazyListDatasetsQuery,
+  useSetDatasetMutation,
+  useHeadQuery,
+  useLazyHeadQuery,
+  useDescribeQuery,
+  useLazyDescribeQuery,
+  useDetectOutliersMutation,
+  useCorrelationsQuery,
+  useLazyCorrelationsQuery,
+  usePlotHistogramMutation,
+  usePlotScatterMutation,
+  useTrainModelMutation,
+  useEvaluateModelQuery,
+  useLazyEvaluateModelQuery,
+  usePredictRowMutation,
+  useSaveModelMutation,
+  useListModelsQuery,
+  useLazyListModelsQuery,
+  useLoadModelMutation,
+  useTestDistributionQuery,
+  useLazyTestDistributionQuery,
+  useDetectOutliersMlMutation,
+  useRunPcaMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,
@@ -1374,6 +1605,7 @@ export const {
   useDeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteMutation,
   useEchoSchemaKnowledgeFlowV1SchemasEchoPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
+  useTestPostSuccessMutation,
   useQueryKnowledgeFlowV1KpiQueryPostMutation,
   useOsHealthQuery,
   useLazyOsHealthQuery,

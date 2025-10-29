@@ -29,6 +29,7 @@ declare module "@mui/material/styles" {
       primary: string;
       secondary: string;
       red: string;
+      purple: string;
       green: string;
       blue: string;
       yellow: string;

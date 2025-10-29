@@ -2,14 +2,14 @@
 PROJECT_NAME        ?= agentic
 PROJECT_SLUG		?= agentic-backend
 VERSION             ?= 0.1
-PY_PACKAGE          ?= app
+PY_PACKAGE          ?= agentic_backend
 
 # Docker/Registry
 REGISTRY_URL        ?= ghcr.io
 REGISTRY_NAMESPACE  ?= thalesgroup/fred-agent
 DOCKERFILE_PATH     ?= ./dockerfiles/Dockerfile-prod
 DOCKER_CONTEXT      ?= ..
-IMAGE_NAME          ?= agentic
+IMAGE_NAME          ?= agentic-backend
 IMAGE_TAG           ?= $(VERSION)
 IMAGE_FULL          ?= $(REGISTRY_URL)/$(REGISTRY_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG)
 

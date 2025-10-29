@@ -9,7 +9,7 @@ services:
     container_name: agentic-backend
     build:
       context: ../../
-      dockerfile: agentic_backend/dockerfiles/Dockerfile-dev
+      dockerfile: agentic-backend/dockerfiles/Dockerfile-dev
     env_file: "~/.fred/openai-api-key.env"
     environment:
       NO_PROXY: "*"
@@ -20,7 +20,7 @@ services:
       - --server.baseUrlPath
       - /fred
     volumes:
-      - ../../agentic_backend:/app
+      - ../../agentic-backend:/app
       - vol-kubeconfig:/home/fred-user/.kube:ro
     networks:
       - app-network
@@ -52,7 +52,7 @@ services:
     container_name: knowledge-flow-backend
     build:
       context: ../../
-      dockerfile: knowledge_flow_backend/dockerfiles/Dockerfile-dev
+      dockerfile: knowledge-flow-backend/dockerfiles/Dockerfile-dev
     environment:
       NO_PROXY: "*"
     command:
@@ -60,7 +60,7 @@ services:
       - /app/config/configuration.yaml
     volumes:
       # Mount the whole project (RW mode)
-      - ../../knowledge_flow_backend:/app:rw
+      - ../../knowledge-flow-backend:/app:rw
     networks:
       - app-network
     ports:
