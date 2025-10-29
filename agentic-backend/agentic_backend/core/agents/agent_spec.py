@@ -67,7 +67,7 @@ class ClientAuthMode(str, Enum):
     # Sends the Authorization: Bearer token (standard OAuth flow)
     USER_TOKEN = "user_token"
     # Suppresses the Authorization header (Forces server to use global auth/PAT)
-    NO_TOKEN = "no_token"
+    NO_TOKEN = "no_token"  # nosec B105
     # Use the token if available, otherwise no token (similar to 'no_token' logic but explicit)
     # The current code only supports 'user_token' or 'no_token' logic for simplicity.
 
