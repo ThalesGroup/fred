@@ -150,7 +150,7 @@ class OpenFgaRebacEngine(RebacEngine):
         )
         return response.authorization_model_id
 
-    async def _initialize_client_and_store(self) -> None:
+    async def _initialize_client_and_store(self) -> OpenFgaClient:
         """If needed, create store, sync schema, and return client."""
         # Try to retrieve store id
         store_id = await self._get_store_id(self._config.store_name)

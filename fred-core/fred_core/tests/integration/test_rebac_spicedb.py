@@ -96,7 +96,7 @@ async def _load_openfga_engine() -> RebacEngine:
 
     try:
         config = OpenFgaRebacConfig(
-            api_url=api_url,
+            api_url=api_url,  # pyright: ignore[reportArgumentType]
             store_name=store,
             sync_schema_on_init=True,
         )

@@ -204,15 +204,17 @@ class SpiceDbRebacEngine(RebacEngine):
             else None,
         )
 
-        request_kwargs: dict[str, object] = {"relationship_filter": relationship_filter}
+        consistency = None
         if consistency_token:
-            request_kwargs["consistency"] = Consistency(
+            consistency = Consistency(
                 at_least_as_fresh=ZedToken(token=consistency_token)
             )
         elif self._read_consistency is not None:
-            request_kwargs["consistency"] = self._read_consistency
+            consistency = self._read_consistency
 
-        request = ReadRelationshipsRequest(**request_kwargs)
+        request = ReadRelationshipsRequest(
+            relationship_filter=relationship_filter, consistency=consistency
+        )
         relations: list[Relation] = []
         for response in self._client.ReadRelationships(request):
             relationship = getattr(response, "relationship", None)
