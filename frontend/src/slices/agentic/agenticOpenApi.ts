@@ -637,6 +637,7 @@ export type UserSecurity = {
 export type FrontendConfigDto = {
   frontend_settings: FrontendSettings;
   user_auth: UserSecurity;
+  is_rebac_enabled: boolean;
 };
 export type AgentTuning2 = {
   /** The agent's mandatory role for discovery. */

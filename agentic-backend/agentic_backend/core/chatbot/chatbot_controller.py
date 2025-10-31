@@ -39,7 +39,7 @@ from fred_core import (
 from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketState
 
-from agentic_backend.application_context import get_configuration
+from agentic_backend.application_context import get_configuration, get_rebac_engine
 from agentic_backend.common.structures import AgentSettings, FrontendSettings
 from agentic_backend.common.utils import log_exception
 from agentic_backend.core.agents.agent_manager import AgentManager
@@ -97,6 +97,7 @@ class EchoEnvelope(BaseModel):
 class FrontendConfigDTO(BaseModel):
     frontend_settings: FrontendSettings
     user_auth: UserSecurity
+    is_rebac_enabled: bool
 
 
 def get_agent_manager(request: Request) -> AgentManager:
@@ -149,6 +150,7 @@ def get_frontend_config() -> FrontendConfigDTO:
             realm_url=cfg.security.user.realm_url,
             client_id=cfg.security.user.client_id,
         ),
+        is_rebac_enabled=get_rebac_engine().enabled,
     )
 
 

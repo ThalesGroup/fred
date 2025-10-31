@@ -24,6 +24,7 @@ import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
+import { getConfig } from "../../../common/config";
 import type { DocumentMetadata, TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { TagNode } from "../../tags/tagTree";
 import { DocumentRowCompact } from "./DocumentLibraryRow";
@@ -111,6 +112,8 @@ export function DocumentLibraryTree({
 }: DocumentLibraryTreeProps) {
   const { t } = useTranslation();
   const [shareTarget, setShareTarget] = React.useState<TagNode | null>(null);
+
+  const { feature_flags } = getConfig();
 
   const handleCloseShareDialog = React.useCallback(() => {
     setShareTarget(null);
@@ -208,17 +211,19 @@ export function DocumentLibraryTree({
 
               {/* Right: share + delete */}
               <Box sx={{ ml: "auto", display: "flex", alignItems: "center" }}>
-                <Tooltip title={t("documentLibraryTree.shareFolder")} enterTouchDelay={10}>
-                  <IconButton
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (folderTag) setShareTarget(c);
-                    }}
-                  >
-                    <PersonAddAltIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
+                {feature_flags.is_rebac_enabled && (
+                  <Tooltip title={t("documentLibraryTree.shareFolder")} enterTouchDelay={10}>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (folderTag) setShareTarget(c);
+                      }}
+                    >
+                      <PersonAddAltIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
                 <Tooltip
                   title={
                     canBeDeleted ? t("documentLibraryTree.deleteFolder") : t("documentLibraryTree.deleteFolderDisabled")
