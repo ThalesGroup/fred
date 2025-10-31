@@ -118,7 +118,7 @@ EngineScenario = tuple[str, Callable[[], Awaitable[RebacEngine]], str | None]
 
 ENGINE_SCENARIOS: tuple[EngineScenario, ...] = (
     ("spicedb", _load_spicedb_engine, None),
-    ("openfga", _load_openfga_engine, None),
+    ("openfga", _load_openfga_engine, "OpenFga integration is stil in devlopment"),
 )
 
 
