@@ -22,6 +22,7 @@ from uuid import uuid4
 from fred_core import (
     Action,
     KeycloakUser,
+    RebacDisabledResult,
     RebacReference,
     Relation,
     RelationType,
@@ -95,8 +96,10 @@ class TagService:
         tags: list[Tag] = self._tag_store.list_tags_for_user(user)
 
         # Filter by permission (todo: use rebac ids to filter at store (DB) level)
-        authorized_tags_ids = [t.id for t in await self.rebac.lookup_user_resources(user, TagPermission.READ)]
-        tags = [t for t in tags if t.id in authorized_tags_ids]
+        authorized_tags_refs = await self.rebac.lookup_user_resources(user, TagPermission.READ)
+        if not isinstance(authorized_tags_refs, RebacDisabledResult):
+            authorized_tags_ids = [t.id for t in authorized_tags_refs]
+            tags = [t for t in tags if t.id in authorized_tags_ids]
 
         # 2) filter by type
         if tag_type is not None:
@@ -175,7 +178,7 @@ class TagService:
                 type=tag_data.type,
             )
         )
-        consistency_token = self.rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.TAGS, resource_id=tag.id)
+        consistency_token = await self.rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.TAGS, resource_id=tag.id)
 
         # Link items
         if tag.type == TagType.DOCUMENT:
@@ -316,7 +319,7 @@ class TagService:
 
         tag_reference = RebacReference(type=Resource.TAGS, id=tag_id)
         user_reference = RebacReference(type=Resource.USER, id=user.uid)
-        return [permission for permission in TagPermission if self.rebac.has_permission(user_reference, permission, tag_reference)]
+        return [permission for permission in TagPermission if await self.rebac.has_permission(user_reference, permission, tag_reference)]
 
     @authorize(Action.READ, Resource.TAGS)
     async def list_tag_members(self, tag_id: str, user: KeycloakUser) -> tuple[list[TagMemberUser], list[TagMemberGroup]]:
@@ -371,6 +374,9 @@ class TagService:
             UserTagRelation.VIEWER,
         ):
             subjects = await self.rebac.lookup_subjects(tag_reference, relation.to_relation(), subject_type)
+            if isinstance(subjects, RebacDisabledResult):
+                return {}
+
             for subject in subjects:
                 current = members.get(subject.id)
                 if current is None or relation_priority[relation] < relation_priority[current]:

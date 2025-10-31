@@ -9,12 +9,21 @@ from knowledge_flow_backend.application_context import get_configuration
 logger = logging.getLogger(__name__)
 
 
-def create_keycloak_admin() -> KeycloakAdmin | None:
+class KeycloackDisabled:
+    """
+    Class used to represent Keycloack clien createtion result when it is disabled,
+    to let know the caller it must handle this case.
+    """
+
+    ...
+
+
+def create_keycloak_admin() -> KeycloakAdmin | KeycloackDisabled:
     """Create a Keycloak admin client using the configured service account. Returns None if M2M security is not enabled."""
     config = get_configuration()
     m2m_security = config.security.m2m
     if not m2m_security or not m2m_security.enabled:
-        return None
+        return KeycloackDisabled()
 
     client_secret = os.getenv("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
     if not client_secret:

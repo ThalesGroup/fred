@@ -14,6 +14,9 @@ from pydantic import ValidationError
 
 from fred_core import (
     DocumentPermission,
+    OpenFgaRebacConfig,
+    OpenFgaRebacEngine,
+    RebacDisabledResult,
     RebacEngine,
     RebacReference,
     Relation,
@@ -23,8 +26,6 @@ from fred_core import (
     SpiceDbRebacEngine,
     TagPermission,
 )
-from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
-from fred_core.security.structure import OpenFgaRebacConfig
 
 SPICEDB_ENDPOINT = os.getenv("SPICEDB_TEST_ENDPOINT", "localhost:50051")
 
@@ -334,6 +335,10 @@ async def test_lookup_subjects_returns_users_by_relation(
         tag, RelationType.VIEWER, Resource.USER, consistency_token=token
     )
 
+    assert not isinstance(owners, RebacDisabledResult)
+    assert not isinstance(editors, RebacDisabledResult)
+    assert not isinstance(viewers, RebacDisabledResult)
+
     assert {ref.id for ref in owners} == {owner.id}
     assert {ref.id for ref in editors} == {editor.id}
     assert {ref.id for ref in viewers} == {viewer.id}
@@ -367,6 +372,9 @@ async def test_list_relations_filters_by_subject_type(
         subject_type=Resource.GROUP,
         consistency_token=token,
     )
+
+    assert not isinstance(user_memberships, RebacDisabledResult)
+    assert not isinstance(group_memberships, RebacDisabledResult)
 
     assert {
         (relation.subject.type, relation.subject.id, relation.resource.id)
@@ -417,6 +425,9 @@ async def test_list_documents_user_can_read(
         resource_type=Resource.DOCUMENTS,
         consistency_token=token,
     )
+
+    assert not isinstance(readable_documents, RebacDisabledResult)
+
     readable_document_ids = {reference.id for reference in readable_documents}
     assert readable_document_ids == {document1.id, document2.id}, (
         f"Unexpected documents for {user.id}: {readable_document_ids}"

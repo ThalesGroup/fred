@@ -574,8 +574,7 @@ class ApplicationContext:
 
     def get_rebac_engine(self) -> RebacEngine:
         if self._rebac_engine is None:
-            rebac_config = self.configuration.security.rebac
-            self._rebac_engine = rebac_factory(rebac_config)
+            self._rebac_engine = rebac_factory(self.configuration.security)
 
         return self._rebac_engine
 

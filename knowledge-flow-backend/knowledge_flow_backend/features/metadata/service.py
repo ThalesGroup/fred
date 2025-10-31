@@ -14,7 +14,7 @@
 import logging
 from datetime import datetime, timezone
 
-from fred_core import Action, DocumentPermission, KeycloakUser, RebacReference, Relation, RelationType, Resource, TagPermission, authorize
+from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, authorize
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage
@@ -54,11 +54,17 @@ class MetadataService:
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_documents_metadata(self, user: KeycloakUser, filters_dict: dict) -> list[DocumentMetadata]:
-        authorized_doc_ids = [d.id for d in await self.rebac.lookup_user_resources(user, DocumentPermission.READ)]
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
 
         try:
             docs = self.metadata_store.get_all_metadata(filters_dict)
+
+            if isinstance(authorized_doc_ref, RebacDisabledResult):
+                # if rebac is disabled, do not filter
+                return docs
+
             # Filter by permission (todo: use rebac ids to filter at store (DB) level)
+            authorized_doc_ids = [d.id for d in authorized_doc_ref]
             return [d for d in docs if d.identity.document_uid in authorized_doc_ids]
         except MetadataDeserializationError as e:
             logger.error(f"[Metadata] Deserialization error: {e}")
@@ -73,11 +79,17 @@ class MetadataService:
         """
         Return all metadata entries associated with a specific tag.
         """
-        authorized_doc_ids = [d.id for d in await self.rebac.lookup_user_resources(user, DocumentPermission.READ)]
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
 
         try:
             docs = self.metadata_store.get_metadata_in_tag(tag_id)
+
+            if isinstance(authorized_doc_ref, RebacDisabledResult):
+                # if rebac is disabled, do not filter
+                return docs
+
             # Filter by permission (todo: use rebac ids to filter at store (DB) level)
+            authorized_doc_ids = [d.id for d in authorized_doc_ref]
             return [d for d in docs if d.identity.document_uid in authorized_doc_ids]
         except Exception as e:
             logger.error(f"Error retrieving metadata for tag {tag_id}: {e}")
@@ -102,7 +114,7 @@ class MetadataService:
         return metadata
 
     @authorize(Action.UPDATE, Resource.DOCUMENTS)
-    async def add_tag_id_to_document(self, user: KeycloakUser, metadata: DocumentMetadata, new_tag_id: str, consistency_token=None) -> None:
+    async def add_tag_id_to_document(self, user: KeycloakUser, metadata: DocumentMetadata, new_tag_id: str, consistency_token: str | None = None) -> None:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, new_tag_id, consistency_token=consistency_token)
 
         try:

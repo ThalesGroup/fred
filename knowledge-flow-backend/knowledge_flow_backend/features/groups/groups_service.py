@@ -7,7 +7,7 @@ from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakGetError
 
 from knowledge_flow_backend.features.groups.groups_structures import GroupSummary
-from knowledge_flow_backend.security.keycloack_admin_client import create_keycloak_admin
+from knowledge_flow_backend.security.keycloack_admin_client import KeycloackDisabled, create_keycloak_admin
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ _MEMBER_PAGE_SIZE = 200
 
 async def list_groups() -> list[GroupSummary]:
     admin = create_keycloak_admin()
-    if not admin:
+    if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; returning empty group list.")
         return []
 
@@ -46,7 +46,7 @@ async def get_groups_by_ids(group_ids: Iterable[str]) -> dict[str, GroupSummary]
         return {}
 
     admin = create_keycloak_admin()
-    if not admin:
+    if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; returning fallback group profiles.")
         return {}
 

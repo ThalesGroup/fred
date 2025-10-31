@@ -2,11 +2,11 @@ import asyncio
 import logging
 from typing import NamedTuple
 
-from fred_core import RebacEngine, RebacReference, Relation, RelationType, Resource
+from fred_core import RebacDisabledResult, RebacEngine, RebacReference, Relation, RelationType, Resource
 from keycloak import KeycloakAdmin
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.security.keycloack_admin_client import create_keycloak_admin
+from knowledge_flow_backend.security.keycloack_admin_client import KeycloackDisabled, create_keycloak_admin
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +36,13 @@ async def reconcile_keycloak_groups_with_rebac() -> None:
     """Synchronize Keycloak group memberships into the ReBAC engine."""
     # Create Keycloak and ReBAC clients
     admin = create_keycloak_admin()
-    if not admin:
+    if isinstance(admin, KeycloackDisabled):
         logger.warning("Keycloak admin client could not be created; skipping reconciliation.")
         return
     rebac_engine = ApplicationContext.get_instance().get_rebac_engine()
+    if not rebac_engine.enabled:
+        logger.warning("Rebac is disabled; skipping reconciliation.")
+        return
 
     # Collect membership edges from both systems
     keycloak_edges = await _collect_keycloak_memberships(admin)
@@ -65,6 +68,8 @@ async def _collect_rebac_memberships(rebac_engine: RebacEngine) -> set[Membershi
         resource_type=Resource.GROUP,
         relation=RelationType.MEMBER,
     )
+    if isinstance(relations, RebacDisabledResult):
+        return set()
     return {MembershipEdge.from_relation(relation) for relation in relations}
 
 
@@ -168,9 +173,9 @@ async def _apply_membership_diff(
 
 async def _write_relation(rebac_engine, relation: Relation, semaphore: asyncio.Semaphore) -> None:
     async with semaphore:
-        await asyncio.to_thread(rebac_engine.add_relation, relation)
+        await rebac_engine.add_relation(relation)
 
 
 async def _delete_relation(rebac_engine, relation: Relation, semaphore: asyncio.Semaphore) -> None:
     async with semaphore:
-        await asyncio.to_thread(rebac_engine.delete_relation, relation)
+        await rebac_engine.delete_relation(relation)

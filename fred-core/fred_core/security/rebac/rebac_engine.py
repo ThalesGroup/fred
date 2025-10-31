@@ -65,8 +65,21 @@ class Relation:
     resource: RebacReference
 
 
+class RebacDisabledResult:
+    """
+    Class used to represent rebac operation result when rebac has been disabled,
+    to let know the caller it must handle this case.
+    """
+
+    ...
+
+
 class RebacEngine(ABC):
     """Abstract base for relationship-based authorization providers."""
+
+    @property
+    def enabled(self) -> bool:
+        return True
 
     @abstractmethod
     async def add_relation(self, relation: Relation) -> str | None:
@@ -147,7 +160,7 @@ class RebacEngine(ABC):
         relation: RelationType,
         subject_type: Resource | None = None,
         consistency_token: str | None = None,
-    ) -> list[Relation]:
+    ) -> list[Relation] | RebacDisabledResult:
         """Return all relations matching the provided filters."""
 
     async def delete_user_relation(
@@ -180,7 +193,7 @@ class RebacEngine(ABC):
         resource_type: Resource,
         *,
         consistency_token: str | None = None,
-    ) -> list[RebacReference]:
+    ) -> list[RebacReference] | RebacDisabledResult:
         """Return resource identifiers the subject can access for a permission."""
 
     @abstractmethod
@@ -191,7 +204,7 @@ class RebacEngine(ABC):
         subject_type: Resource,
         *,
         consistency_token: str | None = None,
-    ) -> list[RebacReference]:
+    ) -> list[RebacReference] | RebacDisabledResult:
         """Return subjects related to the resource by a given relation."""
 
     async def lookup_user_resources(
@@ -200,7 +213,7 @@ class RebacEngine(ABC):
         permission: RebacPermission,
         *,
         consistency_token: str | None = None,
-    ) -> list[RebacReference]:
+    ) -> list[RebacReference] | RebacDisabledResult:
         """Convenience helper to lookup resources for a user."""
         return await self.lookup_resources(
             subject=RebacReference(Resource.USER, user.uid),
@@ -229,7 +242,7 @@ class RebacEngine(ABC):
         consistency_token: str | None = None,
     ) -> None:
         """Raise if the subject is not authorized to perform the action on the resource."""
-        if not self.has_permission(
+        if not await self.has_permission(
             subject, permission, resource, consistency_token=consistency_token
         ):
             raise AuthorizationError(

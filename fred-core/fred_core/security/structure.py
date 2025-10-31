@@ -44,7 +44,14 @@ class UserSecurity(BaseModel):
     client_id: str
 
 
-class SpiceDbRebacConfig(BaseModel):
+class RebacBaseConfig(BaseModel):
+    enabled: bool = Field(
+        default=True,
+        description="To disable ReBAC checks (do not disable in production). If OIDC (UserSecurity and M2MSecurity) ReBAC check will be disabled even if this is true.",
+    )
+
+
+class SpiceDbRebacConfig(RebacBaseConfig):
     """Configuration for a SpiceDB-backed relationship engine."""
 
     type: Literal["spicedb"] = "spicedb"
@@ -63,7 +70,7 @@ class SpiceDbRebacConfig(BaseModel):
     )
 
 
-class OpenFgaRebacConfig(BaseModel):
+class OpenFgaRebacConfig(RebacBaseConfig):
     """Configuration for an OpenFGA-backed relationship engine."""
 
     type: Literal["openfga"] = "openfga"
@@ -109,4 +116,4 @@ class SecurityConfiguration(BaseModel):
     m2m: M2MSecurity
     user: UserSecurity
     authorized_origins: List[AnyHttpUrl] = []
-    rebac: RebacConfiguration
+    rebac: RebacConfiguration | None = None
