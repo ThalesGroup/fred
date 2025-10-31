@@ -3,5 +3,6 @@
 {
   "include": ["fred_core"],
   "typeCheckingMode": "standard",
-  "reportMissingTypeStubs": false
+  "reportMissingTypeStubs": false,
+  "stubPath": "stubs"
 }

@@ -33,6 +33,7 @@ security:
     realm_url: "http://app-keycloak:8080/realms/app"
   authorized_origins:
     - "http://localhost:5173"
+
 scheduler:
   enabled: true
   backend: "temporal"

@@ -13,20 +13,43 @@
 # limitations under the License.
 
 # Copyright Thales 2025
+import asyncio
 import logging
 from datetime import datetime
 from typing import Iterable, Optional
 from uuid import uuid4
 
-from fred_core import Action, KeycloakUser, Resource, authorize
+from fred_core import (
+    Action,
+    KeycloakUser,
+    RebacDisabledResult,
+    RebacReference,
+    Relation,
+    RelationType,
+    Resource,
+    TagPermission,
+    authorize,
+)
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError
+from knowledge_flow_backend.features.groups.groups_service import get_groups_by_ids
+from knowledge_flow_backend.features.groups.groups_structures import GroupSummary
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.resources.service import ResourceService
 from knowledge_flow_backend.features.resources.structures import ResourceKind
-from knowledge_flow_backend.features.tag.structure import Tag, TagCreate, TagType, TagUpdate, TagWithItemsId
+from knowledge_flow_backend.features.tag.structure import (
+    Tag,
+    TagCreate,
+    TagMemberGroup,
+    TagMemberUser,
+    TagType,
+    TagUpdate,
+    TagWithItemsId,
+    UserTagRelation,
+)
+from knowledge_flow_backend.features.users.users_service import UserSummary, get_users_by_ids
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +75,12 @@ class TagService:
         self._tag_store = context.get_tag_store()
         self.document_metadata_service = MetadataService()
         self.resource_service = ResourceService()  # For templates, if needed
+        self.rebac = context.get_rebac_engine()
 
     # ---------- Public API ----------
 
     @authorize(Action.READ, Resource.TAGS)
-    def list_all_tags_for_user(
+    async def list_all_tags_for_user(
         self,
         user: KeycloakUser,
         tag_type: Optional[TagType] = None,
@@ -70,6 +94,12 @@ class TagService:
         """
         # 1) fetch
         tags: list[Tag] = self._tag_store.list_tags_for_user(user)
+
+        # Filter by permission (todo: use rebac ids to filter at store (DB) level)
+        authorized_tags_refs = await self.rebac.lookup_user_resources(user, TagPermission.READ)
+        if not isinstance(authorized_tags_refs, RebacDisabledResult):
+            authorized_tags_ids = [t.id for t in authorized_tags_refs]
+            tags = [t for t in tags if t.id in authorized_tags_ids]
 
         # 2) filter by type
         if tag_type is not None:
@@ -91,7 +121,7 @@ class TagService:
         result: list[TagWithItemsId] = []
         for tag in sliced:
             if tag.type == TagType.DOCUMENT:
-                item_ids = self._retrieve_document_ids_for_tag(user, tag.id)
+                item_ids = await self._retrieve_document_ids_for_tag(user, tag.id)
             elif tag.type == TagType.PROMPT:
                 item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.PROMPT, tag.id)
             elif tag.type == TagType.TEMPLATE:
@@ -104,10 +134,12 @@ class TagService:
         return result
 
     @authorize(Action.READ, Resource.TAGS)
-    def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
+    async def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
+        await self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
+
         tag = self._tag_store.get_tag_by_id(tag_id)
         if tag.type == TagType.DOCUMENT:
-            item_ids = self._retrieve_document_ids_for_tag(user, tag_id)
+            item_ids = await self._retrieve_document_ids_for_tag(user, tag_id)
         elif tag.type == TagType.PROMPT:
             item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.PROMPT, tag.id)
         elif tag.type == TagType.TEMPLATE:
@@ -119,10 +151,10 @@ class TagService:
         return TagWithItemsId.from_tag(tag, item_ids)
 
     @authorize(Action.CREATE, Resource.TAGS)
-    def create_tag_for_user(self, tag_data: TagCreate, user: KeycloakUser) -> TagWithItemsId:
+    async def create_tag_for_user(self, tag_data: TagCreate, user: KeycloakUser) -> TagWithItemsId:
         # Validate referenced items first
         if tag_data.type == TagType.DOCUMENT:
-            documents = self._retrieve_documents_metadata(user, tag_data.item_ids)
+            documents = await self._retrieve_documents_metadata(user, tag_data.item_ids)
         elif tag_data.type in (TagType.PROMPT, TagType.TEMPLATE, TagType.CHAT_CONTEXT):
             documents = []  # not used here
         else:
@@ -146,11 +178,17 @@ class TagService:
                 type=tag_data.type,
             )
         )
+        consistency_token = await self.rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.TAGS, resource_id=tag.id)
 
         # Link items
         if tag.type == TagType.DOCUMENT:
             for doc in documents:
-                self.document_metadata_service.add_tag_id_to_document(user, metadata=doc, new_tag_id=tag.id, modified_by=user.uid)
+                await self.document_metadata_service.add_tag_id_to_document(
+                    user,
+                    metadata=doc,
+                    new_tag_id=tag.id,
+                    consistency_token=consistency_token,
+                )
         elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
             # rk = _tagtype_to_rk(tag.type)
             for rid in tag_data.item_ids:
@@ -163,20 +201,22 @@ class TagService:
         return TagWithItemsId.from_tag(tag, tag_data.item_ids)
 
     @authorize(Action.UPDATE, Resource.TAGS)
-    def update_tag_for_user(self, tag_id: str, tag_data: TagUpdate, user: KeycloakUser) -> TagWithItemsId:
+    async def update_tag_for_user(self, tag_id: str, tag_data: TagUpdate, user: KeycloakUser) -> TagWithItemsId:
+        await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+
         tag = self._tag_store.get_tag_by_id(tag_id)
 
         # Update memberships first
         if tag.type == TagType.DOCUMENT:
-            old_item_ids = self._retrieve_document_ids_for_tag(user, tag_id)
+            old_item_ids = await self._retrieve_document_ids_for_tag(user, tag_id)
             added, removed = self._compute_ids_diff(old_item_ids, tag_data.item_ids)
 
-            added_documents = self._retrieve_documents_metadata(user, added)
-            removed_documents = self._retrieve_documents_metadata(user, removed)
+            added_documents = await self._retrieve_documents_metadata(user, added)
+            removed_documents = await self._retrieve_documents_metadata(user, removed)
             for doc in added_documents:
-                self.document_metadata_service.add_tag_id_to_document(user, doc, tag.id, modified_by=user.uid)
+                await self.document_metadata_service.add_tag_id_to_document(user, doc, tag.id)
             for doc in removed_documents:
-                self.document_metadata_service.remove_tag_id_from_document(user, doc, tag.id, modified_by=user.uid)
+                await self.document_metadata_service.remove_tag_id_from_document(user, doc, tag.id)
 
         elif tag.type in (TagType.PROMPT, TagType.TEMPLATE, TagType.CHAT_CONTEXT):
             rk = _tagtype_to_rk(tag.type)
@@ -203,7 +243,7 @@ class TagService:
 
         # For the response, return the up-to-date list of item ids
         if tag.type == TagType.DOCUMENT:
-            item_ids = self._retrieve_document_ids_for_tag(user, tag_id)
+            item_ids = await self._retrieve_document_ids_for_tag(user, tag_id)
         elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
             rk = _tagtype_to_rk(tag.type)
             item_ids = self.resource_service.get_resource_ids_for_tag(rk, tag_id)
@@ -213,13 +253,15 @@ class TagService:
         return TagWithItemsId.from_tag(updated_tag, item_ids)
 
     @authorize(Action.DELETE, Resource.TAGS)
-    def delete_tag_for_user(self, tag_id: str, user: KeycloakUser) -> None:
+    async def delete_tag_for_user(self, tag_id: str, user: KeycloakUser) -> None:
+        await self.rebac.check_user_permission_or_raise(user, TagPermission.DELETE, tag_id)
+
         tag = self._tag_store.get_tag_by_id(tag_id)
 
         if tag.type == TagType.DOCUMENT:
-            documents = self._retrieve_documents_for_tag(user, tag_id)
+            documents = await self._retrieve_documents_for_tag(user, tag_id)
             for doc in documents:
-                self.document_metadata_service.remove_tag_id_from_document(user, doc, tag_id, modified_by=user.uid)
+                await self.document_metadata_service.remove_tag_id_from_document(user, doc, tag_id)
         elif tag.type == TagType.PROMPT:
             self.resource_service.remove_tag_from_resources(ResourceKind.PROMPT, tag_id)
         elif tag.type == TagType.CHAT_CONTEXT:
@@ -231,23 +273,125 @@ class TagService:
             raise ValueError(f"Unsupported tag type: {tag.type}")
 
         self._tag_store.delete_tag_by_id(tag_id)
+        # TODO: remove relation in ReBAC
+
+    async def share_tag_with_user_or_group(
+        self,
+        user: KeycloakUser,
+        tag_id: str,
+        target_id: str,
+        target_type: Resource,
+        relation: UserTagRelation,
+    ) -> None:
+        """
+        Share a tag with another user or group by adding a relation in the ReBAC engine.
+        """
+        await self.rebac.check_user_permission_or_raise(user, TagPermission.SHARE, tag_id)
+        await self.rebac.add_relation(
+            Relation(
+                subject=RebacReference(type=target_type, id=target_id),
+                relation=relation.to_relation(),
+                resource=RebacReference(type=Resource.TAGS, id=tag_id),
+            )
+        )
+
+    async def unshare_tag_with_user_or_group(self, user: KeycloakUser, tag_id: str, target_id: str, target_type: Resource) -> None:
+        """
+        Revoke tag access previously granted to another user or group.
+        Removes any user-tag relation regardless of the level originally assigned.
+        """
+        await self.rebac.check_user_permission_or_raise(user, TagPermission.SHARE, tag_id)
+        for relation in UserTagRelation:
+            await self.rebac.delete_relation(
+                Relation(
+                    subject=RebacReference(type=target_type, id=target_id),
+                    relation=relation.to_relation(),
+                    resource=RebacReference(type=Resource.TAGS, id=tag_id),
+                )
+            )
+
+    @authorize(Action.READ, Resource.TAGS)
+    async def get_tag_permissions_for_user(self, tag_id: str, user: KeycloakUser) -> list[TagPermission]:
+        """
+        Retrieve the list of permissions the user has on the given tag.
+        """
+        await self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
+
+        tag_reference = RebacReference(type=Resource.TAGS, id=tag_id)
+        user_reference = RebacReference(type=Resource.USER, id=user.uid)
+        return [permission for permission in TagPermission if await self.rebac.has_permission(user_reference, permission, tag_reference)]
+
+    @authorize(Action.READ, Resource.TAGS)
+    async def list_tag_members(self, tag_id: str, user: KeycloakUser) -> tuple[list[TagMemberUser], list[TagMemberGroup]]:
+        """
+        List users and groups who have access to the tag along with their relation level.
+        """
+        await self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
+
+        # Fetch user and group relations
+        user_relations = await self._get_tag_members_by_type(tag_id, Resource.USER)
+        group_relations = await self._get_tag_members_by_type(tag_id, Resource.GROUP)
+
+        # Fetch user and group summaries
+        user_summaries = await get_users_by_ids(user_relations.keys())
+        group_summaries = await get_groups_by_ids(group_relations.keys())
+
+        # Compose result
+        users: list[TagMemberUser] = []
+        groups: list[TagMemberGroup] = []
+        for user_id, relation in user_relations.items():
+            summary = user_summaries.get(user_id) or UserSummary(id=user_id)
+            users.append(TagMemberUser(relation=relation, user=summary))
+
+        for group_id, relation in group_relations.items():
+            profile = group_summaries.get(group_id) or GroupSummary(id=group_id, name=group_id)
+            groups.append(TagMemberGroup(relation=relation, group=profile))
+
+        return users, groups
 
     @authorize(Action.UPDATE, Resource.TAGS)
-    def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:
+    async def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:
+        await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
+
         tag = self._tag_store.get_tag_by_id(tag_id)
         tag.updated_at = datetime.now()
         self._tag_store.update_tag_by_id(tag_id, tag)
 
     # ---------- Internals / helpers ----------
 
-    def _retrieve_documents_for_tag(self, user: KeycloakUser, tag_id: str) -> list[DocumentMetadata]:
-        return self.document_metadata_service.get_document_metadata_in_tag(user, tag_id)
+    async def _get_tag_members_by_type(self, tag_id: str, subject_type: Resource) -> dict[str, UserTagRelation]:
+        tag_reference = RebacReference(type=Resource.TAGS, id=tag_id)
+        relation_priority = {
+            UserTagRelation.OWNER: 0,
+            UserTagRelation.EDITOR: 1,
+            UserTagRelation.VIEWER: 2,
+        }
+        members: dict[str, UserTagRelation] = {}
 
-    def _retrieve_document_ids_for_tag(self, user: KeycloakUser, tag_id: str) -> list[str]:
-        return [d.document_uid for d in self._retrieve_documents_for_tag(user, tag_id)]
+        for relation in (
+            UserTagRelation.OWNER,
+            UserTagRelation.EDITOR,
+            UserTagRelation.VIEWER,
+        ):
+            subjects = await self.rebac.lookup_subjects(tag_reference, relation.to_relation(), subject_type)
+            if isinstance(subjects, RebacDisabledResult):
+                return {}
 
-    def _retrieve_documents_metadata(self, user: KeycloakUser, document_ids: Iterable[str]) -> list[DocumentMetadata]:
-        return [self.document_metadata_service.get_document_metadata(user, doc_id) for doc_id in document_ids]
+            for subject in subjects:
+                current = members.get(subject.id)
+                if current is None or relation_priority[relation] < relation_priority[current]:
+                    members[subject.id] = relation
+
+        return members
+
+    async def _retrieve_documents_for_tag(self, user: KeycloakUser, tag_id: str) -> list[DocumentMetadata]:
+        return await self.document_metadata_service.get_document_metadata_in_tag(user, tag_id)
+
+    async def _retrieve_document_ids_for_tag(self, user: KeycloakUser, tag_id: str) -> list[str]:
+        return [d.document_uid for d in await self._retrieve_documents_for_tag(user, tag_id)]
+
+    async def _retrieve_documents_metadata(self, user: KeycloakUser, document_ids: Iterable[str]) -> list[DocumentMetadata]:
+        return await asyncio.gather(*(self.document_metadata_service.get_document_metadata(user, doc_id) for doc_id in document_ids))
 
     @staticmethod
     def _compute_ids_diff(before: list[str], after: list[str]) -> tuple[list[str], list[str]]:

@@ -50,12 +50,12 @@ class IngestionService:
         metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
 
     @authorize(Action.CREATE, Resource.DOCUMENTS)
-    def save_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
+    async def save_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
         logger.debug(f"Saving metadata {metadata}")
-        return self.metadata_service.save_document_metadata(user, metadata)
+        return await self.metadata_service.save_document_metadata(user, metadata)
 
     @authorize(Action.READ, Resource.DOCUMENTS)
-    def get_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata | None:
+    async def get_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata | None:
         """
         Retrieve the metadata associated with the given document UID.
 
@@ -72,7 +72,7 @@ class IngestionService:
         """
 
         try:
-            return self.metadata_service.get_document_metadata(user, document_uid)
+            return await self.metadata_service.get_document_metadata(user, document_uid)
         except MetadataNotFound:
             return None
 

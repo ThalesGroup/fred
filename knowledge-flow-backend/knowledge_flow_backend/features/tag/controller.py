@@ -21,10 +21,22 @@ from fastapi.params import Query
 from fastapi.responses import JSONResponse
 from fred_core import KeycloakUser, get_current_user
 
-from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
+from knowledge_flow_backend.core.stores.tags.base_tag_store import (
+    TagAlreadyExistsError,
+    TagNotFoundError,
+)
 from knowledge_flow_backend.features.metadata.service import MetadataNotFound
 from knowledge_flow_backend.features.tag.service import TagService
-from knowledge_flow_backend.features.tag.structure import TagCreate, TagType, TagUpdate, TagWithItemsId
+from knowledge_flow_backend.features.tag.structure import (
+    ShareTargetResource,
+    TagCreate,
+    TagMembersResponse,
+    TagPermissionsResponse,
+    TagShareRequest,
+    TagType,
+    TagUpdate,
+    TagWithItemsId,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,15 +57,23 @@ class TagController:
         """Register specific exception handlers for tag-related exceptions."""
 
         @app.exception_handler(TagNotFoundError)
-        async def tag_not_found_handler(request: Request, exc: TagNotFoundError) -> JSONResponse:
+        async def tag_not_found_handler(
+            request: Request, exc: TagNotFoundError
+        ) -> JSONResponse:
             return JSONResponse(status_code=404, content={"detail": "Tag not found"})
 
         @app.exception_handler(TagAlreadyExistsError)
-        async def tag_already_exists_handler(request: Request, exc: TagAlreadyExistsError) -> JSONResponse:
-            return JSONResponse(status_code=409, content={"detail": "Tag already exists"})
+        async def tag_already_exists_handler(
+            request: Request, exc: TagAlreadyExistsError
+        ) -> JSONResponse:
+            return JSONResponse(
+                status_code=409, content={"detail": "Tag already exists"}
+            )
 
         @app.exception_handler(MetadataNotFound)
-        async def metadata_not_found_handler(request: Request, exc: MetadataNotFound) -> JSONResponse:
+        async def metadata_not_found_handler(
+            request: Request, exc: MetadataNotFound
+        ) -> JSONResponse:
             return JSONResponse(status_code=404, content={"detail": str(exc)})
 
     def _register_routes(self, router: APIRouter):
@@ -62,16 +82,27 @@ class TagController:
             response_model=list[TagWithItemsId],
             response_model_exclude_none=True,
             tags=["Tags"],
-            summary=("List tags (optionally filter by type or path prefix). Supports pagination to avoid huge payloads."),
+            summary=(
+                "List tags (optionally filter by type or path prefix). Supports pagination to avoid huge payloads."
+            ),
         )
         async def list_all_tags(
-            type: Annotated[Optional[TagType], Query(description="Filter by tag type")] = None,
-            path_prefix: Annotated[Optional[str], Query(description="Filter by hierarchical path prefix, e.g. 'Sales' or 'Sales/HR'")] = None,
-            limit: Annotated[int, Query(ge=1, le=10000, description="Max items to return")] = 10000,
+            type: Annotated[
+                Optional[TagType], Query(description="Filter by tag type")
+            ] = None,
+            path_prefix: Annotated[
+                Optional[str],
+                Query(
+                    description="Filter by hierarchical path prefix, e.g. 'Sales' or 'Sales/HR'"
+                ),
+            ] = None,
+            limit: Annotated[
+                int, Query(ge=1, le=10000, description="Max items to return")
+            ] = 10000,
             offset: Annotated[int, Query(ge=0, description="Items to skip")] = 0,
             user: KeycloakUser = Depends(get_current_user),
         ) -> list[TagWithItemsId]:
-            return self.service.list_all_tags_for_user(
+            return await self.service.list_all_tags_for_user(
                 user,
                 tag_type=type,
                 path_prefix=path_prefix,
@@ -87,7 +118,31 @@ class TagController:
             summary="Get a tag by ID",
         )
         async def get_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
-            return self.service.get_tag_for_user(tag_id, user)
+            return await self.service.get_tag_for_user(tag_id, user)
+
+        @router.get(
+            "/tags/{tag_id}/permissions",
+            response_model=TagPermissionsResponse,
+            tags=["Tags"],
+            summary="List permissions available on a tag for the current user",
+        )
+        async def get_tag_permissions(
+            tag_id: str, user: KeycloakUser = Depends(get_current_user)
+        ):
+            permissions = await self.service.get_tag_permissions_for_user(tag_id, user)
+            return TagPermissionsResponse(permissions=permissions)
+
+        @router.get(
+            "/tags/{tag_id}/members",
+            response_model=TagMembersResponse,
+            tags=["Tags"],
+            summary="List users and groups who can access a tag",
+        )
+        async def list_tag_members(
+            tag_id: str, user: KeycloakUser = Depends(get_current_user)
+        ):
+            users, groups = await self.service.list_tag_members(tag_id, user)
+            return TagMembersResponse(users=users, groups=groups)
 
         @router.post(
             "/tags",
@@ -97,10 +152,12 @@ class TagController:
             tags=["Tags"],
             summary="Create a new tag",
         )
-        async def create_tag(tag: TagCreate, user: KeycloakUser = Depends(get_current_user)):
+        async def create_tag(
+            tag: TagCreate, user: KeycloakUser = Depends(get_current_user)
+        ):
             # Consider normalizing tag.path in the service if not already done
             logger.info(f"Creating tag: {tag} for user: {user.uid}")
-            return self.service.create_tag_for_user(tag, user)
+            return await self.service.create_tag_for_user(tag, user)
 
         @router.put(
             "/tags/{tag_id}",
@@ -109,8 +166,10 @@ class TagController:
             tags=["Tags"],
             summary="Update a tag (can rename/move via name/path)",
         )
-        async def update_tag(tag_id: str, tag: TagUpdate, user: KeycloakUser = Depends(get_current_user)):
-            return self.service.update_tag_for_user(tag_id, tag, user)
+        async def update_tag(
+            tag_id: str, tag: TagUpdate, user: KeycloakUser = Depends(get_current_user)
+        ):
+            return await self.service.update_tag_for_user(tag_id, tag, user)
 
         @router.delete(
             "/tags/{tag_id}",
@@ -118,5 +177,42 @@ class TagController:
             status_code=status.HTTP_204_NO_CONTENT,
             summary="Delete a tag",
         )
-        async def delete_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
-            self.service.delete_tag_for_user(tag_id, user)
+        async def delete_tag(
+            tag_id: str, user: KeycloakUser = Depends(get_current_user)
+        ):
+            await self.service.delete_tag_for_user(tag_id, user)
+
+        @router.post(
+            "/tags/{tag_id}/share",
+            status_code=status.HTTP_204_NO_CONTENT,
+            tags=["Tags"],
+            summary="Share a tag with another user",
+        )
+        async def share_tag(
+            tag_id: str,
+            share_request: TagShareRequest,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            await self.service.share_tag_with_user_or_group(
+                user,
+                tag_id,
+                share_request.target_id,
+                share_request.target_type.to_resource(),
+                share_request.relation,
+            )
+
+        @router.delete(
+            "/tags/{tag_id}/share/{target_id}",
+            status_code=status.HTTP_204_NO_CONTENT,
+            tags=["Tags"],
+            summary="Stop sharing a tag with a user",
+        )
+        async def unshare_tag(
+            tag_id: str,
+            target_id: str,
+            target_type: ShareTargetResource,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            await self.service.unshare_tag_with_user_or_group(
+                user, tag_id, target_id, target_type.to_resource()
+            )

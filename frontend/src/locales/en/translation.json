@@ -2,13 +2,23 @@
   "common": {
     "add": "Add",
     "noneSelected": "None selected",
+    "close": "Close",
     "loading": "Loading…"
   },
   "resource": {
     "kind": {
-      "prompt": { "one": "prompt", "other": "prompts" },
-      "template": { "one": "template", "other": "templates" },
-      "chat-context": { "one": "chat context", "other": "chat contexts" }
+      "prompt": {
+        "one": "prompt",
+        "other": "prompts"
+      },
+      "template": {
+        "one": "template",
+        "other": "templates"
+      },
+      "chat-context": {
+        "one": "chat context",
+        "other": "chat contexts"
+      }
     }
   },
   "validation": {
@@ -385,6 +395,12 @@
     "removedOneResource": "{{typeOne, capitalize}} removed from library.",
     "confirmRemoveTitle": "Remove from library?",
     "confirmRemoveMessage": "Remove « {{res}} » from « {{folder}} »?"
+  },
+  "documentLibraryTree": {
+    "shareFolder": "Share folder",
+    "shareFolderWithName": "Share \"{{name}}\"",
+    "deleteFolder": "Delete folder",
+    "deleteFolderDisabled": "A library should be empty to be deleted"
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",

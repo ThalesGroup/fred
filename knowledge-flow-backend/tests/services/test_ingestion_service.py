@@ -44,7 +44,7 @@ def test_user():
     )
 
 
-def test_extract_and_save_metadata(sample_docx, metadata_store, test_user):
+async def test_extract_and_save_metadata(sample_docx, metadata_store, test_user):
     service = IngestionService()
 
     # 🔍 Extract metadata
@@ -55,8 +55,8 @@ def test_extract_and_save_metadata(sample_docx, metadata_store, test_user):
     assert metadata.source_tag == "uploads"
 
     # 💾 Save metadata and reload it
-    service.save_metadata(test_user, metadata)
-    restored = service.get_metadata(test_user, metadata.document_uid)
+    await service.save_metadata(test_user, metadata)
+    restored = await service.get_metadata(test_user, metadata.document_uid)
     assert restored is not None
     assert restored.document_uid == metadata.document_uid
     assert restored.tags == ["test"]

@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import Annotated, List, Literal, Union
 
-from pydantic import AnyHttpUrl, AnyUrl, BaseModel
+from pydantic import AnyHttpUrl, AnyUrl, BaseModel, Field
 
 
 class KeycloakUser(BaseModel):
@@ -44,7 +44,76 @@ class UserSecurity(BaseModel):
     client_id: str
 
 
+class RebacBaseConfig(BaseModel):
+    enabled: bool = Field(
+        default=True,
+        description="To disable ReBAC checks (do not disable in production). If OIDC (UserSecurity and M2MSecurity) ReBAC check will be disabled even if this is true.",
+    )
+
+
+class SpiceDbRebacConfig(RebacBaseConfig):
+    """Configuration for a SpiceDB-backed relationship engine."""
+
+    type: Literal["spicedb"] = "spicedb"
+    endpoint: str = Field(
+        ..., description="gRPC endpoint for the SpiceDB implementation (host:port)"
+    )
+    insecure: bool = Field(
+        default=False, description="Use insecure connection instead of TLS"
+    )
+    sync_schema_on_init: bool = Field(
+        default=True, description="Synchronize schema when building the engine"
+    )
+    token_env_var: str = Field(
+        default="SPICEDB_TOKEN",
+        description="Environment variable that stores the SpiceDB preshared key",
+    )
+
+
+class OpenFgaRebacConfig(RebacBaseConfig):
+    """Configuration for an OpenFGA-backed relationship engine."""
+
+    type: Literal["openfga"] = "openfga"
+    api_url: AnyHttpUrl = Field(
+        ...,
+        description="Base URL for the OpenFGA HTTP API (e.g. https://fga.example.com)",
+    )
+    store_name: str = Field(
+        default="fred", description="Name of the OpenFGA store to use"
+    )
+    authorization_model_id: str | None = Field(
+        default=None,
+        description="Optional authorization model ID to use for read operations",
+    )
+    create_store_if_needed: bool = Field(
+        default=True,
+        description="Create the OpenFGA store if it does not already exist",
+    )
+    sync_schema_on_init: bool = Field(
+        default=True,
+        description="Synchronize the authorization model when creating the engine",
+    )
+    token_env_var: str = Field(
+        default="OPENFGA_API_TOKEN",
+        description="Environment variable that stores the OpenFGA API token",
+    )
+    timeout_millisec: int | None = Field(
+        default=None,
+        description="Optional timeout in milliseconds for OpenFGA API requests",
+    )
+    headers: dict[str, str] | None = Field(
+        default=None,
+        description="Static HTTP headers to send with each OpenFGA API request",
+    )
+
+
+RebacConfiguration = Annotated[
+    Union[SpiceDbRebacConfig, OpenFgaRebacConfig], Field(discriminator="type")
+]
+
+
 class SecurityConfiguration(BaseModel):
     m2m: M2MSecurity
     user: UserSecurity
     authorized_origins: List[AnyHttpUrl] = []
+    rebac: RebacConfiguration | None = None

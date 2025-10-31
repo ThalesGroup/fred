@@ -1,0 +1,54 @@
+model
+  schema 1.1
+
+type user
+
+type group
+  relations
+    # A group can have members that are users or other groups (nested groups)
+    define member: [user, group#member]
+
+type tag
+  relations
+    define owner: [user, group#member]
+    define editor: [user, group#member]
+    define viewer: [user, group#member]
+    define parent: [tag]
+
+    # --- Permissions (computed relations) ---
+    # Can read tag: see its name, description, list documents...
+    # -> must be at least viewer
+    define read: viewer or editor or owner or read from parent
+
+    # Can update tag: change its name, description... add or remove content (like documents) in the tag
+    # -> must be at least editor
+    define update: editor or owner or update from parent
+
+    # Can delete tag
+    # -> must be owner
+    define delete: owner or delete from parent
+
+    # Can share tag: add/remove editors/viewers
+    # -> must be owner
+    define share: owner or share from parent
+
+type document
+  relations
+    define parent: [tag]
+
+    # --- Permissions (computed relations) ---
+    # Can read document: see its content
+    # -> must be able to read parent tag (at least viewer)
+    define read: read from parent
+
+    # Can update document: change its name, content...
+    # -> must be able to manage parent tag (at least editor)
+    define update: update from parent
+
+    # Can delete document
+    # -> must be able to manage parent tag (at least editor)
+    define delete: update from parent
+
+    # Can process document: for RAG or SQL data extraction
+    # -> must be able to manage parent tag (at least editor)
+    define process: update from parent

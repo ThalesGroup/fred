@@ -59,6 +59,8 @@ class RBACProvider(AuthorizationProvider):
                 Resource.AGENTS: READ_ONLY,  # Can't create/update/delete agents
                 Resource.SESSIONS: CRUD,
                 Resource.MESSAGE_ATTACHMENTS: {Action.CREATE},
+                Resource.USER: READ_ONLY,
+                Resource.GROUP: READ_ONLY,
             },
             "viewer": {
                 # Viewer can only read

@@ -74,6 +74,8 @@ export const loadConfig = async () => {
 
   // Assemble final config
   const feature_flags = normalizeFlags(frontend.feature_flags);
+  feature_flags.is_rebac_enabled = settings.is_rebac_enabled;
+
   const properties = normalizeProps(frontend.properties);
 
   config = {

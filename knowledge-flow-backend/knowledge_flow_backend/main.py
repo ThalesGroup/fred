@@ -19,8 +19,10 @@
 Entrypoint for the Knowledge Flow Backend App.
 """
 
+import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager, suppress
 
 import uvicorn
 from dotenv import load_dotenv
@@ -39,15 +41,21 @@ from knowledge_flow_backend.application_state import attach_app
 from knowledge_flow_backend.common.http_logging import RequestResponseLogger
 from knowledge_flow_backend.common.structures import Configuration
 from knowledge_flow_backend.common.utils import parse_server_configuration
-from knowledge_flow_backend.core.monitoring.monitoring_controller import MonitoringController
+from knowledge_flow_backend.compat import fastapi_mcp_patch  # noqa: F401
+from knowledge_flow_backend.core.monitoring.monitoring_controller import (
+    MonitoringController,
+)
 from knowledge_flow_backend.features.catalog.controller import CatalogController
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.asset_controller import AssetController
 from knowledge_flow_backend.features.content.content_controller import ContentController
+from knowledge_flow_backend.features.groups import groups_controller
 from knowledge_flow_backend.features.ingestion.controller import IngestionController
 from knowledge_flow_backend.features.kpi import logs_controller
 from knowledge_flow_backend.features.kpi.kpi_controller import KPIController
-from knowledge_flow_backend.features.kpi.opensearch_controller import OpenSearchOpsController
+from knowledge_flow_backend.features.kpi.opensearch_controller import (
+    OpenSearchOpsController,
+)
 from knowledge_flow_backend.features.metadata.controller import MetadataController
 from knowledge_flow_backend.features.pull.controller import PullDocumentController
 from knowledge_flow_backend.features.pull.service import PullDocumentService
@@ -56,7 +64,13 @@ from knowledge_flow_backend.features.scheduler.controller import SchedulerContro
 from knowledge_flow_backend.features.statistic.controller import StatisticController
 from knowledge_flow_backend.features.tabular.controller import TabularController
 from knowledge_flow_backend.features.tag.controller import TagController
-from knowledge_flow_backend.features.vector_search.vector_search_controller import VectorSearchController
+from knowledge_flow_backend.features.users import users_controller
+from knowledge_flow_backend.features.vector_search.vector_search_controller import (
+    VectorSearchController,
+)
+from knowledge_flow_backend.security.keycloak_rebac_sync import (
+    reconcile_keycloak_groups_with_rebac,
+)
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -93,8 +107,12 @@ def load_configuration():
 
 def create_app() -> FastAPI:
     configuration: Configuration = load_configuration()
-    logger.info(f"🛠️ Embedding Model configuration: [{configuration.embedding_model.provider}] {configuration.embedding_model.name}")
-    logger.info(f"🛠️ Chat Model configuration: [{configuration.chat_model.provider}] {configuration.chat_model.name}")
+    logger.info(
+        f"🛠️ Embedding Model configuration: [{configuration.embedding_model.provider}] {configuration.embedding_model.name}"
+    )
+    logger.info(
+        f"🛠️ Chat Model configuration: [{configuration.chat_model.provider}] {configuration.chat_model.name}"
+    )
 
     base_url = configuration.app.base_url
 
@@ -114,15 +132,41 @@ def create_app() -> FastAPI:
     )
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
     application_context._log_config_summary()
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        async def periodic_reconciliation() -> None:
+            while True:
+                try:
+                    await reconcile_keycloak_groups_with_rebac()
+                except Exception:  # noqa: BLE001
+                    logger.exception(
+                        "Scheduled Keycloak→SpiceDB reconciliation failed."
+                    )
+                await asyncio.sleep(15 * 60)
+
+        # Reconcile Keycloak groups with ReBAC every 15 minutes
+        background_task = asyncio.create_task(periodic_reconciliation())
+
+        try:
+            yield
+        finally:
+            background_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await background_task
+
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs",
         redoc_url=f"{configuration.app.base_url}/redoc",
         openapi_url=f"{configuration.app.base_url}/openapi.json",
+        lifespan=lifespan,
     )
 
     # Register exception handlers
     register_exception_handlers(app)
-    allowed_origins = list({_norm_origin(o) for o in configuration.security.authorized_origins})
+    allowed_origins = list(
+        {_norm_origin(o) for o in configuration.security.authorized_origins}
+    )
     logger.info("[CORS] allow_origins=%s", allowed_origins)
     app.add_middleware(
         CORSMiddleware,
@@ -158,6 +202,8 @@ def create_app() -> FastAPI:
     OpenSearchOpsController(router)
     router.include_router(logs_controller.router)
     router.include_router(report_controller.router)
+    router.include_router(groups_controller.router)
+    router.include_router(users_controller.router)
     if configuration.scheduler.enabled:
         logger.info("🧩 Activating ingestion scheduler controller.")
         SchedulerController(router)
@@ -196,8 +242,12 @@ def create_app() -> FastAPI:
     mcp_opensearch_ops = FastApiMCP(
         app,
         name="Knowledge Flow OpenSearch Ops MCP",
-        description=("Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only."),
-        include_tags=["OpenSearch"],  # <-- only export routes tagged OpenSearch as MCP tools
+        description=(
+            "Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only."
+        ),
+        include_tags=[
+            "OpenSearch"
+        ],  # <-- only export routes tagged OpenSearch as MCP tools
         describe_all_responses=True,
         describe_full_response_schema=True,
         auth_config=auth_cfg,
@@ -256,7 +306,7 @@ def create_app() -> FastAPI:
             dependencies=[Depends(get_current_user)]
         ),
     )
-    mcp_statistical.mount_http(mount_path=f"{mcp_prefix}/mcp-statistics")
+    mcp_statistical.mount_http(mount_path=f"{mcp_prefix}/mcp-statistic")
 
     mcp_text = FastApiMCP(
         app,

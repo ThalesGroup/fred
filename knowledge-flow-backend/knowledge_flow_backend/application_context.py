@@ -32,11 +32,13 @@ from fred_core import (
     OpenSearchKPIStore,
     OpenSearchLogStore,
     RamLogStore,
+    RebacEngine,
     SQLStorageConfig,
     SQLTableStore,
     StoreInfo,
     get_embeddings,
     get_model,
+    rebac_factory,
     split_realm_url,
 )
 from langchain_core.embeddings import Embeddings
@@ -138,6 +140,12 @@ def get_kpi_writer() -> KPIWriter:
     return get_app_context().get_kpi_writer()
 
 
+def get_rebac_engine() -> RebacEngine:
+    """Expose the shared ReBAC engine instance."""
+
+    return get_app_context().get_rebac_engine()
+
+
 def get_app_context() -> "ApplicationContext":
     """
     Retrieves the global application context instance.
@@ -209,6 +217,7 @@ class ApplicationContext:
     _catalog_store_instance: Optional[BaseCatalogStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
     _kpi_writer: Optional[KPIWriter] = None
+    _rebac_engine: Optional[RebacEngine] = None
 
     def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
@@ -563,6 +572,12 @@ class ApplicationContext:
         self._kpi_writer = KPIWriter(store=self.get_kpi_store())
         return self._kpi_writer
 
+    def get_rebac_engine(self) -> RebacEngine:
+        if self._rebac_engine is None:
+            self._rebac_engine = rebac_factory(self.configuration.security)
+
+        return self._rebac_engine
+
     def get_kpi_store(self) -> BaseKPIStore:
         if self._kpi_store_instance is not None:
             return self._kpi_store_instance
@@ -781,6 +796,15 @@ class ApplicationContext:
                 logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
                 raise ValueError("Invalid Keycloak URL") from e
             _require_env("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
+
+        rebac = self.configuration.security.rebac
+        if rebac:
+            logger.info("  🕸️ ReBAC engine: %s", rebac.type)
+            logger.info("     • sync_schema_on_init: %s", rebac.sync_schema_on_init)
+            env_name = rebac.token_env_var
+            self._log_sensitive(env_name, os.getenv(env_name))
+        else:
+            logger.info("  🕸️ ReBAC engine: disabled")
 
         embedding = self.configuration.embedding_model
         # Non-secret settings from YAML

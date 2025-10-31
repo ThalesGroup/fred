@@ -47,8 +47,11 @@ from fred_core import (
     OpenSearchKPIStore,
     OpenSearchLogStore,
     RamLogStore,
+    RebacEngine,
+    SpiceDbRebacConfig,
     SQLStorageConfig,
     get_model,
+    rebac_factory,
     split_realm_url,
 )
 from langchain_core.language_models.base import BaseLanguageModel
@@ -134,6 +137,12 @@ def get_history_store() -> BaseHistoryStore:
 
 def get_kpi_writer() -> KPIWriter:
     return get_app_context().get_kpi_writer()
+
+
+def get_rebac_engine() -> RebacEngine:
+    """Expose the shared ReBAC engine instance."""
+
+    return get_app_context().get_rebac_engine()
 
 
 def get_agent_store() -> BaseAgentStore:
@@ -252,6 +261,7 @@ class ApplicationContext:
     _log_store_instance: Optional[BaseLogStore] = None
     _outbound_auth: OutboundAuth | None = None
     _kpi_writer: Optional[KPIWriter] = None
+    _rebac_engine: Optional[RebacEngine] = None
     _io_executor: ThreadPoolExecutor | None = None
 
     def __new__(cls, configuration: Configuration):
@@ -615,6 +625,12 @@ class ApplicationContext:
         )
         return self._outbound_auth
 
+    def get_rebac_engine(self) -> RebacEngine:
+        if self._rebac_engine is None:
+            self._rebac_engine = rebac_factory(self.configuration.security)
+
+        return self._rebac_engine
+
     def _log_config_summary(self) -> None:
         """
         Log a crisp, admin-friendly summary of the Agentic configuration and warn on common mistakes.
@@ -767,5 +783,26 @@ class ApplicationContext:
                 "Ensure client_id matches the secret you provisioned.",
                 m2m_sec.client_id,
             )
+
+        rebac_cfg = cfg.security.rebac
+        if isinstance(rebac_cfg, SpiceDbRebacConfig):
+            logger.info("  🕸️ ReBAC engine: %s", rebac_cfg.type)
+            logger.info("     • endpoint: %s", rebac_cfg.endpoint)
+            logger.info("     • insecure: %s", rebac_cfg.insecure)
+            logger.info("     • sync_schema_on_init: %s", rebac_cfg.sync_schema_on_init)
+            token_value = os.getenv(rebac_cfg.token_env_var, "")
+            if token_value:
+                logger.info(
+                    "     • %s: present (%s)",
+                    rebac_cfg.token_env_var,
+                    _mask(token_value),
+                )
+            else:
+                logger.warning(
+                    "     ⚠️ %s is not set — ReBAC authorization calls will fail.",
+                    rebac_cfg.token_env_var,
+                )
+        else:
+            logger.info("  🕸️ ReBAC engine: disabled")
 
         logger.info("────────────────────────────────────────────────────────────────")

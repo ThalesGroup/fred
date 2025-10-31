@@ -198,8 +198,8 @@ class Rico(AgentFlow):
 
             return {"messages": [answer]}
 
-        except Exception as e:
-            logger.exception("Rico: error in reasoning step.", exc_info=e)
+        except Exception:
+            logger.exception("Rico: error in reasoning step.")
             fallback = await self.model.ainvoke(
                 [
                     HumanMessage(
