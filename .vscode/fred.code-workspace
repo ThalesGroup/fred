@@ -19,7 +19,6 @@
 	"settings": {
 		"files.exclude": {
 			"agentic-backend/": true,
-			"knowledge_flow_backend/": true,
 			"frontend/": true,
 			"fred-core/": true,
 		},
