@@ -2,13 +2,23 @@
   "common": {
     "add": "Ajouter",
     "noneSelected": "Aucune sélection",
+    "close": "Fermer",
     "loading": "Chargement…"
   },
   "resource": {
     "kind": {
-      "prompt": { "one": "prompt", "other": "prompts" },
-      "template": { "one": "modèle", "other": "modèles" },
-      "chat-context": { "one": "contexte de conversation", "other": "contextes de conversation" }
+      "prompt": {
+        "one": "prompt",
+        "other": "prompts"
+      },
+      "template": {
+        "one": "modèle",
+        "other": "modèles"
+      },
+      "chat-context": {
+        "one": "contexte de conversation",
+        "other": "contextes de conversation"
+      }
     }
   },
   "validation": {
@@ -385,6 +395,12 @@
     "removedOneResource": "{{typeOne, capitalize}} supprimé(e) de la bibliothèque.",
     "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
     "confirmRemoveMessage": "Supprimer « {{res}} » de « {{folder}} » ?"
+  },
+  "documentLibraryTree": {
+    "shareFolder": "Partager le dossier",
+    "shareFolderWithName": "Partagez \"{{name}}\"",
+    "deleteFolder": "Supprimer le dossier",
+    "deleteFolderDisabled": "Une bibliothèque doit être vide pour être supprimée"
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",

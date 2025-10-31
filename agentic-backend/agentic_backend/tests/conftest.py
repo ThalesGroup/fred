@@ -1,5 +1,7 @@
 # agentic_backend/tests/conftest.py
 
+import os
+
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
@@ -9,6 +11,7 @@ from fred_core import (
     OpenSearchStoreConfig,
     PostgresStoreConfig,
     SecurityConfiguration,
+    SpiceDbRebacConfig,
     UserSecurity,
 )
 from pydantic import AnyHttpUrl, AnyUrl
@@ -35,6 +38,7 @@ from agentic_backend.common.structures import (
 @pytest.fixture(scope="session")
 def minimal_generalist_config() -> Configuration:
     duckdb_store = DuckdbStoreConfig(type="duckdb", duckdb_path="/tmp/test-duckdb.db")
+    os.environ.setdefault("SPICEDB_TOKEN", "test")
     fake_security_config = SecurityConfiguration(
         m2m=M2MSecurity(
             enabled=False,
@@ -48,6 +52,10 @@ def minimal_generalist_config() -> Configuration:
             client_id="fake-user-client",
         ),
         authorized_origins=[AnyHttpUrl("http://localhost:5173")],
+        rebac=SpiceDbRebacConfig(
+            endpoint="localhost:50051",
+            insecure=True,
+        ),
     )
 
     return Configuration(

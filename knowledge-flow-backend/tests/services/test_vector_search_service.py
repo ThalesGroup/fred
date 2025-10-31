@@ -71,12 +71,12 @@ def test_user():
 # ----------------------------
 
 
-def test_similarity_search_success(monkeypatch, test_user):
+async def test_similarity_search_success(monkeypatch, test_user):
     """Test: performs similarity search with a valid question and k=2.
     Asserts returned objects are Document-score tuples."""
     monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
     vector_svc = VectorSearchService()
-    results = vector_svc.search(question="What is AI?", user=test_user, top_k=2)
+    results = await vector_svc.search(question="What is AI?", user=test_user, top_k=2)
     assert isinstance(results, list)
     assert all(isinstance(doc, tuple) and isinstance(doc[0], Document) for doc in results)
     assert len(results) == 2
@@ -87,12 +87,12 @@ def test_similarity_search_success(monkeypatch, test_user):
 # ----------------------------
 
 
-def test_similarity_search_empty_question(monkeypatch, test_user):
+async def test_similarity_search_empty_question(monkeypatch, test_user):
     """Test: raises ValueError if question is an empty string."""
     monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
     vector_svc = VectorSearchService()
     with pytest.raises(ValueError):
-        vector_svc.search(question="", user=test_user, top_k=3)
+        await vector_svc.search(question="", user=test_user, top_k=3)
 
 
 # ----------------------------
@@ -100,10 +100,10 @@ def test_similarity_search_empty_question(monkeypatch, test_user):
 # ----------------------------
 
 
-def test_similarity_search_zero_k(monkeypatch, test_user):
+async def test_similarity_search_zero_k(monkeypatch, test_user):
     """Test: returns empty list when k=0, a valid edge case."""
     monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
     vector_svc = VectorSearchService()
-    results = vector_svc.search(question="Explain edge case.", user=test_user, top_k=0)
+    results = await vector_svc.search(question="Explain edge case.", user=test_user, top_k=0)
     assert isinstance(results, list)
     assert results == []
