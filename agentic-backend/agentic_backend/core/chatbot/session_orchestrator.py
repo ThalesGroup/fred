@@ -33,7 +33,13 @@ from fred_core import (
     Resource,
     authorize,
 )
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 
 from agentic_backend.application_context import (
     get_default_model,
@@ -51,6 +57,8 @@ from agentic_backend.core.chatbot.chat_schema import (
     SessionSchema,
     SessionWithFiles,
     TextPart,
+    ToolCallPart,
+    ToolResultPart,
 )
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
 from agentic_backend.core.chatbot.stream_transcoder import StreamTranscoder
@@ -135,7 +143,9 @@ class SessionOrchestrator:
         )
 
         transient_agent = await self.agent_factory.create_and_init(
-            agent_name=agent_name, runtime_context=runtime_context
+            agent_name=agent_name,
+            runtime_context=runtime_context,
+            session_id=session_id,
         )
 
         # KPI: count incoming question early (before any work)
@@ -399,22 +409,59 @@ class SessionOrchestrator:
             user_id=user.uid, query=message, session_id=session_id
         )
 
-        # Rebuild minimal LangChain history (user/assistant/system only)
+        # Rebuild minimal LangChain history (user/assistant/system only),
+        # then selectively inject recent tool results as ToolMessages so
+        # agents can recover critical context across requests (e.g., table lists).
         lc_history: list[BaseMessage] = []
+
+        # Track tool calls/results to reconstruct ToolMessages with names
+        tool_calls_by_id: dict[str, str] = {}
+        tool_results: list[tuple[str, str]] = []  # (call_id, content_str)
+
         for m in self.get_session_history(session.id, user):
             if m.role == Role.user:
                 lc_history.append(HumanMessage(_concat_text_parts(m.parts or [])))
             elif m.role == Role.assistant:
+                # Keep assistant text in prompt; record tool_calls separately
                 md = m.metadata.model_dump() if m.metadata else {}
-                lc_history.append(
-                    AIMessage(
-                        content=_concat_text_parts(m.parts or []),
-                        response_metadata=md,
+                if m.channel == Channel.tool_call:
+                    # Collect tool calls by call_id -> name (to pair with results)
+                    for p in m.parts or []:
+                        if isinstance(p, ToolCallPart):
+                            tool_calls_by_id[p.call_id] = p.name
+                else:
+                    lc_history.append(
+                        AIMessage(
+                            content=_concat_text_parts(m.parts or []),
+                            response_metadata=md,
+                        )
                     )
-                )
             elif m.role == Role.system:
                 lc_history.append(SystemMessage(_concat_text_parts(m.parts or [])))
-            # Role.tool is ignored for prompt cleanliness.
+            elif m.role == Role.tool and m.channel == Channel.tool_result:
+                # Collect tool results (paired later to create ToolMessages)
+                for p in m.parts or []:
+                    if isinstance(p, ToolResultPart):
+                        # Ensure string payload (transcoder already stringifies)
+                        content_str = (
+                            p.content if isinstance(p.content, str) else str(p.content)
+                        )
+                        tool_results.append((p.call_id, content_str))
+
+        # Inject the last few ToolMessages (paired via call_id -> tool name) to help tools-first agents.
+        # Keep it small to avoid prompt bloat; this is a stopgap until persistent checkpointers.
+        MAX_INJECTED_TOOL_RESULTS = 8
+        for call_id, content in tool_results[-MAX_INJECTED_TOOL_RESULTS:]:
+            name = tool_calls_by_id.get(call_id)
+            if not name:
+                continue
+            try:
+                lc_history.append(
+                    ToolMessage(content=content, name=name, tool_call_id=call_id)
+                )
+            except Exception:
+                # Defensive: never break history reconstruction due to malformed tool payloads
+                logger.debug("Skipping malformed tool result during history injection.")
 
         return session, lc_history
 
