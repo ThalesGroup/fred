@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from collections.abc import Iterable
-from typing import Any
 
 from fred_core import Action, KeycloakUser, Resource, authorize
 from keycloak import KeycloakAdmin
