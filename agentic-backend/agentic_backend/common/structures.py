@@ -147,6 +147,15 @@ class AIConfig(BaseModel):
             "persistent configurations are ignored."
         ),
     )
+    restore_max_exchanges: int = Field(
+        20,
+        description="Number of past exchanges to restore when initializing an agent session.",
+    )
+
+    max_concurrent_agents: int = Field(
+        128,
+        description="Maximum number of agents that can be cached in memory for faster access.",
+    )
     default_chat_model: ModelConfiguration = Field(
         ...,
         description="Default chat model configuration for all agents and services.",

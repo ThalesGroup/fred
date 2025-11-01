@@ -40,10 +40,20 @@ frontend_settings:
     logoName: "fred"
     siteDisplayName: "Fred Academy"
 ai:
-  # In production we activate the configuration persistence mechanism
+  # In production  activate the configuration persistence mechanism
   # that allow users to create/update agents at runtime and change
   # their configuration without redeploying the application.
+  # Developers: you may prefer to set this to true to trust only your static configuration
   use_static_config_only: false
+
+  # Number of past exchanges to restore when initializing an agent session
+  # This setting is used to limit the amount of historical context
+  # that is loaded into the agent at the beginning of a session. It typically occur after a restart of the application
+  # or when an agent session is re-initialized for any reason.
+  agentic_restore_max_exchanges: 20
+
+  # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
+  max_concurrent_agents: 128
 
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
   # Timeout settings for the client
@@ -110,22 +120,26 @@ ai:
 
 mcp:
   servers:
-    - name: "knowledge-flow-mcp-tabular"
+    - name: "mcp-knowledge-flow-mcp-tabular"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-tabular"
       sse_read_timeout: 2000
-    - name: "knowledge-flow-mcp-opensearch-ops"
+      auth_mode: "user_token"
+    - name: "mcp-knowledge-flow-opensearch-ops"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
       sse_read_timeout: 2000
+      auth_mode: "user_token"
     - name: "mcp-kubernetes-server"
       transport: "streamable_http"
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000
-    - name: "knowledge-flow-mcp-statistic"
+      auth_mode: "user_token"
+    - name: "mcp-atlassian-jira-server"
       transport: "streamable_http"
-      url: "http://localhost:8111/knowledge-flow/v1/mcp-statistic"
+      url: "http://localhost:8885/mcp"
       sse_read_timeout: 2000
+      auth_mode: "no_token"
 
 storage:
   postgres:

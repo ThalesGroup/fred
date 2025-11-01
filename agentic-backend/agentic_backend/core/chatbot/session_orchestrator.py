@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import secrets
 import tempfile
@@ -46,6 +47,7 @@ from agentic_backend.application_context import (
     get_history_store,
     get_kpi_writer,
 )
+from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import AgentFactory
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.runtime_context import RuntimeContext
@@ -91,6 +93,7 @@ class SessionOrchestrator:
 
     def __init__(
         self,
+        configuration: Configuration,
         session_store: BaseSessionStore,
         agent_manager: AgentManager,
         agent_factory: AgentFactory,
@@ -103,7 +106,7 @@ class SessionOrchestrator:
         self.history_store = get_history_store()
         self.kpi: KPIWriter = get_kpi_writer()
         self.attachement_processing = AttachementProcessing()
-
+        self.restore_max_exchanges = configuration.ai.restore_max_exchanges
         # Stateless worker that knows how to turn LangGraph events into ChatMessage[]
         self.transcoder = StreamTranscoder()
 
@@ -142,12 +145,6 @@ class SessionOrchestrator:
             agent_name,
         )
 
-        transient_agent = await self.agent_factory.create_and_init(
-            agent_name=agent_name,
-            runtime_context=runtime_context,
-            session_id=session_id,
-        )
-
         # KPI: count incoming question early (before any work)
         actor = KPIActor(type="human", user_id=user.uid)
         exchange_id = client_exchange_id or str(uuid4())
@@ -162,16 +159,24 @@ class SessionOrchestrator:
             },
             actor=actor,
         )
-
-        # 1) Ensure session + rebuild minimal LC history
-        session, lc_history = self._prepare_session_and_history(
-            user=user,
-            session_id=session_id,
-            message=message,
+        # 1) Get or create the session. We receive a None session_id for new sessions.
+        session = self._get_or_create_session(
+            user_id=user.uid, query=message, session_id=session_id
+        )
+        # 2) Check if an agent instance can be created/initialized/reused
+        agent, is_cached = await self.agent_factory.create_and_init(
             agent_name=agent_name,
             runtime_context=runtime_context,
+            session_id=session.id,
         )
-
+        # 3) Rebuild minimal LangChain history (user/assistant/system only),
+        # This method will only restore history if the agent is not cached.
+        lc_history: List[BaseMessage] = []
+        if not is_cached:
+            lc_history = self._restore_history(
+                user=user,
+                session=session,
+            )
         # Rank base = current stored history length
         prior: List[ChatMessage] = self.history_store.get(session.id) or []
         base_rank = len(prior)
@@ -205,7 +210,7 @@ class SessionOrchestrator:
                 actor=actor,
             ):
                 agent_msgs = await self.transcoder.stream_agent_response(
-                    agent=transient_agent,
+                    agent=agent,
                     input_messages=lc_history + [HumanMessage(message)],
                     session_id=session.id,
                     exchange_id=exchange_id,
@@ -282,8 +287,9 @@ class SessionOrchestrator:
         return self.history_store.get(session_id) or []
 
     @authorize(action=Action.DELETE, resource=Resource.SESSIONS)
-    def delete_session(self, session_id: str, user: KeycloakUser) -> None:
+    async def delete_session(self, session_id: str, user: KeycloakUser) -> None:
         self._authorize_user_action_on_session(session_id, user, Action.DELETE)
+        await self.agent_factory.teardown_session_agents(session_id)
         self.session_store.delete(session_id)
 
     # ---------------- File uploads (kept for backward compatibility) ----------------
@@ -389,81 +395,135 @@ class SessionOrchestrator:
         if asyncio.iscoroutine(result):
             await result
 
-    def _prepare_session_and_history(
+    def _restore_history(
         self,
         *,
         user: KeycloakUser,
-        session_id: str | None,
-        message: str,
-        agent_name: str,
-        runtime_context: RuntimeContext | None = None,
-    ) -> tuple[SessionSchema, list[BaseMessage]]:
+        session: SessionSchema,
+    ) -> list[BaseMessage]:
         """
-        Why here:
-          Session creation, title generation and *minimal* LC history reconstruction
-          are orchestration concerns. We keep the LangChain history intentionally
-          lean (user/assistant/system only) to avoid leaking UI-specific messages
-          (tools, thought traces) into the prompt.
-        """
-        session = self._get_or_create_session(
-            user_id=user.uid, query=message, session_id=session_id
-        )
+        Rehydrate LangChain messages from persisted ChatMessage records, preserving
+        ordering and tool_call/result pairing. Optionally limit to the last N
+        exchanges via env agentic_restore_max_exchanges.
 
-        # Rebuild minimal LangChain history (user/assistant/system only),
-        # then selectively inject recent tool results as ToolMessages so
-        # agents can recover critical context across requests (e.g., table lists).
+        Strategy:
+        - Replay in chronological order (by rank).
+        - Group contiguous tool_call messages into a single AIMessage(tool_calls=[...]).
+        - Emit ToolMessage(s) with proper tool_call_id and name from the paired calls.
+        - Include user/system/assistant textual messages as HumanMessage/SystemMessage/AIMessage.
+        - Never emit orphan ToolMessage (skip results without prior calls in the window).
+        """
+
+        hist = self.get_session_history(session.id, user) or []
+        if not hist:
+            return []
+
+        # Ensure chronological order
+        hist = sorted(hist, key=lambda m: m.rank)
+
+        if self.restore_max_exchanges > 0:
+            last_ids: list[str] = []
+            seen: set[str] = set()
+            for m in reversed(hist):
+                if m.exchange_id not in seen:
+                    seen.add(m.exchange_id)
+                    last_ids.append(m.exchange_id)
+                    if len(last_ids) >= self.restore_max_exchanges:
+                        break
+            selected = set(last_ids)
+            hist = [m for m in hist if m.exchange_id in selected]
+
         lc_history: list[BaseMessage] = []
+        pending_tool_calls: list[dict] = []
+        call_name_by_id: dict[str, str] = {}
 
-        # Track tool calls/results to reconstruct ToolMessages with names
-        tool_calls_by_id: dict[str, str] = {}
-        tool_results: list[tuple[str, str]] = []  # (call_id, content_str)
+        def flush_tool_calls_if_any():
+            if pending_tool_calls:
+                lc_history.append(
+                    AIMessage(content="", tool_calls=list(pending_tool_calls))
+                )
+                pending_tool_calls.clear()
 
-        for m in self.get_session_history(session.id, user):
-            if m.role == Role.user:
-                lc_history.append(HumanMessage(_concat_text_parts(m.parts or [])))
-            elif m.role == Role.assistant:
-                # Keep assistant text in prompt; record tool_calls separately
-                md = m.metadata.model_dump() if m.metadata else {}
-                if m.channel == Channel.tool_call:
-                    # Collect tool calls by call_id -> name (to pair with results)
-                    for p in m.parts or []:
-                        if isinstance(p, ToolCallPart):
-                            tool_calls_by_id[p.call_id] = p.name
-                else:
-                    lc_history.append(
-                        AIMessage(
-                            content=_concat_text_parts(m.parts or []),
-                            response_metadata=md,
+        for m in hist:
+            # Assistant tool_call messages → accumulate for a single AIMessage
+            if m.role == Role.assistant and m.channel == Channel.tool_call:
+                for p in m.parts or []:
+                    if isinstance(p, ToolCallPart):
+                        args_raw = getattr(p, "args", None)
+                        # Expect dict per Chat schema; tolerate strings/others defensively
+                        if isinstance(args_raw, dict):
+                            args_obj = args_raw
+                        elif isinstance(args_raw, str):
+                            try:
+                                args_obj = json.loads(args_raw)
+                            except Exception:
+                                args_obj = {"_raw": args_raw}
+                        else:
+                            args_obj = {}
+                        call_id = p.call_id
+                        name = p.name or "unnamed"
+                        pending_tool_calls.append(
+                            {
+                                "id": call_id,
+                                "name": name,
+                                "args": args_obj,
+                            }
                         )
-                    )
-            elif m.role == Role.system:
-                lc_history.append(SystemMessage(_concat_text_parts(m.parts or [])))
-            elif m.role == Role.tool and m.channel == Channel.tool_result:
-                # Collect tool results (paired later to create ToolMessages)
+                        if call_id and p.name:
+                            call_name_by_id[call_id] = p.name
+                continue
+
+            # Tool result → ensure preceding AIMessage with tool_calls exists
+            if m.role == Role.tool and m.channel == Channel.tool_result:
+                flush_tool_calls_if_any()
                 for p in m.parts or []:
                     if isinstance(p, ToolResultPart):
-                        # Ensure string payload (transcoder already stringifies)
-                        content_str = (
-                            p.content if isinstance(p.content, str) else str(p.content)
-                        )
-                        tool_results.append((p.call_id, content_str))
-
-        # Inject the last few ToolMessages (paired via call_id -> tool name) to help tools-first agents.
-        # Keep it small to avoid prompt bloat; this is a stopgap until persistent checkpointers.
-        MAX_INJECTED_TOOL_RESULTS = 8
-        for call_id, content in tool_results[-MAX_INJECTED_TOOL_RESULTS:]:
-            name = tool_calls_by_id.get(call_id)
-            if not name:
+                        content = p.content
+                        if not isinstance(content, str):
+                            try:
+                                content = json.dumps(content, ensure_ascii=False)
+                            except Exception:
+                                content = str(content)
+                        name = call_name_by_id.get(p.call_id) or "unknown_tool"
+                        try:
+                            lc_history.append(
+                                ToolMessage(
+                                    content=content, name=name, tool_call_id=p.call_id
+                                )
+                            )
+                        except Exception:
+                            logger.warning(
+                                "Failed to restore ToolMessage for tool result '%s'",
+                                name,
+                            )
+                            continue
                 continue
-            try:
-                lc_history.append(
-                    ToolMessage(content=content, name=name, tool_call_id=call_id)
-                )
-            except Exception:
-                # Defensive: never break history reconstruction due to malformed tool payloads
-                logger.debug("Skipping malformed tool result during history injection.")
 
-        return session, lc_history
+            # For any non-tool_call assistant/system/user messages, flush pending tool_calls first
+            flush_tool_calls_if_any()
+
+            if m.role == Role.user:
+                lc_history.append(HumanMessage(_concat_text_parts(m.parts or [])))
+                continue
+
+            if m.role == Role.system:
+                sys_txt = _concat_text_parts(m.parts or [])
+                if sys_txt:
+                    lc_history.append(SystemMessage(sys_txt))
+                continue
+
+            if m.role == Role.assistant:
+                # Skip tool_call here (handled above). Include text for final/observation/etc.
+                if m.channel != Channel.tool_call:
+                    lc_history.append(AIMessage(_concat_text_parts(m.parts or [])))
+                continue
+
+            # Unknown/other roles: ignore for LC prompt
+
+        # If the transcript ended with tool_calls and no results, keep the AI tool_calls
+        flush_tool_calls_if_any()
+
+        return lc_history
 
     def _get_or_create_session(
         self, *, user_id: str, query: str, session_id: Optional[str]
@@ -471,7 +531,9 @@ class SessionOrchestrator:
         if session_id:
             existing = self.session_store.get(session_id)
             if existing:
-                logger.info("Resumed session %s for user %s", session_id, user_id)
+                logger.info(
+                    "[AGENTS] resumed session %s for user %s", session_id, user_id
+                )
                 return existing
 
         new_session_id = secrets.token_urlsafe(8)
@@ -487,7 +549,9 @@ class SessionOrchestrator:
             id=new_session_id, user_id=user_id, title=title, updated_at=_utcnow_dt()
         )
         self.session_store.save(session)
-        logger.info("Created new session %s for user %s", new_session_id, user_id)
+        logger.info(
+            "[AGENTS] Created new session %s for user %s", new_session_id, user_id
+        )
         return session
 
 

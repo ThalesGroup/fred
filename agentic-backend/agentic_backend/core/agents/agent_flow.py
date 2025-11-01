@@ -14,6 +14,7 @@
 
 import logging
 import math
+import os
 import sys
 import tempfile
 from datetime import datetime
@@ -38,8 +39,11 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     SystemMessage,
+    ToolMessage,
 )
 from langchain_core.runnables import Runnable, RunnableConfig
+from langfuse import Langfuse
+from langfuse.callback import CallbackHandler
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState
 from langgraph.graph.state import CompiledStateGraph
@@ -122,6 +126,15 @@ class AgentFlow:
         self._graph = None  # Will be built in async_init
         self.streaming_memory = MemorySaver()
         self.compiled_graph: Optional[CompiledStateGraph] = None
+        has_public_key = os.getenv("LANGFUSE_PUBLIC_KEY") is not None
+        has_secret_key = os.getenv("LANGFUSE_SECRET_KEY") is not None
+
+        if has_public_key and has_secret_key:
+            # Only initialize if keys are present
+            self.langfuse_client = Langfuse()
+        else:
+            # Set to None if disabled
+            self.langfuse_client = None
 
     def get_compiled_graph(self) -> CompiledStateGraph:
         """
@@ -156,6 +169,13 @@ class AgentFlow:
         self.runtime_context: RuntimeContext = runtime_context
         self.asset_client = KfAgentAssetClient(agent=self)
 
+    async def aclose(self) -> None:
+        """
+        Asynchronous cleanup routine that can be overridden by subclasses.
+        Default implementation does nothing.
+        """
+        pass
+
     def refresh_user_access_token(self) -> str:
         """
         Refreshes the user's access token and updates the session's run_config.
@@ -179,7 +199,8 @@ class AgentFlow:
             )
 
         logger.info(
-            "SECURITY: Refreshing user access token via Keycloak realm %s", keycloak_url
+            "[SECURITY] Refreshing user access token via Keycloak realm %s",
+            keycloak_url,
         )
         payload = refresh_user_access_token_from_keycloak(
             keycloak_url=keycloak_url,
@@ -213,7 +234,7 @@ class AgentFlow:
                 )
 
         logger.info(
-            "SECURITY: User access token refreshed successfully [token=%s] [expires_at=%s]",
+            "[SECURITY] User access token refreshed successfully [token=%s] [expires_at=%s]",
             new_access_token,
             expires_at,
         )
@@ -228,29 +249,104 @@ class AgentFlow:
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream LangGraph 'updates' while ensuring the agent sees the run config.
-
-        Why (Fred):
-        - Some nodes rely on self.get_end_user_id() to write/read user-scoped assets.
-        - LangGraph passes `config` to the engine, but your agent methods read `self.run_config`.
-        - We set it once here, before streaming, so node code stays clean.
-
-        Behavior:
-        - Identical to compiled_graph.astream(..., stream_mode='updates')
-        (we just inject self.run_config first).
-        - Accepts **kwargs in case you want to forward additional astream options later.
         """
-        # Make config available to node methods
-        self.run_config = config or {}
+        # 1. Start with the incoming config, ensuring it's not None
+        self.run_config = config if config is not None else {}
         compiled = self.get_compiled_graph()
 
-        # Preserve the exact streaming semantics you had before.
+        # 2. Instantiate the Langfuse Handler
+        # CallbackHandler expects an optional public_key (str | None); do not pass the Langfuse client instance here.
+        langfuse_handler = None
+        if self.langfuse_client is not None:
+            langfuse_handler = CallbackHandler()
+
+            # 3. Safely get the callbacks list (Resolves Pylance warnings)
+            existing_callbacks = self.run_config.get("callbacks")
+            if existing_callbacks is None:
+                # No callbacks provided yet — create a list with our handler
+                callbacks_list = [langfuse_handler]
+            elif isinstance(existing_callbacks, list):
+                # If it's already a list, create a shallow copy and append to avoid mutating external state
+                callbacks_list = list(existing_callbacks) + [langfuse_handler]
+            else:
+                # If it's a single callback object (e.g., a BaseCallbackManager or handler), wrap it into a list
+                callbacks_list = [existing_callbacks, langfuse_handler]
+
+            # 4. Update the config with a list of callbacks (langgraph expects an iterable/list)
+            self.run_config["callbacks"] = callbacks_list  # type: ignore[assignment]
+            logger.info(
+                "[AGENTS] Langfuse CallbackHandler added to run_config callbacks for agent '%s'.",
+                self.get_name(),
+            )
+
+        # 5. Execute the graph using the MODIFIED config (self.run_config)
         async for event in compiled.astream(
             state,
-            config=config,
+            config=self.run_config,  # <--- CORRECT: Pass the updated config
             stream_mode="updates",
             **kwargs,
         ):
             yield event
+
+        # 6. Flush the client after the run is complete
+        if self.langfuse_client is not None:
+            self.langfuse_client.flush()
+
+    @staticmethod
+    def debug_dump_messages(
+        messages: Sequence[AnyMessage], label: str = "Messages"
+    ) -> None:
+        """
+        Log a concise summary of message sequence for debugging purposes.
+
+        Each line shows:
+            [index] role/type | content preview | tool_call_id(s)
+        This avoids any Pydantic serialization warnings or excessive logs.
+        """
+        if not messages:
+            logger.info(f"{label}: (empty)")
+            return
+
+        logger.info(f"----- {label} ({len(messages)}) -----")
+        for i, msg in enumerate(messages):
+            # Determine message role/type
+            role = (
+                getattr(msg, "type", None)
+                or getattr(msg, "role", None)
+                or type(msg).__name__
+            )
+            content = getattr(msg, "content", "")
+            preview = ""
+
+            # Short preview for readability
+            if isinstance(content, str):
+                preview = content.strip().replace("\n", " ")
+                if len(preview) > 60:
+                    preview = preview[:57] + "..."
+            elif isinstance(content, list):
+                preview = f"[list x{len(content)}]"
+            elif isinstance(content, dict):
+                preview = f"[dict keys={list(content.keys())}]"
+
+            # Tool metadata
+            extra = ""
+            if isinstance(msg, AIMessage):
+                tool_calls = getattr(msg, "tool_calls", None)
+                if tool_calls:
+                    ids = [
+                        tc.get("id") or tc.get("name") or "<no-id>"
+                        for tc in tool_calls
+                        if isinstance(tc, dict)
+                    ]
+                    extra = f" tool_calls={ids}"
+            elif isinstance(msg, ToolMessage):
+                tcid = getattr(msg, "tool_call_id", None)
+                if tcid:
+                    extra = f" tool_call_id={tcid}"
+
+            logger.info(f"[{i:02d}] {role:<10} | {preview}{extra}")
+
+        logger.info(f"----- End {label} -----")
 
     @staticmethod
     def ensure_any_message(msg: object) -> AnyMessage:
