@@ -178,7 +178,7 @@ async def get_connected_mcp_client_for_agent(
     auth_label = _mask_auth_value(base_headers.get("Authorization"))
     # 🟢 LOG 5: Auth status
     logger.info(
-        "MCP connect init: Token retrieved successfully. Auth status: %s", auth_label
+        "[MCP] connect init: Token retrieved successfully. Auth status: %s", auth_label
     )
     # ----------------------------------------------------------------
 
@@ -207,7 +207,7 @@ async def get_connected_mcp_client_for_agent(
 
         # 🟢 LOG A: Per-server auth status
         logger.info(
-            "MCP connect server=%s: Auth mode='%s', Auth status: %s (Client token used: %s)",
+            "[MCP] connect server=%s: Auth mode='%s', Auth status: %s (Client token used: %s)",
             server.name,
             auth_mode,
             auth_label,

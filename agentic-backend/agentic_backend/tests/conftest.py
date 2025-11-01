@@ -68,6 +68,8 @@ def minimal_generalist_config() -> Configuration:
         security=fake_security_config,
         ai=AIConfig(
             use_static_config_only=True,
+            max_concurrent_agents=128,
+            restore_max_exchanges=20,
             knowledge_flow_url="http://localhost:8000/agentic/v1",
             timeout=TimeoutSettings(connect=5, read=15),
             default_chat_model=ModelConfiguration(

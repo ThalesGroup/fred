@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-import inspect
+import asyncio
 import logging
 from contextlib import AsyncExitStack
 from typing import Any, List, Optional
@@ -42,28 +42,9 @@ async def _close_mcp_client_quietly(client: Optional[MultiServerMCPClient]) -> N
     logger.info("[MCP] client_id=%s close_quietly", client_id)
 
     try:
-        aclose = getattr(client, "aclose", None)
-        if callable(aclose):
-            res = aclose()
-            if inspect.isawaitable(res):
-                await res
-            logger.info(
-                "[MCP] client_id=%s close_quietly: Closed client via aclose().",
-                client_id,
-            )
-            return
-
-        close = getattr(client, "close", None)
-        if callable(close):
-            close()
-            logger.info(
-                "[MCP] client_id=%s close_quietly: Closed client via close().",
-                client_id,
-            )
-            return
-
         exit_stack = getattr(client, "exit_stack", None)
         if isinstance(exit_stack, AsyncExitStack):
+            # This is the specific line you need to reintroduce for safe shutdown
             await exit_stack.aclose()
             logger.info(
                 "[MCP] client_id=%s close_quietly: Closed client via AsyncExitStack.",
@@ -71,15 +52,14 @@ async def _close_mcp_client_quietly(client: Optional[MultiServerMCPClient]) -> N
             )
             return
 
-        # 🟢 LOG 1: No callable close method found
-        logger.info(
+        logger.warning(
             "[MCP] client_id=%s close_quietly: Client has no recognized close method.",
             client_id,
         )
 
     except Exception:
         # 🟢 LOG 1: Close failure
-        logger.info(
+        logger.warning(
             "[MCP] client_id=%s close_quietly: Client close ignored.",
             client_id,
             exc_info=True,
@@ -110,6 +90,12 @@ class MCPRuntime:
         self.mcp_client: Optional[MultiServerMCPClient] = None
         self.toolkit: Optional[McpToolkit] = None
 
+        # Lifecycle orchestration so enter/exit happen in the SAME task
+        self._lifecycle_task: Optional[asyncio.Task] = None
+        self._stop_event: Optional[asyncio.Event] = None
+        self._ready_event: Optional[asyncio.Event] = None
+        self._lifecycle_error: Optional[BaseException] = None
+
         logger.info(
             "[MCP]agent=%s mcp_servers=%s ",
             self.agent_instance.get_name(),
@@ -133,33 +119,68 @@ class MCPRuntime:
             # We allow the agent to run, but without MCP tools.
             return
 
-        # 1. Get the RuntimeContext from the agent (guaranteed to be set by the factory)
+        # If already running, just return
+        if self._lifecycle_task and not self._lifecycle_task.done():
+            return
+
+        # 1) Prepare lifecycle signals
+        self._stop_event = asyncio.Event()
+        self._ready_event = asyncio.Event()
+        self._lifecycle_error = None
+
+        # 2) Launch lifecycle task that opens and later closes in the same task
         runtime_context: RuntimeContext = self.agent_instance.runtime_context
+        self._lifecycle_task = asyncio.create_task(
+            self._run_lifecycle(runtime_context),
+            name=f"mcp[{self.agent_instance.get_name()}]",
+        )
+
+        # 3) Wait until connected or error
+        await self._ready_event.wait()
+        if self._lifecycle_error:
+            raise self._lifecycle_error
+
+    async def _run_lifecycle(self, runtime_context: RuntimeContext) -> None:
+        """
+        Create and connect the MultiServerMCPClient in THIS task and close it
+        from the same task on stop signal to avoid AnyIO cancel-scope mismatches.
+        """
         try:
-            # 3. Build and connect the client
             new_client = await get_connected_mcp_client_for_agent(
                 agent_name=self.agent_instance.get_name(),
                 mcp_servers=self.available_servers,
                 runtime_context=runtime_context,
             )
-
-            # 4. Set final state
-            self.toolkit = McpToolkit(
-                client=new_client,
-                agent=self.agent_instance,
-            )
             self.mcp_client = new_client
-
+            self.toolkit = McpToolkit(client=new_client, agent=self.agent_instance)
             logger.info(
                 "[MCP] agent=%s init: Successfully built and connected client.",
                 self.agent_instance.get_name(),
             )
-        except Exception:
+            # Signal readiness
+            if self._ready_event:
+                self._ready_event.set()
+
+            # Wait for stop
+            assert self._stop_event is not None
+            await self._stop_event.wait()
+
+        except BaseException as e:
+            # Propagate init error to caller
+            self._lifecycle_error = e
+            if self._ready_event and not self._ready_event.is_set():
+                self._ready_event.set()
             logger.exception(
-                "[MCP] agent=%s init: Failed to build and connect client.",
+                "[MCP] agent=%s lifecycle error during init.",
                 self.agent_instance.get_name(),
             )
-            raise
+        finally:
+            # Close client in the SAME task that opened it
+            try:
+                await _close_mcp_client_quietly(self.mcp_client)
+            finally:
+                self.mcp_client = None
+                self.toolkit = None
 
     def get_tools(self) -> List[BaseTool]:
         """
@@ -168,7 +189,7 @@ class MCPRuntime:
         """
         if not self.toolkit:
             logger.warning(
-                "[MCP][%s] get_tools: Toolkit is None. Returning empty list.",
+                "[MCP] agent=%s get_tools: Toolkit is None. Returning empty list.",
                 self.agent_instance.get_name(),
             )
             return []
@@ -180,14 +201,27 @@ class MCPRuntime:
         """
         Shuts down the MCP client associated with this transient runtime.
         """
-        logger.info(
-            "[MCP][%s] aclose: Shutting down MCPRuntime and closing client.",
+        logger.debug(
+            "[MCP] agent=%s aclose: Shutting down MCPRuntime and closing client.",
             self.agent_instance.get_name(),
         )
-        await _close_mcp_client_quietly(self.mcp_client)
-        self.mcp_client = None
-        self.toolkit = None
+        # If lifecycle task exists, signal and await it to close contexts safely
+        if self._lifecycle_task:
+            if self._stop_event and not self._stop_event.is_set():
+                self._stop_event.set()
+            try:
+                await asyncio.shield(self._lifecycle_task)
+            finally:
+                self._lifecycle_task = None
+                self._stop_event = None
+                self._ready_event = None
+                self._lifecycle_error = None
+        else:
+            # Fallback (shouldn’t normally happen): close inline
+            await _close_mcp_client_quietly(self.mcp_client)
+            self.mcp_client = None
+            self.toolkit = None
         logger.info(
-            "[MCP][%s] aclose: MCP shutdown complete.",
+            "[MCP] agent=%s aclose: MCP shutdown complete.",
             self.agent_instance.get_name(),
         )

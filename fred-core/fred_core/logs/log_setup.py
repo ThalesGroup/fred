@@ -19,6 +19,7 @@ import asyncio
 import json
 import logging
 import threading
+from typing import Any, Optional
 
 from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO
 
@@ -107,6 +108,22 @@ class StoreEmitHandler(logging.Handler):
             self._tls.in_emit = False
 
 
+class TaskNameFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Adds the current asyncio Task name to the log record."""
+        try:
+            current_task: Optional[asyncio.Task[Any]] = asyncio.current_task()
+            if current_task is not None:
+                # Add a custom attribute to the record
+                record.task_name = current_task.get_name() or str(id(current_task))
+            else:
+                record.task_name = "Main"
+        except RuntimeError:
+            # Handles cases where not inside an asyncio loop (e.g., initial sync setup)
+            record.task_name = "Sync"
+        return True
+
+
 def log_setup(
     *,
     service_name: str,
@@ -124,14 +141,21 @@ def log_setup(
 
     # 1) Human console (Rich)
     if RichHandler is not None:
+        formatter = logging.Formatter(
+            # Include custom 'task_name' attribute and standard 'threadName'
+            fmt="%(asctime)s | %(levelname)s | [%(threadName)s/%(task_name)s] | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
         console = RichHandler(
             rich_tracebacks=False,
-            show_time=True,
+            show_time=False,  # Time is now in the custom formatter
             show_level=True,
-            show_path=True,  # shows module/filename:line
-            log_time_format="%Y-%m-%d %H:%M:%S",
-            omit_repeated_times=False,  # ← force time on every line
+            show_path=True,
+            # Omit other rich handler formatting controls, as the formatter handles the prefix
+            log_time_format="%Y-%m-%d %H:%M:%S",  # This can be misleading, rely on formatter time
         )
+        console.setFormatter(formatter)
+        console.addFilter(TaskNameFilter())
         console.setLevel(log_level.upper())
         root.addHandler(console)
 

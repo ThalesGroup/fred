@@ -38,6 +38,7 @@ dependencies = [
   "Pillow>=10.0.0",
   "fred-core",
   "uv",
+  "langchain-openai>=0.3.35",
 ]
 
 [project.optional-dependencies]

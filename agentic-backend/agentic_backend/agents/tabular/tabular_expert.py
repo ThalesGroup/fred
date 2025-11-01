@@ -74,7 +74,7 @@ TABULAR_TUNING = AgentTuning(
         ),
     ],
     mcp_servers=[
-        MCPServerRef(name="knowledge-flow-mcp-tabular"),
+        MCPServerRef(name="mcp-knowledge-flow-mcp-tabular"),
     ],
 )
 
@@ -95,6 +95,19 @@ class Tessa(AgentFlow):
         super().__init__(agent_settings=agent_settings)
         self.mcp = MCPRuntime(agent=self)
         self._recent_table_names: list[str] = []
+
+    # ---------------------------
+    # Bootstrap
+    # ---------------------------
+    async def async_init(self, runtime_context: RuntimeContext):
+        await super().async_init(runtime_context)
+        self.model = get_default_chat_model()
+        await self.mcp.init()  # start MCP + toolkit
+        self.model = self.model.bind_tools(self.mcp.get_tools())
+        self._graph = self._build_graph()
+
+    async def aclose(self):
+        await self.mcp.aclose()
 
     # ---------------------------
     # Tool cache helpers
@@ -125,19 +138,6 @@ class Tessa(AgentFlow):
             return "I do not have any tables listed yet."
         bullets = "\n".join(f"- `{name}`" for name in tables)
         return f"The available table(s):\n{bullets}"
-
-    # ---------------------------
-    # Bootstrap
-    # ---------------------------
-    async def async_init(self, runtime_context: RuntimeContext):
-        await super().async_init(runtime_context)
-        self.model = get_default_chat_model()
-        await self.mcp.init()  # start MCP + toolkit
-        self.model = self.model.bind_tools(self.mcp.get_tools())
-        self._graph = self._build_graph()
-
-    async def aclose(self):
-        await self.mcp.aclose()
 
     # ---------------------------
     # Graph
