@@ -36,7 +36,7 @@ from fred_core import (
 )
 from langchain_core.messages import (
     AIMessage,
-    BaseMessage,
+    AnyMessage,
     HumanMessage,
     SystemMessage,
     ToolMessage,
@@ -50,6 +50,7 @@ from agentic_backend.application_context import (
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import AgentFactory
 from agentic_backend.core.agents.agent_manager import AgentManager
+from agentic_backend.core.agents.agent_utils import log_agent_message_summary
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.chatbot.chat_schema import (
     Channel,
@@ -171,12 +172,15 @@ class SessionOrchestrator:
         )
         # 3) Rebuild minimal LangChain history (user/assistant/system only),
         # This method will only restore history if the agent is not cached.
-        lc_history: List[BaseMessage] = []
+        lc_history: List[AnyMessage] = []
         if not is_cached:
             lc_history = self._restore_history(
                 user=user,
                 session=session,
             )
+            label = f"agent={agent_name} session={session.id}"
+            log_agent_message_summary(lc_history, label=label)
+
         # Rank base = current stored history length
         prior: List[ChatMessage] = self.history_store.get(session.id) or []
         base_rank = len(prior)
@@ -400,28 +404,28 @@ class SessionOrchestrator:
         *,
         user: KeycloakUser,
         session: SessionSchema,
-    ) -> list[BaseMessage]:
+    ) -> list[AnyMessage]:
         """
-        Rehydrate LangChain messages from persisted ChatMessage records, preserving
-        ordering and tool_call/result pairing. Optionally limit to the last N
-        exchanges via env agentic_restore_max_exchanges.
-
-        Strategy:
-        - Replay in chronological order (by rank).
-        - Group contiguous tool_call messages into a single AIMessage(tool_calls=[...]).
-        - Emit ToolMessage(s) with proper tool_call_id and name from the paired calls.
-        - Include user/system/assistant textual messages as HumanMessage/SystemMessage/AIMessage.
-        - Never emit orphan ToolMessage (skip results without prior calls in the window).
+        Fred rationale:
+        - Sort by (exchange_id, rank) to preserve each exchange’s causal order.
+        - Keep tool-call grouping strictly per exchange (no cross-leak).
+        - Emit ToolMessage only if a matching AI tool_call exists in the same exchange.
+        - Windowing by "last N exchanges" always keeps whole exchanges.
         """
-
         hist = self.get_session_history(session.id, user) or []
         if not hist:
+            _rlog("empty", msg="No messages to restore", session_id=session.id)
             return []
 
-        # Ensure chronological order
-        hist = sorted(hist, key=lambda m: m.rank)
+        # 1) Correct ordering
+        try:
+            hist = sorted(hist, key=lambda m: (m.exchange_id, m.rank))
+        except Exception:
+            hist = sorted(hist, key=lambda m: m.rank)
+        _rlog("ordering", msg="Sorted history", count=len(hist))
 
-        if self.restore_max_exchanges > 0:
+        # 2) Optional last-N exchanges window (keeps full exchanges)
+        if getattr(self, "restore_max_exchanges", 0) > 0:
             last_ids: list[str] = []
             seen: set[str] = set()
             for m in reversed(hist):
@@ -431,26 +435,70 @@ class SessionOrchestrator:
                     if len(last_ids) >= self.restore_max_exchanges:
                         break
             selected = set(last_ids)
+            before = len(hist)
             hist = [m for m in hist if m.exchange_id in selected]
+            try:
+                hist = sorted(hist, key=lambda m: (m.exchange_id, m.rank))
+            except Exception:
+                hist = sorted(hist, key=lambda m: m.rank)
+            _rlog(
+                "window",
+                msg="Applied last-N exchanges window",
+                kept=len(hist),
+                dropped=before - len(hist),
+                exchanges=list(selected),
+            )
 
-        lc_history: list[BaseMessage] = []
+        lc_history: list[AnyMessage] = []
+
+        # 3) Per-exchange tool-call context (must not leak)
         pending_tool_calls: list[dict] = []
         call_name_by_id: dict[str, str] = {}
+        known_tool_call_ids: set[str] = set()
+        current_exchange: str | None = None
+
+        def reset_exchange_state():
+            pending_tool_calls.clear()
+            call_name_by_id.clear()
+            known_tool_call_ids.clear()
 
         def flush_tool_calls_if_any():
             if pending_tool_calls:
-                lc_history.append(
-                    AIMessage(content="", tool_calls=list(pending_tool_calls))
+                ai = AIMessage(content="", tool_calls=list(pending_tool_calls))
+                lc_history.append(ai)
+                _rlog(
+                    "emit_ai_calls",
+                    msg="Emitted AI(tool_calls)",
+                    exchange_id=current_exchange,
+                    calls=[
+                        {"id": c.get("id"), "name": c.get("name")}
+                        for c in pending_tool_calls
+                    ],
                 )
                 pending_tool_calls.clear()
 
+        # 4) Replay
         for m in hist:
-            # Assistant tool_call messages → accumulate for a single AIMessage
+            # Exchange boundary: close prior group and reset per-exchange context
+            if current_exchange is None:
+                current_exchange = m.exchange_id
+                _rlog(
+                    "exchange_begin", msg="Begin exchange", exchange_id=current_exchange
+                )
+            elif m.exchange_id != current_exchange:
+                flush_tool_calls_if_any()
+                _rlog("exchange_end", msg="End exchange", exchange_id=current_exchange)
+                reset_exchange_state()
+                current_exchange = m.exchange_id
+                _rlog(
+                    "exchange_begin", msg="Begin exchange", exchange_id=current_exchange
+                )
+
+            # Assistant tool-call parts → accumulate into a single AIMessage
             if m.role == Role.assistant and m.channel == Channel.tool_call:
                 for p in m.parts or []:
                     if isinstance(p, ToolCallPart):
                         args_raw = getattr(p, "args", None)
-                        # Expect dict per Chat schema; tolerate strings/others defensively
                         if isinstance(args_raw, dict):
                             args_obj = args_raw
                         elif isinstance(args_raw, str):
@@ -463,21 +511,35 @@ class SessionOrchestrator:
                         call_id = p.call_id
                         name = p.name or "unnamed"
                         pending_tool_calls.append(
-                            {
-                                "id": call_id,
-                                "name": name,
-                                "args": args_obj,
-                            }
+                            {"id": call_id, "name": name, "args": args_obj}
                         )
+                        if call_id:
+                            known_tool_call_ids.add(call_id)
                         if call_id and p.name:
                             call_name_by_id[call_id] = p.name
+                        _rlog(
+                            "acc_call",
+                            msg="Accumulate tool_call",
+                            exchange_id=current_exchange,
+                            call_id=call_id,
+                            name=name,
+                        )
                 continue
 
-            # Tool result → ensure preceding AIMessage with tool_calls exists
+            # Tool result → only emit if call_id known in THIS exchange
             if m.role == Role.tool and m.channel == Channel.tool_result:
+                # ensure we have a preceding AI(tool_calls=[...]) if we actually accumulated calls
                 flush_tool_calls_if_any()
                 for p in m.parts or []:
                     if isinstance(p, ToolResultPart):
+                        if p.call_id not in known_tool_call_ids:
+                            _rlog(
+                                "skip_orphan_tool_result",
+                                msg="Skip orphan ToolMessage (no matching call in this exchange)",
+                                exchange_id=current_exchange,
+                                call_id=p.call_id,
+                            )
+                            continue
                         content = p.content
                         if not isinstance(content, str):
                             try:
@@ -486,44 +548,80 @@ class SessionOrchestrator:
                                 content = str(content)
                         name = call_name_by_id.get(p.call_id) or "unknown_tool"
                         try:
-                            lc_history.append(
-                                ToolMessage(
-                                    content=content, name=name, tool_call_id=p.call_id
-                                )
+                            tm = ToolMessage(
+                                content=content, name=name, tool_call_id=p.call_id
+                            )
+                            lc_history.append(tm)
+                            _rlog(
+                                "emit_tool",
+                                msg="Emitted ToolMessage",
+                                exchange_id=current_exchange,
+                                call_id=p.call_id,
+                                name=name,
+                                preview=_preview(content),
                             )
                         except Exception:
-                            logger.warning(
-                                "Failed to restore ToolMessage for tool result '%s'",
-                                name,
+                            _rlog(
+                                "emit_tool_error",
+                                msg="Failed to restore ToolMessage",
+                                exchange_id=current_exchange,
+                                call_id=p.call_id,
+                                name=name,
                             )
                             continue
                 continue
 
-            # For any non-tool_call assistant/system/user messages, flush pending tool_calls first
+            # Non-tool_call assistant/system/user → first close any pending call group
             flush_tool_calls_if_any()
 
             if m.role == Role.user:
-                lc_history.append(HumanMessage(_concat_text_parts(m.parts or [])))
+                text = _concat_text_parts(m.parts or [])
+                hm = HumanMessage(text)
+                lc_history.append(hm)
+                _rlog(
+                    "emit_human",
+                    msg="Emitted HumanMessage",
+                    exchange_id=current_exchange,
+                    preview=_preview(text),
+                )
                 continue
 
             if m.role == Role.system:
                 sys_txt = _concat_text_parts(m.parts or [])
                 if sys_txt:
-                    lc_history.append(SystemMessage(sys_txt))
+                    sm = SystemMessage(sys_txt)
+                    lc_history.append(sm)
+                    _rlog(
+                        "emit_system",
+                        msg="Emitted SystemMessage",
+                        exchange_id=current_exchange,
+                        preview=_preview(sys_txt),
+                    )
                 continue
 
             if m.role == Role.assistant:
-                # Skip tool_call here (handled above). Include text for final/observation/etc.
                 if m.channel != Channel.tool_call:
-                    lc_history.append(AIMessage(_concat_text_parts(m.parts or [])))
+                    text = _concat_text_parts(m.parts or [])
+                    am = AIMessage(text)
+                    lc_history.append(am)
+                    _rlog(
+                        "emit_ai_text",
+                        msg="Emitted AI text",
+                        exchange_id=current_exchange,
+                        preview=_preview(text),
+                    )
                 continue
 
-            # Unknown/other roles: ignore for LC prompt
+            # Unknown/other roles → ignore (by design)
 
-        # If the transcript ended with tool_calls and no results, keep the AI tool_calls
+        # If transcript ends with calls and no results, keep the grouped AI(tool_calls=...)
         flush_tool_calls_if_any()
+        _rlog("restore_done", msg="Restoration complete", total=len(lc_history))
 
+        # Optional: show a concise summary of the reconstructed LC messages
         return lc_history
+
+    # --- Small, focused helpers to keep logs readable ---
 
     def _get_or_create_session(
         self, *, user_id: str, query: str, session_id: Optional[str]
@@ -566,3 +664,40 @@ def _concat_text_parts(parts) -> str:
             if txt:
                 texts.append(str(txt))
     return "\n".join(texts).strip()
+
+
+def _rlog(event: str, **fields):
+    """
+    Structured restoration logs.
+    Keep messages short; rely on fields for details. This makes grepping stable.
+    """
+    try:
+        payload = " ".join(
+            f"{k}={_safe(v)}" for k, v in fields.items() if v is not None
+        )
+    except Exception:
+        payload = str(fields)
+    logger.debug(f"[RESTORE] {event} | {payload}")
+
+
+def _preview(content: str, limit: int = 90) -> str:
+    if not content:
+        return ""
+    s = content.strip().replace("\n", " ")
+    return s if len(s) <= limit else s[: limit - 3] + "..."
+
+
+def _safe(v):
+    if isinstance(v, (list, tuple, set)):
+        return (
+            "["
+            + ", ".join(map(_safe, list(v)[:5]))
+            + ("]" if len(v) <= 5 else ", ...]")
+        )
+    if isinstance(v, dict):
+        keys = list(v.keys())[:5]
+        return "{keys=" + ",".join(keys) + ("}" if len(v) <= 5 else ",...}")
+    if isinstance(v, str):
+        v = v.replace("\n", " ")
+        return f"'{v[:60]}...'" if len(v) > 63 else f"'{v}'"
+    return repr(v)
