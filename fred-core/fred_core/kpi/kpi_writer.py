@@ -17,11 +17,13 @@ from __future__ import annotations
 
 import logging
 import time
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, Optional
+from typing import Any, Callable, ContextManager, Dict, Iterable, Optional
 
 from fred_core.kpi.base_kpi_store import BaseKPIStore
+from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import (
     Cost,
     Dims,
@@ -103,7 +105,7 @@ def to_kpi_actor(user: KeycloakUser) -> KPIActor:
 # -------------------------
 # Public KPI API (emission)
 # -------------------------
-class KPIWriter:
+class KPIWriter(BaseKPIWriter):
     """
     Lean, clean emission API on top of a BaseKPIStore.
 
@@ -219,25 +221,8 @@ class KPIWriter:
             actor=actor,
         )
 
-    # ---- timers: context & decorator ----------------------------------------
-    class _TimerCtx:
-        """
-        Context manager timing helper.
-
-        Why:
-        - Guarantees emission even on exceptions.
-        - Standardizes the 'status' dimension to "ok" or "error" automatically.
-        """
-
-        def __init__(
-            self,
-            svc: "KPIWriter",
-            metric_name: str,
-            dims: Optional[Dims],
-            unit: str,
-            labels: Optional[Iterable[str]],
-            actor: KPIActor,
-        ):
+    class _TimerImpl(AbstractContextManager):
+        def __init__(self, svc, metric_name, dims, unit, labels, actor):
             self.svc = svc
             self.metric_name = metric_name
             self.unit = unit
@@ -246,11 +231,11 @@ class KPIWriter:
             self.labels = labels
             self._t0 = 0.0
 
-        def __enter__(self):
+        def __enter__(self) -> None:
             self._t0 = time.perf_counter()
-            return self
+            return None
 
-        def __exit__(self, exc_type, exc, tb):
+        def __exit__(self, exc_type, exc, tb) -> bool:
             dur_ms = (time.perf_counter() - self._t0) * 1000.0
             status = "error" if exc_type else (self.dims.get("status") or "ok")
             dims = dict(self.dims)
@@ -264,8 +249,7 @@ class KPIWriter:
                 actor=self.actor,
                 labels=self.labels,
             )
-            # do not swallow exceptions
-            return False
+            return False  # don’t swallow
 
     def timer(
         self,
@@ -275,9 +259,9 @@ class KPIWriter:
         unit: str = "ms",
         labels: Optional[Iterable[str]] = None,
         actor: KPIActor,
-    ) -> "_TimerCtx":
+    ) -> ContextManager[None]:
         """Timing context. Usage: `with kpi.timer('vectorization.duration_ms', actor=actor): ...`"""
-        return KPIWriter._TimerCtx(self, name, dims, unit, labels, actor)
+        return KPIWriter._TimerImpl(self, name, dims, unit, labels, actor)
 
     def timed(
         self,

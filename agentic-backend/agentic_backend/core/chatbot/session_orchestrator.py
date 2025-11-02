@@ -28,9 +28,9 @@ from fastapi import UploadFile
 from fred_core import (
     Action,
     AuthorizationError,
+    BaseKPIWriter,
     KeycloakUser,
     KPIActor,
-    KPIWriter,
     Resource,
     authorize,
 )
@@ -44,12 +44,9 @@ from langchain_core.messages import (
 
 from agentic_backend.application_context import (
     get_default_model,
-    get_history_store,
-    get_kpi_writer,
 )
 from agentic_backend.common.structures import Configuration
-from agentic_backend.core.agents.agent_factory import AgentFactory
-from agentic_backend.core.agents.agent_manager import AgentManager
+from agentic_backend.core.agents.agent_factory import BaseAgentFactory
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.chatbot.chat_schema import (
@@ -65,6 +62,7 @@ from agentic_backend.core.chatbot.chat_schema import (
 )
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
 from agentic_backend.core.chatbot.stream_transcoder import StreamTranscoder
+from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.session.attachement_processing import AttachementProcessing
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 
@@ -96,16 +94,16 @@ class SessionOrchestrator:
         self,
         configuration: Configuration,
         session_store: BaseSessionStore,
-        agent_manager: AgentManager,
-        agent_factory: AgentFactory,
+        agent_factory: BaseAgentFactory,
+        history_store: BaseHistoryStore,
+        kpi: BaseKPIWriter,
     ):
         self.session_store = session_store
-        self.agent_manager = agent_manager
         self.agent_factory = agent_factory
 
         # Side services
-        self.history_store = get_history_store()
-        self.kpi: KPIWriter = get_kpi_writer()
+        self.history_store = history_store
+        self.kpi: BaseKPIWriter = kpi
         self.attachement_processing = AttachementProcessing()
         self.restore_max_exchanges = configuration.ai.restore_max_exchanges
         # Stateless worker that knows how to turn LangGraph events into ChatMessage[]
@@ -406,12 +404,10 @@ class SessionOrchestrator:
         session: SessionSchema,
     ) -> list[AnyMessage]:
         """
-        Fred rationale (ordering):
-        - Sort strictly by rank (chronological across the whole session).
-          Note: exchange_id is a random UUID per exchange and must NEVER be
-          used as a primary sort key, otherwise exchanges are shuffled.
-        - Keep tool-call grouping strictly per exchange (no cross-leak).
-        - Emit ToolMessage only if a matching AI tool_call exists in the same exchange.
+        Fred rationale:
+        - Global order: strictly by rank (true chronology). Never sort by exchange_id.
+        - Tool-call state is tracked **per exchange** (no cross-leak, no loss on interleave).
+        - Emit ToolMessage only if its call_id exists in the **same exchange**.
         - Windowing by "last N exchanges" always keeps whole exchanges.
         """
         hist = self.get_session_history(session.id, user) or []
@@ -419,9 +415,7 @@ class SessionOrchestrator:
             _rlog("empty", msg="No messages to restore", session_id=session.id)
             return []
 
-        # 1) Correct ordering (chronological by rank)
-        # rank is strictly increasing per session; using it alone preserves order.
-        # Do NOT sort by exchange_id: it's random and would scramble exchanges.
+        # 1) Chronology (rank is authoritative)
         hist = sorted(hist, key=lambda m: m.rank)
         try:
             min_rank = hist[0].rank if hist else None
@@ -440,7 +434,7 @@ class SessionOrchestrator:
             unique_exchanges=uniq_ex,
         )
 
-        # 2) Optional last-N exchanges window (keeps full exchanges)
+        # 2) Optional window by last-N exchanges (keep whole exchanges)
         if getattr(self, "restore_max_exchanges", 0) > 0:
             last_ids: list[str] = []
             seen: set[str] = set()
@@ -450,12 +444,9 @@ class SessionOrchestrator:
                     last_ids.append(m.exchange_id)
                     if len(last_ids) >= self.restore_max_exchanges:
                         break
-            # Keep selection as a set for filtering, but preserve the recency
-            # order in logs via last_ids (most recent first).
             selected = set(last_ids)
             before = len(hist)
             hist = [m for m in hist if m.exchange_id in selected]
-            # Maintain overall chronology after windowing.
             hist = sorted(hist, key=lambda m: m.rank)
             try:
                 min_rank = hist[0].rank if hist else None
@@ -476,50 +467,47 @@ class SessionOrchestrator:
 
         lc_history: list[AnyMessage] = []
 
-        # 3) Per-exchange tool-call context (must not leak)
-        pending_tool_calls: list[dict] = []
-        call_name_by_id: dict[str, str] = {}
-        known_tool_call_ids: set[str] = set()
+        # 3) Per-exchange tool-call context (robust to interleaving)
+        from collections import defaultdict
+
+        pending_tool_calls_by_ex: dict[str, list[dict]] = defaultdict(list)
+        call_name_by_ex: dict[str, dict[str, str]] = defaultdict(dict)
+        known_call_ids_by_ex: dict[str, set[str]] = defaultdict(set)
         current_exchange: str | None = None
 
-        def reset_exchange_state():
-            pending_tool_calls.clear()
-            call_name_by_id.clear()
-            known_tool_call_ids.clear()
-
-        def flush_tool_calls_if_any():
-            if pending_tool_calls:
-                ai = AIMessage(content="", tool_calls=list(pending_tool_calls))
+        def flush_exchange_calls_if_any(ex_id: str | None):
+            """If this exchange accumulated assistant tool_calls, emit a single AIMessage(tool_calls=[...])."""
+            if not ex_id:
+                return
+            calls = pending_tool_calls_by_ex.get(ex_id)
+            if calls:
+                ai = AIMessage(content="", tool_calls=list(calls))
                 lc_history.append(ai)
                 _rlog(
                     "emit_ai_calls",
                     msg="Emitted AI(tool_calls)",
-                    exchange_id=current_exchange,
-                    calls=[
-                        {"id": c.get("id"), "name": c.get("name")}
-                        for c in pending_tool_calls
-                    ],
+                    exchange_id=ex_id,
+                    calls=[{"id": c.get("id"), "name": c.get("name")} for c in calls],
                 )
-                pending_tool_calls.clear()
+                pending_tool_calls_by_ex[ex_id].clear()
 
         # 4) Replay
         for m in hist:
-            # Exchange boundary: close prior group and reset per-exchange context
+            # Exchange boundary: flush prior exchange batch (do NOT forget its state)
             if current_exchange is None:
                 current_exchange = m.exchange_id
                 _rlog(
                     "exchange_begin", msg="Begin exchange", exchange_id=current_exchange
                 )
             elif m.exchange_id != current_exchange:
-                flush_tool_calls_if_any()
+                flush_exchange_calls_if_any(current_exchange)
                 _rlog("exchange_end", msg="End exchange", exchange_id=current_exchange)
-                reset_exchange_state()
                 current_exchange = m.exchange_id
                 _rlog(
                     "exchange_begin", msg="Begin exchange", exchange_id=current_exchange
                 )
 
-            # Assistant tool-call parts → accumulate into a single AIMessage
+            # Assistant → accumulate tool_call parts (batched intent per exchange)
             if m.role == Role.assistant and m.channel == Channel.tool_call:
                 for p in m.parts or []:
                     if isinstance(p, ToolCallPart):
@@ -535,13 +523,13 @@ class SessionOrchestrator:
                             args_obj = {}
                         call_id = p.call_id
                         name = p.name or "unnamed"
-                        pending_tool_calls.append(
+                        pending_tool_calls_by_ex[current_exchange].append(
                             {"id": call_id, "name": name, "args": args_obj}
                         )
                         if call_id:
-                            known_tool_call_ids.add(call_id)
+                            known_call_ids_by_ex[current_exchange].add(call_id)
                         if call_id and p.name:
-                            call_name_by_id[call_id] = p.name
+                            call_name_by_ex[current_exchange][call_id] = p.name
                         _rlog(
                             "acc_call",
                             msg="Accumulate tool_call",
@@ -551,13 +539,13 @@ class SessionOrchestrator:
                         )
                 continue
 
-            # Tool result → only emit if call_id known in THIS exchange
+            # Tool result → only if matching call_id exists in THIS exchange
             if m.role == Role.tool and m.channel == Channel.tool_result:
-                # ensure we have a preceding AI(tool_calls=[...]) if we actually accumulated calls
-                flush_tool_calls_if_any()
+                # Ensure the grouped AI(tool_calls=[...]) for *this* exchange precedes the ToolMessage(s).
+                flush_exchange_calls_if_any(current_exchange)
                 for p in m.parts or []:
                     if isinstance(p, ToolResultPart):
-                        if p.call_id not in known_tool_call_ids:
+                        if p.call_id not in known_call_ids_by_ex[current_exchange]:
                             _rlog(
                                 "skip_orphan_tool_result",
                                 msg="Skip orphan ToolMessage (no matching call in this exchange)",
@@ -571,7 +559,10 @@ class SessionOrchestrator:
                                 content = json.dumps(content, ensure_ascii=False)
                             except Exception:
                                 content = str(content)
-                        name = call_name_by_id.get(p.call_id) or "unknown_tool"
+                        name = (
+                            call_name_by_ex[current_exchange].get(p.call_id)
+                            or "unknown_tool"
+                        )
                         try:
                             tm = ToolMessage(
                                 content=content, name=name, tool_call_id=p.call_id
@@ -596,8 +587,8 @@ class SessionOrchestrator:
                             continue
                 continue
 
-            # Non-tool_call assistant/system/user → first close any pending call group
-            flush_tool_calls_if_any()
+            # Non-tool_call assistant/system/user → close any pending batch for THIS exchange
+            flush_exchange_calls_if_any(current_exchange)
 
             if m.role == Role.user:
                 text = _concat_text_parts(m.parts or [])
@@ -639,11 +630,10 @@ class SessionOrchestrator:
 
             # Unknown/other roles → ignore (by design)
 
-        # If transcript ends with calls and no results, keep the grouped AI(tool_calls=...)
-        flush_tool_calls_if_any()
+        # Tail: if transcript ends with pending calls and no results, keep the grouped AI(tool_calls=...)
+        flush_exchange_calls_if_any(current_exchange)
         _rlog("restore_done", msg="Restoration complete", total=len(lc_history))
 
-        # Optional: show a concise summary of the reconstructed LC messages
         return lc_history
 
     # --- Small, focused helpers to keep logs readable ---

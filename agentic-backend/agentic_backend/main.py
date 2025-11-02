@@ -106,8 +106,9 @@ def create_app() -> FastAPI:
         session_orchestrator = SessionOrchestrator(
             configuration=configuration,
             session_store=get_session_store(),
-            agent_manager=agent_manager,
             agent_factory=agent_factory,
+            history_store=application_context.get_history_store(),
+            kpi=application_context.get_kpi_writer(),
         )
         try:
             await agent_manager.bootstrap()
