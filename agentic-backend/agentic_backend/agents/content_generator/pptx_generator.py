@@ -22,14 +22,14 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from fred_core import VectorSearchHit
-from pydantic import BaseModel
-from langchain_core.output_parsers.json import JsonOutputParser
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.output_parsers.json import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, START, MessagesState, StateGraph
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.util import Pt
+from pydantic import BaseModel
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.kf_agent_asset_client import AssetRetrievalError

@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from contextlib import AsyncExitStack
 from typing import Any, List, Optional
 
 from langchain_core.tools import BaseTool
@@ -41,29 +40,11 @@ async def _close_mcp_client_quietly(client: Optional[MultiServerMCPClient]) -> N
     client_id = f"0x{id(client):x}"
     logger.info("[MCP] client_id=%s close_quietly", client_id)
 
-    try:
-        exit_stack = getattr(client, "exit_stack", None)
-        if isinstance(exit_stack, AsyncExitStack):
-            # This is the specific line you need to reintroduce for safe shutdown
-            await exit_stack.aclose()
-            logger.info(
-                "[MCP] client_id=%s close_quietly: Closed client via AsyncExitStack.",
-                client_id,
-            )
-            return
-
-        logger.warning(
-            "[MCP] client_id=%s close_quietly: Client has no recognized close method.",
-            client_id,
-        )
-
-    except Exception:
-        # 🟢 LOG 1: Close failure
-        logger.warning(
-            "[MCP] client_id=%s close_quietly: Client close ignored.",
-            client_id,
-            exc_info=True,
-        )
+    # Newer MultiServerMCPClient does not maintain persistent resources; sessions are
+    # opened/closed per call. Nothing to close at the client level.
+    logger.debug(
+        "[MCP] client_id=%s close_quietly: nothing to close on client.", client_id
+    )
 
 
 class MCPRuntime:
@@ -153,6 +134,21 @@ class MCPRuntime:
             )
             self.mcp_client = new_client
             self.toolkit = McpToolkit(client=new_client, agent=self.agent_instance)
+            try:
+                # Pre-fetch tools once (async) and cache in toolkit for sync callers
+                tools = await new_client.get_tools()
+                self.toolkit.tools = tools
+                logger.info(
+                    "[MCP] agent=%s init: Prefetched and cached %d tools.",
+                    self.agent_instance.get_name(),
+                    len(tools),
+                )
+            except Exception:
+                logger.warning(
+                    "[MCP] agent=%s init: Failed to prefetch tools; toolkit will attempt best-effort discovery later.",
+                    self.agent_instance.get_name(),
+                    exc_info=True,
+                )
             logger.info(
                 "[MCP] agent=%s init: Successfully built and connected client.",
                 self.agent_instance.get_name(),
