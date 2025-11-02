@@ -406,8 +406,10 @@ class SessionOrchestrator:
         session: SessionSchema,
     ) -> list[AnyMessage]:
         """
-        Fred rationale:
-        - Sort by (exchange_id, rank) to preserve each exchange’s causal order.
+        Fred rationale (ordering):
+        - Sort strictly by rank (chronological across the whole session).
+          Note: exchange_id is a random UUID per exchange and must NEVER be
+          used as a primary sort key, otherwise exchanges are shuffled.
         - Keep tool-call grouping strictly per exchange (no cross-leak).
         - Emit ToolMessage only if a matching AI tool_call exists in the same exchange.
         - Windowing by "last N exchanges" always keeps whole exchanges.
@@ -417,12 +419,26 @@ class SessionOrchestrator:
             _rlog("empty", msg="No messages to restore", session_id=session.id)
             return []
 
-        # 1) Correct ordering
+        # 1) Correct ordering (chronological by rank)
+        # rank is strictly increasing per session; using it alone preserves order.
+        # Do NOT sort by exchange_id: it's random and would scramble exchanges.
+        hist = sorted(hist, key=lambda m: m.rank)
         try:
-            hist = sorted(hist, key=lambda m: (m.exchange_id, m.rank))
+            min_rank = hist[0].rank if hist else None
+            max_rank = hist[-1].rank if hist else None
+            uniq_ex = len({m.exchange_id for m in hist})
         except Exception:
-            hist = sorted(hist, key=lambda m: m.rank)
-        _rlog("ordering", msg="Sorted history", count=len(hist))
+            min_rank = max_rank = None
+            uniq_ex = None
+        _rlog(
+            "ordering",
+            msg="Sorted history by rank",
+            count=len(hist),
+            order_by="rank",
+            min_rank=min_rank,
+            max_rank=max_rank,
+            unique_exchanges=uniq_ex,
+        )
 
         # 2) Optional last-N exchanges window (keeps full exchanges)
         if getattr(self, "restore_max_exchanges", 0) > 0:
@@ -434,19 +450,28 @@ class SessionOrchestrator:
                     last_ids.append(m.exchange_id)
                     if len(last_ids) >= self.restore_max_exchanges:
                         break
+            # Keep selection as a set for filtering, but preserve the recency
+            # order in logs via last_ids (most recent first).
             selected = set(last_ids)
             before = len(hist)
             hist = [m for m in hist if m.exchange_id in selected]
+            # Maintain overall chronology after windowing.
+            hist = sorted(hist, key=lambda m: m.rank)
             try:
-                hist = sorted(hist, key=lambda m: (m.exchange_id, m.rank))
+                min_rank = hist[0].rank if hist else None
+                max_rank = hist[-1].rank if hist else None
             except Exception:
-                hist = sorted(hist, key=lambda m: m.rank)
+                min_rank = max_rank = None
             _rlog(
                 "window",
                 msg="Applied last-N exchanges window",
                 kept=len(hist),
                 dropped=before - len(hist),
-                exchanges=list(selected),
+                exchanges=last_ids,  # most-recent-first for readability
+                order_by="rank",
+                window_by="exchange_id",
+                min_rank=min_rank,
+                max_rank=max_rank,
             )
 
         lc_history: list[AnyMessage] = []
