@@ -26,7 +26,7 @@ import re
 import time
 from typing import Dict, List, Sequence, Tuple, cast
 
-from langchain.schema.document import Document
+from langchain_core.documents import Document
 
 from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit, BaseVectorStore, LexicalHit, LexicalSearchable, SearchFilter
 from knowledge_flow_backend.features.vector_search.vector_search_structures import HybridPolicy

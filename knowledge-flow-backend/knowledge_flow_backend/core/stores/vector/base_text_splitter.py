@@ -16,7 +16,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 
-from langchain.schema.document import Document
+from langchain_core.documents import Document
 
 
 class BaseTextSplitter(ABC):

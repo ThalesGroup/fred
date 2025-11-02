@@ -16,7 +16,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Protocol, Sequence, runtime_checkable
 
 from attr import dataclass
-from langchain.schema.document import Document
+from langchain_core.documents import Document
 
 CHUNK_ID_FIELD = "chunk_uid"  # your canonical per-chunk id in metadata
 

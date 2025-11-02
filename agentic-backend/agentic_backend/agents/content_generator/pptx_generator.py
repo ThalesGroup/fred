@@ -22,9 +22,10 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from fred_core import VectorSearchHit
-from langchain.output_parsers import ResponseSchema, StructuredOutputParser
-from langchain.prompts import ChatPromptTemplate
+from pydantic import BaseModel
+from langchain_core.output_parsers.json import JsonOutputParser
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, START, MessagesState, StateGraph
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -176,7 +177,7 @@ class Sloan(AgentFlow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Initialize placeholders for prompts
-        self.parser: Optional[StructuredOutputParser] = None
+        self.parser: Optional[JsonOutputParser] = None
         self.prompt_template: Optional[ChatPromptTemplate] = None
         self.summary_prompt_template: Optional[ChatPromptTemplate] = None
         self.format_instructions: str = ""
@@ -187,34 +188,21 @@ class Sloan(AgentFlow):
         self.search_client = VectorSearchClient(agent=self)
         self._graph = self._build_graph()
 
-        # Structured output schema (header + body)
-        self.response_schemas = [
-            ResponseSchema(name="project_name", description="Project name"),
-            ResponseSchema(
-                name="start_date",
-                description="Project start date (month and year if possible)",
-            ),
-            ResponseSchema(
-                name="end_date",
-                description="Project end date (month and year if possible)",
-            ),
-            ResponseSchema(name="num_people", description="Number of people involved"),
-            ResponseSchema(name="budget_k_eur", description="Project budget in k€"),
-            ResponseSchema(
-                name="client_presentation_and_context",
-                description="Client presentation and context",
-            ),
-            ResponseSchema(name="stakes", description="Project stakes"),
-            ResponseSchema(
-                name="activities_and_solutions", description="Activities and solutions"
-            ),
-            ResponseSchema(name="client_benefits", description="Client benefits"),
-            ResponseSchema(name="strengths", description="Strengths"),
-            ResponseSchema(name="tech_list", description="List of technologies used"),
-        ]
-        self.parser = StructuredOutputParser.from_response_schemas(
-            self.response_schemas
-        )
+        # Structured output schema using a Pydantic model (JSON output)
+        class ProjectReferenceSchema(BaseModel):
+            project_name: str
+            start_date: str
+            end_date: str
+            num_people: str
+            budget_k_eur: str
+            client_presentation_and_context: str
+            stakes: str
+            activities_and_solutions: str
+            client_benefits: str
+            strengths: str
+            tech_list: str
+
+        self.parser = JsonOutputParser(pydantic_object=ProjectReferenceSchema)
         self.format_instructions = self.parser.get_format_instructions()
 
         # --- Use Tuned Prompts ---
