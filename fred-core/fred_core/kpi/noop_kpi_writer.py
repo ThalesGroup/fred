@@ -62,11 +62,19 @@ class NoOpKPIWriter(BaseKPIWriter):
     # ---- timers --------------------------------------------------------------
 
     class _NoOpTimerImpl(AbstractContextManager):
-        def __enter__(self) -> None:
-            return None
+        # FIX 1: Add __init__ to accept and store the initial dims.
+        # Although not used, it prepares the class for yielding the dict.
+        def __init__(self, dims: Optional[Dims]):
+            # We must yield a mutable dictionary to satisfy the ContextManager[Dims] contract
+            self.dims = dims.copy() if dims is not None else {}
+
+        def __enter__(self) -> Dims:  # <--- CRITICAL FIX 2: Must return Dims
+            # We yield the dictionary so that the user's code can execute:
+            # `with kpi.timer(...) as d:` and then mutate `d` without error.
+            return self.dims
 
         def __exit__(self, exc_type, exc, tb) -> bool:
-            return False
+            return False  # Don't swallow exceptions
 
     def timer(
         self,
@@ -76,8 +84,9 @@ class NoOpKPIWriter(BaseKPIWriter):
         unit: str = "ms",
         labels: Optional[Iterable[str]] = None,
         actor: KPIActor,
-    ) -> ContextManager[None]:
-        return NoOpKPIWriter._NoOpTimerImpl()
+    ) -> ContextManager[Dims]:  # <--- CRITICAL FIX 3: Must return ContextManager[Dims]
+        # FIX 4: Instantiate with initial dims
+        return NoOpKPIWriter._NoOpTimerImpl(dims)
 
     def timed(
         self,
@@ -89,8 +98,10 @@ class NoOpKPIWriter(BaseKPIWriter):
     ) -> Callable:
         def deco(fn: Callable):
             def wrapped(*args, **kwargs):
-                # Execute function without emitting anything; keep behavior identical.
-                return fn(*args, **kwargs)
+                # We must call self.timer to get the context manager,
+                # even if it's a no-op, to ensure the context logic runs (for exceptions).
+                with self.timer(name, unit=unit, dims=static_dims, actor=actor):
+                    return fn(*args, **kwargs)
 
             return wrapped
 

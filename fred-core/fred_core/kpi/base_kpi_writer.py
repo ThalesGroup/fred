@@ -46,6 +46,48 @@ class BaseKPIWriter(ABC):
         actor: KPIActor,
     ) -> None: ...
 
+    @abstractmethod
+    def timer(
+        self,
+        name: str,  # e.g. "api.request_latency_ms"
+        *,
+        dims: Optional[
+            Dims
+        ] = None,  # initial dims; you can add/override in the context
+        unit: str = "ms",  # "ms" or "s" (match the metric name suffix)
+        labels: Optional[Iterable[str]] = None,
+        actor: KPIActor,
+    ) -> ContextManager[Dims]:
+        """
+        Context manager that measures duration and emits once on exit.
+
+        Usage:
+            with kpi.timer("api.request_latency_ms",
+                           dims={"route": "/upload", "method": "POST"},
+                           actor=actor) as d:
+                ... work ...
+                d["status"] = "ok"  # or "error"/"timeout"
+        Semantics:
+            - On exception → emits with status="error" automatically.
+            - Otherwise → uses d.get("status","ok").
+        """
+
+    @abstractmethod
+    def timed(
+        self,
+        name: str,  # e.g. "agent.tool_latency_ms"
+        *,
+        unit: str = "ms",
+        static_dims: Optional[Dims] = None,  # fixed dims baked into the decorator
+        actor: KPIActor,
+    ) -> Callable:
+        """
+        Decorator version of `timer()` for quick instrumentation.
+
+        @kpi.timed("agent.tool_latency_ms", static_dims={"tool":"search"}, actor=actor)
+        def call_tool(...): ...
+        """
+
     # ---- simple helpers ------------------------------------------------------
     @abstractmethod
     def count(
@@ -68,27 +110,6 @@ class BaseKPIWriter(ABC):
         dims: Optional[Dims] = None,
         actor: KPIActor,
     ) -> None: ...
-
-    @abstractmethod
-    def timer(
-        self,
-        name: str,
-        *,
-        dims: Optional[Dims] = None,
-        unit: str = "ms",
-        labels: Optional[Iterable[str]] = None,
-        actor: KPIActor,
-    ) -> ContextManager[None]: ...
-
-    @abstractmethod
-    def timed(
-        self,
-        name: str,
-        *,
-        unit: str = "ms",
-        static_dims: Optional[Dims] = None,
-        actor: KPIActor,
-    ) -> Callable: ...
 
     # ---- domain helpers ------------------------------------------------------
     @abstractmethod

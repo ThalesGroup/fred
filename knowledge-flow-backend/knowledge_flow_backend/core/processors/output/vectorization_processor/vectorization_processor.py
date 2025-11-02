@@ -17,7 +17,7 @@ import os
 import time
 from typing import List, Optional, override
 
-from fred_core import KPIActor, KPIWriter
+from fred_core import BaseKPIWriter, KPIActor
 from langchain.schema.document import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -75,7 +75,7 @@ class VectorizationProcessor(BaseOutputProcessor):
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
         logger.info(f"📝 Metadata store initialized: {self.metadata_store.__class__.__name__}")
 
-        self.kpi: KPIWriter = self.context.get_kpi_writer()  # preferred
+        self.kpi: BaseKPIWriter = self.context.get_kpi_writer()
 
     @override
     def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
@@ -232,6 +232,7 @@ class VectorizationProcessor(BaseOutputProcessor):
                 actor=KPIActor(type="system"),  # or "human", with user_id if relevant
                 scope_type="document",
                 scope_id=doc_uid,
+                error_code=None,
             )
             return metadata
 
