@@ -126,7 +126,6 @@ export function DocumentLibraryShareGroupTree({
                   primary={group.name}
                   secondary={t("documentLibraryShareDialog.groupMembersCount", {
                     count: group.total_member_count ?? group.member_count ?? 0,
-                    defaultValue: "{{count}} members",
                   })}
                 />
               </Box>
@@ -145,7 +144,7 @@ export function DocumentLibraryShareGroupTree({
   if (isLoading) {
     return (
       <Typography variant="body2" color="text.secondary">
-        {t("documentLibraryShareDialog.loadingGroups", { defaultValue: "Loading groups…" })}
+        {t("documentLibraryShareDialog.loadingGroups")}
       </Typography>
     );
   }
@@ -153,7 +152,7 @@ export function DocumentLibraryShareGroupTree({
   if (!filteredGroups.length) {
     return (
       <Typography variant="body2" color="text.secondary">
-        {t("documentLibraryShareDialog.noGroupMatches", { defaultValue: "No groups found." })}
+        {t("documentLibraryShareDialog.noGroupMatches")}
       </Typography>
     );
   }

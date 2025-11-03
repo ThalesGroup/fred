@@ -362,6 +362,34 @@
     "deleteFolder": "Supprimer le dossier",
     "download": "Télécharger"
   },
+  "documentLibraryShareDialog": {
+    "subtitle": "Ajoutez des utilisateurs ou des groupes et gérez les permissions d'accès pour cette bibliothèque.",
+    "addAccessTab": "Ajouter un accès",
+    "currentAccessTab": "Accès actuels",
+    "shareError": "Impossible d'appliquer les paramètres de partage. Veuillez réessayer.",
+    "shareButton": "Partager",
+    "searchPlaceholder": "Rechercher des utilisateurs ou des groupes…",
+    "usersToggle": "Utilisateurs",
+    "groupsToggle": "Groupes",
+    "pendingTitle": "Accès en attente",
+    "pendingCount": "{{count}} en attente",
+    "relation": {
+      "owner": "Propriétaire",
+      "editor": "Éditeur",
+      "viewer": "Lecteur"
+    },
+    "membersError": "Impossible de charger la liste des accès actuels.",
+    "noMembers": "Personne n'a encore accès à ce dossier.",
+    "usersSectionTitle": "Utilisateurs",
+    "groupsSectionTitle": "Groupes",
+    "groupMembersCount": "{{count}} membres",
+    "loadingGroups": "Chargement des groupes…",
+    "noGroupMatches": "Aucun groupe trouvé.",
+    "errorFetchingMembers": "Erreur lors de la récupération des membres du tag.",
+    "errorFetchingUsers": "Erreur lors de la récupération des utilisateurs.",
+    "loadingUsers": "Chargement des utilisateurs…",
+    "noUserMatches": "Aucun utilisateur trouvé."
+  },
   "resourceLibrary": {
     "title": "{{typePlural}}",
     "edit": "Modifier",

@@ -38,9 +38,7 @@ export function DocumentLibraryShareDialog({ tag, open, onClose }: DocumentLibra
       <DialogTitle>
         {t("documentLibraryTree.shareFolderWithName", { name: tag.name })}
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          {t("documentLibraryShareDialog.subtitle", {
-            defaultValue: "Add users or groups and manage access permissions for this library.",
-          })}
+          {t("documentLibraryShareDialog.subtitle")}
         </Typography>
       </DialogTitle>
       <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
@@ -49,13 +47,13 @@ export function DocumentLibraryShareDialog({ tag, open, onClose }: DocumentLibra
             icon={<PersonAddAlt1OutlinedIcon fontSize="small" />}
             iconPosition="start"
             value="add"
-            label={t("documentLibraryShareDialog.addAccessTab", { defaultValue: "Add access" })}
+            label={t("documentLibraryShareDialog.addAccessTab")}
           />
           <Tab
             icon={<ShieldOutlinedIcon fontSize="small" />}
             iconPosition="start"
             value="current"
-            label={t("documentLibraryShareDialog.currentAccessTab", { defaultValue: "Current access" })}
+            label={t("documentLibraryShareDialog.currentAccessTab")}
           />
         </RoundTabs>
 

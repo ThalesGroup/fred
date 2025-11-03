@@ -78,9 +78,7 @@ export function DocumentLibraryShareAddTab({ tag, onShared }: DocumentLibrarySha
       setAudience("user");
       onShared?.();
     } catch (error) {
-      let message = t("documentLibraryShareDialog.shareError", {
-        defaultValue: "We couldn't apply sharing settings. Please try again.",
-      });
+      let message = t("documentLibraryShareDialog.shareError");
       if (error && typeof error === "object" && "data" in error) {
         const data = (error as { data?: unknown }).data;
         if (data && typeof data === "object" && "detail" in data) {
@@ -105,9 +103,7 @@ export function DocumentLibraryShareAddTab({ tag, onShared }: DocumentLibrarySha
       <TextField
         fullWidth
         variant="outlined"
-        placeholder={t("documentLibraryShareDialog.searchPlaceholder", {
-          defaultValue: "Search users or groups…",
-        })}
+        placeholder={t("documentLibraryShareDialog.searchPlaceholder")}
         value={searchQuery}
         onChange={(event) => setSearchQuery(event.target.value)}
         InputProps={{
@@ -127,12 +123,8 @@ export function DocumentLibraryShareAddTab({ tag, onShared }: DocumentLibrarySha
         color="primary"
         disabled={isSharing}
       >
-        <ToggleButton value="user">
-          {t("documentLibraryShareDialog.usersToggle", { defaultValue: "Users" })}
-        </ToggleButton>
-        <ToggleButton value="group">
-          {t("documentLibraryShareDialog.groupsToggle", { defaultValue: "Groups" })}
-        </ToggleButton>
+        <ToggleButton value="user">{t("documentLibraryShareDialog.usersToggle")}</ToggleButton>
+        <ToggleButton value="group">{t("documentLibraryShareDialog.groupsToggle")}</ToggleButton>
       </ToggleButtonGroup>
 
       <Box
@@ -171,16 +163,13 @@ export function DocumentLibraryShareAddTab({ tag, onShared }: DocumentLibrarySha
         <Divider />
 
         <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Typography variant="subtitle2">
-            {t("documentLibraryShareDialog.pendingTitle", { defaultValue: "Pending access" })}
-          </Typography>
+          <Typography variant="subtitle2">{t("documentLibraryShareDialog.pendingTitle")}</Typography>
           {pendingRecipients.length > 0 && (
             <Chip
               color="default"
               variant="outlined"
               label={t("documentLibraryShareDialog.pendingCount", {
                 count: pendingRecipients.length,
-                defaultValue: "{{count}} pending",
               })}
             />
           )}
@@ -206,7 +195,7 @@ export function DocumentLibraryShareAddTab({ tag, onShared }: DocumentLibrarySha
           onClick={() => void handleShare()}
           disabled={pendingRecipients.length === 0 || isSharing}
         >
-          {t("documentLibraryShareDialog.shareButton", { defaultValue: "Share" })}
+          {t("documentLibraryShareDialog.shareButton")}
         </Button>
       </Box>
     </Box>

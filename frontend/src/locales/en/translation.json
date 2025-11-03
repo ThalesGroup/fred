@@ -362,6 +362,34 @@
     "deleteFolder": "Delete folder",
     "download": "Download"
   },
+  "documentLibraryShareDialog": {
+    "subtitle": "Add users or groups and manage access permissions for this library.",
+    "addAccessTab": "Add access",
+    "currentAccessTab": "Current access",
+    "shareError": "We couldn't apply sharing settings. Please try again.",
+    "shareButton": "Share",
+    "searchPlaceholder": "Search users or groups…",
+    "usersToggle": "Users",
+    "groupsToggle": "Groups",
+    "pendingTitle": "Pending access",
+    "pendingCount": "{{count}} pending",
+    "relation": {
+      "owner": "Owner",
+      "editor": "Editor",
+      "viewer": "Viewer"
+    },
+    "membersError": "We could not load the current access list.",
+    "noMembers": "No one has access to this folder yet.",
+    "usersSectionTitle": "Users",
+    "groupsSectionTitle": "Groups",
+    "groupMembersCount": "{{count}} members",
+    "loadingGroups": "Loading groups…",
+    "noGroupMatches": "No groups found.",
+    "errorFetchingMembers": "Error fetching tag members.",
+    "errorFetchingUsers": "Error fetching users.",
+    "loadingUsers": "Loading users…",
+    "noUserMatches": "No users found."
+  },
   "resourceLibrary": {
     "title": "{{typePlural}}",
     "edit": "Edit",

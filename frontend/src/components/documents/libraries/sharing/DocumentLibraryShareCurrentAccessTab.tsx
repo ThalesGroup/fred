@@ -63,9 +63,9 @@ export function DocumentLibraryShareCurrentAccessTab({ tag, open }: DocumentLibr
 
   const relationLabels = React.useMemo<Record<UserTagRelation, string>>(
     () => ({
-      owner: t("documentLibraryShareDialog.relation.owner", { defaultValue: "Owner" }),
-      editor: t("documentLibraryShareDialog.relation.editor", { defaultValue: "Editor" }),
-      viewer: t("documentLibraryShareDialog.relation.viewer", { defaultValue: "Viewer" }),
+      owner: t("documentLibraryShareDialog.relation.owner"),
+      editor: t("documentLibraryShareDialog.relation.editor"),
+      viewer: t("documentLibraryShareDialog.relation.viewer"),
     }),
     [t],
   );
@@ -89,9 +89,7 @@ export function DocumentLibraryShareCurrentAccessTab({ tag, open }: DocumentLibr
   if (isError) {
     return (
       <Typography variant="body2" color="error">
-        {t("documentLibraryShareDialog.membersError", {
-          defaultValue: "We could not load the current access list.",
-        })}
+        {t("documentLibraryShareDialog.membersError")}
       </Typography>
     );
   }
@@ -99,9 +97,7 @@ export function DocumentLibraryShareCurrentAccessTab({ tag, open }: DocumentLibr
   if (!users.length && !groups.length) {
     return (
       <Typography variant="body2" color="text.secondary">
-        {t("documentLibraryShareDialog.noMembers", {
-          defaultValue: "No one has access to this folder yet.",
-        })}
+        {t("documentLibraryShareDialog.noMembers")}
       </Typography>
     );
   }
@@ -111,7 +107,7 @@ export function DocumentLibraryShareCurrentAccessTab({ tag, open }: DocumentLibr
       {users.length > 0 && (
         <Box component="section">
           <Typography variant="subtitle2" color="text.secondary" sx={{ px: 2, py: 1 }}>
-            {t("documentLibraryShareDialog.usersSectionTitle", { defaultValue: "Users" })}
+            {t("documentLibraryShareDialog.usersSectionTitle")}
           </Typography>
           <List dense disablePadding>
             {users.map((userMember) => (
@@ -132,7 +128,7 @@ export function DocumentLibraryShareCurrentAccessTab({ tag, open }: DocumentLibr
       {groups.length > 0 && (
         <Box component="section">
           <Typography variant="subtitle2" color="text.secondary" sx={{ px: 2, py: 1 }}>
-            {t("documentLibraryShareDialog.groupsSectionTitle", { defaultValue: "Groups" })}
+            {t("documentLibraryShareDialog.groupsSectionTitle")}
           </Typography>
           <List dense disablePadding>
             {groups.map((groupMember) => (

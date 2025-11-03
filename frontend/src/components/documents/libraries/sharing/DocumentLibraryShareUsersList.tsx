@@ -50,14 +50,14 @@ export function DocumentLibraryShareUsersList({
   useEffect(() => {
     if (errorFetchingMembers) {
       console.error("Error fetching tag members:", errorFetchingMembers);
-      showError(t("documentLibraryShareDialog.errorFetchingMembers", { defaultValue: "Error fetching tag members." }));
+      showError(t("documentLibraryShareDialog.errorFetchingMembers"));
     }
   }, [errorFetchingMembers]);
 
   useEffect(() => {
     if (errorFetchingUsers) {
       console.error("Error fetching users:", errorFetchingUsers);
-      showError(t("documentLibraryShareDialog.errorFetchingUsers", { defaultValue: "Error fetching users." }));
+      showError(t("documentLibraryShareDialog.errorFetchingUsers"));
     }
   }, [errorFetchingUsers]);
 
@@ -94,7 +94,7 @@ export function DocumentLibraryShareUsersList({
   if (isLoading) {
     return (
       <Typography variant="body2" color="text.secondary">
-        {t("documentLibraryShareDialog.loadingUsers", { defaultValue: "Loading users…" })}
+        {t("documentLibraryShareDialog.loadingUsers")}
       </Typography>
     );
   }
@@ -102,7 +102,7 @@ export function DocumentLibraryShareUsersList({
   if (!filteredUsers.length) {
     return (
       <Typography variant="body2" color="text.secondary">
-        {t("documentLibraryShareDialog.noUserMatches", { defaultValue: "No users found." })}
+        {t("documentLibraryShareDialog.noUserMatches")}
       </Typography>
     );
   }
