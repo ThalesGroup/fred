@@ -14,12 +14,13 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from fred_core import VectorSearchHit
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,  # Unchanged, as requested
@@ -125,7 +126,25 @@ class ToolCallPart(BaseModel):
     type: Literal["tool_call"] = "tool_call"
     call_id: str
     name: str
-    args: Dict[str, Any]
+    args: Dict[str, Any]  # normalized dict after validation
+
+    @field_validator("args", mode="before")
+    @classmethod
+    def parse_args(cls, v: Any) -> Dict[str, Any]:
+        # Accept dicts directly
+        if isinstance(v, dict):
+            return v
+        # Try to parse JSON strings; if scalar/array, wrap as {"_raw": ...}
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, dict):
+                    return parsed
+                return {"_raw": parsed}
+            except Exception:
+                return {"_raw": v}
+        # Fallback: stringify any other object
+        return {"_raw": str(v)}
 
 
 class ToolResultPart(BaseModel):
@@ -135,6 +154,16 @@ class ToolResultPart(BaseModel):
     latency_ms: Optional[int] = None
     # Always send a string; stringify JSON results server-side to avoid UI logic.
     content: str
+
+    # Dev ergonomics: accept dict/list/other and stringify.
+    @field_validator("content", mode="before")
+    @classmethod
+    def _ensure_str_content(cls, v: Any) -> str:
+        if isinstance(v, (dict, list)):
+            return json.dumps(v, ensure_ascii=False)
+        if not isinstance(v, str):
+            return str(v)
+        return v
 
 
 MessagePart = Annotated[

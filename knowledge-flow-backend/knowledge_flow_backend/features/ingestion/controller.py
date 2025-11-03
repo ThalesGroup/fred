@@ -160,7 +160,7 @@ class IngestionController:
                 "api.request_latency_ms",
                 dims={"route": "/upload-process-documents", "method": "POST"},
                 actor=KPIActor(type="human", user_id=user.uid),
-            ) as t:
+            ) as d:
                 parsed_input = IngestionInput(**json.loads(metadata_json))
                 tags = parsed_input.tags
                 source_tag = parsed_input.source_tag
@@ -206,8 +206,7 @@ class IngestionController:
                         except Exception as e:
                             error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
                             yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n"
-
-                    t.dims["status"] = "ok" if success == total else "error"
+                    d["status"] = "ok" if success == total else "error"
                     overall_status = Status.SUCCESS if success == total else Status.ERROR
                     yield json.dumps({"step": "done", "status": overall_status}) + "\n"
 

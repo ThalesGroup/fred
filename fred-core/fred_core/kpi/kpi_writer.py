@@ -17,11 +17,13 @@ from __future__ import annotations
 
 import logging
 import time
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, Optional
+from typing import Any, Callable, ContextManager, Dict, Iterable, Optional
 
 from fred_core.kpi.base_kpi_store import BaseKPIStore
+from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import (
     Cost,
     Dims,
@@ -103,7 +105,7 @@ def to_kpi_actor(user: KeycloakUser) -> KPIActor:
 # -------------------------
 # Public KPI API (emission)
 # -------------------------
-class KPIWriter:
+class KPIWriter(BaseKPIWriter):
     """
     Lean, clean emission API on top of a BaseKPIStore.
 
@@ -219,53 +221,49 @@ class KPIWriter:
             actor=actor,
         )
 
-    # ---- timers: context & decorator ----------------------------------------
-    class _TimerCtx:
-        """
-        Context manager timing helper.
-
-        Why:
-        - Guarantees emission even on exceptions.
-        - Standardizes the 'status' dimension to "ok" or "error" automatically.
-        """
-
-        def __init__(
-            self,
-            svc: "KPIWriter",
-            metric_name: str,
-            dims: Optional[Dims],
-            unit: str,
-            labels: Optional[Iterable[str]],
-            actor: KPIActor,
-        ):
+    class _TimerImpl(AbstractContextManager):
+        # NOTE: This implementation is nested inside KPIWriter
+        def __init__(self, svc, metric_name, dims, unit, labels, actor):
             self.svc = svc
             self.metric_name = metric_name
             self.unit = unit
+            # CRITICAL FIX: The dims dictionary is the object passed out and mutated.
             self.dims = dict(dims or {})
             self.actor = actor
             self.labels = labels
             self._t0 = 0.0
 
-        def __enter__(self):
+        def __enter__(self) -> Dims:  # <-- FIX 1: Must return the Dims dictionary
             self._t0 = time.perf_counter()
-            return self
+            return self.dims  # <-- FIX 2: Return the mutable dimensions dict
 
-        def __exit__(self, exc_type, exc, tb):
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            # Calculate duration and determine final status
             dur_ms = (time.perf_counter() - self._t0) * 1000.0
+
+            # The status is read from the dictionary after the `with` block finishes.
+            # If an exception occurs, default to "error", otherwise default to "ok".
             status = "error" if exc_type else (self.dims.get("status") or "ok")
-            dims = dict(self.dims)
-            dims["status"] = status
+
+            # CRITICAL FIX: Add the final status to the dictionary for emission.
+            # We use the original dictionary self.dims which may have been mutated
+            # by the user in the context block.
+            final_dims = dict(self.dims)
+            final_dims["status"] = status
+
+            # Ensure the unit of the metric matches the unit used in the value calculation.
+            value = dur_ms if self.unit == "ms" else dur_ms / 1000.0
+
             self.svc.emit(
                 name=self.metric_name,
                 type="timer",
-                value=dur_ms,
+                value=value,
                 unit=self.unit,
-                dims=dims,
+                dims=final_dims,  # <-- Use the final, status-updated dictionary
                 actor=self.actor,
                 labels=self.labels,
             )
-            # do not swallow exceptions
-            return False
+            return False  # Don't swallow exceptions
 
     def timer(
         self,
@@ -275,9 +273,9 @@ class KPIWriter:
         unit: str = "ms",
         labels: Optional[Iterable[str]] = None,
         actor: KPIActor,
-    ) -> "_TimerCtx":
-        """Timing context. Usage: `with kpi.timer('vectorization.duration_ms', actor=actor): ...`"""
-        return KPIWriter._TimerCtx(self, name, dims, unit, labels, actor)
+    ) -> ContextManager[Dims]:  # <-- FIX 3: Update return type hint
+        """Timing context. Returns the Dims dict for in-context mutation."""
+        return KPIWriter._TimerImpl(self, name, dims, unit, labels, actor)
 
     def timed(
         self,
@@ -288,20 +286,25 @@ class KPIWriter:
         actor: KPIActor,
     ) -> Callable:
         """
-        Timing decorator with fixed dims. Usage:
+        Timing decorator with fixed dims.
 
-            @kpi.timed('agent.tool_latency_ms', static_dims={'agent_id':'fred','tool_name':'search'}, actor=actor)
-            def call_tool(...): ...
-
-        Why:
-        - Makes it trivial to instrument hot paths without boilerplate.
+        @kpi.timed('agent.tool_latency_ms', static_dims={'agent_id':'fred'}, actor=actor)
+        def call_tool(...): ...
         """
 
         def deco(fn: Callable):
             def wrapped(*args, **kwargs):
-                with self.timer(name, unit=unit, dims=static_dims, actor=actor):
+                # Use the timer, capturing the dims dictionary 'd'
+                with self.timer(name, unit=unit, dims=static_dims, actor=actor) as _:
+                    # Rationale: Allow the decorated function to receive and modify the
+                    # dynamic dimensions, if it accepts a specific key (e.g., 'kpi_dims').
+                    # If you use a pattern where the decorated function modifies status,
+                    # you would pass 'd' into the function's arguments here.
+                    # For a simple wrapper, we just let the timer handle the status based on exceptions.
                     return fn(*args, **kwargs)
 
+            # Use functools.wraps in a real-world scenario to preserve metadata
+            # For this context, we return the wrapped function directly.
             return wrapped
 
         return deco

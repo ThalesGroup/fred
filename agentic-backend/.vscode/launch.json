@@ -27,5 +27,31 @@
       "justMyCode": false,
       "console": "integratedTerminal"
     },
+    {
+      "name": "Debug Agentic Backend Prod",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}",
+      "module": "uvicorn",
+      "args": [
+        "agentic_backend.main:create_app",
+        "--factory",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--log-level",
+        "info",
+        "--loop",
+        "asyncio",
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}",
+        "CONFIG_FILE": "${workspaceFolder}/config/configuration_prod.yaml"
+      },
+      "justMyCode": false,
+      "console": "integratedTerminal"
+    },
   ]
 }
