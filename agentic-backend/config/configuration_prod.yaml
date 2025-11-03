@@ -31,6 +31,7 @@ security:
   authorized_origins:
     - "http://localhost:5173"
   rebac:
+    enabled: false
     type: spicedb
     endpoint: "localhost:50051"
     insecure: true
