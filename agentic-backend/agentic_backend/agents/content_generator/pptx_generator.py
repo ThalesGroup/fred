@@ -451,7 +451,16 @@ class Sloan(AgentFlow):
             answer_text = getattr(answer_msg, "content", "")
             try:
                 assert self.parser is not None
-                structured_data = self.parser.parse(answer_text)
+                parsed = self.parser.parse(answer_text)
+                # JsonOutputParser with pydantic_object returns a BaseModel instance.
+                # Convert it to a plain dict for downstream `.get` and mapping usage.
+                if hasattr(parsed, "model_dump"):
+                    structured_data = parsed.model_dump()
+                elif hasattr(parsed, "dict"):
+                    structured_data = parsed.dict()
+                else:
+                    # Fallback: keep as-is (may already be a dict-like)
+                    structured_data = parsed  # type: ignore[assignment]
             except Exception as e:
                 logger.warning("Structured parse failed: %s", e)
                 structured_data = {"raw_text": answer_text}

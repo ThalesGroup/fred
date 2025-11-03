@@ -17,8 +17,8 @@ import os
 import time
 from typing import List, Optional, override
 
-from langchain_core.documents import Document
 from fred_core import BaseKPIWriter, KPIActor
+from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocSummary, DocumentMetadata, ProcessingStage
