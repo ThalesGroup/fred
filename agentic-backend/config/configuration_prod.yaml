@@ -119,7 +119,6 @@ ai:
       enabled: true
     - name: "Rico"
       type: "agent"
-      role: "Document Retrieval Expert"
       class_path: "agentic_backend.agents.rags.rag_expert.Rico"
       chat_options:
         search_policy_selection: true
