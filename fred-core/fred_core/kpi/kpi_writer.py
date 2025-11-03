@@ -295,7 +295,7 @@ class KPIWriter(BaseKPIWriter):
         def deco(fn: Callable):
             def wrapped(*args, **kwargs):
                 # Use the timer, capturing the dims dictionary 'd'
-                with self.timer(name, unit=unit, dims=static_dims, actor=actor) as d:
+                with self.timer(name, unit=unit, dims=static_dims, actor=actor) as _:
                     # Rationale: Allow the decorated function to receive and modify the
                     # dynamic dimensions, if it accepts a specific key (e.g., 'kpi_dims').
                     # If you use a pattern where the decorated function modifies status,
