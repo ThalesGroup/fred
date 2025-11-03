@@ -28,6 +28,7 @@ from fred_core.common.structures import (
 )
 from fred_core.common.utils import raise_internal_error
 from fred_core.kpi.base_kpi_store import BaseKPIStore
+from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_reader_structures import (
     FilterTerm,
     KPIQuery,
@@ -45,6 +46,7 @@ from fred_core.kpi.kpi_writer_structures import (
     Trace,
 )
 from fred_core.kpi.log_kpi_store import KpiLogStore
+from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from fred_core.logs.base_log_store import BaseLogStore
 from fred_core.logs.log_setup import StoreEmitHandler, log_setup
@@ -171,6 +173,8 @@ __all__ = [
     "KPIQueryResult",
     "TimeBucket",
     "KPIWriter",
+    "NoOpKPIWriter",
+    "BaseKPIWriter",
     "KPIActor",
     "LogStoreConfig",
     "M2MAuthConfig",

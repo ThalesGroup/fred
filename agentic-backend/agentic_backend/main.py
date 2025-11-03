@@ -98,11 +98,17 @@ def create_app() -> FastAPI:
         app.state.configuration = configuration
         agent_loader = AgentLoader(configuration, get_agent_store())
         agent_manager = AgentManager(configuration, agent_loader, get_agent_store())
-        agent_factory = AgentFactory(agent_manager, agent_loader)
+        agent_factory = AgentFactory(
+            configuration=configuration,
+            manager=agent_manager,
+            loader=agent_loader,
+        )
         session_orchestrator = SessionOrchestrator(
-            get_session_store(),
-            agent_manager=agent_manager,
+            configuration=configuration,
+            session_store=get_session_store(),
             agent_factory=agent_factory,
+            history_store=application_context.get_history_store(),
+            kpi=application_context.get_kpi_writer(),
         )
         try:
             await agent_manager.bootstrap()

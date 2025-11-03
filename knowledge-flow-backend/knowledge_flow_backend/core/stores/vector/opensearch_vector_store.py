@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Sequence
 
-from langchain.schema.document import Document
 from langchain_community.vectorstores import OpenSearchVectorSearch
+from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
 from knowledge_flow_backend.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, AnnHit, BaseVectorStore, LexicalHit, LexicalSearchable, SearchFilter

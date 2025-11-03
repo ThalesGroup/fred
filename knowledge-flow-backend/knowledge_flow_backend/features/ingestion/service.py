@@ -188,7 +188,7 @@ class IngestionService:
         Returns the preview file (output.md or table.csv) for a document.
         Raises if not found.
         """
-        for name in ["output.md", "table.csv"]:
+        for name in ["output.md", "table.csv", "output.txt"]:
             candidate = output_dir / name
             if candidate.exists() and candidate.is_file():
                 return candidate

@@ -19,7 +19,7 @@ import re
 
 import dateparser
 import pandas as pd
-from langchain.schema.document import Document
+from langchain_core.documents import Document
 from pandas._libs.tslibs.nattype import NaTType
 
 from knowledge_flow_backend.application_context import ApplicationContext

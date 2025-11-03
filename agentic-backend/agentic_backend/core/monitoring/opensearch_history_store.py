@@ -151,9 +151,11 @@ class OpensearchHistoryStore(BaseHistoryStore):
         # Create or update index mapping
         if not self.client.indices.exists(index=index):
             self.client.indices.create(index=index, body=MAPPING)
-            logger.info("OpenSearch index '%s' created with mapping.", index)
+            logger.info(
+                "[OPENSEARCH] OpenSearch index '%s' created with mapping.", index
+            )
         else:
-            logger.info("OpenSearch index '%s' already exists.", index)
+            logger.info("[OPENSEARCH] OpenSearch index '%s' already exists.", index)
             # Best-effort additive mapping update for 'parts' and typed metadata fields
             try:
                 current = self.client.indices.get_mapping(index=index)
@@ -229,9 +231,15 @@ class OpensearchHistoryStore(BaseHistoryStore):
             updated = _merge_unique_by_key(existing, messages)
             self._cache.set(session_id, updated)
 
-            logger.info("Saved %d messages for session %s", len(messages), session_id)
+            logger.info(
+                "[OPENSEARCH] Saved %d messages for session %s",
+                len(messages),
+                session_id,
+            )
         except Exception as e:
-            logger.error("Failed to save messages for session %s: %s", session_id, e)
+            logger.error(
+                "[OPENSEARCH] Failed to save messages for session %s: %s", session_id, e
+            )
             raise
 
     def get(self, session_id: str) -> List[ChatMessage]:

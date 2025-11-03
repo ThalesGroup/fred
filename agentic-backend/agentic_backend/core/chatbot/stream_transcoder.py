@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from typing import Awaitable, Callable, List, Optional, cast
 
 from fred_core import KeycloakUser
-from langchain_core.messages import AnyMessage, BaseMessage
+from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import MessagesState
 
@@ -116,7 +116,7 @@ class StreamTranscoder:
         self,
         *,
         agent: AgentFlow,
-        input_messages: List[BaseMessage],
+        input_messages: List[AnyMessage],
         session_id: str,
         exchange_id: str,
         agent_name: str,

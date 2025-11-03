@@ -14,8 +14,8 @@
 
 from typing import List
 
-from langchain.schema.document import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from knowledge_flow_backend.core.stores.vector.base_text_splitter import BaseTextSplitter
 

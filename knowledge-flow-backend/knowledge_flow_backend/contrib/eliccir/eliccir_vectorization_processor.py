@@ -15,7 +15,7 @@
 import logging
 from typing import override
 
-from langchain.schema.document import Document
+from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage

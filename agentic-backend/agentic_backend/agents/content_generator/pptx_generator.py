@@ -22,13 +22,14 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from fred_core import VectorSearchHit
-from langchain.output_parsers import ResponseSchema, StructuredOutputParser
-from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.output_parsers.json import JsonOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, START, MessagesState, StateGraph
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.util import Pt
+from pydantic import BaseModel
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.kf_agent_asset_client import AssetRetrievalError
@@ -176,7 +177,7 @@ class Sloan(AgentFlow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Initialize placeholders for prompts
-        self.parser: Optional[StructuredOutputParser] = None
+        self.parser: Optional[JsonOutputParser] = None
         self.prompt_template: Optional[ChatPromptTemplate] = None
         self.summary_prompt_template: Optional[ChatPromptTemplate] = None
         self.format_instructions: str = ""
@@ -187,34 +188,21 @@ class Sloan(AgentFlow):
         self.search_client = VectorSearchClient(agent=self)
         self._graph = self._build_graph()
 
-        # Structured output schema (header + body)
-        self.response_schemas = [
-            ResponseSchema(name="project_name", description="Project name"),
-            ResponseSchema(
-                name="start_date",
-                description="Project start date (month and year if possible)",
-            ),
-            ResponseSchema(
-                name="end_date",
-                description="Project end date (month and year if possible)",
-            ),
-            ResponseSchema(name="num_people", description="Number of people involved"),
-            ResponseSchema(name="budget_k_eur", description="Project budget in k€"),
-            ResponseSchema(
-                name="client_presentation_and_context",
-                description="Client presentation and context",
-            ),
-            ResponseSchema(name="stakes", description="Project stakes"),
-            ResponseSchema(
-                name="activities_and_solutions", description="Activities and solutions"
-            ),
-            ResponseSchema(name="client_benefits", description="Client benefits"),
-            ResponseSchema(name="strengths", description="Strengths"),
-            ResponseSchema(name="tech_list", description="List of technologies used"),
-        ]
-        self.parser = StructuredOutputParser.from_response_schemas(
-            self.response_schemas
-        )
+        # Structured output schema using a Pydantic model (JSON output)
+        class ProjectReferenceSchema(BaseModel):
+            project_name: str
+            start_date: str
+            end_date: str
+            num_people: str
+            budget_k_eur: str
+            client_presentation_and_context: str
+            stakes: str
+            activities_and_solutions: str
+            client_benefits: str
+            strengths: str
+            tech_list: str
+
+        self.parser = JsonOutputParser(pydantic_object=ProjectReferenceSchema)
         self.format_instructions = self.parser.get_format_instructions()
 
         # --- Use Tuned Prompts ---
@@ -463,7 +451,16 @@ class Sloan(AgentFlow):
             answer_text = getattr(answer_msg, "content", "")
             try:
                 assert self.parser is not None
-                structured_data = self.parser.parse(answer_text)
+                parsed = self.parser.parse(answer_text)
+                # JsonOutputParser with pydantic_object returns a BaseModel instance.
+                # Convert it to a plain dict for downstream `.get` and mapping usage.
+                if hasattr(parsed, "model_dump"):
+                    structured_data = parsed.model_dump()
+                elif hasattr(parsed, "dict"):
+                    structured_data = parsed.dict()
+                else:
+                    # Fallback: keep as-is (may already be a dict-like)
+                    structured_data = parsed  # type: ignore[assignment]
             except Exception as e:
                 logger.warning("Structured parse failed: %s", e)
                 structured_data = {"raw_text": answer_text}

@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from threading import Lock
-from typing import Generic, TypeVar
+from typing import Generic, Optional, TypeVar
 
 K = TypeVar("K")
 V = TypeVar("V")
@@ -26,9 +26,13 @@ class ThreadSafeLRUCache(Generic[K, V]):
             if len(self._cache) > self._max_size:
                 self._cache.popitem(last=False)  # Remove LRU
 
-    def delete(self, key: K) -> None:
+    def delete(self, key: K) -> Optional[V]:
         with self._lock:
-            self._cache.pop(key, None)
+            return self._cache.pop(key, None)
+
+    def keys(self) -> list[K]:
+        with self._lock:
+            return list(self._cache.keys())
 
     def clear(self) -> None:
         with self._lock:

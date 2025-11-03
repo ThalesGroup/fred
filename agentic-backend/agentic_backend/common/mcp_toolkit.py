@@ -21,6 +21,8 @@ McpToolkit — build LangChain tools from an MCP client *per turn*.
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import logging
 from typing import TYPE_CHECKING, List
 
@@ -45,7 +47,7 @@ class McpToolkit(BaseToolkit):
         self._agent = agent
         # 🟢 LOG 1: Initialization success
         logger.info(
-            "McpToolkit initialized. Client: %s, Agent: %s",
+            "[MCP] initialized. Client: %s, Agent: %s",
             type(client).__name__,
             type(agent).__name__,
         )
@@ -59,14 +61,36 @@ class McpToolkit(BaseToolkit):
         Note: adapter APIs may differ (get_tools vs as_langchain_tools). We try both
         to be resilient across versions.
         """
+        # If tools were prefetched and cached by MCPRuntime, use them.
+        if self.tools:
+            return self.tools
+
         if hasattr(self._client, "get_tools"):
-            base_tools = self._client.get_tools()  # type: ignore[no-any-return]
-            #  Discovery success
-            logger.info(
-                "McpToolkit discovered %d base tools via get_tools()",
-                len(base_tools),
-            )
-            return base_tools
+            try:
+                result = self._client.get_tools()  # likely coroutine in new adapters
+                if inspect.isawaitable(result):
+                    # If we're not in a running loop, we can run it synchronously
+                    try:
+                        asyncio.get_running_loop()
+                        # Running inside event loop; cannot block safely here.
+                        logger.warning(
+                            "[MCP] _discover_base_tools called inside event loop without prefetched tools; returning empty list."
+                        )
+                        return []
+                    except RuntimeError:
+                        # No running loop: safe to run
+                        base_tools = asyncio.run(result)
+                else:
+                    base_tools = result
+
+                if base_tools:
+                    logger.info(
+                        "[MCP] discovered %d base tools via get_tools()",
+                        len(base_tools),
+                    )
+                return base_tools
+            except Exception as e:
+                logger.warning("[MCP] tool discovery via get_tools failed: %s", e)
 
         # LOG 2 (Failure): Tool discovery failed
         logger.error("MCP client does not expose a tool discovery method.")
@@ -82,11 +106,11 @@ class McpToolkit(BaseToolkit):
         try:
             names = [getattr(t, "name", "") for t in self._discover_base_tools()]
             # 🟢 LOG 3: Peek successful
-            logger.info("McpToolkit peeked tool names: %s", names)
+            logger.info("[MCP] peeked tool names: %s", names)
             return names
         except Exception as e:
             # 🟢 LOG 3 (Failure): Peek failed
-            logger.warning("McpToolkit peek failed during tool discovery: %s", e)
+            logger.warning("[MCP] peek failed during tool discovery: %s", e)
             return []
 
     def get_tools(

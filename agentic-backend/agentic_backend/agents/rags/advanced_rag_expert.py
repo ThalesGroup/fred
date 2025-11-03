@@ -14,11 +14,12 @@
 
 
 import logging
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Literal, Optional, TypedDict, cast
 
 from fred_core import VectorSearchHit
-from langchain.prompts import ChatPromptTemplate
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 
 from agentic_backend.agents.rags.structures import (
@@ -195,15 +196,42 @@ class AdvancedRico(AgentFlow):
 
     # ---------- nodes ----------
 
-    async def _retrieve(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    # Typed partial update for state merges
+    class RagUpdate(TypedDict, total=False):
+        messages: List[AIMessage | ToolMessage]
+        documents: List[VectorSearchHit]
+        sources: List[VectorSearchHit]
+        question: str
+        top_k: int
+        retry_count: int
+        generation: Optional[AIMessage]
+        irrelevant_documents: List[VectorSearchHit]
+
+    def _question_from_state(self, state: "RagGraphState") -> str:
+        """Safely derive a text question from state or last text message.
+
+        Returns a non-None string (possibly empty). Filters out non-text content.
+        """
+        q = state.get("question")
+        if isinstance(q, str) and q.strip():
+            return q
+        msgs = state.get("messages")
+        if isinstance(msgs, list) and msgs:
+            last: AnyMessage = msgs[-1]
+            content = getattr(last, "content", None)
+            if isinstance(content, str):
+                return content
+        return ""
+
+    async def _retrieve(
+        self, state: RagGraphState, config: RunnableConfig | None = None
+    ) -> RagUpdate:
         if self.model is None:
             raise RuntimeError(
                 "Model is not initialized. Did you forget to call async_init()?"
             )
 
-        question: Optional[str] = state.get("question") or (
-            state.get("messages") and state["messages"][-1].content
-        )
+        question: str = self._question_from_state(state)
         top_k: int = int(state.get("top_k", self.TOP_K) or self.TOP_K)
         retry_count: int = int(state.get("retry_count", 0) or 0)
         if retry_count > 0:
@@ -215,7 +243,7 @@ class AdvancedRico(AgentFlow):
             )
             search_policy = get_search_policy(self.get_runtime_context())
             hits: List[VectorSearchHit] = self.search_client.search(
-                question=question or "",
+                question=question,
                 top_k=top_k,
                 document_library_tags_ids=document_library_tags_ids,
                 search_policy=search_policy,
@@ -285,8 +313,10 @@ class AdvancedRico(AgentFlow):
                 ]
             }
 
-    async def _grade_documents(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        question: str = state["question"]
+    async def _grade_documents(
+        self, state: RagGraphState, config: RunnableConfig | None = None
+    ) -> RagUpdate:
+        question: str = self._question_from_state(state)
         documents: Optional[List[VectorSearchHit]] = state.get("documents")
 
         # Permissive, generic grader. Keep candidates unless clearly off-topic.
@@ -386,9 +416,11 @@ class AdvancedRico(AgentFlow):
             "sources": kept,
         }
 
-    async def _generate(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        question: str = state["question"]
-        documents: List[VectorSearchHit] = state["documents"]
+    async def _generate(
+        self, state: RagGraphState, config: RunnableConfig | None = None
+    ) -> RagUpdate:
+        question: str = self._question_from_state(state)
+        documents: List[VectorSearchHit] = list(state.get("documents") or [])
 
         context = "\n".join(
             f"Source file: {d.file_name or d.title}\nPage: {getattr(d, 'page', 'n/a')}\nContent: {d.content}\n"
@@ -438,8 +470,10 @@ class AdvancedRico(AgentFlow):
 
         return {"messages": [progress], "generation": response, "sources": documents}
 
-    async def _rephrase_query(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        question: str = state["question"]
+    async def _rephrase_query(
+        self, state: RagGraphState, config: RunnableConfig | None = None
+    ) -> RagUpdate:
+        question: str = self._question_from_state(state)
         retry_count: int = int(state.get("retry_count", 0) or 0) + 1
 
         system = (
@@ -483,8 +517,15 @@ class AdvancedRico(AgentFlow):
             "retry_count": retry_count,
         }
 
-    async def _finalize_success(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        generation: AIMessage = state["generation"]
+    async def _finalize_success(
+        self, state: RagGraphState, config: RunnableConfig | None = None
+    ) -> RagUpdate:
+        generation_val = state.get("generation")
+        if not isinstance(generation_val, AIMessage):
+            raise ValueError(
+                "finalize_success requires an AIMessage in state['generation']"
+            )
+        generation: AIMessage = generation_val
 
         return {
             "messages": [generation],  # type:"ai", subtype:"final" set downstream
@@ -496,7 +537,9 @@ class AdvancedRico(AgentFlow):
             "irrelevant_documents": [],
         }
 
-    async def _finalize_failure(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    async def _finalize_failure(
+        self, state: RagGraphState, config: RunnableConfig | None = None
+    ) -> RagUpdate:
         explanation = "The agent was unable to generate a satisfactory response. I can rephrase the question and try again."
         msg = AIMessage(
             content=explanation,
@@ -520,7 +563,11 @@ class AdvancedRico(AgentFlow):
 
     # ---------- edges ----------
 
-    async def _decide_to_generate(self, state: Dict[str, Any]) -> str:
+    DecideRoute = Literal["rephrase_query", "generate", "abort"]
+
+    async def _decide_to_generate(
+        self, state: RagGraphState, config: RunnableConfig | None = None
+    ) -> DecideRoute:
         documents: Optional[List[VectorSearchHit]] = state.get("documents")
         retry_count: int = int(state.get("retry_count", 0) or 0)
 
@@ -531,9 +578,18 @@ class AdvancedRico(AgentFlow):
         else:
             return "generate"
 
-    async def _grade_generation(self, state: Dict[str, Any]) -> str:
-        question: str = state["question"]
-        generation: AIMessage = state["generation"]
+    GradeRoute = Literal["useful", "not useful", "abort"]
+
+    async def _grade_generation(
+        self, state: RagGraphState, config: RunnableConfig | None = None
+    ) -> GradeRoute:
+        question: str = self._question_from_state(state)
+        generation_val = state.get("generation")
+        if not isinstance(generation_val, AIMessage):
+            raise ValueError(
+                "grade_generation requires an AIMessage in state['generation']"
+            )
+        generation: AIMessage = generation_val
         retry_count: int = int(state.get("retry_count", 0) or 0)
 
         system = (

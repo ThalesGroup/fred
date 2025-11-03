@@ -263,7 +263,7 @@ async def websocket_chatbot_question(
                 (
                     session,
                     final_messages,
-                ) = await session_orchestrator.chat_ask_websocket(  # Use injected object
+                ) = await session_orchestrator.chat_ask_websocket(
                     user=active_user,
                     callback=ws_callback,
                     session_id=ask.session_id,
@@ -341,12 +341,12 @@ def get_session_history(
     description="Delete a chatbot session.",
     summary="Delete a chatbot session.",
 )
-def delete_session(
+async def delete_session(
     session_id: str,
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> bool:
-    session_orchestrator.delete_session(session_id, user)
+    await session_orchestrator.delete_session(session_id, user)
     return True
 
 

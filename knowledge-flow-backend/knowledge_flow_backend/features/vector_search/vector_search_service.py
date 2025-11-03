@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, Set
 
 from fred_core import Action, KeycloakUser, Resource, VectorSearchHit, authorize
-from langchain.schema.document import Document
+from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit, LexicalSearchable, SearchFilter
