@@ -26,11 +26,17 @@ class TextMarkdownProcessor(BaseMarkdownProcessor):
     def extract_file_metadata(self, file_path: Path) -> dict:
         return {
             "document_name": file_path.name,
-            "size_bytes": file_path.stat().st_size,
+            "file_size_bytes": file_path.stat().st_size,
             "suffix": file_path.suffix,
         }
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
-        with open(file_path, "r", encoding="utf-8") as f_in, open(output_dir / file_path.name, "w", encoding="utf-8") as f_out:
+        """
+        Copy plain text content into a canonical markdown preview file named 'output.md'.
+        This keeps behavior consistent across all input processors so downstream
+        steps (preview/vectorization) can always look for output.md.
+        """
+        md_path = output_dir / "output.md"
+        with open(file_path, "r", encoding="utf-8") as f_in, open(md_path, "w", encoding="utf-8") as f_out:
             f_out.write(f_in.read())
-        return {"doc_dir": str(output_dir), "md_file": str(file_path)}
+        return {"doc_dir": str(output_dir), "md_file": str(md_path)}
