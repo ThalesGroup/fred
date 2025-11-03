@@ -6,15 +6,14 @@ global:
     enabled: true
     image: "alpine:3.22"
   persistence:
-    enabled: false                   # if true = Enable the creation of PVC when duckdb is used - Recommended TRUE
-    dynamic: false                   # if true = let the PVCs create PVs if possible and do not create them manually 
+    enabled: false # if true = Enable the creation of PVC when duckdb is used - Recommended TRUE
+    dynamic: false # if true = let the PVCs create PVs if possible and do not create them manually
     accessModes: "ReadWriteOnce"
     reclaimPolicy: "Retain"
-    storageClass: "local-path"       # if empty = default storage class
-    hostPath: "/mnt/fred-data"       # only used if dynamic=false & storageClass=local-path, remind to create this directory on your host
+    storageClass: "local-path" # if empty = default storage class
+    hostPath: "/mnt/fred-data" # only used if dynamic=false & storageClass=local-path, remind to create this directory on your host
 
 applications:
-
   agentic-backend:
     enabled: true
     applicationName: agentic-backend
@@ -35,7 +34,7 @@ applications:
       enabled: true
       data:
         - "uvicorn"
-        - "app.main:create_app"
+        - "agentic_backend.main:create_app"
         - "--factory"
         - "--host"
         - "0.0.0.0"
@@ -44,7 +43,7 @@ applications:
         - "--log-level"
         - "info"
         - "--loop"
-        - "asyncio"    
+        - "asyncio"
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
@@ -78,7 +77,7 @@ applications:
         configMap:
           name: agentic-backend-back
       - name: agentic-backend-env-vol
-        secret: 
+        secret:
           secretName: agentic-backend-env
       - name: agentic-backend-kube-vol
         configMap:
@@ -107,7 +106,7 @@ applications:
       allowPrivilegeEscalation: false
       capabilities:
         drop:
-        - "ALL"
+          - "ALL"
       runAsUser: 1000
       runAsNonRoot: true
       seccompProfile:
@@ -168,11 +167,16 @@ applications:
         properties:
           logoName: "fred"
       ai:
+        # In production  activate the configuration persistence mechanism
+        # that allow users to create/update agents at runtime and change
+        # their configuration without redeploying the application.
+        use_static_config_only: false
+        # Base URL for the Knowledge Flow service
         knowledge_flow_url: "http://knowledge-flow-backend:8111/knowledge-flow/v1"
         # Timeout settings for the client
         timeout:
-          connect: 5  # Time to wait for a connection in seconds
-          read: 15    # Time to wait for a response in seconds
+          connect: 5 # Time to wait for a connection in seconds
+          read: 15 # Time to wait for a response in seconds
         default_chat_model:
           # Required in .env:
           # - OPENAI_API_KEY
@@ -185,89 +189,41 @@ applications:
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the chat model
         agents:
-        - name: "Samy"
-          type: "agent"
-          class_path: "app.agents.sentinel.sentinel_expert.SentinelExpert"
-          enabled: false
-          role: "Opensearch instance monitoring expert"
-          tags: ["monitoring"]
-          chat_model: {}
-          description: >
-            An expert in monitoring and managing Opensearch instances.
-            Samy can analyze performance metrics, identify issues, and provide recommendations for optimization.
-          mcp_servers:
-            - name: knowledge-flow-mcp-server
-              transport: streamable_http
-              url: http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops
-              sse_read_timeout: 2000
-        - name: "Georges"
-          type: "agent"
-          class_path: "app.agents.generalist.generalist_expert.GeneralistExpert"
-          enabled: true
-          role: "Generalist Assistant"
-          tags: ["general"]
-          chat_model: {}
-          description: >
-            A generalist assistant that can handle a wide range of tasks.
-            He is the default assistant that can handle any task that does not require a specialized assistant.
-        - name: "Tessa"
-          type: "agent"
-          role: "Data Query and SQL Expert"
-          class_path: "app.agents.tabular.tabular_expert.TabularExpert"
-          enabled: true
-          tags: ["data"]
-          chat_model: {}
-          description: >
-            An expert in querying databases and generating SQL queries.
-            Tessa can assist with data retrieval, manipulation, and analysis tasks.
-          mcp_servers:
-            - name: knowledge-flow-mcp-server
-              transport: streamable_http
-              url: http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular
-              sse_read_timeout: 2000
-        - name: "Rico Jr."
-          type: "agent"
-          role: "Document Retrieval Expert"
-          class_path: "app.agents.rags.rag_expert.RagExpert"
-          enabled: true
-          tags: ["documents"]
-          chat_model: {}
-          description: >
-            An expert in retrieving and processing documents using retrieval-augmented generation techniques.
-            Rico Jr. can help with tasks that involve understanding and utilizing large document collections.
-        - name: "Brontë"
-          type: "agent"
-          role: "Content Generator Expert"
-          class_path: "app.agents.content_generator.content_generator_expert.ContentGeneratorExpert"
-          enabled: false
-          tags: ["content"]
-          chat_model: {}
-          description: >
-            An expert in generating content based on templates and knowledge from the knowledge-flow backend.
-            Brontë can assist with creating various types of content efficiently.
-          mcp_servers:
-            - name: knowledge-flow-mcp-server
-              transport: streamable_http
-              url: http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-resources
-              sse_read_timeout: 2000
-        - name: "Rico Senior"
-          type: "agent"
-          role: "Advanced Document Retrieval Expert"
-          class_path: "app.agents.rags.advanced_rag_expert.AdvancedRagExpert"
-          enabled: false
-          tags: ["documents"]
-          chat_model: {}
-          description: >
-            An advanced expert in retrieving and processing documents using enhanced retrieval-augmented generation techniques.
-            Rico Senior is capable of handling more complex document-related tasks with improved accuracy.
-          # settings:
-          #   chunk_size: 512
-          #   chunk_overlap: 64
-          mcp_servers:
-            - name: knowledge-flow-mcp-server
-              transport: streamable_http
-              url: http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-advanced-rag
-              sse_read_timeout: 2000
+          - name: "Samy"
+            type: "agent"
+            class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
+            enabled: false
+          - name: "Georges"
+            type: "agent"
+            class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
+            enabled: true
+          - name: "Tessa"
+            type: "agent"
+            class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
+            enabled: true
+          - name: "Rico"
+            type: "agent"
+            class_path: "agentic_backend.agents.rags.rag_expert.Rico"
+            enabled: true
+          - name: "Rico Senior"
+            type: "agent"
+            role: "Advanced Document Retrieval Expert"
+            class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
+            enabled: false
+      mcp:
+        servers:
+          - name: "knowledge-flow-mcp-tabular"
+            transport: "streamable_http"
+            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
+            sse_read_timeout: 2000
+          - name: "knowledge-flow-mcp-opensearch-ops"
+            transport: "streamable_http"
+            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops"
+            sse_read_timeout: 2000
+          - name: "mcp-kubernetes-server"
+            transport: "streamable_http"
+            url: "http://mcp-kubernetes-server:8081/mcp"
+            sse_read_timeout: 2000
 
       storage:
         postgres:
@@ -399,7 +355,7 @@ applications:
       allowPrivilegeEscalation: false
       capabilities:
         drop:
-        - "ALL"
+          - "ALL"
       runAsNonRoot: true
       seccompProfile:
         type: RuntimeDefault
@@ -440,7 +396,7 @@ applications:
       enabled: true
       data:
         - "uvicorn"
-        - "app.main:create_app"
+        - "knowledge_flow_backend.main:create_app"
         - "--factory"
         - "--host"
         - "0.0.0.0"
@@ -489,7 +445,7 @@ applications:
         configMap:
           name: knowledge-flow-backend-back
       - name: knowledge-flow-backend-env-vol
-        secret: 
+        secret:
           secretName: knowledge-flow-backend-env
     probes:
       lifecycle:
@@ -516,7 +472,7 @@ applications:
       allowPrivilegeEscalation: false
       capabilities:
         drop:
-        - "ALL"
+          - "ALL"
       runAsUser: 1000
       runAsNonRoot: true
       seccompProfile:
@@ -568,21 +524,21 @@ applications:
           connect_timeout_seconds: 5
       input_processors:
         - prefix: ".pdf"
-          class_path: app.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
         - prefix: ".docx"
-          class_path: app.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+          class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
         - prefix: ".pptx"
-          class_path: app.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+          class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
         - prefix: ".csv"
-          class_path: app.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+          class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
         - prefix: ".txt"
-          class_path: app.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+          class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
         - prefix: ".md"
-          class_path: app.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+          class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
         - prefix: ".xlsm"
-          class_path: app.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+          class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
         - prefix: ".jsonl"
-          class_path: app.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
       content_storage:
         type: local
         root_path: ~/.fred/knowledge-flow/content-storage
@@ -601,8 +557,8 @@ applications:
         settings: {}
         type: "openai"
       chat_model:
-        provider: openai        # openai | azure | ollama
-        name: gpt-4o-mini       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
+        provider: openai # openai | azure | ollama
+        name: gpt-4o-mini # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
         settings:
           # openai: nothing else required (keys in .env)
           # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
@@ -640,7 +596,7 @@ applications:
         vector_store:
           type: in_memory
         tabular_stores:
-          base_database:                            # Minimal configuration to enable CSV document ingestion
+          base_database: # Minimal configuration to enable CSV document ingestion
             type: "sql"
             driver: "duckdb"
             database: "base_database"

@@ -13,12 +13,33 @@ from typing import Dict, List, Set, Optional
 
 def setup_backend_environment(backend_dir: Path):
     """Setup environment to import the FastAPI app."""
-    app_dir = backend_dir / "app"
     config_dir = backend_dir / "config"
+    # --- Flexible App Directory Discovery ---
+    # We check for these two paths in order
+    app_dir_options = [
+        backend_dir / "agentic_backend",
+        backend_dir / "knowledge_flow_backend",
+    ]
+    
+    app_dir = None
+    
+    for current_app_dir in app_dir_options:
+        if current_app_dir.exists() and (current_app_dir / "main.py").exists():
+            app_dir = current_app_dir
+            print(f"✅ Found application main code in: {app_dir}")
+            break
+
+    # If neither structure is found, raise the final error
+    if not app_dir:
+        raise FileNotFoundError(
+            f"Could not find app/main.py in expected locations within {backend_dir}. "
+            f"Checked: {backend_dir / 'agentic_backend'} and {backend_dir / 'knowledge_flow_backend'}"
+        )
+    # --- End Flexible App Directory Discovery ---
     
     # Validate backend directory structure
     if not app_dir.exists() or not (app_dir / "main.py").exists():
-        raise FileNotFoundError(f"Could not find app/main.py in {backend_dir}")
+        raise FileNotFoundError(f"Could not find main.py in {backend_dir}")
     
     if not config_dir.exists() or not (config_dir / "configuration.yaml").exists():
         raise FileNotFoundError(f"Could not find config/configuration.yaml in {backend_dir}")

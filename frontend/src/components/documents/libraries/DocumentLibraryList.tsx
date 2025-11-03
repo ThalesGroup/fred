@@ -55,8 +55,10 @@ export default function DocumentLibraryList() {
 
   // Permissions (RBAC)
   const { can } = usePermissions();
+  const canCreateDocument = can("document", "create");
   const canDeleteDocument = can("document", "delete");
   const canDeleteFolder = can("tag", "delete");
+  const canCreateTag = can("tag", "create");
 
   /* ---------------- Data fetching ---------------- */
   const {
@@ -221,6 +223,7 @@ export default function DocumentLibraryList() {
             variant="outlined"
             startIcon={<AddIcon />}
             onClick={() => setIsCreateDrawerOpen(true)}
+            disabled={!canCreateTag}
             sx={{ borderRadius: "8px" }}
           >
             {t("documentLibrariesList.createLibrary")}
@@ -237,12 +240,13 @@ export default function DocumentLibraryList() {
                 setOpenUploadDrawer(true);
               }
             }}
-            disabled={!selectedFolder}
+            disabled={!selectedFolder || !canCreateDocument}
             sx={{ borderRadius: "8px" }}
           >
             {t("documentLibrary.uploadInLibrary")}
           </Button>
         </Box>
+
       </Box>
 
       {/* Bulk actions */}

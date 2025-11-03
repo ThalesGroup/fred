@@ -1,13 +1,14 @@
 {
   "common": {
     "add": "Ajouter",
-    "noneSelected": "Aucune sélection"
+    "noneSelected": "Aucune sélection",
+    "loading": "Chargement…"
   },
   "resource": {
     "kind": {
-      "prompt":   { "one": "prompt",   "other": "prompts" },
+      "prompt": { "one": "prompt", "other": "prompts" },
       "template": { "one": "modèle", "other": "modèles" },
-      "chat-context": { "one" : "contexte de conversation", "other": "contextes de conversation"}
+      "chat-context": { "one": "contexte de conversation", "other": "contextes de conversation" }
     }
   },
   "validation": {
@@ -57,6 +58,45 @@
     "monitoring_kpi": "Kpis",
     "monitoring_logs": "Logs"
   },
+  "assetManager": {
+    "title": "Gérer les ressources pour {{agentId}}",
+    "description": "Téléchargez et gérez les ressources binaires comme les modèles ou les fichiers de configuration pour cet agent. Ces ressources peuvent être référencées par clé dans vos interactions avec l'agent.",
+    "listTitle": "Ressources Actuelles",
+    "noAssetsFound": "Aucune ressource trouvée. Téléchargez-en une ci-dessous pour commencer.",
+    "uploadTitle": "Télécharger une Nouvelle Ressource",
+    "browseButton": "Parcourir",
+    "labelFile": "Fichier à télécharger",
+    "labelKey": "Clé de Ressource (Nom Logique)",
+    "keyPlaceholder": "ex. mon-modele-de-rapport",
+    "labelContentTypeOverride": "Surcharge de Content-Type (Optionnel)",
+    "uploadButton": "Télécharger la Ressource",
+    "uploading": "Téléchargement en cours...",
+    "noFileSelected": "Veuillez sélectionner un fichier à télécharger.",
+    "unknownUploadError": "Une erreur inconnue est survenue lors du téléchargement.",
+    "uploadSuccessSummary": "Ressource Téléchargée",
+    "uploadSuccessDetail": "La ressource '{{key}}' a été téléchargée avec succès.",
+    "uploadFailedSummary": "Échec du Téléchargement",
+    "confirmDelete": "Êtes-vous sûr de vouloir supprimer la ressource '{{key}}'? Cette action est irréversible.",
+    "deleteSuccessSummary": "Ressource Supprimée",
+    "deleteSuccessDetail": "La ressource '{{key}}' a été supprimée.",
+    "deleteFailedSummary": "Échec de la Suppression",
+    "unknownDeleteError": "Une erreur inconnue est survenue lors de la suppression.",
+    "confirmDeleteTitle": "Confirmer la suppression",
+    "confirmDeleteMessage": "Supprimer cette ressource ? Cette action est irréversible."
+  },
+  "agentEditDrawer": {
+    "roleHelperText": "Le rôle obligatoire de l'agent pour la découverte (ex. 'Analyste Financier')",
+    "descriptionHelperText": "La description obligatoire de l'agent.",
+    "tagsHelperText": "Tags utilisés pour la catégorisation et le filtrage.",
+    "noTunableFields": "Cet agent n'expose aucun champ réglable.",
+    "coreFields": "Champs de base",
+    "tunableFields": "Champs réglables",
+    "tagsLabel": "Tags",
+    "saveUser": "Appliquer les modifications pour mon profil",
+    "saveGlobal": "Appliquer les modifications pour tous les utilisateurs",
+    "selectMcpServers": "Sélectionnez des serveurs MCP",
+    "noMcpServers": "Aucun serveur MCP disponible pour le moment."
+  },
   "agentHub": {
     "title": "Centre des Agents",
     "confirmDeleteTitle": "Confirmer la suppression",
@@ -68,6 +108,8 @@
     "search": "Rechercher",
     "filter": "Filtrer",
     "create": "Créer",
+    "createMcpAgent": "Créer un Nouvel Agent MCP",
+    "createMcpAgentNote": "Créer un nouvel agent MCP avec la configuration par défaut.",
     "noAgents": "Aucun agent trouvé",
     "noFavorites": "Vous n'avez pas encore ajouté d'agents à vos favoris",
     "noTag": "Aucun agent avec le tag \"{{tag}}\"",
@@ -99,8 +141,15 @@
       "add_mcp_server": "+ Ajouter un Serveur MCP"
     },
     "errors": {
+      "updateFailed": "Échec de la mise à jour de l'agent",
+      "crewUpdateFailed": "Échec de la mise à jour de l'équipe",
+      "tuningUpdateFailed": "Échec de la mise à jour des réglages de l'agent",
       "creationFailedSummary": "Échec de la création de l'agent",
       "creationFailedDetailFallback": "Une erreur inattendue s'est produite lors de la création de l'agent."
+    },
+    "success": {
+      "summary": "Agent créé",
+      "detail": "L'agent a été créé avec succès."
     }
   },
   "chatbot": {
@@ -115,6 +164,8 @@
       "count": "{{count}} joints"
     },
     "recordAudio": "Enregistrer de l'audio",
+    "sendMessage": "Envoyer le message",
+    "stopResponse": "Arrêter la réponse",
     "stopRecording": "Arrêter l'enregistrement",
     "audioChip": "Enregistrement audio",
     "hideAudio": "Masquer le contrôleur audio",
@@ -145,6 +196,7 @@
     "newConversation": "Nouvelle conversation",
     "noConversation": "Aucune conversation",
     "delete": "Supprimer",
+    "deleteAll": "Tout supprimer",
     "conversationSetup": "Configuration de la conversation",
     "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
     "draftNotSaved": "Brouillon • non encore enregistré",
@@ -187,7 +239,9 @@
     "enabled": "Activer l'agent",
     "disable": "Désactiver l'agent",
     "favorite": "Ajouter l'agent à vos favoris",
-    "unfavorite": "Retirer l'agent de vos favoris"
+    "unfavorite": "Retirer l'agent de vos favoris",
+    "manageAssets": "Gérer les ressources",
+    "manageCrew": "Gérer l'équipe"
   },
   "dialogs": {
     "create": {
@@ -249,7 +303,6 @@
       "documents": "Documents",
       "operations": "Opérations",
       "chatContexts": "Contextes de conversation"
-
     }
   },
   "documentLibrary": {

@@ -14,9 +14,9 @@ dependencies = [
       "sqlalchemy>=2.0.42",
       "sqlparse>=0.5.3",
       "httpx>=0.28.1",
-      "langchain-core>=0.3.76",
-      "langchain-ollama>=0.3.8",
-      "langchain-openai>=0.3.33",
+      "langchain-core>=1.0.0",
+      "langchain-ollama>=1.0.0",
+      "langchain-openai>=1.0.0",
       "azure-identity>=1.25.0",
       "authzed>=1.22.1",
 ]
@@ -36,7 +36,7 @@ dev = [
 ]
 
 [project.optional-dependencies]
-dev = ["bandit>=1.8.6", "basedpyright>=1.31.0", "ruff>=0.12.5"]
+dev = ["bandit>=1.8.6", "basedpyright==1.31.0", "ruff>=0.12.5"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

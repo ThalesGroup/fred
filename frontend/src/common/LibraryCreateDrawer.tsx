@@ -3,8 +3,8 @@ import SaveIcon from "@mui/icons-material/Save";
 import { Alert, Box, Button, Drawer, TextField, Typography } from "@mui/material";
 import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useCreateTagKnowledgeFlowV1TagsPostMutation, TagType } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../components/ToastProvider";
+import { TagType, useCreateTagKnowledgeFlowV1TagsPostMutation } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 interface LibraryCreateDrawerProps {
   isOpen: boolean;
@@ -103,8 +103,6 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
         sx: {
           width: { xs: "100%", sm: 450 },
           p: 3,
-          borderTopLeftRadius: 16,
-          borderBottomLeftRadius: 16,
         },
       }}
     >

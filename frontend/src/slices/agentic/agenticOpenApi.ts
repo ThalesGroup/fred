@@ -11,13 +11,55 @@ const injectedRtkApi = api.injectEndpoints({
       UpdateAgentAgenticV1AgentsUpdatePutApiResponse,
       UpdateAgentAgenticV1AgentsUpdatePutApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/agents/update`, method: "PUT", body: queryArg.agentSettings }),
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/update`,
+        method: "PUT",
+        body: queryArg.agentSettings,
+        params: {
+          is_global: queryArg.isGlobal,
+        },
+      }),
     }),
     deleteAgentAgenticV1AgentsNameDelete: build.mutation<
       DeleteAgentAgenticV1AgentsNameDeleteApiResponse,
       DeleteAgentAgenticV1AgentsNameDeleteApiArg
     >({
       query: (queryArg) => ({ url: `/agentic/v1/agents/${queryArg.name}`, method: "DELETE" }),
+    }),
+    listMcpServersAgenticV1AgentsMcpServersGet: build.query<
+      ListMcpServersAgenticV1AgentsMcpServersGetApiResponse,
+      ListMcpServersAgenticV1AgentsMcpServersGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/agents/mcp-servers` }),
+    }),
+    listRuntimeSourceKeysAgenticV1AgentsSourceKeysGet: build.query<
+      ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiResponse,
+      ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/agents/source/keys` }),
+    }),
+    runtimeSourceByObjectAgenticV1AgentsSourceByObjectGet: build.query<
+      RuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetApiResponse,
+      RuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/source/by-object`,
+        params: {
+          key: queryArg.key,
+        },
+      }),
+    }),
+    runtimeSourceByModuleAgenticV1AgentsSourceByModuleGet: build.query<
+      RuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetApiResponse,
+      RuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/source/by-module`,
+        params: {
+          module: queryArg["module"],
+          qualname: queryArg.qualname,
+        },
+      }),
     }),
     echoSchemaAgenticV1SchemasEchoPost: build.mutation<
       EchoSchemaAgenticV1SchemasEchoPostApiResponse,
@@ -126,6 +168,7 @@ export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
 };
 export type UpdateAgentAgenticV1AgentsUpdatePutApiResponse = /** status 200 Successful Response */ any;
 export type UpdateAgentAgenticV1AgentsUpdatePutApiArg = {
+  isGlobal?: boolean;
   agentSettings:
     | ({
         type: "agent";
@@ -137,6 +180,21 @@ export type UpdateAgentAgenticV1AgentsUpdatePutApiArg = {
 export type DeleteAgentAgenticV1AgentsNameDeleteApiResponse = /** status 200 Successful Response */ any;
 export type DeleteAgentAgenticV1AgentsNameDeleteApiArg = {
   name: string;
+};
+export type ListMcpServersAgenticV1AgentsMcpServersGetApiResponse = /** status 200 Successful Response */ any;
+export type ListMcpServersAgenticV1AgentsMcpServersGetApiArg = void;
+export type ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiResponse = /** status 200 Successful Response */ any;
+export type ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiArg = void;
+export type RuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetApiResponse =
+  /** status 200 Successful Response */ string;
+export type RuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetApiArg = {
+  key: string;
+};
+export type RuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetApiResponse =
+  /** status 200 Successful Response */ string;
+export type RuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetApiArg = {
+  module: string;
+  qualname?: string | null;
 };
 export type EchoSchemaAgenticV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ null;
 export type EchoSchemaAgenticV1SchemasEchoPostApiArg = {
@@ -210,39 +268,8 @@ export type ValidationError = {
 export type HttpValidationError = {
   detail?: ValidationError[];
 };
-export type McpServerConfiguration = {
-  name: string;
-  /** MCP server transport. Can be sse, stdio, websocket or streamable_http */
-  transport?: string | null;
-  /** URL and endpoint of the MCP server */
-  url?: string | null;
-  /** How long (in seconds) the client will wait for a new event before disconnecting */
-  sse_read_timeout?: number | null;
-  /** Command to run for stdio transport. Can be uv, uvx, npx and so on. */
-  command?: string | null;
-  /** Args to give the command as a list. ex:  ['--directory', '/directory/to/mcp', 'run', 'server.py'] */
-  args?: string[] | null;
-  /** Environment variables to give the MCP server */
-  env?: {
-    [key: string]: string;
-  } | null;
-};
 export type CreateMcpAgentRequest = {
   name: string;
-  mcp_servers: McpServerConfiguration[];
-  role: string;
-  description: string;
-  tags?: string[] | null;
-};
-export type ModelConfiguration = {
-  /** Provider of the AI model, e.g., openai, ollama, azure. */
-  provider?: string | null;
-  /** Model name, e.g., gpt-4o, llama2. */
-  name?: string | null;
-  /** Additional provider-specific settings, e.g., Azure deployment name. */
-  settings?: {
-    [key: string]: any;
-  } | null;
 };
 export type UiHints = {
   multiline?: boolean;
@@ -257,6 +284,7 @@ export type FieldSpec = {
   type:
     | "string"
     | "text"
+    | "text-multiline"
     | "number"
     | "integer"
     | "boolean"
@@ -278,6 +306,7 @@ export type FieldSpec = {
     | (
         | "string"
         | "text"
+        | "text-multiline"
         | "number"
         | "integer"
         | "boolean"
@@ -291,14 +320,18 @@ export type FieldSpec = {
     | null;
   ui?: UiHints;
 };
-export type McpServerSpec = {
-  allow_user_add?: boolean;
-  allowed_transports?: string[];
-  required_fields?: string[];
+export type McpServerRef = {
+  name: string;
+  require_tools?: string[];
 };
 export type AgentTuning = {
+  /** The agent's mandatory role for discovery. */
+  role: string;
+  /** The agent's mandatory description for the UI. */
+  description: string;
+  tags?: string[];
   fields?: FieldSpec[];
-  mcp_servers?: McpServerSpec | null;
+  mcp_servers?: McpServerRef[];
 };
 export type AgentChatOptions = {
   search_policy_selection?: boolean;
@@ -306,32 +339,46 @@ export type AgentChatOptions = {
   record_audio_files?: boolean;
   attach_files?: boolean;
 };
+export type ClientAuthMode = "user_token" | "no_token";
+export type McpServerConfiguration = {
+  name: string;
+  /** MCP server transport. Can be sse, stdio, websocket or streamable_http */
+  transport?: string | null;
+  /** URL and endpoint of the MCP server */
+  url?: string | null;
+  /** How long (in seconds) the client will wait for a new event before disconnecting */
+  sse_read_timeout?: number | null;
+  /** Command to run for stdio transport. Can be uv, uvx, npx and so on. */
+  command?: string | null;
+  /** Args to give the command as a list. ex:  ['--directory', '/directory/to/mcp', 'run', 'server.py'] */
+  args?: string[] | null;
+  /** Environment variables to give the MCP server */
+  env?: {
+    [key: string]: string;
+  } | null;
+  /** If false, this MCP server is ignored. */
+  enabled?: boolean;
+  /** Client authentication mode. */
+  auth_mode?: ClientAuthMode;
+};
 export type Agent = {
   name: string;
   enabled?: boolean;
   class_path?: string | null;
-  model?: ModelConfiguration | null;
-  tags?: string[];
-  role: string;
-  description: string;
   tuning?: AgentTuning | null;
-  /** List of active MCP server configurations for this agent. */
-  mcp_servers?: McpServerConfiguration[];
   chat_options?: AgentChatOptions;
+  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "agent";
 };
 export type Leader = {
   name: string;
   enabled?: boolean;
   class_path?: string | null;
-  model?: ModelConfiguration | null;
-  tags?: string[];
-  role: string;
-  description: string;
   tuning?: AgentTuning | null;
-  /** List of active MCP server configurations for this agent. */
-  mcp_servers?: McpServerConfiguration[];
   chat_options?: AgentChatOptions;
+  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "leader";
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];
@@ -367,15 +414,17 @@ export type ImageUrlPart = {
   url: string;
   alt?: string | null;
 };
-export type LinkKind = "citation" | "download" | "external" | "dashboard" | "related";
+export type LinkKind = "citation" | "download" | "external" | "dashboard" | "related" | "view";
 export type LinkPart = {
   type?: "link";
-  href: string;
+  href?: string | null;
   title?: string | null;
   kind?: LinkKind;
   rel?: string | null;
   mime?: string | null;
   source_id?: string | null;
+  document_uid?: string | null;
+  file_name?: string | null;
 };
 export type TextPart = {
   type?: "text";
@@ -445,6 +494,9 @@ export type RuntimeContext = {
   selected_template_ids?: string[] | null;
   selected_chat_context_ids?: string[] | null;
   search_policy?: string | null;
+  access_token?: string | null;
+  refresh_token?: string | null;
+  access_token_expires_at?: number | null;
   [key: string]: any;
 };
 export type ChatMetadata = {
@@ -497,6 +549,8 @@ export type ChatAskInput = {
   agent_name: string;
   runtime_context?: RuntimeContext | null;
   client_exchange_id?: string | null;
+  access_token?: string | null;
+  refresh_token?: string | null;
 };
 export type StreamEvent = {
   type?: "stream";
@@ -586,35 +640,32 @@ export type FrontendConfigDto = {
   user_auth: UserSecurity;
 };
 export type AgentTuning2 = {
+  /** The agent's mandatory role for discovery. */
+  role: string;
+  /** The agent's mandatory description for the UI. */
+  description: string;
+  tags?: string[];
   fields?: FieldSpec[];
-  mcp_servers?: McpServerSpec | null;
+  mcp_servers?: McpServerRef[];
 };
 export type Agent2 = {
   name: string;
   enabled?: boolean;
   class_path?: string | null;
-  model?: ModelConfiguration | null;
-  tags?: string[];
-  role: string;
-  description: string;
   tuning?: AgentTuning2 | null;
-  /** List of active MCP server configurations for this agent. */
-  mcp_servers?: McpServerConfiguration[];
   chat_options?: AgentChatOptions;
+  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "agent";
 };
 export type Leader2 = {
   name: string;
   enabled?: boolean;
   class_path?: string | null;
-  model?: ModelConfiguration | null;
-  tags?: string[];
-  role: string;
-  description: string;
   tuning?: AgentTuning2 | null;
-  /** List of active MCP server configurations for this agent. */
-  mcp_servers?: McpServerConfiguration[];
   chat_options?: AgentChatOptions;
+  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
+  mcp_servers?: McpServerConfiguration[];
   type?: "leader";
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];
@@ -713,6 +764,14 @@ export const {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
   useDeleteAgentAgenticV1AgentsNameDeleteMutation,
+  useListMcpServersAgenticV1AgentsMcpServersGetQuery,
+  useLazyListMcpServersAgenticV1AgentsMcpServersGetQuery,
+  useListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetQuery,
+  useLazyListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetQuery,
+  useRuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetQuery,
+  useLazyRuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetQuery,
+  useRuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetQuery,
+  useLazyRuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetQuery,
   useEchoSchemaAgenticV1SchemasEchoPostMutation,
   useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
   useLazyGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,

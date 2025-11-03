@@ -10,7 +10,7 @@ HOST ?= 0.0.0.0
 ##@ Run
 
 .PHONY: run-local
-run-local: UVICORN_FACTORY ?= app.main:create_app
+run-local: UVICORN_FACTORY ?= ${PY_PACKAGE}.main:create_app
 run-local: UVICORN_LOOP ?= asyncio
 run-local: ## Run the app assuming dependencies already exist
 	$(UV) run uvicorn \
@@ -33,3 +33,7 @@ run: dev run-local ## Install dependencies and run the app with the dev storages
 .PHONY: run-prod
 run-prod: CONFIG_FILE=$(CONFIG_FILE_PROD)
 run-prod: run ## Install dependencies and run the app with the prod storages activated (OpenSearch, MinIO & cie.)
+
+PHONY: run-academy
+run-academy: CONFIG_FILE=$(CONFIG_FILE_ACADEMY)
+run-academy: run ## Install dependencies and run the app with the academy storages activated (DuckDB)

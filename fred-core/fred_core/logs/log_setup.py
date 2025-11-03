@@ -19,6 +19,7 @@ import asyncio
 import json
 import logging
 import threading
+from typing import Any, Optional
 
 from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO
 
@@ -28,6 +29,7 @@ except Exception:  # optional in prod images
     RichHandler = None  # type: ignore
 
 logger = logging.getLogger(__name__)
+
 
 # --- JSON formatter kept tiny and portable ---
 class CompactJsonFormatter(logging.Formatter):
@@ -81,10 +83,14 @@ class StoreEmitHandler(logging.Handler):
                 if payload
                 else record.levelname,  # type: ignore
                 logger=payload.get("logger", record.name) if payload else record.name,
-                file=payload.get("file", record.filename) if payload else record.filename,
+                file=payload.get("file", record.filename)
+                if payload
+                else record.filename,
                 line=payload.get("line", record.lineno) if payload else record.lineno,
                 msg=payload.get("msg", record.getMessage()) if payload else raw,
-                service=payload.get("service", self.service) if payload else self.service,
+                service=payload.get("service", self.service)
+                if payload
+                else self.service,
                 extra=payload.get("extra") if payload else None,
             )
 
@@ -102,6 +108,22 @@ class StoreEmitHandler(logging.Handler):
             self._tls.in_emit = False
 
 
+class TaskNameFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Adds the current asyncio Task name to the log record."""
+        try:
+            current_task: Optional[asyncio.Task[Any]] = asyncio.current_task()
+            if current_task is not None:
+                # Add a custom attribute to the record
+                record.task_name = current_task.get_name() or str(id(current_task))
+            else:
+                record.task_name = "Main"
+        except RuntimeError:
+            # Handles cases where not inside an asyncio loop (e.g., initial sync setup)
+            record.task_name = "Sync"
+        return True
+
+
 def log_setup(
     *,
     service_name: str,
@@ -111,21 +133,29 @@ def log_setup(
 ) -> None:
     root = logging.getLogger()
     root.setLevel(log_level.upper())
-
+    for h in list(root.handlers):
+        root.removeHandler(h)
     marker = f"_fred_handlers_{service_name}"
     if getattr(root, marker, False):
         return
 
     # 1) Human console (Rich)
     if RichHandler is not None:
+        formatter = logging.Formatter(
+            # Include custom 'task_name' attribute and standard 'threadName'
+            fmt="%(asctime)s | %(levelname)s | [%(threadName)s/%(task_name)s] | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
         console = RichHandler(
             rich_tracebacks=False,
-            show_time=True,
+            show_time=False,  # Time is now in the custom formatter
             show_level=True,
-            show_path=True,                 # shows module/filename:line
-            log_time_format="%Y-%m-%d %H:%M:%S",
-            omit_repeated_times=False,      # ← force time on every line
+            show_path=True,
+            # Omit other rich handler formatting controls, as the formatter handles the prefix
+            log_time_format="%Y-%m-%d %H:%M:%S",  # This can be misleading, rely on formatter time
         )
+        console.setFormatter(formatter)
+        console.addFilter(TaskNameFilter())
         console.setLevel(log_level.upper())
         root.addHandler(console)
 
@@ -136,18 +166,23 @@ def log_setup(
     root.addHandler(store_h)
 
     # Fred: prevent client libraries from bouncing through our StoreEmitHandler.
-    for noisy in ("opensearch", "urllib3", "elastic_transport", "elasticsearch", "aiohttp"):
+    for noisy in (
+        "opensearch",
+        "urllib3",
+        "elastic_transport",
+        "elasticsearch",
+        "aiohttp",
+    ):
         lg = logging.getLogger(noisy)
-        lg.handlers.clear()        # their own handlers (if any) → gone
+        lg.handlers.clear()  # their own handlers (if any) → gone
         lg.setLevel(logging.WARNING)
-        lg.propagate = False       # <-- key: do NOT bubble up to root
+        lg.propagate = False  # <-- key: do NOT bubble up to root
 
     # 4) Make uvicorn loggers flow into our handlers (no duplicates)
     if include_uvicorn:
         for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
             lg = logging.getLogger(name)
-            lg.handlers.clear()     # remove uvicorn’s own console handlers
-            lg.propagate = True     # forward to our root handlers
+            lg.handlers.clear()  # remove uvicorn’s own console handlers
+            lg.propagate = True  # forward to our root handlers
 
     setattr(root, marker, True)
-
