@@ -146,6 +146,7 @@ class SentinelExpert(AgentFlow):
         messages = self.with_chat_context_text(messages)
 
         try:
+            # self.log_message_summary(messages)
             response = await self.model.ainvoke(messages)
 
             # 3) Collect tool outputs (latest per tool name) from the history

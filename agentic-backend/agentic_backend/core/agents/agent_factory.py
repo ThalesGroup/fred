@@ -5,6 +5,7 @@ import logging
 from typing import Dict, Tuple, cast
 
 from fred_core import ThreadSafeLRUCache
+from pyparsing import abstractmethod
 
 from agentic_backend.common.structures import AgentSettings, Configuration, Leader
 from agentic_backend.core.agents.agent_flow import AgentFlow
@@ -16,7 +17,32 @@ from agentic_backend.core.leader.leader_flow import LeaderFlow
 logger = logging.getLogger(__name__)
 
 
-class AgentFactory:
+class BaseAgentFactory:
+    @abstractmethod
+    async def create_and_init(
+        self,
+        agent_name: str,
+        runtime_context: RuntimeContext,
+        session_id: str,
+    ) -> Tuple[AgentFlow, bool]:
+        pass
+
+    @abstractmethod
+    async def teardown_session_agents(self, session_id: str) -> None:
+        pass
+
+
+class NoOpAgentFactory(BaseAgentFactory):
+    async def create_and_init(
+        self,
+    ) -> Tuple[AgentFlow, bool]:
+        raise NotImplementedError("NoOpAgentFactory cannot create agents.")
+
+    async def teardown_session_agents(self, session_id: str) -> None:
+        pass
+
+
+class AgentFactory(BaseAgentFactory):
     """
     Factory that returns a **warm, per-(session, agent)** instance.
     Why Fred caches: we persist tool working state across messages (e.g., Tessa’s selected DB).

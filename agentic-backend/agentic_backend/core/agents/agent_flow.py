@@ -38,7 +38,6 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     SystemMessage,
-    ToolMessage,
 )
 from langchain_core.runnables import Runnable, RunnableConfig
 
@@ -69,6 +68,7 @@ from agentic_backend.common.user_token_refresher import (
 )
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec
 from agentic_backend.core.agents.agent_state import Prepared, resolve_prepared
+from agentic_backend.core.agents.agent_utils import log_agent_message_summary
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
@@ -292,61 +292,15 @@ class AgentFlow:
         # if self.langfuse_client is not None:
         #     self.langfuse_client.flush()
 
-    @staticmethod
-    def debug_dump_messages(
-        messages: Sequence[AnyMessage], label: str = "Messages"
-    ) -> None:
+    def log_message_summary(self, messages: Sequence[AnyMessage]) -> None:
         """
         Log a concise summary of message sequence for debugging purposes.
 
         Each line shows:
             [index] role/type | content preview | tool_call_id(s)
-        This avoids any Pydantic serialization warnings or excessive logs.
         """
-        if not messages:
-            logger.info(f"{label}: (empty)")
-            return
-
-        logger.info(f"----- {label} ({len(messages)}) -----")
-        for i, msg in enumerate(messages):
-            # Determine message role/type
-            role = (
-                getattr(msg, "type", None)
-                or getattr(msg, "role", None)
-                or type(msg).__name__
-            )
-            content = getattr(msg, "content", "")
-            preview = ""
-
-            # Short preview for readability
-            if isinstance(content, str):
-                preview = content.strip().replace("\n", " ")
-                if len(preview) > 60:
-                    preview = preview[:57] + "..."
-            elif isinstance(content, list):
-                preview = f"[list x{len(content)}]"
-            elif isinstance(content, dict):
-                preview = f"[dict keys={list(content.keys())}]"
-
-            # Tool metadata
-            extra = ""
-            if isinstance(msg, AIMessage):
-                tool_calls = getattr(msg, "tool_calls", None)
-                if tool_calls:
-                    ids = [
-                        tc.get("id") or tc.get("name") or "<no-id>"
-                        for tc in tool_calls
-                        if isinstance(tc, dict)
-                    ]
-                    extra = f" tool_calls={ids}"
-            elif isinstance(msg, ToolMessage):
-                tcid = getattr(msg, "tool_call_id", None)
-                if tcid:
-                    extra = f" tool_call_id={tcid}"
-
-            logger.info(f"[{i:02d}] {role:<10} | {preview}{extra}")
-
-        logger.info(f"----- End {label} -----")
+        label = f"Messages history for agent '{self.get_name()}'"
+        log_agent_message_summary(messages, label=label)
 
     @staticmethod
     def ensure_any_message(msg: object) -> AnyMessage:

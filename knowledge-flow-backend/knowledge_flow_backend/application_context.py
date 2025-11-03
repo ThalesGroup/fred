@@ -20,6 +20,7 @@ from typing import Dict, Optional, Type, Union
 
 from fred_core import (
     BaseKPIStore,
+    BaseKPIWriter,
     BaseLogStore,
     DuckdbStoreConfig,
     InMemoryLogStorageConfig,
@@ -128,7 +129,7 @@ def get_configuration() -> Configuration:
     return get_app_context().configuration
 
 
-def get_kpi_writer() -> KPIWriter:
+def get_kpi_writer() -> BaseKPIWriter:
     """
     Retrieves the global KPI writer instance.
 
@@ -556,7 +557,7 @@ class ApplicationContext:
         )
         return self._opensearch_client
 
-    def get_kpi_writer(self) -> KPIWriter:
+    def get_kpi_writer(self) -> BaseKPIWriter:
         if self._kpi_writer is not None:
             return self._kpi_writer
 
