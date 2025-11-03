@@ -183,7 +183,7 @@ class SessionOrchestrator:
         prior: List[ChatMessage] = self.history_store.get(session.id) or []
         base_rank = len(prior)
 
-        # 2) Emit the user message immediately
+        # 4) Emit the user message immediately
         user_msg = ChatMessage(
             session_id=session.id,
             exchange_id=exchange_id,
@@ -197,8 +197,9 @@ class SessionOrchestrator:
         all_msgs: List[ChatMessage] = [user_msg]
         await self._emit(callback, user_msg)
 
-        # 3) Stream agent responses via the transcoder
+        # 5) Stream agent responses via the transcoder
         saw_final_assistant = False
+        agent_msgs: List[ChatMessage] = []
         try:
             # Timer covers the entire exchange; status defaults to "error" if exception bubbles.
             with self.kpi.timer(
@@ -247,7 +248,13 @@ class SessionOrchestrator:
                 actor=actor,
             )
 
-        # 4) Persist session + history
+        # 6) Attach the raw runtime context (single source of truth)
+        self._attach_runtime_context(
+            runtime_context=runtime_context,
+            messages=agent_msgs,
+        )
+
+        # 7) Persist session + history
         session.updated_at = _utcnow_dt()
         self.session_store.save(session)
         assert session.user_id == user.uid, "Session/user mismatch"
@@ -666,6 +673,26 @@ class SessionOrchestrator:
             "[AGENTS] Created new session %s for user %s", new_session_id, user_id
         )
         return session
+
+    # ---------------- runtime context attachment ----------------
+
+    def _attach_runtime_context(
+        self,
+        *,
+        runtime_context: Optional[RuntimeContext],
+        messages: List[ChatMessage],
+    ) -> None:
+        """
+        Attach the **raw RuntimeContext** to assistant/final messages.
+        This is the canonical, unmodified source of truth.
+        """
+        if runtime_context is None:
+            return
+        for m in messages:
+            if m.role == Role.assistant and m.channel == Channel.final:
+                md = m.metadata or ChatMetadata()
+                md.runtime_context = runtime_context
+                m.metadata = md
 
 
 # ---------- pure helpers (kept local for discoverability) ----------

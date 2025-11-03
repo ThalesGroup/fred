@@ -84,31 +84,36 @@ const ChatBot = ({
     try {
       const uid = KeyCloakService.GetUserId?.() || "anon";
       localStorage.setItem(`chatctx_open:${uid}`, contextOpen ? "1" : "0");
-    } catch {}
+    } catch { }
   }, [contextOpen]);
 
   const { showInfo, showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
-  // const [postTranscribeAudio] = usePostTranscribeAudioMutation();
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   const wsTokenRef = useRef<string | null>(null);
 
-  // Noms des libs / prompts / templates
+  // Noms des libs / prompts / templates / chat-context
   const { data: docLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
   const { data: promptResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "prompt" });
   const { data: templateResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "template" });
+  const { data: chatContextResources = [] } =
+    useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "chat-context" });
 
   const libraryNameMap = useMemo(
-    () => Object.fromEntries((docLibs as any[]).map((x: any) => [x.id, x.name])),
+    () => Object.fromEntries((docLibs).map((x) => [x.id, x.name])),
     [docLibs],
   );
   const promptNameMap = useMemo(
-    () => Object.fromEntries((promptResources as any[]).map((x: any) => [x.id, x.name ?? x.id])),
+    () => Object.fromEntries((promptResources).map((x) => [x.id, x.name ?? x.id])),
     [promptResources],
   );
   const templateNameMap = useMemo(
-    () => Object.fromEntries((templateResources as any[]).map((x: any) => [x.id, x.name ?? x.id])),
+    () => Object.fromEntries((templateResources).map((x) => [x.id, x.name ?? x.id])),
     [templateResources],
+  );
+  const chatContextNameMap = useMemo(
+    () => Object.fromEntries(chatContextResources.map((x) => [x.id, x.name ?? x.id])),
+    [chatContextResources]
   );
 
   // Lazy messages fetcher
@@ -418,21 +423,20 @@ const ChatBot = ({
     const agentName = currentAgent.name;
 
     // Init runtime context
-    const runtimeContext: RuntimeContext = { ...baseRuntimeContext };
+    const runtimeContext: RuntimeContext = { ...(baseRuntimeContext ?? {}) };
 
-    // Add selected libraries/templates
+    // Add selected libraries / profiles (CANONIQUES — pas de doublon)
     if (content.documentLibraryIds?.length) {
       runtimeContext.selected_document_libraries_ids = content.documentLibraryIds;
     }
-    if (content.promptResourceIds?.length) {
-      runtimeContext.selected_prompt_ids = content.promptResourceIds;
+
+    const selectedChatCtx =
+      (content as any).chatContextResourceIds ?? (content as any).profileResourceIds;
+    if (selectedChatCtx?.length) {
+      runtimeContext.selected_chat_context_ids = selectedChatCtx;
     }
-    if (content.templateResourceIds?.length) {
-      runtimeContext.selected_template_ids = content.templateResourceIds;
-    }
-    if (content.profileResourceIds?.length) {
-      runtimeContext.selected_chat_context_ids = content.profileResourceIds;
-    }
+
+    // Policy
     runtimeContext.search_policy = content.searchPolicy || "semantic";
 
     // Files upload
@@ -690,6 +694,8 @@ const ChatBot = ({
                 messages={messages}
                 agents={agents}
                 currentAgent={currentAgent}
+                libraryNameById={libraryNameMap}
+                chatContextNameById={chatContextNameMap} // ⬅️ passe la map chat-context
               />
               {waitResponse && (
                 <Box mt={1} sx={{ alignSelf: "flex-start" }}>

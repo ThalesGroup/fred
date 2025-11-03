@@ -14,7 +14,7 @@
 
 import { useTranslation } from "react-i18next";
 
-export type ResourceKind = "prompt" | "template" | "profile";
+export type ResourceKind = "prompt" | "template" | "chat-context";
 
 export const useKindLabels = (kind: ResourceKind) => {
   const { t } = useTranslation();

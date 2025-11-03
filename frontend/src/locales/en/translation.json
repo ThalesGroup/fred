@@ -534,5 +534,34 @@
   "unauthorized": {
     "title": "Unauthorized",
     "message": "You do not have the required permissions to access this page."
+  },
+  "header": {
+    "librariesSingular": "Library",
+    "librariesPlural": "Libraries",
+    "chatContextSingular": "Chat context",
+    "chatContextsPlural": "Chat contexts",
+    "librariesInline": "{{label}}: {{names}}",
+    "chatContextsInline": "{{label}}: {{names}}"
+  },
+  "insights": {
+    "aria": "message-insights"
+  },
+  "popover": {
+    "aria": "Message details",
+    "title": "Overview",
+    "task": "Task",
+    "node": "Node",
+    "model": "Model",
+    "tokensTotal": "Tokens used",
+    "tokensIn": "From user (prompt+context)",
+    "tokensOut": "From model (response)",
+    "latency": "Latency",
+    "search": "Search",
+    "temp": "Temp",
+    "sectionLibrarySingular": "LIBRARY",
+    "sectionLibrariesPlural": "LIBRARIES",
+    "sectionChatContextSingular": "CHAT CONTEXT",
+    "sectionChatContextsPlural": "CHAT CONTEXTS",
+    "disclaimer": "AI content may be incorrect."
   }
 }
