@@ -111,9 +111,9 @@ class MetadataController:
                 "Discovered files (e.g., in pull-mode) are not returned by this endpoint — see `/documents/pull`."
             ),
         )
-        def search_document_metadata(filters: Dict[str, Any] = Body(default={}), user: KeycloakUser = Depends(get_current_user)):
+        async def search_document_metadata(filters: Dict[str, Any] = Body(default={}), user: KeycloakUser = Depends(get_current_user)):
             try:
-                return self.service.get_documents_metadata(user, filters)
+                return await self.service.get_documents_metadata(user, filters)
             except Exception as e:
                 log_exception(e)
                 raise handle_exception(e)
@@ -129,9 +129,9 @@ class MetadataController:
                 "Use `/documents/pull` to inspect discovered-but-unprocessed files."
             ),
         )
-        def get_document_metadata(document_uid: str, user: KeycloakUser = Depends(get_current_user)):
+        async def get_document_metadata(document_uid: str, user: KeycloakUser = Depends(get_current_user)):
             try:
-                return self.service.get_document_metadata(user, document_uid)
+                return await self.service.get_document_metadata(user, document_uid)
             except Exception as e:
                 raise handle_exception(e)
 
@@ -147,13 +147,13 @@ class MetadataController:
                 "the flag has no effect."
             ),
         )
-        def update_document_metadata_retrievable(
+        async def update_document_metadata_retrievable(
             document_uid: str,
             retrievable: bool,
             user: KeycloakUser = Depends(get_current_user),
         ):
             try:
-                self.service.update_document_retrievable(user, document_uid, retrievable, user.uid)
+                await self.service.update_document_retrievable(user, document_uid, retrievable, user.uid)
             except Exception as e:
                 raise handle_exception(e)
 
@@ -172,7 +172,7 @@ class MetadataController:
             **Example filters:** `tags`, `retrievable`, `title`, etc.
             """,
         )
-        def browse_documents(req: BrowseDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
+        async def browse_documents(req: BrowseDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
             config = self.context.get_config().document_sources.get(req.source_tag)
             if not config:
                 raise HTTPException(status_code=404, detail=f"Source tag '{req.source_tag}' not found")
@@ -180,7 +180,7 @@ class MetadataController:
             if config.type == "push":
                 filters = req.filters or {}
                 filters["source"] = {"source_tag": req.source_tag}
-                docs = self.service.get_documents_metadata(user, filters)
+                docs = await self.service.get_documents_metadata(user, filters)
                 sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]
 
                 for sort in reversed(sort_by):  # Apply last sort first for correct multi-field sorting

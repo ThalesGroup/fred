@@ -123,11 +123,11 @@ declare module "@mui/material/Typography" {
 }
 
 // ---------- Shared Gradient Stops (single source of truth) ----------
-const lightHeroFrom = "#ffffffd9";
-const lightHeroTo = "#ffffffe6";
+const lightHeroFrom = "#ffffffff";
+const lightHeroTo = "#ffffffff";
 
-const darkHeroFrom = "#191923cc";
-const darkHeroTo = "#191923e6";
+const darkHeroFrom = "#191923ff";
+const darkHeroTo = "#191923ff";
 
 // ---------- Light Palette ----------
 const lightPalette = {
@@ -353,6 +353,13 @@ const lightTheme = createTheme({
         },
       ],
     },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          borderRadius: 16,
+        },
+      },
+    },
 
     // Apply the subtle hero-tinted surfaces globally
     MuiPaper: {
@@ -459,6 +466,13 @@ const darkTheme = createTheme({
           },
         },
       ],
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          borderRadius: 16,
+        },
+      },
     },
 
     // Apply the subtle hero-tinted surfaces globally
