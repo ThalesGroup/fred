@@ -12,21 +12,3 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-from abc import ABC, abstractmethod
-from typing import List
-
-from langchain_core.documents import Document
-
-
-class BaseTextSplitter(ABC):
-    """
-    Interface for splitting documents into smaller chunks.
-    This interface is designed to be implemented by various concrete classes that handle
-    different splitting strategies (e.g., by character, by sentence, etc.).
-    """
-
-    @abstractmethod
-    def split(self, document: Document) -> List[Document]:
-        """Split a document into smaller chunks."""
-        pass

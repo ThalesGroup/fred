@@ -16,8 +16,8 @@ import logging
 import re
 from typing import List, Tuple
 
-from langchain.schema import Document
-from langchain.text_splitter import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
+from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 
 from knowledge_flow_backend.core.stores.vector.base_text_splitter import BaseTextSplitter
 

@@ -48,7 +48,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 import chromadb
 from chromadb.config import Settings
-from langchain.schema.document import Document
+from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
 # Fred base contracts

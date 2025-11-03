@@ -96,6 +96,7 @@ ai:
     - name: "GpsAgent"
       type: "agent"
       role: "Academy sample GPS agent"
+      class_path: "agentic_backend.academy.05_gps_agent.gps_agent.GpsAgent"
       enabled: true
     - name: "MiniRagExpert"
       type: "agent"
@@ -140,6 +141,11 @@ mcp:
       url: "http://localhost:8885/mcp"
       sse_read_timeout: 2000
       auth_mode: "no_token"
+    - name: "mcp-knowledge-flow-statistics"
+      transport: "streamable_http"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-statistics"
+      sse_read_timeout: 2000
+      auth_mode: "user_token"
 
 storage:
   postgres:

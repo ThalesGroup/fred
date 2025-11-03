@@ -18,8 +18,8 @@ from typing import Iterable, List, Optional, Tuple
 
 import weaviate
 from langchain.embeddings.base import Embeddings
-from langchain.schema.document import Document
 from langchain_community.vectorstores import Weaviate
+from langchain_core.documents import Document
 
 from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
 

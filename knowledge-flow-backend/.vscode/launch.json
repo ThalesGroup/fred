@@ -1,0 +1,57 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}",
+      "module": "uvicorn",
+      "args": [
+        "knowledge_flow_backend.main:create_app",
+        "--factory",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--log-level",
+        "info",
+        "--loop",
+        "asyncio",
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}",
+        "CONFIG_FILE": "${workspaceFolder}/config/configuration.yaml"
+      },
+      "justMyCode": false,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Debug Prod",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}",
+      "module": "uvicorn",
+      "args": [
+        "knowledge_flow_backend.main:create_app",
+        "--factory",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--log-level",
+        "info",
+        "--loop",
+        "asyncio",
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}",
+        "CONFIG_FILE": "${workspaceFolder}/config/configuration_prod.yaml"
+      },
+      "justMyCode": false,
+      "console": "integratedTerminal"
+    },
+  ]
+}

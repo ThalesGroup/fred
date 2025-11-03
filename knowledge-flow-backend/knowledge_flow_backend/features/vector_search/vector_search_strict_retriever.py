@@ -8,7 +8,7 @@ import logging
 import time
 from typing import List, Sequence, Set, cast
 
-from langchain.schema.document import Document
+from langchain_core.documents import Document
 
 from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore, LexicalSearchable, SearchFilter
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicy

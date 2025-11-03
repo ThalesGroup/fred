@@ -29,7 +29,7 @@ import logging
 import re
 from typing import List, Optional, Protocol, Tuple
 
-from langchain.schema.document import Document
+from langchain_core.documents import Document
 
 from knowledge_flow_backend.common.structures import ModelConfiguration
 
