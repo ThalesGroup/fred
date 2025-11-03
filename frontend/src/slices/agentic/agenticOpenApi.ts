@@ -490,14 +490,11 @@ export type VectorSearchHit = {
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "cancelled" | "other";
 export type RuntimeContext = {
   selected_document_libraries_ids?: string[] | null;
-  selected_prompt_ids?: string[] | null;
-  selected_template_ids?: string[] | null;
   selected_chat_context_ids?: string[] | null;
   search_policy?: string | null;
   access_token?: string | null;
   refresh_token?: string | null;
   access_token_expires_at?: number | null;
-  [key: string]: any;
 };
 export type ChatMetadata = {
   model?: string | null;

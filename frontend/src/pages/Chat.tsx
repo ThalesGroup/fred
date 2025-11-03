@@ -76,7 +76,6 @@ export default function Chat() {
     loading: sessionsLoading || flowsLoading,
   });
 
-  const [baseRuntimeContext] = useState<Record<string, any>>({});
   const [selectedChatContextIds, setSelectedChatContextIds] = useState<string[]>([]);
 
   const [panelContentType, setPanelContentType] = useState<PanelContentType>(null);
@@ -335,7 +334,6 @@ export default function Chat() {
             onUpdateOrAddSession={updateOrAddSession}
             isCreatingNewConversation={isCreatingNewConversation}
             runtimeContext={{
-              ...baseRuntimeContext,
               selected_chat_context_ids: selectedChatContextIds.length ? selectedChatContextIds : undefined,
             }}
             onBindDraftAgentToSessionId={bindDraftAgentToSessionId}
