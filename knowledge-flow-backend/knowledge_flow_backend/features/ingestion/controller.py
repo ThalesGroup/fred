@@ -19,8 +19,10 @@ import shutil
 import tempfile
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
-from fastapi.responses import StreamingResponse
+import dataclasses
+import json as _json
+from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, Query
+from fastapi.responses import Response, StreamingResponse
 from fred_core import KeycloakUser, KPIActor, KPIWriter, get_current_user
 from pydantic import BaseModel
 
@@ -29,6 +31,8 @@ from knowledge_flow_backend.common.structures import Status
 from knowledge_flow_backend.features.ingestion.service import IngestionService
 from knowledge_flow_backend.features.scheduler.activities import input_process, output_process
 from knowledge_flow_backend.features.scheduler.structure import FileToProcess
+from knowledge_flow_backend.core.processors.input.lightweight_markdown.lite_types import LiteMarkdownOptions
+from knowledge_flow_backend.core.processors.input.lightweight_markdown.service import LightweightMarkdownService
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +91,7 @@ class IngestionController:
     def __init__(self, router: APIRouter):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.service = IngestionService()
+        self.lite_md_service = LightweightMarkdownService()
         logger.info("IngestionController initialized.")
 
         @router.post(
@@ -211,3 +216,71 @@ class IngestionController:
                     yield json.dumps({"step": "done", "status": overall_status}) + "\n"
 
                 return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+
+        @router.post(
+            "/lite/markdown",
+            tags=["Processing"],
+            summary="Lightweight Markdown extraction for a single file",
+            description=(
+                "Extract a compact Markdown representation of a PDF or DOCX without full ingestion. "
+                "Intended for agent use where fast, dependency-light text is needed."
+            ),
+        )
+        def lightweight_markdown(
+            file: UploadFile = File(...),
+            options_json: Optional[str] = Form(None, description="JSON string of LiteMarkdownOptions"),
+            fmt: str = Query("json", alias="format", description="Response format: 'json' or 'text'"),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            # Validate extension
+            filename = file.filename or "uploaded"
+            suffix = pathlib.Path(filename).suffix.lower()
+            if suffix not in (".pdf", ".docx"):
+                raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}")
+
+            # Store to temp
+            raw_path = uploadfile_to_path(file)
+
+            # Parse options
+            opts = LiteMarkdownOptions()
+            if options_json:
+                try:
+                    payload = _json.loads(options_json)
+                    if not isinstance(payload, dict):
+                        raise ValueError("options_json must be an object")
+                    allowed = {f.name for f in dataclasses.fields(LiteMarkdownOptions)}
+                    filtered = {k: v for k, v in payload.items() if k in allowed}
+                    opts = LiteMarkdownOptions(**filtered)
+                except Exception as e:
+                    raise HTTPException(status_code=400, detail=f"Invalid options_json: {e}")
+
+            # Extract
+            try:
+                result = self.lite_md_service.extract(raw_path, options=opts)
+            finally:
+                # Best-effort cleanup of temp file; containing dir will be removed separately if needed
+                try:
+                    raw_path.unlink(missing_ok=True)
+                    # remove parent temp dir if empty
+                    parent = raw_path.parent
+                    if parent.exists() and not any(parent.iterdir()):
+                        parent.rmdir()
+                except Exception:
+                    pass
+
+            if fmt.lower() == "text":
+                return Response(content=result.markdown, media_type="text/plain; charset=utf-8")
+
+            # Default JSON payload
+            return {
+                "document_name": result.document_name,
+                "page_count": result.page_count,
+                "total_chars": result.total_chars,
+                "truncated": result.truncated,
+                "markdown": result.markdown,
+                "pages": [
+                    {"page_no": p.page_no, "char_count": p.char_count, "markdown": p.markdown}
+                    for p in (result.pages or [])
+                ],
+                "extras": result.extras or {},
+            }

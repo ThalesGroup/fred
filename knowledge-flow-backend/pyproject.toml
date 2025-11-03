@@ -52,6 +52,7 @@ dependencies = [
   "matplotlib>=3.10.7",
   "scikit-learn>=1.7.2",
   "langchain-text-splitters>=1.0.0",
+  "docx>=0.2.4",
 ]
 
 [project.optional-dependencies]

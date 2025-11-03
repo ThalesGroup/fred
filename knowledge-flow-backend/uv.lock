@@ -729,6 +729,16 @@ wheels = [
 ]
 
 [[package]]
+name = "docx"
+version = "0.2.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "lxml", marker = "sys_platform == 'linux'" },
+    { name = "pillow", marker = "sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4a/8e/5a01644697b03016de339ef444cfff28367f92984dc74eddaab1ed60eada/docx-0.2.4.tar.gz", hash = "sha256:9d7595eac6e86cda0b7136a2995318d039c1f3eaa368a3300805abbbe5dc8877", size = 54925, upload-time = "2014-02-06T10:02:49.394Z" }
+
+[[package]]
 name = "duckdb"
 version = "1.4.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1451,6 +1461,7 @@ dependencies = [
     { name = "coloredlogs", marker = "sys_platform == 'linux'" },
     { name = "dateparser", marker = "sys_platform == 'linux'" },
     { name = "docling", marker = "sys_platform == 'linux'" },
+    { name = "docx", marker = "sys_platform == 'linux'" },
     { name = "duckdb", marker = "sys_platform == 'linux'" },
     { name = "duckdb-engine", marker = "sys_platform == 'linux'" },
     { name = "fastapi", marker = "sys_platform == 'linux'" },
@@ -1522,6 +1533,7 @@ requires-dist = [
     { name = "coloredlogs", specifier = "==15.0.1" },
     { name = "dateparser", specifier = ">=1.2.2" },
     { name = "docling", specifier = "==2.34.0" },
+    { name = "docx", specifier = ">=0.2.4" },
     { name = "duckdb", specifier = ">=1.3.2" },
     { name = "duckdb-engine", specifier = ">=0.17.0" },
     { name = "fastapi", specifier = "==0.116.1" },

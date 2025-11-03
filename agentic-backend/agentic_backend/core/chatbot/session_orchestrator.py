@@ -60,11 +60,13 @@ from agentic_backend.core.chatbot.chat_schema import (
     ToolCallPart,
     ToolResultPart,
 )
+from agentic_backend.common.structures import ChatContextMessage
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
 from agentic_backend.core.chatbot.stream_transcoder import StreamTranscoder
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.session.attachement_processing import AttachementProcessing
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
+from agentic_backend.common.kf_lite_markdown_client import KfLiteMarkdownClient
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +199,15 @@ class SessionOrchestrator:
         all_msgs: List[ChatMessage] = [user_msg]
         await self._emit(callback, user_msg)
 
-        # 3) Stream agent responses via the transcoder
+        # 3) Prepare optional attachments context (lite markdown) and make it available via runtime_context
+        attachments_context = self._build_attachments_context(session.id, agent)
+        if attachments_context:
+            try:
+                setattr(agent.runtime_context, "attachments_markdown", attachments_context)
+            except Exception:
+                pass
+
+        # 4) Stream agent responses via the transcoder
         saw_final_assistant = False
         try:
             # Timer covers the entire exchange; status defaults to "error" if exception bubbles.
@@ -211,9 +221,12 @@ class SessionOrchestrator:
                 },
                 actor=actor,
             ):
+                # Build input messages ensuring the last message is the Human question.
+                input_messages = lc_history + [HumanMessage(message)]
+
                 agent_msgs = await self.transcoder.stream_agent_response(
                     agent=agent,
-                    input_messages=lc_history + [HumanMessage(message)],
+                    input_messages=input_messages,
                     session_id=session.id,
                     exchange_id=exchange_id,
                     agent_name=agent_name,
@@ -386,6 +399,73 @@ class SessionOrchestrator:
         session_folder = base_temp_dir / session_id
         session_folder.mkdir(parents=True, exist_ok=True)
         return session_folder
+
+    def _lite_client_for_agent(self, agent) -> KfLiteMarkdownClient:
+        # Create a fresh client bound to the current agent runtime context
+        return KfLiteMarkdownClient(agent=agent)
+
+    def _build_attachments_context(self, session_id: str, agent) -> str:
+        """
+        Convert session attachments to compact Markdown and concatenate them as a
+        single context block. Caches per-file results as `.lite.md` next to the
+        uploaded file to avoid re-processing on every turn.
+
+        Safety limits:
+        - Per-file cap ~30k chars (delegated to KF lite endpoint)
+        - Total cap ~40k chars across all attachments; surplus is dropped
+        """
+        try:
+            folder = self._get_session_temp_folder(session_id)
+            if not folder.exists():
+                return ""
+
+            eligible = [
+                p for p in folder.iterdir()
+                if p.is_file() and p.suffix.lower() in {".pdf", ".docx"}
+            ]
+            if not eligible:
+                return ""
+
+            client = self._lite_client_for_agent(agent)
+            parts: list[str] = []
+            total_limit = 40_000
+            for f in sorted(eligible, key=lambda x: x.name.lower()):
+                cache_md = f.with_suffix(f.suffix + ".lite.md")
+                text: Optional[str] = None
+                try:
+                    # Use cache if fresh
+                    if cache_md.exists() and cache_md.stat().st_mtime >= f.stat().st_mtime:
+                        text = cache_md.read_text(encoding="utf-8", errors="ignore")
+                    else:
+                        text = client.extract_markdown(f, max_chars=30_000)
+                        try:
+                            cache_md.write_text(text or "", encoding="utf-8")
+                        except Exception:
+                            pass
+                except Exception:
+                    # Skip problematic files but continue others
+                    continue
+
+                if not text:
+                    continue
+
+                header = f"## Attachment: {f.name}\n\n"
+                block = header + text.strip() + "\n"
+                if sum(len(p) for p in parts) + len(block) > total_limit:
+                    # Stop when exceeding total cap
+                    break
+                parts.append(block)
+
+            if not parts:
+                return ""
+
+            intro = (
+                "You have access to user-provided attachments (lightweight markdown). "
+                "Use them when relevant.\n\n"
+            )
+            return intro + "\n\n".join(parts)
+        except Exception:
+            return ""
 
     async def _emit(self, callback: CallbackType, message: ChatMessage) -> None:
         """
