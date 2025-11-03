@@ -92,9 +92,11 @@ ai:
       enabled: true
     - name: "Rico"
       type: "agent"
-      role: "Document Retrieval Expert"
       class_path: "agentic_backend.agents.rags.rag_expert.Rico"
       enabled: true
+      chat_options:
+        search_policy_selection: true
+        libraries_selection: true
     - name: "Tessa"
       type: "agent"
       class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
