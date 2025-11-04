@@ -84,7 +84,7 @@ const ChatBot = ({
     try {
       const uid = KeyCloakService.GetUserId?.() || "anon";
       localStorage.setItem(`chatctx_open:${uid}`, contextOpen ? "1" : "0");
-    } catch { }
+    } catch {}
   }, [contextOpen]);
 
   const { showInfo, showError } = useToast();
@@ -96,24 +96,22 @@ const ChatBot = ({
   const { data: docLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
   const { data: promptResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "prompt" });
   const { data: templateResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "template" });
-  const { data: chatContextResources = [] } =
-    useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "chat-context" });
+  const { data: chatContextResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({
+    kind: "chat-context",
+  });
 
-  const libraryNameMap = useMemo(
-    () => Object.fromEntries((docLibs).map((x) => [x.id, x.name])),
-    [docLibs],
-  );
+  const libraryNameMap = useMemo(() => Object.fromEntries(docLibs.map((x) => [x.id, x.name])), [docLibs]);
   const promptNameMap = useMemo(
-    () => Object.fromEntries((promptResources).map((x) => [x.id, x.name ?? x.id])),
+    () => Object.fromEntries(promptResources.map((x) => [x.id, x.name ?? x.id])),
     [promptResources],
   );
   const templateNameMap = useMemo(
-    () => Object.fromEntries((templateResources).map((x) => [x.id, x.name ?? x.id])),
+    () => Object.fromEntries(templateResources.map((x) => [x.id, x.name ?? x.id])),
     [templateResources],
   );
   const chatContextNameMap = useMemo(
     () => Object.fromEntries(chatContextResources.map((x) => [x.id, x.name ?? x.id])),
-    [chatContextResources]
+    [chatContextResources],
   );
 
   // Lazy messages fetcher
@@ -428,12 +426,6 @@ const ChatBot = ({
     // Add selected libraries / profiles (CANONIQUES — pas de doublon)
     if (content.documentLibraryIds?.length) {
       runtimeContext.selected_document_libraries_ids = content.documentLibraryIds;
-    }
-
-    const selectedChatCtx =
-      (content as any).chatContextResourceIds ?? (content as any).profileResourceIds;
-    if (selectedChatCtx?.length) {
-      runtimeContext.selected_chat_context_ids = selectedChatCtx;
     }
 
     // Policy
