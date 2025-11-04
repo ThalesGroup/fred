@@ -24,6 +24,7 @@ import AgentsList from "../components/chatbot/settings/AgentList";
 import { ChatContextPickerPanel } from "../components/chatbot/settings/ChatContextPickerPanel";
 import { ConversationList } from "../components/chatbot/settings/ConversationList";
 import { useSessionOrchestrator } from "../hooks/useSessionOrchestrator";
+import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import {
   SessionSchema,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
@@ -76,7 +77,10 @@ export default function Chat() {
     loading: sessionsLoading || flowsLoading,
   });
 
-  const [selectedChatContextIds, setSelectedChatContextIds] = useState<string[]>([]);
+  const [selectedChatContextIds, setSelectedChatContextIds] = useLocalStorageState<string[]>(
+    "chat.selectedChatContextIds",
+    [],
+  );
 
   const [panelContentType, setPanelContentType] = useState<PanelContentType>(null);
   const isPanelOpen = panelContentType !== null;

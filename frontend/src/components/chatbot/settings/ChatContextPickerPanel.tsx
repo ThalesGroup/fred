@@ -19,12 +19,12 @@ import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard";
 export type ChatContextPickerPanelProps = {
   selectedChatContextIds: string[];
   onChangeSelectedChatContextIds: (ids: string[]) => void;
-} & Pick<BoxProps, "sx">; // <-- ADDED: Allows the component to receive the 'sx' prop
+} & Pick<BoxProps, "sx">;
 
 export function ChatContextPickerPanel({
   selectedChatContextIds,
   onChangeSelectedChatContextIds,
-  sx, // <-- ADDED: Destructure the 'sx' prop here
+  sx,
 }: ChatContextPickerPanelProps) {
   const theme = useTheme<Theme>();
   const { t } = useTranslation();
