@@ -121,10 +121,10 @@ class AssetService:  # RENAMED from AgentAssetService
         tag_service = TagService()
 
         # 0️⃣ Get or create the "user_asset" tag
-        existing_tags = tag_service.list_all_tags_for_user(user, tag_type=TagType.DOCUMENT)
+        existing_tags = await tag_service.list_all_tags_for_user(user, tag_type=TagType.DOCUMENT)
         user_asset_tag = next((t for t in existing_tags if t.name == "User Space"), None)
         if user_asset_tag is None:
-            created_tag = tag_service.create_tag_for_user(
+            created_tag = await tag_service.create_tag_for_user(
                 TagCreate(
                     name="User Space",
                     path=None,
@@ -156,7 +156,7 @@ class AssetService:  # RENAMED from AgentAssetService
         ingestion_service.save_input(user, metadata=metadata, input_dir=tmp_dir)
 
         # 4️⃣ Save metadata
-        ingestion_service.save_metadata(user, metadata=metadata)
+        await ingestion_service.save_metadata(user, metadata=metadata)
 
         # 5️⃣ Store the file in the content store with the correct name
         norm_key = self._normalize_key(key)

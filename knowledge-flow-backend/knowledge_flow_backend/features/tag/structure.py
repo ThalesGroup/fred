@@ -14,10 +14,13 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
-from fred_core import BaseModelWithId
-from pydantic import BaseModel, field_validator
+from fred_core import BaseModelWithId, RelationType, Resource, TagPermission
+from pydantic import BaseModel, Field, field_validator
+
+from knowledge_flow_backend.features.groups.groups_structures import GroupSummary
+from knowledge_flow_backend.features.users.users_structures import UserSummary
 
 
 class TagType(str, Enum):
@@ -107,3 +110,49 @@ class TagWithItemsId(Tag):
     @classmethod
     def from_tag(cls, tag: Tag, item_ids: list[str]) -> "TagWithItemsId":
         return cls(**tag.model_dump(), item_ids=item_ids)
+
+
+# Subset of RelationType for user-tag relations
+class UserTagRelation(str, Enum):
+    OWNER = RelationType.OWNER.value
+    EDITOR = RelationType.EDITOR.value
+    VIEWER = RelationType.VIEWER.value
+
+    def to_relation(self) -> RelationType:
+        return RelationType(self.value)
+
+
+# Subset of valid Resource you can share a tag with
+class ShareTargetResource(str, Enum):
+    USER = Resource.USER.value
+    GROUP = Resource.GROUP.value
+
+    def to_resource(self) -> Resource:
+        return Resource(self.value)
+
+
+class TagShareRequest(BaseModel):
+    target_id: str
+    target_type: ShareTargetResource
+    relation: UserTagRelation
+
+
+class TagPermissionsResponse(BaseModel):
+    permissions: list[TagPermission]
+
+
+class TagMemberUser(BaseModel):
+    type: Literal["user"] = "user"
+    relation: UserTagRelation
+    user: UserSummary
+
+
+class TagMemberGroup(BaseModel):
+    type: Literal["group"] = "group"
+    relation: UserTagRelation
+    group: GroupSummary
+
+
+class TagMembersResponse(BaseModel):
+    users: list[TagMemberUser] = Field(default_factory=list)
+    groups: list[TagMemberGroup] = Field(default_factory=list)

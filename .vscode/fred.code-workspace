@@ -38,7 +38,7 @@
 			"esbenp.prettier-vscode",
 			"vivaxy.vscode-conventional-commits",
 			"lokalise.i18n-ally",
-			"authzed.spicedb-vscode"
+			"openfga.openfga-vscode"
 		]
 	}
 }

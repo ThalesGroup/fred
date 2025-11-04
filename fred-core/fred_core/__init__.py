@@ -88,10 +88,26 @@ from fred_core.security.keycloak import (
 )
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
 from fred_core.security.rbac import RBACProvider
+from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
+from fred_core.security.rebac.rebac_engine import (
+    DocumentPermission,
+    RebacDisabledResult,
+    RebacEngine,
+    RebacPermission,
+    RebacReference,
+    Relation,
+    RelationType,
+    TagPermission,
+)
+from fred_core.security.rebac.rebac_factory import rebac_factory
+from fred_core.security.rebac.spicedb_engine import SpiceDbRebacEngine
 from fred_core.security.structure import (
     KeycloakUser,
     M2MSecurity,
+    OpenFgaRebacConfig,
+    RebacConfiguration,
     SecurityConfiguration,
+    SpiceDbRebacConfig,
     UserSecurity,
 )
 from fred_core.store.opensearch_mapping_validator import validate_index_mapping
@@ -118,6 +134,8 @@ __all__ = [
     "KeycloakUser",
     "SecurityConfiguration",
     "M2MSecurity",
+    "RebacConfiguration",
+    "SpiceDbRebacConfig",
     "UserSecurity",
     "TODO_PASS_REAL_USER",
     "NO_AUTHZ_CHECK_USER",
@@ -173,6 +191,18 @@ __all__ = [
     "SQLTableStore",
     "StoreInfo",
     "ModelProvider",
+    "RebacReference",
+    "Relation",
+    "RelationType",
+    "SpiceDbRebacEngine",
+    "TagPermission",
+    "DocumentPermission",
+    "RebacPermission",
+    "RebacDisabledResult",
+    "RebacEngine",
+    "OpenFgaRebacEngine",
+    "OpenFgaRebacConfig",
+    "rebac_factory",
     "get_keycloak_url",
     "get_keycloak_client_id",
 ]

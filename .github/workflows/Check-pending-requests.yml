@@ -126,6 +126,7 @@ jobs:
         uses: authzed/action-spicedb@v1
         with:
           version: v1.36.0
+          args: --grpc-addr ":60051" --readonly-grpc-addr :60052
 
       - name: Run integration tests
         if: ${{ matrix.should-run }}

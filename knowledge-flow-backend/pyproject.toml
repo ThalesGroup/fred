@@ -3,9 +3,7 @@ name = "knowledge-flow-backend"
 readme = "README.md"
 version = "0.1"
 description = "Knowledge Flow Backend"
-authors = [
-    {name = "Fred", email = "noreply@example.com"}
-]
+authors = [{ name = "Fred", email = "noreply@example.com" }]
 requires-python = ">=3.12,<3.13"
 
 dependencies = [
@@ -48,6 +46,7 @@ dependencies = [
   "sqlparse>=0.5.3",
   "uv",
   "chromadb>=0.5",
+  "python-keycloak>=5.8.1",
   "joblib>=1.5.2",
   "matplotlib>=3.10.7",
   "scikit-learn>=1.7.2",
@@ -66,15 +65,13 @@ dev = [
   "tox==4.27.0",
   "pre-commit==4.2.0",
   "bandit==1.8.5",
-  "ruff==0.12.0"
+  "ruff==0.12.0",
 ]
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
-packages = [
-  { include = "knowledge_flow_backend" }
-]
+packages = [{ include = "knowledge_flow_backend" }]
 
 [tool.ruff]
 line-length = 200
@@ -90,12 +87,12 @@ cache_dir = "/tmp/.pytest"
 markers = [
   "content_storage_type(type): mark test to select a content store backend",
   "metadata_storage_type(type): mark test to select a metadata store backend",
-  "vector_storage_type(type): mark test to select a vector store backend"
+  "vector_storage_type(type): mark test to select a vector store backend",
 ]
 
 [tool.uv.sources]
 fred-core = { path = "../fred-core", editable = true }
-torch = { index = "pytorch-cpu", marker = "sys_platform == 'linux'"}
+torch = { index = "pytorch-cpu", marker = "sys_platform == 'linux'" }
 torchvision = { index = "pytorch-cpu", marker = "sys_platform == 'linux'" }
 
 [[tool.uv.index]]
@@ -108,16 +105,14 @@ url = "https://download.pytorch.org/whl/cpu"
 
 [dependency-groups]
 dev = [
-    "bandit>=1.8.5",
-    "basedpyright==1.31.0",
-    "detect-secrets>=1.5.0",
-    "ruff>=0.12.0",
+  "bandit>=1.8.5",
+  "basedpyright==1.31.0",
+  "detect-secrets>=1.5.0",
+  "ruff>=0.12.0",
 ]
 
 [tool.uv]
 # Using `editable_mode = "compat"` when installing fred-core to make editable install work with Pylance (vscode):
 # https://github.com/microsoft/pylance-release/blob/main/TROUBLESHOOTING.md#editable-install-modules-not-found
 config-settings = { editable_mode = "compat" }
-environments = [
-    "sys_platform == 'linux'"
-]
+environments = ["sys_platform == 'linux'"]

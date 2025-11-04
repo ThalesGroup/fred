@@ -2,6 +2,7 @@
 # Copyright Thales 2025
 # Licensed under the Apache License, Version 2.0 (the "License"); ...
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Set
@@ -53,7 +54,7 @@ class VectorSearchService:
 
     # ---------- helpers -------------------------------------------------------
 
-    def _collect_document_ids_from_tags(self, tags_ids: Optional[List[str]], user: KeycloakUser) -> Set[str]:
+    async def _collect_document_ids_from_tags(self, tags_ids: Optional[List[str]], user: KeycloakUser) -> Set[str]:
         """
         Resolve UI tag_ids -> document_uids (library scoping).
         Returns an empty set when no tags provided to keep call sites simple.
@@ -62,19 +63,19 @@ class VectorSearchService:
             return set()
         doc_ids: Set[str] = set()
         for tag_id in tags_ids:
-            tag = self.tag_service.get_tag_for_user(tag_id, user)
+            tag = await self.tag_service.get_tag_for_user(tag_id, user)
             # Tag.item_ids is expected to be a list[str] of document_uids
             doc_ids.update(tag.item_ids or [])
         return doc_ids
 
-    def _tags_meta_from_ids(self, tag_ids: List[str], user: KeycloakUser) -> tuple[list[str], list[str]]:
+    async def _tags_meta_from_ids(self, tag_ids: List[str], user: KeycloakUser) -> tuple[list[str], list[str]]:
         """Resolve tag IDs to human-readable names for UI chips + full breadcrumb paths."""
         if not tag_ids:
             return [], []
         names, full_paths = [], []
         for tid in tag_ids:
             try:
-                tag = self.tag_service.get_tag_for_user(tid, user)
+                tag = await self.tag_service.get_tag_for_user(tid, user)
                 if not tag:
                     continue
                 names.append(tag.name)
@@ -83,14 +84,14 @@ class VectorSearchService:
                 logger.debug("Could not resolve tag id=%s: %s", tid, e)
         return names, full_paths
 
-    def _all_document_library_tags_ids(self, user: KeycloakUser) -> List[str]:
+    async def _all_document_library_tags_ids(self, user: KeycloakUser) -> List[str]:
         """
         Return all library tags ids for the user.
         """
-        tags = self.tag_service.list_all_tags_for_user(user=user, tag_type=TagType.DOCUMENT)
+        tags = await self.tag_service.list_all_tags_for_user(user=user, tag_type=TagType.DOCUMENT)
         return [t.id for t in tags]
 
-    def _to_hit(self, doc: Document, score: float, rank: int, user: KeycloakUser) -> VectorSearchHit:
+    async def _to_hit(self, doc: Document, score: float, rank: int, user: KeycloakUser) -> VectorSearchHit:
         """
         Convert a LangChain Document + score into a VectorSearchHit UI DTO.
         Rationale:
@@ -100,7 +101,7 @@ class VectorSearchService:
 
         # Pull both ids and names (UI displays names; filters might use ids)
         tag_ids = md.get("tag_ids") or []
-        tag_names, tag_full_paths = self._tags_meta_from_ids(tag_ids, user)
+        tag_names, tag_full_paths = await self._tags_meta_from_ids(tag_ids, user)
         uid = md.get("document_uid") or "Unknown"
         vf = md.get("viewer_fragment")
         preview_url = f"/documents/{uid}"
@@ -163,16 +164,16 @@ class VectorSearchService:
 
     # ---------- private strategies -------------------------------------------
 
-    def _semantic(self, *, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str]) -> List[VectorSearchHit]:
+    async def _semantic(self, *, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str]) -> List[VectorSearchHit]:
         """
         Semantic (legacy) — fast but no lexical guardrails.
         Keep available for debugging or recall-heavy exploratory queries.
         """
         sf = SearchFilter(tag_ids=sorted(library_tags_ids)) if library_tags_ids else None
         ann_hits: List[AnnHit] = self.vector_store.ann_search(question, k=k, search_filter=sf)
-        return [self._to_hit(h.document, h.score, rank, user) for rank, h in enumerate(ann_hits, start=1)]
+        return await asyncio.gather(*[self._to_hit(h.document, h.score, rank, user) for rank, h in enumerate(ann_hits, start=1)])
 
-    def _strict(self, *, question: str, user: KeycloakUser, k: Optional[int], library_tags_ids: List[str], policy: SearchPolicy) -> List[VectorSearchHit]:
+    async def _strict(self, *, question: str, user: KeycloakUser, k: Optional[int], library_tags_ids: List[str], policy: SearchPolicy) -> List[VectorSearchHit]:
         """
         Strict = ANN ∩ BM25 ∩ (optional) exact phrase; returns [] when weak.
         """
@@ -181,20 +182,20 @@ class VectorSearchService:
             return []
         p = policy if (k is None or k <= 0) else type(policy)(**{**policy.__dict__, "k_final": k})
         docs = self._strict_retriever.search(query=question, scoped_document_ids=sorted(library_tags_ids), policy=p)
-        return [self._to_hit(doc, score=1.0, rank=i, user=user) for i, doc in enumerate(docs, start=1)]
+        return await asyncio.gather(*[self._to_hit(doc, score=1.0, rank=i, user=user) for i, doc in enumerate(docs, start=1)])
 
-    def _hybrid(self, *, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str], policy: HybridPolicy) -> List[VectorSearchHit]:
+    async def _hybrid(self, *, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str], policy: HybridPolicy) -> List[VectorSearchHit]:
         """
         Hybrid (default) — RRF fusion of BM25 + ANN, MMR de-dup, calibrated gates.
         """
         pairs = self._hybrid_retriever.search(query=question, scoped_document_ids=sorted(library_tags_ids), policy=policy)
         # pairs: List[Tuple[Document, ann_cosine]]
-        return [self._to_hit(doc, score=ann_cos, rank=i, user=user) for i, (doc, ann_cos) in enumerate(pairs[:k], start=1)]
+        return await asyncio.gather(*[self._to_hit(doc, score=ann_cos, rank=i, user=user) for i, (doc, ann_cos) in enumerate(pairs[:k], start=1)])
 
     # ---------- unified public API -------------------------------------------
 
     @authorize(Action.READ, Resource.DOCUMENTS)
-    def search(
+    async def search(
         self,
         *,
         question: str,
@@ -211,13 +212,13 @@ class VectorSearchService:
         We hard-scope by library (tags -> document_uids) to avoid cross-library leakage.
         """
         if not document_library_tags_ids or document_library_tags_ids == []:
-            document_library_tags_ids = self._all_document_library_tags_ids(user)
+            document_library_tags_ids = await self._all_document_library_tags_ids(user)
         policy_key = policy_name or SearchPolicyName.hybrid
         if policy_key == SearchPolicyName.strict:
             pol = POLICIES[SearchPolicyName.strict]
             logger.info("Using strict search policy: %s", pol)
             # If your StrictRetriever.search expects StrictPolicy, this is fine:
-            return self._strict(
+            return await self._strict(
                 question=question,
                 user=user,
                 k=top_k,
@@ -228,7 +229,7 @@ class VectorSearchService:
         if policy_key == SearchPolicyName.hybrid:
             pol = POLICIES[SearchPolicyName.hybrid]
             logger.info("Using hybrid search policy: %s", pol)
-            return self._hybrid(
+            return await self._hybrid(
                 question=question,
                 user=user,
                 k=top_k,
@@ -237,7 +238,7 @@ class VectorSearchService:
             )
 
         logger.info("Using semantic search policy (legacy)")
-        return self._semantic(
+        return await self._semantic(
             question=question,
             user=user,
             k=top_k,

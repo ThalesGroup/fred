@@ -99,7 +99,7 @@ class IngestionController:
             tags=["Processing"],
             summary="Upload documents only — defer processing to backend (e.g., Temporal)",
         )
-        def upload_documents_sync(
+        async def upload_documents_sync(
             files: List[UploadFile] = File(...),
             metadata_json: str = Form(...),
             user: KeycloakUser = Depends(get_current_user),
@@ -117,7 +117,7 @@ class IngestionController:
 
             total = len(preloaded_files)
 
-            def event_stream():
+            async def event_stream():
                 success = 0
                 for filename, input_temp_file in preloaded_files:
                     current_step = "metadata extraction"
@@ -134,7 +134,7 @@ class IngestionController:
 
                         current_step = "metadata saving"
                         yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                        self.service.save_metadata(user, metadata=metadata)
+                        await self.service.save_metadata(user, metadata=metadata)
                         yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                         yield ProcessingProgress(step="Finished", filename=filename, status=Status.FINISHED, document_uid=metadata.document_uid).model_dump_json() + "\n"
 
