@@ -32,6 +32,13 @@ RESOURCES_INDEX_MAPPING = {
 
 
 class OpenSearchResourceStore(BaseResourceStore):
+    default_params: dict[str, str] = {
+        # Important to wait for the changes to be effective before sending response
+        # (if not, you can send a DELETE request, send a GET request to list
+        # them and still get the one you just deleted because OpenSearch hasn't deleted it)
+        "refresh": "wait_for",
+    }
+
     def __init__(
         self,
         host: str,
@@ -62,7 +69,13 @@ class OpenSearchResourceStore(BaseResourceStore):
     def list_resources_for_user(self, user: str, kind: ResourceKind) -> List[Resource]:
         try:
             q = {"query": {"bool": {"must": [{"term": {"owner_id": user}}, {"term": {"kind": kind}}]}}}
-            resp = self.client.search(index=self.index_name, body=q, params={"size": 10000})
+            resp = self.client.search(
+                index=self.index_name,
+                body=q,
+                params={
+                    "size": 10000,
+                },
+            )
             return [Resource(**hit["_source"]) for hit in resp["hits"]["hits"]]
         except Exception as e:
             logger.error(f"[RESOURCES] Failed to list {kind}s for user '{user}': {e}")
@@ -95,6 +108,7 @@ class OpenSearchResourceStore(BaseResourceStore):
                 index=self.index_name,
                 id=resource.id,
                 body=resource.model_dump(mode="json"),
+                params=self.default_params,
             )
             self._cache.set(resource.id, resource)
             logger.info(f"[RESOURCES] Created {resource.kind} '{resource.id}'")
@@ -112,6 +126,7 @@ class OpenSearchResourceStore(BaseResourceStore):
                 index=self.index_name,
                 id=resource_id,
                 body=resource.model_dump(mode="json"),
+                params=self.default_params,
             )
             self._cache.set(resource.id, resource)
             logger.info(f"[RESOURCES] Updated resource '{resource_id}'")
@@ -125,7 +140,7 @@ class OpenSearchResourceStore(BaseResourceStore):
     def delete_resource(self, resource_id: str) -> None:
         self._cache.delete(resource_id)
         try:
-            self.client.delete(index=self.index_name, id=resource_id)
+            self.client.delete(index=self.index_name, id=resource_id, params=self.default_params)
             logger.info(f"[RESOURCES] Deleted resource '{resource_id}'")
         except NotFoundError:
             raise ResourceNotFoundError(f"resource with id '{resource_id}' not found.")
