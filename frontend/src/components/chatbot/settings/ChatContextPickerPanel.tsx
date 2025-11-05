@@ -5,6 +5,7 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 
 import AddIcon from "@mui/icons-material/Add";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { Box, IconButton, List, ListItem, ListItemButton, Theme, Tooltip, Typography, useTheme } from "@mui/material";
 // Import BoxProps and SxProps from MUI for proper typing
 import { BoxProps } from "@mui/material";
@@ -19,12 +20,12 @@ import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard";
 export type ChatContextPickerPanelProps = {
   selectedChatContextIds: string[];
   onChangeSelectedChatContextIds: (ids: string[]) => void;
-} & Pick<BoxProps, "sx">; // <-- ADDED: Allows the component to receive the 'sx' prop
+} & Pick<BoxProps, "sx">;
 
 export function ChatContextPickerPanel({
   selectedChatContextIds,
   onChangeSelectedChatContextIds,
-  sx, // <-- ADDED: Destructure the 'sx' prop here
+  sx,
 }: ChatContextPickerPanelProps) {
   const theme = useTheme<Theme>();
   const { t } = useTranslation();
@@ -117,12 +118,14 @@ export function ChatContextPickerPanel({
                 borderRadius: 1,
                 px: 1,
                 py: 0.75,
-                alignItems: "flex-start",
                 border: `1px solid ${theme.palette.primary.main}`,
                 backgroundColor: theme.palette.mode === "dark" ? "rgba(25,118,210,0.06)" : "rgba(25,118,210,0.04)",
                 "&:hover": {
                   backgroundColor: theme.palette.mode === "dark" ? "rgba(25,118,210,0.1)" : "rgba(25,118,210,0.08)",
                 },
+                display: "flex",
+                gap: 1,
+                alignItems: "center",
               }}
             >
               <Box sx={{ width: "100%", minWidth: 0 }}>
@@ -157,6 +160,19 @@ export function ChatContextPickerPanel({
                   </Typography>
                 )}
               </Box>
+
+              <Tooltip title={t("common.remove")}>
+                <IconButton
+                  size="small"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    applyChatContextSelection([]);
+                  }}
+                  sx={{ flexShrink: 0, opacity: 0.7 }}
+                >
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
             </ListItemButton>
           </ListItem>
         </List>

@@ -30,8 +30,7 @@ import {
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface ResourceLibrariesSelectionCardProps {
-  // add "profile" without changing backend enum usage
-  libraryType: TagType | "chat-context"; // "prompt" | "template" | "chat-context"
+  libraryType: TagType;
   selectedResourceIds: string[];
   setSelectedResourceIds: (ids: string[]) => void;
 }
@@ -46,9 +45,16 @@ export function ChatResourcesSelectionCard({
   const { t } = useTranslation();
 
   // Libraries (as groups to browse)
-  const { data: tags = [], isLoading, isError } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
-    type: libraryType as TagType,
-  });
+  const {
+    data: tags = [],
+    isLoading,
+    isError,
+  } = useListAllTagsKnowledgeFlowV1TagsGetQuery(
+    {
+      type: libraryType,
+    },
+    { refetchOnMountOrArgChange: true },
+  );
 
   // Fetch resources of that kind
   const resourceKind: ResourceKind | undefined = (() => {
@@ -58,12 +64,12 @@ export function ChatResourcesSelectionCard({
     return undefined;
   })();
 
-  // NOTE: this assumes resourceKind is set for supported types
-  const { data: fetchedResources = [] } = resourceKind
-    ? useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: resourceKind })
-    : ({ data: [] } as { data: Resource[] });
+  const { data: fetchedResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery(
+    { kind: resourceKind },
+    { skip: !resourceKind, refetchOnMountOrArgChange: true },
+  );
 
-  const [q, setQ] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
 
   const libs = useMemo<Lib[]>(
@@ -92,15 +98,36 @@ export function ChatResourcesSelectionCard({
   }, [fetchedResources]);
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return libs;
-    return libs.filter(
-      (l) =>
-        l.name.toLowerCase().includes(needle) ||
-        (l.path ?? "").toLowerCase().includes(needle) ||
-        (l.description ?? "").toLowerCase().includes(needle),
-    );
-  }, [libs, q]);
+    const needle = searchQuery.trim().toLowerCase();
+    return libs
+      .map((lib) => {
+        const contents = resourcesByTag.get(lib.id) ?? [];
+
+        if (!needle) {
+          return { lib, resources: contents };
+        }
+
+        const matchesLib =
+          lib.name.toLowerCase().includes(needle) ||
+          (lib.path ?? "").toLowerCase().includes(needle) ||
+          (lib.description ?? "").toLowerCase().includes(needle);
+
+        const matchedResources = contents.filter((resource) => {
+          const name = resource.name?.toLowerCase() ?? "";
+          const description = resource.description?.toLowerCase() ?? "";
+          return name.includes(needle) || description.includes(needle);
+        });
+
+        if (!matchesLib && matchedResources.length === 0) {
+          return null;
+        }
+
+        const resources = matchesLib && matchedResources.length === 0 ? contents : matchedResources;
+
+        return { lib, resources };
+      })
+      .filter((entry): entry is { lib: Lib; resources: Resource[] } => entry !== null);
+  }, [libs, resourcesByTag, searchQuery]);
 
   // --- single-select helpers ---
   const selectResource = (id: string) => {
@@ -135,8 +162,8 @@ export function ChatResourcesSelectionCard({
           size="small"
           fullWidth
           label={searchLabel}
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
         />
       </Box>
 
@@ -156,8 +183,7 @@ export function ChatResourcesSelectionCard({
           </Typography>
         ) : (
           <List dense disablePadding role="radiogroup" aria-label="library resources">
-            {filtered.map((lib) => {
-              const contents = resourcesByTag.get(lib.id) ?? [];
+            {filtered.map(({ lib, resources: contents }) => {
               const isOpen = !!openMap[lib.id];
 
               return (

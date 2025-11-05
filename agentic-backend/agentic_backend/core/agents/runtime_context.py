@@ -16,19 +16,15 @@
 
 from typing import Callable, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 
 class RuntimeContext(BaseModel):
     """
-    Semi-typed runtime context that defines known properties while allowing arbitrary additional ones.
+    Properties that can be passed to an agent at runtime (with a message)
     """
 
-    model_config = ConfigDict(extra="allow")
-
     selected_document_libraries_ids: list[str] | None = None
-    selected_prompt_ids: list[str] | None = None
-    selected_template_ids: list[str] | None = None
     selected_chat_context_ids: list[str] | None = None
     search_policy: str | None = None
     access_token: Optional[str] = None
@@ -52,20 +48,6 @@ def get_search_policy(context: RuntimeContext | None) -> str:
     if not context:
         return "semantic"
     return context.search_policy if context.search_policy else "semantic"
-
-
-def get_prompt_libraries_ids(context: RuntimeContext | None) -> list[str] | None:
-    """Helper to extract prompt library IDs from context."""
-    if not context:
-        return None
-    return context.selected_prompt_ids
-
-
-def get_template_libraries_ids(context: RuntimeContext | None) -> list[str] | None:
-    """Helper to extract template library IDs from context."""
-    if not context:
-        return None
-    return context.selected_template_ids
 
 
 def get_chat_context_libraries_ids(context: RuntimeContext | None) -> list[str] | None:
