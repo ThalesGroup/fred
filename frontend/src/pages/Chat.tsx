@@ -16,7 +16,7 @@ import ChatIcon from "@mui/icons-material/Chat";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 
 import { Box, CircularProgress, Grid2, IconButton, Paper, Typography } from "@mui/material";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
@@ -82,7 +82,10 @@ export default function Chat() {
     [],
   );
 
-  const [panelContentType, setPanelContentType] = useState<PanelContentType>(null);
+  const [panelContentType, setPanelContentType] = useLocalStorageState<PanelContentType>(
+    "chat.panelContentType",
+    "conversations",
+  );
   const isPanelOpen = panelContentType !== null;
 
   const openPanel = (type: PanelContentType) => {
