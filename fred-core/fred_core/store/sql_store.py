@@ -68,6 +68,26 @@ class SQLTableStore:
             )
             logger.error(msg)
             raise RuntimeError(msg) from e
+        
+    def save_database(self):
+        """
+        Ensure the database is fully written to disk.
+        SQLite: checkpoint WAL or switch to DELETE mode.
+        DuckDB: perform a checkpoint to flush writes.
+        """
+        try:
+            with self.engine.connect() as conn:
+                if self.driver == "sqlite":
+                    conn.execute(text("PRAGMA wal_checkpoint(FULL);"))
+                    conn.execute(text("PRAGMA journal_mode=DELETE;"))
+                    conn.execute(text("PRAGMA synchronous=NORMAL;"))
+                elif self.driver == "duckdb":
+                    conn.execute(text("CALL checkpoint();"))  # flush all writes
+            self.engine.dispose()
+            logger.info(f"Database at {self.path} saved to disk successfully.")
+        except Exception as e:
+            logger.error(f"Error saving database: {e}")
+            raise
 
     def _validate_table_name(self, table_name: str):
         valid_tables = inspect(self.engine).get_table_names()
@@ -75,9 +95,17 @@ class SQLTableStore:
             raise ValueError(f"Invalid or unauthorized table name: {table_name}")
 
     def save_table(self, table_name: str, df: pd.DataFrame):
-        df.to_sql(table_name, self.engine, if_exists="replace", index=False)
-        logger.info(f"Saved table '{table_name}' to SQL database")
-
+        """Save (replace) a DataFrame to a SQL table."""
+        try:
+            # `to_sql` gère la transaction elle-même → pas besoin de `begin()`
+            with self.engine.begin() as conn:
+                df.to_sql(table_name, con=conn, if_exists="replace", index=False)
+                
+            logger.info(f"Saved table '{table_name}' to SQL database")
+            self.save_database()
+        except Exception as e:
+            logger.error(f"Error saving table '{table_name}': {e}")
+            raise
     def load_table(self, table_name: str) -> pd.DataFrame:
         self._validate_table_name(table_name)
         return pd.read_sql_table(table_name, self.engine)
@@ -87,6 +115,7 @@ class SQLTableStore:
         with self.engine.begin() as conn:
             conn.execute(text(f'DROP TABLE IF EXISTS "{table_name}"'))
             logger.info(f"Deleted table '{table_name}'")
+        self.save_database()
 
     def list_tables(self) -> List[str]:
         return inspect(self.engine).get_table_names()
@@ -162,6 +191,7 @@ class SQLTableStore:
         try:
             with self.engine.begin() as conn:
                 conn.execute(text(sql))
+            self.save_database()
         except Exception as e:
             logger.error(f"Error executing read/write query: {e}")
             raise
