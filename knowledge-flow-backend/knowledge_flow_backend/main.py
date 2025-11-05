@@ -80,6 +80,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+
+
+
+a      =      "toto" # To test the format ci
+
+
+
+
+
+
 def _norm_origin(o) -> str:
     # Ensure exact match with browser's Origin header (no trailing slash)
     return str(o).rstrip("/")
@@ -107,12 +117,8 @@ def load_configuration():
 
 def create_app() -> FastAPI:
     configuration: Configuration = load_configuration()
-    logger.info(
-        f"🛠️ Embedding Model configuration: [{configuration.embedding_model.provider}] {configuration.embedding_model.name}"
-    )
-    logger.info(
-        f"🛠️ Chat Model configuration: [{configuration.chat_model.provider}] {configuration.chat_model.name}"
-    )
+    logger.info(f"🛠️ Embedding Model configuration: [{configuration.embedding_model.provider}] {configuration.embedding_model.name}")
+    logger.info(f"🛠️ Chat Model configuration: [{configuration.chat_model.provider}] {configuration.chat_model.name}")
 
     base_url = configuration.app.base_url
 
@@ -140,9 +146,7 @@ def create_app() -> FastAPI:
                 try:
                     await reconcile_keycloak_groups_with_rebac()
                 except Exception:  # noqa: BLE001
-                    logger.exception(
-                        "Scheduled Keycloak→SpiceDB reconciliation failed."
-                    )
+                    logger.exception("Scheduled Keycloak→SpiceDB reconciliation failed.")
                 await asyncio.sleep(15 * 60)
 
         # Reconcile Keycloak groups with ReBAC every 15 minutes
@@ -164,9 +168,7 @@ def create_app() -> FastAPI:
 
     # Register exception handlers
     register_exception_handlers(app)
-    allowed_origins = list(
-        {_norm_origin(o) for o in configuration.security.authorized_origins}
-    )
+    allowed_origins = list({_norm_origin(o) for o in configuration.security.authorized_origins})
     logger.info("[CORS] allow_origins=%s", allowed_origins)
     app.add_middleware(
         CORSMiddleware,
@@ -242,12 +244,8 @@ def create_app() -> FastAPI:
     mcp_opensearch_ops = FastApiMCP(
         app,
         name="Knowledge Flow OpenSearch Ops MCP",
-        description=(
-            "Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only."
-        ),
-        include_tags=[
-            "OpenSearch"
-        ],  # <-- only export routes tagged OpenSearch as MCP tools
+        description=("Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only."),
+        include_tags=["OpenSearch"],  # <-- only export routes tagged OpenSearch as MCP tools
         describe_all_responses=True,
         describe_full_response_schema=True,
         auth_config=auth_cfg,
