@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import AppsIcon from "@mui/icons-material/Apps";
 import ChatIcon from "@mui/icons-material/Chat";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 
@@ -20,7 +19,6 @@ import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
-import AgentsList from "../components/chatbot/settings/AgentList";
 import { ChatContextPickerPanel } from "../components/chatbot/settings/ChatContextPickerPanel";
 import { ConversationList } from "../components/chatbot/settings/ConversationList";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
@@ -34,7 +32,7 @@ import {
 
 const PANEL_W = { xs: 300, sm: 340, md: 360 };
 
-type PanelContentType = "agents" | "conversations" | null;
+type PanelContentType = "conversations" | null;
 
 export default function Chat() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -93,16 +91,10 @@ export default function Chat() {
   };
   const closePanel = () => setPanelContentType(null);
 
-  const openAgentsPanel = () => openPanel("agents");
   const openConversationsPanel = () => openPanel("conversations");
 
   const handleSelectAgent = (agent: AnyAgent) => {
     selectAgentForCurrentSession(agent);
-  };
-
-  const handleCreateNewConversation = () => {
-    startNewConversation();
-    if (panelContentType !== "agents") setPanelContentType("agents");
   };
 
   const handleSelectSession = (s: SessionSchema) => {
@@ -188,15 +180,6 @@ export default function Chat() {
   // Helper function to render the correct panel content
   const renderPanelContent = () => {
     switch (panelContentType) {
-      case "agents":
-        return (
-          <AgentsList
-            agents={enabledAgents}
-            selected={currentAgent}
-            onSelect={handleSelectAgent}
-            sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}
-          />
-        );
       case "conversations":
         return (
           <Box sx={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, gap: 1 }}>
@@ -216,7 +199,7 @@ export default function Chat() {
                 sessions={sessions}
                 currentSession={currentSession}
                 onSelectSession={handleSelectSession}
-                onCreateNewConversation={handleCreateNewConversation}
+                onCreateNewConversation={startNewConversation}
                 onDeleteAllSessions={handleDeleteAllSessions}
                 onDeleteSession={handleDeleteSession}
                 isCreatingNewConversation={isCreatingNewConversation}
@@ -230,7 +213,6 @@ export default function Chat() {
     }
   };
 
-  // --- START MODIFIED SECTION ---
   const buttonContainerSx = {
     position: "absolute",
     top: 12,
@@ -249,19 +231,11 @@ export default function Chat() {
         }
       : 12, // Original position when closed
   };
-  // --- END MODIFIED SECTION ---
 
   return (
     <Box ref={containerRef} sx={{ height: "100vh", position: "relative", overflow: "hidden" }}>
       {/* Panel toggle buttons */}
       <Box sx={buttonContainerSx}>
-        <IconButton
-          color={panelContentType === "agents" ? "primary" : "default"}
-          onClick={openAgentsPanel}
-          title={t("settings.assistants")}
-        >
-          <AppsIcon />
-        </IconButton>
         <IconButton
           color={panelContentType === "conversations" ? "primary" : "default"}
           onClick={openConversationsPanel}
