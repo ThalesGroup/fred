@@ -2,19 +2,13 @@
 
 Objective: Get hands-on with Thales’ Fred project, explore its AI agent capabilities, knowledge management features, and customize a few components.
 
-## Prerequisites
+## Prerequisites and ressources
 
-- A machine with Docker or the ability to run services locally (see documentation).
-- Access to the repository: https://github.com/ThalesGroup/fred
-- Node.js and Python installed according to the “Getting Started” guide.
-- Ideally, a recent web browser and internet access.
+Last prerequisites and ressources updated and available at : https://github.com/ThalesGroup/fred
 
-## Ressources
+Find out how to launch the devcontainer in this section : https://github.com/ThalesGroup/fred?tab=readme-ov-file#development-environment-setup
 
-- Fred “Getting Started” guide: https://fredk8.dev/docs/guides/getting-started/
-- Fred architecture & design paper: Fred: A Modular Multi-Agent AI Assistant for Kubernetes
-- GitHub repository: https://github.com/ThalesGroup/fred
-- Quick solutions/corrections will be shared as toggles under each exercise.
+Find out how to start Fred here : https://github.com/ThalesGroup/fred?tab=readme-ov-file#start-fred-components
 
 ## Tips for Success
 
@@ -24,72 +18,6 @@ Objective: Get hands-on with Thales’ Fred project, explore its AI agent capabi
 - Don’t forget to test your modifications (e.g., start a conversation, ask a question…).
 - Ask the facilitator if you need help!
 
-## How to Launch FRED
-
-### Launching Fred via the Dev Container
-
-1 - Clone the Fred repository:
-
-```
-git clone https://github.com/ThalesGroup/fred
-```
-
-2 - Verify that all required dependencies are installed:
-
-<details>
-  <summary>First, make sure you have all the requirements installed</summary>
-
-| Tool         | Type                       | Version                                                                                             | Install hint                                                                                |
-| ------------ | -------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Pyenv        | Python installer           | latest                                                                                              | [Pyenv installation instructions](https://github.com/pyenv/pyenv#installation)              |
-| Python       | Programming language       | 3.12.8                                                                                              | Use `pyenv install 3.12.8`                                                                  |
-| python3-venv | Python venv module/package | matching                                                                                            | Bundled with Python 3 on most systems; otherwise `apt install python3-venv` (Debian/Ubuntu) |
-| nvm          | Node installer             | latest                                                                                              | [nvm installation instructions](https://github.com/nvm-sh/nvm#installing-and-updating)      |
-| Node.js      | Programming language       | 22.13.0                                                                                             | Use `nvm install 22.13.0`                                                                   |
-| Make         | Utility                    | system                                                                                              | Install via system package manager (e.g., `apt install make`, `brew install make`)          |
-| yq           | Utility                    | system                                                                                              | Install via system package manager                                                          |
-| SQLite       | Local RDBMS engine         | ≥ 3.35.0                                                                                            | Install via system package manager                                                          |
-| Pandoc       | 2.9.2.1                    | [Pandoc installation instructions](https://pandoc.org/installing.html)                              | For DOCX document ingestion                                                                 |
-| LibreOffice  | Headless doc converter     | [LibreOffice installation instructions](https://www.libreoffice.org/download/download-libreoffice/) | For PPTX conversion into PDF                                                                |
-
-</details>
-
-3 - Open the Dev Container in VS Code:
-
-3.a - Open the cloned fred folder in VS Code.
-
-3.b - Create a .fred folder in your home directory:
-
-```
-cd ~
-mkdir .fred
-```
-
-3.c - Press F1, then select: Dev Containers: Build and Open in Container.
-
-4 - Launch the three main services (use a separate terminal for each):
-
-4.a - frontend:
-
-```
-cd frontend
-make run
-```
-
-4.b - knowledge-flow:
-
-```
-cd knowledge-flow-backend
-make run
-```
-
-4.c - agentic-backend
-
-```
-cd agentic-backend
-make run              # or make run-academy to run the academy FRED
-```
-
 5 - Open the UI in your browser: http://localhost:5173/chat
 
 ## 🧩 Practical Exercises
@@ -97,13 +25,34 @@ make run              # or make run-academy to run the academy FRED
 ### 1. Getting Started with the UI & Basic Agent
 
 - Launch Fred in academy mode.
-- Select the agent llm_responder and ask it a question.
+- Select the agent generalist assistant and greet him.
 
-### 2. Customize Chat with “Chat Profiles”
+<details>
+<summary>Clue 1</summary>
+To select an agent use the 9 dots on the top left corner of the chat section.
 
-- Create a chat profile. Example:
-"You are an Italian teacher agent. For every question I ask, respond only in Italian. Your goal is to help me learn Italian as fast as possible."
+![alt text](images/image.png)
+
+</details>
+
+### 2. Customize Chat with “Chat Context"
+
+- Create a chat context to give your agent new guidelines or instructions. Example:
+  "You are an Italian teacher agent. For every question I ask, respond only in Italian. Your goal is to help me learn Italian as fast as possible."
 - Start a test conversation using this profile and observe how responses differ.
+
+<details>
+<summary>Clue 1</summary>
+You can add achat context in the ressources/chat_contexts segment.
+</details>
+
+<details>
+<summary>Clue 2</summary>
+You must have a library to create a chat context or add documents.
+
+![alt text](images/image-1.png)
+
+</details>
 
 ### 3. Customize an Agent via the UI + Fine-Tuning Settings
 
@@ -111,37 +60,187 @@ make run              # or make run-academy to run the academy FRED
 - Modify its system prompt and note changes in its behavior.
 - Start a new conversation to compare before/after behaviors.
 
-### 4. Add a Response Template in Agent > Assets
+<details>
+<summary>Clue 1</summary>
+The system prompt modification is available in the Agents section under "Tune the agent exposed parameters".
 
-- Add a template in the agent’s Assets Management section.
-- Test and note differences in responses with and without the template.
+![alt text](images/image-2.png)
 
-### 5. Monitoring / Logs
+</details>
+
+### 4. Create a new agent using the UI
+
+- Think about a use case that would be usefull to solve to automate a tak or learn something.
+- Add a new assistant/agent with a system prompt that try to solve your issue.
+- Test it.
+
+<details>
+<summary>Clue 1</summary>
+To create a new assistant got to the Agents page.
+
+![alt text](images/image-3.png)
+
+</details>
+
+<details>
+<summary>Clue 2</summary>
+Don't forget to enable the agent to be able to access it in the chat section.
+
+![alt text](images/image-4.png)
+
+</details>
+
+<details>
+<summary>Exemple</summary>
+1 - The issue:
+  I need a math teacher to grow my skill.
+
+2 - The assistant:
+
+Name: The Perfect Math Teacher
+
+System Prompt:
+
+You are the world’s best mathematics teacher and tutor.
+Your goal is to help the student truly understand mathematics — not just memorize formulas.
+
+Teaching Philosophy:
+
+- Use clear, step-by-step reasoning for every concept and problem.
+- Always check for understanding before moving to the next idea.
+- Use simple language first, then gradually introduce formal math vocabulary.
+- Encourage curiosity, discovery, and intuition.
+- Adapt explanations to the student’s level, background, and learning style.
+- Use analogies, visuals, and real-world examples when helpful.
+- Ask guiding questions rather than giving full solutions immediately.
+- Give constructive feedback and celebrate progress.
+
+Capabilities:
+
+- You can teach any level of math (elementary to advanced university).
+- You can generate step-by-step solutions, intuitive explanations, visual descriptions, and practice problems.
+- You can simulate a patient one-on-one tutoring session.
+
+Format:
+
+- When responding, always include these sections when relevant:
+- Concept Overview – Explain the main idea in intuitive terms.
+- Step-by-Step Explanation – Break down reasoning carefully.
+- Format math formulas using LaTeX: `$$...$$` for blocks or `$...$` inline.
+
+Tone: Friendly, encouraging, and Socratic — like a patient mentor who believes every student can master math with the right guidance.
+
+3 - questions:
+
+- "Explain to me the trigonometry basics"
+- "Explain to me the complex numbers"
+
+</details>
+
+### 5. Overview of Monitoring and Logs features
 
 - Go to Monitoring > KPIs to analyze Fred’s usage during your session.
 - Go to Monitoring > Logs.
-- Restart the two backends and examine their logs to understand internal backend processes.
+- Restart the two backends and examine their logs to understand internal backend processes. What services you found in the log section ? What purpose do they serve ?
+
+<details>
+<summary>Clue 1</summary>
+To understand what's a token : https://platform.openai.com/tokenizer
+</details>
+
+<details>
+<summary>Clue 2</summary>
+Deselect the Live button in Monitoring > Logs to view the logs without them updating automatically.
+</details>
 
 ### 6. Upload & Explore a PDF Document
 
-- Import a Markdown or PDF document into Fred.
-- Verify that associated objects are created: preview, markdown/pdf conversion, metadata objects.
-- If a vector engine (e.g., ChromaDB) is configured, explore the embeddings generated.
-- Ask a relevant query and check if the document appears in results.
+- Import a Markdown or PDF document into Fred (you can use this document : fred-academy/documents/Generative AI.pdf).
+- Try to view the document using the preview tool.
+- Select the retrieval and QA expert and ask a relevant query and check if the document appears in results.
+- Try to find where is the vector store used to represent the embedded document.
+- (Optional) Try to see what's inside the vectore store using : fred-academy/scripts/inspect_chromadb_collection.py
+
+<details>
+<summary>Usage of inspect_chromadb_collection.py </summary>
+
+```
+cd /workspaces/fred/fred-academy/scripts
+source /workspaces/fred/knowledge-flow-backend/.venv/bin/activate # Use knowlegde-flow virtual environment
+
+python3 inspect_chromadb_collection.py --path "~/the/path/where/is/my/vector/store/directory"
+
+```
+
+</details>
+
+<details>
+<summary>Clue 1</summary>
+To use the preview tool, click on "View Original PDF".
+
+![alt text](images/image-5.png)
+
+</details>
+
+<details>
+<summary>Clue 2</summary>
+To find the vector store search for keywords in the monitoring page.
+
+![alt text](images/image-6.png)
+
+</details>
 
 ### 7. Upload & Explore a CSV Document
 
-- Import a CSV file into Fred.
-- Verify that associated objects are created: preview, conversion, addition to the SQL database.
-- Explore any tables created in the database.
-- Ask a relevant query and check if the document appears in results.
+- Import one or more CSV file into Fred (you can use these csvs : fred-academy/documents/Clients.csv and fred-academy/documents/Sales.csv).
+- Try to view these documents using the preview tool, identify some questions you want to ask the model.
+- Ask your questions.
+- Try to find where the csv documents are saved. (hint : the documents are saved in SQL)
+
+<details>
+<summary>Usage of inspect_duckdb_database.py </summary>
+
+```
+cd /workspaces/fred/fred-academy/scripts
+source /workspaces/fred/knowledge-flow-backend/.venv/bin/activate # Use knowlegde-flow virtual environment
+
+python3 inspect_duckdb_database.py --path "~/the/path/where/is/my/sql/database"
+
+```
+
+</details>
+
+<details>
+<summary>Questions for the given documents</summary>
+
+- How many clients have I ?
+- Where my clients come from ?
+- Who are my top 3 best clients ?
+
+</details>
 
 ### 8. Display Messages Between AI, Tools, and Humans (Debug Mode)
 
-- Launch agentic backend in debug mode.
-- Run one or two simple queries and observe the processing flow: agent → model → vector DB → response.
-- Identify key points in the agent to inspect transmitted messages.
-- Read messages exchanged between Fred components.
+- Launch the Agentic backend in debug mode (Debug Agentic Backend using configuration.yaml).
+- Go to agentic-backend/agentic_backend/agents/generalist/generalist_expert.py and set a breakpoint where the AI model is invoked.
+- Run a simple query and observe the input messages and the response message given by the AI. Analyze the content, the additional_kwargs, and the response_metadata.
+- Try the same with a model that uses MCP tools, such as the tabular asistant. How does the AI call a tool? What is the format of the tool’s response?
+
+<details>
+<summary>Clue 1</summary>
+To run vscode in Debug mode got to "Run and Debug" and select the wanted backend and configuration.
+
+![alt text](images/image-7.png)
+
+</details>
+
+<details>
+<summary>Clue 2</summary>
+The AI model is eventually called with an async method. As such:
+
+![alt text](images/image-8.png)
+
+</details>
 
 ### 9. Test Another Model Provider
 
