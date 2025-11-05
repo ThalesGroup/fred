@@ -1,3 +1,18 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 from __future__ import annotations
 
 import logging
@@ -5,6 +20,10 @@ from pathlib import Path
 from typing import List
 
 import pypdf
+
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import (
+    BaseMarkdownProcessor,
+)
 
 from .lite_types import (
     LiteMarkdownOptions,
@@ -52,9 +71,7 @@ class PdfLiteMarkdownExtractor:
                 else:
                     body = text
 
-                pages_md.append(
-                    LitePageMarkdown(page_no=pno, markdown=body, char_count=len(body))
-                )
+                pages_md.append(LitePageMarkdown(page_no=pno, markdown=body, char_count=len(body)))
 
         combined = "\n\n".join(p.markdown for p in pages_md)
         truncated = False
@@ -84,3 +101,52 @@ class PdfLiteMarkdownExtractor:
         )
         return result
 
+
+class PdfLiteMarkdownProcessor(BaseMarkdownProcessor):
+    """BaseMarkdownProcessor-compatible wrapper around the lightweight PDF extractor.
+
+    Uses pypdf text extraction (no layout) and writes a single `output.md` in
+    the provided `output_dir`, keeping the API homogeneous with other processors.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._extractor = PdfLiteMarkdownExtractor()
+
+    def check_file_validity(self, file_path: Path) -> bool:
+        try:
+            with open(file_path, "rb") as f:
+                reader = pypdf.PdfReader(f)
+                return len(reader.pages) > 0
+        except Exception as e:
+            logger.error(f"Invalid or unreadable PDF file: {file_path} - {e}")
+            return False
+
+    def extract_file_metadata(self, file_path: Path) -> dict:
+        page_count = None
+        try:
+            with open(file_path, "rb") as f:
+                reader = pypdf.PdfReader(f)
+                page_count = len(reader.pages)
+        except Exception:
+            pass
+        try:
+            size = file_path.stat().st_size
+        except Exception:
+            size = None
+        return {
+            "document_name": file_path.name,
+            "file_size_bytes": size,
+            "suffix": file_path.suffix,
+            "page_count": page_count,
+        }
+
+    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        md_path = output_dir / "output.md"
+
+        opts = LiteMarkdownOptions()
+        result = self._extractor.extract(file_path, options=opts)
+        md_path.write_text(result.markdown, encoding="utf-8")
+
+        return {"doc_dir": str(output_dir), "md_file": str(md_path)}

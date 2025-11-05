@@ -12,27 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import dataclasses
 import json
+import json as _json
 import logging
 import pathlib
 import shutil
 import tempfile
 from typing import List, Optional
 
-import dataclasses
-import json as _json
-from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from fred_core import KeycloakUser, KPIActor, KPIWriter, get_current_user
 from pydantic import BaseModel
 
 from knowledge_flow_backend.application_context import get_kpi_writer
 from knowledge_flow_backend.common.structures import Status
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_types import LiteMarkdownOptions
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.service import (
+    LightweightMarkdownError,
+    LightweightMarkdownService,
+)
 from knowledge_flow_backend.features.ingestion.service import IngestionService
 from knowledge_flow_backend.features.scheduler.activities import input_process, output_process
 from knowledge_flow_backend.features.scheduler.structure import FileToProcess
-from knowledge_flow_backend.core.processors.input.lightweight_markdown.lite_types import LiteMarkdownOptions
-from knowledge_flow_backend.core.processors.input.lightweight_markdown.service import LightweightMarkdownService
 
 logger = logging.getLogger(__name__)
 
@@ -221,10 +224,7 @@ class IngestionController:
             "/lite/markdown",
             tags=["Processing"],
             summary="Lightweight Markdown extraction for a single file",
-            description=(
-                "Extract a compact Markdown representation of a PDF or DOCX without full ingestion. "
-                "Intended for agent use where fast, dependency-light text is needed."
-            ),
+            description=("Extract a compact Markdown representation of a PDF or DOCX without full ingestion. Intended for agent use where fast, dependency-light text is needed."),
         )
         def lightweight_markdown(
             file: UploadFile = File(...),
@@ -235,7 +235,7 @@ class IngestionController:
             # Validate extension
             filename = file.filename or "uploaded"
             suffix = pathlib.Path(filename).suffix.lower()
-            if suffix not in (".pdf", ".docx"):
+            if suffix not in (".pdf", ".docx", ".csv"):
                 raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}")
 
             # Store to temp
@@ -257,6 +257,8 @@ class IngestionController:
             # Extract
             try:
                 result = self.lite_md_service.extract(raw_path, options=opts)
+            except LightweightMarkdownError as e:
+                raise HTTPException(status_code=400, detail=str(e))
             finally:
                 # Best-effort cleanup of temp file; containing dir will be removed separately if needed
                 try:
@@ -278,9 +280,6 @@ class IngestionController:
                 "total_chars": result.total_chars,
                 "truncated": result.truncated,
                 "markdown": result.markdown,
-                "pages": [
-                    {"page_no": p.page_no, "char_count": p.char_count, "markdown": p.markdown}
-                    for p in (result.pages or [])
-                ],
+                "pages": [{"page_no": p.page_no, "char_count": p.char_count, "markdown": p.markdown} for p in (result.pages or [])],
                 "extras": result.extras or {},
             }

@@ -1,3 +1,17 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import logging
@@ -5,6 +19,10 @@ from pathlib import Path
 from typing import List
 
 from docx import Document
+
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import (
+    BaseMarkdownProcessor,
+)
 
 from .lite_types import (
     LiteMarkdownOptions,
@@ -91,14 +109,14 @@ class DocxLiteMarkdownExtractor:
                     lines.append(f"<!-- TABLE_START:index={table_idx} rows={len(t.rows)} cols={len(t.columns)} -->")
 
                     # header from first row
-                    header = [ _cell_text(t.cell(0, c)) for c in range(cols) ]
-                    header = [ h if h else " " for h in header ]
+                    header = [_cell_text(t.cell(0, c)) for c in range(cols)]
+                    header = [h if h else " " for h in header]
                     lines.append("| " + " | ".join(header) + " |")
                     lines.append("| " + " | ".join(["---"] * cols) + " |")
 
                     for r in range(1, rows):
-                        row_cells = [ _cell_text(t.cell(r, c)) for c in range(cols) ]
-                        row_cells = [ c if c else " " for c in row_cells ]
+                        row_cells = [_cell_text(t.cell(r, c)) for c in range(cols)]
+                        row_cells = [c if c else " " for c in row_cells]
                         lines.append("| " + " | ".join(row_cells) + " |")
 
                     if rows < len(t.rows) or cols < len(t.columns):
@@ -126,3 +144,47 @@ class DocxLiteMarkdownExtractor:
         )
         return result
 
+
+class DocxLiteMarkdownProcessor(BaseMarkdownProcessor):
+    """BaseMarkdownProcessor-compatible wrapper around the lightweight DOCX extractor.
+
+    Keeps behavior homogeneous with other processors by exposing the
+    check/metadata/convert interface and always writing to `output.md` in the
+    provided `output_dir`.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._extractor = DocxLiteMarkdownExtractor()
+
+    def check_file_validity(self, file_path: Path) -> bool:
+        try:
+            # python-docx will raise if the file isn't a valid DOCX
+            Document(str(file_path))
+            return True
+        except Exception as e:
+            logger.error(f"Invalid or corrupted DOCX file: {file_path} - {e}")
+            return False
+
+    def extract_file_metadata(self, file_path: Path) -> dict:
+        # Keep lightweight and consistent with other simple processors
+        try:
+            size = file_path.stat().st_size
+        except Exception:
+            size = None
+        return {
+            "document_name": file_path.name,
+            "file_size_bytes": size,
+            "suffix": file_path.suffix,
+        }
+
+    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        md_path = output_dir / "output.md"
+
+        # Use defaults; whitespace normalization is handled by the extractor
+        opts = LiteMarkdownOptions()
+        result = self._extractor.extract(file_path, options=opts)
+        md_path.write_text(result.markdown, encoding="utf-8")
+
+        return {"doc_dir": str(output_dir), "md_file": str(md_path)}
