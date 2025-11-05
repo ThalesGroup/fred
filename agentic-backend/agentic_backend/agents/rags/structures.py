@@ -12,37 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional
+from typing import Annotated, List, Optional, TypedDict
 
 from fred_core import VectorSearchHit
+
 from langchain_core.messages import AIMessage
-from langgraph.graph import MessagesState
+from langgraph.graph import add_messages
 from pydantic.v1 import BaseModel
 
 
-class RagGraphState(MessagesState):
+class RagGraphState(TypedDict):
     """
-    Represents the state of the RAG (Retrieval-Augmented Generation) graph during execution.
+    Represents the state of the RAG (Retrieval-Augmented Generation) graph.
 
-    This state object carries all relevant information between steps of the LangGraph agent flow.
-
-    Attributes:
-        question (Optional[str]): The user question to be answered.
-        generation (Optional[AIMessage]): The latest AI-generated response.
-        documents (Optional[List[VectorSearchHit]]): List of retrieved documents relevant to the question.
-        sources (Optional[List[VectorSearchHit]]): Metadata or source references for retrieved documents.
-        retry_count (Optional[int]): Number of retries attempted in the generation process.
-        top_k (Optional[int]): Number of top documents to retrieve from the vector store.
-        irrelevant_documents (Optional[List[VectorSearchHit]]): List of irrelevant documents.
+    This TypedDict defines the structure of the state that flows through the
+    RAG graph, including messages, the user's question, generated responses,
+    retrieved documents, sources, retry count, irrelevant documents, and response grade.
     """
 
+    messages: Annotated[list, add_messages]
     question: Optional[str]
     generation: Optional[AIMessage]
     documents: Optional[List[VectorSearchHit]]
     sources: Optional[List[VectorSearchHit]]
     retry_count: Optional[int]
-    top_k: Optional[int]
     irrelevant_documents: Optional[List[VectorSearchHit]]
+    response_grade: Optional[str]
 
 
 class GradeDocumentsOutput(BaseModel):
