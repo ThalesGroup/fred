@@ -54,6 +54,7 @@ export interface ChatBotProps {
   currentChatBotSession: SessionSchema;
   currentAgent: AnyAgent;
   agents: AnyAgent[];
+  onSelectNewAgent: (flow: AnyAgent) => void;
   onUpdateOrAddSession: (session: SessionSchema) => void;
   isCreatingNewConversation: boolean;
   runtimeContext?: RuntimeContext;
@@ -64,6 +65,7 @@ const ChatBot = ({
   currentChatBotSession,
   currentAgent,
   agents,
+  onSelectNewAgent,
   onUpdateOrAddSession,
   isCreatingNewConversation,
   runtimeContext: baseRuntimeContext,
@@ -657,6 +659,9 @@ const ChatBot = ({
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
                 initialPromptResourceIds={initialCtx.promptResourceIds}
                 initialTemplateResourceIds={initialCtx.templateResourceIds}
+                currentAgent={currentAgent}
+                agents={agents}
+                onSelectNewAgent={onSelectNewAgent}
               />
             </Box>
           </Box>
@@ -708,6 +713,9 @@ const ChatBot = ({
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
                 initialPromptResourceIds={initialCtx.promptResourceIds}
                 initialTemplateResourceIds={initialCtx.templateResourceIds}
+                currentAgent={currentAgent}
+                agents={agents}
+                onSelectNewAgent={onSelectNewAgent}
               />
             </Grid2>
 

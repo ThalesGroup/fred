@@ -23,8 +23,8 @@ import ChatBot from "../components/chatbot/ChatBot";
 import AgentsList from "../components/chatbot/settings/AgentList";
 import { ChatContextPickerPanel } from "../components/chatbot/settings/ChatContextPickerPanel";
 import { ConversationList } from "../components/chatbot/settings/ConversationList";
-import { useSessionOrchestrator } from "../hooks/useSessionOrchestrator";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
+import { useSessionOrchestrator } from "../hooks/useSessionOrchestrator";
 import {
   SessionSchema,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
@@ -335,6 +335,7 @@ export default function Chat() {
             currentChatBotSession={currentSession}
             currentAgent={currentAgent!}
             agents={enabledAgents}
+            onSelectNewAgent={handleSelectAgent}
             onUpdateOrAddSession={updateOrAddSession}
             isCreatingNewConversation={isCreatingNewConversation}
             runtimeContext={{

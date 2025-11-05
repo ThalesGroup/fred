@@ -564,5 +564,8 @@
     "sectionChatContextSingular": "CHAT CONTEXT",
     "sectionChatContextsPlural": "CHAT CONTEXTS",
     "disclaimer": "AI content may be incorrect."
+  },
+  "agentSelector": {
+    "sendTo": "Send to"
   }
 }

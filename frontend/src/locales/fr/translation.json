@@ -564,5 +564,8 @@
     "sectionchatContextSingular": "CONTEXTE DE CONVERSATION",
     "sectionchatContextsPlural": "CONTEXTES DE CONVERSATION",
     "disclaimer": "Le contenu généré par l’IA peut être incorrect."
+  },
+  "agentSelector": {
+    "sendTo": "Envoyer à"
   }
 }
