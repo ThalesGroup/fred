@@ -80,16 +80,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-
-
-
-a      =      "toto" # To test the format ci
-
-
-
-
-
-
 def _norm_origin(o) -> str:
     # Ensure exact match with browser's Origin header (no trailing slash)
     return str(o).rstrip("/")
