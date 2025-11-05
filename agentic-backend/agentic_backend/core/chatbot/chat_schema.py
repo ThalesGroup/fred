@@ -199,6 +199,7 @@ class ChatMetadata(BaseModel):
     agent_name: Optional[str] = None
     latency_ms: Optional[int] = None
     finish_reason: Optional[FinishReason] = None
+    runtime_context: Optional[RuntimeContext] = None
 
     # Escape hatch for gradual rollout; UI should ignore this.
     extras: Dict[str, Any] = Field(default_factory=dict)
@@ -248,7 +249,6 @@ class SessionSchema(BaseModel):
 
 class SessionWithFiles(SessionSchema):
     file_names: List[str] = []
-
 
 # ---------- Transport events ----------
 class StreamEvent(BaseModel):

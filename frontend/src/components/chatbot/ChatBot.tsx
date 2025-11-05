@@ -29,6 +29,7 @@ import {
   SessionSchema,
   StreamEvent,
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
+  useUploadFileAgenticV1ChatbotUploadPostMutation,
 } from "../../slices/agentic/agenticOpenApi.ts";
 import {
   TagType,
@@ -89,30 +90,34 @@ const ChatBot = ({
 
   const { showInfo, showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
-  // const [postTranscribeAudio] = usePostTranscribeAudioMutation();
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   const wsTokenRef = useRef<string | null>(null);
 
-  // Noms des libs / prompts / templates
+  // Noms des libs / prompts / templates / chat-context
   const { data: docLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
   const { data: promptResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "prompt" });
   const { data: templateResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "template" });
+  const { data: chatContextResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({
+    kind: "chat-context",
+  });
 
-  const libraryNameMap = useMemo(
-    () => Object.fromEntries((docLibs as any[]).map((x: any) => [x.id, x.name])),
-    [docLibs],
-  );
+  const libraryNameMap = useMemo(() => Object.fromEntries(docLibs.map((x) => [x.id, x.name])), [docLibs]);
   const promptNameMap = useMemo(
-    () => Object.fromEntries((promptResources as any[]).map((x: any) => [x.id, x.name ?? x.id])),
+    () => Object.fromEntries(promptResources.map((x) => [x.id, x.name ?? x.id])),
     [promptResources],
   );
   const templateNameMap = useMemo(
-    () => Object.fromEntries((templateResources as any[]).map((x: any) => [x.id, x.name ?? x.id])),
+    () => Object.fromEntries(templateResources.map((x) => [x.id, x.name ?? x.id])),
     [templateResources],
+  );
+  const chatContextNameMap = useMemo(
+    () => Object.fromEntries(chatContextResources.map((x) => [x.id, x.name ?? x.id])),
+    [chatContextResources],
   );
 
   // Lazy messages fetcher
   const [fetchHistory] = useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery();
+  const [uploadChatFile] = useUploadFileAgenticV1ChatbotUploadPostMutation();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
@@ -413,57 +418,38 @@ const ChatBot = ({
 
   // Handle user input (text/audio/files)
   const handleSend = async (content: UserInputContent) => {
-    const userId = KeyCloakService.GetUserId();
     const sessionId = currentChatBotSession?.id;
     const agentName = currentAgent.name;
 
     // Init runtime context
-    const runtimeContext: RuntimeContext = { ...baseRuntimeContext };
+    const runtimeContext: RuntimeContext = { ...(baseRuntimeContext ?? {}) };
 
-    // Add selected libraries/templates
+    // Add selected libraries / profiles (CANONIQUES — pas de doublon)
     if (content.documentLibraryIds?.length) {
       runtimeContext.selected_document_libraries_ids = content.documentLibraryIds;
     }
-    if (content.promptResourceIds?.length) {
-      runtimeContext.selected_prompt_ids = content.promptResourceIds;
-    }
-    if (content.templateResourceIds?.length) {
-      runtimeContext.selected_template_ids = content.templateResourceIds;
-    }
-    if (content.profileResourceIds?.length) {
-      runtimeContext.selected_chat_context_ids = content.profileResourceIds;
-    }
+
+    // Policy
     runtimeContext.search_policy = content.searchPolicy || "semantic";
 
-    // Files upload
+    // Files upload (via RTK Query, with auth header from baseQuery)
     if (content.files?.length) {
       for (const file of content.files) {
         const formData = new FormData();
-        formData.append("user_id", userId);
         formData.append("session_id", sessionId || "");
         formData.append("agent_name", agentName);
         formData.append("file", file);
 
         try {
-          const response = await fetch(`${getConfig().backend_url_api}/agentic/v1/chatbot/upload`, {
-            method: "POST",
-            body: formData,
-          });
-
-          if (!response.ok) {
-            showError({
-              summary: "File Upload Error",
-              detail: `Failed to upload ${file.name}: ${response.statusText}`,
-            });
-            throw new Error(`Failed to upload ${file.name}`);
-          }
-
-          const result = await response.json();
-          console.log("✅ Uploaded file:", result);
+          await uploadChatFile({
+            bodyUploadFileAgenticV1ChatbotUploadPost: formData as any,
+          }).unwrap();
+          console.log("✅ Uploaded file:", file.name);
           showInfo({ summary: "File Upload", detail: `File ${file.name} uploaded successfully.` });
-        } catch (err) {
+        } catch (err: any) {
+          const errMsg = err?.data?.detail || err?.error || (err as Error)?.message || "Unknown error";
           console.error("❌ File upload failed:", err);
-          showError({ summary: "File Upload Error", detail: (err as Error).message });
+          showError({ summary: "File Upload Error", detail: `Failed to upload ${file.name}: ${errMsg}` });
         }
       }
     }
@@ -690,6 +676,8 @@ const ChatBot = ({
                 messages={messages}
                 agents={agents}
                 currentAgent={currentAgent}
+                libraryNameById={libraryNameMap}
+                chatContextNameById={chatContextNameMap} // ⬅️ passe la map chat-context
               />
               {waitResponse && (
                 <Box mt={1} sx={{ alignSelf: "flex-start" }}>

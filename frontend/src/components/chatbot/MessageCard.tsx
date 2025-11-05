@@ -1,3 +1,4 @@
+// MessageCard.tsx
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +19,7 @@ import RateReviewIcon from "@mui/icons-material/RateReview";
 import { Box, Chip, Grid2, IconButton, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 //import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 //import ClearIcon from "@mui/icons-material/Clear";
 import { Download as DownloadIcon } from "@mui/icons-material";
@@ -36,6 +38,7 @@ import { useToast } from "../ToastProvider.tsx";
 import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 import GeoMapRenderer from "./GeoMapRenderer.tsx";
 import { MessagePart, toCopyText, toMarkdown } from "./messageParts.ts";
+import MessageRuntimeContextHeader from "./MessageRuntimeContextHeader.tsx";
 
 export default function MessageCard({
   message,
@@ -43,34 +46,39 @@ export default function MessageCard({
   side,
   enableCopy = false,
   enableThumbs = false,
-  // enableAudio = false,
   pending = false,
   showMetaChips = true,
-  suppressText = false, // hides text parts when true (we still render non-text via markdown)
-  onCitationHover, // optional: (uid|null) → let parent highlight Sources
-  onCitationClick, // optional: (uid|null) → parent can open dialog
+  suppressText = false,
+  onCitationHover,
+  onCitationClick,
+  libraryNameById,
+  chatContextNameById,
 }: {
   message: ChatMessage;
   agent: AnyAgent;
   side: "left" | "right";
   enableCopy?: boolean;
   enableThumbs?: boolean;
-  // enableAudio?: boolean;
   pending?: boolean;
   showMetaChips?: boolean;
   suppressText?: boolean;
   onCitationHover?: (uid: string | null) => void;
   onCitationClick?: (uid: string | null) => void;
+
+  libraryNameById?: Record<string, string>;
+  chatContextNameById?: Record<string, string>;
 }) {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { openPdfDocument } = usePdfDocumentViewer();
   const { showError, showInfo } = useToast();
 
-  // const [postSpeechText] = usePostSpeechTextMutation();
   const [postFeedback] = usePostFeedbackAgenticV1ChatbotFeedbackPostMutation();
-
-  // const [audioToSpeech, setAudioToSpeech] = useState<HTMLAudioElement | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+
+  // Header hover state (controls header indicators visibility)
+  const [bubbleHover, setBubbleHover] = useState(false);
+  const isAssistant = side === "left";
 
   const handleFeedbackSubmit = (rating: number, comment?: string) => {
     postFeedback({
@@ -79,47 +87,20 @@ export default function MessageCard({
         comment,
         messageId: message.exchange_id,
         sessionId: message.session_id,
-        agentName: agent.name ?? "unknown",
+        agentName: agent.name ?? t("chat.common.unknown"),
       },
     }).then((result) => {
       if (result.error) {
         showError({
-          summary: "Error submitting feedback",
+          summary: t("chat.feedback.error"),
           detail: extractHttpErrorMessage(result.error),
         });
       } else {
-        showInfo({ summary: "Feedback submitted", detail: "Thank you!" });
+        showInfo({ summary: t("chat.feedback.submitted"), detail: t("chat.feedback.thanks") });
       }
     });
     setFeedbackOpen(false);
   };
-
-  // const handleStartSpeaking = (msgText: string) => {
-  //   postSpeechText(msgText).then((response) => {
-  //     if (response.data) {
-  //       const audioBlob = response.data as Blob;
-  //       const audioUrl = URL.createObjectURL(audioBlob);
-  //       const a = new Audio(audioUrl);
-  //       setAudioToSpeech(a);
-  //       a.play()
-  //         .then(() => {
-  //           a.onended = () => setAudioToSpeech(null);
-  //         })
-  //         .catch((error) => {
-  //           console.error("Failed to play audio:", error);
-  //         });
-  //     } else {
-  //       console.error("No audio data in response");
-  //     }
-  //   });
-  // };
-
-  // const handleStopSpeaking = () => {
-  //   if (audioToSpeech) {
-  //     audioToSpeech.pause();
-  //     setAudioToSpeech(null);
-  //   }
-  // };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).catch(() => {});
@@ -190,6 +171,8 @@ export default function MessageCard({
             <>
               <Grid2>
                 <Box
+                  onMouseEnter={() => setBubbleHover(true)}
+                  onMouseLeave={() => setBubbleHover(false)}
                   sx={{
                     display: "flex",
                     flexDirection: "column",
@@ -201,32 +184,52 @@ export default function MessageCard({
                     wordBreak: "break-word",
                   }}
                 >
-                  {/* Header: task chips + tool-call indicators */}
+                  {/* Header: task chips + indicators */}
                   {(showMetaChips || isCall || isResult) && (
                     <Box display="flex" alignItems="center" gap={1} px={side === "right" ? 0 : 1} pb={0.5}>
                       {showMetaChips && extras?.task && (
-                        <Chip size="small" label={String(extras.task)} variant="outlined" />
+                        <Tooltip title={t("chat.labels.task")}>
+                          <Typography variant="caption" sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, px: 0.75, py: 0.25 }}>
+                            {String(extras.task)}
+                          </Typography>
+                        </Tooltip>
                       )}
                       {showMetaChips && extras?.node && (
-                        <Chip size="small" label={String(extras.node)} variant="outlined" />
+                        <Tooltip title={t("chat.labels.node")}>
+                          <Typography variant="caption" sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, px: 0.75, py: 0.25 }}>
+                            {String(extras.node)}
+                          </Typography>
+                        </Tooltip>
                       )}
                       {showMetaChips && extras?.label && (
-                        <Chip size="small" label={String(extras.label)} variant="outlined" />
+                        <Typography variant="caption" sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, px: 0.75, py: 0.25 }}>
+                          {String(extras.label)}
+                        </Typography>
                       )}
                       {isCall && pending && (
                         <Typography fontSize=".8rem" sx={{ opacity: 0.7 }}>
-                          ⏳ waiting for result…
+                          ⏳ {t("chat.message.waiting")}
                         </Typography>
                       )}
                       {isResult && (
                         <Typography fontSize=".8rem" sx={{ opacity: 0.7 }}>
-                          ✅ tool result
+                          ✅ {t("chat.message.toolResult")}
                         </Typography>
+                      )}
+
+                      {/* Runtime context header (indicators + popover trigger) */}
+                      {isAssistant && (
+                        <MessageRuntimeContextHeader
+                          message={message}
+                          visible={bubbleHover}
+                          libraryNameById={libraryNameById}
+                          chatContextNameById={chatContextNameById}
+                        />
                       )}
                     </Box>
                   )}
 
-                  {/* For tool_call: compact args preview */}
+                  {/* tool_call compact args */}
                   {isCall && message.parts?.[0]?.type === "tool_call" && (
                     <Box px={side === "right" ? 0 : 1} pb={0.5} sx={{ opacity: 0.8 }}>
                       <Typography fontSize=".8rem">
@@ -239,23 +242,22 @@ export default function MessageCard({
                     </Box>
                   )}
 
-                  {/* Main content (single path): ALWAYS markdown, with optional citationMap */}
+                  {/* Main content */}
                   <Box px={side === "right" ? 0 : 1} pb={0.5}>
                     <MarkdownRenderer
                       content={mdContent}
                       size="medium"
                       citations={{
                         getUidForNumber: (n) => {
-                          // Build once per message if you like, but simplest:
                           const src = (message.metadata?.sources as any[]) || [];
                           const ordered = [...src].sort((a, b) => (a?.rank ?? 1e9) - (b?.rank ?? 1e9));
                           const hit = ordered[n - 1];
                           return hit?.uid ?? null;
                         },
-                        onHover: onCitationHover, // already coming from parent
-                        onClick: onCitationClick, // optional
+                        onHover: onCitationHover,
+                        onClick: onCitationClick,
                       }}
-                    />{" "}
+                    />
                   </Box>
                   {geoPart && (
                     <Box px={side === "right" ? 0 : 1} pt={0.5} pb={1}>
@@ -314,31 +316,24 @@ export default function MessageCard({
               {side === "left" ? (
                 <Grid2 size={12} display="flex" alignItems="center" gap={1} flexWrap="wrap">
                   {enableCopy && (
-                    <IconButton size="small" onClick={() => copyToClipboard(toCopyText(message.parts))}>
+                    <IconButton
+                      size="small"
+                      onClick={() => copyToClipboard(toCopyText(message.parts))}
+                      aria-label={t("chat.actions.copyMessage")}
+                    >
                       <ContentCopyIcon fontSize="medium" color="inherit" />
                     </IconButton>
                   )}
 
                   {enableThumbs && (
-                    <IconButton size="small" onClick={() => setFeedbackOpen(true)}>
+                    <IconButton
+                      size="small"
+                      onClick={() => setFeedbackOpen(true)}
+                      aria-label={t("chat.actions.openFeedback")}
+                    >
                       <RateReviewIcon fontSize="medium" color="inherit" />
                     </IconButton>
                   )}
-
-                  {/* {enableAudio && (
-                    <IconButton
-                      size="small"
-                      onClick={() =>
-                        audioToSpeech ? handleStopSpeaking() : handleStartSpeaking(toSpeechText(message.parts))
-                      }
-                    >
-                      {audioToSpeech ? (
-                        <ClearIcon fontSize="medium" color="inherit" />
-                      ) : (
-                        <VolumeUpIcon fontSize="medium" color="inherit" />
-                      )}
-                    </IconButton>
-                  )} */}
 
                   {message.metadata?.token_usage && (
                     <Tooltip

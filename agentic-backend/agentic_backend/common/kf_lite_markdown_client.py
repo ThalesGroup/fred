@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import io
 import json
 import mimetypes
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import requests
 
@@ -13,15 +14,61 @@ from agentic_backend.common.kf_base_client import KfBaseClient
 class KfLiteMarkdownClient(KfBaseClient):
     """
     Minimal client for Knowledge Flow's lightweight Markdown extraction endpoint.
-
     Usage:
-        client = KfLiteMarkdownClient(agent=self)
-        text = client.extract_markdown(path, max_chars=30000)
+        # Agent mode (unchanged):
+        client = KfLiteMarkdownClient(agent=my_agent)
+
+        # Session mode (conversation/controller):
+        client = KfLiteMarkdownClient(access_token=session_access_token,
+                                      refresh_user_access_token=my_refresh_fn)
     """
+    def __init__(
+        self,
+        agent=None,
+        *,
+        access_token: Optional[str] = None,
+        refresh_user_access_token: Optional[Callable[[], str]] = None,
+    ):
+        super().__init__(
+            allowed_methods=frozenset({"POST"}),
+            agent=agent,
+            access_token=access_token,
+            refresh_user_access_token=refresh_user_access_token,
+        )
 
-    def __init__(self, agent):
-        super().__init__(allowed_methods=frozenset({"POST"}), agent=agent)
 
+    def extract_markdown_from_bytes(
+        self,
+        *,
+        filename: str,
+        content: bytes,
+        mime: Optional[str] = None,
+        max_chars: Optional[int] = 30000,
+        include_tables: bool = True,
+        add_page_headings: bool = False,
+    ) -> str:
+        """
+        Fred rationale: identical security (Bearer user token), but avoids local temp files.
+        Sends a multipart/form-data with an in-memory file-like object.
+        """
+        options: Dict[str, Any] = {
+            "max_chars": max_chars,
+            "include_tables": include_tables,
+            "add_page_headings": add_page_headings,
+            "return_per_page": False,
+        }
+        mime = mime or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        files = {"file": (filename, io.BytesIO(content), mime)}
+        data = {"options_json": json.dumps(options)}
+        r: requests.Response = self._request_with_token_refresh(
+            method="POST",
+            path="/lite/markdown?format=text",
+            files=files,
+            data=data,
+        )
+        r.raise_for_status()
+        return r.text or ""
+    
     def extract_markdown(
         self,
         file_path: Path,
@@ -30,11 +77,6 @@ class KfLiteMarkdownClient(KfBaseClient):
         include_tables: bool = True,
         add_page_headings: bool = False,
     ) -> str:
-        """
-        Convert a PDF or DOCX to compact Markdown for conversational use.
-        Returns the plain text body (format=text).
-        """
-        # Build options payload compatible with Knowledge Flow endpoint
         options: Dict[str, Any] = {
             "max_chars": max_chars,
             "include_tables": include_tables,
@@ -42,16 +84,11 @@ class KfLiteMarkdownClient(KfBaseClient):
             "return_per_page": False,
         }
 
-        # Prepare multipart form-data
         mime, _ = mimetypes.guess_type(str(file_path))
         mime = mime or "application/octet-stream"
         with file_path.open("rb") as f:
-            files = {
-                "file": (file_path.name, f, mime),
-            }
-            data = {
-                "options_json": json.dumps(options),
-            }
+            files = {"file": (file_path.name, f, mime)}
+            data = {"options_json": json.dumps(options)}
             r: requests.Response = self._request_with_token_refresh(
                 method="POST",
                 path="/lite/markdown?format=text",
@@ -60,4 +97,3 @@ class KfLiteMarkdownClient(KfBaseClient):
             )
             r.raise_for_status()
             return r.text or ""
-

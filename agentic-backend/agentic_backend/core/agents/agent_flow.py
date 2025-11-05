@@ -645,9 +645,8 @@ class AgentFlow:
         prepared: Prepared = resolve_prepared(ctx, get_knowledge_flow_base_url())
         base = (prepared.prompt_chat_context_text or "").strip()
         # Optionally augment with per-turn attachments markdown injected by the chat layer
-        extra = getattr(ctx, "attachments_markdown", None)
-        if isinstance(extra, str) and extra.strip():
-            return (base + ("\n\n" if base else "") + extra.strip()).strip()
+        if ctx.attachments_markdown is not None:
+            base += ("\n\n" if base else "") + ctx.attachments_markdown.strip()
         return base
 
     def render(self, template: str, **tokens) -> str:

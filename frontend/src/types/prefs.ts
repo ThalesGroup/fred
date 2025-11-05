@@ -13,8 +13,6 @@ export type UserPrefs = {
  */
 export type AgentPrefs = {
   selected_document_libraries_ids: string[]; // default: []
-  selected_prompt_ids: string[] | null; // default: null
-  selected_template_ids: string[] | null; // default: null
   search_policy: SearchPolicyName | null; // "hybrid" | "semantic" | "strict" | null
 };
 

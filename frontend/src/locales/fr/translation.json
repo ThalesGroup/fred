@@ -3,6 +3,7 @@
     "add": "Ajouter",
     "noneSelected": "Aucune sélection",
     "close": "Fermer",
+    "remove": "Supprimer",
     "loading": "Chargement…"
   },
   "resource": {
@@ -534,5 +535,34 @@
   "unauthorized": {
     "title": "Accès non autorisé",
     "message": "Vous n'êtes pas autorisé à voir cette page."
+  },
+  "header": {
+    "librariesSingular": "Bibliothèque",
+    "librariesPlural": "Bibliothèques",
+    "chatContextSingular": "Profil",
+    "chatContextsPlural": "Profils",
+    "librariesInline": "{{label}} : {{names}}",
+    "chatContextsInline": "{{label}} : {{names}}"
+  },
+  "insights": {
+    "aria": "détails-du-message"
+  },
+  "popover": {
+    "aria": "Détails du message",
+    "title": "Aperçu",
+    "task": "Tâche",
+    "node": "Nœud",
+    "model": "Modèle",
+    "tokensTotal": "Jetons utilisés",
+    "tokensIn": "Depuis l’utilisateur (invite+contexte)",
+    "tokensOut": "Depuis le modèle (réponse)",
+    "latency": "Latence",
+    "search": "Recherche",
+    "temp": "Temp.",
+    "sectionLibrarySingular": "BIBLIOTHÈQUE",
+    "sectionLibrariesPlural": "BIBLIOTHÈQUES",
+    "sectionchatContextSingular": "CONTEXTE DE CONVERSATION",
+    "sectionchatContextsPlural": "CONTEXTES DE CONVERSATION",
+    "disclaimer": "Le contenu généré par l’IA peut être incorrect."
   }
 }

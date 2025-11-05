@@ -18,11 +18,10 @@ import asyncio
 import json
 import logging
 import secrets
-import tempfile
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Awaitable, Callable, List, Optional, Tuple
 from uuid import uuid4
+import uuid
 
 from fastapi import UploadFile
 from fred_core import (
@@ -45,10 +44,11 @@ from langchain_core.messages import (
 from agentic_backend.application_context import (
     get_default_model,
 )
+from agentic_backend.common.kf_lite_markdown_client import KfLiteMarkdownClient
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
-from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.runtime_context import RuntimeContext, set_attachments_markdown
 from agentic_backend.core.chatbot.chat_schema import (
     Channel,
     ChatMessage,
@@ -60,13 +60,12 @@ from agentic_backend.core.chatbot.chat_schema import (
     ToolCallPart,
     ToolResultPart,
 )
-from agentic_backend.common.structures import ChatContextMessage
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
+from agentic_backend.core.chatbot.session_in_memory_attachements import SessionInMemoryAttachments
 from agentic_backend.core.chatbot.stream_transcoder import StreamTranscoder
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.session.attachement_processing import AttachementProcessing
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
-from agentic_backend.common.kf_lite_markdown_client import KfLiteMarkdownClient
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +101,7 @@ class SessionOrchestrator:
     ):
         self.session_store = session_store
         self.agent_factory = agent_factory
-
+        self.attachments_memory_store = SessionInMemoryAttachments()
         # Side services
         self.history_store = history_store
         self.kpi: BaseKPIWriter = kpi
@@ -170,6 +169,12 @@ class SessionOrchestrator:
             runtime_context=runtime_context,
             session_id=session.id,
         )
+        # 3) Prepare optional attachments context (lite markdown) and make it available via runtime_context
+        # this corresponds to the attached files that the user added to his conversation. These files are transformed to lite markdown format
+        # in turn added to the runtime context so that the agent can use them during its reasoning
+        attachments_context = self.attachments_memory_store.get_session_attachments_markdown(session.id)
+        set_attachments_markdown(runtime_context, attachments_context)
+
         # 3) Rebuild minimal LangChain history (user/assistant/system only),
         # This method will only restore history if the agent is not cached.
         lc_history: List[AnyMessage] = []
@@ -185,7 +190,7 @@ class SessionOrchestrator:
         prior: List[ChatMessage] = self.history_store.get(session.id) or []
         base_rank = len(prior)
 
-        # 2) Emit the user message immediately
+        # 4) Emit the user message immediately
         user_msg = ChatMessage(
             session_id=session.id,
             exchange_id=exchange_id,
@@ -200,15 +205,11 @@ class SessionOrchestrator:
         await self._emit(callback, user_msg)
 
         # 3) Prepare optional attachments context (lite markdown) and make it available via runtime_context
-        attachments_context = self._build_attachments_context(session.id, agent)
-        if attachments_context:
-            try:
-                setattr(agent.runtime_context, "attachments_markdown", attachments_context)
-            except Exception:
-                pass
+        
 
         # 4) Stream agent responses via the transcoder
         saw_final_assistant = False
+        agent_msgs: List[ChatMessage] = []
         try:
             # Timer covers the entire exchange; status defaults to "error" if exception bubbles.
             with self.kpi.timer(
@@ -260,7 +261,13 @@ class SessionOrchestrator:
                 actor=actor,
             )
 
-        # 4) Persist session + history
+        # 6) Attach the raw runtime context (single source of truth)
+        self._attach_runtime_context(
+            runtime_context=runtime_context,
+            messages=agent_msgs,
+        )
+
+        # 7) Persist session + history
         session.updated_at = _utcnow_dt()
         self.session_store.save(session)
         assert session.user_id == user.uid, "Session/user mismatch"
@@ -275,6 +282,11 @@ class SessionOrchestrator:
         self,
         user: KeycloakUser,
     ) -> List[SessionWithFiles]:
+        """
+        Get all sessions for a user, enriched with the list of uploaded files.
+        This method is only used by the UI to list sessions. It is not part of the
+        chat exchange flow.
+        """
         sessions = self.session_store.get_for_user(user.uid)
         enriched: List[SessionWithFiles] = []
         for session in sessions:
@@ -282,15 +294,9 @@ class SessionOrchestrator:
                 session.id, user, Action.READ
             ):
                 continue
-
-            session_folder = self._get_session_temp_folder(session.id)
-            file_names = (
-                [f.name for f in session_folder.iterdir() if f.is_file()]
-                if session_folder.exists()
-                else []
-            )
+            files_names = self.attachments_memory_store.get_session_attachment_names(session.id)
             enriched.append(
-                SessionWithFiles(**session.model_dump(), file_names=file_names)
+                SessionWithFiles(**session.model_dump(), file_names=files_names)
             )
         return enriched
 
@@ -306,45 +312,70 @@ class SessionOrchestrator:
         self._authorize_user_action_on_session(session_id, user, Action.DELETE)
         await self.agent_factory.teardown_session_agents(session_id)
         self.session_store.delete(session_id)
+        self.attachments_memory_store.clear_session(session_id)
 
     # ---------------- File uploads (kept for backward compatibility) ----------------
 
     @authorize(action=Action.CREATE, resource=Resource.MESSAGE_ATTACHMENTS)
-    async def upload_file(
-        self, user: KeycloakUser, session_id: str, agent_name: str, file: UploadFile
+    async def add_attachment_from_upload(
+        self,
+        *,
+        user: KeycloakUser,
+        access_token: str,
+        session_id: str,
+        file: UploadFile,
+        max_chars: int = 30_000,
+        include_tables: bool = True,
+        add_page_headings: bool = False,
     ) -> dict:
         """
-        Purpose:
-          Keep simple "drop a file into this session's temp area" behavior unchanged,
-          so the UI doesn't need to move right now. Can be split later to a dedicated service.
+        Fred rationale:
+        - Zero temp-files: we stream the uploaded content to Knowledge Flow 'lite/markdown'.
+        - We store ONLY the compact Markdown summary in RAM (SessionInMemoryAttachments).
+        - This powers 'retrieval implicite' in subsequent turns, exactly as designed.
         """
-        self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
-        try:
-            session_folder = self._get_session_temp_folder(session_id)
-            if file.filename is None:
-                raise ValueError("Uploaded file must have a filename.")
-            file_path = session_folder / file.filename
-            content = await file.read()
-            with open(file_path, "wb") as f:
-                f.write(content)
+        if not file.filename:
+            raise ValueError("Uploaded file must have a filename.")
+        content = await file.read()  # stays in memory
 
-            # Kick attachment processing (same behavior as before)
-            self.attachement_processing.process_attachment(file_path)
+        # 1) Secure session-mode client for Knowledge Flow (Bearer user token)
+        client = KfLiteMarkdownClient(
+            access_token=access_token,
+            # Optional: refresh_user_access_token=lambda: self._refresh_user_token(user)
+        )
 
-            logger.info(
-                "[📁 Upload] File '%s' saved to %s for session '%s'",
-                file.filename,
-                file_path,
-                session_id,
-            )
-            return {
-                "filename": file.filename,
-                "saved_path": str(file_path),
-                "message": "File uploaded successfully",
-            }
-        except Exception:
-            logger.exception("Failed to store uploaded file.")
-            raise RuntimeError("Failed to store uploaded file.")
+        # 2) Ask KF to produce a compact Markdown (text-only) for conversational use
+        summary_md = client.extract_markdown_from_bytes(
+            filename=file.filename,
+            content=content,
+            mime=file.content_type,
+            max_chars=max_chars,
+            include_tables=include_tables,
+            add_page_headings=add_page_headings,
+        )
+
+        # 3) Create a stable attachment_id (UUID v4 is fine here)
+        attachment_id = str(uuid.uuid4())
+
+        # 4) Put into in-RAM session cache for implicit retrieval
+        self.attachments_memory_store.put(
+            session_id=session_id,
+            attachment_id=attachment_id,
+            name=file.filename,
+            summary_md=summary_md,
+            mime=file.content_type,
+            size_bytes=len(content),
+        )
+
+        # 5) Return a minimal DTO for the UI
+        return {
+            "session_id": session_id,
+            "attachment_id": attachment_id,
+            "filename": file.filename,
+            "mime": file.content_type,
+            "size_bytes": len(content),
+            "preview_chars": min(len(summary_md), 300),  # hint for UI
+        }
 
     # ---------------- Metrics passthrough ----------------
 
@@ -393,79 +424,6 @@ class SessionOrchestrator:
         # For now, ignore action, only owners can access their sessions
         # action is passed for future flexibility (ex: session sharing with attached permissions)
         return session.user_id == user.uid
-
-    def _get_session_temp_folder(self, session_id: str) -> Path:
-        base_temp_dir = Path(tempfile.gettempdir()) / "chatbot_uploads"
-        session_folder = base_temp_dir / session_id
-        session_folder.mkdir(parents=True, exist_ok=True)
-        return session_folder
-
-    def _lite_client_for_agent(self, agent) -> KfLiteMarkdownClient:
-        # Create a fresh client bound to the current agent runtime context
-        return KfLiteMarkdownClient(agent=agent)
-
-    def _build_attachments_context(self, session_id: str, agent) -> str:
-        """
-        Convert session attachments to compact Markdown and concatenate them as a
-        single context block. Caches per-file results as `.lite.md` next to the
-        uploaded file to avoid re-processing on every turn.
-
-        Safety limits:
-        - Per-file cap ~30k chars (delegated to KF lite endpoint)
-        - Total cap ~40k chars across all attachments; surplus is dropped
-        """
-        try:
-            folder = self._get_session_temp_folder(session_id)
-            if not folder.exists():
-                return ""
-
-            eligible = [
-                p for p in folder.iterdir()
-                if p.is_file() and p.suffix.lower() in {".pdf", ".docx"}
-            ]
-            if not eligible:
-                return ""
-
-            client = self._lite_client_for_agent(agent)
-            parts: list[str] = []
-            total_limit = 40_000
-            for f in sorted(eligible, key=lambda x: x.name.lower()):
-                cache_md = f.with_suffix(f.suffix + ".lite.md")
-                text: Optional[str] = None
-                try:
-                    # Use cache if fresh
-                    if cache_md.exists() and cache_md.stat().st_mtime >= f.stat().st_mtime:
-                        text = cache_md.read_text(encoding="utf-8", errors="ignore")
-                    else:
-                        text = client.extract_markdown(f, max_chars=30_000)
-                        try:
-                            cache_md.write_text(text or "", encoding="utf-8")
-                        except Exception:
-                            pass
-                except Exception:
-                    # Skip problematic files but continue others
-                    continue
-
-                if not text:
-                    continue
-
-                header = f"## Attachment: {f.name}\n\n"
-                block = header + text.strip() + "\n"
-                if sum(len(p) for p in parts) + len(block) > total_limit:
-                    # Stop when exceeding total cap
-                    break
-                parts.append(block)
-
-            if not parts:
-                return ""
-
-            intro = (
-                "You have access to user-provided attachments (lightweight markdown). "
-                "Use them when relevant.\n\n"
-            )
-            return intro + "\n\n".join(parts)
-        except Exception:
-            return ""
 
     async def _emit(self, callback: CallbackType, message: ChatMessage) -> None:
         """
@@ -746,6 +704,26 @@ class SessionOrchestrator:
             "[AGENTS] Created new session %s for user %s", new_session_id, user_id
         )
         return session
+
+    # ---------------- runtime context attachment ----------------
+
+    def _attach_runtime_context(
+        self,
+        *,
+        runtime_context: Optional[RuntimeContext],
+        messages: List[ChatMessage],
+    ) -> None:
+        """
+        Attach the **raw RuntimeContext** to assistant/final messages.
+        This is the canonical, unmodified source of truth.
+        """
+        if runtime_context is None:
+            return
+        for m in messages:
+            if m.role == Role.assistant and m.channel == Channel.final:
+                md = m.metadata or ChatMetadata()
+                md.runtime_context = runtime_context
+                m.metadata = md
 
 
 # ---------- pure helpers (kept local for discoverability) ----------

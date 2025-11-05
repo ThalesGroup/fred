@@ -13,9 +13,9 @@
 // limitations under the License.
 
 import { useCallback, useMemo, useState } from "react";
-import { load, save, updateMap, renameKeyInMap } from "../common/persist";
-import type { AgentPrefs, SessionPrefs, UserPrefs } from "../types/prefs";
+import { load, renameKeyInMap, save, updateMap } from "../common/persist";
 import { SearchPolicyName } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { AgentPrefs, SessionPrefs, UserPrefs } from "../types/prefs";
 
 const K_USER = "UserPrefs"; // UserPrefs
 const K_AGENT = "agentPrefs"; // Record<agentId, AgentPrefs>
@@ -39,8 +39,6 @@ export function useUserPrefs() {
 const DEFAULT_AGENT_PREFS: AgentPrefs = {
   search_policy: "semantic",
   selected_document_libraries_ids: [],
-  selected_prompt_ids: null,
-  selected_template_ids: null,
 };
 
 export function useAgentPrefs(agentId: string | null) {
