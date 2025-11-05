@@ -17,7 +17,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
-import { AgentChipWithIcon } from "../../common/AgentChip.tsx";
 import { getConfig } from "../../common/config.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
@@ -588,65 +587,6 @@ const ChatBot = ({
               gap: 2.5,
             }}
           >
-            {/* Hero header */}
-            <Box
-              sx={{
-                width: "min(900px, 100%)",
-                borderRadius: 3,
-                border: (t) => `1px solid ${t.palette.divider}`,
-                background: (t) =>
-                  `linear-gradient(180deg, ${t.palette.heroBackgroundGrad.gradientFrom}, ${t.palette.heroBackgroundGrad.gradientTo})`,
-                boxShadow: (t) =>
-                  t.palette.mode === "light" ? "0 1px 2px rgba(0,0,0,0.06)" : "0 1px 2px rgba(0,0,0,0.25)",
-                px: { xs: 2, sm: 3 },
-                py: { xs: 2, sm: 2.5 },
-              }}
-            >
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 1.25,
-                  textAlign: "center",
-                  flexWrap: "nowrap",
-                }}
-              >
-                <AgentChipWithIcon agent={currentAgent} />
-
-                <Typography variant="h5" sx={{ fontWeight: 600, letterSpacing: 0.2 }}>
-                  {t("chatbot.startNew", { name: currentAgent.name })}
-                </Typography>
-              </Box>
-
-              <Box
-                sx={{
-                  mt: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 1.25,
-                  color: "text.secondary",
-                  textAlign: "center",
-                  flexWrap: "wrap",
-                }}
-              >
-                <Typography variant="body2" sx={{ fontStyle: "italic" }}>
-                  {currentAgent.tuning.role}
-                </Typography>
-
-                <Box
-                  sx={{
-                    width: 1,
-                    height: 14,
-                    borderLeft: (t) => `1px solid ${t.palette.divider}`,
-                    opacity: 0.6,
-                  }}
-                />
-                <Typography variant="body2">{t("chatbot.changeAssistant")}</Typography>
-              </Box>
-            </Box>
-
             {/* Input area */}
             <Box sx={{ width: "min(900px, 100%)" }}>
               <UserInput
@@ -692,7 +632,7 @@ const ChatBot = ({
                 agents={agents}
                 currentAgent={currentAgent}
                 libraryNameById={libraryNameMap}
-                chatContextNameById={chatContextNameMap} // ⬅️ passe la map chat-context
+                chatContextNameById={chatContextNameMap}
               />
               {waitResponse && (
                 <Box mt={1} sx={{ alignSelf: "flex-start" }}>

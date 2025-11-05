@@ -184,7 +184,6 @@
     "searchPromptLibraries": "Rechercher dans les bibliothèques de prompts...",
     "searchChatContextLibraries": "Rechercher dans les bibliothèques de contextes de conversations...",
     "startNew": "Commencer une nouvelle conversation avec {{name}}",
-    "changeAssistant": "Vous pouvez sélectionner un autre assistant dans le panneau des paramètres.",
     "tooltip": {
       "tokenUsage": "Cette conversation a utilisé {{input}} jetons de prompt et {{output}} jetons de réponse",
       "tokenCount": "Cette conversation a utilisé {{total}} jetons",
