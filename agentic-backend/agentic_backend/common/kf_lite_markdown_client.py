@@ -22,6 +22,7 @@ class KfLiteMarkdownClient(KfBaseClient):
         client = KfLiteMarkdownClient(access_token=session_access_token,
                                       refresh_user_access_token=my_refresh_fn)
     """
+
     def __init__(
         self,
         agent=None,
@@ -35,7 +36,6 @@ class KfLiteMarkdownClient(KfBaseClient):
             access_token=access_token,
             refresh_user_access_token=refresh_user_access_token,
         )
-
 
     def extract_markdown_from_bytes(
         self,
@@ -68,7 +68,7 @@ class KfLiteMarkdownClient(KfBaseClient):
         )
         r.raise_for_status()
         return r.text or ""
-    
+
     def extract_markdown(
         self,
         file_path: Path,

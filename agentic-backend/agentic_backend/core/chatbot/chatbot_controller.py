@@ -364,4 +364,6 @@ async def upload_file(
     access_token: str = Security(oauth2_scheme),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> dict:
-    return await session_orchestrator.add_attachment_from_upload(user=user, access_token=access_token, session_id=session_id, file=file)
+    return await session_orchestrator.add_attachment_from_upload(
+        user=user, access_token=access_token, session_id=session_id, file=file
+    )

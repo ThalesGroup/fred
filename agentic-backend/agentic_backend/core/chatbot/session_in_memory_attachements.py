@@ -1,25 +1,39 @@
 # Copyright Thales 2025
-# Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from dataclasses import dataclass
 from typing import Optional, Dict
 
 from fred_core import ThreadSafeLRUCache
 
-# Reuse your existing ThreadSafeLRUCache
-# from fred_core.utils.lru_cache import ThreadSafeLRUCache   # if stored elsewhere
-# For this snippet we assume it's already imported in context.
-
 @dataclass
 class AttachmentData:
     """
-    Lightweight in-memory view of an attached document.
+    Lightweight in-memory store of attached document.
+
+    When a user uploads a document to a chat session, we process it
+    (e.g., extract text, summarize) and keep a brief Markdown summary
+    in memory for the duration of the session.
+
+    This store is reusing Fred's ThreadSafeLRUCache utility.
 
     Fred rationale:
     - Only keeps what the agent needs for *retrieval-implicit reasoning*:
       a Markdown summary and minimal metadata.
     - No binary content or embeddings stored here.
     """
+
     name: str
     mime: Optional[str]
     size_bytes: Optional[int]
@@ -28,18 +42,23 @@ class AttachmentData:
 
 class SessionInMemoryAttachments:
     """
-    Holds in-RAM attachment summaries per session.
-    Fred rationale:
-    - Temporary, session-scoped cache for implicit retrieval.
-    - Built on the same LRU utility already used elsewhere in Fred
-      → consistent behaviour, no extra complexity.
+    Lightweight in-memory store of attached document.
+
+    When a user uploads a document to a chat session, we process it
+    (e.g., extract text, summarize) and keep a brief Markdown summary
+    in memory for the duration of the session.
+
+    This is simple effective design to avoid external storage for
+    transient data that is only needed during the chat session lifetime.
     """
 
     def __init__(self, max_sessions: int = 500, max_attachments_per_session: int = 4):
         self._max_sessions = max_sessions
         self._max_att_per_session = max_attachments_per_session
         # one LRU for sessions; each session holds a small dict of attachments
-        self._sessions = ThreadSafeLRUCache[str, Dict[str, AttachmentData]](max_sessions)
+        self._sessions = ThreadSafeLRUCache[str, Dict[str, AttachmentData]](
+            max_sessions
+        )
 
     # --------------------------------------------------------------
     # CRUD
@@ -100,7 +119,7 @@ class SessionInMemoryAttachments:
         if not bucket:
             return ""
         return "\n\n".join(att.summary_md for att in bucket.values())
-    
+
     def get_session_attachment_names(self, session_id: str) -> list[str]:
         """List all attachment names for a session."""
         bucket = self._sessions.get(session_id)

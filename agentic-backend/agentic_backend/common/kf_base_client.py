@@ -14,6 +14,7 @@ from agentic_backend.application_context import get_app_context
 
 logger = logging.getLogger(__name__)
 
+
 def _session_with_retries(allowed_methods: frozenset) -> requests.Session:
     s = requests.Session()
     retry = Retry(
@@ -26,6 +27,7 @@ def _session_with_retries(allowed_methods: frozenset) -> requests.Session:
     s.mount("http://", HTTPAdapter(max_retries=retry))
     s.mount("https://", HTTPAdapter(max_retries=retry))
     return s
+
 
 if TYPE_CHECKING:
     from agentic_backend.core.agents.agent_flow import AgentFlow
@@ -70,9 +72,7 @@ class KfBaseClient:
 
         # Sanity: allow either agent-mode OR session-mode
         if not self._agent and not self._static_access_token:
-            raise ValueError(
-                "KfBaseClient requires either `agent` or `access_token`."
-            )
+            raise ValueError("KfBaseClient requires either `agent` or `access_token`.")
 
     # ---------------------------
     # Internal helpers
@@ -131,7 +131,9 @@ class KfBaseClient:
         url = f"{self.base_url}{path}"
         headers: Dict[str, str] = kwargs.pop("headers", {})
         headers["Authorization"] = f"Bearer {self._current_access_token()}"
-        return self.session.request(method, url, timeout=self.timeout, headers=headers, **kwargs)
+        return self.session.request(
+            method, url, timeout=self.timeout, headers=headers, **kwargs
+        )
 
     def _request_with_token_refresh(
         self, method: str, path: str, **kwargs: Any
@@ -146,7 +148,9 @@ class KfBaseClient:
             r.raise_for_status()
             return r
 
-        logger.warning("401 Unauthorized on %s %s. Attempting token refresh...", method, path)
+        logger.warning(
+            "401 Unauthorized on %s %s. Attempting token refresh...", method, path
+        )
         if self._try_refresh_token():
             # attempt 1
             r = self._execute_authenticated_request(method=method, path=path, **kwargs)

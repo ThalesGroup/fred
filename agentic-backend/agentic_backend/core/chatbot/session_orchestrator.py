@@ -48,7 +48,10 @@ from agentic_backend.common.kf_lite_markdown_client import KfLiteMarkdownClient
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
-from agentic_backend.core.agents.runtime_context import RuntimeContext, set_attachments_markdown
+from agentic_backend.core.agents.runtime_context import (
+    RuntimeContext,
+    set_attachments_markdown,
+)
 from agentic_backend.core.chatbot.chat_schema import (
     Channel,
     ChatMessage,
@@ -61,7 +64,9 @@ from agentic_backend.core.chatbot.chat_schema import (
     ToolResultPart,
 )
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
-from agentic_backend.core.chatbot.session_in_memory_attachements import SessionInMemoryAttachments
+from agentic_backend.core.chatbot.session_in_memory_attachements import (
+    SessionInMemoryAttachments,
+)
 from agentic_backend.core.chatbot.stream_transcoder import StreamTranscoder
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.session.attachement_processing import AttachementProcessing
@@ -101,7 +106,8 @@ class SessionOrchestrator:
     ):
         self.session_store = session_store
         self.agent_factory = agent_factory
-        self.attachments_memory_store = SessionInMemoryAttachments()
+        self.attachments_memory_store = SessionInMemoryAttachments(1000, 4)
+        logger.info("[SESSIONS] Initialized attachments memory store max_sessions=%d max_per_session=%d", 1000, 4)
         # Side services
         self.history_store = history_store
         self.kpi: BaseKPIWriter = kpi
@@ -172,7 +178,9 @@ class SessionOrchestrator:
         # 3) Prepare optional attachments context (lite markdown) and make it available via runtime_context
         # this corresponds to the attached files that the user added to his conversation. These files are transformed to lite markdown format
         # in turn added to the runtime context so that the agent can use them during its reasoning
-        attachments_context = self.attachments_memory_store.get_session_attachments_markdown(session.id)
+        attachments_context = (
+            self.attachments_memory_store.get_session_attachments_markdown(session.id)
+        )
         set_attachments_markdown(runtime_context, attachments_context)
 
         # 3) Rebuild minimal LangChain history (user/assistant/system only),
@@ -205,7 +213,6 @@ class SessionOrchestrator:
         await self._emit(callback, user_msg)
 
         # 3) Prepare optional attachments context (lite markdown) and make it available via runtime_context
-        
 
         # 4) Stream agent responses via the transcoder
         saw_final_assistant = False
@@ -294,7 +301,9 @@ class SessionOrchestrator:
                 session.id, user, Action.READ
             ):
                 continue
-            files_names = self.attachments_memory_store.get_session_attachment_names(session.id)
+            files_names = self.attachments_memory_store.get_session_attachment_names(
+                session.id
+            )
             enriched.append(
                 SessionWithFiles(**session.model_dump(), file_names=files_names)
             )
@@ -313,6 +322,7 @@ class SessionOrchestrator:
         await self.agent_factory.teardown_session_agents(session_id)
         self.session_store.delete(session_id)
         self.attachments_memory_store.clear_session(session_id)
+        logger.info("[SESSIONS] Deleted session %s", session_id)
 
     # ---------------- File uploads (kept for backward compatibility) ----------------
 

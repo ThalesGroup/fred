@@ -495,6 +495,7 @@ export type RuntimeContext = {
   access_token?: string | null;
   refresh_token?: string | null;
   access_token_expires_at?: number | null;
+  attachments_markdown?: string | null;
 };
 export type ChatMetadata = {
   model?: string | null;
@@ -702,7 +703,6 @@ export type ChatMessage2 = {
 };
 export type BodyUploadFileAgenticV1ChatbotUploadPost = {
   session_id: string;
-  agent_name: string;
   file: Blob;
 };
 export type FeedbackRecord = {

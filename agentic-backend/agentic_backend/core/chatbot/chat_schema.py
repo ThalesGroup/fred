@@ -250,6 +250,7 @@ class SessionSchema(BaseModel):
 class SessionWithFiles(SessionSchema):
     file_names: List[str] = []
 
+
 # ---------- Transport events ----------
 class StreamEvent(BaseModel):
     type: Literal["stream"] = "stream"
