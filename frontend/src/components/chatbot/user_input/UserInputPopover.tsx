@@ -49,6 +49,7 @@ interface UserInputPopoverProps {
   plusAnchor: HTMLElement | null;
   pickerView: PickerView;
   isRecording: boolean;
+  sessionAttachments: string[];
   selectedDocumentLibrariesIds: string[];
   selectedPromptResourceIds: string[];
   selectedTemplateResourceIds: string[];
@@ -79,6 +80,7 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
   plusAnchor,
   pickerView,
   isRecording,
+  sessionAttachments,
   selectedDocumentLibrariesIds,
   selectedPromptResourceIds,
   selectedTemplateResourceIds,
@@ -160,6 +162,25 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
     >
       {!pickerView && (
         <Box sx={{ display: "flex", flexDirection: "column" }}>
+          {/* Attached files (session) */}
+          {!!sessionAttachments?.length && (
+            <>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
+                <AttachFileIcon fontSize="small" />
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {t("chatbot.attachments.count", { count: sessionAttachments.length })}
+                </Typography>
+              </Stack>
+              <Box sx={{ mb: 1 }}>
+                <Stack direction="row" flexWrap="wrap" gap={0.75}>
+                  {sessionAttachments.map((name, i) => (
+                    <Chip key={`${name}-${i}`} size="small" variant="outlined" label={name.replace(/\.[^/.]+$/, "")} />
+                  ))}
+                </Stack>
+              </Box>
+              <Divider sx={{ my: 1 }} />
+            </>
+          )}
           {agentChatOptions?.libraries_selection && (
             <>
               {sectionHeader(

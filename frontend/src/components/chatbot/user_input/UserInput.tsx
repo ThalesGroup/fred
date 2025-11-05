@@ -25,7 +25,7 @@ import {
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 
 // Import the new sub-components
-import { AgentChatOptions } from "../../../slices/agentic/agenticOpenApi.ts";
+import { AgentChatOptions, useGetSessionsAgenticV1ChatbotSessionsGetQuery } from "../../../slices/agentic/agenticOpenApi.ts";
 import { UserInputAttachments } from "./UserInputAttachments.tsx";
 import { UserInputPopover } from "./UserInputPopover.tsx";
 
@@ -80,6 +80,7 @@ export default function UserInput({
   onStop,
   onContextChange,
   sessionId,
+  attachmentsRefreshTick,
   initialDocumentLibraryIds,
   initialPromptResourceIds,
   initialTemplateResourceIds,
@@ -91,6 +92,7 @@ export default function UserInput({
   onStop?: () => void;
   onContextChange?: (ctx: UserInputContent) => void;
   sessionId?: string;
+  attachmentsRefreshTick?: number;
   initialDocumentLibraryIds?: string[];
   initialPromptResourceIds?: string[];
   initialTemplateResourceIds?: string[];
@@ -266,6 +268,22 @@ export default function UserInput({
   // Libraries are "document" tags in your UI
   const { data: documentTags = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" });
 
+  // --- Session attachments for popover ---
+  const { data: sessions = [], refetch: refetchSessions } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: false,
+    refetchOnReconnect: true,
+  });
+  useEffect(() => {
+    if (sessionId) refetchSessions();
+  }, [attachmentsRefreshTick, sessionId, refetchSessions]);
+  const sessionAttachments: string[] = useMemo(() => {
+    if (!sessionId) return [];
+    const s = (sessions as any[]).find((x) => x?.id === sessionId) as any | undefined;
+    const arr = (s && (s.file_names as string[] | undefined)) || [];
+    return Array.isArray(arr) ? arr : [];
+  }, [sessions, sessionId]);
+
   const promptNameById = useMemo(
     () => Object.fromEntries((promptResources as Resource[]).map((r) => [r.id, r.name])),
     [promptResources],
@@ -352,6 +370,8 @@ export default function UserInput({
       return next;
     });
   };
+
+  // No separate attachments popover (shown inside + menu)
 
   // Audio
   const handleAudioRecorderDisplay = () => {
@@ -497,6 +517,7 @@ export default function UserInput({
               />
             )}
           </Box>
+          {/* Attached files are shown within the + menu popover */}
         </Box>
 
         {/* Popover - now a dedicated component */}
@@ -504,6 +525,7 @@ export default function UserInput({
           plusAnchor={plusAnchor}
           pickerView={pickerView}
           isRecording={isRecording}
+          sessionAttachments={sessionAttachments}
           selectedDocumentLibrariesIds={selectedDocumentLibrariesIds}
           selectedPromptResourceIds={selectedPromptResourceIds}
           selectedTemplateResourceIds={selectedTemplateResourceIds}

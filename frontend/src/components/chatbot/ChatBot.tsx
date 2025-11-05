@@ -118,6 +118,8 @@ const ChatBot = ({
   // Lazy messages fetcher
   const [fetchHistory] = useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery();
   const [uploadChatFile] = useUploadFileAgenticV1ChatbotUploadPostMutation();
+  // Local tick to signal attachments list to refresh after successful uploads
+  const [attachmentsRefreshTick, setAttachmentsRefreshTick] = useState<number>(0);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
@@ -446,6 +448,8 @@ const ChatBot = ({
           }).unwrap();
           console.log("✅ Uploaded file:", file.name);
           showInfo({ summary: "File Upload", detail: `File ${file.name} uploaded successfully.` });
+          // Nudge attachments bar to refresh its session list view
+          setAttachmentsRefreshTick((x) => x + 1);
         } catch (err: any) {
           const errMsg = err?.data?.detail || err?.error || (err as Error)?.message || "Unknown error";
           console.error("❌ File upload failed:", err);
@@ -644,6 +648,7 @@ const ChatBot = ({
                 onStop={stopStreaming}
                 onContextChange={setUserInputContext}
                 sessionId={currentChatBotSession?.id}
+                attachmentsRefreshTick={attachmentsRefreshTick}
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
                 initialPromptResourceIds={initialCtx.promptResourceIds}
                 initialTemplateResourceIds={initialCtx.templateResourceIds}
@@ -695,6 +700,7 @@ const ChatBot = ({
                 onStop={stopStreaming}
                 onContextChange={setUserInputContext}
                 sessionId={currentChatBotSession?.id}
+                attachmentsRefreshTick={attachmentsRefreshTick}
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
                 initialPromptResourceIds={initialCtx.promptResourceIds}
                 initialTemplateResourceIds={initialCtx.templateResourceIds}
