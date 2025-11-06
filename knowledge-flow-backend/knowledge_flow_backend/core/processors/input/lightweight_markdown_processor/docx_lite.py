@@ -120,7 +120,7 @@ class DocxLiteMarkdownExtractor:
                         lines.append("| " + " | ".join(row_cells) + " |")
 
                     if rows < len(t.rows) or cols < len(t.columns):
-                        lines.append(f"… (table truncated)")
+                        lines.append("… (table truncated)")
 
                     lines.append("<!-- TABLE_END -->")
                     lines.append("")
