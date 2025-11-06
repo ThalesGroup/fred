@@ -60,9 +60,9 @@ export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
   const ICON_SIZE = 14;
   const ICON_GAP = 6; // distance between icon and text
   const ICON_BOX_W = ICON_SIZE + ICON_GAP; // mirrored on the right
-  const CHIP_HEIGHT = 28;
+  const CHIP_HEIGHT = 24;
   const PILL_RADIUS = 999;
-  const SIDE_PAD = 6; // equal padding from chip borders (L & R)
+  const SIDE_PAD = 8; // equal padding from chip borders (L & R)
   const NAME_MAX_W = 160; // cap; keep if you want ellipsis sooner
 
   return (
@@ -72,11 +72,11 @@ export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
         <Box
           sx={{
             display: "grid",
-            gridTemplateColumns: `${ICON_BOX_W}px minmax(0, 1fr) ${ICON_BOX_W}px`,
+            gridTemplateColumns: `${ICON_BOX_W}px minmax(0, 1fr)`,
             alignItems: "center",
             columnGap: 0,
             minWidth: 0,
-            px: `${SIDE_PAD}px`, // symmetric padding from borders
+            px: `${SIDE_PAD}px`,
           }}
         >
           {/* Left icon track */}
@@ -103,9 +103,6 @@ export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
               {agent.name}
             </Typography>
           </Box>
-
-          {/* Right spacer mirrors the icon track */}
-          <Box sx={{ width: ICON_BOX_W }} />
         </Box>
       }
       sx={[

@@ -184,7 +184,6 @@
     "searchPromptLibraries": "Search prompt libraries...",
     "searchChatContextLibraries": "Search chat context libraries...",
     "startNew": "Start a new conversation with {{name}}",
-    "changeAssistant": "You can select another assistant in the settings panel.",
     "tooltip": {
       "tokenUsage": "This conversation has used {{input}} prompt tokens and {{output}} response tokens",
       "tokenCount": "This conversation has used {{total}} tokens",
@@ -564,5 +563,8 @@
     "sectionChatContextSingular": "CHAT CONTEXT",
     "sectionChatContextsPlural": "CHAT CONTEXTS",
     "disclaimer": "AI content may be incorrect."
+  },
+  "agentSelector": {
+    "sendTo": "Send to"
   }
 }
