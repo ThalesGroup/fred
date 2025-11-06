@@ -79,7 +79,7 @@ class PdfLiteMarkdownExtractor:
 
         # If truncated, optionally trim per-page details to reflect cut
         if truncated and opts.return_per_page:
-            remaining = len(combined)
+            # remaining = len(combined)
             # crude heuristic: keep pages while within the truncated combined text
             kept: List[LitePageMarkdown] = []
             acc = 0
@@ -129,6 +129,7 @@ class PdfLiteMarkdownProcessor(BaseMarkdownProcessor):
                 reader = pypdf.PdfReader(f)
                 page_count = len(reader.pages)
         except Exception:
+            logger.warning(f"Could not read PDF metadata for file: {file_path}")
             pass
         try:
             size = file_path.stat().st_size
