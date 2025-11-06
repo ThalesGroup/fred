@@ -6,7 +6,7 @@
 // User input component for the chatbot
 
 import AddIcon from "@mui/icons-material/Add";
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import StopIcon from "@mui/icons-material/Stop";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -25,7 +25,12 @@ import {
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 
 // Import the new sub-components
-import { AgentChatOptions, useGetSessionsAgenticV1ChatbotSessionsGetQuery } from "../../../slices/agentic/agenticOpenApi.ts";
+import { AnyAgent } from "../../../common/agent.ts";
+import {
+  AgentChatOptions,
+  useGetSessionsAgenticV1ChatbotSessionsGetQuery,
+} from "../../../slices/agentic/agenticOpenApi.ts";
+import { AgentSelector } from "./AgentSelector.tsx";
 import { UserInputAttachments } from "./UserInputAttachments.tsx";
 import { UserInputPopover } from "./UserInputPopover.tsx";
 
@@ -85,6 +90,9 @@ export default function UserInput({
   initialPromptResourceIds,
   initialTemplateResourceIds,
   initialSearchPolicy = "semantic",
+  currentAgent,
+  agents,
+  onSelectNewAgent,
 }: {
   agentChatOptions?: AgentChatOptions;
   isWaiting: boolean;
@@ -97,6 +105,9 @@ export default function UserInput({
   initialPromptResourceIds?: string[];
   initialTemplateResourceIds?: string[];
   initialSearchPolicy?: SearchPolicyName;
+  currentAgent: AnyAgent;
+  agents: AnyAgent[];
+  onSelectNewAgent: (flow: AnyAgent) => void;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -277,11 +288,16 @@ export default function UserInput({
   useEffect(() => {
     if (sessionId) refetchSessions();
   }, [attachmentsRefreshTick, sessionId, refetchSessions]);
-  const sessionAttachments: string[] = useMemo(() => {
+  type AttachmentRef = { id: string; name: string };
+  const sessionAttachments: AttachmentRef[] = useMemo(() => {
     if (!sessionId) return [];
     const s = (sessions as any[]).find((x) => x?.id === sessionId) as any | undefined;
-    const arr = (s && (s.file_names as string[] | undefined)) || [];
-    return Array.isArray(arr) ? arr : [];
+    // Prefer new backend shape with IDs
+    const att = s?.attachments;
+    if (Array.isArray(att)) return att as AttachmentRef[];
+    // Fallback to legacy file_names list if attachments not present
+    const names = (s && (s.file_names as string[] | undefined)) || [];
+    return Array.isArray(names) ? names.map((n) => ({ id: n, name: n })) : [];
   }, [sessions, sessionId]);
 
   const promptNameById = useMemo(
@@ -393,7 +409,7 @@ export default function UserInput({
   const removeTemplate = (id: string) => setTemplates((prev) => prev.filter((x) => x !== id));
 
   return (
-    <Grid2 container sx={{ height: "100%", justifyContent: "flex-end", overflow: "hidden" }} size={12} display="flex">
+    <Grid2 container sx={{ height: "100%", justifyContent: "flex-start", overflow: "hidden" }} size={12} display="flex">
       {/* Attachments strip - now a dedicated component */}
       <UserInputAttachments
         files={filesBlob}
@@ -402,6 +418,8 @@ export default function UserInput({
         onShowAudioController={() => setDisplayAudioController(true)}
         onRemoveAudio={() => setAudioBlob(null)}
       />
+
+      <AgentSelector agents={agents} currentAgent={currentAgent} onSelectNewAgent={onSelectNewAgent} />
 
       {/* Only the inner rounded input remains visible */}
       <Grid2 container size={12} alignItems="center" sx={{ p: 0, gap: 0, backgroundColor: "transparent" }}>
@@ -462,6 +480,7 @@ export default function UserInput({
           <Box
             sx={{
               borderRadius: 4,
+              borderTopLeftRadius: 0,
               border: `1px solid ${theme.palette.divider}`,
               background:
                 theme.palette.mode === "light" ? theme.palette.common.white : theme.palette.background.default,

@@ -59,6 +59,7 @@ from agentic_backend.core.chatbot.chat_schema import (
     Role,
     SessionSchema,
     SessionWithFiles,
+    AttachmentRef,
     TextPart,
     ToolCallPart,
     ToolResultPart,
@@ -308,8 +309,14 @@ class SessionOrchestrator:
             files_names = self.attachments_memory_store.get_session_attachment_names(
                 session.id
             )
+            id_name_pairs = self.attachments_memory_store.get_session_attachment_id_name_pairs(
+                session.id
+            )
+            attachments = [AttachmentRef(id=att_id, name=name) for att_id, name in id_name_pairs]
             enriched.append(
-                SessionWithFiles(**session.model_dump(), file_names=files_names)
+                SessionWithFiles(
+                    **session.model_dump(), file_names=files_names, attachments=attachments
+                )
             )
         return enriched
 

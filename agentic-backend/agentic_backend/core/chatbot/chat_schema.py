@@ -247,8 +247,14 @@ class SessionSchema(BaseModel):
     updated_at: datetime
 
 
+class AttachmentRef(BaseModel):
+    id: str
+    name: str
+
+
 class SessionWithFiles(SessionSchema):
     file_names: List[str] = []
+    attachments: List[AttachmentRef] = []
 
 
 # ---------- Transport events ----------

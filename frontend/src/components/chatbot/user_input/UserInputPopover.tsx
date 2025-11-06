@@ -45,12 +45,14 @@ import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard.tsx";
 
 type PickerView = null | "libraries" | "prompts" | "templates" | "search_policy";
 
+type SessionAttachmentRef = { id: string; name: string };
+
 interface UserInputPopoverProps {
   plusAnchor: HTMLElement | null;
   pickerView: PickerView;
   isRecording: boolean;
   sessionId?: string;
-  sessionAttachments: string[];
+  sessionAttachments: SessionAttachmentRef[];
   selectedDocumentLibrariesIds: string[];
   selectedPromptResourceIds: string[];
   selectedTemplateResourceIds: string[];
@@ -191,13 +193,13 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
               </Stack>
               <Box sx={{ mb: 1 }}>
                 <Stack direction="row" flexWrap="wrap" gap={0.75}>
-                  {sessionAttachments.map((name, i) => (
+                  {sessionAttachments.map((att, i) => (
                     <Chip
-                      key={`${name}-${i}`}
+                      key={`${att.id}-${i}`}
                       size="small"
                       variant="outlined"
-                      label={name.replace(/\.[^/.]+$/, "")}
-                      onDelete={isDeleting ? undefined : () => handleDeleteAttachment(name)}
+                      label={att.name.replace(/\.[^/.]+$/, "")}
+                      onDelete={isDeleting ? undefined : () => handleDeleteAttachment(att.id)}
                     />
                   ))}
                 </Stack>

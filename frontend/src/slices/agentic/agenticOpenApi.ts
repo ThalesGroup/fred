@@ -587,12 +587,17 @@ export type ErrorEvent = {
   content: string;
   session_id?: string | null;
 };
+export type AttachmentRef = {
+  id: string;
+  name: string;
+};
 export type SessionWithFiles = {
   id: string;
   user_id: string;
   title: string;
   updated_at: string;
   file_names?: string[];
+  attachments?: AttachmentRef[];
 };
 export type MetricsBucket = {
   timestamp: string;

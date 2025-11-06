@@ -20,6 +20,7 @@ RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh && \
 # Create virtualenv manually (outside project for portability)
 ENV UV_PROJECT_ENVIRONMENT=/app/venv
 ENV PATH="/app/venv/bin:$PATH"
+ENV TIKTOKEN_CACHE_DIR=/app/encodings
 
 # Set working directory
 WORKDIR /app
@@ -29,11 +30,18 @@ COPY knowledge-flow-backend/pyproject.toml knowledge-flow-backend/uv.lock* /app/
 # Copy Makefile-related files
 COPY knowledge-flow-backend/Makefile /app/
 COPY scripts /scripts
+
 # Copy fred-core folder as this is a Python-dependency for the backend
 COPY fred-core /fred-core
 
 # Install dependencies using make with both VENV and TARGET properly set
 RUN make dev
+
+# Prepare local encodings directory
+RUN mkdir -p $TIKTOKEN_CACHE_DIR
+
+# Download encodings for offline usage
+RUN python /scripts/download_encodings.py https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken
 
 # Copy projets
 COPY knowledge-flow-backend/. /app/
@@ -59,7 +67,10 @@ RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
 
 # Copy virtualenv from build stage
 COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/venv /app/venv
+COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/encodings /app/encodings
+
 ENV PATH="/app/venv/bin:$PATH"
+ENV TIKTOKEN_CACHE_DIR=/app/encodings
 
 # Set working directory
 WORKDIR /app

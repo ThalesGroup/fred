@@ -127,6 +127,13 @@ class SessionInMemoryAttachments:
             return []
         return [att.name for att in bucket.values()]
 
+    def get_session_attachment_id_name_pairs(self, session_id: str) -> list[tuple[str, str]]:
+        """List attachment (id, name) pairs for a session."""
+        bucket = self._sessions.get(session_id)
+        if not bucket:
+            return []
+        return [(att_id, att.name) for att_id, att in bucket.items()]
+
     def stats(self) -> dict:
         """Basic observability hook."""
         return {
