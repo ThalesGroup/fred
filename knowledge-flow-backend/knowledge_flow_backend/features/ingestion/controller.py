@@ -268,6 +268,7 @@ class IngestionController:
                     if parent.exists() and not any(parent.iterdir()):
                         parent.rmdir()
                 except Exception:
+                    logger.warning(f"Failed to clean up temporary file: {raw_path}")
                     pass
 
             if fmt.lower() == "text":
