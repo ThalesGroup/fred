@@ -257,6 +257,15 @@ class SessionWithFiles(SessionSchema):
     attachments: List[AttachmentRef] = []
 
 
+class ChatbotRuntimeSummary(BaseModel):
+    """Lightweight runtime snapshot for UI recap."""
+    sessions_total: int
+    agents_active_total: int
+    attachments_total: int
+    attachments_sessions: int
+    max_attachments_per_session: int
+
+
 # ---------- Transport events ----------
 class StreamEvent(BaseModel):
     type: Literal["stream"] = "stream"

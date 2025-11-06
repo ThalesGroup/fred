@@ -53,16 +53,17 @@ from agentic_backend.core.agents.runtime_context import (
     set_attachments_markdown,
 )
 from agentic_backend.core.chatbot.chat_schema import (
+    AttachmentRef,
     Channel,
     ChatMessage,
     ChatMetadata,
     Role,
     SessionSchema,
     SessionWithFiles,
-    AttachmentRef,
     TextPart,
     ToolCallPart,
     ToolResultPart,
+    ChatbotRuntimeSummary,
 )
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
 from agentic_backend.core.chatbot.session_in_memory_attachements import (
@@ -309,13 +310,19 @@ class SessionOrchestrator:
             files_names = self.attachments_memory_store.get_session_attachment_names(
                 session.id
             )
-            id_name_pairs = self.attachments_memory_store.get_session_attachment_id_name_pairs(
-                session.id
+            id_name_pairs = (
+                self.attachments_memory_store.get_session_attachment_id_name_pairs(
+                    session.id
+                )
             )
-            attachments = [AttachmentRef(id=att_id, name=name) for att_id, name in id_name_pairs]
+            attachments = [
+                AttachmentRef(id=att_id, name=name) for att_id, name in id_name_pairs
+            ]
             enriched.append(
                 SessionWithFiles(
-                    **session.model_dump(), file_names=files_names, attachments=attachments
+                    **session.model_dump(),
+                    file_names=files_names,
+                    attachments=attachments,
                 )
             )
         return enriched
@@ -359,12 +366,13 @@ class SessionOrchestrator:
         )
 
     @authorize(action=Action.CREATE, resource=Resource.MESSAGE_ATTACHMENTS)
+    @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
     async def add_attachment_from_upload(
         self,
         *,
         user: KeycloakUser,
         access_token: str,
-        session_id: str,
+        session_id: Optional[str],
         file: UploadFile,
         max_chars: int = 30_000,
         include_tables: bool = True,
@@ -379,6 +387,16 @@ class SessionOrchestrator:
         if not file.filename:
             raise ValueError("Uploaded file must have a filename.")
         content = await file.read()  # stays in memory
+
+        # If no session_id was provided (first interaction), create one now.
+        # Use a lightweight title based on the filename to keep UX sensible.
+        session = self._get_or_create_session(
+            user_id=user.uid,
+            query=f"File: {file.filename}",
+            session_id=session_id if session_id else None,
+        )
+        # Ensure the user has rights on this session (create/update if needed)
+        self._authorize_user_action_on_session(session.id, user, Action.UPDATE)
 
         # 1) Secure session-mode client for Knowledge Flow (Bearer user token)
         client = KfLiteMarkdownClient(
@@ -401,7 +419,7 @@ class SessionOrchestrator:
 
         # 4) Put into in-RAM session cache for implicit retrieval
         self.attachments_memory_store.put(
-            session_id=session_id,
+            session_id=session.id,
             attachment_id=attachment_id,
             name=file.filename,
             summary_md=summary_md,
@@ -411,7 +429,7 @@ class SessionOrchestrator:
 
         # 5) Return a minimal DTO for the UI
         return {
-            "session_id": session_id,
+            "session_id": session.id,
             "attachment_id": attachment_id,
             "filename": file.filename,
             "mime": file.content_type,
@@ -439,6 +457,40 @@ class SessionOrchestrator:
             groupby=groupby,
             agg_mapping=agg_mapping,
             user_id=user.uid,
+        )
+
+    @authorize(action=Action.READ, resource=Resource.SESSIONS)
+    def get_runtime_summary(self, user: KeycloakUser) -> ChatbotRuntimeSummary:
+        """Return a simple per-user snapshot: sessions, active agents, attachments."""
+        sessions = self.session_store.get_for_user(user.uid)
+        session_ids = {s.id for s in sessions}
+        sessions_total = len(session_ids)
+
+        # Agent instances in cache filtered to these sessions
+        try:
+            active_keys = getattr(self.agent_factory, "list_active_keys", lambda: [])()
+        except Exception:
+            active_keys = []
+        agents_active_total = sum(1 for sid, _ in active_keys if sid in session_ids)
+
+        # Attachments across these sessions
+        attachments_total = 0
+        attachments_sessions = 0
+        for sid in session_ids:
+            ids = self.attachments_memory_store.list_ids(sid)
+            if ids:
+                attachments_sessions += 1
+                attachments_total += len(ids)
+
+        att_stats = self.attachments_memory_store.stats()
+        max_att = int(att_stats.get("max_attachments_per_session", 0))
+
+        return ChatbotRuntimeSummary(
+            sessions_total=sessions_total,
+            agents_active_total=agents_active_total,
+            attachments_total=attachments_total,
+            attachments_sessions=attachments_sessions,
+            max_attachments_per_session=max_att,
         )
 
     # ---------------- internals ----------------

@@ -13,9 +13,10 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 from fred_core import ThreadSafeLRUCache
+
 
 @dataclass
 class AttachmentData:
@@ -127,7 +128,9 @@ class SessionInMemoryAttachments:
             return []
         return [att.name for att in bucket.values()]
 
-    def get_session_attachment_id_name_pairs(self, session_id: str) -> list[tuple[str, str]]:
+    def get_session_attachment_id_name_pairs(
+        self, session_id: str
+    ) -> list[tuple[str, str]]:
         """List attachment (id, name) pairs for a session."""
         bucket = self._sessions.get(session_id)
         if not bucket:
@@ -136,8 +139,17 @@ class SessionInMemoryAttachments:
 
     def stats(self) -> dict:
         """Basic observability hook."""
+        try:
+            keys = list(self._sessions.keys())
+        except Exception:
+            keys = []
+        attachments_total = 0
+        for sid in keys:
+            bucket = self._sessions.get(sid) or {}
+            attachments_total += len(bucket)
         return {
-            "sessions": len(self._sessions.keys()),
+            "sessions": len(keys),
+            "attachments_total": attachments_total,
             "max_sessions": self._max_sessions,
             "max_attachments_per_session": self._max_att_per_session,
         }

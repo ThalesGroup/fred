@@ -40,11 +40,14 @@ export interface ProgressStepperProps {
 export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
   if (!steps.length) return null;
 
-  const stepsByFile = steps.reduce((acc, step) => {
-    if (!acc[step.filename]) acc[step.filename] = [];
-    acc[step.filename].push(step);
-    return acc;
-  }, {} as Record<string, ProgressStep[]>);
+  const stepsByFile = steps.reduce(
+    (acc, step) => {
+      if (!acc[step.filename]) acc[step.filename] = [];
+      acc[step.filename].push(step);
+      return acc;
+    },
+    {} as Record<string, ProgressStep[]>,
+  );
 
   const getIcon = (status: string) => {
     switch (status) {
@@ -94,17 +97,10 @@ export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
 
           <Divider sx={{ mb: 1 }} />
 
-          <Stepper
-            activeStep={fileSteps.length}
-            orientation="vertical"
-            sx={{ pl: 1 }}
-          >
+          <Stepper activeStep={fileSteps.length} orientation="vertical" sx={{ pl: 1 }}>
             {fileSteps.map((step, index) => (
               <Step key={index}>
-                <StepLabel
-                  icon={getIcon(step.status)}
-                  error={step.status === "error"}
-                >
+                <StepLabel icon={getIcon(step.status)} error={step.status === "error"}>
                   <Typography
                     variant="body1"
                     fontWeight="medium"
@@ -119,11 +115,7 @@ export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
                   </Typography>
                 </StepLabel>
                 <StepContent>
-                  <Typography
-                    variant="body2"
-                    color="textSecondary"
-                    sx={{ ml: 1, maxWidth: "100%" }}
-                  >
+                  <Typography variant="body2" color="textSecondary" sx={{ ml: 1, maxWidth: "100%" }}>
                     {step.status}
                   </Typography>
                 </StepContent>
@@ -131,7 +123,6 @@ export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
             ))}
           </Stepper>
         </Paper>
-
       ))}
     </Box>
   );

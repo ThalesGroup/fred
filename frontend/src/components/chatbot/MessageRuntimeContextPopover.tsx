@@ -108,14 +108,12 @@ export default function MessageRuntimeContextPopover({
           <SectionRow label={t("popover.search")} value={searchPolicy} />
           <SectionRow label={t("popover.temp")} value={typeof temperature === "number" ? temperature : undefined} />
 
-          {(libsLabeled.length || ctxLabeled.length) ? <Divider flexItem /> : null}
+          {libsLabeled.length || ctxLabeled.length ? <Divider flexItem /> : null}
 
           {libsLabeled.length ? (
             <>
               <Typography variant="overline" sx={{ opacity: 0.7 }}>
-                {libsLabeled.length > 1
-                  ? t("popover.sectionLibrariesPlural")
-                  : t("popover.sectionLibrarySingular")}
+                {libsLabeled.length > 1 ? t("popover.sectionLibrariesPlural") : t("popover.sectionLibrarySingular")}
               </Typography>
               <Typography variant="caption" fontWeight={500} sx={{ display: "block" }}>
                 {libsLabeled.join(", ")}

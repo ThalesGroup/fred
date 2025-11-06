@@ -1,4 +1,3 @@
-
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,10 +21,7 @@ export default function Unauthorized() {
   return (
     <PageError
       title={t("unauthorized.title", "Unauthorized")}
-      message={t(
-        "unauthorized.message",
-        "You do not have the required permissions to access this page."
-      )}
+      message={t("unauthorized.message", "You do not have the required permissions to access this page.")}
     />
   );
 }

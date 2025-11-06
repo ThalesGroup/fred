@@ -146,6 +146,12 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getRuntimeSummaryAgenticV1MetricsChatbotSummaryGet: build.query<
+      GetRuntimeSummaryAgenticV1MetricsChatbotSummaryGetApiResponse,
+      GetRuntimeSummaryAgenticV1MetricsChatbotSummaryGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/metrics/chatbot/summary` }),
+    }),
     getFeedbackAgenticV1ChatbotFeedbackGet: build.query<
       GetFeedbackAgenticV1ChatbotFeedbackGetApiResponse,
       GetFeedbackAgenticV1ChatbotFeedbackGetApiArg
@@ -263,6 +269,9 @@ export type GetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetApiArg = {
   agg?: string[];
   groupby?: string[];
 };
+export type GetRuntimeSummaryAgenticV1MetricsChatbotSummaryGetApiResponse =
+  /** status 200 Successful Response */ ChatbotRuntimeSummary;
+export type GetRuntimeSummaryAgenticV1MetricsChatbotSummaryGetApiArg = void;
 export type GetFeedbackAgenticV1ChatbotFeedbackGetApiResponse = /** status 200 Successful Response */ FeedbackRecord[];
 export type GetFeedbackAgenticV1ChatbotFeedbackGetApiArg = void;
 export type PostFeedbackAgenticV1ChatbotFeedbackPostApiResponse = unknown;
@@ -612,6 +621,13 @@ export type MetricsResponse = {
   precision: string;
   buckets: MetricsBucket[];
 };
+export type ChatbotRuntimeSummary = {
+  sessions_total: number;
+  agents_active_total: number;
+  attachments_total: number;
+  attachments_sessions: number;
+  max_attachments_per_session: number;
+};
 export type EchoEnvelope = {
   kind:
     | "ChatMessage"
@@ -623,7 +639,8 @@ export type EchoEnvelope = {
     | "MetricsResponse"
     | "MetricsBucket"
     | "VectorSearchHit"
-    | "RuntimeContext";
+    | "RuntimeContext"
+    | "ChatbotRuntimeSummary";
   /** Schema payload being echoed */
   payload:
     | ChatMessage
@@ -636,7 +653,8 @@ export type EchoEnvelope = {
     | MetricsResponse
     | MetricsBucket
     | VectorSearchHit
-    | RuntimeContext;
+    | RuntimeContext
+    | ChatbotRuntimeSummary;
 };
 export type FrontendFlags = {
   enableK8Features?: boolean;
@@ -812,6 +830,8 @@ export const {
   useLazyReadyAgenticV1ReadyGetQuery,
   useGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery,
   useLazyGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery,
+  useGetRuntimeSummaryAgenticV1MetricsChatbotSummaryGetQuery,
+  useLazyGetRuntimeSummaryAgenticV1MetricsChatbotSummaryGetQuery,
   useGetFeedbackAgenticV1ChatbotFeedbackGetQuery,
   useLazyGetFeedbackAgenticV1ChatbotFeedbackGetQuery,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,

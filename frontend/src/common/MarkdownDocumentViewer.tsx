@@ -116,14 +116,14 @@ export const MarkdownDocumentViewer: React.FC<MarkdownDocumentViewerProps> = ({
             <CircularProgress />
           </Box>
         ) : (
-            <MarkdownContainer padding={3}>
-              <MarkdownRendererWithHighlights
-                highlightedParts={[...highlightedParts, ...highlightedPartsFromExtracts]}
-                content={docContent}
-                size="medium"
-                enableEmojiSubstitution
-              />
-            </MarkdownContainer>
+          <MarkdownContainer padding={3}>
+            <MarkdownRendererWithHighlights
+              highlightedParts={[...highlightedParts, ...highlightedPartsFromExtracts]}
+              content={docContent}
+              size="medium"
+              enableEmojiSubstitution
+            />
+          </MarkdownContainer>
         )}
       </Box>
     </Box>

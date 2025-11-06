@@ -54,6 +54,7 @@ from agentic_backend.core.chatbot.chat_schema import (
     SessionSchema,
     SessionWithFiles,
     StreamEvent,
+    ChatbotRuntimeSummary,
 )
 from agentic_backend.core.chatbot.metric_structures import (
     MetricsBucket,
@@ -77,6 +78,7 @@ EchoPayload = Union[
     MetricsBucket,
     VectorSearchHit,
     RuntimeContext,
+    ChatbotRuntimeSummary,
 ]
 
 
@@ -92,6 +94,7 @@ class EchoEnvelope(BaseModel):
         "MetricsBucket",
         "VectorSearchHit",
         "RuntimeContext",
+        "ChatbotRuntimeSummary",
     ]
     payload: EchoPayload = Field(..., description="Schema payload being echoed")
 

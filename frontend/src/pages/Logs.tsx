@@ -65,7 +65,7 @@ export default function Logs() {
         gap={1}
         p={2}
         sx={{
-          height: '100%',
+          height: "100%",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",

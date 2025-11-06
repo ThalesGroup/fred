@@ -23,7 +23,6 @@
 // - Uses RTK OpenAPI hooks you already generated: useQueryLogs... + useTailLogsFile...
 // - Minimal UI plumbing: level floor, service filter, logger contains, text contains.
 
-
 import {
   Box,
   Chip,

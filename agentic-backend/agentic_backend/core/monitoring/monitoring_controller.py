@@ -25,6 +25,7 @@ from fred_core import KeycloakUser, get_current_user
 
 from agentic_backend.core.chatbot.chatbot_controller import get_session_orchestrator
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
+from agentic_backend.core.chatbot.chat_schema import ChatbotRuntimeSummary
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -84,3 +85,15 @@ def get_node_numerical_metrics(
         groupby=groupby,
         agg_mapping=agg_mapping,
     )
+
+
+@router.get(
+    "/metrics/chatbot/summary",
+    summary="Get simple per-user runtime summary",
+    response_model=ChatbotRuntimeSummary,
+)
+def get_runtime_summary(
+    user: KeycloakUser = Depends(get_current_user),
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+) -> ChatbotRuntimeSummary:
+    return session_orchestrator.get_runtime_summary(user)

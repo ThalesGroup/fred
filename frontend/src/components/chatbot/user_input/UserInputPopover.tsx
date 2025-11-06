@@ -38,7 +38,10 @@ import React, { SetStateAction } from "react";
 import TravelExploreIcon from "@mui/icons-material/TravelExplore";
 
 import { useTranslation } from "react-i18next";
-import { AgentChatOptions, useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation } from "../../../slices/agentic/agenticOpenApi.ts";
+import {
+  AgentChatOptions,
+  useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation,
+} from "../../../slices/agentic/agenticOpenApi.ts";
 import { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { ChatDocumentLibrariesSelectionCard } from "../ChatDocumentLibrariesSelectionCard.tsx";
 import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard.tsx";
@@ -110,8 +113,7 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
   onRefreshSessionAttachments,
 }) => {
   const { t } = useTranslation();
-  const [deleteAttachment, { isLoading: isDeleting }] =
-    useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation();
+  const [deleteAttachment, { isLoading: isDeleting }] = useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation();
 
   const handleClose = () => {
     setPickerView(null);
@@ -303,7 +305,20 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
                   <AttachFileIcon fontSize="small" />
                 </ListItemIcon>
                 <ListItemText
-                  primary={t("chatbot.attachFiles")}
+                  primary={
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <span>{t("chatbot.attachFiles")}</span>
+                      <Tooltip title={t("chatbot.attachments.betaNotice")}>
+                        <Chip
+                          label={t("common.beta")}
+                          size="small"
+                          color="warning"
+                          variant="outlined"
+                          sx={{ height: 18, fontSize: "0.68rem" }}
+                        />
+                      </Tooltip>
+                    </Stack>
+                  }
                   secondary={
                     filesBlob?.length
                       ? t("chatbot.attachments.count", {

@@ -56,9 +56,7 @@ const TRACE_CHANNELS: Channel[] = [
   "error",
 ];
 
-type TraceEntry =
-  | { kind: "solo"; message: ChatMessage }
-  | { kind: "combo"; call: ChatMessage; result?: ChatMessage };
+type TraceEntry = { kind: "solo"; message: ChatMessage } | { kind: "combo"; call: ChatMessage; result?: ChatMessage };
 
 // helpers kept local (can be moved to a shared traceUtils.ts if reused elsewhere)
 const toolName = (m: ChatMessage): string | undefined => {
@@ -207,8 +205,7 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
                 const chipChannel = formatChannel(message.channel);
 
                 // Prefer tool_result summary when available; else preview/node/task/channel
-                const primarySolo =
-                  summarizeToolResult(message) || previewText || chipNode || chipTask || chipChannel;
+                const primarySolo = summarizeToolResult(message) || previewText || chipNode || chipTask || chipChannel;
 
                 const callJustification =
                   entry.kind === "combo"
@@ -221,12 +218,10 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
                         return undefined;
                       })()
                     : undefined;
-                const callPreview =
-                  entry.kind === "combo" ? asPlainText(textPreview(entry.call)) : undefined;
+                const callPreview = entry.kind === "combo" ? asPlainText(textPreview(entry.call)) : undefined;
                 const resultSummary =
                   entry.kind === "combo" && entry.result ? summarizeToolResult(entry.result) : undefined;
-                const pendingResult =
-                  entry.kind === "combo" && !entry.result ? "waiting for result…" : undefined;
+                const pendingResult = entry.kind === "combo" && !entry.result ? "waiting for result…" : undefined;
 
                 const primary = entry.kind === "combo" ? callJustification || callPreview || chipChannel : primarySolo;
                 const primaryTooltip =
@@ -252,9 +247,11 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
                       })()
                     : undefined;
                 const resultOk =
-                  entry.kind === "combo" && entry.result ? okFlag(entry.result) : entry.kind === "combo"
-                    ? undefined
-                    : okFlag(message);
+                  entry.kind === "combo" && entry.result
+                    ? okFlag(entry.result)
+                    : entry.kind === "combo"
+                      ? undefined
+                      : okFlag(message);
 
                 const collapsedStatus =
                   entry.kind === "combo"

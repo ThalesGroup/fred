@@ -43,6 +43,11 @@ class BaseAgentFactory:
     async def teardown_session_agents(self, session_id: str) -> None:
         pass
 
+    # Lightweight observability hook
+    def list_active_keys(self) -> list[tuple[str, str]]:
+        """List cached (session_id, agent_name) keys if implemented; empty by default."""
+        return []
+
 
 class NoOpAgentFactory(BaseAgentFactory):
     async def create_and_init(
@@ -52,6 +57,9 @@ class NoOpAgentFactory(BaseAgentFactory):
 
     async def teardown_session_agents(self, session_id: str) -> None:
         pass
+
+    def list_active_keys(self) -> list[tuple[str, str]]:
+        return []
 
 
 class AgentFactory(BaseAgentFactory):
@@ -219,3 +227,10 @@ class AgentFactory(BaseAgentFactory):
                 f"[AGENTS] Failed to close agent '{agent_name}' for session '{session_id}'.",
                 exc_info=True,
             )
+
+    # ---------- Observability ----------
+    def list_active_keys(self) -> list[tuple[str, str]]:
+        try:
+            return list(self._agent_cache.keys())
+        except Exception:
+            return []

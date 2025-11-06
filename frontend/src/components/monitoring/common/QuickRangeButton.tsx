@@ -27,7 +27,7 @@ export default function QuickRangeButton({ isSel, onClick, label }: Props) {
       onClick={onClick}
       variant={isSel ? "contained" : "outlined"}
       size="small"
-     sx={{ py: 0.3,  textTransform: "none", fontSize: 12, lineHeight: 1.2 }}
+      sx={{ py: 0.3, textTransform: "none", fontSize: 12, lineHeight: 1.2 }}
     >
       {label}
     </Button>

@@ -4,7 +4,8 @@
     "noneSelected": "Aucune sélection",
     "close": "Fermer",
     "remove": "Supprimer",
-    "loading": "Chargement…"
+    "loading": "Chargement…",
+    "beta": "Bêta"
   },
   "resource": {
     "kind": {
@@ -56,7 +57,8 @@
       "account": "Voir votre profil",
       "selectCluster": "Veuillez d'abord sélectionner un cluster",
       "monitoring_kpi": "Vue d'ensemble des Kpis",
-      "monitoring_logs": "Console de logs"
+      "monitoring_logs": "Console de logs",
+      "monitoring_runtime": "Résumé d'exécution"
     },
     "theme": {
       "light": "clair",
@@ -67,7 +69,17 @@
       "website": "Site web"
     },
     "monitoring_kpi": "Kpis",
-    "monitoring_logs": "Logs"
+    "monitoring_logs": "Logs",
+    "monitoring_runtime": "Runtime"
+  },
+  "runtime": {
+    "title": "Résumé d'exécution",
+    "sessions": "Sessions",
+    "activeAgents": "Agents actifs",
+    "attachments": "Pièces jointes",
+    "sessionsWithAttachments": "Sessions avec pièces jointes",
+    "maxAttachmentsPerSession": "Pièces jointes max/session",
+    "error": "Échec du chargement du résumé"
   },
   "assetManager": {
     "title": "Gérer les ressources pour {{agentId}}",
@@ -172,6 +184,7 @@
     },
     "attachFiles": "Joindre des fichiers",
     "attachments": {
+      "betaNotice": "Les pièces jointes sont en version bêta. Seuls les fichiers CSV, docx et pdf sont pris en charge. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
       "count": "{{count}} joints"
     },
     "recordAudio": "Enregistrer de l'audio",
