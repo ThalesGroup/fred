@@ -449,7 +449,10 @@ const ChatBot = ({
     if (content.files?.length) {
       for (const file of content.files) {
         const formData = new FormData();
-        formData.append("session_id", sessionId || "");
+        // Always read the latest session id from the ref so that after the
+        // first upload creates a session, subsequent files reuse the same id.
+        const effectiveSessionId = pendingSessionIdRef.current || sessionId || "";
+        formData.append("session_id", effectiveSessionId);
         formData.append("agent_name", agentName);
         formData.append("file", file);
 
@@ -459,7 +462,7 @@ const ChatBot = ({
           }).unwrap();
           // If we were in a draft (no real session yet), bind it now using the server-created id
           const sid = (res as any)?.session_id as string | undefined;
-          if (!sessionId && sid) {
+          if (!sessionId && sid && pendingSessionIdRef.current !== sid) {
             onBindDraftAgentToSessionId?.(sid);
             pendingSessionIdRef.current = sid;
           }
