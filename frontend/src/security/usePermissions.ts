@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useEffect, useState } from "react";
-import { getConfig, loadPermissions } from "../common/config";
+import { loadPermissions } from "../common/config";
 import { KeyCloakService } from "./KeycloakService";
 
 // Get the current user’s role based on Keycloak roles

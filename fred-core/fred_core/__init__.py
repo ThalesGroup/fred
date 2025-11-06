@@ -84,8 +84,8 @@ from fred_core.security.keycloak import (
     get_keycloak_client_id,
     get_keycloak_url,
     initialize_user_security,
-    split_realm_url,
     oauth2_scheme,
+    split_realm_url,
 )
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
 from fred_core.security.rbac import RBACProvider
