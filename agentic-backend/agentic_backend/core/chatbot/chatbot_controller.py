@@ -367,3 +367,19 @@ async def upload_file(
     return await session_orchestrator.add_attachment_from_upload(
         user=user, access_token=access_token, session_id=session_id, file=file
     )
+
+
+@router.delete(
+    "/chatbot/upload/{attachment_id}",
+    description="Delete an uploaded file from a chatbot conversation",
+    summary="Delete an uploaded file",
+)
+async def delete_file(
+    session_id: str,
+    attachment_id: str,
+    user: KeycloakUser = Depends(get_current_user),
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+) -> None:
+    await session_orchestrator.delete_attachment(
+        user=user, session_id=session_id, attachment_id=attachment_id
+    )

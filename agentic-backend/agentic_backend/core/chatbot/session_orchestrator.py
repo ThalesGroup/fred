@@ -18,10 +18,10 @@ import asyncio
 import json
 import logging
 import secrets
+import uuid
 from datetime import datetime, timezone
 from typing import Awaitable, Callable, List, Optional, Tuple
 from uuid import uuid4
-import uuid
 
 from fastapi import UploadFile
 from fred_core import (
@@ -107,7 +107,11 @@ class SessionOrchestrator:
         self.session_store = session_store
         self.agent_factory = agent_factory
         self.attachments_memory_store = SessionInMemoryAttachments(1000, 4)
-        logger.info("[SESSIONS] Initialized attachments memory store max_sessions=%d max_per_session=%d", 1000, 4)
+        logger.info(
+            "[SESSIONS] Initialized attachments memory store max_sessions=%d max_per_session=%d",
+            1000,
+            4,
+        )
         # Side services
         self.history_store = history_store
         self.kpi: BaseKPIWriter = kpi
@@ -325,6 +329,27 @@ class SessionOrchestrator:
         logger.info("[SESSIONS] Deleted session %s", session_id)
 
     # ---------------- File uploads (kept for backward compatibility) ----------------
+
+    @authorize(action=Action.CREATE, resource=Resource.MESSAGE_ATTACHMENTS)
+    async def delete_attachment(
+        self,
+        *,
+        user: KeycloakUser,
+        session_id: str,
+        attachment_id: str,
+    ) -> None:
+        """
+        Delete an in-memory attachment from a session.
+        """
+        self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
+        self.attachments_memory_store.delete(
+            session_id=session_id, attachment_id=attachment_id
+        )
+        logger.info(
+            "[SESSIONS] Deleted attachment %s from session %s",
+            attachment_id,
+            session_id,
+        )
 
     @authorize(action=Action.CREATE, resource=Resource.MESSAGE_ATTACHMENTS)
     async def add_attachment_from_upload(

@@ -113,6 +113,18 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bodyUploadFileAgenticV1ChatbotUploadPost,
       }),
     }),
+    deleteFileAgenticV1ChatbotUploadAttachmentIdDelete: build.mutation<
+      DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiResponse,
+      DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/upload/${queryArg.attachmentId}`,
+        method: "DELETE",
+        params: {
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
     healthzAgenticV1HealthzGet: build.query<HealthzAgenticV1HealthzGetApiResponse, HealthzAgenticV1HealthzGetApiArg>({
       query: () => ({ url: `/agentic/v1/healthz` }),
     }),
@@ -232,6 +244,11 @@ export type UploadFileAgenticV1ChatbotUploadPostApiResponse = /** status 200 Suc
 };
 export type UploadFileAgenticV1ChatbotUploadPostApiArg = {
   bodyUploadFileAgenticV1ChatbotUploadPost: BodyUploadFileAgenticV1ChatbotUploadPost;
+};
+export type DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiResponse = /** status 200 Successful Response */ null;
+export type DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiArg = {
+  attachmentId: string;
+  sessionId: string;
 };
 export type HealthzAgenticV1HealthzGetApiResponse = /** status 200 Successful Response */ any;
 export type HealthzAgenticV1HealthzGetApiArg = void;
@@ -783,6 +800,7 @@ export const {
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
+  useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation,
   useHealthzAgenticV1HealthzGetQuery,
   useLazyHealthzAgenticV1HealthzGetQuery,
   useReadyAgenticV1ReadyGetQuery,

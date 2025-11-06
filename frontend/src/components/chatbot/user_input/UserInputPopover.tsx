@@ -38,7 +38,7 @@ import React, { SetStateAction } from "react";
 import TravelExploreIcon from "@mui/icons-material/TravelExplore";
 
 import { useTranslation } from "react-i18next";
-import { AgentChatOptions } from "../../../slices/agentic/agenticOpenApi.ts";
+import { AgentChatOptions, useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation } from "../../../slices/agentic/agenticOpenApi.ts";
 import { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { ChatDocumentLibrariesSelectionCard } from "../ChatDocumentLibrariesSelectionCard.tsx";
 import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard.tsx";
@@ -49,6 +49,7 @@ interface UserInputPopoverProps {
   plusAnchor: HTMLElement | null;
   pickerView: PickerView;
   isRecording: boolean;
+  sessionId?: string;
   sessionAttachments: string[];
   selectedDocumentLibrariesIds: string[];
   selectedPromptResourceIds: string[];
@@ -71,6 +72,7 @@ interface UserInputPopoverProps {
   onRecordAudioClick: () => void;
   agentChatOptions?: AgentChatOptions;
   filesBlob: File[] | null;
+  onRefreshSessionAttachments?: () => void;
 }
 
 const countChip = (n: number) =>
@@ -80,6 +82,7 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
   plusAnchor,
   pickerView,
   isRecording,
+  sessionId,
   sessionAttachments,
   selectedDocumentLibrariesIds,
   selectedPromptResourceIds,
@@ -102,8 +105,11 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
   onRecordAudioClick,
   agentChatOptions,
   filesBlob,
+  onRefreshSessionAttachments,
 }) => {
   const { t } = useTranslation();
+  const [deleteAttachment, { isLoading: isDeleting }] =
+    useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation();
 
   const handleClose = () => {
     setPickerView(null);
@@ -142,6 +148,18 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
     </Stack>
   );
 
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    if (!sessionId) return;
+    try {
+      await deleteAttachment({ attachmentId, sessionId }).unwrap();
+      onRefreshSessionAttachments?.();
+    } catch (e) {
+      // Silently fail here; parent toast system is not wired in this component.
+      // Console helps debugging in dev.
+      console.error("Failed to delete attachment", attachmentId, e);
+    }
+  };
+
   return (
     <Popover
       open={Boolean(plusAnchor)}
@@ -174,7 +192,13 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
               <Box sx={{ mb: 1 }}>
                 <Stack direction="row" flexWrap="wrap" gap={0.75}>
                   {sessionAttachments.map((name, i) => (
-                    <Chip key={`${name}-${i}`} size="small" variant="outlined" label={name.replace(/\.[^/.]+$/, "")} />
+                    <Chip
+                      key={`${name}-${i}`}
+                      size="small"
+                      variant="outlined"
+                      label={name.replace(/\.[^/.]+$/, "")}
+                      onDelete={isDeleting ? undefined : () => handleDeleteAttachment(name)}
+                    />
                   ))}
                 </Stack>
               </Box>

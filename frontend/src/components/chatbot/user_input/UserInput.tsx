@@ -525,6 +525,7 @@ export default function UserInput({
           plusAnchor={plusAnchor}
           pickerView={pickerView}
           isRecording={isRecording}
+          sessionId={sessionId}
           sessionAttachments={sessionAttachments}
           selectedDocumentLibrariesIds={selectedDocumentLibrariesIds}
           selectedPromptResourceIds={selectedPromptResourceIds}
@@ -543,6 +544,10 @@ export default function UserInput({
           onRemoveLib={removeLib}
           onRemovePrompt={removePrompt}
           onRemoveTemplate={removeTemplate}
+          onRefreshSessionAttachments={() => {
+            // Refresh the sessions list so the attachments view updates after deletions
+            refetchSessions();
+          }}
           onAttachFileClick={() => {
             fileInputRef.current?.click();
             setPickerView(null);
