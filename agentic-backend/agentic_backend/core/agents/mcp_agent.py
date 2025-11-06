@@ -102,7 +102,46 @@ class MCPAgent(AgentFlow):
         # LLM node
         builder.add_node("reasoner", self.reasoner)
         tools = self.mcp.get_tools()
-        tool_node = ToolNode(tools=tools)
+        # Configure tool node to surface human-readable errors to the user instead of raising
+        def _friendly_tool_error(e: Exception) -> str:
+            # Try to identify common connection/timeout errors from MCP HTTP client stack
+            try:
+                import httpx  # type: ignore
+                import httpcore  # type: ignore
+            except Exception:  # pragma: no cover - best effort import
+                httpx = None  # type: ignore
+                httpcore = None  # type: ignore
+
+            conn_like = (
+                ConnectionError,
+                TimeoutError,
+            )
+            if httpx is not None:
+                conn_like = conn_like + (
+                    getattr(httpx, "ConnectError", Exception),
+                    getattr(httpx, "ReadTimeout", Exception),
+                    getattr(httpx, "WriteTimeout", Exception),
+                    getattr(httpx, "PoolTimeout", Exception),
+                )
+            if httpcore is not None:
+                conn_like = conn_like + (
+                    getattr(httpcore, "ConnectError", Exception),
+                )
+
+            # Connection or timeout to MCP server → clear human message
+            if isinstance(e, conn_like):
+                return (
+                    "The MCP server appears unreachable. Please ensure it is running "
+                    "and accessible, then try again."
+                )
+
+            # Generic tool failure fallback (short, user-friendly)
+            return (
+                "A tool error occurred while using the MCP integration. "
+                "Please try again or contact support if it persists."
+            )
+
+        tool_node = ToolNode(tools=tools, handle_tool_errors=_friendly_tool_error)
         builder.add_node("tools", tool_node)
 
         builder.add_edge(START, "reasoner")
@@ -165,6 +204,14 @@ class MCPAgent(AgentFlow):
         except Exception:
             logger.exception("MCPAgent: unexpected error during reasoning.")
             fallback = await self.model.ainvoke(
-                [HumanMessage(content="An error occurred.")]
+                [
+                    HumanMessage(
+                        content=(
+                            "Sorry, I hit an unexpected error while reasoning. "
+                            "Please try again. If it persists, ensure any required "
+                            "external tools (MCP servers) are running."
+                        )
+                    )
+                ]
             )
             return {"messages": [fallback]}
