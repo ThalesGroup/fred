@@ -16,7 +16,7 @@ import logging
 
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt import tools_condition
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
@@ -155,9 +155,7 @@ class ContentGeneratorExpert(AgentFlow):
         builder = StateGraph(MessagesState)
 
         builder.add_node("reasoner", self._reasoner)
-        tools = self.mcp.get_tools()
-        tool_node = ToolNode(tools=tools)
-        builder.add_node("tools", tool_node)
+        builder.add_node("tools", self.mcp.get_tool_nodes())
         builder.add_edge(START, "reasoner")
         builder.add_conditional_edges("reasoner", tools_condition)
         builder.add_edge("tools", "reasoner")

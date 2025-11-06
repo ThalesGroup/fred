@@ -11,7 +11,9 @@ It is composed of:
 - a **Python knowledge flow backend** (FastAPI) for document ingestion and vector search
 - a **React frontend**
 
-Fred is not a framework, but a full reference implementation that shows how to build practical multi-agent applications with LangChain and LangGraph. Agents cooperate to answer technical, context-aware questions.
+Fred provides a number of easy examples to start with. These are provided in so-called 'academy' folders for you to play with mcp server or agent development.
+
+Fred is not a development framework, rather a full reference implementation that shows how to build practical multi-agent applications with LangChain and LangGraph. Agents cooperate to answer technical, context-aware questions.
 
 See the project site: <https://fredk8.dev>
 
@@ -433,7 +435,8 @@ For production mode, please reach out to your DevOps team so that they tune Fred
 
 ## Agent coding academy
 
-Refer to the [academy](./agentic-backend/agentic_backend/academy/ACADEMY.md)
+Refer to the sample third-party application in [academy samples](./academy/README.md).
+Refer to the [academy agents](./agentic-backend/agentic_backend/academy/ACADEMY.md) for a number of sample agents.
 
 ## Advanced configuration
 

@@ -22,10 +22,12 @@ from typing import Any, List, Optional
 
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from langgraph.prebuilt import ToolNode
 
 from agentic_backend.application_context import get_mcp_configuration
 from agentic_backend.common.mcp_toolkit import McpToolkit
 from agentic_backend.common.mcp_utils import get_connected_mcp_client_for_agent
+from agentic_backend.common.tool_node_utils import create_mcp_tool_node
 from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerConfiguration
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 
@@ -192,6 +194,17 @@ class MCPRuntime:
 
         # We assume McpToolkit.get_tools() handles policy/role filtering
         return self.toolkit.get_tools()
+
+    def get_tool_nodes(self) -> ToolNode:
+        """
+        Returns a ToolNode wrapping the MCP tools for use in a StateGraph.
+        This API uses the shared factory with standardized MCP-friendly error handling.
+        The benefit is to make your agent's tool node send clear, human-friendly
+        error messages to the end user if the MCP server is down or unreachable instead of
+        raw stack traces.
+        """
+        tools = self.get_tools()
+        return create_mcp_tool_node(tools)
 
     async def aclose(self) -> None:
         """
