@@ -65,12 +65,14 @@ class RBACProvider(AuthorizationProvider):
             "viewer": {
                 # Viewer can only read
                 **{resource: READ_ONLY for resource in Resource},
-                # Except for:
+                # Viewer can sent feedback
                 Resource.FEEDBACK: {Action.CREATE},
                 # Viewer can chat:
                 Resource.SESSIONS: CRUD,
                 Resource.MESSAGE_ATTACHMENTS: {Action.CREATE},
                 Resource.PROMPT_COMPLETIONS: {Action.CREATE},
+                # Viewer can create and use Chat Context (resources)
+                Resource.RESOURCES: CRUD,
             },
             "service_agent": {
                 Resource.TAGS: READ_ONLY,

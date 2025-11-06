@@ -128,6 +128,10 @@ export default function UserInput({
   const [selectedSearchPolicyName, setSelectedSearchPolicyName] = useState<SearchPolicyName>("semantic");
   const canSend = !!userInput.trim() || !!audioBlob || !!(filesBlob && filesBlob.length);
 
+  const canAttach = Object.values(agentChatOptions)
+    .filter((value) => typeof value === "boolean")
+    .some((v) => v);
+
   // Selections made *before* we get a real sessionId (first question) — migrate them.
   const preSessionRef = useRef<PersistedCtx>({});
 
@@ -399,6 +403,23 @@ export default function UserInput({
         <Box sx={{ position: "relative", width: "100%" }}>
           {/* + anchored inside the input, bottom-left */}
           <Box sx={{ position: "absolute", right: 8, bottom: 6, zIndex: 1, display: "flex", gap: 0.75 }}>
+            {canAttach && (
+              <Tooltip title={t("chatbot.menu.addToSetup")}>
+                <span>
+                  <IconButton
+                    aria-label="add-to-setup"
+                    sx={{ fontSize: "1.6rem", p: "8px" }}
+                    onClick={(e) => {
+                      setPickerView(null);
+                      setPlusAnchor(e.currentTarget);
+                    }}
+                    disabled={isWaiting}
+                  >
+                    <AddIcon fontSize="inherit" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )}
             {!isWaiting && (
               <Tooltip title={t("chatbot.sendMessage", "Send message")}>
                 <span>
@@ -428,21 +449,6 @@ export default function UserInput({
                 </span>
               </Tooltip>
             )}
-            <Tooltip title={t("chatbot.menu.addToSetup")}>
-              <span>
-                <IconButton
-                  aria-label="add-to-setup"
-                  sx={{ fontSize: "1.6rem", p: "8px" }}
-                  onClick={(e) => {
-                    setPickerView(null);
-                    setPlusAnchor(e.currentTarget);
-                  }}
-                  disabled={isWaiting}
-                >
-                  <AddIcon fontSize="inherit" />
-                </IconButton>
-              </span>
-            </Tooltip>
           </Box>
 
           {/* Hidden native file input */}
@@ -510,7 +516,7 @@ export default function UserInput({
           </Box>
         </Box>
 
-        {/* Popover - now a dedicated component */}
+        {/* Popover */}
         <UserInputPopover
           plusAnchor={plusAnchor}
           pickerView={pickerView}

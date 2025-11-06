@@ -145,8 +145,14 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
       open={Boolean(plusAnchor)}
       anchorEl={plusAnchor}
       onClose={handleClose}
-      anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      transformOrigin={{ vertical: "top", horizontal: "right" }}
+      anchorOrigin={{
+        vertical: "top",
+        horizontal: "center",
+      }}
+      transformOrigin={{
+        vertical: "bottom",
+        horizontal: "right",
+      }}
       slotProps={{
         paper: {
           sx: {
