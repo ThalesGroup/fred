@@ -28,6 +28,7 @@ import {
   SessionSchema,
   StreamEvent,
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
+  useUploadFileAgenticV1ChatbotUploadPostMutation,
 } from "../../slices/agentic/agenticOpenApi.ts";
 import {
   TagType,
@@ -92,6 +93,9 @@ const ChatBot = ({
   const webSocketRef = useRef<WebSocket | null>(null);
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   const wsTokenRef = useRef<string | null>(null);
+  // When backend creates a session during first file upload, keep it locally
+  // so the immediate next message uses the same session id.
+  const pendingSessionIdRef = useRef<string | null>(null);
 
   // Noms des libs / prompts / templates / chat-context
   const { data: docLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
@@ -117,6 +121,9 @@ const ChatBot = ({
 
   // Lazy messages fetcher
   const [fetchHistory] = useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery();
+  const [uploadChatFile] = useUploadFileAgenticV1ChatbotUploadPostMutation();
+  // Local tick to signal attachments list to refresh after successful uploads
+  const [attachmentsRefreshTick, setAttachmentsRefreshTick] = useState<number>(0);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
@@ -162,6 +169,13 @@ const ChatBot = ({
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [messages, currentChatBotSession?.id]);
+
+  // Clear pending session once parent propagated the real session
+  useEffect(() => {
+    if (currentChatBotSession?.id && pendingSessionIdRef.current === currentChatBotSession.id) {
+      pendingSessionIdRef.current = null;
+    }
+  }, [currentChatBotSession?.id]);
 
   const setupWebSocket = async (): Promise<WebSocket | null> => {
     const current = webSocketRef.current;
@@ -394,7 +408,7 @@ const ChatBot = ({
   // Once a session exists, UserInput persists per-session selections itself.
   useEffect(() => {
     if (!userInputContext) return;
-    const sessionId = currentChatBotSession?.id;
+    const sessionId = pendingSessionIdRef.current || currentChatBotSession?.id;
     if (sessionId) return; // session exists -> do NOT save per-agent defaults here
 
     try {
@@ -417,7 +431,6 @@ const ChatBot = ({
 
   // Handle user input (text/audio/files)
   const handleSend = async (content: UserInputContent) => {
-    const userId = KeyCloakService.GetUserId();
     const sessionId = currentChatBotSession?.id;
     const agentName = currentAgent.name;
 
@@ -432,35 +445,35 @@ const ChatBot = ({
     // Policy
     runtimeContext.search_policy = content.searchPolicy || "semantic";
 
-    // Files upload
+    // Files upload (via RTK Query, with auth header from baseQuery)
     if (content.files?.length) {
       for (const file of content.files) {
         const formData = new FormData();
-        formData.append("user_id", userId);
-        formData.append("session_id", sessionId || "");
+        // Always read the latest session id from the ref so that after the
+        // first upload creates a session, subsequent files reuse the same id.
+        const effectiveSessionId = pendingSessionIdRef.current || sessionId || "";
+        formData.append("session_id", effectiveSessionId);
         formData.append("agent_name", agentName);
         formData.append("file", file);
 
         try {
-          const response = await fetch(`${getConfig().backend_url_api}/agentic/v1/chatbot/upload`, {
-            method: "POST",
-            body: formData,
-          });
-
-          if (!response.ok) {
-            showError({
-              summary: "File Upload Error",
-              detail: `Failed to upload ${file.name}: ${response.statusText}`,
-            });
-            throw new Error(`Failed to upload ${file.name}`);
+          const res = await uploadChatFile({
+            bodyUploadFileAgenticV1ChatbotUploadPost: formData as any,
+          }).unwrap();
+          // If we were in a draft (no real session yet), bind it now using the server-created id
+          const sid = (res as any)?.session_id as string | undefined;
+          if (!sessionId && sid && pendingSessionIdRef.current !== sid) {
+            onBindDraftAgentToSessionId?.(sid);
+            pendingSessionIdRef.current = sid;
           }
-
-          const result = await response.json();
-          console.log("✅ Uploaded file:", result);
+          console.log("✅ Uploaded file:", file.name);
           showInfo({ summary: "File Upload", detail: `File ${file.name} uploaded successfully.` });
-        } catch (err) {
+          // Nudge attachments bar to refresh its session list view
+          setAttachmentsRefreshTick((x) => x + 1);
+        } catch (err: any) {
+          const errMsg = err?.data?.detail || err?.error || (err as Error)?.message || "Unknown error";
           console.error("❌ File upload failed:", err);
-          showError({ summary: "File Upload Error", detail: (err as Error).message });
+          showError({ summary: "File Upload Error", detail: `Failed to upload ${file.name}: ${errMsg}` });
         }
       }
     }
@@ -499,7 +512,7 @@ const ChatBot = ({
     const eventBase: ChatAskInput = {
       message: input,
       agent_name: agent ? agent.name : currentAgent.name,
-      session_id: currentChatBotSession?.id,
+      session_id: pendingSessionIdRef.current || currentChatBotSession?.id,
       runtime_context: runtimeContext,
       access_token: accessToken || undefined, // Now the backend can read the active token
       refresh_token: refreshToken || undefined, // Now the backend can save and use the refresh token
@@ -596,6 +609,7 @@ const ChatBot = ({
                 onStop={stopStreaming}
                 onContextChange={setUserInputContext}
                 sessionId={currentChatBotSession?.id}
+                attachmentsRefreshTick={attachmentsRefreshTick}
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
                 initialPromptResourceIds={initialCtx.promptResourceIds}
                 initialTemplateResourceIds={initialCtx.templateResourceIds}
@@ -650,6 +664,7 @@ const ChatBot = ({
                 onStop={stopStreaming}
                 onContextChange={setUserInputContext}
                 sessionId={currentChatBotSession?.id}
+                attachmentsRefreshTick={attachmentsRefreshTick}
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
                 initialPromptResourceIds={initialCtx.promptResourceIds}
                 initialTemplateResourceIds={initialCtx.templateResourceIds}

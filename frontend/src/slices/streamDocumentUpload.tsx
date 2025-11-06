@@ -34,9 +34,7 @@ export async function streamUploadOrProcessDocument(
   }
 
   const endpoint =
-    mode === "upload"
-      ? "/knowledge-flow/v1/upload-documents"
-      : "/knowledge-flow/v1/upload-process-documents";
+    mode === "upload" ? "/knowledge-flow/v1/upload-documents" : "/knowledge-flow/v1/upload-process-documents";
 
   const response = await fetch(`${backend_url_knowledge}${endpoint}`, {
     method: "POST",

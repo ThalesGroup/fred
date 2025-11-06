@@ -18,9 +18,8 @@ import asyncio
 import json
 import logging
 import secrets
-import tempfile
+import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Awaitable, Callable, List, Optional, Tuple
 from uuid import uuid4
 
@@ -45,12 +44,18 @@ from langchain_core.messages import (
 from agentic_backend.application_context import (
     get_default_model,
 )
+from agentic_backend.common.kf_lite_markdown_client import KfLiteMarkdownClient
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
-from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.runtime_context import (
+    RuntimeContext,
+    set_attachments_markdown,
+)
 from agentic_backend.core.chatbot.chat_schema import (
+    AttachmentRef,
     Channel,
+    ChatbotRuntimeSummary,
     ChatMessage,
     ChatMetadata,
     Role,
@@ -61,6 +66,9 @@ from agentic_backend.core.chatbot.chat_schema import (
     ToolResultPart,
 )
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
+from agentic_backend.core.chatbot.session_in_memory_attachements import (
+    SessionInMemoryAttachments,
+)
 from agentic_backend.core.chatbot.stream_transcoder import StreamTranscoder
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.session.attachement_processing import AttachementProcessing
@@ -100,7 +108,12 @@ class SessionOrchestrator:
     ):
         self.session_store = session_store
         self.agent_factory = agent_factory
-
+        self.attachments_memory_store = SessionInMemoryAttachments(1000, 4)
+        logger.info(
+            "[SESSIONS] Initialized attachments memory store max_sessions=%d max_per_session=%d",
+            1000,
+            4,
+        )
         # Side services
         self.history_store = history_store
         self.kpi: BaseKPIWriter = kpi
@@ -168,6 +181,14 @@ class SessionOrchestrator:
             runtime_context=runtime_context,
             session_id=session.id,
         )
+        # 3) Prepare optional attachments context (lite markdown) and make it available via runtime_context
+        # this corresponds to the attached files that the user added to his conversation. These files are transformed to lite markdown format
+        # in turn added to the runtime context so that the agent can use them during its reasoning
+        attachments_context = (
+            self.attachments_memory_store.get_session_attachments_markdown(session.id)
+        )
+        set_attachments_markdown(runtime_context, attachments_context)
+
         # 3) Rebuild minimal LangChain history (user/assistant/system only),
         # This method will only restore history if the agent is not cached.
         lc_history: List[AnyMessage] = []
@@ -197,7 +218,9 @@ class SessionOrchestrator:
         all_msgs: List[ChatMessage] = [user_msg]
         await self._emit(callback, user_msg)
 
-        # 5) Stream agent responses via the transcoder
+        # 3) Prepare optional attachments context (lite markdown) and make it available via runtime_context
+
+        # 4) Stream agent responses via the transcoder
         saw_final_assistant = False
         agent_msgs: List[ChatMessage] = []
         try:
@@ -212,9 +235,12 @@ class SessionOrchestrator:
                 },
                 actor=actor,
             ):
+                # Build input messages ensuring the last message is the Human question.
+                input_messages = lc_history + [HumanMessage(message)]
+
                 agent_msgs = await self.transcoder.stream_agent_response(
                     agent=agent,
-                    input_messages=lc_history + [HumanMessage(message)],
+                    input_messages=input_messages,
                     session_id=session.id,
                     exchange_id=exchange_id,
                     agent_name=agent_name,
@@ -269,6 +295,11 @@ class SessionOrchestrator:
         self,
         user: KeycloakUser,
     ) -> List[SessionWithFiles]:
+        """
+        Get all sessions for a user, enriched with the list of uploaded files.
+        This method is only used by the UI to list sessions. It is not part of the
+        chat exchange flow.
+        """
         sessions = self.session_store.get_for_user(user.uid)
         enriched: List[SessionWithFiles] = []
         for session in sessions:
@@ -276,15 +307,23 @@ class SessionOrchestrator:
                 session.id, user, Action.READ
             ):
                 continue
-
-            session_folder = self._get_session_temp_folder(session.id)
-            file_names = (
-                [f.name for f in session_folder.iterdir() if f.is_file()]
-                if session_folder.exists()
-                else []
+            files_names = self.attachments_memory_store.get_session_attachment_names(
+                session.id
             )
+            id_name_pairs = (
+                self.attachments_memory_store.get_session_attachment_id_name_pairs(
+                    session.id
+                )
+            )
+            attachments = [
+                AttachmentRef(id=att_id, name=name) for att_id, name in id_name_pairs
+            ]
             enriched.append(
-                SessionWithFiles(**session.model_dump(), file_names=file_names)
+                SessionWithFiles(
+                    **session.model_dump(),
+                    file_names=files_names,
+                    attachments=attachments,
+                )
             )
         return enriched
 
@@ -300,45 +339,103 @@ class SessionOrchestrator:
         self._authorize_user_action_on_session(session_id, user, Action.DELETE)
         await self.agent_factory.teardown_session_agents(session_id)
         self.session_store.delete(session_id)
+        self.attachments_memory_store.clear_session(session_id)
+        logger.info("[SESSIONS] Deleted session %s", session_id)
 
     # ---------------- File uploads (kept for backward compatibility) ----------------
 
     @authorize(action=Action.CREATE, resource=Resource.MESSAGE_ATTACHMENTS)
-    async def upload_file(
-        self, user: KeycloakUser, session_id: str, agent_name: str, file: UploadFile
-    ) -> dict:
+    async def delete_attachment(
+        self,
+        *,
+        user: KeycloakUser,
+        session_id: str,
+        attachment_id: str,
+    ) -> None:
         """
-        Purpose:
-          Keep simple "drop a file into this session's temp area" behavior unchanged,
-          so the UI doesn't need to move right now. Can be split later to a dedicated service.
+        Delete an in-memory attachment from a session.
         """
         self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
-        try:
-            session_folder = self._get_session_temp_folder(session_id)
-            if file.filename is None:
-                raise ValueError("Uploaded file must have a filename.")
-            file_path = session_folder / file.filename
-            content = await file.read()
-            with open(file_path, "wb") as f:
-                f.write(content)
+        self.attachments_memory_store.delete(
+            session_id=session_id, attachment_id=attachment_id
+        )
+        logger.info(
+            "[SESSIONS] Deleted attachment %s from session %s",
+            attachment_id,
+            session_id,
+        )
 
-            # Kick attachment processing (same behavior as before)
-            self.attachement_processing.process_attachment(file_path)
+    @authorize(action=Action.CREATE, resource=Resource.MESSAGE_ATTACHMENTS)
+    @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
+    async def add_attachment_from_upload(
+        self,
+        *,
+        user: KeycloakUser,
+        access_token: str,
+        session_id: Optional[str],
+        file: UploadFile,
+        max_chars: int = 30_000,
+        include_tables: bool = True,
+        add_page_headings: bool = False,
+    ) -> dict:
+        """
+        Fred rationale:
+        - Zero temp-files: we stream the uploaded content to Knowledge Flow 'lite/markdown'.
+        - We store ONLY the compact Markdown summary in RAM (SessionInMemoryAttachments).
+        - This powers 'retrieval implicite' in subsequent turns, exactly as designed.
+        """
+        if not file.filename:
+            raise ValueError("Uploaded file must have a filename.")
+        content = await file.read()  # stays in memory
 
-            logger.info(
-                "[📁 Upload] File '%s' saved to %s for session '%s'",
-                file.filename,
-                file_path,
-                session_id,
-            )
-            return {
-                "filename": file.filename,
-                "saved_path": str(file_path),
-                "message": "File uploaded successfully",
-            }
-        except Exception:
-            logger.exception("Failed to store uploaded file.")
-            raise RuntimeError("Failed to store uploaded file.")
+        # If no session_id was provided (first interaction), create one now.
+        # Use a lightweight title based on the filename to keep UX sensible.
+        session = self._get_or_create_session(
+            user_id=user.uid,
+            query=f"File: {file.filename}",
+            session_id=session_id if session_id else None,
+        )
+        # Ensure the user has rights on this session (create/update if needed)
+        self._authorize_user_action_on_session(session.id, user, Action.UPDATE)
+
+        # 1) Secure session-mode client for Knowledge Flow (Bearer user token)
+        client = KfLiteMarkdownClient(
+            access_token=access_token,
+            # Optional: refresh_user_access_token=lambda: self._refresh_user_token(user)
+        )
+
+        # 2) Ask KF to produce a compact Markdown (text-only) for conversational use
+        summary_md = client.extract_markdown_from_bytes(
+            filename=file.filename,
+            content=content,
+            mime=file.content_type,
+            max_chars=max_chars,
+            include_tables=include_tables,
+            add_page_headings=add_page_headings,
+        )
+
+        # 3) Create a stable attachment_id (UUID v4 is fine here)
+        attachment_id = str(uuid.uuid4())
+
+        # 4) Put into in-RAM session cache for implicit retrieval
+        self.attachments_memory_store.put(
+            session_id=session.id,
+            attachment_id=attachment_id,
+            name=file.filename,
+            summary_md=summary_md,
+            mime=file.content_type,
+            size_bytes=len(content),
+        )
+
+        # 5) Return a minimal DTO for the UI
+        return {
+            "session_id": session.id,
+            "attachment_id": attachment_id,
+            "filename": file.filename,
+            "mime": file.content_type,
+            "size_bytes": len(content),
+            "preview_chars": min(len(summary_md), 300),  # hint for UI
+        }
 
     # ---------------- Metrics passthrough ----------------
 
@@ -360,6 +457,40 @@ class SessionOrchestrator:
             groupby=groupby,
             agg_mapping=agg_mapping,
             user_id=user.uid,
+        )
+
+    @authorize(action=Action.READ, resource=Resource.SESSIONS)
+    def get_runtime_summary(self, user: KeycloakUser) -> ChatbotRuntimeSummary:
+        """Return a simple per-user snapshot: sessions, active agents, attachments."""
+        sessions = self.session_store.get_for_user(user.uid)
+        session_ids = {s.id for s in sessions}
+        sessions_total = len(session_ids)
+
+        # Agent instances in cache filtered to these sessions
+        try:
+            active_keys = getattr(self.agent_factory, "list_active_keys", lambda: [])()
+        except Exception:
+            active_keys = []
+        agents_active_total = sum(1 for sid, _ in active_keys if sid in session_ids)
+
+        # Attachments across these sessions
+        attachments_total = 0
+        attachments_sessions = 0
+        for sid in session_ids:
+            ids = self.attachments_memory_store.list_ids(sid)
+            if ids:
+                attachments_sessions += 1
+                attachments_total += len(ids)
+
+        att_stats = self.attachments_memory_store.stats()
+        max_att = int(att_stats.get("max_attachments_per_session", 0))
+
+        return ChatbotRuntimeSummary(
+            sessions_total=sessions_total,
+            agents_active_total=agents_active_total,
+            attachments_total=attachments_total,
+            attachments_sessions=attachments_sessions,
+            max_attachments_per_session=max_att,
         )
 
     # ---------------- internals ----------------
@@ -387,12 +518,6 @@ class SessionOrchestrator:
         # For now, ignore action, only owners can access their sessions
         # action is passed for future flexibility (ex: session sharing with attached permissions)
         return session.user_id == user.uid
-
-    def _get_session_temp_folder(self, session_id: str) -> Path:
-        base_temp_dir = Path(tempfile.gettempdir()) / "chatbot_uploads"
-        session_folder = base_temp_dir / session_id
-        session_folder.mkdir(parents=True, exist_ok=True)
-        return session_folder
 
     async def _emit(self, callback: CallbackType, message: ChatMessage) -> None:
         """

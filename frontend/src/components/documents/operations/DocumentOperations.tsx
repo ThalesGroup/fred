@@ -31,7 +31,7 @@ import {
   SelectChangeEvent,
   TextField,
   Typography,
-  useTheme
+  useTheme,
 } from "@mui/material";
 
 import ClearIcon from "@mui/icons-material/Clear";
@@ -159,15 +159,20 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
 
   useEffect(() => {
     fetchFiles();
-  }, [selectedSourceTag, searchQuery, selectedLibrary, selectedStages, searchableFilter, currentPage, documentsPerPage]);
+  }, [
+    selectedSourceTag,
+    searchQuery,
+    selectedLibrary,
+    selectedStages,
+    searchableFilter,
+    currentPage,
+    documentsPerPage,
+  ]);
 
   return (
     <Container maxWidth="xl">
       {/* Filter Section */}
-      <Paper
-        elevation={2}
-        sx={{ p: 3, borderRadius: 4, border: `1px solid ${theme.palette.divider}`, mb: 3 }}
-      >
+      <Paper elevation={2} sx={{ p: 3, borderRadius: 4, border: `1px solid ${theme.palette.divider}`, mb: 3 }}>
         <Grid2 container spacing={2} alignItems="center">
           <Grid2 size={{ xs: 12, md: 12 }}>
             {/* Top Filters */}
@@ -291,11 +296,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
                 </FormControl>
 
                 {userInfo.canManageDocuments && isPullMode && (
-                  <Button
-                    variant="outlined"
-                    onClick={handleRefreshPullSource}
-                    sx={{ minWidth: "auto", px: 2 }}
-                  >
+                  <Button variant="outlined" onClick={handleRefreshPullSource} sx={{ minWidth: "auto", px: 2 }}>
                     <RefreshIcon />
                   </Button>
                 )}

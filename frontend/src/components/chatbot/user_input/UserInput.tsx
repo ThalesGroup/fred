@@ -26,7 +26,10 @@ import {
 
 // Import the new sub-components
 import { AnyAgent } from "../../../common/agent.ts";
-import { AgentChatOptions } from "../../../slices/agentic/agenticOpenApi.ts";
+import {
+  AgentChatOptions,
+  useGetSessionsAgenticV1ChatbotSessionsGetQuery,
+} from "../../../slices/agentic/agenticOpenApi.ts";
 import { AgentSelector } from "./AgentSelector.tsx";
 import { UserInputAttachments } from "./UserInputAttachments.tsx";
 import { UserInputPopover } from "./UserInputPopover.tsx";
@@ -82,6 +85,7 @@ export default function UserInput({
   onStop,
   onContextChange,
   sessionId,
+  attachmentsRefreshTick,
   initialDocumentLibraryIds,
   initialPromptResourceIds,
   initialTemplateResourceIds,
@@ -96,6 +100,7 @@ export default function UserInput({
   onStop?: () => void;
   onContextChange?: (ctx: UserInputContent) => void;
   sessionId?: string;
+  attachmentsRefreshTick?: number;
   initialDocumentLibraryIds?: string[];
   initialPromptResourceIds?: string[];
   initialTemplateResourceIds?: string[];
@@ -278,6 +283,27 @@ export default function UserInput({
   // Libraries are "document" tags in your UI
   const { data: documentTags = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" });
 
+  // --- Session attachments for popover ---
+  const { data: sessions = [], refetch: refetchSessions } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: false,
+    refetchOnReconnect: true,
+  });
+  useEffect(() => {
+    if (sessionId) refetchSessions();
+  }, [attachmentsRefreshTick, sessionId, refetchSessions]);
+  type AttachmentRef = { id: string; name: string };
+  const sessionAttachments: AttachmentRef[] = useMemo(() => {
+    if (!sessionId) return [];
+    const s = (sessions as any[]).find((x) => x?.id === sessionId) as any | undefined;
+    // Prefer new backend shape with IDs
+    const att = s?.attachments;
+    if (Array.isArray(att)) return att as AttachmentRef[];
+    // Fallback to legacy file_names list if attachments not present
+    const names = (s && (s.file_names as string[] | undefined)) || [];
+    return Array.isArray(names) ? names.map((n) => ({ id: n, name: n })) : [];
+  }, [sessions, sessionId]);
+
   const promptNameById = useMemo(
     () => Object.fromEntries((promptResources as Resource[]).map((r) => [r.id, r.name])),
     [promptResources],
@@ -364,6 +390,8 @@ export default function UserInput({
       return next;
     });
   };
+
+  // No separate attachments popover (shown inside + menu)
 
   // Audio
   const handleAudioRecorderDisplay = () => {
@@ -514,6 +542,7 @@ export default function UserInput({
               />
             )}
           </Box>
+          {/* Attached files are shown within the + menu popover */}
         </Box>
 
         {/* Popover */}
@@ -521,6 +550,8 @@ export default function UserInput({
           plusAnchor={plusAnchor}
           pickerView={pickerView}
           isRecording={isRecording}
+          sessionId={sessionId}
+          sessionAttachments={sessionAttachments}
           selectedDocumentLibrariesIds={selectedDocumentLibrariesIds}
           selectedPromptResourceIds={selectedPromptResourceIds}
           selectedTemplateResourceIds={selectedTemplateResourceIds}
@@ -538,6 +569,10 @@ export default function UserInput({
           onRemoveLib={removeLib}
           onRemovePrompt={removePrompt}
           onRemoveTemplate={removeTemplate}
+          onRefreshSessionAttachments={() => {
+            // Refresh the sessions list so the attachments view updates after deletions
+            refetchSessions();
+          }}
           onAttachFileClick={() => {
             fileInputRef.current?.click();
             setPickerView(null);

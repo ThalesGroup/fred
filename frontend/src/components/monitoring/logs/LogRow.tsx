@@ -29,9 +29,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 
-import {
-  LogEventDto,
-} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { LogEventDto } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import dayjs from "dayjs";
 
 type Level = LogEventDto["level"];
@@ -161,12 +159,10 @@ export function LogRow({ e }: { e: LogEventDto }) {
 
       {/* copy */}
       <Tooltip title="Copy message">
-        <IconButton size="small" onClick={copy} sx={{ p: 0.25, color: 'text.secondary'  }}>
+        <IconButton size="small" onClick={copy} sx={{ p: 0.25, color: "text.secondary" }}>
           <ContentCopyIcon fontSize="inherit" />
         </IconButton>
       </Tooltip>
     </Stack>
   );
 }
-
-

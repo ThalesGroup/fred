@@ -64,8 +64,8 @@ export const getAgentAvatar = (name: string, size: number = 28) => {
   const color = expertColors[name] || fallbackColor; // Use mapped color or fallback
   return <Avatar sx={{ bgcolor: color, width: size, height: size }}>{name?.toUpperCase().charAt(0)}</Avatar>;
 };
-export const getAgentBadge = (name: string, isLeader: boolean = false,  size: number = 28) => {
-  const agentColor = isLeader ?  teal[500] : green[500];
+export const getAgentBadge = (name: string, isLeader: boolean = false, size: number = 28) => {
+  const agentColor = isLeader ? teal[500] : green[500];
 
   return (
     <Badge

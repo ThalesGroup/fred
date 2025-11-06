@@ -116,10 +116,8 @@ export const AgentHub = () => {
   const [agentForAssetManagement, setAgentForAssetManagement] = useState<AnyAgent | null>(null);
 
   const [triggerGetFlows, { isFetching }] = useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
-  const {
-    data: mcpServersData,
-    isFetching: isFetchingMcpServers,
-  } = useListMcpServersAgenticV1AgentsMcpServersGetQuery();
+  const { data: mcpServersData, isFetching: isFetchingMcpServers } =
+    useListMcpServersAgenticV1AgentsMcpServersGetQuery();
   const { updateEnabled } = useAgentUpdater();
   const [triggerGetSource] = useLazyGetRuntimeSourceTextQuery();
 

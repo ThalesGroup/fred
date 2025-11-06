@@ -247,8 +247,24 @@ class SessionSchema(BaseModel):
     updated_at: datetime
 
 
+class AttachmentRef(BaseModel):
+    id: str
+    name: str
+
+
 class SessionWithFiles(SessionSchema):
     file_names: List[str] = []
+    attachments: List[AttachmentRef] = []
+
+
+class ChatbotRuntimeSummary(BaseModel):
+    """Lightweight runtime snapshot for UI recap."""
+
+    sessions_total: int
+    agents_active_total: int
+    attachments_total: int
+    attachments_sessions: int
+    max_attachments_per_session: int
 
 
 # ---------- Transport events ----------

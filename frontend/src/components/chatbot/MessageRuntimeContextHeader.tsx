@@ -19,12 +19,7 @@ type Props = {
   chatContextNameById?: Record<string, string>;
 };
 
-export default function MessageRuntimeContextHeader({
-  message,
-  visible,
-  libraryNameById,
-  chatContextNameById,
-}: Props) {
+export default function MessageRuntimeContextHeader({ message, visible, libraryNameById, chatContextNameById }: Props) {
   const theme = useTheme();
   const { t } = useTranslation();
 
@@ -82,9 +77,7 @@ export default function MessageRuntimeContextHeader({
 
   const searchPolicy = getFirst(rc, ["search_policy", "searchPolicy"]);
   const usedTemperature =
-    meta?.temperature != null ? Number(meta.temperature) :
-    rc?.temperature != null ? Number(rc.temperature) :
-    undefined;
+    meta?.temperature != null ? Number(meta.temperature) : rc?.temperature != null ? Number(rc.temperature) : undefined;
 
   const labelize = (ids: string[] | undefined, map?: Record<string, string>) =>
     (ids ?? []).filter(Boolean).map((id) => map?.[id] || id);
@@ -95,15 +88,12 @@ export default function MessageRuntimeContextHeader({
   const libsTextFull = libsLabeled.join(", ");
   const chatCtxTextFull = ctxLabeled.join(", ");
 
-  const librariesLabel =
-    libsLabeled.length > 1 ? t("header.librariesPlural") : t("header.librariesSingular");
-  const chatContextLabel =
-    ctxLabeled.length > 1 ? t("header.chatContextsPlural") : t("header.chatContextSingular");
+  const librariesLabel = libsLabeled.length > 1 ? t("header.librariesPlural") : t("header.librariesSingular");
+  const chatContextLabel = ctxLabeled.length > 1 ? t("header.chatContextsPlural") : t("header.chatContextSingular");
 
   const extras = getExtras(message);
   const modelName: string | undefined = meta?.model ?? undefined;
-  const latencyMs: number | undefined =
-    meta?.latency_ms ?? meta?.timings?.durationMs ?? meta?.latency?.ms ?? undefined;
+  const latencyMs: number | undefined = meta?.latency_ms ?? meta?.timings?.durationMs ?? meta?.latency?.ms ?? undefined;
   const inTokens = message.metadata?.token_usage?.input_tokens;
   const outTokens = message.metadata?.token_usage?.output_tokens;
 

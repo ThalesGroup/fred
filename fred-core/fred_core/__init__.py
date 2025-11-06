@@ -84,6 +84,7 @@ from fred_core.security.keycloak import (
     get_keycloak_client_id,
     get_keycloak_url,
     initialize_user_security,
+    oauth2_scheme,
     split_realm_url,
 )
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
@@ -146,6 +147,7 @@ __all__ = [
     "is_authorized",
     "authorize_or_raise",
     "authorize",
+    "oauth2_scheme",
     "register_exception_handlers",
     "BaseModelWithId",
     "OpenSearchStoreConfig",

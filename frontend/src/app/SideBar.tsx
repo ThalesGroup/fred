@@ -75,6 +75,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
   const canReadKpis = can("kpi", "create");
   const canReadOpenSearch = can("opensearch", "create");
   const canReadLogs = can("logs", "create");
+  const canReadRuntime = can("kpi", "create");
 
   const menuItems: MenuItemCfg[] = [
     {
@@ -87,7 +88,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
     },
 
     // Only show monitoring if user has permission
-    ...(canReadKpis || canReadOpenSearch || canReadLogs
+    ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime
       ? [
           {
             key: "monitoring",
@@ -105,6 +106,18 @@ export default function SideBar({ darkMode, onThemeChange }) {
                       url: `/monitoring/kpis`,
                       canBeDisabled: false,
                       tooltip: t("sidebar.tooltip.monitoring_kpi") || "KPI Overview",
+                    },
+                  ]
+                : []),
+              ...(canReadRuntime
+                ? [
+                    {
+                      key: "monitoring-runtime",
+                      label: t("sidebar.monitoring_runtime", "Runtime"),
+                      icon: <MonitorHeartIcon />,
+                      url: `/monitoring/runtime`,
+                      canBeDisabled: false,
+                      tooltip: t("sidebar.tooltip.monitoring_runtime", "Runtime summary"),
                     },
                   ]
                 : []),

@@ -17,22 +17,14 @@
 import CloseIcon from "@mui/icons-material/Close";
 import DownloadIcon from "@mui/icons-material/Download";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import {
-  AppBar,
-  Box,
-  CircularProgress,
-  IconButton,
-  Toolbar,
-  Tooltip,
-  Typography,
-} from "@mui/material";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Document, Page } from 'react-pdf';
-import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
-import 'react-pdf/dist/esm/Page/TextLayer.css';
+import { AppBar, Box, CircularProgress, IconButton, Toolbar, Tooltip, Typography } from "@mui/material";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Document, Page } from "react-pdf";
+import "react-pdf/dist/esm/Page/AnnotationLayer.css";
+import "react-pdf/dist/esm/Page/TextLayer.css";
 //import BugReportIcon from "@mui/icons-material/BugReport";
-import { useLazyDownloadRawContentBlobQuery } from '../slices/knowledgeFlow/knowledgeFlowApi.blob';
-import { downloadFile } from '../utils/downloadUtils';
+import { useLazyDownloadRawContentBlobQuery } from "../slices/knowledgeFlow/knowledgeFlowApi.blob";
+import { downloadFile } from "../utils/downloadUtils";
 
 interface PdfDocumentViewerProps {
   document: {
@@ -42,10 +34,10 @@ interface PdfDocumentViewerProps {
   onClose: () => void;
 }
 
-type RenderMode = 'arraybuffer' | 'blob' | 'objecturl';
+type RenderMode = "arraybuffer" | "blob" | "objecturl";
 
 const DEBUG = false; // flip to false to silence logs in production quickly
-const TAG = '[PdfViewer]';
+const TAG = "[PdfViewer]";
 const PDF_SCALE_FACTOR = 0.8; // Set to 1.0 for 100% width, 0.8 for 80%, etc.
 
 const log = (...args: any[]) => DEBUG && console.log(TAG, ...args);
@@ -65,7 +57,7 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
   const [loadError, setLoadError] = useState<string | null>(null);
   const [serverPreview, setServerPreview] = useState<string | null>(null); // show HTML/JSON if not a PDF
   const [numPages, setNumPages] = useState<number | null>(null);
-  const [renderMode, setRenderMode] = useState<RenderMode>('arraybuffer');
+  const [renderMode, setRenderMode] = useState<RenderMode>("arraybuffer");
 
   // Fit-to-width
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -73,9 +65,9 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
 
   // Compute the "file" prop for <Document/> from the selected render mode
   const reactPdfFile = useMemo(() => {
-    if (renderMode === 'arraybuffer' && arrayBuffer) return { data: arrayBuffer };
-    if (renderMode === 'blob' && blob) return blob;
-    if (renderMode === 'objecturl' && objectUrl) return objectUrl;
+    if (renderMode === "arraybuffer" && arrayBuffer) return { data: arrayBuffer };
+    if (renderMode === "blob" && blob) return blob;
+    if (renderMode === "objecturl" && objectUrl) return objectUrl;
     return null;
   }, [renderMode, arrayBuffer, blob, objectUrl]);
 
@@ -84,10 +76,10 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
     if (!contentRef.current) return;
     const el = contentRef.current;
     const ro = new ResizeObserver(() => {
-      const baseW = Math.max(320, Math.floor(el.clientWidth - 24)); 
+      const baseW = Math.max(320, Math.floor(el.clientWidth - 24));
       const scaledW = Math.floor(baseW * PDF_SCALE_FACTOR);
       setPageWidth(scaledW);
-      log('ResizeObserver -> pageWidth', scaledW);
+      log("ResizeObserver -> pageWidth", scaledW);
     });
     ro.observe(el);
     const initialBaseW = Math.max(320, Math.floor(el.clientWidth - 24));
@@ -100,7 +92,7 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
     setArrayBuffer(null);
     if (objectUrl) {
       URL.revokeObjectURL(objectUrl);
-      log('Revoked ObjectURL');
+      log("Revoked ObjectURL");
     }
     setObjectUrl(null);
     setNumPages(null);
@@ -109,7 +101,7 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
 
   const fetchPdf = useCallback(async () => {
     if (!doc?.document_uid) {
-      setLoadError('No document UID provided.');
+      setLoadError("No document UID provided.");
       setIsLoading(false);
       return;
     }
@@ -117,41 +109,41 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
     setIsLoading(true);
     setLoadError(null);
     clearData();
-    setRenderMode('arraybuffer');
+    setRenderMode("arraybuffer");
 
     const uid = doc.document_uid;
     const assumedUrl = `/knowledge-flow/v1/raw_content/${uid}`; // informational only
-    log('Fetching PDF…', { uid, assumedUrl });
+    log("Fetching PDF…", { uid, assumedUrl });
 
     try {
       const pdfBlob = await triggerDownloadBlob({ documentUid: uid }).unwrap();
 
-      log('Fetch OK. Blob info:', {
+      log("Fetch OK. Blob info:", {
         instanceOfBlob: pdfBlob instanceof Blob,
         size: pdfBlob.size,
-        type: pdfBlob.type || '(unset)',
+        type: pdfBlob.type || "(unset)",
       });
 
       // Sanity checks
       if (!(pdfBlob instanceof Blob)) {
-        throw new Error('Endpoint did not return a Blob');
+        throw new Error("Endpoint did not return a Blob");
       }
       if (pdfBlob.size === 0) {
         // often indicates 401/403 HTML body filtered out by fetch, or server issue
-        const txt = await pdfBlob.text().catch(() => '');
+        const txt = await pdfBlob.text().catch(() => "");
         setServerPreview(txt.slice(0, 4000));
-        throw new Error('Empty file received from server (0 bytes).');
+        throw new Error("Empty file received from server (0 bytes).");
       }
 
       // Peek header to confirm PDF
       const head = await pdfBlob.slice(0, 8).text();
-      const isPdf = head.startsWith('%PDF-');
-      log('Header peek:', JSON.stringify(head), 'isPdf?', isPdf);
+      const isPdf = head.startsWith("%PDF-");
+      log("Header peek:", JSON.stringify(head), "isPdf?", isPdf);
 
       if (!isPdf) {
-        const preview = await pdfBlob.text().catch(() => '(non-text payload)');
+        const preview = await pdfBlob.text().catch(() => "(non-text payload)");
         setServerPreview(preview.slice(0, 4000));
-        throw new Error('Server did not return a PDF (no %PDF- header).');
+        throw new Error("Server did not return a PDF (no %PDF- header).");
       }
 
       // Prepare all render strategies
@@ -160,11 +152,10 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
       setArrayBuffer(ab);
       const url = URL.createObjectURL(pdfBlob);
       setObjectUrl(url);
-      log('Prepared render modes: arrayBuffer, blob, objectUrl');
-
+      log("Prepared render modes: arrayBuffer, blob, objectUrl");
     } catch (e: any) {
-      error('Fetch error:', e);
-      setLoadError(e?.message || 'Failed to load PDF.');
+      error("Fetch error:", e);
+      setLoadError(e?.message || "Failed to load PDF.");
     } finally {
       setIsLoading(false);
     }
@@ -177,7 +168,7 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
     return () => {
       if (objectUrl) {
         URL.revokeObjectURL(objectUrl);
-        log('Cleanup: revoked ObjectURL');
+        log("Cleanup: revoked ObjectURL");
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -186,42 +177,42 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
   // react-pdf callbacks
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
-    log('Document loaded. Pages:', numPages, 'renderMode:', renderMode);
+    log("Document loaded. Pages:", numPages, "renderMode:", renderMode);
   };
 
   const onDocumentLoadError = (err: any) => {
-    warn('react-pdf onLoadError:', err?.message || err);
+    warn("react-pdf onLoadError:", err?.message || err);
     // Fallback chain: arraybuffer → blob → objecturl → give up
-    setRenderMode(prev => {
-      if (prev === 'arraybuffer' && blob) {
-        log('Falling back: arraybuffer → blob');
-        return 'blob';
+    setRenderMode((prev) => {
+      if (prev === "arraybuffer" && blob) {
+        log("Falling back: arraybuffer → blob");
+        return "blob";
       }
-      if (prev === 'blob' && objectUrl) {
-        log('Falling back: blob → objecturl');
-        return 'objecturl';
+      if (prev === "blob" && objectUrl) {
+        log("Falling back: blob → objecturl");
+        return "objecturl";
       }
-      error('All render strategies failed.');
-      setLoadError(err?.message || 'Failed to render PDF.');
+      error("All render strategies failed.");
+      setLoadError(err?.message || "Failed to render PDF.");
       return prev;
     });
   };
 
   const handleRetry = () => {
-    log('Manual retry requested.');
+    log("Manual retry requested.");
     fetchPdf();
   };
 
   return (
-     <Box
+    <Box
       sx={{
         width: "80vw",
-        height: "100%",      // let Drawer control height
-        maxHeight: "100vh",  // never exceed viewport
+        height: "100%", // let Drawer control height
+        maxHeight: "100vh", // never exceed viewport
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
-        minHeight: 0,        // ✅ critical for scrollable flex children
+        minHeight: 0, // ✅ critical for scrollable flex children
       }}
     >
       <AppBar position="static" color="default" elevation={0}>
@@ -258,19 +249,19 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
         ref={contentRef}
         sx={{
           flex: 1,
-          minHeight: 0,          // ✅ allow this flex child to actually scroll
+          minHeight: 0, // ✅ allow this flex child to actually scroll
           overflowY: "auto",
           overflowX: "hidden",
           p: 2,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',  // horizontal centering only
-          justifyContent: 'flex-start', // ✅ start at top
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center", // horizontal centering only
+          justifyContent: "flex-start", // ✅ start at top
           boxSizing: "border-box",
           width: "100%",
         }}
-      >  
-            {isLoading ? (
+      >
+        {isLoading ? (
           <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
             <CircularProgress />
           </Box>
@@ -280,11 +271,20 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
               {loadError}
             </Typography>
             {serverPreview && (
-              <Box sx={{ textAlign: 'left', mx: 'auto', maxWidth: 900, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
+              <Box
+                sx={{
+                  textAlign: "left",
+                  mx: "auto",
+                  maxWidth: 900,
+                  p: 2,
+                  bgcolor: "background.paper",
+                  borderRadius: 1,
+                }}
+              >
                 <Typography variant="subtitle2" gutterBottom>
                   Server response preview (first 4KB):
                 </Typography>
-                <Box component="pre" sx={{ whiteSpace: 'pre-wrap', m: 0, fontFamily: 'monospace', fontSize: 12 }}>
+                <Box component="pre" sx={{ whiteSpace: "pre-wrap", m: 0, fontFamily: "monospace", fontSize: 12 }}>
                   {serverPreview}
                 </Box>
               </Box>
@@ -299,13 +299,7 @@ export const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({ document: 
             error={<Typography color="error">Failed to load PDF document.</Typography>}
           >
             {Array.from({ length: numPages ?? 0 }, (_, i) => (
-              <Page
-                key={`page_${i + 1}`}
-                pageNumber={i + 1}
-                width={pageWidth}
-                renderAnnotationLayer
-                renderTextLayer
-              />
+              <Page key={`page_${i + 1}`} pageNumber={i + 1} width={pageWidth} renderAnnotationLayer renderTextLayer />
             ))}
           </Document>
         ) : (
