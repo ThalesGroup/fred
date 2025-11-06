@@ -259,6 +259,7 @@ class SessionWithFiles(SessionSchema):
 
 class ChatbotRuntimeSummary(BaseModel):
     """Lightweight runtime snapshot for UI recap."""
+
     sessions_total: int
     agents_active_total: int
     attachments_total: int
