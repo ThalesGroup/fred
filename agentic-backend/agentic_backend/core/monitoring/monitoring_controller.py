@@ -23,9 +23,9 @@ from fastapi import (
 )
 from fred_core import KeycloakUser, get_current_user
 
+from agentic_backend.core.chatbot.chat_schema import ChatbotRuntimeSummary
 from agentic_backend.core.chatbot.chatbot_controller import get_session_orchestrator
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
-from agentic_backend.core.chatbot.chat_schema import ChatbotRuntimeSummary
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
 
 logger = logging.getLogger(__name__)

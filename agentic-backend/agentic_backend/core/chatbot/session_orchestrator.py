@@ -55,6 +55,7 @@ from agentic_backend.core.agents.runtime_context import (
 from agentic_backend.core.chatbot.chat_schema import (
     AttachmentRef,
     Channel,
+    ChatbotRuntimeSummary,
     ChatMessage,
     ChatMetadata,
     Role,
@@ -63,7 +64,6 @@ from agentic_backend.core.chatbot.chat_schema import (
     TextPart,
     ToolCallPart,
     ToolResultPart,
-    ChatbotRuntimeSummary,
 )
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
 from agentic_backend.core.chatbot.session_in_memory_attachements import (
