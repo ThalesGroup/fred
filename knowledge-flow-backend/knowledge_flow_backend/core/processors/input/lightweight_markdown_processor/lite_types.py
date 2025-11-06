@@ -75,4 +75,3 @@ def collapse_whitespace(text: str) -> str:
     while "\n\n\n" in t:
         t = t.replace("\n\n\n", "\n\n")
     return t
-
