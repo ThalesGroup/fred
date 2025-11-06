@@ -38,6 +38,7 @@ from agentic_backend.core.agents.agent_spec import AgentTuning
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
+    get_document_uid,
     get_search_policy,
 )
 from agentic_backend.core.runtime_source import expose_runtime_source
@@ -128,9 +129,9 @@ class AdvancedRico(AgentFlow):
     traceability through detailed metadata and tool call handling.
     """
 
-    TOP_K = 20  # Number of top chunks to retrieve during vector search
+    TOP_K = 25  # Number of top chunks to retrieve during vector search
     MIN_DOCS = 3
-    TOP_R = 5  # Number of top-reranked chunks to consider before grading
+    TOP_R = 6  # Number of top-reranked chunks to consider before grading
     tuning = AgentTuning(
         role="Advanced Document Retrieval Expert",
         description="An advanced expert in retrieving and processing documents using enhanced retrieval-augmented generation techniques. Rico Senior is capable of handling more complex document-related tasks with improved accuracy.",
@@ -258,6 +259,7 @@ class AdvancedRico(AgentFlow):
         # Prepare search context
         runtime_context = self.get_runtime_context()
         document_library_tags_ids = get_document_library_tags_ids(runtime_context)
+        document_uid = get_document_uid(runtime_context)
         search_policy = get_search_policy(runtime_context)
 
         try:
@@ -267,6 +269,7 @@ class AdvancedRico(AgentFlow):
                 top_k=self.TOP_K,
                 document_library_tags_ids=document_library_tags_ids,
                 search_policy=search_policy,
+                document_uid=document_uid,
             )
 
             if not hits:
@@ -515,12 +518,26 @@ class AdvancedRico(AgentFlow):
         chat_context_instructions = self.chat_context_text()
 
         # Build prompt template and variables
-        base_prompt = (
-            "You are an assistant that answers questions based on retrieved documents.\n"
-            "Use the documents to support your response with citations.\n\n"
-            "{context}\n\n"
-            "Question: {question}"
-        )
+        base_prompt = """
+        You are an expert research assistant who helps users find accurate answers based on documents.
+        
+        SOURCE DOCUMENTS:
+        {context}
+        
+        INSTRUCTIONS:
+        - Carefully analyse the above documents.
+        - Answer the question based EXCLUSIVELY on these documents.
+        - Structure your answer clearly (using paragraphs if necessary).
+        - If several documents address the subject, summarise the information.
+        - Adapt the level of detail to the question asked.
+
+        IMPORTANT:
+        - If information is missing: clearly state that no information is available in the documents.
+        - If the information is partial: provide what you have and mention the limitations
+        - If the sources differ: present the different perspectives
+
+        QUESTION: {question}
+        """
 
         variables = {
             "context": context,
@@ -617,10 +634,28 @@ class AdvancedRico(AgentFlow):
         generation = cast(AIMessage, state["generation"])
 
         # Define grading prompt
-        system_prompt = (
-            "You are a grader assessing whether an answer resolves a question. "
-            "Return a binary 'yes' or 'no'."
-        )
+        system_prompt = """
+        You are an evaluator who determines whether an answer properly answers a question.
+
+        Evaluation criteria:
+        - Does the answer DIRECTLY address the specific question asked?
+        - Does the answer provide CONCRETE and RELEVANT information?
+        - Does the answer contain the key information needed to satisfy the question?
+
+        Return "yes" ONLY if:
+        - The answer provides the specific information requested
+        - The core of the question is addressed with substance
+        - A user would find the answer genuinely helpful
+
+        Return "no" if:
+        - The answer is vague or too general
+        - The answer talks around the topic without answering
+        - The answer is off-topic or irrelevant
+        - The answer is empty or lacks substance
+        - The answer only acknowledges the question without answering it
+
+        Return only "yes" or "no".
+        """
 
         grade_prompt = ChatPromptTemplate.from_messages(
             [
