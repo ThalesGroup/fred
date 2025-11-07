@@ -246,7 +246,6 @@ export default function DocumentLibraryList() {
             {t("documentLibrary.uploadInLibrary")}
           </Button>
         </Box>
-
       </Box>
 
       {/* Bulk actions */}

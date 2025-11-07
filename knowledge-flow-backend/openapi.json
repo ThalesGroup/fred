@@ -1259,6 +1259,65 @@
         ]
       }
     },
+    "/knowledge-flow/v1/lite/markdown": {
+      "post": {
+        "tags": [
+          "Processing"
+        ],
+        "summary": "Lightweight Markdown extraction for a single file",
+        "description": "Extract a compact Markdown representation of a PDF or DOCX without full ingestion. Intended for agent use where fast, dependency-light text is needed.",
+        "operationId": "lightweight_markdown_knowledge_flow_v1_lite_markdown_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Response format: 'json' or 'text'",
+              "default": "json",
+              "title": "Format"
+            },
+            "description": "Response format: 'json' or 'text'"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_lightweight_markdown_knowledge_flow_v1_lite_markdown_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/knowledge-flow/v1/tabular/databases": {
       "get": {
         "tags": [
@@ -2519,6 +2578,207 @@
         }
       }
     },
+    "/knowledge-flow/v1/tags/{tag_id}/permissions": {
+      "get": {
+        "tags": [
+          "Tags"
+        ],
+        "summary": "List permissions available on a tag for the current user",
+        "operationId": "get_tag_permissions_knowledge_flow_v1_tags__tag_id__permissions_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagPermissionsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/tags/{tag_id}/members": {
+      "get": {
+        "tags": [
+          "Tags"
+        ],
+        "summary": "List users and groups who can access a tag",
+        "operationId": "list_tag_members_knowledge_flow_v1_tags__tag_id__members_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagMembersResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/tags/{tag_id}/share": {
+      "post": {
+        "tags": [
+          "Tags"
+        ],
+        "summary": "Share a tag with another user",
+        "operationId": "share_tag_knowledge_flow_v1_tags__tag_id__share_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagShareRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/knowledge-flow/v1/tags/{tag_id}/share/{target_id}": {
+      "delete": {
+        "tags": [
+          "Tags"
+        ],
+        "summary": "Stop sharing a tag with a user",
+        "operationId": "unshare_tag_knowledge_flow_v1_tags__tag_id__share__target_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tag Id"
+            }
+          },
+          {
+            "name": "target_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Target Id"
+            }
+          },
+          {
+            "name": "target_type",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ShareTargetResource"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/knowledge-flow/v1/resources/schema": {
       "get": {
         "tags": [
@@ -3522,6 +3782,67 @@
         ]
       }
     },
+    "/knowledge-flow/v1/groups": {
+      "get": {
+        "tags": [
+          "Groups"
+        ],
+        "summary": "List groups registered in Keycloak.",
+        "operationId": "list_groups_knowledge_flow_v1_groups_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GroupSummary"
+                  },
+                  "type": "array",
+                  "title": "Response List Groups Knowledge Flow V1 Groups Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/knowledge-flow/v1/users": {
+      "get": {
+        "tags": [
+          "Users",
+          "Users"
+        ],
+        "summary": "List users registered in Keycloak.",
+        "operationId": "list_users_knowledge_flow_v1_users_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserSummary"
+                  },
+                  "type": "array",
+                  "title": "Response List Users Knowledge Flow V1 Users Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/knowledge-flow/v1/process-documents": {
       "post": {
         "tags": [
@@ -3747,6 +4068,32 @@
         ],
         "title": "AssetMeta",
         "description": "Public metadata for any asset, inheriting file details and adding scope context."
+      },
+      "Body_lightweight_markdown_knowledge_flow_v1_lite_markdown_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          },
+          "options_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options Json",
+            "description": "JSON string of LiteMarkdownOptions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_lightweight_markdown_knowledge_flow_v1_lite_markdown_post"
       },
       "Body_process_documents_sync_knowledge_flow_v1_upload_process_documents_post": {
         "properties": {
@@ -4423,6 +4770,53 @@
           "value"
         ],
         "title": "FilterTerm"
+      },
+      "GroupSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "member_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Count"
+          },
+          "total_member_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Member Count"
+          },
+          "sub_groups": {
+            "items": {
+              "$ref": "#/components/schemas/GroupSummary"
+            },
+            "type": "array",
+            "title": "Sub Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "GroupSummary"
       },
       "HTTPValidationError": {
         "properties": {
@@ -5493,6 +5887,14 @@
         ],
         "title": "SetDatasetRequest"
       },
+      "ShareTargetResource": {
+        "type": "string",
+        "enum": [
+          "user",
+          "group"
+        ],
+        "title": "ShareTargetResource"
+      },
       "SortOption": {
         "properties": {
           "field": {
@@ -5765,6 +6167,118 @@
         "title": "TagCreate",
         "description": "name: leaf segment (e.g. 'HR')\npath: optional parent path (e.g. 'Sales'); full path becomes 'Sales/HR'"
       },
+      "TagMemberGroup": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "group",
+            "title": "Type",
+            "default": "group"
+          },
+          "relation": {
+            "$ref": "#/components/schemas/UserTagRelation"
+          },
+          "group": {
+            "$ref": "#/components/schemas/GroupSummary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "relation",
+          "group"
+        ],
+        "title": "TagMemberGroup"
+      },
+      "TagMemberUser": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "user",
+            "title": "Type",
+            "default": "user"
+          },
+          "relation": {
+            "$ref": "#/components/schemas/UserTagRelation"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "relation",
+          "user"
+        ],
+        "title": "TagMemberUser"
+      },
+      "TagMembersResponse": {
+        "properties": {
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/TagMemberUser"
+            },
+            "type": "array",
+            "title": "Users"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/TagMemberGroup"
+            },
+            "type": "array",
+            "title": "Groups"
+          }
+        },
+        "type": "object",
+        "title": "TagMembersResponse"
+      },
+      "TagPermission": {
+        "type": "string",
+        "enum": [
+          "read",
+          "update",
+          "delete",
+          "share"
+        ],
+        "title": "TagPermission",
+        "description": "Tag permissions encoded in the graph."
+      },
+      "TagPermissionsResponse": {
+        "properties": {
+          "permissions": {
+            "items": {
+              "$ref": "#/components/schemas/TagPermission"
+            },
+            "type": "array",
+            "title": "Permissions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "permissions"
+        ],
+        "title": "TagPermissionsResponse"
+      },
+      "TagShareRequest": {
+        "properties": {
+          "target_id": {
+            "type": "string",
+            "title": "Target Id"
+          },
+          "target_type": {
+            "$ref": "#/components/schemas/ShareTargetResource"
+          },
+          "relation": {
+            "$ref": "#/components/schemas/UserTagRelation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_id",
+          "target_type",
+          "relation"
+        ],
+        "title": "TagShareRequest"
+      },
       "TagType": {
         "type": "string",
         "enum": [
@@ -5969,6 +6483,61 @@
           "features"
         ],
         "title": "TrainModelRequest"
+      },
+      "UserSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "UserSummary"
+      },
+      "UserTagRelation": {
+        "type": "string",
+        "enum": [
+          "owner",
+          "editor",
+          "viewer"
+        ],
+        "title": "UserTagRelation"
       },
       "ValidationError": {
         "properties": {

@@ -38,17 +38,24 @@ import React, { SetStateAction } from "react";
 import TravelExploreIcon from "@mui/icons-material/TravelExplore";
 
 import { useTranslation } from "react-i18next";
-import { AgentChatOptions } from "../../../slices/agentic/agenticOpenApi.ts";
+import {
+  AgentChatOptions,
+  useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation,
+} from "../../../slices/agentic/agenticOpenApi.ts";
 import { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { ChatDocumentLibrariesSelectionCard } from "../ChatDocumentLibrariesSelectionCard.tsx";
 import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard.tsx";
 
 type PickerView = null | "libraries" | "prompts" | "templates" | "search_policy";
 
+type SessionAttachmentRef = { id: string; name: string };
+
 interface UserInputPopoverProps {
   plusAnchor: HTMLElement | null;
   pickerView: PickerView;
   isRecording: boolean;
+  sessionId?: string;
+  sessionAttachments: SessionAttachmentRef[];
   selectedDocumentLibrariesIds: string[];
   selectedPromptResourceIds: string[];
   selectedTemplateResourceIds: string[];
@@ -70,6 +77,7 @@ interface UserInputPopoverProps {
   onRecordAudioClick: () => void;
   agentChatOptions?: AgentChatOptions;
   filesBlob: File[] | null;
+  onRefreshSessionAttachments?: () => void;
 }
 
 const countChip = (n: number) =>
@@ -79,6 +87,8 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
   plusAnchor,
   pickerView,
   isRecording,
+  sessionId,
+  sessionAttachments,
   selectedDocumentLibrariesIds,
   selectedPromptResourceIds,
   selectedTemplateResourceIds,
@@ -100,8 +110,10 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
   onRecordAudioClick,
   agentChatOptions,
   filesBlob,
+  onRefreshSessionAttachments,
 }) => {
   const { t } = useTranslation();
+  const [deleteAttachment, { isLoading: isDeleting }] = useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation();
 
   const handleClose = () => {
     setPickerView(null);
@@ -140,13 +152,31 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
     </Stack>
   );
 
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    if (!sessionId) return;
+    try {
+      await deleteAttachment({ attachmentId, sessionId }).unwrap();
+      onRefreshSessionAttachments?.();
+    } catch (e) {
+      // Silently fail here; parent toast system is not wired in this component.
+      // Console helps debugging in dev.
+      console.error("Failed to delete attachment", attachmentId, e);
+    }
+  };
+
   return (
     <Popover
       open={Boolean(plusAnchor)}
       anchorEl={plusAnchor}
       onClose={handleClose}
-      anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      transformOrigin={{ vertical: "top", horizontal: "right" }}
+      anchorOrigin={{
+        vertical: "top",
+        horizontal: "center",
+      }}
+      transformOrigin={{
+        vertical: "bottom",
+        horizontal: "right",
+      }}
       slotProps={{
         paper: {
           sx: {
@@ -160,6 +190,31 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
     >
       {!pickerView && (
         <Box sx={{ display: "flex", flexDirection: "column" }}>
+          {/* Attached files (session) */}
+          {!!sessionAttachments?.length && (
+            <>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
+                <AttachFileIcon fontSize="small" />
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {t("chatbot.attachments.count", { count: sessionAttachments.length })}
+                </Typography>
+              </Stack>
+              <Box sx={{ mb: 1 }}>
+                <Stack direction="row" flexWrap="wrap" gap={0.75}>
+                  {sessionAttachments.map((att, i) => (
+                    <Chip
+                      key={`${att.id}-${i}`}
+                      size="small"
+                      variant="outlined"
+                      label={att.name.replace(/\.[^/.]+$/, "")}
+                      onDelete={isDeleting ? undefined : () => handleDeleteAttachment(att.id)}
+                    />
+                  ))}
+                </Stack>
+              </Box>
+              <Divider sx={{ my: 1 }} />
+            </>
+          )}
           {agentChatOptions?.libraries_selection && (
             <>
               {sectionHeader(
@@ -256,7 +311,20 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
                   <AttachFileIcon fontSize="small" />
                 </ListItemIcon>
                 <ListItemText
-                  primary={t("chatbot.attachFiles")}
+                  primary={
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <span>{t("chatbot.attachFiles")}</span>
+                      <Tooltip title={t("chatbot.attachments.betaNotice")}>
+                        <Chip
+                          label={t("common.beta")}
+                          size="small"
+                          color="warning"
+                          variant="outlined"
+                          sx={{ height: 18, fontSize: "0.68rem" }}
+                        />
+                      </Tooltip>
+                    </Stack>
+                  }
                   secondary={
                     filesBlob?.length
                       ? t("chatbot.attachments.count", {

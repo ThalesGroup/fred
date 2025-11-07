@@ -171,7 +171,7 @@ export function ResourceLibraryTree({
               }}
               onClick={(e) => {
                 e.stopPropagation();
-                setSelectedFolder(isSelected ? null : c.full); 
+                setSelectedFolder(isSelected ? null : c.full);
               }}
             >
               {/* Left: tri-state + folder icon + name */}

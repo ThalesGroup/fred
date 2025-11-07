@@ -23,12 +23,15 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute = ({ children, resource, action, anyResource = false }: ProtectedRouteProps) => {
-  const { can } = usePermissions();
+  const { can, loading } = usePermissions();
+
+  // Avoid false negatives on hard reloads while permissions are still loading
+  if (loading) return null;
 
   const allowed = Array.isArray(resource)
     ? anyResource
-      ? resource.some(r => can(r, action))
-      : resource.every(r => can(r, action))
+      ? resource.some((r) => can(r, action))
+      : resource.every((r) => can(r, action))
     : can(resource, action);
 
   if (!allowed) return <Navigate to="/unauthorized" replace />;

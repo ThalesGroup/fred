@@ -30,10 +30,19 @@ class RuntimeContext(BaseModel):
     access_token: Optional[str] = None
     refresh_token: Optional[str] = None
     access_token_expires_at: Optional[int] = None
+    attachments_markdown: Optional[str] = (
+        None  # if the session has some attachement files, this will hold their markdown representation
+    )
 
 
 # Type alias for context provider functions
 RuntimeContextProvider = Callable[[], Optional[RuntimeContext]]
+
+
+def set_attachments_markdown(context: RuntimeContext, markdown: str) -> None:
+    """Helper to set attachments markdown in context."""
+    if markdown is not None and len(markdown) > 0:
+        context.attachments_markdown = markdown
 
 
 def get_document_library_tags_ids(context: RuntimeContext | None) -> list[str] | None:

@@ -43,13 +43,13 @@ function useLogApis(service: ServiceId) {
 
 export function LogConsoleTile({
   start,
-  end,                         // ← now REQUIRED
+  end, // ← now REQUIRED
   height = 260,
   defaultService = "knowledge-flow",
   fillParent = true,
 }: {
   start: Date;
-  end: Date;                   // ← no "until now" here; parent always passes a value
+  end: Date; // ← no "until now" here; parent always passes a value
   height?: number;
   defaultService?: string;
   devTail?: boolean;
@@ -103,7 +103,7 @@ export function LogConsoleTile({
     }),
     [start, end, minLevel, service, dLoggerLike, dTextLike],
   );
- 
+
   const fetchQuery = useCallback(() => {
     postQuery({ logQuery: body }).catch(() => {});
   }, [postQuery, body]);
@@ -120,7 +120,7 @@ export function LogConsoleTile({
     return asc.length > MAX_EVENTS ? asc.slice(asc.length - MAX_EVENTS) : asc;
   }, [queryState.data]);
 
-   const copyAll = useCallback(() => {
+  const copyAll = useCallback(() => {
     if (events.length === 0) return;
 
     // Format events into a readable text block
@@ -132,12 +132,13 @@ export function LogConsoleTile({
         const extra = e.extra ? `\n\tEXTRA: ${JSON.stringify(e.extra)}` : "";
         return `[${ts}] [${e.level}] [${origin}] ${e.msg}${extra}`;
       })
-      .join('\n');
+      .join("\n");
 
     // Use navigator.clipboard.writeText to copy
-    navigator.clipboard.writeText(logText)
-      .then(() => console.log('Logs copied to clipboard'))
-      .catch((err) => console.error('Failed to copy logs: ', err));
+    navigator.clipboard
+      .writeText(logText)
+      .then(() => console.log("Logs copied to clipboard"))
+      .catch((err) => console.error("Failed to copy logs: ", err));
   }, [events]);
 
   // ---- Stick to bottom on new data if user is near bottom ----
@@ -175,17 +176,17 @@ export function LogConsoleTile({
           setLoggerLike={setLoggerLike}
           textLike={textLike}
           setTextLike={setTextLike}
-          onRefresh={fetchQuery}   // manual refresh remains available
+          onRefresh={fetchQuery} // manual refresh remains available
         />
         <Tooltip title="Copy all visible logs to clipboard">
-          <Button 
+          <Button
             variant="outlined"
             size="small"
             onClick={copyAll}
             disabled={events.length === 0}
             startIcon={<ContentCopyIcon />}
             // Ensure button height matches CONTROL_HEIGHT (32px)
-            sx={{ height: 32 }} 
+            sx={{ height: 32 }}
           >
             {t("logs.copyAll", { count: events.length })}
           </Button>

@@ -189,20 +189,29 @@ export default function MessageCard({
                     <Box display="flex" alignItems="center" gap={1} px={side === "right" ? 0 : 1} pb={0.5}>
                       {showMetaChips && extras?.task && (
                         <Tooltip title={t("chat.labels.task")}>
-                          <Typography variant="caption" sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, px: 0.75, py: 0.25 }}>
+                          <Typography
+                            variant="caption"
+                            sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, px: 0.75, py: 0.25 }}
+                          >
                             {String(extras.task)}
                           </Typography>
                         </Tooltip>
                       )}
                       {showMetaChips && extras?.node && (
                         <Tooltip title={t("chat.labels.node")}>
-                          <Typography variant="caption" sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, px: 0.75, py: 0.25 }}>
+                          <Typography
+                            variant="caption"
+                            sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, px: 0.75, py: 0.25 }}
+                          >
                             {String(extras.node)}
                           </Typography>
                         </Tooltip>
                       )}
                       {showMetaChips && extras?.label && (
-                        <Typography variant="caption" sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, px: 0.75, py: 0.25 }}>
+                        <Typography
+                          variant="caption"
+                          sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, px: 0.75, py: 0.25 }}
+                        >
                           {String(extras.label)}
                         </Typography>
                       )}

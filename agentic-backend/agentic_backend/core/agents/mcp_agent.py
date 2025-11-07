@@ -19,7 +19,7 @@ from typing import Any, Dict
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt import tools_condition
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
@@ -101,9 +101,8 @@ class MCPAgent(AgentFlow):
 
         # LLM node
         builder.add_node("reasoner", self.reasoner)
-        tools = self.mcp.get_tools()
-        tool_node = ToolNode(tools=tools)
-        builder.add_node("tools", tool_node)
+        # Use shared ToolNode factory with standardized human-friendly MCP error handling
+        builder.add_node("tools", self.mcp.get_tool_nodes())
 
         builder.add_edge(START, "reasoner")
         builder.add_conditional_edges(
@@ -165,6 +164,14 @@ class MCPAgent(AgentFlow):
         except Exception:
             logger.exception("MCPAgent: unexpected error during reasoning.")
             fallback = await self.model.ainvoke(
-                [HumanMessage(content="An error occurred.")]
+                [
+                    HumanMessage(
+                        content=(
+                            "Sorry, I hit an unexpected error while reasoning. "
+                            "Please try again. If it persists, ensure any required "
+                            "external tools (MCP servers) are running."
+                        )
+                    )
+                ]
             )
             return {"messages": [fallback]}

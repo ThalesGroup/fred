@@ -102,13 +102,11 @@ export default function DateRangeControl({
             isSel={isSelected(qr)}
             onClick={() => applyRange(qr)}
             label={t(qr.labelKey ?? "", { defaultValue: qr.labelFallback }) as string}
-            
           />
         ))}
       </ButtonGroup>
 
-      <LocalizationProvider dateAdapter={AdapterDayjs} 
-        adapterLocale={i18n.language}>
+      <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale={i18n.language}>
         <Box display="flex" gap={1} alignItems="center">
           <DateTimePicker
             label={t("metrics.from")}
@@ -117,7 +115,7 @@ export default function DateRangeControl({
             format={dateFormat}
             slotProps={{
               // MODIFICATION: Removed margin: "dense"
-              textField: { size: "small", sx: textFieldSx }, 
+              textField: { size: "small", sx: textFieldSx },
               openPickerButton: { size: "small" },
             }}
             maxDateTime={endDate}
@@ -129,7 +127,7 @@ export default function DateRangeControl({
             format={dateFormat}
             slotProps={{
               // MODIFICATION: Removed margin: "dense"
-              textField: { size: "small", sx: textFieldSx }, 
+              textField: { size: "small", sx: textFieldSx },
               openPickerButton: { size: "small" },
             }}
             minDateTime={startDate}

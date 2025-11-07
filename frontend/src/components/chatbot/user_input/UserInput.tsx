@@ -6,7 +6,7 @@
 // User input component for the chatbot
 
 import AddIcon from "@mui/icons-material/Add";
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import StopIcon from "@mui/icons-material/Stop";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -25,7 +25,12 @@ import {
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 
 // Import the new sub-components
-import { AgentChatOptions } from "../../../slices/agentic/agenticOpenApi.ts";
+import { AnyAgent } from "../../../common/agent.ts";
+import {
+  AgentChatOptions,
+  useGetSessionsAgenticV1ChatbotSessionsGetQuery,
+} from "../../../slices/agentic/agenticOpenApi.ts";
+import { AgentSelector } from "./AgentSelector.tsx";
 import { UserInputAttachments } from "./UserInputAttachments.tsx";
 import { UserInputPopover } from "./UserInputPopover.tsx";
 
@@ -80,10 +85,14 @@ export default function UserInput({
   onStop,
   onContextChange,
   sessionId,
+  attachmentsRefreshTick,
   initialDocumentLibraryIds,
   initialPromptResourceIds,
   initialTemplateResourceIds,
   initialSearchPolicy = "semantic",
+  currentAgent,
+  agents,
+  onSelectNewAgent,
 }: {
   agentChatOptions?: AgentChatOptions;
   isWaiting: boolean;
@@ -91,10 +100,14 @@ export default function UserInput({
   onStop?: () => void;
   onContextChange?: (ctx: UserInputContent) => void;
   sessionId?: string;
+  attachmentsRefreshTick?: number;
   initialDocumentLibraryIds?: string[];
   initialPromptResourceIds?: string[];
   initialTemplateResourceIds?: string[];
   initialSearchPolicy?: SearchPolicyName;
+  currentAgent: AnyAgent;
+  agents: AnyAgent[];
+  onSelectNewAgent: (flow: AnyAgent) => void;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -119,6 +132,10 @@ export default function UserInput({
   const [selectedTemplateResourceIds, setSelectedTemplateResourceIds] = useState<string[]>([]);
   const [selectedSearchPolicyName, setSelectedSearchPolicyName] = useState<SearchPolicyName>("semantic");
   const canSend = !!userInput.trim() || !!audioBlob || !!(filesBlob && filesBlob.length);
+
+  const canAttach = Object.values(agentChatOptions)
+    .filter((value) => typeof value === "boolean")
+    .some((v) => v);
 
   // Selections made *before* we get a real sessionId (first question) — migrate them.
   const preSessionRef = useRef<PersistedCtx>({});
@@ -266,6 +283,27 @@ export default function UserInput({
   // Libraries are "document" tags in your UI
   const { data: documentTags = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" });
 
+  // --- Session attachments for popover ---
+  const { data: sessions = [], refetch: refetchSessions } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: false,
+    refetchOnReconnect: true,
+  });
+  useEffect(() => {
+    if (sessionId) refetchSessions();
+  }, [attachmentsRefreshTick, sessionId, refetchSessions]);
+  type AttachmentRef = { id: string; name: string };
+  const sessionAttachments: AttachmentRef[] = useMemo(() => {
+    if (!sessionId) return [];
+    const s = (sessions as any[]).find((x) => x?.id === sessionId) as any | undefined;
+    // Prefer new backend shape with IDs
+    const att = s?.attachments;
+    if (Array.isArray(att)) return att as AttachmentRef[];
+    // Fallback to legacy file_names list if attachments not present
+    const names = (s && (s.file_names as string[] | undefined)) || [];
+    return Array.isArray(names) ? names.map((n) => ({ id: n, name: n })) : [];
+  }, [sessions, sessionId]);
+
   const promptNameById = useMemo(
     () => Object.fromEntries((promptResources as Resource[]).map((r) => [r.id, r.name])),
     [promptResources],
@@ -353,6 +391,8 @@ export default function UserInput({
     });
   };
 
+  // No separate attachments popover (shown inside + menu)
+
   // Audio
   const handleAudioRecorderDisplay = () => {
     setIsRecording((v) => !v);
@@ -373,7 +413,7 @@ export default function UserInput({
   const removeTemplate = (id: string) => setTemplates((prev) => prev.filter((x) => x !== id));
 
   return (
-    <Grid2 container sx={{ height: "100%", justifyContent: "flex-end", overflow: "hidden" }} size={12} display="flex">
+    <Grid2 container sx={{ height: "100%", justifyContent: "flex-start", overflow: "hidden" }} size={12} display="flex">
       {/* Attachments strip - now a dedicated component */}
       <UserInputAttachments
         files={filesBlob}
@@ -383,12 +423,31 @@ export default function UserInput({
         onRemoveAudio={() => setAudioBlob(null)}
       />
 
+      <AgentSelector agents={agents} currentAgent={currentAgent} onSelectNewAgent={onSelectNewAgent} />
+
       {/* Only the inner rounded input remains visible */}
       <Grid2 container size={12} alignItems="center" sx={{ p: 0, gap: 0, backgroundColor: "transparent" }}>
         {/* Single rounded input with the "+" inside (bottom-left) */}
         <Box sx={{ position: "relative", width: "100%" }}>
           {/* + anchored inside the input, bottom-left */}
           <Box sx={{ position: "absolute", right: 8, bottom: 6, zIndex: 1, display: "flex", gap: 0.75 }}>
+            {canAttach && (
+              <Tooltip title={t("chatbot.menu.addToSetup")}>
+                <span>
+                  <IconButton
+                    aria-label="add-to-setup"
+                    sx={{ fontSize: "1.6rem", p: "8px" }}
+                    onClick={(e) => {
+                      setPickerView(null);
+                      setPlusAnchor(e.currentTarget);
+                    }}
+                    disabled={isWaiting}
+                  >
+                    <AddIcon fontSize="inherit" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )}
             {!isWaiting && (
               <Tooltip title={t("chatbot.sendMessage", "Send message")}>
                 <span>
@@ -418,21 +477,6 @@ export default function UserInput({
                 </span>
               </Tooltip>
             )}
-            <Tooltip title={t("chatbot.menu.addToSetup")}>
-              <span>
-                <IconButton
-                  aria-label="add-to-setup"
-                  sx={{ fontSize: "1.6rem", p: "8px" }}
-                  onClick={(e) => {
-                    setPickerView(null);
-                    setPlusAnchor(e.currentTarget);
-                  }}
-                  disabled={isWaiting}
-                >
-                  <AddIcon fontSize="inherit" />
-                </IconButton>
-              </span>
-            </Tooltip>
           </Box>
 
           {/* Hidden native file input */}
@@ -442,6 +486,7 @@ export default function UserInput({
           <Box
             sx={{
               borderRadius: 4,
+              borderTopLeftRadius: 0,
               border: `1px solid ${theme.palette.divider}`,
               background:
                 theme.palette.mode === "light" ? theme.palette.common.white : theme.palette.background.default,
@@ -497,13 +542,16 @@ export default function UserInput({
               />
             )}
           </Box>
+          {/* Attached files are shown within the + menu popover */}
         </Box>
 
-        {/* Popover - now a dedicated component */}
+        {/* Popover */}
         <UserInputPopover
           plusAnchor={plusAnchor}
           pickerView={pickerView}
           isRecording={isRecording}
+          sessionId={sessionId}
+          sessionAttachments={sessionAttachments}
           selectedDocumentLibrariesIds={selectedDocumentLibrariesIds}
           selectedPromptResourceIds={selectedPromptResourceIds}
           selectedTemplateResourceIds={selectedTemplateResourceIds}
@@ -521,6 +569,10 @@ export default function UserInput({
           onRemoveLib={removeLib}
           onRemovePrompt={removePrompt}
           onRemoveTemplate={removeTemplate}
+          onRefreshSessionAttachments={() => {
+            // Refresh the sessions list so the attachments view updates after deletions
+            refetchSessions();
+          }}
           onAttachFileClick={() => {
             fileInputRef.current?.click();
             setPickerView(null);

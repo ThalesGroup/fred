@@ -95,11 +95,7 @@ export default function ReasoningStepBadge({
   })();
 
   const accentMain =
-    typeof resultOk !== "undefined"
-      ? resultOk
-        ? theme.palette.success.main
-        : theme.palette.error.main
-      : baseAccent;
+    typeof resultOk !== "undefined" ? (resultOk ? theme.palette.success.main : theme.palette.error.main) : baseAccent;
 
   const hasResult = typeof resultOk !== "undefined";
   const baseIntensity = theme.palette.mode === "dark" ? 0.15 : 0.05;
@@ -213,9 +209,7 @@ export default function ReasoningStepBadge({
           {derivedStatus && (
             <Chip
               label={
-                derivedStatus === "pending"
-                  ? (theme.palette.mode === "dark" ? "pending" : "pending")
-                  : derivedStatus
+                derivedStatus === "pending" ? (theme.palette.mode === "dark" ? "pending" : "pending") : derivedStatus
               }
               size="small"
               color={statusChipColor as "default" | "success" | "error" | "warning"}

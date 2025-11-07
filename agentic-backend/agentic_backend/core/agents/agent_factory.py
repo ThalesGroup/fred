@@ -1,4 +1,16 @@
-# agentic_backend/core/agents/agent_factory.py (refactor excerpt)
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import asyncio
 import logging
@@ -31,6 +43,11 @@ class BaseAgentFactory:
     async def teardown_session_agents(self, session_id: str) -> None:
         pass
 
+    # Lightweight observability hook
+    def list_active_keys(self) -> list[tuple[str, str]]:
+        """List cached (session_id, agent_name) keys if implemented; empty by default."""
+        return []
+
 
 class NoOpAgentFactory(BaseAgentFactory):
     async def create_and_init(
@@ -40,6 +57,9 @@ class NoOpAgentFactory(BaseAgentFactory):
 
     async def teardown_session_agents(self, session_id: str) -> None:
         pass
+
+    def list_active_keys(self) -> list[tuple[str, str]]:
+        return []
 
 
 class AgentFactory(BaseAgentFactory):
@@ -207,3 +227,10 @@ class AgentFactory(BaseAgentFactory):
                 f"[AGENTS] Failed to close agent '{agent_name}' for session '{session_id}'.",
                 exc_info=True,
             )
+
+    # ---------- Observability ----------
+    def list_active_keys(self) -> list[tuple[str, str]]:
+        try:
+            return list(self._agent_cache.keys())
+        except Exception:
+            return []

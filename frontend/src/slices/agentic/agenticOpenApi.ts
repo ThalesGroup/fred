@@ -113,6 +113,18 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bodyUploadFileAgenticV1ChatbotUploadPost,
       }),
     }),
+    deleteFileAgenticV1ChatbotUploadAttachmentIdDelete: build.mutation<
+      DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiResponse,
+      DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/upload/${queryArg.attachmentId}`,
+        method: "DELETE",
+        params: {
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
     healthzAgenticV1HealthzGet: build.query<HealthzAgenticV1HealthzGetApiResponse, HealthzAgenticV1HealthzGetApiArg>({
       query: () => ({ url: `/agentic/v1/healthz` }),
     }),
@@ -133,6 +145,12 @@ const injectedRtkApi = api.injectEndpoints({
           groupby: queryArg.groupby,
         },
       }),
+    }),
+    getRuntimeSummaryAgenticV1MetricsChatbotSummaryGet: build.query<
+      GetRuntimeSummaryAgenticV1MetricsChatbotSummaryGetApiResponse,
+      GetRuntimeSummaryAgenticV1MetricsChatbotSummaryGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/metrics/chatbot/summary` }),
     }),
     getFeedbackAgenticV1ChatbotFeedbackGet: build.query<
       GetFeedbackAgenticV1ChatbotFeedbackGetApiResponse,
@@ -233,6 +251,11 @@ export type UploadFileAgenticV1ChatbotUploadPostApiResponse = /** status 200 Suc
 export type UploadFileAgenticV1ChatbotUploadPostApiArg = {
   bodyUploadFileAgenticV1ChatbotUploadPost: BodyUploadFileAgenticV1ChatbotUploadPost;
 };
+export type DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiResponse = /** status 200 Successful Response */ null;
+export type DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiArg = {
+  attachmentId: string;
+  sessionId: string;
+};
 export type HealthzAgenticV1HealthzGetApiResponse = /** status 200 Successful Response */ any;
 export type HealthzAgenticV1HealthzGetApiArg = void;
 export type ReadyAgenticV1ReadyGetApiResponse = /** status 200 Successful Response */ any;
@@ -246,6 +269,9 @@ export type GetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetApiArg = {
   agg?: string[];
   groupby?: string[];
 };
+export type GetRuntimeSummaryAgenticV1MetricsChatbotSummaryGetApiResponse =
+  /** status 200 Successful Response */ ChatbotRuntimeSummary;
+export type GetRuntimeSummaryAgenticV1MetricsChatbotSummaryGetApiArg = void;
 export type GetFeedbackAgenticV1ChatbotFeedbackGetApiResponse = /** status 200 Successful Response */ FeedbackRecord[];
 export type GetFeedbackAgenticV1ChatbotFeedbackGetApiArg = void;
 export type PostFeedbackAgenticV1ChatbotFeedbackPostApiResponse = unknown;
@@ -495,6 +521,7 @@ export type RuntimeContext = {
   access_token?: string | null;
   refresh_token?: string | null;
   access_token_expires_at?: number | null;
+  attachments_markdown?: string | null;
 };
 export type ChatMetadata = {
   model?: string | null;
@@ -569,12 +596,17 @@ export type ErrorEvent = {
   content: string;
   session_id?: string | null;
 };
+export type AttachmentRef = {
+  id: string;
+  name: string;
+};
 export type SessionWithFiles = {
   id: string;
   user_id: string;
   title: string;
   updated_at: string;
   file_names?: string[];
+  attachments?: AttachmentRef[];
 };
 export type MetricsBucket = {
   timestamp: string;
@@ -589,6 +621,13 @@ export type MetricsResponse = {
   precision: string;
   buckets: MetricsBucket[];
 };
+export type ChatbotRuntimeSummary = {
+  sessions_total: number;
+  agents_active_total: number;
+  attachments_total: number;
+  attachments_sessions: number;
+  max_attachments_per_session: number;
+};
 export type EchoEnvelope = {
   kind:
     | "ChatMessage"
@@ -600,7 +639,8 @@ export type EchoEnvelope = {
     | "MetricsResponse"
     | "MetricsBucket"
     | "VectorSearchHit"
-    | "RuntimeContext";
+    | "RuntimeContext"
+    | "ChatbotRuntimeSummary";
   /** Schema payload being echoed */
   payload:
     | ChatMessage
@@ -613,7 +653,8 @@ export type EchoEnvelope = {
     | MetricsResponse
     | MetricsBucket
     | VectorSearchHit
-    | RuntimeContext;
+    | RuntimeContext
+    | ChatbotRuntimeSummary;
 };
 export type FrontendFlags = {
   enableK8Features?: boolean;
@@ -702,7 +743,6 @@ export type ChatMessage2 = {
 };
 export type BodyUploadFileAgenticV1ChatbotUploadPost = {
   session_id: string;
-  agent_name: string;
   file: Blob;
 };
 export type FeedbackRecord = {
@@ -783,12 +823,15 @@ export const {
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
+  useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation,
   useHealthzAgenticV1HealthzGetQuery,
   useLazyHealthzAgenticV1HealthzGetQuery,
   useReadyAgenticV1ReadyGetQuery,
   useLazyReadyAgenticV1ReadyGetQuery,
   useGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery,
   useLazyGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery,
+  useGetRuntimeSummaryAgenticV1MetricsChatbotSummaryGetQuery,
+  useLazyGetRuntimeSummaryAgenticV1MetricsChatbotSummaryGetQuery,
   useGetFeedbackAgenticV1ChatbotFeedbackGetQuery,
   useLazyGetFeedbackAgenticV1ChatbotFeedbackGetQuery,
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,

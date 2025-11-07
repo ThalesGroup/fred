@@ -33,7 +33,7 @@ type Props = {
 const PDF_SCALE = 0.8;
 
 export const PdfStreamingDocumentViewer: React.FC<Props> = ({ document: doc, onClose }) => {
-  const token = useAuthToken();               // ← decoupled
+  const token = useAuthToken(); // ← decoupled
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
@@ -56,7 +56,7 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ document: doc, onC
 
   const pdfUrl = useMemo(
     () => (doc?.document_uid ? `/knowledge-flow/v1/raw_content/stream/${doc.document_uid}` : null),
-    [doc?.document_uid]
+    [doc?.document_uid],
   );
 
   const fileProp = useMemo(() => {
@@ -91,10 +91,22 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ document: doc, onC
   };
 
   return (
-    <Box sx={{ width: "80vw", height: "100%", maxHeight: "100vh", display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
+    <Box
+      sx={{
+        width: "80vw",
+        height: "100%",
+        maxHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        minHeight: 0,
+      }}
+    >
       <AppBar position="static" color="default" elevation={0}>
         <Toolbar>
-          <Typography variant="h6" sx={{ flex: 1, pr: 1 }}>{doc?.file_name || "PDF Document"}</Typography>
+          <Typography variant="h6" sx={{ flex: 1, pr: 1 }}>
+            {doc?.file_name || "PDF Document"}
+          </Typography>
 
           {/* Download keeps using the non-streaming endpoint */}
           <Tooltip title="Download">
@@ -127,12 +139,23 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ document: doc, onC
       <Box
         ref={contentRef}
         sx={{
-          flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", p: 2,
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", boxSizing: "border-box", width: "100%",
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          overflowX: "hidden",
+          p: 2,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "flex-start",
+          boxSizing: "border-box",
+          width: "100%",
         }}
       >
         {!isLoading && loadError && (
-          <Typography color="error" sx={{ mt: 4 }}>{loadError}</Typography>
+          <Typography color="error" sx={{ mt: 4 }}>
+            {loadError}
+          </Typography>
         )}
 
         {fileProp && !loadError && (
@@ -157,7 +180,9 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ document: doc, onC
         )}
 
         {!fileProp && !loadError && (
-          <Typography color="error" sx={{ mt: 4 }}>Document content is unavailable.</Typography>
+          <Typography color="error" sx={{ mt: 4 }}>
+            Document content is unavailable.
+          </Typography>
         )}
       </Box>
     </Box>

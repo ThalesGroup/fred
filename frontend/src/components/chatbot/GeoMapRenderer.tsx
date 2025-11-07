@@ -46,10 +46,7 @@ function featureStyleFromProps(feature: GeoJSON.Feature | undefined): L.PathOpti
 // Honor properties.radius and properties.style if present.
 function pointToLayerGeneric(feature: GeoJSON.Feature<GeoJSON.Point, any>, latlng: L.LatLng): L.Layer {
   const p = (feature.properties ?? {}) as Record<string, unknown>;
-  const styleOverride =
-    typeof p.style === "object"
-      ? (p.style as Partial<L.CircleMarkerOptions>)
-      : undefined;
+  const styleOverride = typeof p.style === "object" ? (p.style as Partial<L.CircleMarkerOptions>) : undefined;
   const fallbackStyle = featureStyleFromProps(feature) as Partial<L.CircleMarkerOptions> | undefined;
   const base: Partial<L.CircleMarkerOptions> = styleOverride ?? fallbackStyle ?? {};
   const radius = typeof p.radius === "number" ? (p.radius as number) : 6;
