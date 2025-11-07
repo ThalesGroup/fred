@@ -110,7 +110,8 @@ async def setup_agent(
         raise ValueError(f"Agent '{agent_name}' not found. Available: {available}")
 
     agent = AdvancedRico(settings)
-    await agent.async_init()
+    runtime_context = RuntimeContext()
+    await agent.async_init(runtime_context=runtime_context)
 
     if doc_lib_ids:
         agent.set_runtime_context(
