@@ -22,6 +22,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { LibraryCreateDrawer } from "../../common/LibraryCreateDrawer";
 import { useTagCommands } from "../../common/useTagCommands";
+import { useLocalStorageState } from "../../hooks/useLocalStorageState";
 import { usePermissions } from "../../security/usePermissions";
 import {
   Resource,
@@ -84,7 +85,7 @@ export default function ResourceLibraryList({ kind }: Props) {
   const { showConfirmationDialog } = useConfirmationDialog();
 
   /** ---------------- State ---------------- */
-  const [expanded, setExpanded] = React.useState<string[]>([]);
+  const [expanded, setExpanded] = useLocalStorageState<string[]>("ResourceLibraryList.expanded", []);
   const [selectedFolder, setSelectedFolder] = React.useState<string | null>(null);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = React.useState(false);
   const [openCreateResource, setOpenCreateResource] = React.useState(false);
