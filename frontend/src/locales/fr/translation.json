@@ -51,7 +51,7 @@
       "optimize": "Consulter les gains d'optimisation",
       "chat": "Discuter avec l'assistant IA",
       "monitoring": "Superviser les appels IA backend",
-      "knowledge": "Consulter le vos bibliothèque de documents et de prompts",
+      "knowledge": "Consulter vos bibliothèques de documents et de prompts",
       "agent": "Voir les agents",
       "workspaces": "Voir les espaces",
       "account": "Voir votre profil",
@@ -144,7 +144,7 @@
       "name": "Nom",
       "nickname": "Diminutif",
       "description": "Description",
-      "role": "Role",
+      "role": "Rôle",
       "base_prompt": "Prompt",
       "agent_type": "Type d'agent",
       "icon": "Icône",
@@ -161,7 +161,7 @@
       }
     },
     "actions": {
-      "add_mcp_server": "+ Ajouter un Serveur MCP"
+      "add_mcp_server": "+ Ajouter un serveur MCP"
     },
     "errors": {
       "updateFailed": "Échec de la mise à jour de l'agent",
@@ -426,7 +426,7 @@
     "folderDeleteDetail": "Le dossier « {{name}} » a été supprimé.",
     "searchPlaceholder": "Rechercher un(e) {{typeOne}}",
     "importDrawerTitle": "Importer un(e) {{typeOne}}",
-    "dropFiles": "Deposez vos {{typePlural}} ici",
+    "dropFiles": "Déposez vos {{typePlural}} ici",
     "noFiles": "Aucun(e) {{typeOne}} trouvé(e)",
     "import": "Importer",
     "selected": "Sélectionné",
@@ -441,7 +441,7 @@
   },
   "documentLibraryTree": {
     "shareFolder": "Partager le dossier",
-    "shareFolderWithName": "Partagez \"{{name}}\"",
+    "shareFolderWithName": "Partager \"{{name}}\"",
     "deleteFolder": "Supprimer le dossier",
     "deleteFolderDisabled": "Une bibliothèque doit être vide pour être supprimée"
   },
@@ -455,14 +455,14 @@
     "dateAdded": "Date d'ajout",
     "retrievableYes": "Consultable",
     "retrievableNo": "Exclu",
-    "status": "Status",
+    "status": "Statu",
     "actions": "Actions",
     "loadingMetadata": "Chargement des métadonnées...",
     "noMetadata": "Aucune métadonnée disponible.",
     "yes": "Oui",
     "no": "Non",
     "librairies": "Bibliothèques",
-    "nowSearchable": "Maintenant cherchable",
+    "nowSearchable": "Désormais inclus dans la recherche",
     "nowExcluded": "Désormais exclu de la recherche"
   },
   "documentDrawerTable": {
