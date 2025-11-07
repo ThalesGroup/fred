@@ -53,11 +53,6 @@ function resourcesInSubtree(root: TagNode, all: Resource[], getChildren: (n: Tag
   return out;
 }
 
-/** Count of direct items on this folder’s tag(s) (source of truth, not filtered). */
-function directItemCount(node: TagNode): number {
-  return (node.tagsHere ?? []).reduce((sum, t) => sum + (t.item_ids?.length ?? 0), 0);
-}
-
 /* --------------------------------------------------------------------------
  * Component
  * -------------------------------------------------------------------------- */
