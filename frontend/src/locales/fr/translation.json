@@ -220,6 +220,8 @@
     "noConversation": "Aucune conversation",
     "delete": "Supprimer",
     "deleteAll": "Tout supprimer",
+    "confirmDeleteAllTitle": "Supprimer toutes les conversations ?",
+    "confirmDeleteAllMessage": "Cette action supprimera toutes les conversations définitivement. Voulez-vous continuer ?",
     "conversationSetup": "Configuration de la conversation",
     "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
     "draftNotSaved": "Brouillon • non encore enregistré",

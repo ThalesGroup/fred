@@ -221,6 +221,8 @@
     "noConversation": "No conversation",
     "delete": "Delete",
     "deleteAll": "Delete all",
+    "confirmDeleteAllTitle": "Delete all conversations?",
+    "confirmDeleteAllMessage": "This action will permanently delete all conversations. Do you want to continue?",
     "chatContext": "Chat context",
     "conversationSetup": "Conversation setup",
     "newConversationHelp": "Start a new conversation (not yet saved)",
