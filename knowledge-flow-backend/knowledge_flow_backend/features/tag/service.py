@@ -179,16 +179,27 @@ class TagService:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.DELETE, tag_id)
 
         tag = self._tag_store.get_tag_by_id(tag_id)
+
+        # Get all sub tags (recusrively) and the current tag
+        sub_tags = await self.list_all_tags_for_user(user, tag.type, path_prefix=tag.full_path)
+
+        # Delete all of them
+        await asyncio.gather(*(self._delete_one_tag(sub_tag, user) for sub_tag in sub_tags))
+
+    async def _delete_one_tag(self, tag: Tag, user: KeycloakUser):
+        await self.rebac.check_user_permission_or_raise(user, TagPermission.DELETE, tag.id)
         item_service = get_specific_tag_item_service(tag.type)
 
+        # Remove tag on all items (and delete them if they have no tag anymore)
         item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
-
         await asyncio.gather(
-            *(item_service.remove_tag_id_from_item(user, item_id, tag_id) for item_id in item_ids),
+            *(item_service.remove_tag_id_from_item(user, item_id, tag.id) for item_id in item_ids),
         )
 
-        self._tag_store.delete_tag_by_id(tag_id)
-        # TODO: remove relation in ReBAC
+        # Remove tag
+        self._tag_store.delete_tag_by_id(tag.id)
+
+        # TODO: remove all relation of this tag in ReBAC
 
     async def share_tag_with_user_or_group(
         self,
