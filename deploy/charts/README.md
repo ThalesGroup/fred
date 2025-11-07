@@ -17,9 +17,9 @@ Build the agentic backend, the knowledge-flow backend, and the frontend images:
 ### 1. Build the Docker images
 
 ```bash
-docker build -f agentic-backend/dockerfiles/Dockerfile-prod -t ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1 .
-docker build -f knowledge_flow_backend/dockerfiles/Dockerfile-prod -t ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1 .
-docker build -f frontend/dockerfiles/Dockerfile-prod -t ghcr.io/thalesgroup/fred-agent/frontend:0.1 .
+docker build -f agentic-backend/dockerfiles/Dockerfile-prod -t ghcr.io/thalesgroup/fred-agent/agentic-backend:v1.0.0 .
+docker build -f knowledge_flow_backend/dockerfiles/Dockerfile-prod -t ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:v1.0.0 .
+docker build -f frontend/dockerfiles/Dockerfile-prod -t ghcr.io/thalesgroup/fred-agent/frontend:v1.0.0 .
 ```
 
 ### 2. Load the images into your Kubernetes cluster
@@ -32,15 +32,15 @@ You need to save the images locally and import them into the internal containerd
 
 ```bash
 # Agentic backend
-docker save ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1 | gzip > /tmp/agentic-backend.tgz
+docker save ghcr.io/thalesgroup/fred-agent/agentic-backend:v1.0.0 | gzip > /tmp/agentic-backend.tgz
 sudo k3s ctr images import /tmp/agentic-backend.tgz
 
 # Knowledge-flow backend
-docker save ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1 | gzip > /tmp/knowledge-flow-backend.tgz
+docker save ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:v1.0.0 | gzip > /tmp/knowledge-flow-backend.tgz
 sudo k3s ctr images import /tmp/knowledge-flow-backend.tgz
 
 # Frontend
-docker save ghcr.io/thalesgroup/fred-agent/frontend:0.1 | gzip > /tmp/frontend.tgz
+docker save ghcr.io/thalesgroup/fred-agent/frontend:v1.0.0 | gzip > /tmp/frontend.tgz
 sudo k3s ctr images import /tmp/frontend.tgz
 ```
 
@@ -53,13 +53,13 @@ You can import your locally built images directly into your k3d cluster using th
 
 ```bash
 # Agentic backend
-k3d image import ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1 -c <YOUR_K3D_CLUSTER_NAME>
+k3d image import ghcr.io/thalesgroup/fred-agent/agentic-backend:v1.0.0 -c <YOUR_K3D_CLUSTER_NAME>
 
 # Knowledge-flow backend
-k3d image import ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1 -c <YOUR_K3D_CLUSTER_NAME>
+k3d image import ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:v1.0.0 -c <YOUR_K3D_CLUSTER_NAME>
 
 # Frontend
-k3d image import ghcr.io/thalesgroup/fred-agent/frontend:0.1 -c <YOUR_K3D_CLUSTER_NAME>
+k3d image import ghcr.io/thalesgroup/fred-agent/frontend:v1.0.0 -c <YOUR_K3D_CLUSTER_NAME>
 ```
 Replace `<YOUR_K3D_CLUSTER_NAME>` with the name of your k3d cluster (e.g., `k3d-k3s-default`).
 
