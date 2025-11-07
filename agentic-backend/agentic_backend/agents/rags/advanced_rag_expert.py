@@ -266,7 +266,7 @@ class AdvancedRico(AgentFlow):
                 question=question or "",
                 top_k=self.TOP_K,
                 document_library_tags_ids=document_library_tags_ids,
-                search_policy=search_policy
+                search_policy=search_policy,
             )
 
             if not hits:
