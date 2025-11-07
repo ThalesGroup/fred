@@ -437,7 +437,10 @@
     "bulkRemoveFromLibrary": "Supprimer de la bibliothèque",
     "removedOneResource": "{{typeOne, capitalize}} supprimé(e) de la bibliothèque.",
     "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
-    "confirmRemoveMessage": "Supprimer « {{res}} » de « {{folder}} » ?"
+    "confirmRemoveMessage": "Supprimer « {{res}} » de « {{folder}} » ?",
+    "emptyLibrariesTitle": "Aucune bibliothèque pour le moment",
+    "emptyLibrariesDescription": "Créez votre première bibliothèque pour organiser vos {{typePlural}}.",
+    "emptyLibrariesAction": "Créer une bibliothèque"
   },
   "documentLibraryTree": {
     "shareFolder": "Partager le dossier",

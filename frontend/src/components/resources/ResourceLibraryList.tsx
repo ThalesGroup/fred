@@ -32,6 +32,7 @@ import {
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
+import { EmptyState } from "../EmptyState";
 import { buildTree, findNode, TagNode } from "../tags/tagTree";
 import { ChatContextEditorModal } from "./ChatContextEditorModal";
 import { PromptEditorModal } from "./PromptEditorModal";
@@ -124,6 +125,7 @@ export default function ResourceLibraryList({ kind }: Props) {
 
   // 3) Build tree
   const tree = React.useMemo<TagNode | null>(() => (allTags ? buildTree(allTags) : null), [allTags]);
+  const hasFolders = Boolean(tree && tree.children.size > 0);
 
   /** ---------------- Commands (create/update/remove) ---------------- */
   const { createResource, updateResource, removeFromLibrary /*, getResource*/ } = useResourceCommands(kind, {
@@ -355,7 +357,7 @@ export default function ResourceLibraryList({ kind }: Props) {
       )}
 
       {/* Tree */}
-      {!isLoading && !isError && tree && (
+      {!isLoading && !isError && tree && hasFolders && (
         <Card sx={{ borderRadius: 3 }}>
           {/* Tree header */}
           <Box display="flex" alignItems="center" justifyContent="space-between" px={1} py={0.5}>
@@ -388,6 +390,25 @@ export default function ResourceLibraryList({ kind }: Props) {
               onDeleteFolder={handleDeleteFolder}
             />
           </Box>
+        </Card>
+      )}
+      {!isLoading && !isError && tree && !hasFolders && (
+        <Card sx={{ borderRadius: 3 }}>
+          <EmptyState
+            icon={<FolderOutlinedIcon color="disabled" />}
+            title={t("resourceLibrary.emptyLibrariesTitle", { typePlural })}
+            description={t("resourceLibrary.emptyLibrariesDescription", { typePlural })}
+            actionButton={
+              canCreateTag
+                ? {
+                    label: t("resourceLibrary.emptyLibrariesAction"),
+                    onClick: () => setIsCreateDrawerOpen(true),
+                    startIcon: <AddIcon />,
+                    variant: "contained",
+                  }
+                : undefined
+            }
+          />
         </Card>
       )}
 
