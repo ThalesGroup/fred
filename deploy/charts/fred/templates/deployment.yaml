@@ -88,6 +88,11 @@ spec:
             {{- end }}
           {{- end }}
 
+          {{- if .app.envFrom }}
+          envFrom:
+{{ toYaml .app.envFrom | nindent 12 }}
+          {{- end }}
+
           {{- if .app.probes.livenessProbe.enabled }}
           livenessProbe:
 {{ toYaml .app.probes.livenessProbe.data | nindent 12 }}
