@@ -1266,7 +1266,6 @@ export type TagCreate = {
   path?: string | null;
   description?: string | null;
   type: TagType;
-  item_ids?: string[];
 };
 export type TagUpdate = {
   name: string;
