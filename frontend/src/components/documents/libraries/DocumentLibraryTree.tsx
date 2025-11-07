@@ -168,9 +168,7 @@ export function DocumentLibraryTree({
       const folderChecked = totalForTag > 0 && selectedForTag === totalForTag;
       const folderIndeterminate = selectedForTag > 0 && selectedForTag < totalForTag;
 
-      // Empty = no subfolders + no direct items on this node’s tag(s)
-      const isEmptyFolder = c.children.size === 0 && directItemCount(c) === 0 && !!folderTag;
-      const canBeDeleted = !!folderTag && !!onDeleteFolder && isEmptyFolder && canDeleteFolder;
+      const canBeDeleted = !!folderTag && !!onDeleteFolder && canDeleteFolder;
 
       return (
         <TreeItem
