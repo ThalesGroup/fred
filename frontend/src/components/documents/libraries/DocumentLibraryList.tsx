@@ -20,11 +20,12 @@ import UploadIcon from "@mui/icons-material/Upload";
 import { Box, Breadcrumbs, Button, Card, Chip, IconButton, Link, TextField, Tooltip, Typography } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { EmptyState } from "../../EmptyState";
 import { LibraryCreateDrawer } from "../../../common/LibraryCreateDrawer";
 import { useTagCommands } from "../../../common/useTagCommands";
 import { usePermissions } from "../../../security/usePermissions";
+import { EmptyState } from "../../EmptyState";
 
+import { useLocalStorageState } from "../../../hooks/useLocalStorageState";
 import {
   DocumentMetadata,
   TagWithItemsId,
@@ -43,7 +44,7 @@ export default function DocumentLibraryList() {
   const { showConfirmationDialog } = useConfirmationDialog();
 
   /* ---------------- State ---------------- */
-  const [expanded, setExpanded] = React.useState<string[]>([]);
+  const [expanded, setExpanded] = useLocalStorageState<string[]>("DocumentLibraryList.expanded", []);
   const [selectedFolder, setSelectedFolder] = React.useState<string | null>(null);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = React.useState(false);
   const [openUploadDrawer, setOpenUploadDrawer] = React.useState(false);
