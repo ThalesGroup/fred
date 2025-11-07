@@ -20,6 +20,7 @@ import UploadIcon from "@mui/icons-material/Upload";
 import { Box, Breadcrumbs, Button, Card, Chip, IconButton, Link, TextField, Tooltip, Typography } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { EmptyState } from "../../EmptyState";
 import { LibraryCreateDrawer } from "../../../common/LibraryCreateDrawer";
 import { useTagCommands } from "../../../common/useTagCommands";
 import { usePermissions } from "../../../security/usePermissions";
@@ -80,6 +81,7 @@ export default function DocumentLibraryList() {
 
   /* ---------------- Tree building ---------------- */
   const tree = React.useMemo<TagNode | null>(() => (tags ? buildTree(tags) : null), [tags]);
+  const hasFolders = Boolean(tree && tree.children.size > 0);
 
   const getChildren = React.useCallback((n: TagNode) => {
     const arr = Array.from(n.children.values());
@@ -285,7 +287,7 @@ export default function DocumentLibraryList() {
       )}
 
       {/* Tree */}
-      {!isLoading && !isError && tree && (
+      {!isLoading && !isError && tree && hasFolders && (
         <Card
           sx={{
             borderRadius: 3,
@@ -339,6 +341,32 @@ export default function DocumentLibraryList() {
               canDeleteFolder={canDeleteFolder}
             />
           </Box>
+        </Card>
+      )}
+      {!isLoading && !isError && tree && !hasFolders && (
+        <Card
+          sx={{
+            borderRadius: 3,
+            display: "flex",
+            flexDirection: "column",
+            flex: 1,
+          }}
+        >
+          <EmptyState
+            icon={<FolderOutlinedIcon color="disabled" />}
+            title={t("documentLibrariesList.emptyFoldersTitle")}
+            description={t("documentLibrariesList.emptyFoldersDescription")}
+            actionButton={
+              canCreateTag
+                ? {
+                    label: t("documentLibrariesList.emptyFoldersAction"),
+                    onClick: () => setIsCreateDrawerOpen(true),
+                    startIcon: <AddIcon />,
+                    variant: "contained",
+                  }
+                : undefined
+            }
+          />
         </Card>
       )}
 

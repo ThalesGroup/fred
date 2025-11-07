@@ -493,7 +493,10 @@
     "documentCountPlural": "{{count}} documents",
     "createLibrary": "Create Document Library",
     "collapseAll": "Collapse all",
-    "expandAll": "Expand all"
+    "expandAll": "Expand all",
+    "emptyFoldersTitle": "No libraries yet",
+    "emptyFoldersDescription": "Create your first library to organize these documents and keep uploads tidy.",
+    "emptyFoldersAction": "Create library"
   },
   "libraryCreateDrawer": {
     "title": "Create New Library",

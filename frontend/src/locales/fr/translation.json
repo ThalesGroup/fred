@@ -492,7 +492,10 @@
     "documentCountPlural": "{{count}} documents",
     "createLibrary": "Créer une bibliothèque de documents",
     "collapseAll": "Tout réduire",
-    "expandAll": "Tout développer"
+    "expandAll": "Tout développer",
+    "emptyFoldersTitle": "Aucune bibliothèque pour le moment",
+    "emptyFoldersDescription": "Créez votre première bibliothèque pour organiser les documents et garder les ajouts rangés.",
+    "emptyFoldersAction": "Créer une bibliothèque"
   },
   "libraryCreateDrawer": {
     "title": "Créer une nouvelle bibliothèque",
