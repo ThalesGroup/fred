@@ -221,6 +221,8 @@
     "noConversation": "No conversation",
     "delete": "Delete",
     "deleteAll": "Delete all",
+    "confirmDeleteAllTitle": "Delete all conversations?",
+    "confirmDeleteAllMessage": "This action will permanently delete all conversations. Do you want to continue?",
     "chatContext": "Chat context",
     "conversationSetup": "Conversation setup",
     "newConversationHelp": "Start a new conversation (not yet saved)",
@@ -436,7 +438,10 @@
     "bulkRemoveFromLibrary": "Remove from library",
     "removedOneResource": "{{typeOne, capitalize}} removed from library.",
     "confirmRemoveTitle": "Remove from library?",
-    "confirmRemoveMessage": "Remove « {{res}} » from « {{folder}} »?"
+    "confirmRemoveMessage": "Remove « {{res}} » from « {{folder}} »?",
+    "emptyLibrariesTitle": "No libraries yet",
+    "emptyLibrariesDescription": "Create your first library to organize your {{typePlural}}.",
+    "emptyLibrariesAction": "Create library"
   },
   "documentLibraryTree": {
     "shareFolder": "Share folder",
@@ -491,7 +496,10 @@
     "documentCountPlural": "{{count}} documents",
     "createLibrary": "Create Document Library",
     "collapseAll": "Collapse all",
-    "expandAll": "Expand all"
+    "expandAll": "Expand all",
+    "emptyFoldersTitle": "No libraries yet",
+    "emptyFoldersDescription": "Create your first library to organize these documents and keep uploads tidy.",
+    "emptyFoldersAction": "Create library"
   },
   "libraryCreateDrawer": {
     "title": "Create New Library",

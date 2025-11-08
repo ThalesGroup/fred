@@ -130,7 +130,6 @@ class AssetService:  # RENAMED from AgentAssetService
                     path=None,
                     description="Generic tag for all files uploaded by users",
                     type=TagType.DOCUMENT,
-                    item_ids=[],
                 ),
                 user,
             )

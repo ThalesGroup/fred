@@ -16,7 +16,7 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import Iterable, Optional
+from typing import Optional
 from uuid import uuid4
 
 from fred_core import (
@@ -32,13 +32,11 @@ from fred_core import (
 )
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError
 from knowledge_flow_backend.features.groups.groups_service import get_groups_by_ids
 from knowledge_flow_backend.features.groups.groups_structures import GroupSummary
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.resources.service import ResourceService
-from knowledge_flow_backend.features.resources.structures import ResourceKind
 from knowledge_flow_backend.features.tag.structure import (
     Tag,
     TagCreate,
@@ -49,19 +47,10 @@ from knowledge_flow_backend.features.tag.structure import (
     TagWithItemsId,
     UserTagRelation,
 )
+from knowledge_flow_backend.features.tag.tagItemsService import get_specific_tag_item_service
 from knowledge_flow_backend.features.users.users_service import UserSummary, get_users_by_ids
 
 logger = logging.getLogger(__name__)
-
-
-def _tagtype_to_rk(tag_type: TagType) -> ResourceKind:
-    if tag_type == TagType.PROMPT:
-        return ResourceKind.PROMPT
-    if tag_type == TagType.TEMPLATE:
-        return ResourceKind.TEMPLATE
-    if tag_type == TagType.CHAT_CONTEXT:
-        return ResourceKind.CHAT_CONTEXT
-    raise ValueError(f"Unsupported TagType for resources: {tag_type}")
 
 
 class TagService:
@@ -120,16 +109,9 @@ class TagService:
         # 6) attach item ids
         result: list[TagWithItemsId] = []
         for tag in sliced:
-            if tag.type == TagType.DOCUMENT:
-                item_ids = await self._retrieve_document_ids_for_tag(user, tag.id)
-            elif tag.type == TagType.PROMPT:
-                item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.PROMPT, tag.id)
-            elif tag.type == TagType.TEMPLATE:
-                item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.TEMPLATE, tag.id)
-            elif tag.type == TagType.CHAT_CONTEXT:
-                item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.CHAT_CONTEXT, tag.id)
-            else:
-                raise ValueError(f"Unsupported tag type: {tag.type}")
+            item_service = get_specific_tag_item_service(tag.type)
+            item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
+
             result.append(TagWithItemsId.from_tag(tag, item_ids))
         return result
 
@@ -138,28 +120,13 @@ class TagService:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
 
         tag = self._tag_store.get_tag_by_id(tag_id)
-        if tag.type == TagType.DOCUMENT:
-            item_ids = await self._retrieve_document_ids_for_tag(user, tag_id)
-        elif tag.type == TagType.PROMPT:
-            item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.PROMPT, tag.id)
-        elif tag.type == TagType.TEMPLATE:
-            item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.TEMPLATE, tag.id)
-        elif tag.type == TagType.CHAT_CONTEXT:
-            item_ids = self.resource_service.get_resource_ids_for_tag(ResourceKind.CHAT_CONTEXT, tag.id)
-        else:
-            raise ValueError(f"Unsupported tag type: {tag.type}")
+        item_service = get_specific_tag_item_service(tag.type)
+        item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
+
         return TagWithItemsId.from_tag(tag, item_ids)
 
     @authorize(Action.CREATE, Resource.TAGS)
     async def create_tag_for_user(self, tag_data: TagCreate, user: KeycloakUser) -> TagWithItemsId:
-        # Validate referenced items first
-        if tag_data.type == TagType.DOCUMENT:
-            documents = await self._retrieve_documents_metadata(user, tag_data.item_ids)
-        elif tag_data.type in (TagType.PROMPT, TagType.TEMPLATE, TagType.CHAT_CONTEXT):
-            documents = []  # not used here
-        else:
-            raise ValueError(f"Unsupported tag type: {tag_data.type}")
-
         # Normalize + uniqueness
         norm_path = self._normalize_path(tag_data.path)
         full_path = self._compose_full_path(norm_path, tag_data.name)
@@ -178,78 +145,33 @@ class TagService:
                 type=tag_data.type,
             )
         )
-        consistency_token = await self.rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.TAGS, resource_id=tag.id)
 
-        # Link items
-        if tag.type == TagType.DOCUMENT:
-            for doc in documents:
-                await self.document_metadata_service.add_tag_id_to_document(
-                    user,
-                    metadata=doc,
-                    new_tag_id=tag.id,
-                    consistency_token=consistency_token,
-                )
-        elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
-            # rk = _tagtype_to_rk(tag.type)
-            for rid in tag_data.item_ids:
-                try:
-                    self.resource_service.add_tag_to_resource(rid, tag.id)
-                except Exception as e:
-                    logger.warning(f"Failed to attach tag {tag.id} to resource {rid}: {e}")
-                    raise
+        await self.rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.TAGS, resource_id=tag.id)
 
-        return TagWithItemsId.from_tag(tag, tag_data.item_ids)
+        return TagWithItemsId.from_tag(tag, [])
 
     @authorize(Action.UPDATE, Resource.TAGS)
     async def update_tag_for_user(self, tag_id: str, tag_data: TagUpdate, user: KeycloakUser) -> TagWithItemsId:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
 
         tag = self._tag_store.get_tag_by_id(tag_id)
+        item_service = get_specific_tag_item_service(tag.type)
 
-        # Update memberships first
-        if tag.type == TagType.DOCUMENT:
-            old_item_ids = await self._retrieve_document_ids_for_tag(user, tag_id)
-            added, removed = self._compute_ids_diff(old_item_ids, tag_data.item_ids)
+        # Add / remove changed item ids
+        old_item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
+        added_ids, removed_ids = self._compute_ids_diff(old_item_ids, tag_data.item_ids)
 
-            added_documents = await self._retrieve_documents_metadata(user, added)
-            removed_documents = await self._retrieve_documents_metadata(user, removed)
-            for doc in added_documents:
-                await self.document_metadata_service.add_tag_id_to_document(user, doc, tag.id)
-            for doc in removed_documents:
-                await self.document_metadata_service.remove_tag_id_from_document(user, doc, tag.id)
+        await asyncio.gather(
+            *(item_service.add_tag_id_to_item(user, added_id, tag_id) for added_id in added_ids),
+            *(item_service.remove_tag_id_from_item(user, removed_id, tag_id) for removed_id in removed_ids),
+        )
 
-        elif tag.type in (TagType.PROMPT, TagType.TEMPLATE, TagType.CHAT_CONTEXT):
-            rk = _tagtype_to_rk(tag.type)
-            old_item_ids = self.resource_service.get_resource_ids_for_tag(rk, tag_id)
-            added, removed = self._compute_ids_diff(old_item_ids, tag_data.item_ids)
-
-            for rid in added:
-                try:
-                    self.resource_service.add_tag_to_resource(rid, tag_id)
-                except Exception:
-                    # Decide whether to continue or fail fast
-                    raise
-            for rid in removed:
-                try:
-                    # auto-delete orphan if it loses its last tag
-                    self.resource_service.remove_tag_from_resource(rid, tag_id, delete_if_orphan=True)
-                except Exception:
-                    raise
-        else:
-            raise ValueError(f"Unsupported tag type: {tag.type}")
-
+        # Update tag
         tag.updated_at = datetime.now()
         updated_tag = self._tag_store.update_tag_by_id(tag_id, tag)
 
-        # For the response, return the up-to-date list of item ids
-        if tag.type == TagType.DOCUMENT:
-            item_ids = await self._retrieve_document_ids_for_tag(user, tag_id)
-        elif tag.type in (TagType.PROMPT, TagType.TEMPLATE):
-            rk = _tagtype_to_rk(tag.type)
-            item_ids = self.resource_service.get_resource_ids_for_tag(rk, tag_id)
-        else:
-            item_ids = []
-
+        # Return the up-to-date list of item ids
+        item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
         return TagWithItemsId.from_tag(updated_tag, item_ids)
 
     @authorize(Action.DELETE, Resource.TAGS)
@@ -258,22 +180,26 @@ class TagService:
 
         tag = self._tag_store.get_tag_by_id(tag_id)
 
-        if tag.type == TagType.DOCUMENT:
-            documents = await self._retrieve_documents_for_tag(user, tag_id)
-            for doc in documents:
-                await self.document_metadata_service.remove_tag_id_from_document(user, doc, tag_id)
-        elif tag.type == TagType.PROMPT:
-            self.resource_service.remove_tag_from_resources(ResourceKind.PROMPT, tag_id)
-        elif tag.type == TagType.CHAT_CONTEXT:
-            self.resource_service.remove_tag_from_resources(ResourceKind.CHAT_CONTEXT, tag_id)
-        elif tag.type == TagType.TEMPLATE:
-            # BUGFIX: was PROMPT before; must be TEMPLATE
-            self.resource_service.remove_tag_from_resources(ResourceKind.TEMPLATE, tag_id)
-        else:
-            raise ValueError(f"Unsupported tag type: {tag.type}")
+        # Get all sub tags (recusrively) and the current tag
+        sub_tags = await self.list_all_tags_for_user(user, tag.type, path_prefix=tag.full_path)
 
-        self._tag_store.delete_tag_by_id(tag_id)
-        # TODO: remove relation in ReBAC
+        # Delete all of them
+        await asyncio.gather(*(self._delete_one_tag(sub_tag, user) for sub_tag in sub_tags))
+
+    async def _delete_one_tag(self, tag: Tag, user: KeycloakUser):
+        await self.rebac.check_user_permission_or_raise(user, TagPermission.DELETE, tag.id)
+        item_service = get_specific_tag_item_service(tag.type)
+
+        # Remove tag on all items (and delete them if they have no tag anymore)
+        item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
+        await asyncio.gather(
+            *(item_service.remove_tag_id_from_item(user, item_id, tag.id) for item_id in item_ids),
+        )
+
+        # Remove tag
+        self._tag_store.delete_tag_by_id(tag.id)
+
+        # TODO: remove all relation of this tag in ReBAC
 
     async def share_tag_with_user_or_group(
         self,
@@ -383,15 +309,6 @@ class TagService:
                     members[subject.id] = relation
 
         return members
-
-    async def _retrieve_documents_for_tag(self, user: KeycloakUser, tag_id: str) -> list[DocumentMetadata]:
-        return await self.document_metadata_service.get_document_metadata_in_tag(user, tag_id)
-
-    async def _retrieve_document_ids_for_tag(self, user: KeycloakUser, tag_id: str) -> list[str]:
-        return [d.document_uid for d in await self._retrieve_documents_for_tag(user, tag_id)]
-
-    async def _retrieve_documents_metadata(self, user: KeycloakUser, document_ids: Iterable[str]) -> list[DocumentMetadata]:
-        return await asyncio.gather(*(self.document_metadata_service.get_document_metadata(user, doc_id) for doc_id in document_ids))
 
     @staticmethod
     def _compute_ids_diff(before: list[str], after: list[str]) -> tuple[list[str], list[str]]:
