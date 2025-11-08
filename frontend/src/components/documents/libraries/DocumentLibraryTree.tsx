@@ -61,11 +61,6 @@ function docsInSubtree(
   return out;
 }
 
-/** Count of direct items on this folder’s tag(s) (source of truth, not filtered). */
-function directItemCount(node: TagNode): number {
-  return (node.tagsHere ?? []).reduce((sum, t) => sum + (t.item_ids?.length ?? 0), 0);
-}
-
 /* --------------------------------------------------------------------------
  * Component
  * -------------------------------------------------------------------------- */
@@ -168,9 +163,7 @@ export function DocumentLibraryTree({
       const folderChecked = totalForTag > 0 && selectedForTag === totalForTag;
       const folderIndeterminate = selectedForTag > 0 && selectedForTag < totalForTag;
 
-      // Empty = no subfolders + no direct items on this node’s tag(s)
-      const isEmptyFolder = c.children.size === 0 && directItemCount(c) === 0 && !!folderTag;
-      const canBeDeleted = !!folderTag && !!onDeleteFolder && isEmptyFolder && canDeleteFolder;
+      const canBeDeleted = !!folderTag && !!onDeleteFolder && canDeleteFolder;
 
       return (
         <TreeItem

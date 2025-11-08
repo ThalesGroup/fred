@@ -23,7 +23,9 @@ import { useTranslation } from "react-i18next";
 import { LibraryCreateDrawer } from "../../../common/LibraryCreateDrawer";
 import { useTagCommands } from "../../../common/useTagCommands";
 import { usePermissions } from "../../../security/usePermissions";
+import { EmptyState } from "../../EmptyState";
 
+import { useLocalStorageState } from "../../../hooks/useLocalStorageState";
 import {
   DocumentMetadata,
   TagWithItemsId,
@@ -42,7 +44,7 @@ export default function DocumentLibraryList() {
   const { showConfirmationDialog } = useConfirmationDialog();
 
   /* ---------------- State ---------------- */
-  const [expanded, setExpanded] = React.useState<string[]>([]);
+  const [expanded, setExpanded] = useLocalStorageState<string[]>("DocumentLibraryList.expanded", []);
   const [selectedFolder, setSelectedFolder] = React.useState<string | null>(null);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = React.useState(false);
   const [openUploadDrawer, setOpenUploadDrawer] = React.useState(false);
@@ -80,6 +82,7 @@ export default function DocumentLibraryList() {
 
   /* ---------------- Tree building ---------------- */
   const tree = React.useMemo<TagNode | null>(() => (tags ? buildTree(tags) : null), [tags]);
+  const hasFolders = Boolean(tree && tree.children.size > 0);
 
   const getChildren = React.useCallback((n: TagNode) => {
     const arr = Array.from(n.children.values());
@@ -285,7 +288,7 @@ export default function DocumentLibraryList() {
       )}
 
       {/* Tree */}
-      {!isLoading && !isError && tree && (
+      {!isLoading && !isError && tree && hasFolders && (
         <Card
           sx={{
             borderRadius: 3,
@@ -339,6 +342,32 @@ export default function DocumentLibraryList() {
               canDeleteFolder={canDeleteFolder}
             />
           </Box>
+        </Card>
+      )}
+      {!isLoading && !isError && tree && !hasFolders && (
+        <Card
+          sx={{
+            borderRadius: 3,
+            display: "flex",
+            flexDirection: "column",
+            flex: 1,
+          }}
+        >
+          <EmptyState
+            icon={<FolderOutlinedIcon color="disabled" />}
+            title={t("documentLibrariesList.emptyFoldersTitle")}
+            description={t("documentLibrariesList.emptyFoldersDescription")}
+            actionButton={
+              canCreateTag
+                ? {
+                    label: t("documentLibrariesList.emptyFoldersAction"),
+                    onClick: () => setIsCreateDrawerOpen(true),
+                    startIcon: <AddIcon />,
+                    variant: "contained",
+                  }
+                : undefined
+            }
+          />
         </Card>
       )}
 
