@@ -85,6 +85,9 @@ export default function UserInput({
   onStop,
   onContextChange,
   sessionId,
+  effectiveSessionId,
+  uploadingFiles,
+  onFilesSelected,
   attachmentsRefreshTick,
   initialDocumentLibraryIds,
   initialPromptResourceIds,
@@ -100,6 +103,9 @@ export default function UserInput({
   onStop?: () => void;
   onContextChange?: (ctx: UserInputContent) => void;
   sessionId?: string;
+  effectiveSessionId?: string;
+  uploadingFiles?: string[];
+  onFilesSelected?: (files: File[]) => void;
   attachmentsRefreshTick?: number;
   initialDocumentLibraryIds?: string[];
   initialPromptResourceIds?: string[];
@@ -122,6 +128,7 @@ export default function UserInput({
   const [displayAudioRecorder, setDisplayAudioRecorder] = useState<boolean>(false);
   const [displayAudioController, setDisplayAudioController] = useState<boolean>(false);
   const [isRecording, setIsRecording] = useState<boolean>(false);
+  // Deprecated for uploads: files are uploaded immediately; keep no per-message files
   const [filesBlob, setFilesBlob] = useState<File[] | null>(null);
 
   // --- Fred rationale ---
@@ -131,7 +138,7 @@ export default function UserInput({
   const [selectedPromptResourceIds, setSelectedPromptResourceIds] = useState<string[]>([]);
   const [selectedTemplateResourceIds, setSelectedTemplateResourceIds] = useState<string[]>([]);
   const [selectedSearchPolicyName, setSelectedSearchPolicyName] = useState<SearchPolicyName>("semantic");
-  const canSend = !!userInput.trim() || !!audioBlob || !!(filesBlob && filesBlob.length);
+  const canSend = !!userInput.trim() || !!audioBlob; // files upload immediately now
 
   const canAttach = Object.values(agentChatOptions)
     .filter((value) => typeof value === "boolean")
@@ -293,16 +300,17 @@ export default function UserInput({
     if (sessionId) refetchSessions();
   }, [attachmentsRefreshTick, sessionId, refetchSessions]);
   type AttachmentRef = { id: string; name: string };
+  const attachmentSessionId = effectiveSessionId || sessionId;
   const sessionAttachments: AttachmentRef[] = useMemo(() => {
-    if (!sessionId) return [];
-    const s = (sessions as any[]).find((x) => x?.id === sessionId) as any | undefined;
+    if (!attachmentSessionId) return [];
+    const s = (sessions as any[]).find((x) => x?.id === attachmentSessionId) as any | undefined;
     // Prefer new backend shape with IDs
     const att = s?.attachments;
     if (Array.isArray(att)) return att as AttachmentRef[];
     // Fallback to legacy file_names list if attachments not present
     const names = (s && (s.file_names as string[] | undefined)) || [];
     return Array.isArray(names) ? names.map((n) => ({ id: n, name: n })) : [];
-  }, [sessions, sessionId]);
+  }, [sessions, attachmentSessionId]);
 
   const promptNameById = useMemo(
     () => Object.fromEntries((promptResources as Resource[]).map((r) => [r.id, r.name])),
@@ -362,7 +370,6 @@ export default function UserInput({
     onSend({
       text: userInput,
       audio: audioBlob || undefined,
-      files: filesBlob || undefined,
       documentLibraryIds: selectedDocumentLibrariesIds,
       promptResourceIds: selectedPromptResourceIds,
       templateResourceIds: selectedTemplateResourceIds,
@@ -376,11 +383,10 @@ export default function UserInput({
 
   // Files
   const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files) return;
-    setFilesBlob((prev) => {
-      const existing = prev ?? [];
-      return [...existing, ...Array.from(e.target.files!)];
-    });
+    const list = e.target.files ? Array.from(e.target.files) : [];
+    if (list.length) onFilesSelected?.(list);
+    // Do not keep files as message attachments; upload starts immediately
+    setFilesBlob(null);
     e.target.value = ""; // allow same files again later
   };
   const handleRemoveFile = (index: number) => {
@@ -392,6 +398,12 @@ export default function UserInput({
   };
 
   // No separate attachments popover (shown inside + menu)
+
+  // Refresh session attachments after uploads/deletes
+  useEffect(() => {
+    if (attachmentSessionId) refetchSessions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attachmentsRefreshTick, attachmentSessionId]);
 
   // Audio
   const handleAudioRecorderDisplay = () => {
@@ -416,7 +428,8 @@ export default function UserInput({
     <Grid2 container sx={{ height: "100%", justifyContent: "flex-start", overflow: "hidden" }} size={12} display="flex">
       {/* Attachments strip - now a dedicated component */}
       <UserInputAttachments
-        files={filesBlob}
+        uploadingFileNames={uploadingFiles}
+        files={null}
         audio={audioBlob}
         onRemoveFile={handleRemoveFile}
         onShowAudioController={() => setDisplayAudioController(true)}
@@ -550,7 +563,8 @@ export default function UserInput({
           plusAnchor={plusAnchor}
           pickerView={pickerView}
           isRecording={isRecording}
-          sessionId={sessionId}
+          sessionId={attachmentSessionId}
+          uploadingFileNames={uploadingFiles}
           sessionAttachments={sessionAttachments}
           selectedDocumentLibrariesIds={selectedDocumentLibrariesIds}
           selectedPromptResourceIds={selectedPromptResourceIds}
