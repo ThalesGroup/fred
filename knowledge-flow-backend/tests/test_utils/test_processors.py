@@ -28,9 +28,22 @@ class TestMarkdownProcessor(BaseMarkdownProcessor):
     def extract_file_metadata(self, file_path: Path) -> dict:
         return {"title": "test-markdown"}
 
-    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str) -> dict:
+    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         output_path = output_dir / "output.md"
         output_path.write_text("# Test Markdown Content")
+        return {"markdown_path": str(output_path)}
+
+
+class TestDocxProcessor(BaseMarkdownProcessor):
+    def check_file_validity(self, file_path: Path) -> bool:
+        return file_path.suffix.lower() == ".docx"
+
+    def extract_file_metadata(self, file_path: Path) -> dict:
+        return {"title": "test-docx"}
+
+    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
+        output_path = output_dir / "output.md"
+        output_path.write_text("# Converted from DOCX")
         return {"markdown_path": str(output_path)}
 
 

@@ -90,9 +90,9 @@ class BaseContentStore(ABC):
         pass
 
     @abstractmethod
-    def get_markdown(self, document_uid: str) -> str:
+    def get_preview_bytes(self, doc_path: str) -> bytes:
         """
-        Returns the markdown content (from output/output.md).
+        Returns the preview image bytes (from preview/preview.png).
         """
         pass
 

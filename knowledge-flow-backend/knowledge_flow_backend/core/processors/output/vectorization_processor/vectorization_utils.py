@@ -65,6 +65,8 @@ def flat_metadata_from(md: DocumentMetadata) -> dict:
         "repository": md.source.source_tag,
         "pull_location": md.source.pull_location,
         "date_added_to_kb": md.source.date_added_to_kb,
+        # retrievability flag (used to filter search results)
+        "retrievable": md.source.retrievable,
         # — provenance for repo_url
         "repository_web": md.source.repository_web,
         "repo_ref": md.source.repo_ref,

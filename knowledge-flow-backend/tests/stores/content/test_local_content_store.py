@@ -73,8 +73,8 @@ def test_save_and_get_markdown(tmp_store, tmp_path):
     md_file.write_text("# Hello")
 
     tmp_store.save_content(doc_id, doc_dir)
-    markdown = tmp_store.get_markdown(doc_id)
-    assert markdown == "# Hello"
+    markdown = tmp_store.get_preview_bytes(f"{doc_id}/output/output.md")
+    assert markdown.decode("utf-8") == "# Hello"
 
 
 def test_save_content_overwrites_existing_directory(tmp_store, tmp_path):
@@ -84,7 +84,7 @@ def test_save_content_overwrites_existing_directory(tmp_store, tmp_path):
     doc_dir.mkdir()
     (doc_dir / "input").mkdir()
     (doc_dir / "input" / "file1.txt").write_text("new content")
-    dest_path = tmp_store.destination_root / doc_id
+    dest_path = tmp_store.document_root / doc_id
     dest_path.mkdir(parents=True)
     old_file = dest_path / "old.txt"
     old_file.write_text("old content")
@@ -103,7 +103,7 @@ def test_delete_content(tmp_store, tmp_path):
     doc_dir.mkdir()
     tmp_store.save_content(doc_id, doc_dir)
     tmp_store.delete_content(doc_id)
-    assert not (tmp_store.destination_root / doc_id).exists()
+    assert not (tmp_store.document_root / doc_id).exists()
 
 
 # ----------------------------
@@ -124,7 +124,7 @@ def test_get_content_empty_input(tmp_store, tmp_path):
     (doc_dir / "input").mkdir(parents=True)
     tmp_store.save_content(doc_id, doc_dir)
 
-    dest = tmp_store.destination_root / doc_id / "input"
+    dest = tmp_store.document_root / doc_id / "input"
     for f in dest.iterdir():
         f.unlink()
 
@@ -135,7 +135,7 @@ def test_get_content_empty_input(tmp_store, tmp_path):
 def test_get_markdown_not_found(tmp_store):
     """Raise FileNotFoundError if the markdown file is missing."""
     with pytest.raises(FileNotFoundError):
-        tmp_store.get_markdown("unknown_doc")
+        tmp_store.get_preview_bytes("unknown_doc")
 
 
 def test_save_content_copies_file_and_logs(tmp_store, tmp_path, caplog):
@@ -147,7 +147,7 @@ def test_save_content_copies_file_and_logs(tmp_store, tmp_path, caplog):
     file.write_text("some data")
     with caplog.at_level("INFO"):
         tmp_store.save_content(doc_id, doc_dir)
-    copied_file = tmp_store.destination_root / doc_id / "example.txt"
+    copied_file = tmp_store.document_root / doc_id / "example.txt"
     assert copied_file.exists()
     assert copied_file.read_text() == "some data"
     assert any("Copied file" in msg for msg in caplog.text.splitlines())
@@ -162,19 +162,19 @@ def test_get_markdown_raises_and_logs(monkeypatch, tmp_store, tmp_path, caplog):
     md_file = output_dir / "output.md"
     md_file.write_text("valid content")
     tmp_store.save_content(doc_id, doc_dir)
-    target_md_path = tmp_store.destination_root / doc_id / "output" / "output.md"
-    original_read_text = Path.read_text
+    target_md_path = tmp_store.document_root / doc_id / "output" / "output.md"
+    original_read_bytes = Path.read_bytes
 
-    def faulty_read_text(self, *args, **kwargs):
+    def faulty_read_bytes(self, *args, **kwargs):
         if self == target_md_path:
             raise OSError("Read error")
-        return original_read_text(self, *args, **kwargs)
+        return original_read_bytes(self, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "read_text", faulty_read_text)
+    monkeypatch.setattr(Path, "read_bytes", faulty_read_bytes)
     with caplog.at_level("ERROR"):
         with pytest.raises(OSError, match="Read error"):
-            tmp_store.get_markdown(doc_id)
-    assert "Error reading markdown file" in caplog.text
+            tmp_store.get_preview_bytes(f"{doc_id}/output/output.md")
+    assert "Error reading document file for" in caplog.text
 
 
 # ----------------------------

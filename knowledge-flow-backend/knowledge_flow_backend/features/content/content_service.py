@@ -14,8 +14,10 @@
 
 import logging
 import mimetypes
+from io import BytesIO
 from typing import BinaryIO, Tuple
 
+import pandas as pd
 from fred_core import Action, KeycloakUser, Resource, authorize
 
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
@@ -91,12 +93,32 @@ class ContentService:
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_markdown_preview(self, user: KeycloakUser, document_uid: str) -> str:
         """
-        Returns content of output.md if it exists (as markdown).
+        Return a markdown preview of the document.
+        For CSV files, returns the first 200 rows as a markdown table.
+        For other files, returns the generated markdown preview.
+
+        This method raises FileNotFoundError if no preview is found.
+
+        The usage is to help the end user (if he is authorized) to quickly see
+        a preview of the document content without downloading the full file.
         """
-        try:
-            return self.content_store.get_markdown(document_uid)
-        except FileNotFoundError:
-            raise FileNotFoundError(f"No markdown preview found for document {document_uid}")
+        document_metadata = await self.get_document_metadata(user, document_uid)
+        if not document_metadata:
+            raise FileNotFoundError(f"No metadata found for document {document_uid}")
+        mime_type = document_metadata.file.mime_type
+        if mime_type == "text/csv":
+            csv_bytes = self.content_store.get_preview_bytes(f"{document_uid}/output/table.csv")
+            csv_file_like = BytesIO(csv_bytes)
+            df = pd.read_csv(csv_file_like, nrows=100)
+            preview_str = df.to_markdown(index=False, tablefmt="github")
+            if preview_str is None or preview_str.strip() == "":
+                preview_str = "_(The CSV file is empty or has no data to display)_"
+            return preview_str
+        else:
+            try:
+                return self.content_store.get_preview_bytes(f"{document_uid}/output/output.md").decode("utf-8")
+            except FileNotFoundError:
+                raise ValueError(f"No preview found for document {document_uid} of type {mime_type} ")
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_file_metadata(self, user: KeycloakUser, document_uid: str) -> FileMetadata:

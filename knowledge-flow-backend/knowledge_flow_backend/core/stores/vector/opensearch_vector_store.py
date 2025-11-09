@@ -463,6 +463,11 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         - LangChain's OpenSearchVectorSearch expects `boolean_filter` to be a LIST of filters.
         - Our raw OS queries also expect that list under `bool.filter`.
         - Returning a dict with `bool.filter` here causes double nesting upstream.
+
+        Backward compatibility:
+        - For the special field `retrievable=True`, we include documents where the
+          field is missing as well. This keeps older indices (that don't yet store
+          `metadata.retrievable`) searchable until re-indexing occurs.
         """
         if not f:
             return None
@@ -471,5 +476,29 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             filters.append({"terms": {"metadata.tag_ids": list(f.tag_ids)}})
         if f.metadata_terms:
             for field, values in f.metadata_terms.items():
-                filters.append({"terms": {f"metadata.{field}": list(values)}})
+                meta_field = f"metadata.{field}"
+                # Special handling for retrievable=True
+                try:
+                    values_list = list(values) if values is not None else []
+                except TypeError:
+                    values_list = [values]
+
+                if field == "retrievable" and any(bool(v) is True or str(v).lower() == "true" for v in values_list):
+                    # Build a should-clause: retrievable:true OR field missing
+                    filters.append(
+                        {
+                            "bool": {
+                                "should": [
+                                    {"terms": {meta_field: [True]}},
+                                    {"bool": {"must_not": {"exists": {"field": meta_field}}}},
+                                ],
+                                "minimum_should_match": 1,
+                            }
+                        }
+                    )
+                    # If caller also passed False, keep it explicit too (rare)
+                    if any(bool(v) is False or str(v).lower() == "false" for v in values_list):
+                        filters.append({"terms": {meta_field: [False]}})
+                else:
+                    filters.append({"terms": {meta_field: values_list}})
         return filters or None

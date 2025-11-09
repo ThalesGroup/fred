@@ -1,9 +1,18 @@
-// NewDocumentViewer.tsx
 // Copyright Thales 2025
-// Licensed under the Apache License, Version 2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 import CloseIcon from "@mui/icons-material/Close";
-import DownloadIcon from "@mui/icons-material/Download";
 import { AppBar, Box, CircularProgress, IconButton, Toolbar, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
 
@@ -41,7 +50,6 @@ export const MarkdownDocumentViewer: React.FC<MarkdownDocumentViewerProps> = ({
   const [docContent, setDocContent] = useState<string>("");
   const [isLoadingDoc, setIsLoadingDoc] = useState<boolean>(false);
   console.log("Rendering MarkdownDocumentViewer for document:", doc);
-  // ⬇️ CHANGE 2: generated API exposes a *query* hook; we use the lazy variant to keep identical call style
   const [triggerGetPreview] = useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery();
 
   // same logic as before (just safer for -1 indices)
@@ -83,17 +91,6 @@ export const MarkdownDocumentViewer: React.FC<MarkdownDocumentViewerProps> = ({
     void load();
   }, [doc?.document_uid, doc?.content, doc?.file_url, triggerGetPreview]);
 
-  const handleDownload = () => {
-    if (!doc?.file_url) return;
-    const link = window.document.createElement("a");
-    link.href = doc.file_url;
-    link.download = doc.file_name || "document.md";
-    link.target = "_blank";
-    window.document.body.appendChild(link);
-    link.click();
-    window.document.body.removeChild(link);
-  };
-
   return (
     <Box sx={{ width: "80vw", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <AppBar position="static" color="default" elevation={0}>
@@ -101,9 +98,7 @@ export const MarkdownDocumentViewer: React.FC<MarkdownDocumentViewerProps> = ({
           <Typography variant="h6" sx={{ flex: 1 }}>
             {doc?.file_name || "Markdown Document"}
           </Typography>
-          <IconButton onClick={handleDownload} disabled={!doc?.file_url}>
-            <DownloadIcon />
-          </IconButton>
+
           <IconButton onClick={onClose}>
             <CloseIcon />
           </IconButton>

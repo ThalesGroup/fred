@@ -1,0 +1,187 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from typing import List, Tuple
+
+import fitz
+from markitdown import MarkItDown
+
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.base_lite_md_processor import BaseLiteMdProcessor
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import (
+    LiteMarkdownOptions,
+    LiteMarkdownResult,
+    LitePageMarkdown,
+    collapse_whitespace,
+    enforce_max_chars,
+)
+
+# Core idea:
+# - Prefer MarkItDown for whole-PDF conversion (good quality, less code).
+# - If callers ask for page-level control (page_range, per-page output, page headings),
+#   switch to a page-wise path using PyMuPDF (fitz), which ships with markitdown.
+# - Fall back gracefully if markitdown or fitz are unavailable.
+
+logger = logging.getLogger(__name__)
+
+
+# Optional imports guarded for runtime + Pylance friendliness
+
+
+class LitePdfToMdProcessor(BaseLiteMdProcessor):
+    """
+    Lightweight PDF → Markdown.
+
+    Fred rationale:
+    - Use `markitdown` for "good-enough" Markdown with minimal maintenance.
+    - Preserve Fred's page-oriented UX when needed via PyMuPDF page scans.
+    - Keep token budgets predictable via normalization + max_chars cap.
+    """
+
+    def __init__(self) -> None:
+        self._md = MarkItDown() if MarkItDown else None
+
+    # ---- helpers -------------------------------------------------------------
+
+    def _needs_page_wise(self, opts: LiteMarkdownOptions) -> bool:
+        """Return True if caller requested page-range or page-structured output."""
+        return bool(opts.page_range or opts.return_per_page or opts.add_page_headings)
+
+    def _normalize(self, s: str, opts: LiteMarkdownOptions) -> str:
+        return collapse_whitespace(s) if opts.normalize_whitespace else s
+
+    def _safe_page_range(self, page_count: int, page_range: Tuple[int, int] | None) -> Tuple[int, int]:
+        """
+        Ensures a valid, 1-based inclusive page range within the PDF's total page count.
+
+        Fred rationale:
+        - Keeps downstream iteration deterministic.
+        - Clamps values silently so agents never raise IndexError on out-of-bounds pages.
+        """
+        if not page_range:
+            return (1, page_count)
+
+        start_p, end_p = page_range
+        start_p = max(1, min(start_p, page_count))
+        end_p = max(start_p, min(end_p, page_count))  # ensures end ≥ start
+
+        return (start_p, end_p)
+
+    # ---- page-wise extraction (PyMuPDF) -------------------------------------
+
+    def _extract_pages_with_fitz(self, file_path: Path, opts: LiteMarkdownOptions) -> LiteMarkdownResult:
+        doc = fitz.open(str(file_path))
+        page_count = doc.page_count
+
+        start_p, end_p = self._safe_page_range(page_count, opts.page_range)
+        pages_md: List[LitePageMarkdown] = []
+
+        for pno in range(start_p, end_p + 1):
+            page = doc.load_page(pno - 1)
+            # Plain text is enough for the lightweight path; keeps speed & determinism.
+            raw_text = page.get_text("text")
+            text: str = raw_text if isinstance(raw_text, str) else str(raw_text)
+            text = self._normalize(text, opts).strip()
+
+            if opts.add_page_headings:
+                if text:
+                    body = f"## Page {pno}\n\n{text}"
+                else:
+                    body = f"## Page {pno}"
+            else:
+                body = text
+
+            pages_md.append(LitePageMarkdown(page_no=pno, markdown=body, char_count=len(body)))
+
+        combined = "\n\n".join(p.markdown for p in pages_md)
+        combined, truncated = enforce_max_chars(combined, opts.max_chars)
+
+        # If truncated and per-page requested, keep only fully contained pages
+        if truncated and opts.return_per_page:
+            kept: List[LitePageMarkdown] = []
+            acc = 0
+            for idx, p in enumerate(pages_md):
+                # account for the "\n\n" separators between pages
+                sep = 2 if idx > 0 else 0
+                if acc + sep + len(p.markdown) > len(combined):
+                    break
+                acc += sep + len(p.markdown)
+                kept.append(p)
+            pages_md = kept
+
+        return LiteMarkdownResult(
+            document_name=file_path.name,
+            page_count=page_count,
+            total_chars=len(combined),
+            truncated=truncated,
+            markdown=combined,
+            pages=pages_md if opts.return_per_page else [],
+            extras={"engine": "pymupdf-pagewise"},
+        )
+
+    # ---- whole-document extraction (markitdown) ------------------------------
+
+    def _extract_with_markitdown(self, file_path: Path, opts: LiteMarkdownOptions) -> LiteMarkdownResult:
+        if not self._md:
+            raise RuntimeError("markitdown not available for PDF conversion")
+
+        converted = self._md.convert(str(file_path))
+        # Pylance sometimes flags `.text`; guard with getattr for static peace of mind.
+        md = getattr(converted, "text", "") or ""
+        md = self._normalize(md, opts)
+
+        md, truncated = enforce_max_chars(md, opts.max_chars)
+
+        return LiteMarkdownResult(
+            document_name=file_path.name,
+            page_count=None,  # markitdown abstracts away page structure
+            total_chars=len(md),
+            truncated=truncated,
+            markdown=md,
+            pages=[],  # no per-page in this path
+            extras={"engine": "markitdown"},
+        )
+
+    # ---- public API ----------------------------------------------------------
+
+    def extract(self, file_path: Path, options: LiteMarkdownOptions | None = None) -> LiteMarkdownResult:
+        """
+        Strategy:
+        - If caller wants page control: use PyMuPDF (fast, deterministic).
+        - Else prefer markitdown (best quality/maintenance for whole-doc).
+        - On failures, log and fall back to the other path when possible.
+        """
+        opts = options or LiteMarkdownOptions()
+
+        # Page-wise needs trump markitdown (which doesn't expose page slicing)
+        if self._needs_page_wise(opts):
+            try:
+                return self._extract_pages_with_fitz(file_path, opts)
+            except Exception as e:
+                logger.warning(f"Page-wise PDF extraction failed, trying markitdown: {e}")
+
+            # Fall back to whole-doc if page-wise failed
+            return self._extract_with_markitdown(file_path, opts)
+
+        # Whole-document path first (simpler, better formatting when available)
+        try:
+            return self._extract_with_markitdown(file_path, opts)
+        except Exception as e:
+            logger.warning(f"markitdown PDF conversion failed, trying page-wise fallback: {e}")
+
+        # Fall back to page-wise text if markitdown fails
+        return self._extract_pages_with_fitz(file_path, opts)

@@ -206,6 +206,26 @@ class MetadataService:
             self.metadata_store.save_metadata(metadata)
             logger.info(f"[METADATA] Set retrievable={value} for document '{document_uid}' by '{modified_by}'")
 
+            # If the document was already vectorized, optionally reflect the toggle in the vector index
+            # to make the change effective immediately in search results.
+            try:
+                if ProcessingStage.VECTORIZED in metadata.processing.stages:
+                    if value is False:
+                        # Eagerly remove vectors to exclude from search without waiting for re-index.
+                        if self.vector_store is None:
+                            self.vector_store = ApplicationContext.get_instance().get_vector_store()
+                        self.vector_store.delete_vectors_for_document(document_uid=document_uid)
+                        logger.info(f"[VECTOR] Deleted vectors for document '{document_uid}' due to retrievable=False")
+                    else:
+                        # value is True — vectors may not exist anymore; a re-vectorization is needed to include back.
+                        # We log guidance rather than auto-reindex to avoid heavy work on a PUT toggle.
+                        logger.info(
+                            "[VECTOR] retrievable=True set for '%s'. If vectors were previously removed, re-vectorize to include back in search.",
+                            document_uid,
+                        )
+            except Exception as ve:
+                logger.warning(f"[VECTOR] Could not reflect retrievable toggle in vector index for '{document_uid}': {ve}")
+
         except Exception as e:
             logger.error(f"Error updating retrievable flag for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
