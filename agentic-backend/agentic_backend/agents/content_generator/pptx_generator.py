@@ -40,7 +40,6 @@ from agentic_backend.common.rags_utils import (
     format_sources_for_prompt,
     sort_hits,
 )
-from agentic_backend.common.structures import AgentChatOptions
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.runtime_context import (

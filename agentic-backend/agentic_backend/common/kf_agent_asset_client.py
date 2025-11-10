@@ -68,16 +68,22 @@ class KfAgentAssetClient(KfBaseClient):
     def __init__(self, agent: "AgentFlow"):
         super().__init__(agent=agent, allowed_methods=frozenset({"GET", "POST"}))
 
-    def _get_asset_stream(self, agent: str, key: str, access_token: str) -> requests.Response:
+    def _get_asset_stream(
+        self, agent: str, key: str, access_token: str
+    ) -> requests.Response:
         path = f"/agent-assets/{agent}/{key}"
-        r = self._request_with_token_refresh("GET", path, access_token=access_token, stream=True)
+        r = self._request_with_token_refresh(
+            "GET", path, access_token=access_token, stream=True
+        )
         r.raise_for_status()
         return r
 
     def fetch_asset_content_text(self, agent: str, key: str, access_token: str) -> str:
         """Fetches the complete text content of an asset."""
         try:
-            response = self._get_asset_stream(agent=agent, key=key, access_token=access_token)
+            response = self._get_asset_stream(
+                agent=agent, key=key, access_token=access_token
+            )
 
             content_bytes = b""
             for chunk in response.iter_content(chunk_size=8192):
@@ -88,11 +94,16 @@ class KfAgentAssetClient(KfBaseClient):
 
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code
-            logger.error(f"HTTP error ({status}) reading asset {key}: {e}", exc_info=True)
+            logger.error(
+                f"HTTP error ({status}) reading asset {key}: {e}", exc_info=True
+            )
             if status == 404:
-                raise AssetRetrievalError(f"Asset key '{key}' not found (404).", status_code=status) from e
+                raise AssetRetrievalError(
+                    f"Asset key '{key}' not found (404).", status_code=status
+                ) from e
             raise AssetRetrievalError(
-                f"HTTP failure retrieving asset '{key}' (Status: {status}).", status_code=status
+                f"HTTP failure retrieving asset '{key}' (Status: {status}).",
+                status_code=status,
             ) from e
         except Exception as e:
             logger.error(f"General error reading asset {key}: {e}", exc_info=True)
@@ -109,7 +120,9 @@ class KfAgentAssetClient(KfBaseClient):
         Requires access_token for authorization.
         """
         try:
-            resp = self._get_asset_stream(agent=agent, key=key, access_token=access_token)
+            resp = self._get_asset_stream(
+                agent=agent, key=key, access_token=access_token
+            )
             try:
                 chunks = []
                 total = 0
@@ -123,18 +136,27 @@ class KfAgentAssetClient(KfBaseClient):
 
             ctype = resp.headers.get("Content-Type", "application/octet-stream")
             disp = resp.headers.get("Content-Disposition", "")
-            m = re.search(r"filename\*=UTF-8''([^;]+)", disp) or re.search(r'filename="([^"]+)"', disp)
+            m = re.search(r"filename\*=UTF-8''([^;]+)", disp) or re.search(
+                r'filename="([^"]+)"', disp
+            )
             filename = (m.group(1) if m else key) or key
 
-            return AssetBlob(bytes=content, content_type=ctype, filename=filename, size=total)
+            return AssetBlob(
+                bytes=content, content_type=ctype, filename=filename, size=total
+            )
 
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code
-            logger.error(f"HTTP error ({status}) reading asset {key}: {e}", exc_info=True)
+            logger.error(
+                f"HTTP error ({status}) reading asset {key}: {e}", exc_info=True
+            )
             if status == 404:
-                raise AssetRetrievalError(f"Asset key '{key}' not found (404).", status_code=404) from e
+                raise AssetRetrievalError(
+                    f"Asset key '{key}' not found (404).", status_code=404
+                ) from e
             raise AssetRetrievalError(
-                f"HTTP failure retrieving asset '{key}' (Status: {status}).", status_code=status
+                f"HTTP failure retrieving asset '{key}' (Status: {status}).",
+                status_code=status,
             ) from e
         except Exception as e:
             logger.error(f"General error reading asset {key}: {e}", exc_info=True)
