@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class AssetRetrievalError(Exception):
-    """Custom exception raised when an agent asset cannot be retrieved."""
+    """Raised when an agent asset cannot be retrieved."""
 
     def __init__(self, message: str, status_code: Optional[int] = None):
         super().__init__(message)
@@ -39,7 +39,7 @@ class AssetRetrievalError(Exception):
 
 
 class AssetUploadError(Exception):
-    """Custom exception raised when an asset cannot be uploaded."""
+    """Raised when an asset cannot be uploaded."""
 
     def __init__(self, message: str, status_code: Optional[int] = None):
         super().__init__(message)
@@ -48,7 +48,6 @@ class AssetUploadError(Exception):
 
 @dataclass(frozen=True)
 class AssetBlob:
-    # Why: single payload with enough context for UI + agent decisions.
     bytes: bytes
     content_type: str
     filename: str
@@ -64,84 +63,38 @@ class AssetUploadResult:
 
 
 class KfAgentAssetClient(KfBaseClient):
-    """
-    Client for fetching user-uploaded assets, inheriting security and retry logic.
-
-    Requires an access_token for all requests.
-    """
+    """Client for fetching user-uploaded assets, inheriting security and retry logic."""
 
     def __init__(self, agent: "AgentFlow"):
-        # Initialize the base client, specifying the methods we allow (GET and POST)
-        super().__init__(
-            agent=agent,
-            allowed_methods=frozenset({"GET", "POST"}),
-        )
+        super().__init__(agent=agent, allowed_methods=frozenset({"GET", "POST"}))
 
-    def _get_asset_stream(
-        self, agent: str, key: str, access_token: str
-    ) -> requests.Response:
-        """
-        Fetches an asset from the backend. Returns a requests.Response object
-        with stream=True set, allowing iteration over content chunks.
-        Caller is responsible for closing the response stream.
-        Requires access_token for authorization.
-        """
-        # Endpoint: /agent-assets/{agent}/{key}
+    def _get_asset_stream(self, agent: str, key: str, access_token: str) -> requests.Response:
         path = f"/agent-assets/{agent}/{key}"
-
-        # Use the base class's authenticated retry mechanism for a GET request.
-        r = self._request_with_token_refresh(
-            "GET", path, access_token=access_token, stream=True
-        )
-        r.raise_for_status()  # Raise HTTPError for bad status codes (4xx, 5xx)
+        r = self._request_with_token_refresh("GET", path, access_token=access_token, stream=True)
+        r.raise_for_status()
         return r
 
     def fetch_asset_content_text(self, agent: str, key: str, access_token: str) -> str:
-        """
-        Fetches the complete content of an asset, handles streaming/chunking,
-        and returns the decoded content as a string.
-
-        On failure (network, 404, etc.), raises AssetRetrievalError.
-        Requires access_token for authorization.
-        """
+        """Fetches the complete text content of an asset."""
         try:
-            # 1. Get the streamed response, passing the required token
-            response = self._get_asset_stream(
-                agent=agent, key=key, access_token=access_token
-            )
+            response = self._get_asset_stream(agent=agent, key=key, access_token=access_token)
 
-            # 2. Read all content from the stream in chunks
             content_bytes = b""
             for chunk in response.iter_content(chunk_size=8192):
-                content_bytes += chunk
-
-            # 3. CRITICAL: Close the stream after reading
+                if chunk:
+                    content_bytes += chunk
             response.close()
-
-            # 4. Decode as UTF-8 text (assuming text asset)
             return content_bytes.decode("utf-8")
 
-        # ... (Exception Handling remains the same) ...
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code
-            logger.error(
-                f"HTTP error ({status}) reading asset {key}: {e}", exc_info=True
-            )
-
+            logger.error(f"HTTP error ({status}) reading asset {key}: {e}", exc_info=True)
             if status == 404:
-                # Specific error for Not Found, very common case
-                raise AssetRetrievalError(
-                    f"Asset key '{key}' not found (404).", status_code=status
-                ) from e
-
-            # General HTTP failure
+                raise AssetRetrievalError(f"Asset key '{key}' not found (404).", status_code=status) from e
             raise AssetRetrievalError(
-                f"HTTP failure retrieving asset '{key}' (Status: {status}).",
-                status_code=status,
+                f"HTTP failure retrieving asset '{key}' (Status: {status}).", status_code=status
             ) from e
-
         except Exception as e:
-            # Catch connection, timeout, decoding, or general I/O errors
             logger.error(f"General error reading asset {key}: {e}", exc_info=True)
             raise AssetRetrievalError(
                 f"Failed to read/decode asset '{key}' ({type(e).__name__})."
@@ -156,9 +109,7 @@ class KfAgentAssetClient(KfBaseClient):
         Requires access_token for authorization.
         """
         try:
-            resp = self._get_asset_stream(
-                agent=agent, key=key, access_token=access_token
-            )
+            resp = self._get_asset_stream(agent=agent, key=key, access_token=access_token)
             try:
                 chunks = []
                 total = 0
@@ -168,33 +119,22 @@ class KfAgentAssetClient(KfBaseClient):
                         total += len(chunk)
                 content = b"".join(chunks)
             finally:
-                # Why: callers must not leak sockets.
                 resp.close()
 
             ctype = resp.headers.get("Content-Type", "application/octet-stream")
-            # Try to honor server-provided filename; fallback to 'key'
             disp = resp.headers.get("Content-Disposition", "")
-            m = re.search(r"filename\*=UTF-8\'\'([^;]+)", disp) or re.search(
-                r'filename="([^"]+)"', disp
-            )
+            m = re.search(r"filename\*=UTF-8''([^;]+)", disp) or re.search(r'filename="([^"]+)"', disp)
             filename = (m.group(1) if m else key) or key
 
-            return AssetBlob(
-                bytes=content, content_type=ctype, filename=filename, size=total
-            )
+            return AssetBlob(bytes=content, content_type=ctype, filename=filename, size=total)
 
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code
-            logger.error(
-                f"HTTP error ({status}) reading asset {key}: {e}", exc_info=True
-            )
+            logger.error(f"HTTP error ({status}) reading asset {key}: {e}", exc_info=True)
             if status == 404:
-                raise AssetRetrievalError(
-                    f"Asset key '{key}' not found (404).", status_code=404
-                ) from e
+                raise AssetRetrievalError(f"Asset key '{key}' not found (404).", status_code=404) from e
             raise AssetRetrievalError(
-                f"HTTP failure retrieving asset '{key}' (Status: {status}).",
-                status_code=status,
+                f"HTTP failure retrieving asset '{key}' (Status: {status}).", status_code=status
             ) from e
         except Exception as e:
             logger.error(f"General error reading asset {key}: {e}", exc_info=True)
@@ -207,7 +147,6 @@ class KfAgentAssetClient(KfBaseClient):
         key: str,
         file_content: bytes | BinaryIO,
         filename: str,
-        access_token: str,  # --- NEW: Required access token
         content_type: Optional[str] = None,
         # NEW ARGUMENT: Explicit ID for the end-user (if the agent knows it)
         user_id_override: Optional[str] = None,
@@ -240,7 +179,6 @@ class KfAgentAssetClient(KfBaseClient):
             r = self._request_with_token_refresh(
                 "POST",
                 path,
-                access_token=access_token,  # Pass the required user token
                 files=files,
                 data=data,  # This now includes the user_id_override if present
             )

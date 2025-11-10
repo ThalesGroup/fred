@@ -23,6 +23,7 @@ from typing import Dict, List, Optional
 
 from fred_core import VectorSearchHit
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 from langchain_core.output_parsers.json import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, START, MessagesState, StateGraph
@@ -169,10 +170,6 @@ class Sloan(AgentFlow):
     """
 
     tuning = RAG_TUNING
-    default_chat_options = AgentChatOptions(
-        search_policy_selection=True,
-        libraries_selection=True,
-    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -182,8 +179,8 @@ class Sloan(AgentFlow):
         self.summary_prompt_template: Optional[ChatPromptTemplate] = None
         self.format_instructions: str = ""
 
-    async def async_init(self):
-        """Initialize model, search client, parser, and prompt."""
+    async def async_init(self, runtime_context: RuntimeContext):
+        await super().async_init(runtime_context)
         self.model = get_default_chat_model()
         self.search_client = VectorSearchClient(agent=self)
         self._graph = self._build_graph()
