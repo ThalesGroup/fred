@@ -23,7 +23,6 @@ from typing import Dict, List, Optional
 
 from fred_core import VectorSearchHit
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from agentic_backend.core.agents.runtime_context import RuntimeContext
 from langchain_core.output_parsers.json import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, START, MessagesState, StateGraph
@@ -45,6 +44,7 @@ from agentic_backend.common.structures import AgentChatOptions
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.runtime_context import (
+    RuntimeContext,
     get_document_library_tags_ids,
     get_search_policy,
 )
