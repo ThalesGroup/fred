@@ -218,6 +218,46 @@ This ensures that as soon as you open a Python file under agentic_backend/ (or k
 
 ### Model configuration
 
+#### Default Chat Models (Agentic Backend)
+
+Within the **agentic backend**, Fred uses **default models** that serve as the primary AI components for agents. These models determine how agents handle both conversational and general AI tasks.
+
+##### Key Concepts
+
+- **Default Chat Model**  
+  This is the model used for all conversational tasks within the agentic backend. Every agent relies on this model unless a specific agent configuration overrides it. It includes configurable options such as temperature, retry limits, and request timeouts.
+
+- **Default Language Model**  
+  This model is used for non-chat AI tasks. If it is not explicitly defined, the agentic backend automatically falls back to the default chat model. This ensures consistent behavior and prevents runtime errors when a separate language model is not set.
+
+In the agentic-backend configuration these can be set as is:
+
+```yaml
+ai:
+  default_chat_model:
+    # Required in .env:
+    # - OPENAI_API_KEY
+    provider: "openai"
+    name: "gpt-4o"
+    settings: {}
+  default_language_model:
+    # Required in .env:
+    # - OPENAI_API_KEY
+    provider: "openai"
+    name: "gpt-4o"
+    settings: {}
+```
+
+⚠️ `default_language_model` overrides `default_chat_model` if set.
+
+##### Notes
+
+- Credentials for the chosen model provider (OpenAI, Azure OpenAI, Ollama, etc.) must be provided in the agentic backend’s environment files.
+- These default models form the base of all AI capabilities within the agentic backend, and all agents leverage them unless explicitly configured otherwise.
+- Updating the default models in the configuration changes the behavior of all agents, so it is a central point for tuning the system.
+
+#### Set it up according to your development environment
+
 No matter which development environment you choose, both backends rely on two pairs of `.env`/`configuration.yaml` files for credentials and model settings:
 
 - Agentic backend: `agentic_backend/config/.env` and `agentic_backend/config/configuration.yaml`
@@ -313,6 +353,16 @@ No matter which development environment you choose, both backends rely on two pa
     yq eval 'del(.embedding_model.settings)' -i knowledge_flow_backend/config/configuration.yaml
     yq eval '.embedding_model.settings.azure_endpoint = "<your-azure-openai-endpoint>"' -i knowledge_flow_backend/config/configuration.yaml
     yq eval '.embedding_model.settings.azure_openai_api_version = "<your-azure-openai-api-version>"' -i knowledge_flow_backend/config/configuration.yaml
+    ```
+
+  - Vision model
+
+    ```bash
+    yq eval '.vision_model.provider = "azure-openai"' -i knowledge_flow_backend/config/configuration.yaml
+    yq eval '.vision_model.name = "<your-azure-openai-deployment-name>"' -i knowledge_flow_backend/config/configuration.yaml
+    yq eval 'del(.vision_model.settings)' -i knowledge_flow_backend/config/configuration.yaml
+    yq eval '.vision_model.settings.azure_endpoint = "<your-azure-openai-endpoint>"' -i knowledge_flow_backend/config/configuration.yaml
+    yq eval '.vision_model.settings.azure_openai_api_version = "<your-azure-openai-api-version>"' -i knowledge_flow_backend/config/configuration.yaml
     ```
 
 - Copy-paste your `AZURE_OPENAI_API_KEY` value in both `.env` files.

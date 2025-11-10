@@ -467,9 +467,9 @@ class ApplicationContext:
         return get_model(self.configuration.chat_model)
 
     def get_vision_model(self):
-        if not self.configuration.vision:
+        if not self.configuration.vision_model:
             raise ValueError("Vision model configuration is missing.")
-        return get_model(self.configuration.vision)
+        return get_model(self.configuration.vision_model)
 
     def get_vector_store(self) -> BaseVectorStore:
         """
