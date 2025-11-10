@@ -40,7 +40,6 @@
       }
     }
   },
-  "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
   "remoteUser": "vscode",
   "overrideCommand": true,
   "updateRemoteUserUID": true
