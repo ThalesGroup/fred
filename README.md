@@ -193,7 +193,7 @@ After cloning the repo, you can open Fred's VS Code workspace with `code .vscode
 When you open Fred's VS Code workspace, VS Code will load four folders:
 
 - `fred` – for any repo‑wide files, scripts, etc
-- `agentic_backend` – first Python backend
+- `agentic-backend` – first Python backend
 - `knowledge-flow-backend` – second Python backend
 - `fred-core` - a common python library for both python backends
 - `frontend` – UI
