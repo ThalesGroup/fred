@@ -238,14 +238,7 @@ function Area({
     }
 
     return elements;
-  }, [
-    messages,
-    agents,
-    currentAgent,
-    highlightUid,
-    libraryNameById,
-    chatContextNameById,
-  ]);
+  }, [messages, agents, currentAgent, highlightUid, libraryNameById, chatContextNameById]);
 
   useEffect(() => {
     scrollToBottom();

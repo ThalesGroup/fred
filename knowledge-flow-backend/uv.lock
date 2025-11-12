@@ -1,9 +1,11 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = "==3.12.*"
 resolution-markers = [
     "platform_machine == 'aarch64' and sys_platform == 'linux'",
-    "platform_machine != 'aarch64' and sys_platform == 'linux'",
+    "platform_machine == 'x86_64' and sys_platform == 'linux'",
+    "platform_machine == 'arm64' and sys_platform == 'linux'",
+    "platform_machine != 'aarch64' and platform_machine != 'arm64' and platform_machine != 'x86_64' and sys_platform == 'linux'",
 ]
 supported-markers = [
     "sys_platform == 'linux'",
@@ -20,7 +22,8 @@ dependencies = [
     { name = "psutil", marker = "sys_platform == 'linux'" },
     { name = "pyyaml", marker = "sys_platform == 'linux'" },
     { name = "safetensors", marker = "sys_platform == 'linux'" },
-    { name = "torch", marker = "sys_platform == 'linux'" },
+    { name = "torch", version = "2.7.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+    { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b1/72/ff3961c19ee395c3d30ac630ee77bfb0e1b46b87edc504d4f83bb4a89705/accelerate-1.10.1.tar.gz", hash = "sha256:3dea89e433420e4bfac0369cae7e36dcd6a56adfcfd38cdda145c6225eab5df8", size = 392446, upload-time = "2025-08-25T13:57:06.21Z" }
 wheels = [
@@ -732,8 +735,10 @@ dependencies = [
     { name = "pydantic", marker = "sys_platform == 'linux'" },
     { name = "rtree", marker = "sys_platform == 'linux'" },
     { name = "safetensors", extra = ["torch"], marker = "sys_platform == 'linux'" },
-    { name = "torch", marker = "sys_platform == 'linux'" },
-    { name = "torchvision", marker = "sys_platform == 'linux'" },
+    { name = "torch", version = "2.7.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+    { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "torchvision", version = "0.22.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+    { name = "torchvision", version = "0.22.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "tqdm", marker = "sys_platform == 'linux'" },
     { name = "transformers", marker = "sys_platform == 'linux'" },
 ]
@@ -757,6 +762,16 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/16/d1/aab7c394da7bf9b2e5d372d781e88be27b440e50e9682bb40b9c86823961/docling_parse-4.6.0-cp312-cp312-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5fb15b2f2b24b896b0f3a9bc254ef905f9a00101c1574368639060d47140a084", size = 14977961, upload-time = "2025-10-17T11:16:13.493Z" },
     { url = "https://files.pythonhosted.org/packages/41/17/61ecf8ffa7c843640608878b27431b48099606e61f201243f6d8adca7981/docling_parse-4.6.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a535f0cb0c9470d84b3699cebb150ae16a6686828ba40ac0228214fb74e7d0bc", size = 15088424, upload-time = "2025-10-17T11:16:15.288Z" },
 ]
+
+[[package]]
+name = "docx"
+version = "0.2.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "lxml", marker = "sys_platform == 'linux'" },
+    { name = "pillow", marker = "sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4a/8e/5a01644697b03016de339ef444cfff28367f92984dc74eddaab1ed60eada/docx-0.2.4.tar.gz", hash = "sha256:9d7595eac6e86cda0b7136a2995318d039c1f3eaa368a3300805abbbe5dc8877", size = 54925, upload-time = "2014-02-06T10:02:49.394Z" }
 
 [[package]]
 name = "duckdb"
@@ -806,8 +821,10 @@ dependencies = [
     { name = "scikit-image", marker = "sys_platform == 'linux'" },
     { name = "scipy", marker = "sys_platform == 'linux'" },
     { name = "shapely", marker = "sys_platform == 'linux'" },
-    { name = "torch", marker = "sys_platform == 'linux'" },
-    { name = "torchvision", marker = "sys_platform == 'linux'" },
+    { name = "torch", version = "2.7.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+    { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "torchvision", version = "0.22.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+    { name = "torchvision", version = "0.22.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bb/84/4a2cab0e6adde6a85e7ba543862e5fc0250c51f3ac721a078a55cdcff250/easyocr-1.7.2-py3-none-any.whl", hash = "sha256:5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c", size = 2870178, upload-time = "2024-09-24T11:34:43.554Z" },
@@ -1112,6 +1129,8 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/19/0d/6660d55f7373b2ff8152401a83e02084956da23ae58cddbfb0b330978fe9/greenlet-3.2.4-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3b3812d8d0c9579967815af437d96623f45c0f2ae5f04e366de62a12d83a8fb0", size = 607586, upload-time = "2025-08-07T13:18:28.544Z" },
     { url = "https://files.pythonhosted.org/packages/8e/1a/c953fdedd22d81ee4629afbb38d2f9d71e37d23caace44775a3a969147d4/greenlet-3.2.4-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:abbf57b5a870d30c4675928c37278493044d7c14378350b3aa5d484fa65575f0", size = 1123281, upload-time = "2025-08-07T13:42:39.858Z" },
     { url = "https://files.pythonhosted.org/packages/3f/c7/12381b18e21aef2c6bd3a636da1088b888b97b7a0362fac2e4de92405f97/greenlet-3.2.4-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:20fb936b4652b6e307b8f347665e2c615540d4b42b3b4c8a321d8286da7e520f", size = 1151142, upload-time = "2025-08-07T13:18:22.981Z" },
+    { url = "https://files.pythonhosted.org/packages/27/45/80935968b53cfd3f33cf99ea5f08227f2646e044568c9b1555b58ffd61c2/greenlet-3.2.4-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:ee7a6ec486883397d70eec05059353b8e83eca9168b9f3f9a361971e77e0bcd0", size = 1564846, upload-time = "2025-11-04T12:42:15.191Z" },
+    { url = "https://files.pythonhosted.org/packages/69/02/b7c30e5e04752cb4db6202a3858b149c0710e5453b71a3b2aec5d78a1aab/greenlet-3.2.4-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:326d234cbf337c9c3def0676412eb7040a35a768efc92504b947b3e9cfc7543d", size = 1633814, upload-time = "2025-11-04T12:42:17.175Z" },
 ]
 
 [[package]]
@@ -1497,6 +1516,7 @@ dependencies = [
     { name = "coloredlogs", marker = "sys_platform == 'linux'" },
     { name = "dateparser", marker = "sys_platform == 'linux'" },
     { name = "docling", marker = "sys_platform == 'linux'" },
+    { name = "docx", marker = "sys_platform == 'linux'" },
     { name = "duckdb", marker = "sys_platform == 'linux'" },
     { name = "duckdb-engine", marker = "sys_platform == 'linux'" },
     { name = "fastapi", marker = "sys_platform == 'linux'" },
@@ -1532,8 +1552,10 @@ dependencies = [
     { name = "shortuuid", marker = "sys_platform == 'linux'" },
     { name = "sqlparse", marker = "sys_platform == 'linux'" },
     { name = "temporalio", marker = "sys_platform == 'linux'" },
-    { name = "torch", marker = "sys_platform == 'linux'" },
-    { name = "torchvision", marker = "sys_platform == 'linux'" },
+    { name = "torch", version = "2.7.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'arm64' and sys_platform == 'linux')" },
+    { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "torchvision", version = "0.22.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'arm64' and sys_platform == 'linux')" },
+    { name = "torchvision", version = "0.22.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "uv", marker = "sys_platform == 'linux'" },
     { name = "uvicorn", extra = ["standard"], marker = "sys_platform == 'linux'" },
     { name = "weaviate-client", marker = "sys_platform == 'linux'" },
@@ -1569,6 +1591,7 @@ requires-dist = [
     { name = "coloredlogs", specifier = "==15.0.1" },
     { name = "dateparser", specifier = ">=1.2.2" },
     { name = "docling", specifier = "==2.34.0" },
+    { name = "docx", specifier = ">=0.2.4" },
     { name = "duckdb", specifier = ">=1.3.2" },
     { name = "duckdb-engine", specifier = ">=0.17.0" },
     { name = "fastapi", specifier = "==0.116.1" },
@@ -1611,10 +1634,10 @@ requires-dist = [
     { name = "shortuuid", specifier = "==1.0.13" },
     { name = "sqlparse", specifier = ">=0.5.3" },
     { name = "temporalio", specifier = ">=1.14.1" },
-    { name = "torch", marker = "sys_platform != 'linux'", specifier = "==2.7.1+cpu" },
-    { name = "torch", marker = "sys_platform == 'linux'", specifier = "==2.7.1+cpu", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "torchvision", marker = "sys_platform != 'linux'", specifier = "==0.22.1+cpu" },
-    { name = "torchvision", marker = "sys_platform == 'linux'", specifier = "==0.22.1+cpu", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", marker = "platform_machine == 'aarch64' or platform_machine == 'arm64'", specifier = "==2.7.1" },
+    { name = "torch", marker = "platform_machine == 'x86_64'", specifier = "==2.7.1+cpu", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torchvision", marker = "platform_machine == 'aarch64' or platform_machine == 'arm64'", specifier = "==0.22.1" },
+    { name = "torchvision", marker = "platform_machine == 'x86_64'", specifier = "==0.22.1+cpu", index = "https://download.pytorch.org/whl/cpu" },
     { name = "tox", marker = "extra == 'dev'", specifier = "==4.27.0" },
     { name = "uv" },
     { name = "uvicorn", extras = ["standard"], specifier = "==0.34.0" },
@@ -3257,7 +3280,8 @@ wheels = [
 [package.optional-dependencies]
 torch = [
     { name = "numpy", marker = "sys_platform == 'linux'" },
-    { name = "torch", marker = "sys_platform == 'linux'" },
+    { name = "torch", version = "2.7.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+    { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
 ]
 
 [[package]]
@@ -3586,30 +3610,77 @@ wheels = [
 
 [[package]]
 name = "torch"
-version = "2.7.1+cpu"
-source = { registry = "https://download.pytorch.org/whl/cpu" }
+version = "2.7.1"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "platform_machine == 'arm64' and sys_platform == 'linux'",
+    "platform_machine != 'aarch64' and platform_machine != 'arm64' and platform_machine != 'x86_64' and sys_platform == 'linux'",
+]
 dependencies = [
-    { name = "filelock", marker = "sys_platform == 'linux'" },
-    { name = "fsspec", marker = "sys_platform == 'linux'" },
-    { name = "jinja2", marker = "sys_platform == 'linux'" },
-    { name = "networkx", marker = "sys_platform == 'linux'" },
-    { name = "setuptools", marker = "sys_platform == 'linux'" },
-    { name = "sympy", marker = "sys_platform == 'linux'" },
-    { name = "typing-extensions", marker = "sys_platform == 'linux'" },
+    { name = "filelock", marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+    { name = "fsspec", marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+    { name = "jinja2", marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+    { name = "networkx", marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+    { name = "setuptools", marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+    { name = "sympy", marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+    { name = "typing-extensions", marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
 ]
 wheels = [
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:3bf2db5adf77b433844f080887ade049c4705ddf9fe1a32023ff84ff735aa5ad" },
+    { url = "https://files.pythonhosted.org/packages/87/93/fb505a5022a2e908d81fe9a5e0aa84c86c0d5f408173be71c6018836f34e/torch-2.7.1-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:27ea1e518df4c9de73af7e8a720770f3628e7f667280bce2be7a16292697e3fa", size = 98948276, upload-time = "2025-06-04T17:39:12.852Z" },
+    { url = "https://files.pythonhosted.org/packages/56/7e/67c3fe2b8c33f40af06326a3d6ae7776b3e3a01daa8f71d125d78594d874/torch-2.7.1-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:c33360cfc2edd976c2633b3b66c769bdcbbf0e0b6550606d188431c81e7dd1fc", size = 821025792, upload-time = "2025-06-04T17:34:58.747Z" },
+]
+
+[[package]]
+name = "torch"
+version = "2.7.1+cpu"
+source = { registry = "https://download.pytorch.org/whl/cpu" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux'",
+]
+dependencies = [
+    { name = "filelock", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "fsspec", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "jinja2", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "networkx", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "setuptools", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "sympy", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "typing-extensions", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+]
+wheels = [
     { url = "https://download.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:8f8b3cfc53010a4b4a3c7ecb88c212e9decc4f5eeb6af75c3c803937d2d60947" },
+]
+
+[[package]]
+name = "torchvision"
+version = "0.22.1"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "platform_machine == 'arm64' and sys_platform == 'linux'",
+    "platform_machine != 'aarch64' and platform_machine != 'arm64' and platform_machine != 'x86_64' and sys_platform == 'linux'",
+]
+dependencies = [
+    { name = "numpy", marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+    { name = "pillow", marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+    { name = "torch", version = "2.7.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/25/f6/53e65384cdbbe732cc2106bb04f7fb908487e4fb02ae4a1613ce6904a122/torchvision-0.22.1-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:964414eef19459d55a10e886e2fca50677550e243586d1678f65e3f6f6bac47a", size = 2514576, upload-time = "2025-06-04T17:43:02.707Z" },
+    { url = "https://files.pythonhosted.org/packages/17/8b/155f99042f9319bd7759536779b2a5b67cbd4f89c380854670850f89a2f4/torchvision-0.22.1-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:699c2d70d33951187f6ed910ea05720b9b4aaac1dcc1135f53162ce7d42481d3", size = 7485962, upload-time = "2025-06-04T17:42:43.606Z" },
 ]
 
 [[package]]
 name = "torchvision"
 version = "0.22.1+cpu"
 source = { registry = "https://download.pytorch.org/whl/cpu" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux'",
+]
 dependencies = [
-    { name = "numpy", marker = "sys_platform == 'linux'" },
-    { name = "pillow", marker = "sys_platform == 'linux'" },
-    { name = "torch", marker = "sys_platform == 'linux'" },
+    { name = "numpy", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "pillow", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
 ]
 wheels = [
     { url = "https://download.pytorch.org/whl/cpu/torchvision-0.22.1%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:b5fa7044bd82c6358e8229351c98070cf3a7bf4a6e89ea46352ae6c65745ef94" },

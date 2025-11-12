@@ -219,6 +219,19 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost,
       }),
     }),
+    lightweightMarkdownKnowledgeFlowV1LiteMarkdownPost: build.mutation<
+      LightweightMarkdownKnowledgeFlowV1LiteMarkdownPostApiResponse,
+      LightweightMarkdownKnowledgeFlowV1LiteMarkdownPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/lite/markdown`,
+        method: "POST",
+        body: queryArg.bodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost,
+        params: {
+          format: queryArg.format,
+        },
+      }),
+    }),
     listTabularDatabases: build.query<ListTabularDatabasesApiResponse, ListTabularDatabasesApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/tabular/databases` }),
     }),
@@ -738,6 +751,12 @@ export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiResp
 export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiArg = {
   bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost: BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost;
 };
+export type LightweightMarkdownKnowledgeFlowV1LiteMarkdownPostApiResponse = /** status 200 Successful Response */ any;
+export type LightweightMarkdownKnowledgeFlowV1LiteMarkdownPostApiArg = {
+  /** Response format: 'json' or 'text' */
+  format?: string;
+  bodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost: BodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost;
+};
 export type ListTabularDatabasesApiResponse = /** status 200 Successful Response */ string[];
 export type ListTabularDatabasesApiArg = void;
 export type LoadTabularDatabaseApiResponse = /** status 200 Successful Response */ any;
@@ -1159,6 +1178,11 @@ export type BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost = 
   files: Blob[];
   metadata_json: string;
 };
+export type BodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost = {
+  file: Blob;
+  /** JSON string of LiteMarkdownOptions */
+  options_json?: string | null;
+};
 export type ListTableResponse = {
   db_name: string;
   tables: string[];
@@ -1242,7 +1266,6 @@ export type TagCreate = {
   path?: string | null;
   description?: string | null;
   type: TagType;
-  item_ids?: string[];
 };
 export type TagUpdate = {
   name: string;
@@ -1545,6 +1568,7 @@ export const {
   useDeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteMutation,
   useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
+  useLightweightMarkdownKnowledgeFlowV1LiteMarkdownPostMutation,
   useListTabularDatabasesQuery,
   useLazyListTabularDatabasesQuery,
   useLoadTabularDatabaseMutation,

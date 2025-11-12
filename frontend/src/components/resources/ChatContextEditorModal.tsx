@@ -13,15 +13,7 @@
 // limitations under the License.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  TextField,
-} from "@mui/material";
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField } from "@mui/material";
 import yaml from "js-yaml";
 import { ResourceKind, useKindLabels } from "./resourceLabels";
 
@@ -30,18 +22,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import {
-  buildFrontMatter,
-  buildProfileYaml,
-  looksLikeYamlDoc,
-  splitFrontMatter,
-} from "./resourceYamlUtils";
+import { buildFrontMatter, buildProfileYaml, looksLikeYamlDoc, splitFrontMatter } from "./resourceYamlUtils";
 const profileSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
   body: z.string().min(1, "Profile body is required"),
 });
-
 
 type ProfileFormData = z.infer<typeof profileSchema>;
 
@@ -78,7 +64,7 @@ export const ChatContextEditorModal: React.FC<ChatContextEditorModalProps> = ({
   const { one: typeOne } = useKindLabels(kind ?? "chat-context");
 
   // ----- Simple mode form (create) -----
-  
+
   const {
     register,
     handleSubmit,
@@ -110,18 +96,17 @@ export const ChatContextEditorModal: React.FC<ChatContextEditorModalProps> = ({
     }
   }, [isOpen, isDocMode, incomingDoc, initial?.name, initial?.description, reset]);
 
-
   // ----- Submit handlers -----
   const onSubmitSimple = (data: ProfileFormData) => {
     const body = (data.body || "").trim();
     const content = looksLikeYamlDoc(body)
       ? body
       : buildProfileYaml({
-        name: data.name,
-        description: data.description || undefined,
-        labels: undefined,
-        body,
-      });
+          name: data.name,
+          description: data.description || undefined,
+          labels: undefined,
+          body,
+        });
 
     const payload: ResourceCreateLike = {
       name: data.name,
@@ -155,13 +140,10 @@ export const ChatContextEditorModal: React.FC<ChatContextEditorModalProps> = ({
     onClose();
   };
 
-
   return (
     <Dialog open={isOpen} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>
-        {initial
-          ? t("resourceLibrary.editResource", { typeOne })
-          : t("resourceLibrary.createResource", { typeOne })}
+        {initial ? t("resourceLibrary.editResource", { typeOne }) : t("resourceLibrary.createResource", { typeOne })}
       </DialogTitle>
       {/* Render either simple or doc form */}
       {isDocMode ? (

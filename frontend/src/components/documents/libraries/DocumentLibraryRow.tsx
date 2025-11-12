@@ -53,7 +53,7 @@ export function DocumentRowCompact({
   const canDeleteDocument = can("document", "delete");
 
   const formatDate = (date?: string) => (date ? dayjs(date).format("DD/MM/YYYY") : "-");
-  const isPdf = doc.identity.document_name.toLowerCase().endsWith('.pdf');
+  const isPdf = doc.identity.document_name.toLowerCase().endsWith(".pdf");
 
   return (
     <Box
@@ -82,12 +82,10 @@ export function DocumentRowCompact({
           {doc.identity.document_name || doc.identity.document_uid}
         </Typography>
       </Box>
-
       {/* 2) Summary (peek + dialog). Rationale: keep doc “why” close to the name. */}
       <Box sx={{ justifySelf: "start" }}>
         <SummaryPreview summary={doc.summary} docTitle={doc.identity.title ?? doc.identity.document_name} />
       </Box>
-
       {/* 3) Keywords (compact trigger + grouped dialog) */}
       <Box sx={{ justifySelf: "start" }}>
         {doc.summary?.keywords && doc.summary.keywords.length > 0 ? (
@@ -102,16 +100,13 @@ export function DocumentRowCompact({
           </Typography>
         )}
       </Box>
-
       <Box sx={{ justifySelf: "start" }}>
         {/* 🆕 Condition to show PDF button instead of standard preview */}
         {onPdfPreview && isPdf ? (
-          <Tooltip 
-            title={t("documentLibrary.viewOriginalPdf", "View Original PDF")}
-          >
-            <IconButton 
-              size="small" 
-              onClick={() => onPdfPreview(doc)} 
+          <Tooltip title={t("documentLibrary.viewOriginalPdf", "View Original PDF")}>
+            <IconButton
+              size="small"
+              onClick={() => onPdfPreview(doc)}
               aria-label={t("documentLibrary.viewOriginalPdf")}
             >
               <PictureAsPdfIcon fontSize="inherit" />
@@ -125,7 +120,8 @@ export function DocumentRowCompact({
             </IconButton>
           </Tooltip>
         ) : null}
-      </Box>      {/* 5) Status pills */}
+      </Box>{" "}
+      {/* 5) Status pills */}
       <Box sx={{ display: "flex", gap: 0.5, justifySelf: "start" }}>
         {DOCUMENT_PROCESSING_STAGES.map((stage) => {
           const status = doc.processing.stages?.[stage] ?? "not_started";
@@ -158,7 +154,6 @@ export function DocumentRowCompact({
           );
         })}
       </Box>
-
       {/* 6) Date added */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, justifySelf: "start" }}>
         <Tooltip title={doc.source.date_added_to_kb}>
@@ -170,7 +165,6 @@ export function DocumentRowCompact({
           </Box>
         </Tooltip>
       </Box>
-
       {/* 7) Searchable toggle */}
       <Box sx={{ justifySelf: "start" }}>
         <Tooltip
@@ -204,7 +198,6 @@ export function DocumentRowCompact({
           </span>
         </Tooltip>
       </Box>
-
       {/* 8) Actions (download/remove) */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, justifySelf: "end" }}>
         {onDownload && (
@@ -216,16 +209,16 @@ export function DocumentRowCompact({
         )}
         {onRemoveFromLibrary && (
           <Tooltip title={t("documentLibrary.removeFromLibrary")}>
-              <IconButton
-                size="small"
-                disabled={!canDeleteDocument}
-                onClick={() => {
-                  if (!canDeleteDocument) return;
-                  onRemoveFromLibrary(doc);
-                }}
-              >
-                <DeleteIcon fontSize="inherit" />
-              </IconButton>
+            <IconButton
+              size="small"
+              disabled={!canDeleteDocument}
+              onClick={() => {
+                if (!canDeleteDocument) return;
+                onRemoveFromLibrary(doc);
+              }}
+            >
+              <DeleteIcon fontSize="inherit" />
+            </IconButton>
           </Tooltip>
         )}
       </Box>

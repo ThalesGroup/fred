@@ -4,7 +4,8 @@
     "noneSelected": "Aucune sélection",
     "close": "Fermer",
     "remove": "Supprimer",
-    "loading": "Chargement…"
+    "loading": "Chargement…",
+    "beta": "Bêta"
   },
   "resource": {
     "kind": {
@@ -50,13 +51,14 @@
       "optimize": "Consulter les gains d'optimisation",
       "chat": "Discuter avec l'assistant IA",
       "monitoring": "Superviser les appels IA backend",
-      "knowledge": "Consulter le vos bibliothèque de documents et de prompts",
+      "knowledge": "Consulter vos bibliothèques de documents et de prompts",
       "agent": "Voir les agents",
       "workspaces": "Voir les espaces",
       "account": "Voir votre profil",
       "selectCluster": "Veuillez d'abord sélectionner un cluster",
       "monitoring_kpi": "Vue d'ensemble des Kpis",
-      "monitoring_logs": "Console de logs"
+      "monitoring_logs": "Console de logs",
+      "monitoring_runtime": "Résumé d'exécution"
     },
     "theme": {
       "light": "clair",
@@ -67,7 +69,17 @@
       "website": "Site web"
     },
     "monitoring_kpi": "Kpis",
-    "monitoring_logs": "Logs"
+    "monitoring_logs": "Logs",
+    "monitoring_runtime": "Runtime"
+  },
+  "runtime": {
+    "title": "Résumé d'exécution",
+    "sessions": "Sessions",
+    "activeAgents": "Agents actifs",
+    "attachments": "Pièces jointes",
+    "sessionsWithAttachments": "Sessions avec pièces jointes",
+    "maxAttachmentsPerSession": "Pièces jointes max/session",
+    "error": "Échec du chargement du résumé"
   },
   "assetManager": {
     "title": "Gérer les ressources pour {{agentId}}",
@@ -132,7 +144,7 @@
       "name": "Nom",
       "nickname": "Diminutif",
       "description": "Description",
-      "role": "Role",
+      "role": "Rôle",
       "base_prompt": "Prompt",
       "agent_type": "Type d'agent",
       "icon": "Icône",
@@ -149,7 +161,7 @@
       }
     },
     "actions": {
-      "add_mcp_server": "+ Ajouter un Serveur MCP"
+      "add_mcp_server": "+ Ajouter un serveur MCP"
     },
     "errors": {
       "updateFailed": "Échec de la mise à jour de l'agent",
@@ -172,6 +184,7 @@
     },
     "attachFiles": "Joindre des fichiers",
     "attachments": {
+      "betaNotice": "Les pièces jointes sont en version bêta. Seuls les fichiers CSV, docx et pdf sont pris en charge. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
       "count": "{{count}} joints"
     },
     "recordAudio": "Enregistrer de l'audio",
@@ -184,7 +197,6 @@
     "searchPromptLibraries": "Rechercher dans les bibliothèques de prompts...",
     "searchChatContextLibraries": "Rechercher dans les bibliothèques de contextes de conversations...",
     "startNew": "Commencer une nouvelle conversation avec {{name}}",
-    "changeAssistant": "Vous pouvez sélectionner un autre assistant dans le panneau des paramètres.",
     "tooltip": {
       "tokenUsage": "Cette conversation a utilisé {{input}} jetons de prompt et {{output}} jetons de réponse",
       "tokenCount": "Cette conversation a utilisé {{total}} jetons",
@@ -208,6 +220,8 @@
     "noConversation": "Aucune conversation",
     "delete": "Supprimer",
     "deleteAll": "Tout supprimer",
+    "confirmDeleteAllTitle": "Supprimer toutes les conversations ?",
+    "confirmDeleteAllMessage": "Cette action supprimera toutes les conversations définitivement. Voulez-vous continuer ?",
     "conversationSetup": "Configuration de la conversation",
     "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
     "draftNotSaved": "Brouillon • non encore enregistré",
@@ -412,7 +426,7 @@
     "folderDeleteDetail": "Le dossier « {{name}} » a été supprimé.",
     "searchPlaceholder": "Rechercher un(e) {{typeOne}}",
     "importDrawerTitle": "Importer un(e) {{typeOne}}",
-    "dropFiles": "Deposez vos {{typePlural}} ici",
+    "dropFiles": "Déposez vos {{typePlural}} ici",
     "noFiles": "Aucun(e) {{typeOne}} trouvé(e)",
     "import": "Importer",
     "selected": "Sélectionné",
@@ -423,11 +437,14 @@
     "bulkRemoveFromLibrary": "Supprimer de la bibliothèque",
     "removedOneResource": "{{typeOne, capitalize}} supprimé(e) de la bibliothèque.",
     "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
-    "confirmRemoveMessage": "Supprimer « {{res}} » de « {{folder}} » ?"
+    "confirmRemoveMessage": "Supprimer « {{res}} » de « {{folder}} » ?",
+    "emptyLibrariesTitle": "Aucune bibliothèque pour le moment",
+    "emptyLibrariesDescription": "Créez votre première bibliothèque pour organiser vos {{typePlural}}.",
+    "emptyLibrariesAction": "Créer une bibliothèque"
   },
   "documentLibraryTree": {
     "shareFolder": "Partager le dossier",
-    "shareFolderWithName": "Partagez \"{{name}}\"",
+    "shareFolderWithName": "Partager \"{{name}}\"",
     "deleteFolder": "Supprimer le dossier",
     "deleteFolderDisabled": "Une bibliothèque doit être vide pour être supprimée"
   },
@@ -441,14 +458,14 @@
     "dateAdded": "Date d'ajout",
     "retrievableYes": "Consultable",
     "retrievableNo": "Exclu",
-    "status": "Status",
+    "status": "Statu",
     "actions": "Actions",
     "loadingMetadata": "Chargement des métadonnées...",
     "noMetadata": "Aucune métadonnée disponible.",
     "yes": "Oui",
     "no": "Non",
     "librairies": "Bibliothèques",
-    "nowSearchable": "Maintenant cherchable",
+    "nowSearchable": "Désormais inclus dans la recherche",
     "nowExcluded": "Désormais exclu de la recherche"
   },
   "documentDrawerTable": {
@@ -478,7 +495,10 @@
     "documentCountPlural": "{{count}} documents",
     "createLibrary": "Créer une bibliothèque de documents",
     "collapseAll": "Tout réduire",
-    "expandAll": "Tout développer"
+    "expandAll": "Tout développer",
+    "emptyFoldersTitle": "Aucune bibliothèque pour le moment",
+    "emptyFoldersDescription": "Créez votre première bibliothèque pour organiser les documents et garder les ajouts rangés.",
+    "emptyFoldersAction": "Créer une bibliothèque"
   },
   "libraryCreateDrawer": {
     "title": "Créer une nouvelle bibliothèque",
@@ -564,5 +584,8 @@
     "sectionchatContextSingular": "CONTEXTE DE CONVERSATION",
     "sectionchatContextsPlural": "CONTEXTES DE CONVERSATION",
     "disclaimer": "Le contenu généré par l’IA peut être incorrect."
+  },
+  "agentSelector": {
+    "sendTo": "Envoyer à"
   }
 }

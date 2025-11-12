@@ -29,7 +29,12 @@ import-order-fix: ## Run the formatter (ruff) to fix import order
 	$(UV) run ruff check --select I --fix
 
 .PHONY: format
-format: ## Run the formatter (ruff)
+format: ## Run the formatter (ruff) to check for format errors
+	@echo "************ Executing Ruff formatter ************"
+	$(UV) run ruff format --check
+
+.PHONY: format
+format-fix: ## Run the formatter (ruff) to fix format errors
 	@echo "************ Executing Ruff formatter ************"
 	$(UV) run ruff format
 
@@ -70,11 +75,11 @@ baseline-sast: ${BASELINE_DIR} ## Set bandit baseline
 
 .PHONY: baseline-detect-secret
 baseline-detect-secret: ${BASELINE_DIR} ## Set detect-secrets baseline
-	cd .. && ${VENV}/bin/detect-secrets scan $(CURDIR) > ${DETECT_SECRET_BASELINE_FILE} 
+	cd .. && ${VENV}/bin/detect-secrets scan $(CURDIR) > ${DETECT_SECRET_BASELINE_FILE}
 
 .PHONY: baseline-type-check
 baseline-type-check: ${BASELINE_DIR} ## Set basedpyright baseline
-	${UV} run basedpyright --baseline-file ${BASEDPYRIGHT_BASELINE_FILE} --writebaseline 
+	${UV} run basedpyright --baseline-file ${BASEDPYRIGHT_BASELINE_FILE} --writebaseline
 
 .PHONY: baseline
 baseline: format ## Format code and set all baselines

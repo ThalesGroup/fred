@@ -45,14 +45,14 @@ export function useAuth() {
 
 /**
  * Custom hook to retrieve the raw JWT/access token from Keycloak.
- * * * This utilizes KeyCloakService.GetToken(), which handles both production (real KC token) 
+ * * * This utilizes KeyCloakService.GetToken(), which handles both production (real KC token)
  * and development (local dev admin token) modes correctly.
  * * @returns The raw access token string, or undefined if not authenticated.
  */
 export function useAuthToken(): string | undefined {
   // Retrieve the token using the service's defined getter
   const token = KeyCloakService.GetToken();
-  
+
   // GetToken returns string | null, so we cast null to undefined for TypeScript
   return token || undefined;
 }

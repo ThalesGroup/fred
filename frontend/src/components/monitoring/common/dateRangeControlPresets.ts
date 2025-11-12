@@ -4,15 +4,16 @@
 import dayjs, { Dayjs } from "dayjs";
 import type { QuickRangeItem } from "./DateRangeControl";
 
-const last = (n: number, unit: dayjs.ManipulateType, round?: "hour" | "day" | "none") =>
+const last =
+  (n: number, unit: dayjs.ManipulateType, round?: "hour" | "day" | "none") =>
   (now: Dayjs): [Dayjs, Dayjs] => {
     const end = round === "hour" ? now.endOf("hour") : round === "day" ? now.endOf("day") : now;
     const start =
       round === "hour"
         ? end.subtract(n, unit).startOf("hour")
         : round === "day"
-        ? end.subtract(n, unit).startOf("day")
-        : end.subtract(n, unit);
+          ? end.subtract(n, unit).startOf("day")
+          : end.subtract(n, unit);
     return [start, end];
   };
 
@@ -26,9 +27,34 @@ export const SHORT_QUICK_RANGES: QuickRangeItem[] = [
 
 export const FULL_QUICK_RANGES: QuickRangeItem[] = [
   ...SHORT_QUICK_RANGES,
-  { id: "today", labelKey: "metrics.range.today", labelFallback: "Today", compute: (n) => [n.startOf("day"), n.endOf("day")] },
-  { id: "yesterday", labelKey: "metrics.range.yesterday", labelFallback: "Yesterday", compute: (n) => [n.subtract(1, "day").startOf("day"), n.subtract(1, "day").endOf("day")] },
-  { id: "thisWeek", labelKey: "metrics.range.thisWeek", labelFallback: "This week", compute: (n) => [n.startOf("week"), n.endOf("week")] },
-  { id: "thisMonth", labelKey: "metrics.range.thisMonth", labelFallback: "This month", compute: (n) => [n.startOf("month"), n.endOf("month")] },
-  { id: "thisYear", labelKey: "metrics.range.thisYear", labelFallback: "This year", compute: (n) => [n.startOf("year"), n.endOf("year")] },
+  {
+    id: "today",
+    labelKey: "metrics.range.today",
+    labelFallback: "Today",
+    compute: (n) => [n.startOf("day"), n.endOf("day")],
+  },
+  {
+    id: "yesterday",
+    labelKey: "metrics.range.yesterday",
+    labelFallback: "Yesterday",
+    compute: (n) => [n.subtract(1, "day").startOf("day"), n.subtract(1, "day").endOf("day")],
+  },
+  {
+    id: "thisWeek",
+    labelKey: "metrics.range.thisWeek",
+    labelFallback: "This week",
+    compute: (n) => [n.startOf("week"), n.endOf("week")],
+  },
+  {
+    id: "thisMonth",
+    labelKey: "metrics.range.thisMonth",
+    labelFallback: "This month",
+    compute: (n) => [n.startOf("month"), n.endOf("month")],
+  },
+  {
+    id: "thisYear",
+    labelKey: "metrics.range.thisYear",
+    labelFallback: "This year",
+    compute: (n) => [n.startOf("year"), n.endOf("year")],
+  },
 ];

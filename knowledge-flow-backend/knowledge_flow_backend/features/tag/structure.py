@@ -20,14 +20,21 @@ from fred_core import BaseModelWithId, RelationType, Resource, TagPermission
 from pydantic import BaseModel, Field, field_validator
 
 from knowledge_flow_backend.features.groups.groups_structures import GroupSummary
+from knowledge_flow_backend.features.resources.structures import ResourceKind
 from knowledge_flow_backend.features.users.users_structures import UserSummary
+
+VALID_RESOURCE_KIND_IN_TAG = {}
 
 
 class TagType(str, Enum):
     DOCUMENT = "document"
-    PROMPT = "prompt"
-    TEMPLATE = "template"
-    CHAT_CONTEXT = "chat-context"
+    PROMPT = ResourceKind.PROMPT.value
+    TEMPLATE = ResourceKind.TEMPLATE.value
+    CHAT_CONTEXT = ResourceKind.CHAT_CONTEXT.value
+
+    def to_resource_kind(self):
+        """Convert TagType to ResourceKind. Can raise a ValueError if TagType is not a valid ResourceKind"""
+        return ResourceKind(self.value)
 
 
 def _normalize_path(p: Optional[str]) -> Optional[str]:
@@ -48,12 +55,6 @@ class TagCreate(BaseModel):
     path: Optional[str] = None
     description: Optional[str] = None
     type: TagType
-    item_ids: list[str] = []
-
-    @field_validator("item_ids")
-    @classmethod
-    def _no_none_ids(cls, v):
-        return [i for i in v if i]
 
     @field_validator("path")
     @classmethod

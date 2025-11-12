@@ -28,7 +28,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/agentic-backend
-      tag: "0.1"
+      tag: "v1.0.0"
       pullPolicy: IfNotPresent
     command:
       enabled: true
@@ -212,19 +212,21 @@ applications:
             enabled: false
       mcp:
         servers:
-          - name: "knowledge-flow-mcp-tabular"
+          - name: "mcp-knowledge-flow-mcp-tabular"
             transport: "streamable_http"
             url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
             sse_read_timeout: 2000
-          - name: "knowledge-flow-mcp-opensearch-ops"
+            auth_mode: "user_token"
+          - name: "mcp-knowledge-flow-opensearch-ops"
             transport: "streamable_http"
             url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops"
             sse_read_timeout: 2000
+            auth_mode: "user_token"
           - name: "mcp-kubernetes-server"
             transport: "streamable_http"
             url: "http://mcp-kubernetes-server:8081/mcp"
             sse_read_timeout: 2000
-
+            auth_mode: "user_token"
       storage:
         postgres:
           host: localhost
@@ -276,7 +278,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/frontend
-      tag: "0.1"
+      tag: "v1.0.0"
       pullPolicy: IfNotPresent
     command:
       enabled: false
@@ -391,7 +393,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
-      tag: "0.1"
+      tag: "v1.0.0"
     command:
       enabled: true
       data:
@@ -563,6 +565,12 @@ applications:
           # openai: nothing else required (keys in .env)
           # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
           # ollama: { base_url: "http://localhost:11434"
+      vision_model:
+        provider: openai
+        name: gpt-4o-mini # or gpt-4o if you want higher fidelity
+        settings:
+          temperature: 0 # optional
+          max_retries: 2 # optional
       storage:
         postgres:
           host: localhost

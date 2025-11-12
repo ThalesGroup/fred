@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import * as React from "react";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
+import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import { Box, Checkbox, IconButton, Tooltip } from "@mui/material";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
-import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
-import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
-import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import * as React from "react";
 
-import { TagNode } from "../tags/tagTree";
 import { Resource, TagWithItemsId } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { TagNode } from "../tags/tagTree";
 import { ResourceRowCompact } from "./ResourceRowCompact";
 
 /* --------------------------------------------------------------------------
@@ -51,11 +51,6 @@ function resourcesInSubtree(root: TagNode, all: Resource[], getChildren: (n: Tag
     for (const ch of getChildren(cur)) stack.push(ch);
   }
   return out;
-}
-
-/** Count of direct items on this folder’s tag(s) (source of truth, not filtered). */
-function directItemCount(node: TagNode): number {
-  return (node.tagsHere ?? []).reduce((sum, t) => sum + (t.item_ids?.length ?? 0), 0);
 }
 
 /* --------------------------------------------------------------------------
@@ -151,8 +146,7 @@ export function ResourceLibraryTree({
       const folderChecked = totalForTag > 0 && selectedForTag === totalForTag;
       const folderIndeterminate = selectedForTag > 0 && selectedForTag < totalForTag;
 
-      // Empty = no subfolders + no direct items on this node’s tag(s)
-      const isEmptyFolder = c.children.size === 0 && directItemCount(c) === 0 && !!hereTag;
+      const canBeDeleted = !!hereTag && !!onDeleteFolder;
 
       return (
         <TreeItem
@@ -171,7 +165,7 @@ export function ResourceLibraryTree({
               }}
               onClick={(e) => {
                 e.stopPropagation();
-                setSelectedFolder(isSelected ? null : c.full); 
+                setSelectedFolder(isSelected ? null : c.full);
               }}
             >
               {/* Left: tri-state + folder icon + name */}
@@ -192,21 +186,20 @@ export function ResourceLibraryTree({
               </Box>
 
               {/* Right: delete (only when selected + empty + real tag + handler) */}
-              {isSelected && isEmptyFolder && hereTag && onDeleteFolder && (
-                <Box sx={{ ml: "auto", display: "flex", alignItems: "center" }}>
-                  <Tooltip title="Delete folder">
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteFolder(hereTag);
-                      }}
-                    >
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-              )}
+              <Box sx={{ ml: "auto", display: "flex", alignItems: "center" }}>
+                <Tooltip title="Delete folder">
+                  <IconButton
+                    size="small"
+                    disabled={!canBeDeleted}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteFolder(hereTag);
+                    }}
+                  >
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
             </Box>
           }
         >

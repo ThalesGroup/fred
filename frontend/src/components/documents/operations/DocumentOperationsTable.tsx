@@ -224,15 +224,15 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
         />
       )}
 
-    <TableContainer
-      sx={{
-        flex: 1,
-        minHeight: 0,
-        height: "100%",
-        width: "100%",
-        maxHeight: "40vh",
-        overflowY: "auto",
-      }}
+      <TableContainer
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          height: "100%",
+          width: "100%",
+          maxHeight: "40vh",
+          overflowY: "auto",
+        }}
       >
         <Table size="medium">
           <TableHead>

@@ -1,0 +1,105 @@
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import { Box, BoxProps, Button, List, ListItemButton, Popover, Typography, useTheme } from "@mui/material";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { AnyAgent } from "../../../common/agent";
+import { AgentChipWithIcon } from "../../../common/AgentChip";
+import { AgentTooltip } from "../../../common/AgentTooltip";
+export type AgentSelectorProps = AgentPopoverPickerProps & Pick<BoxProps, "sx">;
+
+export function AgentSelector({ sx, currentAgent, agents, onSelectNewAgent }: AgentSelectorProps) {
+  const theme = useTheme();
+  const { t } = useTranslation();
+
+  const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
+  const handleOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+  const isPickerOpen = Boolean(anchorEl);
+
+  return (
+    <>
+      {/* Current agent name */}
+      <Box
+        sx={{
+          border: `1px solid ${theme.palette.divider}`,
+          borderBottom: "0px",
+          borderTopLeftRadius: "16px",
+          borderTopRightRadius: "16px",
+          background: theme.palette.background.paper,
+          paddingX: 2,
+          paddingY: 0.5,
+          display: "flex",
+          gap: 0.5,
+          alignItems: "center",
+          justifyContent: "center",
+          ...sx,
+        }}
+      >
+        <Typography>{t("agentSelector.sendTo")}</Typography>
+        <Button
+          sx={{
+            color: "inherit",
+            padding: 0.5,
+            borderRadius: "16px",
+          }}
+          onClick={handleOpen}
+        >
+          <AgentChipWithIcon agent={currentAgent} />
+
+          {isPickerOpen ? <KeyboardArrowUpIcon sx={{ ml: 0.5 }} /> : <KeyboardArrowDownIcon sx={{ ml: 0.5 }} />}
+        </Button>
+      </Box>
+
+      {/* Popover to select agent */}
+      <Popover
+        open={isPickerOpen}
+        anchorEl={anchorEl}
+        onClose={handleClose}
+        anchorOrigin={{
+          vertical: "top",
+          horizontal: "center",
+        }}
+        transformOrigin={{
+          vertical: "bottom",
+          horizontal: "center",
+        }}
+      >
+        <AgentPopoverPicker
+          currentAgent={currentAgent}
+          agents={agents}
+          onSelectNewAgent={(agent) => {
+            handleClose();
+            onSelectNewAgent(agent);
+          }}
+        />
+      </Popover>
+    </>
+  );
+}
+
+export interface AgentPopoverPickerProps {
+  currentAgent: AnyAgent;
+  agents: AnyAgent[];
+  onSelectNewAgent: (flow: AnyAgent) => void;
+}
+
+export function AgentPopoverPicker({ currentAgent, agents, onSelectNewAgent }: AgentPopoverPickerProps) {
+  return (
+    <List>
+      {agents.map((agent) => {
+        return (
+          <AgentTooltip agent={agent}>
+            <ListItemButton onClick={() => onSelectNewAgent(agent)} selected={agent.name === currentAgent.name}>
+              <AgentChipWithIcon agent={agent} />
+            </ListItemButton>
+          </AgentTooltip>
+        );
+      })}
+    </List>
+  );
+}

@@ -4,7 +4,8 @@
     "noneSelected": "None selected",
     "close": "Close",
     "remove": "Remove",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "beta": "Beta"
   },
   "resource": {
     "kind": {
@@ -56,7 +57,8 @@
       "account": "View your account",
       "selectCluster": "Please select a cluster first",
       "monitoring_kpi": "Kpi Dashboard",
-      "monitoring_logs": "Log Console"
+      "monitoring_logs": "Log Console",
+      "monitoring_runtime": "Runtime summary"
     },
     "theme": {
       "light": "light",
@@ -67,7 +69,17 @@
       "website": "Website"
     },
     "monitoring_kpi": "Kpis",
-    "monitoring_logs": "Logs"
+    "monitoring_logs": "Logs",
+    "monitoring_runtime": "Runtime"
+  },
+  "runtime": {
+    "title": "Runtime Summary",
+    "sessions": "Sessions",
+    "activeAgents": "Active agents",
+    "attachments": "Attachments",
+    "sessionsWithAttachments": "Sessions with attachments",
+    "maxAttachmentsPerSession": "Max attachments/session",
+    "error": "Failed to load runtime summary"
   },
   "assetManager": {
     "title": "Manage Assets for {{agentId}}",
@@ -172,8 +184,10 @@
     },
     "attachFiles": "Attach files",
     "attachments": {
+      "betaNotice": "File attachments are in beta. Only CSV, docx and pdf files are supported. Please provide feedback to help us improve this feature.",
       "count": "{{count}} attached"
     },
+
     "recordAudio": "Record audio",
     "sendMessage": "Send message",
     "stopResponse": "Stop response",
@@ -184,7 +198,6 @@
     "searchPromptLibraries": "Search prompt libraries...",
     "searchChatContextLibraries": "Search chat context libraries...",
     "startNew": "Start a new conversation with {{name}}",
-    "changeAssistant": "You can select another assistant in the settings panel.",
     "tooltip": {
       "tokenUsage": "This conversation has used {{input}} prompt tokens and {{output}} response tokens",
       "tokenCount": "This conversation has used {{total}} tokens",
@@ -208,6 +221,8 @@
     "noConversation": "No conversation",
     "delete": "Delete",
     "deleteAll": "Delete all",
+    "confirmDeleteAllTitle": "Delete all conversations?",
+    "confirmDeleteAllMessage": "This action will permanently delete all conversations. Do you want to continue?",
     "chatContext": "Chat context",
     "conversationSetup": "Conversation setup",
     "newConversationHelp": "Start a new conversation (not yet saved)",
@@ -423,7 +438,10 @@
     "bulkRemoveFromLibrary": "Remove from library",
     "removedOneResource": "{{typeOne, capitalize}} removed from library.",
     "confirmRemoveTitle": "Remove from library?",
-    "confirmRemoveMessage": "Remove « {{res}} » from « {{folder}} »?"
+    "confirmRemoveMessage": "Remove « {{res}} » from « {{folder}} »?",
+    "emptyLibrariesTitle": "No libraries yet",
+    "emptyLibrariesDescription": "Create your first library to organize your {{typePlural}}.",
+    "emptyLibrariesAction": "Create library"
   },
   "documentLibraryTree": {
     "shareFolder": "Share folder",
@@ -478,7 +496,10 @@
     "documentCountPlural": "{{count}} documents",
     "createLibrary": "Create Document Library",
     "collapseAll": "Collapse all",
-    "expandAll": "Expand all"
+    "expandAll": "Expand all",
+    "emptyFoldersTitle": "No libraries yet",
+    "emptyFoldersDescription": "Create your first library to organize these documents and keep uploads tidy.",
+    "emptyFoldersAction": "Create library"
   },
   "libraryCreateDrawer": {
     "title": "Create New Library",
@@ -564,5 +585,8 @@
     "sectionChatContextSingular": "CHAT CONTEXT",
     "sectionChatContextsPlural": "CHAT CONTEXTS",
     "disclaimer": "AI content may be incorrect."
+  },
+  "agentSelector": {
+    "sendTo": "Send to"
   }
 }

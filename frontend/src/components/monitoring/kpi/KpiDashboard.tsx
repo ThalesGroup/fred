@@ -145,13 +145,13 @@ export default function KpiDashboard() {
       {/* Single Paper host: global filters only */}
       <DashboardCard>
         <DateRangeControl
-                  startDate={startDate}
-                  endDate={endDate}
-                  setStartDate={setStartDate}
-                  setEndDate={setEndDate} 
-                  quickRanges={FULL_QUICK_RANGES}
-                  toleranceMs={90_000} // tighter match for short windows
-                />
+          startDate={startDate}
+          endDate={endDate}
+          setStartDate={setStartDate}
+          setEndDate={setEndDate}
+          quickRanges={FULL_QUICK_RANGES}
+          toleranceMs={90_000} // tighter match for short windows
+        />
       </DashboardCard>
 
       {/* Compact grid; frameless tiles (Boxes) to avoid Paper-in-Paper */}

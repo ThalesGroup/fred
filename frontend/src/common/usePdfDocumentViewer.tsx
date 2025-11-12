@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 import { useDrawer } from "../components/DrawerProvider";
 import PdfStreamingDocumentViewer from "./PdfStreamingDocumentViewer";
 
@@ -26,13 +25,8 @@ export const usePdfDocumentViewer = () => {
 
   const openPdfDocument = (doc: PdfDocumentData) => {
     openDrawer({
-      content: (
-        <PdfStreamingDocumentViewer
-          document={doc}
-          onClose={closeDrawer}
-        />
-      ),
-      anchor: 'right',
+      content: <PdfStreamingDocumentViewer document={doc} onClose={closeDrawer} />,
+      anchor: "right",
     });
   };
 

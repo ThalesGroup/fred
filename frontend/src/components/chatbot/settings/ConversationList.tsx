@@ -1,5 +1,16 @@
 // Copyright Thales 2025
-// Licensed under the Apache License, Version 2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
@@ -23,6 +34,7 @@ import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { SessionSchema } from "../../../slices/agentic/agenticOpenApi";
+import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
 
 /**
  * Fred UI rationale:
@@ -56,6 +68,7 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
   const theme = useTheme<Theme>();
   const isDarkTheme = theme.palette.mode === "dark";
   const { t } = useTranslation();
+  const { showConfirmationDialog } = useConfirmationDialog();
 
   // Palette hooks (kept aligned with sidebar)
   const activeItemBgColor = theme.palette.sidebar.activeItem;
@@ -102,6 +115,17 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
     if (isEditing) saveEditing();
   };
 
+  const handleConfirmDeleteAll = () => {
+    showConfirmationDialog({
+      title: t("settings.confirmDeleteAllTitle", "Delete all conversations?"),
+      message: t(
+        "settings.confirmDeleteAllMessage",
+        "This action will permanently delete all conversations. Do you want to continue?"
+      ),
+      onConfirm: onDeleteAllSessions,
+    });
+  };
+
   return (
     <Box
       sx={[
@@ -143,7 +167,7 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
             <Tooltip title={t("settings.deleteAll")}>
               <span>
                 <IconButton
-                  onClick={onDeleteAllSessions}
+                  onClick={handleConfirmDeleteAll}
                   size="small"
                   disabled={!hasSessions}
                   sx={{

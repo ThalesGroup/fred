@@ -303,12 +303,12 @@ class StorageConfig(BaseModel):
 class Configuration(BaseModel):
     app: AppConfig
     chat_model: ModelConfiguration
+    embedding_model: ModelConfiguration
+    vision_model: Optional[ModelConfiguration] = None
     security: SecurityConfiguration
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
-    embedding_model: ModelConfiguration
-    vision: Optional[ModelConfiguration] = None
     scheduler: SchedulerConfig
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")

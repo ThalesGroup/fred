@@ -18,7 +18,7 @@ from typing import Any, Dict
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt import tools_condition
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
@@ -123,10 +123,8 @@ class Sage(AgentFlow):
         # LLM node
         builder.add_node("reasoner", self._run_reasoning_step)
 
-        # Tools node, with resilient refresh/rebind
-        tools = self.mcp.get_tools()
-        tool_node = ToolNode(tools=tools)
-        builder.add_node("tools", tool_node)
+        # Tools node, with resilient refresh/rebind and friendly errors for MCP
+        builder.add_node("tools", self.mcp.get_tool_nodes())
 
         builder.add_edge(START, "reasoner")
         builder.add_conditional_edges(

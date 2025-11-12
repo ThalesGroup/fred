@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useEffect, useState } from "react";
-import { getConfig, loadPermissions } from "../common/config";
+import { loadPermissions } from "../common/config";
 import { KeyCloakService } from "./KeycloakService";
 
 // Get the current user’s role based on Keycloak roles
@@ -27,24 +27,38 @@ function getCurrentRole(): string {
 
 // Hook to check permissions
 export const usePermissions = () => {
-  const [permissions, setPermissions] = useState<string[]>(getConfig().permissions);
+  const [permissions, setPermissions] = useState<string[] | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
-  // Loads permissions at mount time
   useEffect(() => {
-    const fetchPermissions = async () => {
-      const perms = await loadPermissions();
-      setPermissions(perms);
+    let mounted = true;
+    (async () => {
+      try {
+        const perms = await loadPermissions();
+        if (mounted) setPermissions(perms);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
     };
-    fetchPermissions();
   }, []);
 
-  const can = (resource: string, action: string) =>
-    permissions.some(p => p.toLowerCase() === `${resource}:${action}`.toLowerCase());
-
-  const refreshPermissions = async () => {
-    const perms = await loadPermissions();
-    setPermissions(perms);
+  const can = (resource: string, action: string) => {
+    const list = permissions ?? [];
+    return list.some((p) => p.toLowerCase() === `${resource}:${action}`.toLowerCase());
   };
 
-  return { permissions, can, refreshPermissions, role: getCurrentRole() };
+  const refreshPermissions = async () => {
+    setLoading(true);
+    try {
+      const perms = await loadPermissions();
+      setPermissions(perms);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { permissions: permissions ?? [], loading, can, refreshPermissions, role: getCurrentRole() };
 };

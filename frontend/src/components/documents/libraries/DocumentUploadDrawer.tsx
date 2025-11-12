@@ -54,18 +54,14 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
     noKeyboard: true,
     onDrop: (acceptedFiles) => {
       setTempFiles((prevFiles) => {
-        const existingFiles = new Map(
-          prevFiles.map((f) => [`${f.name}-${f.size}-${f.lastModified}`, f])
-        );
+        const existingFiles = new Map(prevFiles.map((f) => [`${f.name}-${f.size}-${f.lastModified}`, f]));
 
-        const newUniqueFiles = acceptedFiles.filter(
-          (f) => !existingFiles.has(`${f.name}-${f.size}-${f.lastModified}`)
-        );
+        const newUniqueFiles = acceptedFiles.filter((f) => !existingFiles.has(`${f.name}-${f.size}-${f.lastModified}`));
 
         if (newUniqueFiles.length < acceptedFiles.length) {
           showInfo({
             summary: t("documentDrawerTable.documentAlreadyAddedToast.summary"),
-            detail:  t("documentDrawerTable.documentAlreadyAddedToast.detail"),
+            detail: t("documentDrawerTable.documentAlreadyAddedToast.detail"),
           });
         }
         return [...prevFiles, ...newUniqueFiles];
@@ -110,9 +106,7 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
               displayIndexRef.current += 1;
               window.setTimeout(() => {
                 setUploadProgressSteps((prev) => {
-                  const existingIndex = prev.findIndex(
-                    (s) => s.step === step.step && s.filename === step.filename
-                  );
+                  const existingIndex = prev.findIndex((s) => s.step === step.step && s.filename === step.filename);
                   if (existingIndex !== -1) {
                     const updated = [...prev];
                     updated[existingIndex] = step;
@@ -158,12 +152,14 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
       anchor="right"
       open={isOpen}
       onClose={handleClose}
-      slotProps={{ paper: {
-        sx: {
-          width: { xs: "100%", sm: 450 },
-          p: 3,
+      slotProps={{
+        paper: {
+          sx: {
+            width: { xs: "100%", sm: 450 },
+            p: 3,
+          },
         },
-      }}}
+      }}
     >
       <Typography variant="h5" fontWeight="bold" gutterBottom>
         {t("documentLibrary.uploadDrawerTitle")}

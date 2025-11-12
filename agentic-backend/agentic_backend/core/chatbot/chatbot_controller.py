@@ -24,6 +24,7 @@ from fastapi import (
     Form,
     HTTPException,
     Request,
+    Security,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
@@ -35,6 +36,7 @@ from fred_core import (
     VectorSearchHit,
     decode_jwt,
     get_current_user,
+    oauth2_scheme,
 )
 from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketState
@@ -46,6 +48,7 @@ from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.chatbot.chat_schema import (
     ChatAskInput,
+    ChatbotRuntimeSummary,
     ChatMessage,
     ErrorEvent,
     FinalEvent,
@@ -75,6 +78,7 @@ EchoPayload = Union[
     MetricsBucket,
     VectorSearchHit,
     RuntimeContext,
+    ChatbotRuntimeSummary,
 ]
 
 
@@ -90,6 +94,7 @@ class EchoEnvelope(BaseModel):
         "MetricsBucket",
         "VectorSearchHit",
         "RuntimeContext",
+        "ChatbotRuntimeSummary",
     ]
     payload: EchoPayload = Field(..., description="Schema payload being echoed")
 
@@ -357,9 +362,27 @@ async def delete_session(
 )
 async def upload_file(
     session_id: str = Form(...),
-    agent_name: str = Form(...),
     file: UploadFile = File(...),
     user: KeycloakUser = Depends(get_current_user),
+    access_token: str = Security(oauth2_scheme),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> dict:
-    return await session_orchestrator.upload_file(user, session_id, agent_name, file)
+    return await session_orchestrator.add_attachment_from_upload(
+        user=user, access_token=access_token, session_id=session_id, file=file
+    )
+
+
+@router.delete(
+    "/chatbot/upload/{attachment_id}",
+    description="Delete an uploaded file from a chatbot conversation",
+    summary="Delete an uploaded file",
+)
+async def delete_file(
+    session_id: str,
+    attachment_id: str,
+    user: KeycloakUser = Depends(get_current_user),
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+) -> None:
+    await session_orchestrator.delete_attachment(
+        user=user, session_id=session_id, attachment_id=attachment_id
+    )

@@ -21,13 +21,12 @@ import Chat from "../pages/Chat";
 import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { Kpis } from "../pages/Kpis";
 import Logs from "../pages/Logs";
+import Runtime from "../pages/Runtime";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
 import { Profile } from "../pages/Profile";
 
-const RootLayout = ({ children }: React.PropsWithChildren<{}>) => (
-  <LayoutWithSidebar>{children}</LayoutWithSidebar>
-);
+const RootLayout = ({ children }: React.PropsWithChildren<{}>) => <LayoutWithSidebar>{children}</LayoutWithSidebar>;
 
 export const routes: RouteObject[] = [
   {
@@ -47,6 +46,14 @@ export const routes: RouteObject[] = [
         element: (
           <ProtectedRoute resource="kpi" action="create">
             <Kpis />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "monitoring/runtime",
+        element: (
+          <ProtectedRoute resource="kpi" action="create">
+            <Runtime />
           </ProtectedRoute>
         ),
       },

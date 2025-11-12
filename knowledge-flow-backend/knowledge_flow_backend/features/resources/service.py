@@ -53,17 +53,8 @@ class ResourceService:
     def delete(self, *, resource_id: str, user: KeycloakUser) -> None:
         self._resource_store.delete_resource(resource_id=resource_id)
 
-    # ---------- Membership helpers ----------
-
-    def get_resource_ids_for_tag(self, kind: ResourceKind, tag_id: str) -> list[str]:
-        all_resources = self._resource_store.get_all_resources(kind=kind)
-        return [res.id for res in all_resources if tag_id in res.library_tags]
-
-    def get_resources_for_tag(self, kind: ResourceKind, tag_id: str) -> list[Resource]:
-        all_resources = self._resource_store.get_all_resources(kind=kind)
-        return [res for res in all_resources if tag_id in res.library_tags]
-
-    def add_tag_to_resource(self, resource_id: str, tag_id: str) -> Resource:
+    @authorize(Action.UPDATE, AuthzResource.RESOURCES)
+    def add_tag_to_resource(self, user: KeycloakUser, resource_id: str, tag_id: str) -> Resource:
         res = self._resource_store.get_resource_by_id(resource_id)
         if tag_id not in res.library_tags:
             res.library_tags.append(tag_id)
@@ -71,7 +62,8 @@ class ResourceService:
             res = self._resource_store.update_resource(resource_id=res.id, resource=res)
         return res
 
-    def remove_tag_from_resource(self, resource_id: str, tag_id: str, *, delete_if_orphan: bool = True) -> None:
+    @authorize(Action.UPDATE, AuthzResource.RESOURCES)
+    def remove_tag_from_resource(self, user: KeycloakUser, resource_id: str, tag_id: str, *, delete_if_orphan: bool = True) -> None:
         res = self._resource_store.get_resource_by_id(resource_id)
         if tag_id in res.library_tags:
             res.library_tags.remove(tag_id)
@@ -80,15 +72,3 @@ class ResourceService:
             else:
                 res.updated_at = utc_now()
                 self._resource_store.update_resource(resource_id=res.id, resource=res)
-
-    def remove_tag_from_resources(self, kind: ResourceKind, tag_id: str) -> None:
-        """Remove tag from all resources that have it; delete orphans."""
-        for res in self.get_resources_for_tag(kind, tag_id):
-            # This loop is smaller than scanning all resources
-            if tag_id in res.library_tags:
-                res.library_tags.remove(tag_id)
-                if not res.library_tags:
-                    self._resource_store.delete_resource(resource_id=res.id)
-                else:
-                    res.updated_at = utc_now()
-                    self._resource_store.update_resource(resource_id=res.id, resource=res)

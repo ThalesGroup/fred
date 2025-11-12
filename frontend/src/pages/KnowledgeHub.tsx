@@ -82,7 +82,7 @@ export const KnowledgeHub = () => {
       <Box sx={{ mb: 3 }}>
         {selectedView === "chatContexts" && (
           <Container maxWidth="xl">
-            <ResourceLibraryList kind="chat-context"  />
+            <ResourceLibraryList kind="chat-context" />
           </Container>
         )}
         {selectedView === "documents" && (
