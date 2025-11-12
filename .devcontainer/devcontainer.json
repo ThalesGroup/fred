@@ -26,7 +26,7 @@
     "BASH_HISTFILE": "${containerEnv:DEV_CACHE_DIR}/commandhistory/.bash_history",
 
     // Set pip cache directory to dev cache volume
-    "PIP_CACHE_DIR": "/fred-dev-cache/pip",
+    "PIP_CACHE_DIR": "${containerEnv:DEV_CACHE_DIR}/pip",
 
     // Set UV cache directories to dev cache volume
     "UV_CACHE_DIR": "${containerEnv:DEV_CACHE_DIR}/uv",
@@ -34,7 +34,10 @@
     "UV_LINK_MODE": "copy",
 
     // Set NPM cache directory to dev cache volume
-    "NPM_CONFIG_CACHE": "${containerEnv:DEV_CACHE_DIR}/npm-cache"
+    "NPM_CONFIG_CACHE": "${containerEnv:DEV_CACHE_DIR}/npm-cache",
+
+    // Universal cache (for tools following XDG spec)
+    "XDG_CACHE_HOME": "${containerEnv:DEV_CACHE_DIR}/xdg"
   },
   // Init zsh and bash conf in dev cache volume
   "postStartCommand": "./.devcontainer/scripts/init-shell.sh",
