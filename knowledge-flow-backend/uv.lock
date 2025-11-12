@@ -472,6 +472,15 @@ wheels = [
 ]
 
 [[package]]
+name = "cobble"
+version = "0.1.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/54/7a/a507c709be2c96e1bb6102eb7b7f4026c5e5e223ef7d745a17d239e9d844/cobble-0.1.4.tar.gz", hash = "sha256:de38be1539992c8a06e569630717c485a5f91be2192c461ea2b220607dfa78aa", size = 3805, upload-time = "2024-06-01T18:11:09.528Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d5/e1/3714a2f371985215c219c2a70953d38e3eed81ef165aed061d21de0e998b/cobble-0.1.4-py3-none-any.whl", hash = "sha256:36c91b1655e599fd428e2b95fdd5f0da1ca2e9f1abb0bc871dec21a0e78a2b44", size = 3984, upload-time = "2024-06-01T18:11:07.911Z" },
+]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -771,16 +780,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/16/d1/aab7c394da7bf9b2e5d372d781e88be27b440e50e9682bb40b9c86823961/docling_parse-4.6.0-cp312-cp312-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5fb15b2f2b24b896b0f3a9bc254ef905f9a00101c1574368639060d47140a084", size = 14977961, upload-time = "2025-10-17T11:16:13.493Z" },
     { url = "https://files.pythonhosted.org/packages/41/17/61ecf8ffa7c843640608878b27431b48099606e61f201243f6d8adca7981/docling_parse-4.6.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a535f0cb0c9470d84b3699cebb150ae16a6686828ba40ac0228214fb74e7d0bc", size = 15088424, upload-time = "2025-10-17T11:16:15.288Z" },
 ]
-
-[[package]]
-name = "docx"
-version = "0.2.4"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "lxml", marker = "sys_platform == 'linux'" },
-    { name = "pillow", marker = "sys_platform == 'linux'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4a/8e/5a01644697b03016de339ef444cfff28367f92984dc74eddaab1ed60eada/docx-0.2.4.tar.gz", hash = "sha256:9d7595eac6e86cda0b7136a2995318d039c1f3eaa368a3300805abbbe5dc8877", size = 54925, upload-time = "2014-02-06T10:02:49.394Z" }
 
 [[package]]
 name = "duckdb"
@@ -1525,7 +1524,6 @@ dependencies = [
     { name = "coloredlogs", marker = "sys_platform == 'linux'" },
     { name = "dateparser", marker = "sys_platform == 'linux'" },
     { name = "docling", marker = "sys_platform == 'linux'" },
-    { name = "docx", marker = "sys_platform == 'linux'" },
     { name = "duckdb", marker = "sys_platform == 'linux'" },
     { name = "duckdb-engine", marker = "sys_platform == 'linux'" },
     { name = "fastapi", marker = "sys_platform == 'linux'" },
@@ -1538,7 +1536,7 @@ dependencies = [
     { name = "langchain", marker = "sys_platform == 'linux'" },
     { name = "langchain-community", marker = "sys_platform == 'linux'" },
     { name = "langchain-text-splitters", marker = "sys_platform == 'linux'" },
-    { name = "markitdown", marker = "sys_platform == 'linux'" },
+    { name = "markitdown", extra = ["docx"], marker = "sys_platform == 'linux'" },
     { name = "matplotlib", marker = "sys_platform == 'linux'" },
     { name = "minio", marker = "sys_platform == 'linux'" },
     { name = "openai", marker = "sys_platform == 'linux'" },
@@ -1602,7 +1600,6 @@ requires-dist = [
     { name = "coloredlogs", specifier = "==15.0.1" },
     { name = "dateparser", specifier = ">=1.2.2" },
     { name = "docling", specifier = "==2.34.0" },
-    { name = "docx", specifier = ">=0.2.4" },
     { name = "duckdb", specifier = ">=1.3.2" },
     { name = "duckdb-engine", specifier = ">=0.17.0" },
     { name = "fastapi", specifier = "==0.116.1" },
@@ -1616,7 +1613,7 @@ requires-dist = [
     { name = "langchain", specifier = ">=1.0.0" },
     { name = "langchain-community", specifier = ">=0.4.0" },
     { name = "langchain-text-splitters", specifier = ">=1.0.0" },
-    { name = "markitdown", specifier = ">=0.1.3" },
+    { name = "markitdown", extras = ["docx"], specifier = ">=0.1.3" },
     { name = "matplotlib", specifier = ">=3.10.7" },
     { name = "minio", specifier = "==7.2.15" },
     { name = "openai", specifier = ">=1.104.2,<2.0.0" },
@@ -1942,6 +1939,18 @@ wheels = [
 ]
 
 [[package]]
+name = "mammoth"
+version = "1.11.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cobble", marker = "sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ed/3c/a58418d2af00f2da60d4a51e18cd0311307b72d48d2fffec36a97b4a5e44/mammoth-1.11.0.tar.gz", hash = "sha256:a0f59e442f34d5b6447f4b0999306cbf3e67aaabfa8cb516f878fb1456744637", size = 53142, upload-time = "2025-09-19T10:35:20.373Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ca/54/2e39566a131b13f6d8d193f974cb6a34e81bb7cc2fa6f7e03de067b36588/mammoth-1.11.0-py2.py3-none-any.whl", hash = "sha256:c077ab0d450bd7c0c6ecd529a23bf7e0fa8190c929e28998308ff4eada3f063b", size = 54752, upload-time = "2025-09-19T10:35:18.699Z" },
+]
+
+[[package]]
 name = "markdown-it-py"
 version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1981,6 +1990,12 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/87/31/90cef2bc8ecd85c200ed3b3d1e20fc7a724213502685c4b05b5431e02668/markitdown-0.1.3.tar.gz", hash = "sha256:b0d9127c3373a68274dede6af6c9bb0684b78ce364c727c4c304da97a20d6fd9", size = 40039, upload-time = "2025-08-26T22:37:04.4Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/97/83/7b47d2ecbf58650a03aeeb21ba2d59175f202bf4fb81d44f40f1deb82bc0/markitdown-0.1.3-py3-none-any.whl", hash = "sha256:08d9a25770979d78f60dcc0afcb868de6799608e4db65342b2e03304fb091251", size = 58391, upload-time = "2025-08-26T22:37:02.924Z" },
+]
+
+[package.optional-dependencies]
+docx = [
+    { name = "lxml", marker = "sys_platform == 'linux'" },
+    { name = "mammoth", marker = "sys_platform == 'linux'" },
 ]
 
 [[package]]

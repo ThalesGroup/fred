@@ -99,8 +99,11 @@ class BenchmarkController:
         import tempfile
 
         original_name = Path(file.filename or "upload").name
+        # Preserve the original file extension so downstream tools (e.g., pandoc)
+        # can infer the type from the path.
+        ext = Path(original_name).suffix.lower()
 
-        tmp = tempfile.NamedTemporaryFile(delete=False)
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
         try:
             with tmp as f:
                 shutil.copyfileobj(file.file, f)
@@ -119,7 +122,6 @@ class BenchmarkController:
                     raise HTTPException(status_code=400, detail=f"Unknown processor id: {n}")
                 specs.append(reg[n])
         else:
-            ext = file.filename and Path(file.filename).suffix.lower() or ""
             specs = [s for s in reg.values() if ext in s.file_types]
 
         if not specs:
@@ -142,7 +144,7 @@ class BenchmarkController:
         try:
             resp = BenchmarkResponse(
                 input_filename=original_name,
-                file_type=input_path.suffix.lower(),
+                file_type=ext,
                 results=results,
             )
             if persist:

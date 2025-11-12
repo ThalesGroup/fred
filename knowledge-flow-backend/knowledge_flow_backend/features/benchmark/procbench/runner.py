@@ -151,6 +151,17 @@ class LiteAdapter:
             page_count = result.page_count
             dur = int((time.perf_counter() - started) * 1000)
             stats = _analyze_markdown(md_text) if md_text else None
+            try:
+                logger.info(
+                    "Lite adapter result | processor=%s kind=%s len=%d pages=%s duration_ms=%d",
+                    processor_spec.id,
+                    processor_spec.kind,
+                    len(md_text),
+                    page_count,
+                    dur,
+                )
+            except Exception:
+                pass
             return ProcessorRunResult(
                 processor_id=processor_spec.id,
                 display_name=processor_spec.display_name,

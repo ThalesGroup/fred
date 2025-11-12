@@ -4,6 +4,17 @@ import os
 from typing import Any, Dict, Hashable, List
 
 import joblib
+import matplotlib
+
+# Force a non-interactive backend in server/headless environments to avoid
+# messages like "Backend TkAgg is interactive backend" and GUI requirements.
+if not os.environ.get("MPLBACKEND"):
+    try:
+        matplotlib.use("Agg", force=True)
+    except Exception:
+        # Best effort: ignore if backend already set or unavailable
+        pass
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
