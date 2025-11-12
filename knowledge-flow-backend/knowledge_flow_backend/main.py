@@ -45,6 +45,7 @@ from knowledge_flow_backend.compat import fastapi_mcp_patch  # noqa: F401
 from knowledge_flow_backend.core.monitoring.monitoring_controller import (
     MonitoringController,
 )
+from knowledge_flow_backend.features.benchmark.benchmark_controller import BenchmarkController
 from knowledge_flow_backend.features.catalog.controller import CatalogController
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.asset_controller import AssetController
@@ -199,6 +200,8 @@ def create_app() -> FastAPI:
     if configuration.scheduler.enabled:
         logger.info("🧩 Activating ingestion scheduler controller.")
         SchedulerController(router)
+    # Developer benchmarking tools (always mounted; auth-protected)
+    BenchmarkController(router)
 
     logger.info("🧩 All controllers registered.")
     app.include_router(router)

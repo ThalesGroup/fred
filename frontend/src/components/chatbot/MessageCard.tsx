@@ -15,7 +15,6 @@
 
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import PreviewIcon from "@mui/icons-material/Preview";
-import RateReviewIcon from "@mui/icons-material/RateReview";
 import { Box, Chip, Grid2, IconButton, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useMemo, useState } from "react";
@@ -23,6 +22,7 @@ import { useTranslation } from "react-i18next";
 //import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 //import ClearIcon from "@mui/icons-material/Clear";
 import { Download as DownloadIcon } from "@mui/icons-material";
+import FeedbackOutlinedIcon from "@mui/icons-material/FeedbackOutlined";
 import { AnyAgent } from "../../common/agent.ts";
 import { AgentChipMini } from "../../common/AgentChip.tsx";
 import { usePdfDocumentViewer } from "../../common/usePdfDocumentViewer";
@@ -340,7 +340,7 @@ export default function MessageCard({
                       onClick={() => setFeedbackOpen(true)}
                       aria-label={t("chat.actions.openFeedback")}
                     >
-                      <RateReviewIcon fontSize="medium" color="inherit" />
+                      <FeedbackOutlinedIcon fontSize="small" color="inherit" />
                     </IconButton>
                   )}
 

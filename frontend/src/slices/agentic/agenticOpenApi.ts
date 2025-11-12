@@ -360,9 +360,13 @@ export type AgentTuning = {
   mcp_servers?: McpServerRef[];
 };
 export type AgentChatOptions = {
+  /** Show a selector to choose the retrieval/search policy (e.g., hybrid, semantic, strict) before sending a message. */
   search_policy_selection?: boolean;
+  /** Display a picker to include document libraries/knowledge sources that the agent can use for this message (session-scoped context). */
   libraries_selection?: boolean;
+  /** Add a microphone control to record a short audio clip and attach it to the message. */
   record_audio_files?: boolean;
+  /** Allow attaching local files (e.g., PDFs, images, text) to the message and show existing attachments. */
   attach_files?: boolean;
 };
 export type ClientAuthMode = "user_token" | "no_token";

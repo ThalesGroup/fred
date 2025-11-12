@@ -96,6 +96,8 @@ const ChatBot = ({
   // When backend creates a session during first file upload, keep it locally
   // so the immediate next message uses the same session id.
   const pendingSessionIdRef = useRef<string | null>(null);
+  // Track files being uploaded right now to surface inline progress in the input bar
+  const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
 
   // Noms des libs / prompts / templates / chat-context
   const { data: docLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
@@ -429,11 +431,8 @@ const ChatBot = ({
     currentChatBotSession?.id, // guard: only save when undefined
   ]);
 
-  // Handle user input (text/audio/files)
+  // Handle user input (text/audio)
   const handleSend = async (content: UserInputContent) => {
-    const sessionId = currentChatBotSession?.id;
-    const agentName = currentAgent.name;
-
     // Init runtime context
     const runtimeContext: RuntimeContext = { ...(baseRuntimeContext ?? {}) };
 
@@ -445,38 +444,7 @@ const ChatBot = ({
     // Policy
     runtimeContext.search_policy = content.searchPolicy || "semantic";
 
-    // Files upload (via RTK Query, with auth header from baseQuery)
-    if (content.files?.length) {
-      for (const file of content.files) {
-        const formData = new FormData();
-        // Always read the latest session id from the ref so that after the
-        // first upload creates a session, subsequent files reuse the same id.
-        const effectiveSessionId = pendingSessionIdRef.current || sessionId || "";
-        formData.append("session_id", effectiveSessionId);
-        formData.append("agent_name", agentName);
-        formData.append("file", file);
-
-        try {
-          const res = await uploadChatFile({
-            bodyUploadFileAgenticV1ChatbotUploadPost: formData as any,
-          }).unwrap();
-          // If we were in a draft (no real session yet), bind it now using the server-created id
-          const sid = (res as any)?.session_id as string | undefined;
-          if (!sessionId && sid && pendingSessionIdRef.current !== sid) {
-            onBindDraftAgentToSessionId?.(sid);
-            pendingSessionIdRef.current = sid;
-          }
-          console.log("✅ Uploaded file:", file.name);
-          showInfo({ summary: "File Upload", detail: `File ${file.name} uploaded successfully.` });
-          // Nudge attachments bar to refresh its session list view
-          setAttachmentsRefreshTick((x) => x + 1);
-        } catch (err: any) {
-          const errMsg = err?.data?.detail || err?.error || (err as Error)?.message || "Unknown error";
-          console.error("❌ File upload failed:", err);
-          showError({ summary: "File Upload Error", detail: `Failed to upload ${file.name}: ${errMsg}` });
-        }
-      }
-    }
+    // Files are now uploaded immediately upon selection (not here)
 
     if (content.text) {
       queryChatBot(content.text.trim(), undefined, runtimeContext);
@@ -493,6 +461,42 @@ const ChatBot = ({
       //   });
     } else {
       console.warn("No content to send.");
+    }
+  };
+
+  // Upload files immediately when user selects them (sequential to preserve session binding)
+  const handleFilesSelected = async (files: File[]) => {
+    if (!files?.length) return;
+    const sessionId = currentChatBotSession?.id;
+    const agentName = currentAgent.name;
+
+    for (const file of files) {
+      setUploadingFiles((prev) => [...prev, file.name]);
+      const formData = new FormData();
+      const effectiveSessionId = pendingSessionIdRef.current || sessionId || "";
+      formData.append("session_id", effectiveSessionId);
+      formData.append("agent_name", agentName);
+      formData.append("file", file);
+
+      try {
+        const res = await uploadChatFile({
+          bodyUploadFileAgenticV1ChatbotUploadPost: formData as any,
+        }).unwrap();
+        const sid = (res as any)?.session_id as string | undefined;
+        if (!sessionId && sid && pendingSessionIdRef.current !== sid) {
+          onBindDraftAgentToSessionId?.(sid);
+          pendingSessionIdRef.current = sid;
+        }
+        console.log("✅ Uploaded file:", file.name);
+        // Refresh attachments view in the popover
+        setAttachmentsRefreshTick((x) => x + 1);
+      } catch (err: any) {
+        const errMsg = err?.data?.detail || err?.error || (err as Error)?.message || "Unknown error";
+        console.error("❌ File upload failed:", err);
+        showError({ summary: "File Upload Error", detail: `Failed to upload ${file.name}: ${errMsg}` });
+      } finally {
+        setUploadingFiles((prev) => prev.filter((n) => n !== file.name));
+      }
     }
   };
 
@@ -558,6 +562,7 @@ const ChatBot = ({
       ? messages.reduce((sum, msg) => sum + (msg.metadata?.token_usage?.input_tokens || 0), 0)
       : 0;
   // After your state declarations
+  const effectiveSessionId = pendingSessionIdRef.current || currentChatBotSession?.id || undefined;
   const showWelcome = !waitResponse && (isCreatingNewConversation || messages.length === 0);
 
   const hasContext =
@@ -613,6 +618,9 @@ const ChatBot = ({
                 onStop={stopStreaming}
                 onContextChange={setUserInputContext}
                 sessionId={currentChatBotSession?.id}
+                effectiveSessionId={effectiveSessionId}
+                uploadingFiles={uploadingFiles}
+                onFilesSelected={handleFilesSelected}
                 attachmentsRefreshTick={attachmentsRefreshTick}
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
                 initialPromptResourceIds={initialCtx.promptResourceIds}
@@ -668,6 +676,9 @@ const ChatBot = ({
                 onStop={stopStreaming}
                 onContextChange={setUserInputContext}
                 sessionId={currentChatBotSession?.id}
+                effectiveSessionId={effectiveSessionId}
+                uploadingFiles={uploadingFiles}
+                onFilesSelected={handleFilesSelected}
                 attachmentsRefreshTick={attachmentsRefreshTick}
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
                 initialPromptResourceIds={initialCtx.promptResourceIds}

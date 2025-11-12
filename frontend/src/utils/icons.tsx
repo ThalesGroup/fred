@@ -153,3 +153,83 @@ const ExcelIcon = (props) => (
 );
 
 export { WordIcon, PdfIcon, ExcelIcon };
+
+// Minimal PowerPoint icon (orange theme)
+const PowerPointIcon = (props) => (
+  <SvgIcon {...props} viewBox="0 0 32 32">
+    <defs>
+      <linearGradient id="pptg" x1="4" y1="4" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stopColor="#d35230" />
+        <stop offset="1" stopColor="#b7472a" />
+      </linearGradient>
+    </defs>
+    <rect x="2" y="6" width="20" height="20" rx="2" ry="2" fill="url(#pptg)" />
+    <path d="M24 3h4a1 1 0 0 1 1 1v7H24z" fill="#f3a28b" />
+    <rect x="24" y="11" width="5" height="15" rx="0.8" fill="#e2694f" />
+    <path d="M10.2 12h3.4c1.9 0 3.2 1.1 3.2 2.8 0 1.9-1.5 3-3.5 3H12v3.2H10.2V12zm3.2 4.1c0.9 0 1.6-0.5 1.6-1.3 0-0.8-0.6-1.2-1.5-1.2H12V16h1.4z" fill="#fff" />
+  </SvgIcon>
+);
+
+export { PowerPointIcon };
+
+// Minimal Markdown icon (purple theme)
+const MarkdownIcon = (props) => (
+  <SvgIcon {...props} viewBox="0 0 32 32">
+    <defs>
+      <linearGradient id="mdg" x1="4" y1="4" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stopColor="#6f42c1" />
+        <stop offset="1" stopColor="#563d7c" />
+      </linearGradient>
+    </defs>
+    <rect x="2" y="6" width="20" height="20" rx="2" ry="2" fill="url(#mdg)" />
+    <path d="M24 3h4a1 1 0 0 1 1 1v7H24z" fill="#bba1ef" />
+    <rect x="24" y="11" width="5" height="15" rx="0.8" fill="#8a6bd1" />
+    {/* MD letters using text for clarity */}
+    <text x="5.2" y="20.5" fill="#ffffff" fontFamily="Inter, Arial, Helvetica, sans-serif" fontWeight="700" fontSize="8">
+      MD
+    </text>
+    {/* Small code chevron */}
+    <path d="M15 15 l3 3 -3 3" fill="none" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </SvgIcon>
+);
+
+// Minimal Text icon (blue theme)
+const TextIcon = (props) => (
+  <SvgIcon {...props} viewBox="0 0 32 32">
+    <defs>
+      <linearGradient id="txtg" x1="4" y1="4" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stopColor="#4a90e2" />
+        <stop offset="1" stopColor="#2b6cb0" />
+      </linearGradient>
+    </defs>
+    <rect x="2" y="6" width="20" height="20" rx="2" ry="2" fill="url(#txtg)" />
+    <path d="M24 3h4a1 1 0 0 1 1 1v7H24z" fill="#a7c7f2" />
+    <rect x="24" y="11" width="5" height="15" rx="0.8" fill="#5da0e6" />
+    <text x="4.6" y="20.5" fill="#ffffff" fontFamily="Inter, Arial, Helvetica, sans-serif" fontWeight="700" fontSize="8">
+      TXT
+    </text>
+  </SvgIcon>
+);
+
+export { MarkdownIcon, TextIcon };
+
+// Feedback icon: side-by-side choices (green check, orange cross)
+const FeedbackIcon = (props) => (
+  <SvgIcon {...props} viewBox="0 0 32 32">
+    {/* Subtle card background */}
+    <rect x="3" y="7" width="26" height="18" rx="4" ry="4" fill="#F7F8FA" />
+    <rect x="3.5" y="7.5" width="25" height="17" rx="3.5" ry="3.5" fill="none" stroke="#E3E6EB" strokeWidth="1" />
+
+    {/* Left pill — positive (green) */}
+    <rect x="6.5" y="10" width="9.5" height="12" rx="2.2" fill="#2ecc71" />
+    {/* Check mark */}
+    <path d="M9.2 16 l2.3 2.6 4.0-5.2" fill="none" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+
+    {/* Right pill — negative (orange) */}
+    <rect x="16.8" y="10" width="9.7" height="12" rx="2.2" fill="#f39c12" />
+    {/* Cross */}
+    <path d="M19.1 13.5 L23.2 17.6 M23.2 13.5 L19.1 17.6" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" />
+  </SvgIcon>
+);
+
+export { FeedbackIcon };

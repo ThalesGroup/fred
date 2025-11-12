@@ -169,7 +169,7 @@ class VectorSearchService:
         Semantic (legacy) — fast but no lexical guardrails.
         Keep available for debugging or recall-heavy exploratory queries.
         """
-        sf = SearchFilter(tag_ids=sorted(library_tags_ids)) if library_tags_ids else None
+        sf = SearchFilter(tag_ids=sorted(library_tags_ids), metadata_terms={"retrievable": [True]}) if library_tags_ids else SearchFilter(metadata_terms={"retrievable": [True]})
         ann_hits: List[AnnHit] = self.vector_store.ann_search(question, k=k, search_filter=sf)
         return await asyncio.gather(*[self._to_hit(h.document, h.score, rank, user) for rank, h in enumerate(ann_hits, start=1)])
 

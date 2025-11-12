@@ -58,7 +58,8 @@
       "selectCluster": "Please select a cluster first",
       "monitoring_kpi": "Kpi Dashboard",
       "monitoring_logs": "Log Console",
-      "monitoring_runtime": "Runtime summary"
+      "monitoring_runtime": "Runtime summary",
+      "monitoring_processors": "Processor bench"
     },
     "theme": {
       "light": "light",
@@ -70,7 +71,8 @@
     },
     "monitoring_kpi": "Kpis",
     "monitoring_logs": "Logs",
-    "monitoring_runtime": "Runtime"
+    "monitoring_runtime": "Runtime",
+    "monitoring_processors": "Processors"
   },
   "runtime": {
     "title": "Runtime Summary",
@@ -80,6 +82,55 @@
     "sessionsWithAttachments": "Sessions with attachments",
     "maxAttachmentsPerSession": "Max attachments/session",
     "error": "Failed to load runtime summary"
+  },
+  "procbench": {
+    "title": "Document Processor Bench",
+    "description": "Upload a document (pdf, pptx, docx, xlsx) and compare extraction quality and speed across processors.",
+    "uploadTitle": "Upload a document",
+    "uploadSubtitle": "Supported: PDF, DOCX, PPTX, Markdown, Text",
+    "browse": "Browse",
+    "noFile": "No file selected",
+    "run": "Run Bench",
+    "running": "Running...",
+    "clear": "Clear",
+    "runFailed": "Benchmark failed",
+    "runSuccess": "Benchmark complete",
+    "runSuccessDetail": "Processors executed successfully.",
+    "summaryFor": "Summary for '{{name}}'",
+    "processorsCount": "{{count}} processor(s)",
+    "view": { "sideBySide": "Side by side", "stacked": "Stacked" },
+    "metricsTitle": "Processor Metrics",
+    "persistLabel": "Save run",
+    "saved": {
+      "title": "Saved runs",
+      "modified": "Modified",
+      "file": "File",
+      "count": "Processors",
+      "actions": "Actions",
+      "open": "Open",
+      "delete": "Delete",
+      "empty": "No saved runs yet.",
+      "loadFailed": "Failed to load saved run",
+      "deleteFailed": "Failed to delete run"
+    },
+    "col": {
+      "processor": "Processor",
+      "kind": "Kind",
+      "status": "Status",
+      "duration": "Duration",
+      "tokens": "Tokens (est)",
+      "words": "Words",
+      "headings": "Headings",
+      "images": "Images",
+      "tables": "Table-like lines"
+    },
+    "ok": "OK",
+    "error": "Error",
+    "runtime": "{{ms}} ms",
+    "pages": "{{n}} page(s)",
+    "noMarkdown": "No markdown produced",
+    "openLatest": "Open latest run",
+    "detail": { "title": "Run Detail", "expandAll": "Expand all", "collapseAll": "Collapse all" }
   },
   "assetManager": {
     "title": "Manage Assets for {{agentId}}",

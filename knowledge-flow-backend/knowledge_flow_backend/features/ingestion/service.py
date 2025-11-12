@@ -167,22 +167,6 @@ class IngestionService:
         return processor.process(file_path=file_to_process_abs_str, metadata=input_file_metadata)
 
     @authorize(Action.READ, Resource.DOCUMENTS)
-    def get_markdown(self, user: KeycloakUser, metadata: DocumentMetadata, target_dir: pathlib.Path) -> pathlib.Path:
-        """
-        Downloads the preview file (markdown or CSV) for the document and saves it into `target_dir`.
-        Returns the filename of the downloaded preview.
-        """
-        try:
-            # Try markdown first
-            md_content = self.content_store.get_markdown(metadata.document_uid)
-            target_file = target_dir / "output.md"
-            target_file.write_text(md_content, encoding="utf-8")
-            logger.info(f"Markdown preview saved to {target_file}")
-            return target_file
-        except FileNotFoundError:
-            raise RuntimeError(f"No preview available for document {metadata.document_uid} in content store")
-
-    @authorize(Action.READ, Resource.DOCUMENTS)
     def get_preview_file(self, user: KeycloakUser, metadata: DocumentMetadata, output_dir: pathlib.Path) -> pathlib.Path:
         """
         Returns the preview file (output.md or table.csv) for a document.

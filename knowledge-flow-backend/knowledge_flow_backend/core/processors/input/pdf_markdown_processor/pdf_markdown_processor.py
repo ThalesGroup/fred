@@ -39,8 +39,9 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         self.process_images = get_configuration().processing.process_images
         if self.process_images:
             if not get_configuration().vision_model:
-                raise ValueError("Vision model configuration is missing but process_images is enabled.")
-            self.image_describer = build_image_describer(get_configuration().vision_model)
+                logger.warning("Vision model configuration is missing while process_images is enabled.")
+            else:
+                self.image_describer = build_image_describer(get_configuration().vision_model)
 
     def check_file_validity(self, file_path: Path) -> bool:
         """Checks if the PDF is readable and contains at least one page."""

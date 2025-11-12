@@ -1,11 +1,21 @@
 ##@ Tests
 
+# Extra options you can pass to pytest, e.g.:
+#   make test PYTEST_OPTS=-v          # one line per test
+#   make test PYTEST_OPTS="-vv -rA"    # very verbose + report summary
+PYTEST_OPTS ?=
+
 .PHONY: test
 test: dev ## Run all tests
 	@echo "************ TESTING ************"
-	${UV} run pytest -m "not integration" --cov=. --cov-config=.coveragerc --cov-report=html
+	# Ensure uv doesn't warn about foreign active VIRTUAL_ENV
+	VIRTUAL_ENV= ${UV} run pytest $(PYTEST_OPTS) -m "not integration" --cov=. --cov-config=.coveragerc --cov-report=html
 	@echo "✅ Coverage report: htmlcov/index.html"
-	@xdg-open htmlcov/index.html || echo "📎 Open manually htmlcov/index.html"
+	@if [ "${OPEN_COVERAGE}" = "1" ]; then \
+		xdg-open htmlcov/index.html || echo "📎 Open manually htmlcov/index.html"; \
+	else \
+		echo "📎 Set OPEN_COVERAGE=1 to auto-open coverage in a browser"; \
+	fi
 
 .PHONY: list-tests
 list-tests: dev ## List all available test names using pytest
@@ -18,7 +28,7 @@ test-one: dev ## Run a specific test by setting TEST=...
 		echo "❌ Please provide a test path using: make test-one TEST=path::to::test"; \
 		exit 1; \
 	fi
-	${UV} run pytest -v $(subst ::,::,$(TEST))
+	${UV} run pytest $(PYTEST_OPTS) -v $(subst ::,::,$(TEST))
 
 INTEGRATION_COMPOSE := $(CURDIR)/docker-compose.integration.yml
 

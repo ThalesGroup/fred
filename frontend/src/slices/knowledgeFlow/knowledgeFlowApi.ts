@@ -8,4 +8,5 @@ export const knowledgeFlowApi = createApi({
   // baseQuery: fetchBaseQuery({ baseUrl: "/" }),
   endpoints: () => ({}),
   reducerPath: "knowledgeFlowApi",
+  tagTypes: ["BenchRun"],
 });

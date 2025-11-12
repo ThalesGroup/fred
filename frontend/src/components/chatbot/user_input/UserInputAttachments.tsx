@@ -13,11 +13,12 @@
 // limitations under the License.
 
 import React from "react";
-import { Chip, Grid2 } from "@mui/material";
+import { Chip, CircularProgress, Grid2 } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 interface UserInputAttachmentsProps {
   files: File[] | null;
+  uploadingFileNames?: string[];
   audio: Blob | null;
   onRemoveFile: (index: number) => void;
   onShowAudioController: () => void;
@@ -26,6 +27,7 @@ interface UserInputAttachmentsProps {
 
 export const UserInputAttachments: React.FC<UserInputAttachmentsProps> = ({
   files,
+  uploadingFileNames,
   audio,
   onRemoveFile,
   onShowAudioController,
@@ -33,7 +35,7 @@ export const UserInputAttachments: React.FC<UserInputAttachmentsProps> = ({
 }) => {
   const { t } = useTranslation();
 
-  const hasAttachments = (files && files.length > 0) || audio;
+  const hasAttachments = (uploadingFileNames && uploadingFileNames.length > 0) || (files && files.length > 0) || audio;
 
   if (!hasAttachments) return null;
 
@@ -48,6 +50,18 @@ export const UserInputAttachments: React.FC<UserInputAttachmentsProps> = ({
       justifyContent="center"
       gap={1}
     >
+      {uploadingFileNames &&
+        uploadingFileNames.map((name, i) => (
+          <Grid2 size="auto" key={`${name}-${i}-uploading`}>
+            <Chip
+              icon={<CircularProgress size={14} />}
+              label={t("chatbot.uploadingFile", { defaultValue: "Uploading {{name}}...", name })}
+              color="warning"
+              variant="outlined"
+              sx={{ height: 32, fontSize: "1.0rem" }}
+            />
+          </Grid2>
+        ))}
       {files &&
         files.map((f, i) => (
           <Grid2 size="auto" key={`${f.name}-${i}`}>

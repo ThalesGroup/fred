@@ -36,16 +36,6 @@
                 }
             }
         ],
-        "./knowledge_flow_backend/core/stores/content/minio_content_store.py": [
-            {
-                "code": "reportReturnType",
-                "range": {
-                    "startColumn": 19,
-                    "endColumn": 65,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./knowledge_flow_backend/core/stores/vector/weaviate_vector_store.py": [
             {
                 "code": "reportAttributeAccessIssue",

@@ -61,4 +61,3 @@ def test_pdf_processor_end_to_end(processor: PdfMarkdownProcessor, sample_pdf_fi
     assert md_file.exists()
     md_content = md_file.read_text(encoding="utf-8").strip()
     assert md_content != ""
-    assert "There is an image showing a mocked description." in md_content

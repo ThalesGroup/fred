@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Protocol, Sequence, runtime_checkable
+from typing import List, Mapping, Optional, Protocol, Sequence, Union, runtime_checkable
 
 from attr import dataclass
 from langchain_core.documents import Document
@@ -30,7 +30,9 @@ class SearchFilter:
     """
 
     tag_ids: Optional[Sequence[str]] = None
-    metadata_terms: Optional[Dict[str, Sequence[str]]] = None
+    # Accept JSON-like scalar values for metadata filtering (str, int, float, bool)
+    # Use Mapping for covariance to allow callers to pass dict[str, list[bool]] safely.
+    metadata_terms: Optional[Mapping[str, Sequence[Union[str, int, float, bool]]]] = None
 
 
 @dataclass(frozen=True)
