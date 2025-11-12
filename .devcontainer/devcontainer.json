@@ -12,7 +12,8 @@
   "workspaceFolder": "/workspaces/fred",
   "runArgs": ["--init"],
   "mounts": [
-    "source=${localEnv:HOME}/.fred,target=/home/vscode/.fred,type=bind,consistency=cached"
+    "source=${localEnv:HOME}/.fred,target=/home/vscode/.fred,type=bind,consistency=cached",
+    "source=fred-dev-cache,target=/fred-dev-cache,type=volume"
   ],
   "forwardPorts": [5173, 8000, 8111],
   "portsAttributes": {
