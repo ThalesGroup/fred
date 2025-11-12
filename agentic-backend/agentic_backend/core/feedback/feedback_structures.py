@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Optional
 
 from fred_core import BaseModelWithId
-from pydantic import Field, ConfigDict
+from pydantic import ConfigDict, Field
 
 
 class FeedbackRecord(BaseModelWithId):

@@ -149,6 +149,7 @@ def client(app_context, monkeypatch) -> TestClient:
 
     # Use a fake chat model for tests to avoid real provider keys/network
     from langchain_core.language_models.fake_chat_models import FakeChatModel
+
     import agentic_backend.application_context as app_ctx
 
     monkeypatch.setattr(app_ctx, "get_model", lambda cfg: FakeChatModel())
