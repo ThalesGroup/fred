@@ -433,9 +433,6 @@ const ChatBot = ({
 
   // Handle user input (text/audio)
   const handleSend = async (content: UserInputContent) => {
-    const sessionId = currentChatBotSession?.id;
-    const agentName = currentAgent.name;
-
     // Init runtime context
     const runtimeContext: RuntimeContext = { ...(baseRuntimeContext ?? {}) };
 

@@ -1044,9 +1044,7 @@ export type RunKnowledgeFlowV1DevBenchRunPostApiResponse = /** status 200 Succes
 export type RunKnowledgeFlowV1DevBenchRunPostApiArg = {
   bodyRunKnowledgeFlowV1DevBenchRunPost: BodyRunKnowledgeFlowV1DevBenchRunPost;
 };
-export type ListRunsKnowledgeFlowV1DevBenchRunsGetApiResponse = /** status 200 Successful Response */ {
-  [key: string]: any;
-}[];
+export type ListRunsKnowledgeFlowV1DevBenchRunsGetApiResponse = /** status 200 Successful Response */ SavedRunSummary[];
 export type ListRunsKnowledgeFlowV1DevBenchRunsGetApiArg = void;
 export type GetRunKnowledgeFlowV1DevBenchRunsRunIdGetApiResponse =
   /** status 200 Successful Response */ BenchmarkResponse;
@@ -1627,6 +1625,14 @@ export type BodyRunKnowledgeFlowV1DevBenchRunPost = {
   processors?: string | null;
   /** Persist the run under the user's benchmark folder */
   persist?: boolean | null;
+};
+export type SavedRunSummary = {
+  id: string;
+  input_filename: string;
+  file_type: string;
+  processors_count: number;
+  size?: number | null;
+  modified?: string | null;
 };
 export const {
   useHealthzKnowledgeFlowV1HealthzGetQuery,
