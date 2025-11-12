@@ -13,9 +13,9 @@
 # limitations under the License.
 
 from typing import List, Literal, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ProcessorDescriptor(BaseModel):
@@ -65,6 +65,33 @@ class SavedRun(BaseModel):
     input_filename: str
     file_type: str
     results: List[ProcessorRunResult]
+
+    @field_validator("saved_at", mode="before")
+    @classmethod
+    def _parse_saved_at(cls, v):
+        """
+        Accept both extended ISO-8601 (e.g. 2025-11-12T07:16:06Z)
+        and compact basic format (e.g. 20251112T071606Z) historically written.
+        """
+        if isinstance(v, datetime):
+            return v
+        if isinstance(v, str):
+            s = v.strip()
+            # First, try compact basic UTC format
+            if s.endswith("Z"):
+                try:
+                    return datetime.strptime(s, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+                except ValueError:
+                    # Not the basic format; fall through
+                    pass
+            # Try extended ISO-8601; replace trailing Z with +00:00 for fromisoformat
+            try:
+                iso = s[:-1] + "+00:00" if s.endswith("Z") else s
+                return datetime.fromisoformat(iso)
+            except Exception:
+                # Let pydantic raise a proper error afterwards
+                return v
+        return v
 
 
 class SavedRunSummary(BaseModel):

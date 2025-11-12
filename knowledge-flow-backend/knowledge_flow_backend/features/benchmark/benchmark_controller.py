@@ -163,12 +163,14 @@ class BenchmarkController:
 
     def _save_run(self, user: KeycloakUser, resp: BenchmarkResponse) -> str:
         store = ApplicationContext.get_instance().get_content_store()
-        now = dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        # Use two representations: a stable, file-safe id timestamp and an ISO-8601 saved_at
+        now_id = dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        now_iso = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
         # Use timestamp + sanitized filename for readability
         safe_name = (resp.input_filename or "upload").replace("/", "_").replace("\\", "_")
-        run_id = f"{now}-{safe_name}"
+        run_id = f"{now_id}-{safe_name}"
         payload = {
-            "saved_at": now,
+            "saved_at": now_iso,
             "user_id": user.uid,
             "input_filename": resp.input_filename,
             "file_type": resp.file_type,
