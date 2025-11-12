@@ -5,16 +5,6 @@ from typing import Any, Dict, Hashable, List
 
 import joblib
 import matplotlib
-
-# Force a non-interactive backend in server/headless environments to avoid
-# messages like "Backend TkAgg is interactive backend" and GUI requirements.
-if not os.environ.get("MPLBACKEND"):
-    try:
-        matplotlib.use("Agg", force=True)
-    except Exception:
-        # Best effort: ignore if backend already set or unavailable
-        pass
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -29,6 +19,15 @@ from sklearn.preprocessing import LabelEncoder
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Force a non-interactive backend in server/headless environments to avoid
+# messages like "Backend TkAgg is interactive backend" and GUI requirements.
+if not os.environ.get("MPLBACKEND"):
+    try:
+        matplotlib.use("Agg", force=True)
+    except Exception:
+        logger.warning("skipping matplotlib backend set to 'Agg'")
+        pass
 
 
 class StatisticService:
