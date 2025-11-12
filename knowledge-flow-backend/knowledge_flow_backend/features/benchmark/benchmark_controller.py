@@ -13,6 +13,9 @@
 # limitations under the License.
 
 
+import datetime as dt
+import io
+import json as _json
 import logging
 from pathlib import Path
 from typing import List, Optional
@@ -20,6 +23,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fred_core import KeycloakUser, get_current_user
 
+from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.benchmark.procbench.models import (
     BenchmarkResponse,
     ProcessorDescriptor,
@@ -29,10 +33,6 @@ from knowledge_flow_backend.features.benchmark.procbench.models import (
 )
 from knowledge_flow_backend.features.benchmark.procbench.registry import default_registry
 from knowledge_flow_backend.features.benchmark.procbench.runner import LiteAdapter, StandardProcessorAdapter
-from knowledge_flow_backend.application_context import ApplicationContext
-import json as _json
-import io
-import datetime as dt
 
 logger = logging.getLogger(__name__)
 

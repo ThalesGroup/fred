@@ -20,14 +20,14 @@ from knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_m
 )
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_docx_to_md_processor import LiteDocxToMdProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor import LitePdfToMdProcessor
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor import PptxMarkdownProcessor
-from knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor import TextMarkdownProcessor
 from knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor import (
     MarkdownMarkdownProcessor,
 )
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import (
     PdfMarkdownProcessor,
 )
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor import PptxMarkdownProcessor
+from knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor import TextMarkdownProcessor
 
 from .runner import ProcessorSpec
 

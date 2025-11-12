@@ -45,6 +45,7 @@ from knowledge_flow_backend.compat import fastapi_mcp_patch  # noqa: F401
 from knowledge_flow_backend.core.monitoring.monitoring_controller import (
     MonitoringController,
 )
+from knowledge_flow_backend.features.benchmark.benchmark_controller import BenchmarkController
 from knowledge_flow_backend.features.catalog.controller import CatalogController
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.asset_controller import AssetController
@@ -68,7 +69,6 @@ from knowledge_flow_backend.features.users import users_controller
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
-from knowledge_flow_backend.features.benchmark.benchmark_controller import BenchmarkController
 from knowledge_flow_backend.security.keycloak_rebac_sync import (
     reconcile_keycloak_groups_with_rebac,
 )
