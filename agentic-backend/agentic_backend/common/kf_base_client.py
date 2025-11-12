@@ -38,13 +38,6 @@ TokenRefreshCallback = Callable[[], str]
 class KfBaseClient:
     """
     Base client for secure, retrying access to Knowledge Flow (and related Fred backends).
-
-    Fred rationale:
-    - *Identity propagation* is the invariant. The source of identity may be:
-      (a) an AgentFlow (agent runtime context), or
-      (b) a conversation/session controller that holds a user access_token.
-    - This client therefore accepts EITHER `agent=...` OR `access_token=...`.
-      Optional `refresh_user_access_token` can be provided in session mode.
     """
 
     def __init__(
@@ -65,12 +58,10 @@ class KfBaseClient:
 
         self.session = _session_with_retries(allowed_methods)
 
-        # --- Identity providers (exactly one mode should be used) ---
         self._agent = agent
         self._static_access_token = access_token
         self._refresh_cb = refresh_user_access_token
 
-        # Sanity: allow either agent-mode OR session-mode
         if not self._agent and not self._static_access_token:
             raise ValueError("KfBaseClient requires either `agent` or `access_token`.")
 
@@ -85,17 +76,12 @@ class KfBaseClient:
             if not token:
                 raise ValueError("AgentFlow runtime_context has no access_token.")
             return token
-        # session-mode
         if not self._static_access_token:
             raise ValueError("No access_token provided for session-scoped client.")
         return self._static_access_token
 
     def _try_refresh_token(self) -> bool:
-        """
-        Try to refresh token in either mode.
-        Returns True if a refresh happened and token should be retried.
-        """
-        # Agent mode: delegate to agent if available
+        """Try to refresh token in either mode."""
         if self._agent and getattr(self._agent, "refresh_user_access_token", None):
             try:
                 self._agent.refresh_user_access_token()
@@ -105,7 +91,6 @@ class KfBaseClient:
                 logger.error("Agent-led token refresh failed: %s", e)
                 return False
 
-        # Session mode: use provided callback if any
         if self._refresh_cb:
             try:
                 new_token = self._refresh_cb()
@@ -128,9 +113,18 @@ class KfBaseClient:
     def _execute_authenticated_request(
         self, method: str, path: str, **kwargs: Any
     ) -> requests.Response:
+        """
+        Executes an HTTP request with Bearer authentication.
+        If an explicit 'access_token' kwarg is provided, it overrides the default one.
+        """
         url = f"{self.base_url}{path}"
+
+        # Support explicit override of the token
+        token = kwargs.pop("access_token", None) or self._current_access_token()
+
         headers: Dict[str, str] = kwargs.pop("headers", {})
-        headers["Authorization"] = f"Bearer {self._current_access_token()}"
+        headers["Authorization"] = f"Bearer {token}"
+
         return self.session.request(
             method, url, timeout=self.timeout, headers=headers, **kwargs
         )
@@ -140,9 +134,7 @@ class KfBaseClient:
     ) -> requests.Response:
         """
         Executes a request, handling user-token expiration (401) via refresh and retry.
-        Works identically in agent-mode and session-mode.
         """
-        # attempt 0
         r = self._execute_authenticated_request(method=method, path=path, **kwargs)
         if r.status_code != 401:
             r.raise_for_status()
@@ -152,7 +144,6 @@ class KfBaseClient:
             "401 Unauthorized on %s %s. Attempting token refresh...", method, path
         )
         if self._try_refresh_token():
-            # attempt 1
             r = self._execute_authenticated_request(method=method, path=path, **kwargs)
 
         r.raise_for_status()

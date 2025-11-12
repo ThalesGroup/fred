@@ -23,14 +23,36 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        // ---- Backend ----
+        // Python support
         "ms-python.python",
         "ms-python.vscode-pylance",
+        // Python linter and formatter
         "charliermarsh.ruff",
+        // OpenFga .fga file support
+        "openfga.openfga-vscode",
+
+        // ---- Frontend ----
+        // Typescript support
         "ms-vscode.vscode-typescript-next",
+        // Typescript linter
         "dbaeumer.vscode-eslint",
+        // Typescript formatter
         "esbenp.prettier-vscode",
-        "ms-azuretools.vscode-docker",
-        "mhutchie.git-graph"
+        // Help handling internationalization (missing key, quick translation file edit...)
+        "lokalise.i18n-ally",
+        // Better Typescript error messages
+        "YoavBls.pretty-ts-errors",
+
+        // ---- Other ----
+        // Handle containers in vscode (docker)
+        "ms-azuretools.vscode-containers",
+        // Help doing conventional commits
+        "vivaxy.vscode-conventional-commits",
+        // Git graph visualization
+        "mhutchie.git-graph",
+        // GitHub PR and issue management
+        "GitHub.vscode-pull-request-github"
       ],
       "settings": {
         "editor.formatOnSave": true,

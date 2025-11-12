@@ -605,6 +605,10 @@ const ChatBot = ({
               gap: 2.5,
             }}
           >
+            {/* Welcome hint */}
+            <Typography variant="h6" color="text.secondary" sx={{ textAlign: "center" }}>
+              {t("chatbot.startNew", { name: currentAgent?.name ?? "assistant" })}
+            </Typography>
             {/* Input area */}
             <Box sx={{ width: "min(900px, 100%)" }}>
               <UserInput

@@ -40,10 +40,10 @@ from agentic_backend.common.rags_utils import (
     format_sources_for_prompt,
     sort_hits,
 )
-from agentic_backend.common.structures import AgentChatOptions
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.runtime_context import (
+    RuntimeContext,
     get_document_library_tags_ids,
     get_search_policy,
 )
@@ -169,10 +169,6 @@ class Sloan(AgentFlow):
     """
 
     tuning = RAG_TUNING
-    default_chat_options = AgentChatOptions(
-        search_policy_selection=True,
-        libraries_selection=True,
-    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -182,8 +178,8 @@ class Sloan(AgentFlow):
         self.summary_prompt_template: Optional[ChatPromptTemplate] = None
         self.format_instructions: str = ""
 
-    async def async_init(self):
-        """Initialize model, search client, parser, and prompt."""
+    async def async_init(self, runtime_context: RuntimeContext):
+        await super().async_init(runtime_context)
         self.model = get_default_chat_model()
         self.search_client = VectorSearchClient(agent=self)
         self._graph = self._build_graph()

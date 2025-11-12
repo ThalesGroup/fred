@@ -490,18 +490,20 @@ class AgentFlow:
             raise AssetRetrievalError(error_msg)
 
     async def fetch_asset_text(self, asset_key: str) -> str:
-        """
-        Retrieves the content of a user-uploaded asset securely and cleanly.
-
-        """
         agent_name = self.get_name()
         try:
+            access_token = getattr(self.runtime_context, "access_token", None)
+            if not access_token:
+                access_token = self.refresh_user_access_token()
+
             return await get_app_context().run_in_executor(
-                self.asset_client.fetch_asset_content_text, agent_name, asset_key
+                self.asset_client.fetch_asset_content_text,
+                agent_name,
+                asset_key,
+                access_token,
             )
         except AssetRetrievalError as e:
             logger.error(f"Failed to fetch asset for agent: {e}")
-            # Re-raise the error, or return a default/fail state
             return f"[Asset Retrieval Error: {e.args[0]}]"
         except Exception as e:
             logger.error(f"Unexpected error fetching asset for agent: {e}")
@@ -510,12 +512,19 @@ class AgentFlow:
     async def fetch_asset_blob(self, asset_key: str) -> AssetBlob:
         """
         Retrieves the content of a user-uploaded asset securely and cleanly.
-
         """
         agent_name = self.get_name()
         try:
+            # Ensure token is valid (refresh if necessary)
+            access_token = getattr(self.runtime_context, "access_token", None)
+            if not access_token:
+                access_token = self.refresh_user_access_token()
+
             return await get_app_context().run_in_executor(
-                self.asset_client.fetch_asset_blob, agent_name, asset_key
+                self.asset_client.fetch_asset_blob,
+                agent_name,
+                asset_key,
+                access_token,
             )
         except AssetRetrievalError as e:
             logger.error(f"Failed to fetch asset for agent: {e}")

@@ -93,6 +93,7 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
                     selected_attr = attr
                     break
             except Exception:
+                logger.debug("Accessing unknown attribute '%s' on MarkItDown converted object failed", attr)
                 # Accessing unknown attrs is safe; continue to next
                 pass
 
@@ -105,7 +106,7 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
                 len(raw_md),
             )
             if raw_md:
-                logger.info("----- BEGIN RAW MARKDOWN -----\n%s\n----- END RAW MARKDOWN -----", raw_md)
+                logger.debug("----- BEGIN RAW MARKDOWN -----\n%s\n----- END RAW MARKDOWN -----", raw_md)
 
         if not md:
             logger.warning("MarkItDown returned empty text for DOCX; using python-docx fallback")
@@ -138,7 +139,7 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
             (md[:120].replace("\n", " ") if md else ""),
         )
         if md:
-            logger.info("----- BEGIN FINAL MARKDOWN -----\n%s\n----- END FINAL MARKDOWN -----", md)
+            logger.debug("----- BEGIN FINAL MARKDOWN -----\n%s\n----- END FINAL MARKDOWN -----", md)
 
         return LiteMarkdownResult(
             document_name=file_path.name,
