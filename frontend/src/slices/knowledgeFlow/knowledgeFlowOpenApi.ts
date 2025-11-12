@@ -232,39 +232,42 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    listTabularDatabases: build.query<ListTabularDatabasesApiResponse, ListTabularDatabasesApiArg>({
+    getContext: build.query<GetContextApiResponse, GetContextApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/tabular/context` }),
+    }),
+    listDatabases: build.query<ListDatabasesApiResponse, ListDatabasesApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/tabular/databases` }),
     }),
-    loadTabularDatabase: build.mutation<LoadTabularDatabaseApiResponse, LoadTabularDatabaseApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/load/${queryArg.dbName}`, method: "POST" }),
+    listTables: build.query<ListTablesApiResponse, ListTablesApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/tables` }),
     }),
-    listTablesLoadedDb: build.query<ListTablesLoadedDbApiResponse, ListTablesLoadedDbApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/tabular/tables` }),
+    getDatabaseSchemas: build.query<GetDatabaseSchemasApiResponse, GetDatabaseSchemasApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/schemas` }),
     }),
-    listAllTableSchemasLoadedDb: build.query<ListAllTableSchemasLoadedDbApiResponse, ListAllTableSchemasLoadedDbApiArg>(
-      {
-        query: () => ({ url: `/knowledge-flow/v1/tabular/schemas` }),
-      },
-    ),
-    getTableSchemaLoadedDb: build.query<GetTableSchemaLoadedDbApiResponse, GetTableSchemaLoadedDbApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/tables/${queryArg.tableName}/schema` }),
-    }),
-    tabularSqlReadLoadedDb: build.mutation<TabularSqlReadLoadedDbApiResponse, TabularSqlReadLoadedDbApiArg>({
+    getSchema: build.query<GetSchemaApiResponse, GetSchemaApiArg>({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular/sql/read`,
+        url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/tables/${queryArg.tableName}/schema`,
+      }),
+    }),
+    readQuery: build.mutation<ReadQueryApiResponse, ReadQueryApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/sql/read`,
         method: "POST",
         body: queryArg.rawSqlRequest,
       }),
     }),
-    tabularSqlWriteLoadedDb: build.mutation<TabularSqlWriteLoadedDbApiResponse, TabularSqlWriteLoadedDbApiArg>({
+    writeQuery: build.mutation<WriteQueryApiResponse, WriteQueryApiArg>({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular/sql/write`,
+        url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/sql/write`,
         method: "POST",
         body: queryArg.rawSqlRequest,
       }),
     }),
-    deleteTableLoadedDb: build.mutation<DeleteTableLoadedDbApiResponse, DeleteTableLoadedDbApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/tables/${queryArg.tableName}`, method: "DELETE" }),
+    deleteTable: build.mutation<DeleteTableApiResponse, DeleteTableApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/tables/${queryArg.tableName}`,
+        method: "DELETE",
+      }),
     }),
     listDatasets: build.query<ListDatasetsApiResponse, ListDatasetsApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/stat/list_datasets` }),
@@ -757,33 +760,46 @@ export type LightweightMarkdownKnowledgeFlowV1LiteMarkdownPostApiArg = {
   format?: string;
   bodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost: BodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost;
 };
-export type ListTabularDatabasesApiResponse = /** status 200 Successful Response */ string[];
-export type ListTabularDatabasesApiArg = void;
-export type LoadTabularDatabaseApiResponse = /** status 200 Successful Response */ any;
-export type LoadTabularDatabaseApiArg = {
-  /** Name of the database to load */
+export type GetContextApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+}[];
+export type GetContextApiArg = void;
+export type ListDatabasesApiResponse = /** status 200 Successful Response */ string[];
+export type ListDatabasesApiArg = void;
+export type ListTablesApiResponse = /** status 200 Successful Response */ ListTablesResponse;
+export type ListTablesApiArg = {
+  /** Database name */
   dbName: string;
 };
-export type ListTablesLoadedDbApiResponse = /** status 200 Successful Response */ ListTableResponse;
-export type ListTablesLoadedDbApiArg = void;
-export type ListAllTableSchemasLoadedDbApiResponse = /** status 200 Successful Response */ TabularSchemaResponse[];
-export type ListAllTableSchemasLoadedDbApiArg = void;
-export type GetTableSchemaLoadedDbApiResponse = /** status 200 Successful Response */ TabularSchemaResponse;
-export type GetTableSchemaLoadedDbApiArg = {
-  /** Name of the table */
+export type GetDatabaseSchemasApiResponse = /** status 200 Successful Response */ GetSchemaResponse[];
+export type GetDatabaseSchemasApiArg = {
+  /** Database name */
+  dbName: string;
+};
+export type GetSchemaApiResponse = /** status 200 Successful Response */ GetSchemaResponse;
+export type GetSchemaApiArg = {
+  /** Database name */
+  dbName: string;
+  /** Table name */
   tableName: string;
 };
-export type TabularSqlReadLoadedDbApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
-export type TabularSqlReadLoadedDbApiArg = {
+export type ReadQueryApiResponse = /** status 200 Successful Response */ RawSqlResponse;
+export type ReadQueryApiArg = {
+  /** Database name */
+  dbName: string;
   rawSqlRequest: RawSqlRequest;
 };
-export type TabularSqlWriteLoadedDbApiResponse = /** status 200 Successful Response */ TabularQueryResponse;
-export type TabularSqlWriteLoadedDbApiArg = {
+export type WriteQueryApiResponse = /** status 200 Successful Response */ RawSqlResponse;
+export type WriteQueryApiArg = {
+  /** Database name */
+  dbName: string;
   rawSqlRequest: RawSqlRequest;
 };
-export type DeleteTableLoadedDbApiResponse = unknown;
-export type DeleteTableLoadedDbApiArg = {
-  /** Table name to delete */
+export type DeleteTableApiResponse = unknown;
+export type DeleteTableApiArg = {
+  /** Database name */
+  dbName: string;
+  /** Table name */
   tableName: string;
 };
 export type ListDatasetsApiResponse = /** status 200 Successful Response */ any;
@@ -1183,7 +1199,7 @@ export type BodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost = {
   /** JSON string of LiteMarkdownOptions */
   options_json?: string | null;
 };
-export type ListTableResponse = {
+export type ListTablesResponse = {
   db_name: string;
   tables: string[];
 };
@@ -1191,13 +1207,13 @@ export type TabularColumnSchema = {
   name: string;
   dtype: "string" | "integer" | "float" | "boolean" | "datetime" | "unknown";
 };
-export type TabularSchemaResponse = {
+export type GetSchemaResponse = {
   db_name: string;
   table_name: string;
   columns: TabularColumnSchema[];
   row_count?: number | null;
 };
-export type TabularQueryResponse = {
+export type RawSqlResponse = {
   db_name: string;
   sql_query: string;
   rows?:
@@ -1569,18 +1585,19 @@ export const {
   useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
   useLightweightMarkdownKnowledgeFlowV1LiteMarkdownPostMutation,
-  useListTabularDatabasesQuery,
-  useLazyListTabularDatabasesQuery,
-  useLoadTabularDatabaseMutation,
-  useListTablesLoadedDbQuery,
-  useLazyListTablesLoadedDbQuery,
-  useListAllTableSchemasLoadedDbQuery,
-  useLazyListAllTableSchemasLoadedDbQuery,
-  useGetTableSchemaLoadedDbQuery,
-  useLazyGetTableSchemaLoadedDbQuery,
-  useTabularSqlReadLoadedDbMutation,
-  useTabularSqlWriteLoadedDbMutation,
-  useDeleteTableLoadedDbMutation,
+  useGetContextQuery,
+  useLazyGetContextQuery,
+  useListDatabasesQuery,
+  useLazyListDatabasesQuery,
+  useListTablesQuery,
+  useLazyListTablesQuery,
+  useGetDatabaseSchemasQuery,
+  useLazyGetDatabaseSchemasQuery,
+  useGetSchemaQuery,
+  useLazyGetSchemaQuery,
+  useReadQueryMutation,
+  useWriteQueryMutation,
+  useDeleteTableMutation,
   useListDatasetsQuery,
   useLazyListDatasetsQuery,
   useSetDatasetMutation,
