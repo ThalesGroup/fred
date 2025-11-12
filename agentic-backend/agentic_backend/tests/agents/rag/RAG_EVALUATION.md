@@ -1,15 +1,15 @@
-# RAGAS Evaluation Script
+# RAG Evaluation Script
 
-This script evaluates Retrieval-Augmented Generation (RAG) agents using the [RAGAS](https://docs.ragas.io/) framework. It allows you to assess agent performance on a set of questions using various RAGAS metrics.
+This script evaluates Retrieval-Augmented Generation (RAG) agents using the [DeepEval](https://deepeval.com/) framework. It allows you to assess agent performance on a set of questions using various RAG metrics.
 
 ## Features
 
 - Evaluates RAG agents using multiple RAGAS metrics:
-  - Faithfulness : Measures if the answer is factually grounded in the retrieved context.
-  - Answer Relevancy : Measures if the answer directly addresses the question.
-  - Context Precision : Measures if relevant documents are ranked first in the retrieved context.
-  - Context Recall : Measures if all necessary information to answer is in the retrieved context.
-  - Answer Similarity : Measures semantic similarity between the generated answer and expected answer.
+  - Answer Relevancy : Measures how relevant the generated answer is to the user’s question.
+  - Faithfullness : Measures how factually consistent the answer is with the retrieved context.
+  - Contextual Precision : Measures how much of the retrieved context is actually useful for generating the answer
+  - Contextual Recall : Measures whether the retrieved context contains all the information needed to answer correctly.
+  - Contxtual Relevancy : Measures how relevant the retrieved context is to the question itself (not to the final answer).
 - Supports custom chat and embedding models
 - Configurable document libraries for agent context
 
@@ -21,7 +21,7 @@ This script evaluates Retrieval-Augmented Generation (RAG) agents using the [RAG
 ## Usage
 
 ```bash
-python ragas_evaluation.py \
+python rag_evaluation.py \
   --chat_model "gpt-4" \
   --embedding_model "text-embedding-3-small" \
   --dataset_path "tests/agents/rag/test_questions.json" \
@@ -53,15 +53,35 @@ The test dataset should be a JSON file with the following structure:
 
 ## Output
 
-The script outputs evaluation results in a formatted table showing scores for each metric with visual progress bars. Example:
+The script outputs evaluation results in a formatted table showing scores for each metric. Example:
 
 ```
-📈 RAGAS EVALUATION RESULTS
+📈 DEEPEVAL EVALUATION RESULTS
 ======================================================================
-  faithfulness         : ████████████████████░░ 0.920
-  answer_relevancy     : ████████████████████░░ 0.880
-  context_precision    : ████████████████████░░ 0.900
-  context_recall       : ████████████████████░░ 0.850
-  answer_similarity    : ████████████████████░░ 0.910
+AVERAGES PER METRIC
 ======================================================================
+Answer Relevancy
+──────────────────────────────────────────────────────────────────────
+  Average:           0.8333 (83.33%)
+
+Contextual Precision
+──────────────────────────────────────────────────────────────────────
+  Average:           1.0000 (100.0%)
+
+Contextual Recall
+──────────────────────────────────────────────────────────────────────
+  Average:           0.0000 (0.0%)
+
+Contextual Relevancy
+──────────────────────────────────────────────────────────────────────
+  Average:           0.1905 (19.05%)
+
+Faithfulness
+──────────────────────────────────────────────────────────────────────
+  Average:           0.8000 (80.0%)
+
+======================================================================
+OVERALL AVERAGE
+======================================================================
+  Overall average:   0.5648 (56.48%)
 ```
