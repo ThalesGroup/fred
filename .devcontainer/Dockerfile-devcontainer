@@ -3,39 +3,40 @@ FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 ARG USERNAME=vscode
 ARG USER_UID=1000
 ARG USER_GID=${USER_UID}
+ARG ENV DEV_CACHE_DIR="/fred-dev-cache"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        bash-completion \
-        build-essential \
-        ca-certificates \
-        curl \
-        fd-find \
-        git \
-        gnupg \
-        jq \
-        less \
-        libffi-dev \
-        libpq-dev \
-        libsqlite3-dev \
-        libssl-dev \
-        locales \
-        make \
-        pandoc \
-        python3 \
-        python3-venv \
-        python3-pip \
-        sqlite3 \
-        sudo \
-        unzip \
-        wget \
-        xz-utils \
-        zip \
-        libreoffice \
-        fonts-dejavu \
-        tmux && \
+    bash-completion \
+    build-essential \
+    ca-certificates \
+    curl \
+    fd-find \
+    git \
+    gnupg \
+    jq \
+    less \
+    libffi-dev \
+    libpq-dev \
+    libsqlite3-dev \
+    libssl-dev \
+    locales \
+    make \
+    pandoc \
+    python3 \
+    python3-venv \
+    python3-pip \
+    sqlite3 \
+    sudo \
+    unzip \
+    wget \
+    xz-utils \
+    zip \
+    libreoffice \
+    fonts-dejavu \
+    tmux && \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
     npm install -g npm@latest && \
@@ -49,10 +50,18 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mv /root/.local/bin/uv /usr/local/bin/uv && \
     chmod +x /usr/local/bin/uv
 
+# Write command history to a file saved in the cache dev volume (for bash and zsh)
+ENV COMMAND_HISTORY_DIR="${DEV_CACHE_DIR}/commandhistory"
+RUN mkdir -p ${COMMAND_HISTORY_DIR} \
+    && touch ${COMMAND_HISTORY_DIR}/.bash_history ${COMMAND_HISTORY_DIR}/.zsh_history \
+    && chown -R $USERNAME ${COMMAND_HISTORY_DIR} \
+    && echo "export PROMPT_COMMAND='history -a' && export HISTFILE=${COMMAND_HISTORY_DIR}/.bash_history" >> "/home/$USERNAME/.bashrc" \
+    && echo "export PROMPT_COMMAND='history -a' && export HISTFILE=${COMMAND_HISTORY_DIR}/.zsh_history" >> "/home/$USERNAME/.zshrc"
+
 RUN if ! id -u ${USERNAME} >/dev/null 2>&1; then \
-        groupadd --gid ${USER_GID} ${USERNAME} && \
-        useradd --uid ${USER_UID} --gid ${USER_GID} -m ${USERNAME} && \
-        usermod -aG sudo ${USERNAME}; \
+    groupadd --gid ${USER_GID} ${USERNAME} && \
+    useradd --uid ${USER_UID} --gid ${USER_GID} -m ${USERNAME} && \
+    usermod -aG sudo ${USERNAME}; \
     fi && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME}
 
