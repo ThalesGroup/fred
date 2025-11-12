@@ -38,6 +38,7 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     SystemMessage,
+    ToolMessage,
 )
 from langchain_core.runnables import Runnable, RunnableConfig
 
@@ -331,20 +332,42 @@ class AgentFlow:
 
     def recent_messages(
         self,
-        messages: Sequence[AnyMessage],
-        *,
+        messages: Sequence[Any],
         max_messages: int = 8,
-    ) -> List[AnyMessage]:
+    ) -> List[Any]:
         """
-        Return a shallow copy of the latest `max_messages` items.
-        Call this before invoking the LLM to keep prompts short while
-        the full dialogue remains in MessagesState for other nodes.
+        Return the most recent messages including AI messages and all tool messages
+        associated with any tool calls present in the selection.
         """
-        if max_messages is None or max_messages <= 0:
+        if not messages or max_messages <= 0:
             return []
-        if len(messages) <= max_messages:
-            return list(messages)
-        return list(messages[-max_messages:])
+
+        selected = list(messages[-max_messages:])
+        i = 0
+        while i < len(selected):
+            msg = selected[i]
+            if isinstance(msg, ToolMessage):
+                call_id = getattr(msg, "tool_call_id", None)
+                if call_id:
+                    for ai_msg in reversed(messages):
+                        if isinstance(ai_msg, AIMessage):
+                            tool_calls = getattr(ai_msg, "tool_calls", [])
+                            if any(call.get("id") == call_id for call in tool_calls):
+                                if ai_msg not in selected:
+                                    selected.insert(0, ai_msg)
+                                    i += 1
+                                for call in tool_calls:
+                                    for tm in messages:
+                                        if isinstance(tm, ToolMessage) and getattr(
+                                            tm, "tool_call_id", None
+                                        ) == call.get("id"):
+                                            if tm not in selected:
+                                                ai_index = selected.index(ai_msg)
+                                                selected.insert(ai_index + 1, tm)
+                                break
+            i += 1
+
+        return selected
 
     @staticmethod
     def delta(*msgs: AnyMessage) -> MessagesState:
