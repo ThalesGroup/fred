@@ -13,19 +13,17 @@
 # limitations under the License.
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 
 from fred_core import Action, KeycloakUser, Resource, authorize
-from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo
 
 from knowledge_flow_backend.features.tabular.structures import (
     DTypes,
-    ListTableResponse,
-    RawSQLRequest,
+    GetSchemaResponse,
+    ListTablesResponse,
+    RawSQLResponse,
     TabularColumnSchema,
-    TabularQueryResponse,
-    TabularSchemaResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,35 +40,6 @@ class TabularService:
 
     def __init__(self, stores_info: Dict[str, StoreInfo]):
         self.stores_info = stores_info
-        self.loaded_store: Optional[Tuple[SQLTableStore, str]] = None
-
-    # -------------------------------------------------------------------------
-    # Gestion explicite du store
-    # -------------------------------------------------------------------------
-
-    def load_store(self, db_name: str) -> None:
-        """
-        Charge explicitement un store et le mémorise dans l'instance.
-
-        :param db_name: Nom de la base à charger.
-        """
-        if not db_name:
-            raise ValueError(f"A database name must be explicitly provided to load a store. Available databases: {list(self.stores_info.keys())}")
-
-        if db_name not in self.stores_info:
-            raise ValueError(f"Unknown database '{db_name}'. Available databases: {list(self.stores_info.keys())}")
-
-        store = self.stores_info[db_name].store
-        self.loaded_store = (store, db_name)
-        logger.info(f"Store for database '{db_name}' successfully loaded.")
-
-    def _require_store(self) -> Tuple[SQLTableStore, str]:
-        """
-        Vérifie qu’un store a bien été chargé avant d’exécuter une opération.
-        """
-        if not self.loaded_store:
-            raise RuntimeError("No database is currently loaded. Please call `load_store(db_name)` before performing operations.")
-        return self.loaded_store
 
     def _check_write_allowed(self, db_name: str):
         store_info = self.stores_info.get(db_name)
@@ -99,10 +68,10 @@ class TabularService:
     # -------------------------------------------------------------------------
 
     @authorize(action=Action.DELETE, resource=Resource.TABLES)
-    def delete_table(self, user: KeycloakUser, table_name: str) -> None:
-        store, db_name = self._require_store()
+    def delete_table(self, user: KeycloakUser, db_name: str, table_name: str) -> None:
         self._check_write_allowed(db_name)
         try:
+            store = self.stores_info[db_name].store
             store.delete_table(table_name)
             logger.info(f"Table '{table_name}' deleted from database '{db_name}'")
         except Exception as e:
@@ -113,25 +82,42 @@ class TabularService:
     def list_databases(self, user: KeycloakUser) -> List[str]:
         return list(self.stores_info.keys())
 
+    @authorize(action=Action.READ, resource=Resource.TABLES_DATABASES)
+    def list_databases_with_tables(self, user: KeycloakUser) -> List[Dict[str, List[str]]]:
+        """
+        Retourne la liste de toutes les bases et leurs tables.
+        Format : [{"database": db_name, "tables": [...]}, ...]
+        """
+        results = []
+        for db_name, store_info in self.stores_info.items():
+            try:
+                store = store_info.store
+                tables = store.list_tables()
+                results.append({"database": db_name, "tables": tables})
+            except Exception as e:
+                logger.warning(f"Failed to list tables for database '{db_name}': {e}")
+                results.append({"database": db_name, "tables": []})
+        return results
+
     @authorize(action=Action.READ, resource=Resource.TABLES)
-    def get_schema(self, user: KeycloakUser, table_name: str) -> TabularSchemaResponse:
-        store, db_name = self._require_store()
+    def get_schema(self, user: KeycloakUser, db_name: str, table_name: str) -> GetSchemaResponse:
+        store = self.stores_info[db_name].store
         table_name = self._sanitize_table_name(table_name)
         schema = store.get_table_schema(table_name)
         columns = [TabularColumnSchema(name=col, dtype=self._map_sql_type_to_literal(dtype)) for col, dtype in schema]
         count_df = store.execute_sql_query(f'SELECT COUNT(*) AS count FROM "{table_name}"')
         row_count = int(count_df["count"].iloc[0])
-        return TabularSchemaResponse(db_name=db_name, table_name=table_name, columns=columns, row_count=row_count)
+        return GetSchemaResponse(db_name=db_name, table_name=table_name, columns=columns, row_count=row_count)
 
     @authorize(action=Action.READ, resource=Resource.TABLES)
-    def list_tables(self, user: KeycloakUser) -> ListTableResponse:
-        store, db_name = self._require_store()
+    def list_tables(self, user: KeycloakUser, db_name: str) -> ListTablesResponse:
+        store = self.stores_info[db_name].store
         table_names = store.list_tables()
-        return ListTableResponse(db_name=db_name, tables=table_names)
+        return ListTablesResponse(db_name=db_name, tables=table_names)
 
     @authorize(action=Action.READ, resource=Resource.TABLES)
-    def list_tables_with_schema(self, user: KeycloakUser) -> List[TabularSchemaResponse]:
-        store, db_name = self._require_store()
+    def list_tables_with_schema(self, user: KeycloakUser, db_name: str) -> List[GetSchemaResponse]:
+        store = self.stores_info[db_name].store
         responses = []
         table_names = store.list_tables()
         for table in table_names:
@@ -141,7 +127,7 @@ class TabularService:
                 count_df = store.execute_sql_query(f'SELECT COUNT(*) AS count FROM "{table}"')
                 row_count = int(count_df["count"].iloc[0])
                 responses.append(
-                    TabularSchemaResponse(
+                    GetSchemaResponse(
                         db_name=db_name,
                         table_name=table,
                         columns=columns,
@@ -154,22 +140,22 @@ class TabularService:
         return responses
 
     @authorize(action=Action.READ, resource=Resource.TABLES)
-    def query_read(self, user: KeycloakUser, request: RawSQLRequest) -> TabularQueryResponse:
-        sql = request.query.strip()
+    def query_read(self, user: KeycloakUser, db_name: str, query: str) -> RawSQLResponse:
+        sql = query.strip()
         if not sql.lower().startswith("select"):
             raise ValueError("Only SELECT statements are allowed on the read endpoint")
-        store, db_name = self._require_store()
+        store = self.stores_info[db_name].store
         df = store.execute_sql_query(sql)
-        return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=df.to_dict(orient="records"), error=None)
+        return RawSQLResponse(db_name=db_name, sql_query=sql, rows=df.to_dict(orient="records"), error=None)
 
     @authorize(action=Action.UPDATE, resource=Resource.TABLES)
     @authorize(action=Action.CREATE, resource=Resource.TABLES)
     @authorize(action=Action.DELETE, resource=Resource.TABLES)
-    def query_write(self, user: KeycloakUser, request: RawSQLRequest) -> TabularQueryResponse:
-        sql = request.query.strip()
+    def query_write(self, user: KeycloakUser, db_name: str, query: str) -> RawSQLResponse:
+        sql = query.strip()
         if not sql:
             raise ValueError("Empty SQL string provided")
-        store, db_name = self._require_store()
+        store = self.stores_info[db_name].store
         self._check_write_allowed(db_name)
         store.execute_update_query(sql)
-        return TabularQueryResponse(db_name=db_name, sql_query=sql, rows=[], error=None)
+        return RawSQLResponse(db_name=db_name, sql_query=sql, rows=[], error=None)

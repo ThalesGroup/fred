@@ -240,19 +240,19 @@ applications:
           username: admin
         feedback_store:
           type: "duckdb"
-          duckdb_path: "~/.fred/agentic/feedback.duckdb"
+          duckdb_path: "/home/fred-user/.fred/agentic/feedback.duckdb"
 
         agent_store:
           type: "duckdb"
-          duckdb_path: "~/.fred/agentic/agent.duckdb"
+          duckdb_path: "/home/fred-user/.fred/agentic/agent.duckdb"
 
         session_store:
           type: "duckdb"
-          duckdb_path: "~/.fred/agentic/session.duckdb"
+          duckdb_path: "/home/fred-user/.fred/agentic/session.duckdb"
 
         history_store:
           type: "duckdb"
-          duckdb_path: "~/.fred/agentic/history.duckdb"
+          duckdb_path: "/home/fred-user/.fred/agentic/history.duckdb"
 
         kpi_store:
           type: "log"
@@ -543,7 +543,7 @@ applications:
           class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
       content_storage:
         type: local
-        root_path: ~/.fred/knowledge-flow/content-storage
+        root_path: /home/fred-user/.fred/knowledge-flow/content-storage
       document_sources:
         fred:
           type: push
@@ -584,22 +584,22 @@ applications:
           username: admin
         catalog_store:
           type: "duckdb"
-          duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"
+          duckdb_path: "/home/fred-user/.fred/knowledge-flow/catalog.duckdb"
         prompt_store:
           type: "duckdb"
-          duckdb_path: "~/.fred/knowledge-flow/prompt.duckdb"
+          duckdb_path: "/home/fred-user/.fred/knowledge-flow/prompt.duckdb"
         resource_store:
           type: "duckdb"
-          duckdb_path: "~/.fred/knowledge-flow/resource.duckdb"
+          duckdb_path: "/home/fred-user/.fred/knowledge-flow/resource.duckdb"
         kpi_store:
           type: "log"
           level: "INFO"
         tag_store:
           type: "duckdb"
-          duckdb_path: "~/.fred/knowledge-flow/tag.duckdb"
+          duckdb_path: "/home/fred-user/.fred/knowledge-flow/tag.duckdb"
         metadata_store:
           type: "duckdb"
-          duckdb_path: "~/.fred/knowledge-flow/metadata.duckdb"
+          duckdb_path: "/home/fred-user/.fred/knowledge-flow/metadata.duckdb"
 
         vector_store:
           type: in_memory
@@ -608,7 +608,7 @@ applications:
             type: "sql"
             driver: "duckdb"
             database: "base_database"
-            path: "~/.fred/knowledge-flow/db.duckdb"
+            path: "/home/fred-user/.fred/knowledge-flow/db.duckdb"
             mode: "read_and_write"
 
     dotenv:

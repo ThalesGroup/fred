@@ -12,8 +12,35 @@
   "workspaceFolder": "/workspaces/fred",
   "runArgs": ["--init"],
   "mounts": [
-    "source=${localEnv:HOME}/.fred,target=/home/vscode/.fred,type=bind,consistency=cached"
+    // Fred config directory from host
+    "source=${localEnv:HOME}/.fred,target=/home/vscode/.fred,type=bind,consistency=cached",
+    // Volume to cache dev files
+    "source=fred-dev-cache,target=/fred-dev-cache,type=volume"
   ],
+  "containerEnv": {
+    "DEV_CACHE_DIR": "/fred-dev-cache"
+  },
+  "remoteEnv": {
+    // Save ZSH and BASH history to dev cache volume (set by postStartCommand)
+    "ZSH_HISTFILE": "${containerEnv:DEV_CACHE_DIR}/commandhistory/.zsh_history",
+    "BASH_HISTFILE": "${containerEnv:DEV_CACHE_DIR}/commandhistory/.bash_history",
+
+    // Set pip cache directory to dev cache volume
+    "PIP_CACHE_DIR": "${containerEnv:DEV_CACHE_DIR}/pip",
+
+    // Set UV cache directories to dev cache volume
+    "UV_CACHE_DIR": "${containerEnv:DEV_CACHE_DIR}/uv",
+    "UV_PYTHON_CACHE_DIR": "${containerEnv:DEV_CACHE_DIR}/uv/python",
+    "UV_LINK_MODE": "copy",
+
+    // Set NPM cache directory to dev cache volume
+    "NPM_CONFIG_CACHE": "${containerEnv:DEV_CACHE_DIR}/npm-cache",
+
+    // Universal cache (for tools following XDG spec)
+    "XDG_CACHE_HOME": "${containerEnv:DEV_CACHE_DIR}/xdg"
+  },
+  // Init zsh and bash conf in dev cache volume
+  "postStartCommand": "./.devcontainer/scripts/init-shell.sh",
   "forwardPorts": [5173, 8000, 8111],
   "portsAttributes": {
     "5173": { "label": "frontend (Vite)" },
@@ -58,7 +85,8 @@
         "editor.formatOnSave": true,
         "python.linting.enabled": true,
         "python.testing.pytestEnabled": true,
-        "python.defaultInterpreterPath": "${workspaceFolder}/agentic_backend/.venv/bin/python"
+        "python.defaultInterpreterPath": "${workspaceFolder}/agentic_backend/.venv/bin/python",
+        "terminal.integrated.defaultProfile.linux": "zsh"
       }
     }
   },
