@@ -210,3 +210,5 @@ knowledge-flow-backend/openapi.json
 
 # evaluation results
 /developer_tools/evaluation_results/
+
+**/.deepeval
