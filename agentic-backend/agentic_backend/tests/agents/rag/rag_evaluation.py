@@ -4,8 +4,8 @@ import json
 import logging
 import os
 import sys
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
 
 from deepeval import evaluate
 from deepeval.evaluate import AsyncConfig
@@ -16,13 +16,11 @@ from deepeval.metrics import (
     ContextualRelevancyMetric,
     FaithfulnessMetric,
 )
-from deepeval.models import OllamaModel, GPTModel
+from deepeval.models import GPTModel, OllamaModel
 from deepeval.test_case import LLMTestCase
-
-from langchain_openai import (
-    ChatOpenAI
-)
 from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
+
 from agentic_backend.agents.rags.advanced_rag_expert import AdvancedRico
 from agentic_backend.application_context import (
     ApplicationContext,
@@ -84,9 +82,16 @@ def mapping_langchain_deepeval(langchain_model):
         A DeepEval model instance (OllamaModel or GPTModel) corresponding to the input.
     """
     if isinstance(langchain_model, ChatOllama):
-        return OllamaModel(model=langchain_model.model, base_url=langchain_model.base_url, temperature=langchain_model.temperature or 0.0)
+        return OllamaModel(
+            model=langchain_model.model,
+            base_url=langchain_model.base_url,
+            temperature=langchain_model.temperature or 0.0,
+        )
     if isinstance(langchain_model, ChatOpenAI):
-        return GPTModel(model=langchain_model.model_name, temperature=langchain_model.temperature or 0.0)
+        return GPTModel(
+            model=langchain_model.model_name,
+            temperature=langchain_model.temperature or 0.0,
+        )
 
 
 async def setup_agent(
@@ -111,7 +116,9 @@ async def setup_agent(
 
     agent = AdvancedRico(settings)
     await agent.async_init()
-    agent.set_runtime_context(context=RuntimeContext(access_token="ragas_eval_token_1234567"))
+    agent.set_runtime_context(
+        context=RuntimeContext(access_token="fake_token")
+    )
 
     if doc_lib_ids:
         agent.set_runtime_context(
@@ -136,30 +143,30 @@ def calculate_metric_averages(result):
         for metric_data in test_result.metrics_data:
             metric_name = metric_data.name
             metrics_scores[metric_name].append(metric_data.score)
-    
+
     print("\n" + "=" * 70)
     print("AVERAGES PER METRIC")
     print("=" * 70)
-    
+
     results = {}
     for metric_name in sorted(metrics_scores.keys()):
         scores = metrics_scores[metric_name]
         avg = sum(scores) / len(scores) if scores else 0
         min_score = min(scores) if scores else 0
         max_score = max(scores) if scores else 0
-        
+
         print(f"\n{metric_name}")
         print(f"{'─' * 70}")
         percent = round(avg * 100, 2)
         print(f"  Average:           {avg:.4f} ({percent}%)")
-        
+
         results[metric_name] = {
             "scores": scores,
             "average": avg,
             "min": min_score,
-            "max": max_score
+            "max": max_score,
         }
-    
+
     all_scores = [score for scores in metrics_scores.values() for score in scores]
     global_average = sum(all_scores) / len(all_scores) if all_scores else 0
 
