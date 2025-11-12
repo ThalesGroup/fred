@@ -63,7 +63,8 @@
         "editor.formatOnSave": true,
         "python.linting.enabled": true,
         "python.testing.pytestEnabled": true,
-        "python.defaultInterpreterPath": "${workspaceFolder}/agentic_backend/.venv/bin/python"
+        "python.defaultInterpreterPath": "${workspaceFolder}/agentic_backend/.venv/bin/python",
+        "terminal.integrated.defaultProfile.linux": "zsh"
       }
     }
   },
