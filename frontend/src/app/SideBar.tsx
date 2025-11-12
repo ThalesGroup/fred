@@ -121,6 +121,18 @@ export default function SideBar({ darkMode, onThemeChange }) {
                     },
                   ]
                 : []),
+              ...(canReadRuntime
+                ? [
+                    {
+                      key: "monitoring-processors",
+                      label: t("sidebar.monitoring_processors", "Processors"),
+                      icon: <MonitorHeartIcon />,
+                      url: `/monitoring/processors`,
+                      canBeDisabled: false,
+                      tooltip: t("sidebar.tooltip.monitoring_processors", "Processor bench"),
+                    },
+                  ]
+                : []),
               ...(canReadOpenSearch || canReadLogs
                 ? [
                     {

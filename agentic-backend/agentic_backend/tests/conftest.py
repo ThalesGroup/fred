@@ -1,5 +1,6 @@
 # agentic_backend/tests/conftest.py
 
+import asyncio
 import os
 
 import pytest
@@ -7,16 +8,18 @@ from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from fred_core import (
     DuckdbStoreConfig,
+    KeycloakUser,
     M2MSecurity,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
     SecurityConfiguration,
     SpiceDbRebacConfig,
     UserSecurity,
+    get_current_user,
 )
 from pydantic import AnyHttpUrl, AnyUrl
 
-from agentic_backend.application_context import ApplicationContext
+from agentic_backend.application_context import ApplicationContext, get_agent_store
 
 # ⬇️ NEW: Agent/union + RecursionConfig now live in tuning_spec
 # ⬇️ REST of your config types stay where they were
@@ -33,6 +36,9 @@ from agentic_backend.common.structures import (
     StorageConfig,
     TimeoutSettings,
 )
+from agentic_backend.core.agents.agent_loader import AgentLoader
+from agentic_backend.core.agents.agent_manager import AgentManager
+from agentic_backend.core.chatbot import chatbot_controller
 
 
 @pytest.fixture(scope="session")
@@ -81,8 +87,8 @@ def minimal_generalist_config() -> Configuration:
             knowledge_flow_url="http://localhost:8000/agentic/v1",
             timeout=TimeoutSettings(connect=5, read=15),
             default_chat_model=ModelConfiguration(
-                provider="openai",
-                name="gpt-4o",
+                provider="test",
+                name="test",
                 settings={"temperature": 0.0, "max_retries": 2, "request_timeout": 30},
             ),
             default_language_model=ModelConfiguration(
@@ -94,6 +100,12 @@ def minimal_generalist_config() -> Configuration:
                 # ⬇️ instantiate the concrete Agent (discriminator handled automatically)
                 Agent(
                     name="Georges",
+                    class_path="agentic_backend.agents.generalist.generalist_expert.Georges",
+                    enabled=True,
+                ),
+                # Include a basic flow named 'Fred' to satisfy tests expecting it
+                Agent(
+                    name="Fred",
                     class_path="agentic_backend.agents.generalist.generalist_expert.Georges",
                     enabled=True,
                 ),
@@ -126,8 +138,40 @@ def app_context(minimal_generalist_config):
 
 
 @pytest.fixture
-def client(app_context) -> TestClient:
+def client(app_context, monkeypatch) -> TestClient:
     app = FastAPI()
+    # Mount our API under the expected base URL
     router = APIRouter(prefix="/agentic/v1")
+
+    # Include the chatbot routes (under test)
+    router.include_router(chatbot_controller.router)
     app.include_router(router)
+
+    # Use a fake chat model for tests to avoid real provider keys/network
+    from langchain_core.language_models.fake_chat_models import FakeChatModel
+    import agentic_backend.application_context as app_ctx
+
+    monkeypatch.setattr(app_ctx, "get_model", lambda cfg: FakeChatModel())
+
+    # Initialize a real AgentManager using the shared ApplicationContext
+    loader = AgentLoader(app_context.configuration, get_agent_store())
+    manager = AgentManager(app_context.configuration, loader, get_agent_store())
+    # Load static agents so /chatbot/agenticflows returns data
+    # Use asyncio.run to avoid deprecated get_event_loop behavior
+    try:
+        asyncio.run(manager.bootstrap())
+    except RuntimeError:
+        # Fallback for environments that already run an event loop
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(manager.bootstrap())
+        finally:
+            loop.close()
+    app.state.agent_manager = manager
+
+    # Keep auth predictable
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        uid="u-1", username="tester", email="t@example.com", roles=["user"]
+    )
+
     return TestClient(app)

@@ -610,6 +610,40 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.processDocumentsRequest,
       }),
     }),
+    listProcessorsKnowledgeFlowV1DevBenchProcessorsGet: build.query<
+      ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiResponse,
+      ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/dev/bench/processors` }),
+    }),
+    runKnowledgeFlowV1DevBenchRunPost: build.mutation<
+      RunKnowledgeFlowV1DevBenchRunPostApiResponse,
+      RunKnowledgeFlowV1DevBenchRunPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/dev/bench/run`,
+        method: "POST",
+        body: queryArg.bodyRunKnowledgeFlowV1DevBenchRunPost,
+      }),
+    }),
+    listRunsKnowledgeFlowV1DevBenchRunsGet: build.query<
+      ListRunsKnowledgeFlowV1DevBenchRunsGetApiResponse,
+      ListRunsKnowledgeFlowV1DevBenchRunsGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/dev/bench/runs` }),
+    }),
+    getRunKnowledgeFlowV1DevBenchRunsRunIdGet: build.query<
+      GetRunKnowledgeFlowV1DevBenchRunsRunIdGetApiResponse,
+      GetRunKnowledgeFlowV1DevBenchRunsRunIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/dev/bench/runs/${queryArg.runId}` }),
+    }),
+    deleteRunKnowledgeFlowV1DevBenchRunsRunIdDelete: build.mutation<
+      DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiResponse,
+      DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/dev/bench/runs/${queryArg.runId}`, method: "DELETE" }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -1002,6 +1036,28 @@ export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse =
   /** status 200 Successful Response */ any;
 export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg = {
   processDocumentsRequest: ProcessDocumentsRequest;
+};
+export type ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiResponse =
+  /** status 200 Successful Response */ ProcessorDescriptor[];
+export type ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiArg = void;
+export type RunKnowledgeFlowV1DevBenchRunPostApiResponse = /** status 200 Successful Response */ BenchmarkResponse;
+export type RunKnowledgeFlowV1DevBenchRunPostApiArg = {
+  bodyRunKnowledgeFlowV1DevBenchRunPost: BodyRunKnowledgeFlowV1DevBenchRunPost;
+};
+export type ListRunsKnowledgeFlowV1DevBenchRunsGetApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+}[];
+export type ListRunsKnowledgeFlowV1DevBenchRunsGetApiArg = void;
+export type GetRunKnowledgeFlowV1DevBenchRunsRunIdGetApiResponse =
+  /** status 200 Successful Response */ BenchmarkResponse;
+export type GetRunKnowledgeFlowV1DevBenchRunsRunIdGetApiArg = {
+  runId: string;
+};
+export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiArg = {
+  runId: string;
 };
 export type Identity = {
   /** Original file name incl. extension */
@@ -1529,6 +1585,49 @@ export type ProcessDocumentsRequest = {
   files: FileToProcessWithoutUser[];
   pipeline_name: string;
 };
+export type ProcessorDescriptor = {
+  id: string;
+  name: string;
+  kind: "standard" | "lite";
+  file_types?: string[];
+};
+export type ProcessorRunMetrics = {
+  chars: number;
+  words: number;
+  headings: number;
+  h1: number;
+  h2: number;
+  h3: number;
+  images: number;
+  links: number;
+  code_blocks: number;
+  table_like_lines: number;
+  tokens_est: number;
+};
+export type ProcessorRunResult = {
+  processor_id: string;
+  display_name: string;
+  kind: "standard" | "lite";
+  status: "ok" | "error";
+  duration_ms: number;
+  markdown?: string | null;
+  metrics?: ProcessorRunMetrics | null;
+  page_count?: number | null;
+  error_message?: string | null;
+};
+export type BenchmarkResponse = {
+  input_filename: string;
+  file_type: string;
+  results: ProcessorRunResult[];
+};
+export type BodyRunKnowledgeFlowV1DevBenchRunPost = {
+  /** Input document (pdf, docx, …) */
+  file: Blob;
+  /** Comma-separated processor ids; default by file type */
+  processors?: string | null;
+  /** Persist the run under the user's benchmark folder */
+  persist?: boolean | null;
+};
 export const {
   useHealthzKnowledgeFlowV1HealthzGetQuery,
   useLazyHealthzKnowledgeFlowV1HealthzGetQuery,
@@ -1659,4 +1758,12 @@ export const {
   useLazyListUsersKnowledgeFlowV1UsersGetQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
+  useListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,
+  useLazyListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,
+  useRunKnowledgeFlowV1DevBenchRunPostMutation,
+  useListRunsKnowledgeFlowV1DevBenchRunsGetQuery,
+  useLazyListRunsKnowledgeFlowV1DevBenchRunsGetQuery,
+  useGetRunKnowledgeFlowV1DevBenchRunsRunIdGetQuery,
+  useLazyGetRunKnowledgeFlowV1DevBenchRunsRunIdGetQuery,
+  useDeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteMutation,
 } = injectedRtkApi;

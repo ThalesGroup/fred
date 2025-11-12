@@ -58,7 +58,8 @@
       "selectCluster": "Veuillez d'abord sélectionner un cluster",
       "monitoring_kpi": "Vue d'ensemble des Kpis",
       "monitoring_logs": "Console de logs",
-      "monitoring_runtime": "Résumé d'exécution"
+      "monitoring_runtime": "Résumé d'exécution",
+      "monitoring_processors": "Banc de test processeurs"
     },
     "theme": {
       "light": "clair",
@@ -70,7 +71,57 @@
     },
     "monitoring_kpi": "Kpis",
     "monitoring_logs": "Logs",
-    "monitoring_runtime": "Runtime"
+    "monitoring_runtime": "Runtime",
+    "monitoring_processors": "Processeurs"
+  },
+  "procbench": {
+    "title": "Banc de test des processeurs",
+    "description": "Ajoutez un PDF ou DOCX et comparez la qualité et la vitesse d'extraction entre processeurs.",
+    "uploadTitle": "Ajouter un document",
+    "uploadSubtitle": "Pris en charge : PDF, DOCX, PPTX, Markdown, Texte",
+    "browse": "Parcourir",
+    "noFile": "Aucun fichier sélectionné",
+    "run": "Lancer le banc",
+    "running": "Exécution...",
+    "clear": "Effacer",
+    "runFailed": "Échec du banc",
+    "runSuccess": "Banc terminé",
+    "runSuccessDetail": "Processeurs exécutés avec succès.",
+    "summaryFor": "Résumé pour '{{name}}'",
+    "processorsCount": "{{count}} processeur(s)",
+    "view": { "sideBySide": "Côte à côte", "stacked": "Empilé" },
+    "metricsTitle": "Métriques des processeurs",
+    "persistLabel": "Enregistrer l'exécution",
+    "saved": {
+      "title": "Exécutions enregistrées",
+      "modified": "Modifié",
+      "file": "Fichier",
+      "count": "Processeurs",
+      "actions": "Actions",
+      "open": "Ouvrir",
+      "delete": "Supprimer",
+      "empty": "Aucune exécution enregistrée.",
+      "loadFailed": "Échec du chargement de l'exécution",
+      "deleteFailed": "Échec de la suppression"
+    },
+    "col": {
+      "processor": "Processeur",
+      "kind": "Type",
+      "status": "Statut",
+      "duration": "Durée",
+      "tokens": "Jetons (est)",
+      "words": "Mots",
+      "headings": "Titres",
+      "images": "Images",
+      "tables": "Lignes de tableau"
+    },
+    "ok": "OK",
+    "error": "Erreur",
+    "runtime": "{{ms}} ms",
+    "pages": "{{n}} page(s)",
+    "noMarkdown": "Aucun markdown produit",
+    "openLatest": "Ouvrir la dernière exécution",
+    "detail": { "title": "Détail de l'exécution", "expandAll": "Tout déplier", "collapseAll": "Tout replier" }
   },
   "runtime": {
     "title": "Résumé d'exécution",

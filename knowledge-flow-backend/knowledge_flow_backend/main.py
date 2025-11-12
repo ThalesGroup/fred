@@ -68,6 +68,7 @@ from knowledge_flow_backend.features.users import users_controller
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
+from knowledge_flow_backend.features.benchmark.benchmark_controller import BenchmarkController
 from knowledge_flow_backend.security.keycloak_rebac_sync import (
     reconcile_keycloak_groups_with_rebac,
 )
@@ -199,6 +200,8 @@ def create_app() -> FastAPI:
     if configuration.scheduler.enabled:
         logger.info("🧩 Activating ingestion scheduler controller.")
         SchedulerController(router)
+    # Developer benchmarking tools (always mounted; auth-protected)
+    BenchmarkController(router)
 
     logger.info("🧩 All controllers registered.")
     app.include_router(router)
