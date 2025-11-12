@@ -38,6 +38,7 @@ TUNING = AgentTuning(
     ),
 )
 
+
 class MiniRagExpert(SimpleAgentFlow):
     """
     Hover intent:
