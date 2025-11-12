@@ -23,7 +23,7 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        // -- Backend --
+        // ---- Backend ----
         // Python support
         "ms-python.python",
         "ms-python.vscode-pylance",
@@ -32,7 +32,7 @@
         // OpenFga .fga file support
         "openfga.openfga-vscode",
 
-        // -- Frontend --
+        // ---- Frontend ----
         // Typescript support
         "ms-vscode.vscode-typescript-next",
         // Typescript linter
@@ -44,13 +44,15 @@
         // Better Typescript error messages
         "YoavBls.pretty-ts-errors",
 
-        // -- Other --
-        // To handle containers
+        // ---- Other ----
+        // Handle containers in vscode (docker)
         "ms-azuretools.vscode-containers",
         // Help doing conventional commits
         "vivaxy.vscode-conventional-commits",
         // Git graph visualization
-        "mhutchie.git-graph"
+        "mhutchie.git-graph",
+        // GitHub PR and issue management
+        "GitHub.vscode-pull-request-github"
       ],
       "settings": {
         "editor.formatOnSave": true,
