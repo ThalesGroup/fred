@@ -72,24 +72,22 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
         converted = self._md.convert(str(file_path))
         md = ""
         engine = "markitdown"
-        try:
-            logger.info(
-                "MarkItDown.convert done | type=%s has_text=%s has_markdown=%s has_content=%s has_md=%s",
-                type(converted).__name__,
-                hasattr(converted, "text"),
-                hasattr(converted, "markdown"),
-                hasattr(converted, "content"),
-                hasattr(converted, "md"),
-            )
-        except Exception:
-            pass
+        logger.debug(
+            "MarkItDown.convert done | type=%s has_text=%s has_markdown=%s has_content=%s has_md=%s",
+            type(converted).__name__,
+            hasattr(converted, "text"),
+            hasattr(converted, "markdown"),
+            hasattr(converted, "content"),
+            hasattr(converted, "md"),
+        )
+
         selected_attr = None
         for attr in ("text", "markdown", "content", "md"):
             try:
                 val = getattr(converted, attr, None)
                 if isinstance(val, str) and val.strip():
                     md = val
-                    logger.info("Using MarkItDown attribute '%s' | length=%d", attr, len(md))
+                    logger.debug("Using MarkItDown attribute '%s' | length=%d", attr, len(md))
                     selected_attr = attr
                     break
             except Exception:
