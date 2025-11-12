@@ -117,7 +117,7 @@ async def setup_agent(
     agent = AdvancedRico(settings)
     await agent.async_init()
     agent.set_runtime_context(
-        context=RuntimeContext(access_token="fake_token")
+        context=RuntimeContext(access_token="fake_token") # nosec B106
     )
 
     if doc_lib_ids:
