@@ -3,7 +3,6 @@ FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 ARG USERNAME=vscode
 ARG USER_UID=1000
 ARG USER_GID=${USER_UID}
-ARG ENV DEV_CACHE_DIR="/fred-dev-cache"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -49,19 +48,6 @@ RUN YQ_VERSION="4.44.3" && \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mv /root/.local/bin/uv /usr/local/bin/uv && \
     chmod +x /usr/local/bin/uv
-
-# Write command history to a file saved in the cache dev volume (for bash and zsh)
-ENV COMMAND_HISTORY_DIR="${DEV_CACHE_DIR}/commandhistory"
-RUN mkdir -p ${COMMAND_HISTORY_DIR} \
-    && touch ${COMMAND_HISTORY_DIR}/.bash_history ${COMMAND_HISTORY_DIR}/.zsh_history \
-    && chown -R $USERNAME ${COMMAND_HISTORY_DIR} \
-    && echo "export PROMPT_COMMAND='history -a' && export HISTFILE=${COMMAND_HISTORY_DIR}/.bash_history" >> "/home/$USERNAME/.bashrc" \
-    && echo "export PROMPT_COMMAND='history -a' && export HISTFILE=${COMMAND_HISTORY_DIR}/.zsh_history" >> "/home/$USERNAME/.zshrc"
-
-# Set UV cache directories to dev cache volume
-ENV UV_CACHE_DIR="${DEV_CACHE_DIR}/uv"
-ENV UV_PYTHON_CACHE_DIR="${DEV_CACHE_DIR}/uv/python"
-ENV UV_LINK_MODE=copy
 
 RUN if ! id -u ${USERNAME} >/dev/null 2>&1; then \
     groupadd --gid ${USER_GID} ${USERNAME} && \
