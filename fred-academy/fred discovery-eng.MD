@@ -29,7 +29,7 @@ Find out how to start Fred here : https://github.com/ThalesGroup/fred?tab=readme
 
 <details>
 <summary>Clue 1</summary>
-To select an agent use the 9 dots on the top left corner of the chat section.
+To select an agent use the dropdown menu on the top left corner of the chat section.
 
 ![alt text](images/image.png)
 
@@ -43,7 +43,7 @@ To select an agent use the 9 dots on the top left corner of the chat section.
 
 <details>
 <summary>Clue 1</summary>
-You can add achat context in the ressources/chat_contexts segment.
+You can add a chat context in the ressources/chat_contexts segment.
 </details>
 
 <details>
@@ -51,6 +51,14 @@ You can add achat context in the ressources/chat_contexts segment.
 You must have a library to create a chat context or add documents.
 
 ![alt text](images/image-1.png)
+
+</details>
+
+<details>
+<summary>Clue 3</summary>
+To use a chat context you must select it on the caht page.
+
+![alt text](images/image-9.png)
 
 </details>
 
@@ -247,6 +255,9 @@ The AI model is eventually called with an async method. As such:
 - Modify configuration.yaml in the agentic backend to switch between a “local” vs. “cloud” model.
 - Compare results: response time, style, cost, and configuration complexity.
 - Document your observations.
+
+Use the documentation : https://github.com/ThalesGroup/fred?tab=readme-ov-file#supported-model-providers
+
 
 ### 10. Explore the Knowledge-Flow API Documentation
 
