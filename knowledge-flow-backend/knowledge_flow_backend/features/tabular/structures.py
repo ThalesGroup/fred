@@ -28,12 +28,17 @@ class TabularColumnSchema(BaseModel):
     dtype: DTypes
 
 
-class ListTableResponse(BaseModel):
+class ListDatabasesResponse(BaseModel):
     db_name: str
     tables: list[str]
 
 
-class TabularSchemaResponse(BaseModel):
+class ListTablesResponse(BaseModel):
+    db_name: str
+    tables: list[str]
+
+
+class GetSchemaResponse(BaseModel):
     db_name: str
     table_name: str
     columns: List[TabularColumnSchema]
@@ -44,15 +49,11 @@ class RawSQLRequest(BaseModel):
     query: str
 
 
-class TabularQueryResponse(BaseModel):
+class RawSQLResponse(BaseModel):
     db_name: str
     sql_query: str
     rows: Optional[List[dict]] = []
     error: Optional[str] = None
-
-
-class HowToMakeAQueryResponse(BaseModel):
-    how: str
 
 
 class TabularDatasetMetadata(BaseModel):

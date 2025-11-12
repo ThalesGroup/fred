@@ -15,11 +15,12 @@
 
 import json
 import logging
-from typing import Any, Dict
+from typing import Annotated, Any, Dict, List, TypedDict
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AnyMessage, HumanMessage, ToolMessage
 from langgraph.constants import START
-from langgraph.graph import MessagesState, StateGraph
+from langgraph.graph import StateGraph
+from langgraph.graph.message import add_messages
 from langgraph.prebuilt import tools_condition
 
 from agentic_backend.application_context import get_default_chat_model
@@ -79,6 +80,13 @@ TABULAR_TUNING = AgentTuning(
 )
 
 
+class TabularState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+    database_context: List[
+        Dict[str, Any]
+    ]  # [{"database": "db1", "tables": ["t1", "t2"]}]
+
+
 @expose_runtime_source("agent.Tessa")
 class Tessa(AgentFlow):
     """
@@ -94,7 +102,6 @@ class Tessa(AgentFlow):
     def __init__(self, agent_settings: AgentSettings):
         super().__init__(agent_settings=agent_settings)
         self.mcp = MCPRuntime(agent=self)
-        self._recent_table_names: list[str] = []
 
     # ---------------------------
     # Bootstrap
@@ -120,30 +127,59 @@ class Tessa(AgentFlow):
                 return payload
         return payload
 
-    def _latest_tool_output(self, state: MessagesState, tool_name: str) -> Any:
+    def _latest_tool_output(self, state: TabularState, tool_name: str) -> Any:
         for msg in reversed(state["messages"]):
             if isinstance(msg, ToolMessage) and getattr(msg, "name", "") == tool_name:
                 return self._maybe_parse_json(msg.content)
         return None
 
-    def _is_table_question(self, text: str) -> bool:
-        lowered = text.lower()
-        if "table" not in lowered:
-            return False
-        intent_markers = ("what", "list", "which", "again", "available", "show")
-        return any(marker in lowered for marker in intent_markers)
+    def _format_context_for_prompt(self, database_context: List[Dict[str, Any]]) -> str:
+        """Format the DB context for injection into the system prompt in a clear hierarchical style."""
+        if not database_context:
+            return "No databases or tables currently loaded.\n"
 
-    def _format_table_names(self, tables: list[str]) -> str:
-        if not tables:
-            return "I do not have any tables listed yet."
-        bullets = "\n".join(f"- `{name}`" for name in tables)
-        return f"The available table(s):\n{bullets}"
+        lines = ["You have access to :"]
+        for entry in database_context:
+            entry = self._maybe_parse_json(entry)
+            db = entry.get("database", "unknown")
+            tables = entry.get("tables", [])
+            lines.append(f"- Database: {db} with tables: {tables}")
+        return "\n".join(lines)
+
+    async def _ensure_database_context(
+        self, state: TabularState
+    ) -> List[Dict[str, Any]]:
+        if state.get("database_context"):
+            return state["database_context"]
+
+        logger.info("Fetching database context via MCP (get_tabular_context)...")
+        try:
+            tools = self.mcp.get_tools()
+            tool = next((t for t in tools if t.name == "get_context"), None)
+            if not tool:
+                logger.warning("Unable to find tool 'get_context' in MCP server.")
+                return []
+
+            raw_context = await tool.ainvoke({})
+
+            # Parser la string JSON en liste de dicts
+            context = (
+                json.loads(raw_context) if isinstance(raw_context, str) else raw_context
+            )
+
+            # Sauvegarder dans l'état pour les appels suivants
+            state["database_context"] = context
+            return context
+
+        except Exception as e:
+            logger.warning(f"Could not load database context: {e}")
+            return []
 
     # ---------------------------
     # Graph
     # ---------------------------
     def _build_graph(self) -> StateGraph:
-        builder = StateGraph(MessagesState)
+        builder = StateGraph(TabularState)
 
         # LLM node
         builder.add_node("reasoner", self.reasoner)
@@ -156,75 +192,48 @@ class Tessa(AgentFlow):
     # ---------------------------
     # LLM node
     # ---------------------------
-    async def reasoner(self, state: MessagesState):
+    async def reasoner(self, state: TabularState):
         if self.model is None:
             raise RuntimeError(
                 "Tessa: model is not initialized. Call async_init() first."
             )
 
-        latest_tables_raw = self._latest_tool_output(state, "list_table_names")
-        parsed_table_names: list[str] = []
-        if isinstance(latest_tables_raw, list):
-            parsed_table_names = [str(item) for item in latest_tables_raw]
-        elif isinstance(latest_tables_raw, dict):
-            names = latest_tables_raw.get("tables") or latest_tables_raw.get("data")
-            if isinstance(names, list):
-                parsed_table_names = [str(item) for item in names]
-
-        if parsed_table_names:
-            self._recent_table_names = parsed_table_names
-
-        last_message = state["messages"][-1]
-        cached_tables = self._recent_table_names
-        if (
-            cached_tables
-            and isinstance(last_message, HumanMessage)
-            and isinstance(last_message.content, str)
-            and self._is_table_question(last_message.content)
-        ):
-            answer = AIMessage(content=self._format_table_names(cached_tables))
-            return {"messages": [answer]}
-
-        # 1) Build the system prompt from tuning (tokens like {today} resolved safely)
         tpl = self.get_tuned_text("prompts.system") or ""
+
+        # 🟢 Load database + tables context if missing
+        database_context = await self._ensure_database_context(state)
+        tpl += self._format_context_for_prompt(database_context)
         system_text = self.render(tpl)
 
-        # 2) Ask the model (prepend a single SystemMessage)
-        recent_history = self.recent_messages(state["messages"], max_messages=6)
+        # Build message sequence
+        recent_history = self.recent_messages(state["messages"], max_messages=5)
         messages = self.with_system(system_text, recent_history)
         messages = self.with_chat_context_text(messages)
 
         try:
             response = await self.model.ainvoke(messages)
 
-            # 3) Collect tool outputs from ToolMessages and attach to response metadata for the UI
+            # 🔹 Update metadata with tool responses
             tool_payloads: Dict[str, Any] = {}
             for msg in state["messages"]:
                 if isinstance(msg, ToolMessage) and getattr(msg, "name", ""):
                     raw = msg.content
-                    normalized: Any = raw
-                    if isinstance(raw, str):
-                        try:
-                            normalized = json.loads(raw)
-                        except Exception:
-                            normalized = raw  # keep raw string if not JSON
-                    if getattr(msg, "name", "") == "list_table_names":
-                        parsed = self._maybe_parse_json(raw)
-                        if isinstance(parsed, list):
-                            self._recent_table_names = [str(item) for item in parsed]
+                    try:
+                        normalized = json.loads(raw) if isinstance(raw, str) else raw
+                    except Exception:
+                        normalized = raw
                     tool_payloads[msg.name or "unknown_tool"] = normalized
 
-            md = getattr(response, "response_metadata", None)
-            if not isinstance(md, dict):
-                md = {}
-            tools_md = md.get("tools", {})
-            if not isinstance(tools_md, dict):
-                tools_md = {}
+            md = getattr(response, "response_metadata", {}) or {}
+            tools_md = md.get("tools", {}) or {}
             tools_md.update(tool_payloads)
             md["tools"] = tools_md
             response.response_metadata = md
 
-            return {"messages": [response]}
+            return {
+                "messages": [response],
+                "database_context": database_context,
+            }
 
         except Exception:
             logger.exception("Tessa failed during reasoning.")
@@ -235,7 +244,10 @@ class Tessa(AgentFlow):
                     )
                 ]
             )
-            return {"messages": [fallback]}
+            return {
+                "messages": [fallback],
+                "database_context": [],
+            }
 
     # ---------------------------
     # (Optional) helper for listing datasets from a prior tool result
