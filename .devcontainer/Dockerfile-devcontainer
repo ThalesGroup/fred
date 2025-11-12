@@ -58,6 +58,11 @@ RUN mkdir -p ${COMMAND_HISTORY_DIR} \
     && echo "export PROMPT_COMMAND='history -a' && export HISTFILE=${COMMAND_HISTORY_DIR}/.bash_history" >> "/home/$USERNAME/.bashrc" \
     && echo "export PROMPT_COMMAND='history -a' && export HISTFILE=${COMMAND_HISTORY_DIR}/.zsh_history" >> "/home/$USERNAME/.zshrc"
 
+# Set UV cache directories to dev cache volume
+ENV UV_CACHE_DIR="${DEV_CACHE_DIR}/uv"
+ENV UV_PYTHON_CACHE_DIR="${DEV_CACHE_DIR}/uv/python"
+ENV UV_LINK_MODE=copy
+
 RUN if ! id -u ${USERNAME} >/dev/null 2>&1; then \
     groupadd --gid ${USER_GID} ${USERNAME} && \
     useradd --uid ${USER_UID} --gid ${USER_GID} -m ${USERNAME} && \

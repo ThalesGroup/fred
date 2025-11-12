@@ -43,5 +43,7 @@
   },
   "remoteUser": "vscode",
   "overrideCommand": true,
-  "updateRemoteUserUID": true
+  "updateRemoteUserUID": true,
+  // Give permissions to the fred-dev-cache volume
+  "postStartCommand": "sudo chown -R $(id -u):$(id -g) /fred-dev-cache"
 }
