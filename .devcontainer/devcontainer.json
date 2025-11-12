@@ -25,6 +25,9 @@
     "ZSH_HISTFILE": "${containerEnv:DEV_CACHE_DIR}/commandhistory/.zsh_history",
     "BASH_HISTFILE": "${containerEnv:DEV_CACHE_DIR}/commandhistory/.bash_history",
 
+    // Set pip cache directory to dev cache volume
+    "PIP_CACHE_DIR": "/fred-dev-cache/pip",
+
     // Set UV cache directories to dev cache volume
     "UV_CACHE_DIR": "${containerEnv:DEV_CACHE_DIR}/uv",
     "UV_PYTHON_CACHE_DIR": "${containerEnv:DEV_CACHE_DIR}/uv/python",
