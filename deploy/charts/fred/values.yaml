@@ -565,6 +565,12 @@ applications:
           # openai: nothing else required (keys in .env)
           # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
           # ollama: { base_url: "http://localhost:11434"
+      vision_model:
+        provider: openai
+        name: gpt-4o-mini # or gpt-4o if you want higher fidelity
+        settings:
+          temperature: 0 # optional
+          max_retries: 2 # optional
       storage:
         postgres:
           host: localhost

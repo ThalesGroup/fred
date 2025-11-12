@@ -108,6 +108,10 @@ chat_model:
 #     azure_apim_resource_path: "/genai-aoai-inference/v2"
 #     azure_openai_api_version: "2024-06-01"
 #     azure_tenant_id: "737c6905-f186-4bcf-afb3-43e349ee23a3"
+vision_model:
+  provider: openai
+  name: gpt-4o-mini # or gpt-4o if you want higher fidelity
+
 storage:
   postgres:
     host: localhost
