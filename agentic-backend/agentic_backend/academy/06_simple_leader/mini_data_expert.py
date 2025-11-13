@@ -31,12 +31,10 @@ from agentic_backend.core.agents.agent_spec import AgentTuning
 from agentic_backend.core.agents.simple_agent_flow import SimpleAgentFlow
 
 TUNING = AgentTuning(
-    role="Mini Data Expert",
+    role="mini_data_expert",
     description=(
-        "A mock data-connected expert that simulates fetching KPI data. "
-        "Returns a hard-coded mini-table mimicking a real data fetch."
+        "A minimal document expert, it simulates a retrieval of KPIs by returning a short, deterministic response with mock data."
     ),
-    tags=["academy"],
 )
 
 
@@ -46,6 +44,8 @@ class MiniDataExpert(SimpleAgentFlow):
     - This expert simulates a tool-backed response (e.g., KPI lookup).
     - Keeps the same surface as a real tool expert for easy later swap.
     """
+
+    tuning = TUNING
 
     tuning = TUNING
 

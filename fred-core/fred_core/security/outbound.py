@@ -44,7 +44,7 @@ class ClientCredentialsProvider:
                     keycloak_base="https://auth.example.com",
                     realm="myrealm",
                     client_id="service-app",
-                    client_secret="supersecret",
+                    client_secret="supersecret",            #pragma: allowlist secret
                     audience="api-service"
             )
             token = provider()  # Returns a valid access token string

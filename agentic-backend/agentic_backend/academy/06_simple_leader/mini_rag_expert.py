@@ -32,12 +32,10 @@ from agentic_backend.core.agents.agent_spec import AgentTuning
 from agentic_backend.core.agents.simple_agent_flow import SimpleAgentFlow
 
 TUNING = AgentTuning(
-    role="Mini Doc Expert",
+    role="mini_rag_expert",
     description=(
-        "A mock document-grounded expert that simulates answering questions "
-        "using retrieved documents. Returns a hard-coded answer with fake sources."
+        "A minimal document expert, it simulates a retrieval-augmented (RAG) answer by returning a short, deterministic response with mock source citations."
     ),
-    tags=["academy"],
 )
 
 

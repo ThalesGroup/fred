@@ -1,0 +1,31 @@
+CustomerID,FirstName,LastName,Email,Phone,City,Country
+C001,Emma,Renaud,emma.renaud@example.com,0622102233,Valence,France
+C002,Olivia,Moore,olivia.moore@example.com,2135550102,Los Angeles,USA
+C003,Amelia,Evans,amelia.evans@example.co.uk,07678901234,Sheffield,UK
+C004,Harry,Brown,harry.brown@example.co.uk,07345678901,Birmingham,UK
+C005,Li,Wei,li.wei@example.cn,13800138000,Beijing,China
+C006,Victor,Laporte,victor.laporte@example.com,0633213344,Bayonne,France
+C007,Paul,Weber,paul.weber@example.de,01514455667,Cologne,Germany
+C008,Manon,Marchand,manon.marchand@example.com,0677668899,Mulhouse,France
+C009,Élise,Dumont,elise.dumont@example.com,0655446677,Clermont-Ferrand,France
+C010,Jack,Taylor,jack.taylor@example.co.uk,07567890123,Leeds,UK
+C011,Ethan,Jackson,ethan.jackson@example.com,3125550103,Chicago,USA
+C012,Sophia,Wilson,sophia.wilson@example.co.uk,07456789012,Liverpool,UK
+C013,Lena,Fischer,lena.fischer@example.de,01513344556,Munich,Germany
+C014,Sarah,Gautier,sarah.gautier@example.com,0699880011,Nancy,France
+C015,Gabriel,Perrin,gabriel.perrin@example.com,0666557788,Orléans,France
+C016,Mathieu,Renard,mathieu.renard@example.com,0610991122,Perpignan,France
+C017,Sophia,Martinez,sophia.martinez@example.com,4155550104,San Francisco,USA
+C018,Mia,Roberts,mia.roberts@example.co.uk,07890123456,Bristol,UK
+C019,Adam,Lemoine,adam.lemoine@example.com,0644335566,Metz,France
+C020,Julia,Martinez,julia.martinez@example.com,0633224455,Amiens,France
+C021,Anna,Schmidt,anna.schmidt@example.de,01511223344,Berlin,Germany
+C022,Charlie,Thomas,charlie.thomas@example.co.uk,07789012345,Glasgow,UK
+C023,James,Anderson,james.anderson@example.com,2025550101,New York,USA
+C024,Leo,Johnson,leo.johnson@example.co.uk,07901234567,Newcastle,UK
+C025,Oliver,Smith,oliver.smith@example.co.uk,07123456789,London,UK
+C026,Emily,Jones,emily.jones@example.co.uk,07234567890,Manchester,UK
+C027,Laura,Braun,laura.braun@example.de,01515566778,Frankfurt,Germany
+C028,Tom,Colin,tom.colin@example.com,0688779900,Caen,France
+C029,Max,Müller,max.mueller@example.de,01512233445,Hamburg,Germany
+C030,Wang,Yue,wang.yue@example.cn,13900139000,Shanghai,China
