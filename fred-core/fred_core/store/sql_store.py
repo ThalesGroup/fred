@@ -68,7 +68,7 @@ class SQLTableStore:
             )
             logger.error(msg)
             raise RuntimeError(msg) from e
-        
+
     def save_database(self):
         """
         Ensure the database is fully written to disk.
@@ -100,12 +100,13 @@ class SQLTableStore:
             # `to_sql` gère la transaction elle-même → pas besoin de `begin()`
             with self.engine.begin() as conn:
                 df.to_sql(table_name, con=conn, if_exists="replace", index=False)
-                
+
             logger.info(f"Saved table '{table_name}' to SQL database")
             self.save_database()
         except Exception as e:
             logger.error(f"Error saving table '{table_name}': {e}")
             raise
+
     def load_table(self, table_name: str) -> pd.DataFrame:
         self._validate_table_name(table_name)
         return pd.read_sql_table(table_name, self.engine)
