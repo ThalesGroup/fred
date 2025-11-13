@@ -80,7 +80,17 @@ class OpenFgaRebacEngine(RebacEngine):
         return None
 
     async def delete_relation(self, relation: Relation) -> str | None:
-        raise NotImplementedError("OpenFGA relation writes are not implemented yet")
+        client = await self.get_client()
+
+        body = ClientWriteRequest(
+            deletes=[OpenFgaRebacEngine._relation_to_tuple(relation)]
+        )
+
+        logger.debug("Deleting relation %s", relation)
+
+        _ = await client.write(body)
+
+        return None
 
     async def delete_reference_relations(self, reference: RebacReference) -> str | None:
         raise NotImplementedError(
