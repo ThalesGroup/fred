@@ -6,6 +6,7 @@ from typing import Mapping
 from openfga_sdk.client.configuration import ClientConfiguration
 from openfga_sdk.models import ListStoresResponse, Store
 from openfga_sdk.models.create_store_request import CreateStoreRequest
+from openfga_sdk.models.check_response import CheckResponse
 from openfga_sdk.models.write_authorization_model_request import (
     WriteAuthorizationModelRequest,
 )
@@ -14,6 +15,7 @@ from openfga_sdk.models.write_authorization_model_response import (
 )
 from openfga_sdk.client.models.write_request import ClientWriteRequest
 from openfga_sdk.client.models.write_response import ClientWriteResponse
+from openfga_sdk.client.models.check_request import ClientCheckRequest
 
 class OpenFgaClient:
     def __init__(self, configuration: ClientConfiguration) -> None: ...
@@ -45,3 +47,8 @@ class OpenFgaClient:
         body: ClientWriteRequest,
         options: Mapping[str, object] | None = ...,
     ) -> ClientWriteResponse: ...
+    async def check(
+        self,
+        body: ClientCheckRequest,
+        options: Mapping[str, object] | None = ...,
+    ) -> CheckResponse: ...

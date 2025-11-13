@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import os
 
 from openfga_sdk.client.client import OpenFgaClient
 from openfga_sdk.client.configuration import ClientConfiguration
+from openfga_sdk.client.models.check_request import ClientCheckRequest
 from openfga_sdk.client.models.tuple import ClientTuple
 from openfga_sdk.client.models.write_request import ClientWriteRequest
 from openfga_sdk.credentials import CredentialConfiguration, Credentials
@@ -24,6 +27,8 @@ from fred_core.security.rebac.rebac_engine import (
     RelationType,
 )
 from fred_core.security.structure import OpenFgaRebacConfig
+
+logger = logging.getLogger(__name__)
 
 
 class OpenFgaRebacEngine(RebacEngine):
@@ -55,6 +60,7 @@ class OpenFgaRebacEngine(RebacEngine):
 
         self._config = config
         self._schema = schema
+        self._client_lock = asyncio.Lock()
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Public RebacEngine methods
@@ -66,6 +72,8 @@ class OpenFgaRebacEngine(RebacEngine):
         body = ClientWriteRequest(
             writes=[OpenFgaRebacEngine._relation_to_tuple(relation)]
         )
+
+        logger.debug("Adding relation %s", relation)
 
         _ = await client.write(body)
 
@@ -117,7 +125,23 @@ class OpenFgaRebacEngine(RebacEngine):
         *,
         consistency_token: str | None = None,
     ) -> bool:
-        raise NotImplementedError("OpenFGA permission checks are not implemented yet")
+        client = await self.get_client()
+
+        logger.debug(
+            "Checking permission %s for subject %s on resource %s",
+            permission,
+            subject,
+            resource,
+        )
+        body = ClientCheckRequest(
+            user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
+            relation=permission.value,
+            object=OpenFgaRebacEngine._reference_to_openfga_id(resource),
+        )
+
+        response = await client.check(body)
+
+        return response.allowed
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Client and initialization helpers
@@ -184,7 +208,9 @@ class OpenFgaRebacEngine(RebacEngine):
     async def get_client(self) -> OpenFgaClient:
         """Lazily initialize and cache an OpenFGA client with store ID."""
         if self._cached_client is None:
-            self._cached_client = await self._initialize_client_and_store()
+            async with self._client_lock:
+                if self._cached_client is None:
+                    self._cached_client = await self._initialize_client_and_store()
 
         return self._cached_client
 
@@ -194,10 +220,17 @@ class OpenFgaRebacEngine(RebacEngine):
 
     @staticmethod
     def _relation_to_tuple(relation: Relation) -> ClientTuple:
+        subject_id = OpenFgaRebacEngine._reference_to_openfga_id(relation.subject)
+        object_id = OpenFgaRebacEngine._reference_to_openfga_id(relation.resource)
+
+        # When a group acts as a subject we must point to its "member" relation set.
+        if relation.subject.type == Resource.GROUP:
+            subject_id += "#member"
+
         return ClientTuple(
-            user=OpenFgaRebacEngine._reference_to_openfga_id(relation.subject),
+            user=subject_id,
             relation=relation.relation.value,
-            object=OpenFgaRebacEngine._reference_to_openfga_id(relation.resource),
+            object=object_id,
         )
 
     @staticmethod
