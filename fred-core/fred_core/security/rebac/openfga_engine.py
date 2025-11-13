@@ -7,6 +7,8 @@ import os
 
 from openfga_sdk.client.client import OpenFgaClient
 from openfga_sdk.client.configuration import ClientConfiguration
+from openfga_sdk.client.models.tuple import ClientTuple
+from openfga_sdk.client.models.write_request import ClientWriteRequest
 from openfga_sdk.credentials import CredentialConfiguration, Credentials
 from openfga_sdk.models.create_store_request import CreateStoreRequest
 
@@ -59,7 +61,15 @@ class OpenFgaRebacEngine(RebacEngine):
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     async def add_relation(self, relation: Relation) -> str | None:
-        raise NotImplementedError("OpenFGA relation writes are not implemented yet")
+        client = await self.get_client()
+
+        body = ClientWriteRequest(
+            writes=[OpenFgaRebacEngine._relation_to_tuple(relation)]
+        )
+
+        _ = await client.write(body)
+
+        return None
 
     async def delete_relation(self, relation: Relation) -> str | None:
         raise NotImplementedError("OpenFGA relation writes are not implemented yet")
@@ -177,3 +187,19 @@ class OpenFgaRebacEngine(RebacEngine):
             self._cached_client = await self._initialize_client_and_store()
 
         return self._cached_client
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Helpers
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    @staticmethod
+    def _relation_to_tuple(relation: Relation) -> ClientTuple:
+        return ClientTuple(
+            user=OpenFgaRebacEngine._reference_to_openfga_id(relation.subject),
+            relation=relation.relation.value,
+            object=OpenFgaRebacEngine._reference_to_openfga_id(relation.resource),
+        )
+
+    @staticmethod
+    def _reference_to_openfga_id(reference: RebacReference) -> str:
+        return f"{reference.type.value}:{reference.id}"

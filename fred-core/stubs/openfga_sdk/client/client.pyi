@@ -12,6 +12,8 @@ from openfga_sdk.models.write_authorization_model_request import (
 from openfga_sdk.models.write_authorization_model_response import (
     WriteAuthorizationModelResponse,
 )
+from openfga_sdk.client.models.write_request import ClientWriteRequest
+from openfga_sdk.client.models.write_response import ClientWriteResponse
 
 class OpenFgaClient:
     def __init__(self, configuration: ClientConfiguration) -> None: ...
@@ -38,3 +40,8 @@ class OpenFgaClient:
         body: WriteAuthorizationModelRequest,
         options: Mapping[str, object] | None = ...,
     ) -> WriteAuthorizationModelResponse: ...
+    async def write(
+        self,
+        body: ClientWriteRequest,
+        options: Mapping[str, object] | None = ...,
+    ) -> ClientWriteResponse: ...
