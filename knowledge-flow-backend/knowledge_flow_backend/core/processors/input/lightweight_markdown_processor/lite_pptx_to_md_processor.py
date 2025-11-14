@@ -21,6 +21,7 @@ from typing import List, Tuple
 from markitdown import MarkItDown
 from pptx import Presentation
 
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.base_lite_md_processor import BaseLiteMdProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import (
     LiteMarkdownOptions,
@@ -318,3 +319,68 @@ class LitePptxToMdExtractor(BaseLiteMdProcessor):
             logger.debug("No speaker notes found or extraction failed.")
             pass
         return ""
+
+
+class LitePptxMarkdownProcessor(BaseMarkdownProcessor):
+    """
+    Adapter so the lightweight PPTX extractor can be used as a full
+    ingestion-time BaseMarkdownProcessor while reusing LitePptxToMdExtractor.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._lite = LitePptxToMdExtractor()
+
+    def check_file_validity(self, file_path: Path) -> bool:
+        try:
+            pres = Presentation(str(file_path))
+            if len(pres.slides) == 0:
+                logger.warning("LitePptxMarkdownProcessor: PPTX %s has no slides.", file_path)
+                return False
+            return True
+        except Exception as e:  # noqa: BLE001
+            logger.error("LitePptxMarkdownProcessor: invalid PPTX %s: %s", file_path, e)
+            return False
+
+    def extract_file_metadata(self, file_path: Path) -> dict:
+        """
+        Lightweight metadata extraction for PPTX.
+        """
+        try:
+            pres = Presentation(str(file_path))
+            slide_count = len(pres.slides)
+            return {
+                "document_name": file_path.name,
+                "title": file_path.stem,
+                "page_count": slide_count,
+            }
+        except Exception as e:  # noqa: BLE001
+            logger.error("LitePptxMarkdownProcessor: error extracting metadata from %s: %s", file_path, e)
+            return {"document_name": file_path.name, "error": str(e)}
+
+    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
+        """
+        Use the lightweight extractor to generate Markdown for PPTX and save
+        it to 'output.md' in the provided output directory.
+        """
+        output_markdown_path = output_dir / "output.md"
+        try:
+            result = self._lite.extract(file_path, LiteMarkdownOptions())
+            markdown = result.markdown or ""
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_markdown_path.write_text(markdown, encoding="utf-8")
+
+            engine = (result.extras or {}).get("engine") if isinstance(result.extras, dict) else None
+            message = f"Lite PPTX conversion succeeded (engine={engine})" if engine else "Lite PPTX conversion succeeded."
+            status = "ok"
+        except Exception as e:  # noqa: BLE001
+            logger.error("LitePptxMarkdownProcessor: conversion failed for %s: %s", file_path, e)
+            status = "error"
+            message = str(e)
+
+        return {
+            "doc_dir": str(output_dir),
+            "md_file": str(output_markdown_path),
+            "status": status,
+            "message": message,
+        }
