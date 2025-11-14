@@ -11,10 +11,14 @@ from openfga_sdk.client.client import OpenFgaClient
 from openfga_sdk.client.configuration import ClientConfiguration
 from openfga_sdk.client.models.check_request import ClientCheckRequest
 from openfga_sdk.client.models.list_objects_request import ClientListObjectsRequest
+from openfga_sdk.client.models.list_users_request import ClientListUsersRequest
 from openfga_sdk.client.models.tuple import ClientTuple
 from openfga_sdk.client.models.write_request import ClientWriteRequest
 from openfga_sdk.credentials import CredentialConfiguration, Credentials
 from openfga_sdk.models.create_store_request import CreateStoreRequest
+from openfga_sdk.models.fga_object import FgaObject
+from openfga_sdk.models.user import User
+from openfga_sdk.models.user_type_filter import UserTypeFilter
 
 from fred_core.security.models import Resource
 from fred_core.security.rebac.openfga_schema import (
@@ -137,7 +141,24 @@ class OpenFgaRebacEngine(RebacEngine):
         *,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
-        raise NotImplementedError("OpenFGA subject lookup is not implemented yet")
+        client = await self.get_client()
+
+        userFilters = [UserTypeFilter(type=subject_type.value)]
+        # When a group acts as a subject we must point to its "member" relation set.
+        if subject_type == Resource.GROUP:
+            userFilters[0].relation = "member"
+
+        body = ClientListUsersRequest(
+            object=FgaObject(type=resource.type.value, id=resource.id),
+            relation=relation.value,
+            user_filters=userFilters,
+        )
+
+        response = await client.list_users(body)
+        return [
+            OpenFgaRebacEngine._openfga_user_to_reference(user)
+            for user in response.users
+        ]
 
     async def has_permission(
         self,
@@ -269,4 +290,11 @@ class OpenFgaRebacEngine(RebacEngine):
         return RebacReference(
             type=Resource(type_str),
             id=id_str,
+        )
+
+    @staticmethod
+    def _openfga_user_to_reference(user: User) -> RebacReference:
+        return RebacReference(
+            type=user.object.type,
+            id=user.object.id,
         )
