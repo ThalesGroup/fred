@@ -97,7 +97,16 @@ class OpenFgaRebacEngine(RebacEngine):
 
         return None
 
-    async def delete_reference_relations(self, reference: RebacReference) -> str | None:
+    async def delete_all_relations_of_reference(
+        self, reference: RebacReference
+    ) -> str | None:
+        # Not that easy to do with OpenFGA API yet
+        # This has been discussed in their community though:
+        # - https://github.com/orgs/openfga/discussions/225
+        # - https://github.com/orgs/openfga/discussions/341
+        #
+        # Improvement on the delete api were added in their roadmap:
+        # https://github.com/openfga/roadmap/issues/34
         raise NotImplementedError(
             "OpenFGA bulk relation deletion is not implemented yet"
         )

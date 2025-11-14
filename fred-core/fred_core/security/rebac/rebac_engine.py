@@ -96,7 +96,9 @@ class RebacEngine(ABC):
         """
 
     @abstractmethod
-    async def delete_reference_relations(self, reference: RebacReference) -> str | None:
+    async def delete_all_relations_of_reference(
+        self, reference: RebacReference
+    ) -> str | None:
         """Remove all relationships where the reference participates as subject or resource."""
 
     async def add_relations(self, relations: Iterable[Relation]) -> str | None:
@@ -181,7 +183,7 @@ class RebacEngine(ABC):
 
     async def delete_user_relations(self, user: KeycloakUser) -> str | None:
         """Convenience helper to delete all relationships for a user."""
-        return await self.delete_reference_relations(
+        return await self.delete_all_relations_of_reference(
             RebacReference(Resource.USER, user.uid)
         )
 

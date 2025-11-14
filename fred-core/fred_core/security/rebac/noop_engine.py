@@ -30,7 +30,9 @@ class NoopRebacEngine(RebacEngine):
     async def delete_relation(self, relation: Relation) -> str | None:
         return None
 
-    async def delete_reference_relations(self, reference: RebacReference) -> str | None:
+    async def delete_all_relations_of_reference(
+        self, reference: RebacReference
+    ) -> str | None:
         return None
 
     async def list_relations(

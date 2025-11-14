@@ -220,7 +220,7 @@ async def test_delete_reference_relations_removes_incoming_and_outgoing_edges(
         consistency_token=token,
     )
 
-    deletion_token = await rebac_engine.delete_reference_relations(tag)
+    deletion_token = await rebac_engine.delete_all_relations_of_reference(tag)
     assert deletion_token is not None
 
     assert not await rebac_engine.has_permission(

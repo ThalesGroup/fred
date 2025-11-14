@@ -99,7 +99,9 @@ class SpiceDbRebacEngine(RebacEngine):
         response = self._client.WriteRelationships(request)
         return response.written_at.token
 
-    async def delete_reference_relations(self, reference: RebacReference) -> str | None:
+    async def delete_all_relations_of_reference(
+        self, reference: RebacReference
+    ) -> str | None:
         last_token: str | None = None
 
         # Delete all relationships where the reference is the resource
