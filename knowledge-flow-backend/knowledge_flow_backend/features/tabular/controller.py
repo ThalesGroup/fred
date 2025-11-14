@@ -46,108 +46,17 @@ class TabularController:
                 raise HTTPException(status_code=500, detail=str(e))
 
         # -----------------------------
-        # DATABASE MANAGEMENT
-        # -----------------------------
-
-        @router.get(
-            "/tabular/databases",
-            response_model=List[str],
-            tags=["Tabular"],
-            summary="List available databases",
-            operation_id="list_databases",
-        )
-        async def list_databases(user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.TABLES_DATABASES)
-            try:
-                return self.service.list_databases(user)
-            except Exception as e:
-                logger.exception("Failed to list databases")
-                raise HTTPException(status_code=500, detail=str(e))
-
-        @router.get(
-            "/tabular/databases/{db_name}/tables",
-            response_model=ListTablesResponse,
-            tags=["Tabular"],
-            summary="List tables in a given database",
-            operation_id="list_tables",
-        )
-        async def list_tables(
-            db_name: str = Path(..., description="Database name"),
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            authorize_or_raise(user, Action.READ, Resource.TABLES)
-            try:
-                return self.service.list_tables(user, db_name=db_name)
-            except Exception as e:
-                logger.exception(f"Failed to list tables for database {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
-
-        @router.get(
-            "/tabular/databases/{db_name}/schemas",
-            response_model=List[GetSchemaResponse],
-            tags=["Tabular"],
-            summary="List schemas of all tables in a given database",
-            operation_id="get_database_schemas",
-        )
-        async def list_schemas(
-            db_name: str = Path(..., description="Database name"),
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            authorize_or_raise(user, Action.READ, Resource.TABLES)
-            try:
-                return self.service.list_tables_with_schema(user, db_name=db_name)
-            except Exception as e:
-                logger.exception(f"Failed to list schemas for database {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
-
-        @router.get(
-            "/tabular/databases/{db_name}/tables/{table_name}/schema",
-            response_model=GetSchemaResponse,
-            tags=["Tabular"],
-            summary="Get schema of a specific table",
-            operation_id="get_schema",
-        )
-        async def get_table_schema(
-            db_name: str = Path(..., description="Database name"),
-            table_name: str = Path(..., description="Table name"),
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            authorize_or_raise(user, Action.READ, Resource.TABLES)
-            try:
-                return self.service.get_schema(user, db_name=db_name, table_name=table_name)
-            except Exception as e:
-                logger.exception(f"Failed to get schema for {table_name} in database {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
-
-        # -----------------------------
         # SQL QUERIES
         # -----------------------------
 
-        @router.post(
-            "/tabular/databases/{db_name}/sql/read",
-            response_model=RawSQLResponse,
-            tags=["Tabular"],
-            summary="Execute a read-only SQL query on a given database",
-            operation_id="read_query",
-        )
-        async def raw_sql_read(
-            db_name: str = Path(..., description="Database name"),
-            request: RawSQLRequest = Body(..., description="SQL query payload"),
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            authorize_or_raise(user, Action.READ, Resource.TABLES)
-            try:
-                return self.service.query_read(user, db_name=db_name, query=request.query)
-            except Exception as e:
-                logger.exception(f"Read SQL query failed on database {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
+        
 
         @router.post(
-            "/tabular/databases/{db_name}/sql/write",
+            "/tabular/databases/{db_name}/sql/query",
             response_model=RawSQLResponse,
             tags=["Tabular"],
-            summary="Execute a write SQL query on a given database",
-            operation_id="write_query",
+            summary="Execute almost any SQL query on a given database",
+            operation_id="sql_query",
         )
         async def raw_sql_write(
             db_name: str = Path(..., description="Database name"),
@@ -155,6 +64,7 @@ class TabularController:
             user: KeycloakUser = Depends(get_current_user),
         ):
             authorize_or_raise(user, Action.CREATE, Resource.TABLES)
+            authorize_or_raise(user, Action.READ, Resource.TABLES)
             try:
                 return self.service.query_write(user, db_name=db_name, query=request.query)
             except PermissionError as e:
@@ -168,23 +78,23 @@ class TabularController:
         # DELETE TABLE
         # -----------------------------
 
-        @router.delete(
-            "/tabular/databases/{db_name}/tables/{table_name}",
-            status_code=204,
-            tags=["Tabular"],
-            summary="Delete a table from a given database",
-            operation_id="delete_table",
-        )
-        async def delete_table(
-            db_name: str = Path(..., description="Database name"),
-            table_name: str = Path(..., description="Table name"),
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            authorize_or_raise(user, Action.DELETE, Resource.TABLES)
-            try:
-                self.service.delete_table(user, db_name=db_name, table_name=table_name)
-            except PermissionError as e:
-                raise HTTPException(status_code=403, detail=str(e))
-            except Exception as e:
-                logger.exception(f"Failed to delete table {table_name} in database {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
+        # @router.delete(
+        #     "/tabular/databases/{db_name}/tables/{table_name}",
+        #     status_code=204,
+        #     tags=["Tabular"],
+        #     summary="Delete a table from a given database",
+        #     operation_id="delete_table",
+        # )
+        # async def delete_table(
+        #     db_name: str = Path(..., description="Database name"),
+        #     table_name: str = Path(..., description="Table name"),
+        #     user: KeycloakUser = Depends(get_current_user),
+        # ):
+        #     authorize_or_raise(user, Action.DELETE, Resource.TABLES)
+        #     try:
+        #         self.service.delete_table(user, db_name=db_name, table_name=table_name)
+        #     except PermissionError as e:
+        #         raise HTTPException(status_code=403, detail=str(e))
+        #     except Exception as e:
+        #         logger.exception(f"Failed to delete table {table_name} in database {db_name}")
+        #         raise HTTPException(status_code=500, detail=str(e))

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import json
 from typing import Dict, List
 
 from fred_core import Action, KeycloakUser, Resource, authorize
@@ -83,21 +84,58 @@ class TabularService:
         return list(self.stores_info.keys())
 
     @authorize(action=Action.READ, resource=Resource.TABLES_DATABASES)
-    def list_databases_with_tables(self, user: KeycloakUser) -> List[Dict[str, List[str]]]:
+    def list_databases_with_tables(self, user: KeycloakUser) -> List[Dict[str, List[Dict]]]:
         """
-        Retourne la liste de toutes les bases et leurs tables.
-        Format : [{"database": db_name, "tables": [...]}, ...]
+        Retourne la liste de toutes les bases avec leurs tables et
+        la première ligne entièrement non nulle de chaque table.
+        
+        Format :
+        [
+            {
+                "database": db_name,
+                "tables": [
+                    {
+                        "name": table_name,
+                        "first_row": {col: val, ...} ou None
+                    }
+                ]
+            }
+        ]
         """
         results = []
+
         for db_name, store_info in self.stores_info.items():
+            db_result = {"database": db_name, "tables": []}
+
             try:
                 store = store_info.store
                 tables = store.list_tables()
-                results.append({"database": db_name, "tables": tables})
+
+                for table in tables:
+                    first_row = None
+
+                    try:
+                        sql = f"SELECT * FROM {table} LIMIT 1;"
+                        rows = store.execute_sql_query(sql).to_dict(orient="records")
+                        if rows :
+                            first_row = rows[0]
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to retrieve first non-null row for table '{table}' in '{db_name}': {e}"
+                        )
+
+                    db_result["tables"].append({
+                        "name": table,
+                        "first_row": json.dumps(first_row, ensure_ascii=False, default=str)
+                    })
+
             except Exception as e:
                 logger.warning(f"Failed to list tables for database '{db_name}': {e}")
-                results.append({"database": db_name, "tables": []})
+
+            results.append(db_result)
+
         return results
+
 
     @authorize(action=Action.READ, resource=Resource.TABLES)
     def get_schema(self, user: KeycloakUser, db_name: str, table_name: str) -> GetSchemaResponse:
@@ -142,20 +180,66 @@ class TabularService:
     @authorize(action=Action.READ, resource=Resource.TABLES)
     def query_read(self, user: KeycloakUser, db_name: str, query: str) -> RawSQLResponse:
         sql = query.strip()
-        if not sql.lower().startswith("select"):
-            raise ValueError("Only SELECT statements are allowed on the read endpoint")
-        store = self.stores_info[db_name].store
-        df = store.execute_sql_query(sql)
-        return RawSQLResponse(db_name=db_name, sql_query=sql, rows=df.to_dict(orient="records"), error=None)
+        try:
+            if not sql.lower().startswith("select"):
+                raise ValueError("Only SELECT statements are allowed on the read endpoint")
 
+            store = self.stores_info[db_name].store
+            df = store.execute_sql_query(sql)
+
+            return RawSQLResponse(
+                db_name=db_name,
+                sql_query=sql,
+                rows=df.to_dict(orient="records"),
+                error=None
+            )
+
+        except Exception as e:
+            return RawSQLResponse(
+                db_name=db_name,
+                sql_query=sql,
+                rows=[],
+                error=str(e)
+            )
+    
     @authorize(action=Action.UPDATE, resource=Resource.TABLES)
     @authorize(action=Action.CREATE, resource=Resource.TABLES)
     @authorize(action=Action.DELETE, resource=Resource.TABLES)
     def query_write(self, user: KeycloakUser, db_name: str, query: str) -> RawSQLResponse:
         sql = query.strip()
-        if not sql:
-            raise ValueError("Empty SQL string provided")
-        store = self.stores_info[db_name].store
-        self._check_write_allowed(db_name)
-        store.execute_update_query(sql)
-        return RawSQLResponse(db_name=db_name, sql_query=sql, rows=[], error=None)
+        try:
+            if not sql:
+                raise ValueError("Empty SQL string provided")
+
+            store = self.stores_info[db_name].store
+
+            self._check_write_allowed(db_name)
+
+            if query.startswith("SELECT") :
+                df = store.execute_sql_query(sql)
+
+                return RawSQLResponse(
+                    db_name=db_name,
+                    sql_query=sql,
+                    rows=df.to_dict(orient="records"),
+                    error=None
+                )
+            else :
+                store.execute_update_query(sql)
+
+                return RawSQLResponse(
+                    db_name=db_name,
+                    sql_query=sql,
+                    rows=[],
+                    error=None
+                )
+
+        except Exception as e:
+            return RawSQLResponse(
+                db_name=db_name,
+                sql_query=sql,
+                rows=[],
+                error=str(e)
+            )
+
+

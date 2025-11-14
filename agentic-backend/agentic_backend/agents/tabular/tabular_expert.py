@@ -133,48 +133,6 @@ class Tessa(AgentFlow):
                 return self._maybe_parse_json(msg.content)
         return None
 
-    def _format_context_for_prompt(self, database_context: List[Dict[str, Any]]) -> str:
-        """Format the DB context for injection into the system prompt in a clear hierarchical style."""
-        if not database_context:
-            return "No databases or tables currently loaded.\n"
-
-        lines = ["You have access to :"]
-        for entry in database_context:
-            entry = self._maybe_parse_json(entry)
-            db = entry.get("database", "unknown")
-            tables = entry.get("tables", [])
-            lines.append(f"- Database: {db} with tables: {tables}")
-        return "\n".join(lines)
-
-    async def _ensure_database_context(
-        self, state: TabularState
-    ) -> List[Dict[str, Any]]:
-        if state.get("database_context"):
-            return state["database_context"]
-
-        logger.info("Fetching database context via MCP (get_tabular_context)...")
-        try:
-            tools = self.mcp.get_tools()
-            tool = next((t for t in tools if t.name == "get_context"), None)
-            if not tool:
-                logger.warning("Unable to find tool 'get_context' in MCP server.")
-                return []
-
-            raw_context = await tool.ainvoke({})
-
-            # Parser la string JSON en liste de dicts
-            context = (
-                json.loads(raw_context) if isinstance(raw_context, str) else raw_context
-            )
-
-            # Sauvegarder dans l'état pour les appels suivants
-            state["database_context"] = context
-            return context
-
-        except Exception as e:
-            logger.warning(f"Could not load database context: {e}")
-            return []
-
     # ---------------------------
     # Graph
     # ---------------------------
@@ -199,10 +157,6 @@ class Tessa(AgentFlow):
             )
 
         tpl = self.get_tuned_text("prompts.system") or ""
-
-        # 🟢 Load database + tables context if missing
-        database_context = await self._ensure_database_context(state)
-        tpl += self._format_context_for_prompt(database_context)
         system_text = self.render(tpl)
 
         # Build message sequence
@@ -231,8 +185,7 @@ class Tessa(AgentFlow):
             response.response_metadata = md
 
             return {
-                "messages": [response],
-                "database_context": database_context,
+                "messages": [response]
             }
 
         except Exception:
@@ -245,28 +198,5 @@ class Tessa(AgentFlow):
                 ]
             )
             return {
-                "messages": [fallback],
-                "database_context": [],
+                "messages": [fallback]
             }
-
-    # ---------------------------
-    # (Optional) helper for listing datasets from a prior tool result
-    # ---------------------------
-    def _extract_dataset_summaries_from_get_schema_reponse(
-        self, data: list[dict]
-    ) -> list[str]:
-        summaries = []
-        for entry in data:
-            if isinstance(entry, dict) and {
-                "document_name",
-                "columns",
-                "row_count",
-            }.issubset(entry.keys()):
-                try:
-                    title = entry.get("document_name", "Untitled")
-                    uid = entry.get("document_uid", "")
-                    rows = entry.get("row_count", "?")
-                    summaries.append(f"- **{title}** (`{uid}`), {rows} rows")
-                except Exception as e:
-                    logger.warning("Failed to summarize dataset entry: %s", e)
-        return summaries
