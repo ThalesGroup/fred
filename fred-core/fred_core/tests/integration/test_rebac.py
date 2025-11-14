@@ -118,7 +118,7 @@ EngineScenario = tuple[str, Callable[[], Awaitable[RebacEngine]], str | None]
 
 ENGINE_SCENARIOS: tuple[EngineScenario, ...] = (
     ("spicedb", _load_spicedb_engine, None),
-    ("openfga", _load_openfga_engine, "OpenFga integration is stil in devlopment"),
+    ("openfga", _load_openfga_engine, None),
 )
 
 
@@ -189,8 +189,6 @@ async def test_deleting_relation_revokes_access(
         tag,
         consistency_token=deletion_token,
     )
-
-    assert deletion_token is not None
 
 
 @pytest.mark.integration
@@ -342,6 +340,50 @@ async def test_lookup_subjects_returns_users_by_relation(
     assert {ref.id for ref in owners} == {owner.id}
     assert {ref.id for ref in editors} == {editor.id}
     assert {ref.id for ref in viewers} == {viewer.id}
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_lookup_subjects_returns_groups_by_relation(
+    rebac_engine: RebacEngine,
+) -> None:
+    tag = _make_reference(Resource.TAGS)
+    owner_group = _make_reference(Resource.GROUP, prefix="owner-group")
+    editor_group = _make_reference(Resource.GROUP, prefix="editor-group")
+    viewer_group = _make_reference(Resource.GROUP, prefix="viewer-group")
+    stray_group = _make_reference(Resource.GROUP, prefix="stray-group")
+    stray_tag = _make_reference(Resource.TAGS, prefix="stray-tag")
+
+    token = await rebac_engine.add_relations(
+        [
+            Relation(subject=owner_group, relation=RelationType.OWNER, resource=tag),
+            Relation(subject=editor_group, relation=RelationType.EDITOR, resource=tag),
+            Relation(subject=viewer_group, relation=RelationType.VIEWER, resource=tag),
+            Relation(
+                subject=stray_group,
+                relation=RelationType.VIEWER,
+                resource=stray_tag,
+            ),
+        ]
+    )
+
+    owner_groups = await rebac_engine.lookup_subjects(
+        tag, RelationType.OWNER, Resource.GROUP, consistency_token=token
+    )
+    editor_groups = await rebac_engine.lookup_subjects(
+        tag, RelationType.EDITOR, Resource.GROUP, consistency_token=token
+    )
+    viewer_groups = await rebac_engine.lookup_subjects(
+        tag, RelationType.VIEWER, Resource.GROUP, consistency_token=token
+    )
+
+    assert not isinstance(owner_groups, RebacDisabledResult)
+    assert not isinstance(editor_groups, RebacDisabledResult)
+    assert not isinstance(viewer_groups, RebacDisabledResult)
+
+    assert {ref.id for ref in owner_groups} == {owner_group.id}
+    assert {ref.id for ref in editor_groups} == {editor_group.id}
+    assert {ref.id for ref in viewer_groups} == {viewer_group.id}
 
 
 @pytest.mark.integration

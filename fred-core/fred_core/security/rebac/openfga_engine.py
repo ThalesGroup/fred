@@ -294,7 +294,14 @@ class OpenFgaRebacEngine(RebacEngine):
 
     @staticmethod
     def _openfga_user_to_reference(user: User) -> RebacReference:
-        return RebacReference(
-            type=user.object.type,
-            id=user.object.id,
-        )
+        if user.object:
+            encoded_id = f"{user.object.type}:{user.object.id}"
+        elif user.userset:
+            relation_suffix = (
+                f"#{user.userset.relation}" if user.userset.relation else ""
+            )
+            encoded_id = f"{user.userset.type}:{user.userset.id}{relation_suffix}"
+        else:
+            raise ValueError("OpenFGA user response missing object and userset")
+
+        return OpenFgaRebacEngine._openfga_id_to_reference(encoded_id)
