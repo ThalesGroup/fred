@@ -21,6 +21,7 @@ from typing import List
 
 import pandas as pd
 
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 from knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor import CsvTabularProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.base_lite_md_processor import BaseLiteMdProcessor
 
@@ -93,3 +94,63 @@ class LiteCsvToMdProcesor(BaseLiteMdProcessor):
             pages=[LitePageMarkdown(page_no=1, markdown=md, char_count=len(md))] if opts.return_per_page else [],
             extras={},
         )
+
+
+class LiteCsvMarkdownProcessor(BaseMarkdownProcessor):
+    """
+    Adapter so the lightweight CSV → Markdown extractor can be used as a
+    BaseMarkdownProcessor during ingestion, instead of the tabular path.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._lite = LiteCsvToMdProcesor()
+
+    def check_file_validity(self, file_path: Path) -> bool:
+        try:
+            stat = file_path.stat()
+            if stat.st_size <= 0:
+                logger.warning("LiteCsvMarkdownProcessor: CSV %s is empty.", file_path)
+                return False
+            return True
+        except Exception as e:  # noqa: BLE001
+            logger.error("LiteCsvMarkdownProcessor: invalid CSV %s: %s", file_path, e)
+            return False
+
+    def extract_file_metadata(self, file_path: Path) -> dict:
+        """
+        Lightweight metadata extraction for CSV.
+        """
+        try:
+            return {
+                "document_name": file_path.name,
+                "title": file_path.stem,
+            }
+        except Exception as e:  # noqa: BLE001
+            logger.error("LiteCsvMarkdownProcessor: error extracting metadata from %s: %s", file_path, e)
+            return {"document_name": file_path.name, "error": str(e)}
+
+    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
+        """
+        Use the lightweight CSV-to-Markdown extractor and save to 'output.md'.
+        """
+        output_markdown_path = output_dir / "output.md"
+        try:
+            result = self._lite.extract(file_path, LiteMarkdownOptions())
+            markdown = result.markdown or ""
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_markdown_path.write_text(markdown, encoding="utf-8")
+
+            status = "ok"
+            message = "Lite CSV conversion succeeded."
+        except Exception as e:  # noqa: BLE001
+            logger.error("LiteCsvMarkdownProcessor: conversion failed for %s: %s", file_path, e)
+            status = "error"
+            message = str(e)
+
+        return {
+            "doc_dir": str(output_dir),
+            "md_file": str(output_markdown_path),
+            "status": status,
+            "message": message,
+        }

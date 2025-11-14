@@ -20,6 +20,7 @@ from pathlib import Path
 
 from markitdown import MarkItDown
 
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.base_lite_md_processor import BaseLiteMdProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import (
     LiteMarkdownOptions,
@@ -195,3 +196,67 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
             (md[:120].replace("\n", " ") if md else ""),
         )
         return md
+
+
+class LiteDocxMarkdownProcessor(BaseMarkdownProcessor):
+    """
+    Adapter so the lightweight DOCX processor can be used as a full
+    ingestion-time BaseMarkdownProcessor while reusing LiteDocxToMdProcessor.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._lite = LiteDocxToMdProcessor()
+
+    def check_file_validity(self, file_path: Path) -> bool:
+        try:
+            stat = file_path.stat()
+            if stat.st_size <= 0:
+                logger.warning("LiteDocxMarkdownProcessor: DOCX %s is empty.", file_path)
+                return False
+            return True
+        except Exception as e:  # noqa: BLE001
+            logger.error("LiteDocxMarkdownProcessor: invalid DOCX %s: %s", file_path, e)
+            return False
+
+    def extract_file_metadata(self, file_path: Path) -> dict:
+        """
+        Lightweight metadata extraction for DOCX.
+        Only fields that are cheap to compute are returned.
+        """
+        try:
+            # Avoid bringing in heavy dependencies; we only expose what we know.
+            return {
+                "document_name": file_path.name,
+                "title": file_path.stem,
+            }
+        except Exception as e:  # noqa: BLE001
+            logger.error("LiteDocxMarkdownProcessor: error extracting metadata from %s: %s", file_path, e)
+            return {"document_name": file_path.name, "error": str(e)}
+
+    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
+        """
+        Use the lightweight extractor to generate Markdown for DOCX and save
+        it to 'output.md' in the provided output directory.
+        """
+        output_markdown_path = output_dir / "output.md"
+        try:
+            result = self._lite.extract(file_path, LiteMarkdownOptions())
+            markdown = result.markdown or ""
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_markdown_path.write_text(markdown, encoding="utf-8")
+
+            engine = (result.extras or {}).get("engine") if isinstance(result.extras, dict) else None
+            message = f"Lite DOCX conversion succeeded (engine={engine})" if engine else "Lite DOCX conversion succeeded."
+            status = "ok"
+        except Exception as e:  # noqa: BLE001
+            logger.error("LiteDocxMarkdownProcessor: conversion failed for %s: %s", file_path, e)
+            status = "error"
+            message = str(e)
+
+        return {
+            "doc_dir": str(output_dir),
+            "md_file": str(output_markdown_path),
+            "status": status,
+            "message": message,
+        }

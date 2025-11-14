@@ -21,6 +21,7 @@ from typing import List, Tuple
 import fitz
 from markitdown import MarkItDown
 
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.base_lite_md_processor import BaseLiteMdProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import (
     LiteMarkdownOptions,
@@ -185,3 +186,84 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
 
         # Fall back to page-wise text if markitdown fails
         return self._extract_pages_with_fitz(file_path, opts)
+
+
+class LitePdfMarkdownProcessor(BaseMarkdownProcessor):
+    """
+    Adapter so the lightweight PDF processor can be used as a full
+    ingestion-time BaseMarkdownProcessor (for the Temporal pipeline),
+    while still reusing the same lightweight extraction engine.
+
+    - check_file_validity / extract_file_metadata satisfy BaseInputProcessor.
+    - convert_file_to_markdown writes an 'output.md' file, as expected by
+      IngestionService.process_input and downstream processors.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._lite = LitePdfToMdProcessor()
+
+    def check_file_validity(self, file_path: Path) -> bool:
+        """
+        Basic validity check using PyMuPDF: the file must be a readable
+        PDF with at least one page.
+        """
+        try:
+            doc = fitz.open(str(file_path))
+            if doc.page_count <= 0:
+                logger.warning("LitePdfMarkdownProcessor: PDF %s has no pages.", file_path)
+                return False
+            return True
+        except Exception as e:
+            logger.error("LitePdfMarkdownProcessor: invalid PDF %s: %s", file_path, e)
+            return False
+
+    def extract_file_metadata(self, file_path: Path) -> dict:
+        """
+        Lightweight metadata extraction based on PyMuPDF.
+        Returns only fields that are cheap to compute.
+        """
+        try:
+            doc = fitz.open(str(file_path))
+            info = doc.metadata or {}
+            return {
+                "title": info.get("title") or None,
+                "author": info.get("author") or None,
+                "document_name": file_path.name,
+                "page_count": doc.page_count,
+                "extras": {
+                    "pdf.subject": info.get("subject") or None,
+                    "pdf.producer": info.get("producer") or None,
+                    "pdf.creator": info.get("creator") or None,
+                },
+            }
+        except Exception as e:
+            logger.error("LitePdfMarkdownProcessor: error extracting metadata from %s: %s", file_path, e)
+            return {"document_name": file_path.name, "error": str(e)}
+
+    def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
+        """
+        Use the lightweight extractor to generate Markdown and persist it
+        to 'output.md' in the given output directory.
+        """
+        output_markdown_path = output_dir / "output.md"
+        try:
+            result = self._lite.extract(file_path, LiteMarkdownOptions())
+            markdown = result.markdown or ""
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_markdown_path.write_text(markdown, encoding="utf-8")
+
+            engine = (result.extras or {}).get("engine") if isinstance(result.extras, dict) else None
+            message = f"Lite PDF conversion succeeded (engine={engine})" if engine else "Lite PDF conversion succeeded."
+            status = "ok"
+        except Exception as e:
+            logger.error("LitePdfMarkdownProcessor: conversion failed for %s: %s", file_path, e)
+            status = "error"
+            message = str(e)
+
+        return {
+            "doc_dir": str(output_dir),
+            "md_file": str(output_markdown_path),
+            "status": status,
+            "message": message,
+        }

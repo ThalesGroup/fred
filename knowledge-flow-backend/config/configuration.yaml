@@ -45,7 +45,7 @@ scheduler:
     connect_timeout_seconds: 5
 input_processors:
   - prefix: ".pdf"
-    class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+    class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
   - prefix: ".docx"
     class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
   - prefix: ".pptx"
