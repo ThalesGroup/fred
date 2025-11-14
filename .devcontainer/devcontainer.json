@@ -10,7 +10,10 @@
     }
   },
   "workspaceFolder": "/workspaces/fred",
-  "runArgs": ["--init"],
+  "runArgs": [
+    "--init",
+    "--add-host=host.docker.internal:host-gateway"
+  ],
   "mounts": [
     // Fred config directory from host
     "source=${localEnv:HOME}/.fred,target=/home/vscode/.fred,type=bind,consistency=cached",
@@ -41,11 +44,12 @@
   },
   // Init zsh and bash conf in dev cache volume
   "postStartCommand": "./.devcontainer/scripts/init-shell.sh",
-  "forwardPorts": [5173, 8000, 8111],
+  "forwardPorts": [5173, 8000, 8111, 8885],
   "portsAttributes": {
     "5173": { "label": "frontend (Vite)" },
     "8000": { "label": "agentic backend" },
-    "8111": { "label": "knowledge flow backend" }
+    "8111": { "label": "knowledge flow backend" },
+    "8885": { "label": "Atlassian external MCP server" }
   },
   "customizations": {
     "vscode": {
