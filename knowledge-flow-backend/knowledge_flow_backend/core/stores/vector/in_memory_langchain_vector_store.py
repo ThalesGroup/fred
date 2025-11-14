@@ -157,6 +157,27 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
         except Exception:
             logger.exception("❌ Failed to delete vectors for document_uid=%s", document_uid)
 
+    def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:
+        """
+        Dev-only: toggle retrievable flag on existing in-memory chunks without deleting them.
+        """
+        try:
+            updated = 0
+            for rec in self.vectorstore.store.values():
+                md = rec.get("metadata") or {}
+                if md.get("document_uid") == document_uid:
+                    md["retrievable"] = bool(value)
+                    rec["metadata"] = md
+                    updated += 1
+            logger.info(
+                "✅ Updated retrievable=%s on %d in-memory chunks for document_uid=%s",
+                value,
+                updated,
+                document_uid,
+            )
+        except Exception:
+            logger.exception("❌ Failed to update retrievable flag for document_uid=%s in in-memory store", document_uid)
+
     # ---- BaseVectorStore: ANN ----
 
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:

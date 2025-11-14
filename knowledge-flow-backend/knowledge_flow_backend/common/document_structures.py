@@ -344,6 +344,11 @@ class DocumentMetadata(BaseModel):
         self.processing.mark_done(stage)
 
     def mark_retrievable(self) -> None:
+        """
+        Mark the source as retrievable (raw file can be re-fetched).
+        That means a vector search can retrieve chunks from this doc.
+        This flags is set after successful ingestion of vectors into the vector store.
+        """
         self.source.retrievable = True
 
     def mark_unretrievable(self) -> None:
