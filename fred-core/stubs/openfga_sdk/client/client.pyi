@@ -7,6 +7,7 @@ from openfga_sdk.client.configuration import ClientConfiguration
 from openfga_sdk.models import ListStoresResponse, Store
 from openfga_sdk.models.create_store_request import CreateStoreRequest
 from openfga_sdk.models.check_response import CheckResponse
+from openfga_sdk.models.list_objects_response import ListObjectsResponse
 from openfga_sdk.models.write_authorization_model_request import (
     WriteAuthorizationModelRequest,
 )
@@ -16,6 +17,7 @@ from openfga_sdk.models.write_authorization_model_response import (
 from openfga_sdk.client.models.write_request import ClientWriteRequest
 from openfga_sdk.client.models.write_response import ClientWriteResponse
 from openfga_sdk.client.models.check_request import ClientCheckRequest
+from openfga_sdk.client.models.list_objects_request import ClientListObjectsRequest
 
 class OpenFgaClient:
     def __init__(self, configuration: ClientConfiguration) -> None: ...
@@ -52,3 +54,8 @@ class OpenFgaClient:
         body: ClientCheckRequest,
         options: Mapping[str, object] | None = ...,
     ) -> CheckResponse: ...
+    async def list_objects(
+        self,
+        body: ClientListObjectsRequest,
+        options: Mapping[str, object] | None = ...,
+    ) -> ListObjectsResponse: ...

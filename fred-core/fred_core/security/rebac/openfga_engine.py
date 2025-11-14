@@ -10,6 +10,7 @@ import os
 from openfga_sdk.client.client import OpenFgaClient
 from openfga_sdk.client.configuration import ClientConfiguration
 from openfga_sdk.client.models.check_request import ClientCheckRequest
+from openfga_sdk.client.models.list_objects_request import ClientListObjectsRequest
 from openfga_sdk.client.models.tuple import ClientTuple
 from openfga_sdk.client.models.write_request import ClientWriteRequest
 from openfga_sdk.credentials import CredentialConfiguration, Credentials
@@ -115,7 +116,18 @@ class OpenFgaRebacEngine(RebacEngine):
         *,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
-        raise NotImplementedError("OpenFGA resource lookup is not implemented yet")
+        client = await self.get_client()
+
+        body = ClientListObjectsRequest(
+            user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
+            relation=permission.value,
+            type=resource_type.value,
+        )
+
+        response = await client.list_objects(body)
+        return [
+            OpenFgaRebacEngine._openfga_id_to_reference(obj) for obj in response.objects
+        ]
 
     async def lookup_subjects(
         self,
@@ -246,3 +258,15 @@ class OpenFgaRebacEngine(RebacEngine):
     @staticmethod
     def _reference_to_openfga_id(reference: RebacReference) -> str:
         return f"{reference.type.value}:{reference.id}"
+
+    @staticmethod
+    def _openfga_id_to_reference(openfga_id: str) -> RebacReference:
+        type_str, id_str = openfga_id.split(":", 1)
+
+        # Split on # to remove possible relation suffixes like "#member"
+        id_str = id_str.split("#", 1)[0]
+
+        return RebacReference(
+            type=Resource(type_str),
+            id=id_str,
+        )
