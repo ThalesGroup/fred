@@ -127,6 +127,7 @@ mcp:
     - name: "mcp-atlassian-jira-server"
       transport: "streamable_http"
       url: "http://host.docker.internal:8885/mcp"
+      # url: "http://localhost:8885/mcp"
       sse_read_timeout: 2000
       auth_mode: "no_token"
 
