@@ -68,6 +68,13 @@ class BaseVectorStore(ABC):
         """Delete all chunks for a logical document."""
         raise NotImplementedError
 
+    def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:  # pragma: no cover - optional capability
+        """
+        Optional capability: update the 'retrievable' flag for all chunks of a document
+        without deleting vectors. Concrete stores that support this should override.
+        """
+        raise NotImplementedError("This vector store does not support retrievable toggling.")
+
     @abstractmethod
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:
         """Semantic (ANN) search; should honor SearchFilter where supported."""

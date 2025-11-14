@@ -199,6 +199,7 @@ class MetadataService:
             if not metadata:
                 raise MetadataNotFound(f"Document '{document_uid}' not found.")
 
+            # 1) Update metadata-store view of retrievability
             metadata.source.retrievable = value
             metadata.identity.modified = datetime.now(timezone.utc)
             metadata.identity.last_modified_by = modified_by
@@ -206,21 +207,22 @@ class MetadataService:
             self.metadata_store.save_metadata(metadata)
             logger.info(f"[METADATA] Set retrievable={value} for document '{document_uid}' by '{modified_by}'")
 
-            # If the document was already vectorized, optionally reflect the toggle in the vector index
-            # to make the change effective immediately in search results.
+            # 2) If the document was vectorized, reflect the toggle in the vector index
+            # to make the change effective immediately in search results, without deleting vectors.
             try:
                 if ProcessingStage.VECTORIZED in metadata.processing.stages:
-                    if value is False:
-                        # Eagerly remove vectors to exclude from search without waiting for re-index.
-                        if self.vector_store is None:
-                            self.vector_store = ApplicationContext.get_instance().get_vector_store()
-                        self.vector_store.delete_vectors_for_document(document_uid=document_uid)
-                        logger.info(f"[VECTOR] Deleted vectors for document '{document_uid}' due to retrievable=False")
-                    else:
-                        # value is True — vectors may not exist anymore; a re-vectorization is needed to include back.
-                        # We log guidance rather than auto-reindex to avoid heavy work on a PUT toggle.
+                    if self.vector_store is None:
+                        self.vector_store = ApplicationContext.get_instance().get_vector_store()
+                    try:
+                        self.vector_store.set_document_retrievable(document_uid=document_uid, value=value)
                         logger.info(
-                            "[VECTOR] retrievable=True set for '%s'. If vectors were previously removed, re-vectorize to include back in search.",
+                            "[VECTOR] Updated retrievable=%s in vector index for document '%s'.",
+                            value,
+                            document_uid,
+                        )
+                    except NotImplementedError:
+                        logger.info(
+                            "[VECTOR] Vector store does not support retrievable toggling; vectors unchanged for document '%s'.",
                             document_uid,
                         )
             except Exception as ve:

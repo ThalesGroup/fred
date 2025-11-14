@@ -10,38 +10,17 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License.
+# limitations under the License under the License.
 
 
 """
 ChromaDBVectorStore — embedded, local FS-backed implementation for Fred
-
-Why this exists (Fred rationale):
-- We want a zero-infra vector store for dev/demo/offline runs. Chroma's
-  PersistentClient stores data on disk without a separate server or Docker.
-- We keep Fred's BaseVectorStore contract so we can swap backends (OpenSearch,
-  FAISS, Chroma) without touching calling code.
-- Design choice: we compute embeddings via the caller-provided `Embeddings`
-  (LangChain-like) to keep provider control (Azure, OpenAI, Ollama, HF).
-
-Limitations & capabilities:
-- Implements ANN (semantic) search and hydration (FetchById).
-- Does NOT implement BM25/phrase search (LexicalSearchable) — Chroma doesn't
-  ship lexical scoring. For hybrid, prefer OpenSearchVectorStore.
-
-Data model expectations (same as the rest of Fred):
-- Each chunk is a `Document` whose `metadata` contains:
-  - `chunk_uid` (CHUNK_ID_FIELD): stable ID for idempotent upserts
-  - `document_uid`: logical parent doc identity (for deletion by doc)
-
-Scoring notes:
-- Chroma returns distances; we convert cosine distance → similarity via
-  `similarity = max(0.0, min(1.0, 1.0 - distance))` for a friendly [0,1] score.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional, Sequence
@@ -51,7 +30,7 @@ from chromadb.config import Settings
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
-# Fred base contracts
+# Fred base contracts (assuming these exist in the environment)
 from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
     AnnHit,
@@ -61,6 +40,8 @@ from knowledge_flow_backend.core.stores.vector.base_vector_store import (
 )
 
 DOC_UID_FIELD = "document_uid"
+# Configure logger for this module
+logger = logging.getLogger(__name__)
 
 
 def _assert_has_metadata_keys(doc: Document) -> None:
@@ -73,22 +54,19 @@ def _assert_has_metadata_keys(doc: Document) -> None:
 def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
     """
     Build the 'where' filter for Chroma.
-    Supports:
-      - Multiple tag_ids
-      - Multiple metadata fields
-    Chroma only accepts primitive types (string, number), so lists are JSON-encoded
-    exactly as stored via `sanitize_metadata`.
     """
     if not search_filter:
         return None
 
-    where: Dict[str, Dict] = {}
+    # Chroma's validate_where() requires that each where expression dict has
+    # exactly one top-level operator key.
+    clauses: List[Dict[str, Dict]] = []
 
     # ---- Tag IDs ----
     if search_filter.tag_ids:
         # Each tag is stored as a JSON array string
         tag_values = [json.dumps([t]) for t in search_filter.tag_ids]
-        where["tag_ids"] = {"$in": tag_values}
+        clauses.append({"tag_ids": {"$in": tag_values}})
 
     # ---- Metadata terms ----
     for field, values in (search_filter.metadata_terms or {}).items():
@@ -99,9 +77,22 @@ def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
                 encoded_values.append(json.dumps(v))
             else:
                 encoded_values.append(v)
-        where[field] = {"$in": encoded_values}
+        clauses.append({field: {"$in": encoded_values}})
 
-    return where or None
+    if not clauses:
+        return None
+
+    # Show the built clauses before final compilation
+    logger.debug(f"[SEARCH] Chroma filter clauses built: {clauses}")
+
+    if len(clauses) == 1:
+        return clauses[0]
+
+    final_where = {"$and": clauses}
+    # Show the final combined $and filter
+    logger.debug(f"[SEARCH] Chroma final 'where' filter: {final_where}")
+
+    return final_where
 
 
 def _cosine_similarity_from_distance(distance: float) -> float:
@@ -117,9 +108,10 @@ def sanitize_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
             clean[k] = v.isoformat()
         elif isinstance(v, list):
             # always JSON encode, even single element or empty
-            import json
-
-            clean[k] = json.dumps(v)
+            json_encoded = json.dumps(v)
+            clean[k] = json_encoded
+            # Show how lists are encoded for storage
+            logger.debug(f"[SEARCH] Field '{k}': List {v} encoded to string '{json_encoded}'")
         elif isinstance(v, Mapping):
             clean[k] = sanitize_metadata(v)
         else:
@@ -131,23 +123,19 @@ def restore_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
     restored: dict[str, Any] = {}
     for k, v in meta.items():
         if isinstance(v, str):
-            # Try to restore datetime
-            # try:
-            #     restored[k] = datetime.fromisoformat(v)
-            #     continue
-            # except ValueError:
-            #     pass
-            # Try to restore JSON-encoded lists
+            # Try to restore JSON-encoded lists (Chroma stores lists as JSON strings)
             try:
                 loaded = json.loads(v)
                 if isinstance(loaded, list):
                     restored[k] = loaded
+                    # Show how lists are restored from storage
+                    logger.debug(f"[SEARCH] Field '{k}': String '{v}' restored to List {loaded}")
                     continue
             except (json.JSONDecodeError, TypeError):
                 pass
             restored[k] = v
         elif v == "":
-            # originally empty list
+            # Handle cases where an empty string might represent an originally empty list
             restored[k] = []
         else:
             restored[k] = v
@@ -158,25 +146,23 @@ def restore_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
 class ChromaDBVectorStore(BaseVectorStore, FetchById):
     """
     Embedded ChromaDB implementation of Fred's BaseVectorStore.
-
-    Usage (dev-friendly, no server needed):
-        store = ChromaDBVectorStore(
-            persist_path=".fred_chroma",
-            collection_name="fred_chunks",
-            embeddings=azure_embedder,
-        )
     """
 
     persist_path: str
     collection_name: str
     embeddings: Embeddings
+    embedding_model_name: str
 
     def __init__(self, persist_path: str, collection_name: str, embeddings: Embeddings, embedding_model_name: str) -> None:
         self.persist_path = persist_path
         self.collection_name = collection_name
         self.embeddings = embeddings
         self.embedding_model_name = embedding_model_name
+
+        logger.info(f"[SEARCH] Initializing ChromaDB PersistentClient at path: {self.persist_path}")
         client = chromadb.PersistentClient(path=self.persist_path, settings=Settings(anonymized_telemetry=False))
+
+        logger.info(f"[SEARCH] Getting or creating collection: {self.collection_name} with 'cosine' space.")
         self._collection = client.get_or_create_collection(
             name=self.collection_name,
             metadata={"hnsw:space": "cosine"},  # ensure cosine distance
@@ -185,31 +171,98 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
     # -------- Ingestion --------
     def add_documents(self, documents: List[Document], *, ids: Optional[List[str]] = None) -> List[str]:
         if not documents:
+            logger.warning("[SEARCH] add_documents called with empty list. Returning early.")
             return []
+
         # Validate metadata presence and build ids
-        for d in documents:
+        texts = []
+        metadatas = []
+        chunk_ids: List[str] = ids or []
+
+        logger.debug(f"[SEARCH] Processing {len(documents)} documents.")
+
+        for i, d in enumerate(documents):
             _assert_has_metadata_keys(d)
-        chunk_ids: List[str] = ids or [str(d.metadata[CHUNK_ID_FIELD]) for d in documents]
+
+            original_meta = d.metadata
+            texts.append(d.page_content)
+
+            # Sanitize and log metadata conversion
+            sanitized = sanitize_metadata(original_meta)
+            metadatas.append(sanitized)
+
+            chunk_id = str(d.metadata[CHUNK_ID_FIELD])
+            chunk_ids.append(chunk_id)
+
+            logger.debug(f"[SEARCH] Document {i + 1} (ID: {chunk_id}):")
+            logger.debug(f"[SEARCH]   - Original Metadata: {original_meta}")
+            # The sanitize_metadata function handles logging the list conversions
+            logger.debug(f"[SEARCH]   - **Sanitized (Stored) Metadata**: {sanitized}")
+
         if len(chunk_ids) != len(documents):
             raise ValueError("len(ids) must match len(documents)")
 
-        texts = [d.page_content for d in documents]
-        metadatas = [sanitize_metadata(d.metadata) for d in documents]
+        # LOGGING: Indicate embedding step
+        logger.debug(f"[SEARCH] Embedding {len(texts)} documents using model: {self.embedding_model_name}...")
         vectors = self.embeddings.embed_documents(texts)
+        logger.debug(f"[SEARCH] Embedding complete. Vector dimension: {len(vectors[0]) if vectors else 'N/A'}")
 
-        # Upsert for idempotency (add would error on duplicates)
-        # Note: upsert is available in modern Chroma. If pinned older versions lack upsert,
-        # you can fallback to delete(ids) + add(...), but that's less efficient.
+        # Upsert for idempotency
+        logger.debug(f"[SEARCH] Upserting {len(chunk_ids)} chunks into Chroma collection '{self.collection_name}'")
         self._collection.add(
             ids=chunk_ids,
             embeddings=vectors,  # type: ignore[arg-type]
             documents=texts,
             metadatas=metadatas,  # type: ignore[arg-type]
         )
+        logger.debug("[SEARCH] Upsert successful.")
         return chunk_ids
 
     def delete_vectors_for_document(self, *, document_uid: str) -> None:
+        # LOGGING: Show the delete operation
+        logger.info(f"[SEARCH] Deleting vectors for document_uid: {document_uid} from collection '{self.collection_name}'")
         self._collection.delete(where={DOC_UID_FIELD: document_uid})
+        logger.debug("[SEARCH] Delete operation sent to ChromaDB.")
+
+    def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:
+        """
+        Update the 'retrievable' flag for all chunks of a document without deleting vectors.
+        """
+        try:
+            logger.info(
+                "[SEARCH] Updating retrievable=%s for all chunks of document_uid=%s in collection '%s'",
+                value,
+                document_uid,
+                self.collection_name,
+            )
+            got = self._collection.get(where={DOC_UID_FIELD: document_uid}, include=["metadatas"])
+            ids: List[str] = got.get("ids") or []
+            metadatas: List[Mapping[str, Any]] = got.get("metadatas") or []
+            if not ids:
+                logger.info("[SEARCH] No chunks found for document_uid=%s when updating retrievable flag.", document_uid)
+                return
+
+            new_metadatas: List[Dict[str, Any]] = []
+            for meta in metadatas:
+                m: Dict[str, Any] = dict(meta or {})
+                m["retrievable"] = bool(value)
+                new_metadatas.append(m)
+
+            self._collection.update(ids=ids, metadatas=new_metadatas)  # type: ignore[arg-type]
+            logger.info(
+                "[SEARCH] Updated retrievable=%s on %d chunks for document_uid=%s in collection '%s'",
+                value,
+                len(ids),
+                document_uid,
+                self.collection_name,
+            )
+        except Exception:
+            logger.exception(
+                "[SEARCH] Failed to update retrievable flag for document_uid=%s in collection '%s'",
+                document_uid,
+                self.collection_name,
+            )
+            raise
 
     # -------- Search --------
     def ann_search(
@@ -221,16 +274,21 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
     ) -> List[AnnHit]:
         """
         Perform semantic (ANN) search with optional filtering.
-        Supports multiple tag_ids and metadata_terms like an OpenSearch efficient_filter.
-        Restores metadata lists (tag_ids, etc.) for compatibility with Pydantic.
         """
+        # Show the incoming query and parameters
+        logger.debug(f"[SEARCH] Query: '{query[:50]}...', k={k}")
+        logger.debug(f"[SEARCH] Requested Filter (SearchFilter object): {search_filter}")
+
         # ---- Build the Chroma 'where' filter ----
         where = _build_where(search_filter)
 
         # ---- Embed query ----
+        logger.debug("[SEARCH] Embedding query...")
         query_vector = self.embeddings.embed_query(query)
+        logger.debug(f"[SEARCH] Query vector generated: dimension={len(query_vector)}, model={self.embedding_model_name}")
 
         # ---- Query Chroma ----
+        logger.debug(f"[SEARCH] Calling ChromaDB query: n_results={k}, where={where}")
         res = self._collection.query(
             query_embeddings=[query_vector],
             n_results=k,
@@ -238,35 +296,63 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
             include=["distances", "documents", "metadatas"],
         )
 
+        # LOGGING: Show the raw results summary from Chroma
+        ids = (res.get("ids") or [[]])[0]
+        dists = (res.get("distances") or [[]])[0]
+
+        if ids:
+            logger.debug(f"[SEARCH] Top {len(ids)} IDs: {ids}")
+            logger.debug(f"[SEARCH] Top {len(dists)} Distances: {[f'{d:.4f}' for d in dists]}")
+        else:
+            # Explicitly log when no documents are returned due to filtering/search
+            logger.info("[SEARCH] NO DOCUMENTS RETURNED. Check 'where' filter consistency with stored metadata.")
+
         # ---- Extract results ----
         docs = (res.get("documents") or [[]])[0]
         metas = (res.get("metadatas") or [[]])[0]
-        dists = (res.get("distances") or [[]])[0]
 
         hits: List[AnnHit] = []
-        for text, meta, dist in zip(docs, metas, dists):
+        for i, (chunk_id, text, meta, dist) in enumerate(zip(ids, docs, metas, dists)):
             meta = meta or {}
+            # This call triggers the restore metadata logs
             restored_meta = restore_metadata(meta)
 
-            # Ensure tag_ids is always a list
+            # Ensure tag_ids is always a list (even if it was stored as a single element)
             if "tag_ids" in restored_meta and not isinstance(restored_meta["tag_ids"], list):
                 restored_meta["tag_ids"] = [restored_meta["tag_ids"]]
 
             doc = Document(page_content=text, metadata=restored_meta)
-            hits.append(AnnHit(document=doc, score=_cosine_similarity_from_distance(dist)))
+            hit = AnnHit(document=doc, score=_cosine_similarity_from_distance(dist))
+            hits.append(hit)
 
+            # LOGGING: Log the final hit details
+            logger.debug(f"[SEARCH] [Hit {i + 1}] ID: {chunk_id}, Score: {hit.score:.4f} (Distance: {dist:.4f})")
+            logger.debug(f"[SEARCH]   - Retrieved Text: {text[:50]}...")
+            logger.debug(f"[SEARCH]   - **Final Restored Metadata**: {restored_meta}")
+
+        logger.debug(f"[SEARCH] --- END: ANN Search complete. Returning {len(hits)} hits. ---")
         return hits
 
     # -------- Hydration --------
     def fetch_documents(self, chunk_ids: Sequence[str]) -> List[Document]:
         if not chunk_ids:
+            logger.debug("[SEARCH] fetch_documents called with empty list. Returning early.")
             return []
-        got = self._collection.get(ids=list(chunk_ids), include=["documents", "metadatas"])
-        docs: List[Document] = []
+
+        chunk_ids_list = list(chunk_ids)
+        logger.debug(f"[SEARCH] Fetching {len(chunk_ids_list)} documents by chunk_id from collection '{self.collection_name}'")
+        got = self._collection.get(ids=chunk_ids_list, include=["documents", "metadatas"])
+
         documents = got.get("documents", []) or []
         metadatas = got.get("metadatas", []) or []
+
+        docs: List[Document] = []
         for text, meta in zip(documents, metadatas):
-            docs.append(Document(page_content=text or "", metadata=restore_metadata(meta or {})))
+            restored_meta = restore_metadata(meta or {})
+            docs.append(Document(page_content=text or "", metadata=restored_meta))
+            logger.debug(f"[SEARCH] Retrieved chunk {restored_meta.get(CHUNK_ID_FIELD, 'N/A')}. Restored Metadata: {restored_meta}")
+
+        logger.debug(f"[SEARCH] Fetch complete. Retrieved {len(docs)} documents.")
         return docs
 
 
