@@ -175,7 +175,7 @@ class OpenFgaRebacEngine(RebacEngine):
 
     async def _get_store_id(self, store_name: str) -> str | None:
         async with self._create_client_with_no_store() as client:
-            response = await client.list_stores()
+            response = await client.list_stores({"name": store_name})
 
         for store in response.stores:
             if store.name == store_name:
