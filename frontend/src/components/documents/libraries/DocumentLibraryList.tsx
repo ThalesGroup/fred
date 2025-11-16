@@ -106,7 +106,7 @@ export default function DocumentLibraryList() {
   const allExpanded = React.useMemo(() => expanded.length > 0, [expanded]);
 
   /* ---------------- Commands ---------------- */
-  const { toggleRetrievable, removeFromLibrary, preview, previewPdf, download } = useDocumentCommands({
+  const { toggleRetrievable, removeFromLibrary, bulkRemoveFromLibraryForTag, preview, previewPdf, download } = useDocumentCommands({
     refetchTags: refetch,
     refetchDocs: () => fetchAllDocuments({ filters: {} }),
   });
@@ -165,19 +165,29 @@ export default function DocumentLibraryList() {
     showConfirmationDialog({
       title: t("documentLibrary.confirmBulkRemoveTitle") || "Remove selected?",
       onConfirm: async () => {
-        const docsById = new Map<string, DocumentMetadata>(
-          (allDocuments ?? []).map((d) => [d.identity.document_uid, d]),
-        );
+        const docsById = new Map<string, DocumentMetadata>((allDocuments ?? []).map((d) => [d.identity.document_uid, d]));
+        const docsByTag = new Map<string, { tag: TagWithItemsId; docs: DocumentMetadata[] }>();
+
         for (const [docUid, tag] of entries) {
           const doc = docsById.get(docUid);
           if (!doc) continue;
-          // eslint-disable-next-line no-await-in-loop
-          await removeFromLibrary(doc, tag);
+          const existing = docsByTag.get(tag.id);
+          if (existing) {
+            existing.docs.push(doc);
+          } else {
+            docsByTag.set(tag.id, { tag, docs: [doc] });
+          }
         }
+
+        for (const { tag, docs } of docsByTag.values()) {
+          // eslint-disable-next-line no-await-in-loop
+          await bulkRemoveFromLibraryForTag(docs, tag);
+        }
+
         setSelectedDocs({});
       },
     });
-  }, [selectedDocs, allDocuments, removeFromLibrary, setSelectedDocs, showConfirmationDialog, t]);
+  }, [selectedDocs, allDocuments, bulkRemoveFromLibraryForTag, setSelectedDocs, showConfirmationDialog, t]);
 
   const { confirmDeleteFolder } = useTagCommands({
     refetchTags: refetch,

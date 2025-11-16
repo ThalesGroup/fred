@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.content.base_content_store import StoredObjectInfo
-from knowledge_flow_backend.features.ingestion.service import IngestionService
+from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 from knowledge_flow_backend.features.tag.service import TagCreate, TagService, TagType
 
 # Define the scope type for clarity

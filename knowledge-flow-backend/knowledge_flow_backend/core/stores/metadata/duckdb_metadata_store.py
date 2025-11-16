@@ -156,19 +156,71 @@ class DuckdbMetadataStore(BaseMetadataStore):
     def _match_nested(self, item: dict, filter_dict: dict) -> bool:
         """
         Recursively match a filter dict against a nested dict (string-compare for robustness).
-        - If filter value is a list, any exact string match passes.
+
+        This implementation is aligned with the flattened field semantics used by the
+        OpenSearch metadata store so that callers can use the same filter keys regardless
+        of the underlying metadata backend.
+
+        Notable behaviours:
+        - Supports both nested keys (e.g. {"source": {"source_tag": "fred"}})
+          and flattened aliases (e.g. {"source_tag": "fred"}).
+        - For list-valued filters, a match occurs when *any* element matches
+          (mirrors OpenSearch "terms" semantics on multi-valued fields).
+        - Special handling for processing stage filters using the
+          "processing_stages" flattened key.
         """
         for key, value in filter_dict.items():
+            # Special case: processing stage filters use a flattened key
+            # "processing_stages": {"raw": "done", "preview": "done", ...}
+            if key == "processing_stages" and isinstance(value, dict):
+                stages = item.get("processing", {}).get("stages", {})
+                if not isinstance(stages, dict):
+                    return False
+
+                for stage_key, expected in value.items():
+                    current = stages.get(stage_key)
+                    if isinstance(expected, list):
+                        # Any-of semantics on stage status
+                        if isinstance(current, list):
+                            if not any(str(c) in map(str, expected) for c in current):
+                                return False
+                        else:
+                            if str(current) not in map(str, expected):
+                                return False
+                    else:
+                        if str(current) != str(expected):
+                            return False
+                continue
+
             if isinstance(value, dict):
+                # Follow nested structure as-is (e.g. {"source": {"source_tag": "fred"}})
                 sub = item.get(key, {})
                 if not isinstance(sub, dict) or not self._match_nested(sub, value):
                     return False
             else:
-                cur = item.get(key)
+                # Flattened aliases for common fields so callers can use the
+                # same keys as the OpenSearch-backed path.
+                cur = item.get(key, None)
+                if cur is None:
+                    if key in {"document_name", "document_uid"}:
+                        cur = item.get("identity", {}).get(key)
+                    elif key in {"source_tag", "retrievable"}:
+                        cur = item.get("source", {}).get(key)
+                    elif key == "tag_ids":
+                        cur = item.get("tags", {}).get("tag_ids")
+
                 if isinstance(value, list):
-                    if str(cur) not in map(str, value):
-                        return False
+                    # When the filter is a list:
+                    # - if the current value is also a list, check that they intersect
+                    # - otherwise, require the scalar value to be in the filter list
+                    if isinstance(cur, list):
+                        if not any(str(c) in map(str, value) for c in cur):
+                            return False
+                    else:
+                        if str(cur) not in map(str, value):
+                            return False
                 else:
                     if str(cur) != str(value):
                         return False
+
         return True

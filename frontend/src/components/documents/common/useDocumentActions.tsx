@@ -12,69 +12,129 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   DocumentMetadata,
   ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg,
-  ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg,
+  ProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostApiArg,
   ProcessDocumentsRequest,
+  ProcessDocumentsProgressRequest,
+  ProcessDocumentsProgressResponse,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
-  useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
+  useProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../../ToastProvider";
 import {
   createBulkProcessSyncAction,
-  createBulkScheduleAction,
   createProcessAction,
-  createScheduleAction,
 } from "../operations/DocumentOperationsActions";
 
 export const useDocumentActions = (onRefreshData?: () => void) => {
   const { t } = useTranslation();
   const { showInfo, showError } = useToast();
-  console.log("useDocumentActions with to review", onRefreshData);
 
   // API hooks
 
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
-  const [scheduleDocuments] = useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation();
+  const [fetchProgress] = useProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostMutation();
 
-  const handleSchedule = async (files: DocumentMetadata[]) => {
+  const [progress, setProgress] = useState<ProcessDocumentsProgressResponse | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const clearProgress = () => {
+    // Debug: user cleared progress manually
+    console.log("[useDocumentActions] clearProgress called, clearing progress and stopping polling");
+    setIsProcessing(false);
+    setProgress(null);
+  };
+
+  const refreshProgress = async () => {
+    console.log("[useDocumentActions] refreshProgress triggered");
     try {
-      const payload: ProcessDocumentsRequest = {
-        files: files.map((f) => {
-          const isPull = f.source.source_type === "pull";
-          return {
-            source_tag: f.source.source_tag,
-            document_uid: isPull ? undefined : f.identity.document_uid,
-            external_path: isPull ? (f.source.pull_location ?? undefined) : undefined,
-            tags: f.tags.tag_ids || [],
-            display_name: f.identity.document_name,
-          };
-        }),
-        pipeline_name: "manual_ui_async",
+      const req: ProcessDocumentsProgressRequest = {};
+      const args: ProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostApiArg = {
+        processDocumentsProgressRequest: req,
       };
+      console.log("[useDocumentActions] Calling /process-documents/progress (manual refresh) with:", req);
+      const res = await fetchProgress(args).unwrap();
+      console.log("[useDocumentActions] Manual progress response:", res);
+      setProgress(res);
 
-      const args: ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg = {
-        processDocumentsRequest: payload,
-      };
-
-      const result = await scheduleDocuments(args).unwrap();
-
-      showInfo({
-        summary: "Processing started",
-        detail: `Workflow ${result.workflow_id} submitted`,
-      });
+      const finished = res.documents_fully_processed + res.documents_failed;
+      const done = res.documents_found > 0 && finished === res.documents_found;
+      setIsProcessing(!done && res.documents_found > 0);
     } catch (error: any) {
+      console.error("[useDocumentActions] refreshProgress error:", error);
       showError({
-        summary: "Processing Failed",
-        detail: error?.data?.detail ?? error.message,
+        summary: "Progress tracking failed",
+        detail: error?.data?.detail ?? error.message ?? "Unknown error while refreshing progress.",
       });
     }
   };
 
+  useEffect(() => {
+    if (!isProcessing) {
+      console.log("[useDocumentActions] Not processing, polling is idle");
+      return;
+    }
+
+    console.log("[useDocumentActions] Starting polling for processing progress");
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const req: ProcessDocumentsProgressRequest = {};
+        const args: ProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostApiArg = {
+          processDocumentsProgressRequest: req,
+        };
+        console.log("[useDocumentActions] Calling /process-documents/progress (poll) with:", req);
+        const res = await fetchProgress(args).unwrap();
+        if (cancelled) return;
+
+        console.log("[useDocumentActions] Poll progress response:", res);
+        setProgress(res);
+
+        const finished = res.documents_fully_processed + res.documents_failed;
+        const done = res.documents_found > 0 && finished === res.documents_found;
+
+        if (done) {
+          console.log("[useDocumentActions] Poll detected DONE for all documents, stopping polling");
+          onRefreshData?.();
+          setIsProcessing(false);
+          return;
+        }
+
+        timeoutId = setTimeout(poll, 2000);
+      } catch (error: any) {
+        if (!cancelled) {
+          console.error("[useDocumentActions] Poll error:", error);
+          showError({
+            summary: "Progress tracking failed",
+            detail: error?.data?.detail ?? error.message ?? "Unknown error while polling progress.",
+          });
+          setIsProcessing(false);
+        }
+      }
+    };
+
+    poll();
+
+    return () => {
+      console.log("[useDocumentActions] Cleaning up polling effect (component unmount or deps change)");
+      cancelled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [isProcessing, fetchProgress, onRefreshData, showError]);
+
   const handleProcess = async (files: DocumentMetadata[]) => {
     try {
+      console.log("[useDocumentActions] handleProcess called for files:", files.map((f) => f.identity.document_uid));
       const payload: ProcessDocumentsRequest = {
         files: files.map((f) => {
           const isPull = f.source.source_type === "pull";
@@ -93,13 +153,19 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
         processDocumentsRequest: payload,
       };
 
+      console.log("[useDocumentActions] Calling /process-documents with payload:", payload);
       const result = await processDocuments(args).unwrap();
+      console.log("[useDocumentActions] /process-documents response:", result);
+      console.log("[useDocumentActions] Started processing workflow", result.workflow_id);
+      setProgress(null);
+      setIsProcessing(true);
 
       showInfo({
         summary: "Processing started",
-        detail: `Workflow ${result.workflow_id} submitted`,
+        detail: `Queued ${result.total_files} document(s) for local processing`,
       });
     } catch (error: any) {
+      console.error("[useDocumentActions] handleProcess error:", error);
       showError({
         summary: "Processing Failed",
         detail: error?.data?.detail ?? error.message,
@@ -108,18 +174,15 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
   };
 
   // Create default actions
-  const defaultRowActions = [
-    createProcessAction((file) => handleProcess([file]), t),
-    createScheduleAction((file) => handleSchedule([file]), t),
-  ];
+  const defaultRowActions = [createProcessAction((file) => handleProcess([file]), t)];
 
-  const defaultBulkActions = [
-    createBulkProcessSyncAction((files) => handleProcess(files), t),
-    createBulkScheduleAction((file) => handleSchedule(file), t), // Optional if your library supports bulk createScheduleAction
-  ];
+  const defaultBulkActions = [createBulkProcessSyncAction((files) => handleProcess(files), t)];
 
   return {
     defaultRowActions,
     defaultBulkActions,
+    progress,
+    clearProgress,
+    refreshProgress,
   };
 };

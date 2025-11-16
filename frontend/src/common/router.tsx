@@ -22,6 +22,7 @@ import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { Kpis } from "../pages/Kpis";
 import Logs from "../pages/Logs";
 import Runtime from "../pages/Runtime";
+import DataHub from "../pages/DataHub";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
 import { Profile } from "../pages/Profile";
@@ -56,6 +57,14 @@ export const routes: RouteObject[] = [
         element: (
           <ProtectedRoute resource="kpi" action="create">
             <Runtime />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "monitoring/data",
+        element: (
+          <ProtectedRoute resource="kpi" action="create">
+            <DataHub />
           </ProtectedRoute>
         ),
       },

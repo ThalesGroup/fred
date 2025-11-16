@@ -51,7 +51,7 @@ from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.asset_controller import AssetController
 from knowledge_flow_backend.features.content.content_controller import ContentController
 from knowledge_flow_backend.features.groups import groups_controller
-from knowledge_flow_backend.features.ingestion.controller import IngestionController
+from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
 from knowledge_flow_backend.features.kpi import logs_controller
 from knowledge_flow_backend.features.kpi.kpi_controller import KPIController
 from knowledge_flow_backend.features.kpi.opensearch_controller import (
@@ -61,7 +61,7 @@ from knowledge_flow_backend.features.metadata.controller import MetadataControll
 from knowledge_flow_backend.features.pull.controller import PullDocumentController
 from knowledge_flow_backend.features.pull.service import PullDocumentService
 from knowledge_flow_backend.features.resources.controller import ResourceController
-from knowledge_flow_backend.features.scheduler.controller import SchedulerController
+from knowledge_flow_backend.features.scheduler.scheduler_controller import SchedulerController
 from knowledge_flow_backend.features.statistic.controller import StatisticController
 from knowledge_flow_backend.features.tabular.controller import TabularController
 from knowledge_flow_backend.features.tag.controller import TagController

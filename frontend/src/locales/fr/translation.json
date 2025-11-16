@@ -74,6 +74,42 @@
     "monitoring_runtime": "Runtime",
     "monitoring_processors": "Processeurs"
   },
+  "runtime": {
+    "title": "Résumé d'exécution",
+    "sessions": "Sessions",
+    "activeAgents": "Agents actifs",
+    "attachments": "Pièces jointes",
+    "sessionsWithAttachments": "Sessions avec pièces jointes",
+    "maxAttachmentsPerSession": "Pièces jointes max/session",
+    "error": "Échec du chargement du résumé"
+  },
+  "scheduler": {
+    "processingStatusTitle": "Statut de traitement",
+    "processingStatusSummary": "Traité {{done}}/{{total}} (échecs : {{failed}})",
+    "processingStatusIdle": "Aucun traitement actif. Sélectionnez des documents et cliquez sur Traiter pour démarrer.",
+    "processingStatusPreview": "Aperçu prêt : {{count}}",
+    "processingStatusVector": "Vectorisé : {{count}}",
+    "processingStatusSql": "Indexé SQL : {{count}}",
+    "processingStatusProgressLabel": "{{percent}}% traité",
+    "processingStatusDoneLabel": "Terminés",
+    "processingStatusFailedOnlyLabel": "En échec",
+    "processingStatusRemainingLabel": "Restant",
+    "refreshProgress": "Rafraîchir",
+    "refreshFailed": "Échec du rafraîchissement",
+    "hideProgress": "Masquer",
+    "globalStatusTitle": "Traitement de la bibliothèque",
+    "globalStatusLoading": "Chargement de l’état de traitement…",
+    "globalStatusSummary": "{{processed}}/{{total}} traités • {{in_progress}} en cours • {{failed}} en échec • {{not_started}} non démarrés",
+    "globalStatusEmpty": "Aucun document dans la base de connaissances pour le moment.",
+    "globalStatusProcessedLabel": "Traités : {{count}}",
+    "globalStatusInProgressLabel": "En cours : {{count}}",
+    "globalStatusFailedLabel": "En échec : {{count}}",
+    "globalStatusNotStartedLabel": "Non démarrés : {{count}}",
+    "globalStatusProcessedLabelShort": "Traités",
+    "globalStatusInProgressLabelShort": "En cours",
+    "globalStatusFailedLabelShort": "Échecs",
+    "globalStatusNotStartedLabelShort": "Non démarrés"
+  },
   "procbench": {
     "title": "Banc de test des processeurs",
     "description": "Ajoutez un PDF ou DOCX et comparez la qualité et la vitesse d'extraction entre processeurs.",
@@ -122,15 +158,6 @@
     "noMarkdown": "Aucun markdown produit",
     "openLatest": "Ouvrir la dernière exécution",
     "detail": { "title": "Détail de l'exécution", "expandAll": "Tout déplier", "collapseAll": "Tout replier" }
-  },
-  "runtime": {
-    "title": "Résumé d'exécution",
-    "sessions": "Sessions",
-    "activeAgents": "Agents actifs",
-    "attachments": "Pièces jointes",
-    "sessionsWithAttachments": "Sessions avec pièces jointes",
-    "maxAttachmentsPerSession": "Pièces jointes max/session",
-    "error": "Échec du chargement du résumé"
   },
   "assetManager": {
     "title": "Gérer les ressources pour {{agentId}}",

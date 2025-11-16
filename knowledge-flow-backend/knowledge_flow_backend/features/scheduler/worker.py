@@ -55,7 +55,7 @@ async def run_worker(config: TemporalSchedulerConfig):
         target_host=config.host,
         namespace=config.namespace,
     )
-    logger.info(f"✅ Connected to Temporal. Registering worker on queue: '{config.task_queue}'")
+    logger.info(f"[SCHEDULER] Connected to Temporal. Registering worker on queue: '{config.task_queue}'")
 
     # Use thread pool executor for sync activities
     executor = concurrent.futures.ThreadPoolExecutor()
@@ -76,5 +76,5 @@ async def run_worker(config: TemporalSchedulerConfig):
         activity_executor=executor,
     )
 
-    logger.info("🚀 Temporal worker is now running and ready to receive ingestion jobs.")
+    logger.info("[SCHEDULER] Temporal worker is now running and ready to receive ingestion jobs.")
     await worker.run()
