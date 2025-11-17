@@ -404,6 +404,11 @@ async def test_lookup_subjects_returns_groups_by_relation(
 async def test_list_relations_filters_by_subject_type(
     rebac_engine: RebacEngine,
 ) -> None:
+    if not rebac_engine.need_keycloak_sync:
+        pytest.skip(
+            "Keycloak sync not needed for this backend, list_relations not needed and not implemented"
+        )
+
     team = _make_reference(Resource.GROUP, prefix="team")
     child_team = _make_reference(Resource.GROUP, prefix="team")
     member = _make_reference(Resource.USER, prefix="member")
