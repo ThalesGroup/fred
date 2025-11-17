@@ -15,8 +15,8 @@
 import { Box, IconButton, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import React from "react";
-import { Pie, PieChart, Cell, ResponsiveContainer } from "recharts";
 import { useTranslation } from "react-i18next";
+import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useGetProcessingSummaryKnowledgeFlowV1DocumentsProcessingSummaryGetQuery } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -29,12 +29,10 @@ export const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> =
   const { t } = useTranslation();
   const theme = useTheme();
 
-  const { data, isLoading, isError, refetch } = useGetProcessingSummaryKnowledgeFlowV1DocumentsProcessingSummaryGetQuery(
-    undefined,
-    {
-      pollInterval: pollIntervalMs,
-    },
-  );
+  const { data, isLoading, isError, refetch } =
+    useGetProcessingSummaryKnowledgeFlowV1DocumentsProcessingSummaryGetQuery(undefined, {
+      pollingInterval: pollIntervalMs,
+    });
 
   const totalDocuments = data?.total_documents ?? 0;
   const fullyProcessed = data?.fully_processed ?? 0;
@@ -152,14 +150,7 @@ export const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> =
         {chartData.length > 0 && (
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie
-                data={chartData}
-                dataKey="value"
-                nameKey="key"
-                innerRadius={24}
-                outerRadius={36}
-                paddingAngle={1}
-              >
+              <Pie data={chartData} dataKey="value" nameKey="key" innerRadius={24} outerRadius={36} paddingAngle={1}>
                 {chartData.map((entry) => (
                   <Cell key={entry.key} fill={colors[entry.key] || theme.palette.grey[300]} />
                 ))}

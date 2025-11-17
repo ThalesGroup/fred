@@ -24,10 +24,9 @@ import { ProcessDocumentsProgressResponse } from "../../../slices/knowledgeFlow/
 interface DocumentOperationsStatusProps {
   progress: ProcessDocumentsProgressResponse | null;
   onRefresh: () => void;
-  onClear: () => void;
 }
 
-export const DocumentOperationsStatus: React.FC<DocumentOperationsStatusProps> = ({ progress, onRefresh, onClear }) => {
+export const DocumentOperationsStatus: React.FC<DocumentOperationsStatusProps> = ({ progress, onRefresh }) => {
   const { t } = useTranslation();
   const theme = useTheme();
 

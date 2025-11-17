@@ -39,7 +39,7 @@ def _run_ingestion_pipeline(definition: PipelineDefinition) -> str:
     """
     # Simulate slower per-file processing so that UI progress indicators remain
     # visible during local development/demo.
-    simulated_delay_seconds = 30
+    simulated_delay_seconds = 0
     logger.info(
         "Starting local ingestion pipeline for %d file(s) with simulated delay of %d seconds per file",
         len(definition.files),

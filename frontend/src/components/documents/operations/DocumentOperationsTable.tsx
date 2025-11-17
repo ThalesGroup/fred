@@ -142,8 +142,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
   };
 
   // If actions are undefined, use default actions from useDocumentActions
-  const { defaultBulkActions, defaultRowActions, progress, clearProgress, refreshProgress } =
-    useDocumentActions(onRefreshData);
+  const { defaultBulkActions, defaultRowActions, progress, refreshProgress } = useDocumentActions(onRefreshData);
   const rowActionsWithDefault = rowActions === undefined ? defaultRowActions : rowActions;
   const bulkActionsWithDefault = bulkActions === undefined ? defaultBulkActions : bulkActions;
 
@@ -204,7 +203,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
           <DocumentProcessingStatus />
         </Box>
         <Box flex={1}>
-          <DocumentOperationsStatus progress={progress} onRefresh={refreshProgress} onClear={clearProgress} />
+          <DocumentOperationsStatus progress={progress} onRefresh={refreshProgress} />
         </Box>
       </Box>
 
