@@ -16,6 +16,7 @@ from openfga_sdk.client.models.list_users_request import ClientListUsersRequest
 from openfga_sdk.client.models.tuple import ClientTuple
 from openfga_sdk.client.models.write_request import ClientWriteRequest
 from openfga_sdk.credentials import CredentialConfiguration, Credentials
+from openfga_sdk.models.consistency_preference import ConsistencyPreference
 from openfga_sdk.models.create_store_request import CreateStoreRequest
 from openfga_sdk.models.fga_object import FgaObject
 from openfga_sdk.models.user import User
@@ -86,7 +87,9 @@ class OpenFgaRebacEngine(RebacEngine):
 
         _ = await client.write(body)
 
-        return None
+        # Returning this for now as OpenFGA does not support real consistency tokens (Zanzibar Zookies)
+        # for now (https://openfga.dev/docs/interacting/consistency#future-work)
+        return ConsistencyPreference.HIGHER_CONSISTENCY
 
     async def delete_relation(self, relation: Relation) -> str | None:
         client = await self.get_client()
@@ -99,7 +102,9 @@ class OpenFgaRebacEngine(RebacEngine):
 
         _ = await client.write(body)
 
-        return None
+        # Returning this for now as OpenFGA does not support real consistency tokens (Zanzibar Zookies)
+        # for now (https://openfga.dev/docs/interacting/consistency#future-work)
+        return ConsistencyPreference.HIGHER_CONSISTENCY
 
     async def delete_all_relations_of_reference(
         self, reference: RebacReference
@@ -147,8 +152,10 @@ class OpenFgaRebacEngine(RebacEngine):
                 for rel in (contextual_relations or [])
             ],
         )
-
-        response = await client.list_objects(body)
+        options = {
+            "consistency": consistency_token,
+        }
+        response = await client.list_objects(body, options)
         return [
             OpenFgaRebacEngine._openfga_id_to_reference(obj) for obj in response.objects
         ]
@@ -179,7 +186,11 @@ class OpenFgaRebacEngine(RebacEngine):
             ],
         )
 
-        response = await client.list_users(body)
+        options = {
+            "consistency": consistency_token,
+        }
+
+        response = await client.list_users(body, options)
         return [
             OpenFgaRebacEngine._openfga_user_to_reference(user)
             for user in response.users
@@ -212,7 +223,11 @@ class OpenFgaRebacEngine(RebacEngine):
             ],
         )
 
-        response = await client.check(body)
+        options = {
+            "consistency": consistency_token,
+        }
+
+        response = await client.check(body, options)
 
         return response.allowed
 
