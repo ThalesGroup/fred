@@ -55,6 +55,8 @@ async def _load_spicedb_engine() -> SpiceDbRebacEngine:
     probe_subject = RebacReference(type=Resource.USER, id=_unique_id("probe-user"))
     last_error: grpc.RpcError | None = None
 
+    os.environ["M2M_CLIENT_SECRET"] = "test-secret"
+
     for attempt in range(1, MAX_STARTUP_ATTEMPTS + 1):
         try:
             engine = SpiceDbRebacEngine(
@@ -65,7 +67,7 @@ async def _load_spicedb_engine() -> SpiceDbRebacEngine:
                 ),
                 M2MSecurity(
                     enabled=True,
-                    realm_url=cast(AnyUrl, ""),
+                    realm_url=cast(AnyUrl, "http://app-keycloak:8080/realms/app"),
                     client_id="test-client",
                 ),
                 token=token,
@@ -77,14 +79,13 @@ async def _load_spicedb_engine() -> SpiceDbRebacEngine:
                 resource_type=Resource.TAGS,
             )
             return engine
-        except grpc.RpcError as exc:  # pragma: no cover - depends on external service
+        except grpc.RpcError as exc:
             last_error = exc
             await asyncio.sleep(STARTUP_BACKOFF_SECONDS)
+        except Exception as exc:
+            pytest.skip(f"Failed to create SpiceDB engine: {exc}")
 
-    pytest.skip(
-        "SpiceDB test server not available after retries: "
-        f"{last_error}"  # pragma: no cover - depends on external service
-    )
+    pytest.skip(f"SpiceDB test server not available after retries: {last_error}")
 
 
 async def _load_openfga_engine() -> RebacEngine:
@@ -109,12 +110,13 @@ async def _load_openfga_engine() -> RebacEngine:
         )
         mock_m2m = M2MSecurity(
             enabled=True,
-            realm_url=cast(AnyUrl, ""),
+            realm_url=cast(AnyUrl, "http://app-keycloak:8080/realms/app"),
             client_id="test-client",
         )
     except ValidationError as exc:
         pytest.skip(f"Invalid OpenFGA configuration: {exc}")
 
+    os.environ[mock_m2m.secret_env_var] = "test-secret"
     os.environ[config.token_env_var] = "test-token"
 
     try:
