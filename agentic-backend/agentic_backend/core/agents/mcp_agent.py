@@ -23,7 +23,6 @@ from langgraph.prebuilt import tools_condition
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
-from agentic_backend.common.structures import AgentChatOptions
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.runtime_context import RuntimeContext
@@ -71,11 +70,6 @@ class MCPAgent(AgentFlow):
     """
 
     tuning = MCP_TUNING
-    default_chat_options = AgentChatOptions(
-        search_policy_selection=True,
-        libraries_selection=True,
-    )
-    
     # ---------------------------
     # Bootstrap
     # ---------------------------
