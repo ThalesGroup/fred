@@ -55,7 +55,7 @@ async def _load_spicedb_engine() -> SpiceDbRebacEngine:
     probe_subject = RebacReference(type=Resource.USER, id=_unique_id("probe-user"))
     last_error: grpc.RpcError | None = None
 
-    os.environ["M2M_CLIENT_SECRET"] = "test-secret"
+    os.environ["M2M_CLIENT_SECRET"] = "test-secret"  # nosec: mock secret for tests
 
     for attempt in range(1, MAX_STARTUP_ATTEMPTS + 1):
         try:
@@ -116,8 +116,8 @@ async def _load_openfga_engine() -> RebacEngine:
     except ValidationError as exc:
         pytest.skip(f"Invalid OpenFGA configuration: {exc}")
 
-    os.environ[mock_m2m.secret_env_var] = "test-secret"
-    os.environ[config.token_env_var] = "test-token"
+    os.environ[mock_m2m.secret_env_var] = "test-secret"  # nosec: test secret for tests
+    os.environ[config.token_env_var] = "test-token"  # nosec: mock secret for tests
 
     try:
         engine = OpenFgaRebacEngine(config, mock_m2m, token=store)

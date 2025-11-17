@@ -125,7 +125,7 @@ class OpenFgaRebacEngine(RebacEngine):
         body = ReadRequestTupleKey()
         continuation_token: str | None = None
 
-        while continuation_token != "":
+        while continuation_token != "":  # nosec: not a secret token (bandit flags it...)
             options = {}
             if continuation_token:
                 options["continuation_token"] = continuation_token
