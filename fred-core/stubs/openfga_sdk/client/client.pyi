@@ -9,6 +9,8 @@ from openfga_sdk.models.create_store_request import CreateStoreRequest
 from openfga_sdk.models.check_response import CheckResponse
 from openfga_sdk.models.list_objects_response import ListObjectsResponse
 from openfga_sdk.models.list_users_response import ListUsersResponse
+from openfga_sdk.models.read_request_tuple_key import ReadRequestTupleKey
+from openfga_sdk.models.read_response import ReadResponse
 from openfga_sdk.models.write_authorization_model_request import (
     WriteAuthorizationModelRequest,
 )
@@ -66,3 +68,8 @@ class OpenFgaClient:
         body: ClientListUsersRequest,
         options: Mapping[str, object] | None = ...,
     ) -> ListUsersResponse: ...
+    async def read(
+        self,
+        body: ReadRequestTupleKey,
+        options: Mapping[str, object] | None = ...,
+    ) -> ReadResponse: ...

@@ -19,6 +19,7 @@ from openfga_sdk.credentials import CredentialConfiguration, Credentials
 from openfga_sdk.models.consistency_preference import ConsistencyPreference
 from openfga_sdk.models.create_store_request import CreateStoreRequest
 from openfga_sdk.models.fga_object import FgaObject
+from openfga_sdk.models.read_request_tuple_key import ReadRequestTupleKey
 from openfga_sdk.models.user import User
 from openfga_sdk.models.user_type_filter import UserTypeFilter
 
@@ -110,15 +111,53 @@ class OpenFgaRebacEngine(RebacEngine):
         self, reference: RebacReference
     ) -> str | None:
         # Not that easy to do with OpenFGA API yet
-        # This has been discussed in their community though:
+        # This has been discussed in their community:
         # - https://github.com/orgs/openfga/discussions/225
         # - https://github.com/orgs/openfga/discussions/341
         #
         # Improvement on the delete api were added in their roadmap:
         # https://github.com/openfga/roadmap/issues/34
-        raise NotImplementedError(
-            "OpenFGA bulk relation deletion is not implemented yet"
-        )
+
+        fga_id_to_delete = OpenFgaRebacEngine._reference_to_openfga_id(reference)
+        to_delete: list[ClientTuple] = []
+
+        client = await self.get_client()
+        body = ReadRequestTupleKey()
+        continuation_token: str | None = None
+
+        while continuation_token != "":
+            options = {}
+            if continuation_token:
+                options["continuation_token"] = continuation_token
+
+            res = await client.read(body, options)
+            continuation_token = res.continuation_token
+
+            # Filter only tuples related to the given reference
+            for tup in res.tuples:
+                if (
+                    tup.key.user == fga_id_to_delete
+                    or tup.key.object == fga_id_to_delete
+                ):
+                    to_delete.append(
+                        ClientTuple(
+                            user=tup.key.user,
+                            relation=tup.key.relation,
+                            object=tup.key.object,
+                        )
+                    )
+
+        if not to_delete:
+            return None
+
+        # Delete all found tuples
+        body_delete = ClientWriteRequest(deletes=to_delete)
+        logger.debug("Deleting %d relations of reference %s", len(to_delete), reference)
+        _ = await client.write(body_delete)
+
+        # Returning this for now as OpenFGA does not support real consistency tokens (Zanzibar Zookies)
+        # for now (https://openfga.dev/docs/interacting/consistency#future-work)
+        return ConsistencyPreference.HIGHER_CONSISTENCY
 
     async def list_relations(
         self,
