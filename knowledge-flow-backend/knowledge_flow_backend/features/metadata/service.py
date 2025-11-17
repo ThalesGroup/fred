@@ -228,8 +228,9 @@ class MetadataService:
 
                 if table_name in existing_tables:
                     try:
-                        # Use a lightweight COUNT(*) query to avoid loading full tables
-                        df = csv_store.execute_sql_query(f'SELECT COUNT(*) AS n FROM "{table_name}"')
+                        # Use a lightweight COUNT(*) query to avoid loading full tables.
+                        # table_name is sanitized via sanitize_sql_name, so this is safe from SQL injection.
+                        df = csv_store.execute_sql_query(f'SELECT COUNT(*) AS n FROM "{table_name}"')  # nosec B608
                         if not df.empty and "n" in df.columns:
                             row_count = int(df["n"].iloc[0])
                     except Exception as e:
@@ -496,7 +497,7 @@ class MetadataService:
         """
         try:
             # Import here to avoid circular imports
-            from knowledge_flow_backend.features.tag.service import TagService
+            from knowledge_flow_backend.features.tag.tag_service import TagService
 
             tag_service = TagService()
 

@@ -47,7 +47,7 @@ from knowledge_flow_backend.features.tag.structure import (
     TagWithItemsId,
     UserTagRelation,
 )
-from knowledge_flow_backend.features.tag.tagItemsService import get_specific_tag_item_service
+from knowledge_flow_backend.features.tag.tag_item_service import get_specific_tag_item_service
 from knowledge_flow_backend.features.users.users_service import UserSummary, get_users_by_ids
 
 logger = logging.getLogger(__name__)

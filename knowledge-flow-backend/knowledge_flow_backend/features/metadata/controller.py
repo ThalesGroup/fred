@@ -158,8 +158,7 @@ class MetadataController:
             response_model=ProcessingSummary,
             summary="Get consolidated processing status for all documents",
             description=(
-                "Returns an aggregate view of processing status across all documents visible to the current user, "
-                "including counts of fully processed, in-progress, failed, and not-started documents."
+                "Returns an aggregate view of processing status across all documents visible to the current user, including counts of fully processed, in-progress, failed, and not-started documents."
             ),
         )
         async def get_processing_summary(user: KeycloakUser = Depends(get_current_user)):

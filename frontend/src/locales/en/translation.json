@@ -5,7 +5,39 @@
     "close": "Close",
     "remove": "Remove",
     "loading": "Loading…",
-    "beta": "Beta"
+    "beta": "Beta",
+    "retry": "Retry",
+    "error": "Error",
+    "refresh": "Refresh"
+  },
+  "dataHub": {
+    "title": "Data Hub - Document Lineage",
+    "refresh": "Refresh",
+    "error": "Failed to load processing graph",
+    "empty": "No processing graph data available yet. Ingest and process documents to populate this view.",
+    "searchHelp": "Filter documents by name or source",
+    "searchPlaceholder": "Search documents...",
+    "vectorDistributionTitle": "Vectors per document",
+    "vectorDistributionSubtitle": "{{count}} documents with vectors",
+    "vectorDistributionMany": "{{count}} documents",
+    "rowDistributionTitle": "Rows per document",
+    "rowDistributionSubtitle": "{{count}} documents with tables",
+    "rowDistributionMany": "{{count}} documents",
+    "sortLabel": "Sort by",
+    "sortName": "Name (A–Z)",
+    "sortVectorsDesc": "Vectors (high to low)",
+    "sortVectorsAsc": "Vectors (low to high)",
+    "sortRowsDesc": "Rows (high to low)",
+    "sortRowsAsc": "Rows (low to high)",
+    "limitLabel": "Show",
+    "limitAll": "All",
+    "documentColumn": "Document",
+    "vectorsColumn": "Vectors",
+    "rowsColumn": "Rows",
+    "vectorTableTitle": "Documents with vectors",
+    "rowTableTitle": "Documents with tables",
+    "hideSection": "Hide",
+    "showSection": "Show"
   },
   "resource": {
     "kind": {
@@ -59,7 +91,8 @@
       "monitoring_kpi": "Kpi Dashboard",
       "monitoring_logs": "Log Console",
       "monitoring_runtime": "Runtime summary",
-      "monitoring_processors": "Processor bench"
+      "monitoring_processors": "Processor bench",
+      "monitoring_data": "Data monitoring"
     },
     "theme": {
       "light": "light",
@@ -72,7 +105,8 @@
     "monitoring_kpi": "Kpis",
     "monitoring_logs": "Logs",
     "monitoring_runtime": "Runtime",
-    "monitoring_processors": "Processors"
+    "monitoring_processors": "Processors",
+    "monitoring_data": "Data"
   },
   "runtime": {
     "title": "Runtime Summary",

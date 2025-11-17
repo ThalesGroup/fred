@@ -126,6 +126,7 @@ class BaseScheduler:
             try:
                 metadata = await self._metadata_service.get_document_metadata(user, uid)
             except Exception:
+                logger.warning("[SCHEDULER] Document metadata not found for uid=%s", uid)
                 continue
 
             stages = metadata.processing.stages or {}

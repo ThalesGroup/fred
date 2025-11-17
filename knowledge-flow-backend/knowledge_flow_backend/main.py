@@ -64,7 +64,7 @@ from knowledge_flow_backend.features.resources.controller import ResourceControl
 from knowledge_flow_backend.features.scheduler.scheduler_controller import SchedulerController
 from knowledge_flow_backend.features.statistic.controller import StatisticController
 from knowledge_flow_backend.features.tabular.controller import TabularController
-from knowledge_flow_backend.features.tag.controller import TagController
+from knowledge_flow_backend.features.tag.tag_controller import TagController
 from knowledge_flow_backend.features.users import users_controller
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
