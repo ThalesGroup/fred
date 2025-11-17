@@ -15,7 +15,10 @@
 import { Box, Button, Typography } from "@mui/material";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  DocumentMetadata,
+  ProcessDocumentsProgressResponse,
+} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface CustomBulkAction {
   icon: React.ReactElement;
@@ -27,18 +30,24 @@ export interface DocumentTableSelectionToolbarProps {
   selectedFiles: DocumentMetadata[];
   actions: CustomBulkAction[];
   isVisible: boolean;
+  progress?: ProcessDocumentsProgressResponse | null;
 }
 
 export const DocumentOperationsTableSelectionToolbar: React.FC<DocumentTableSelectionToolbarProps> = ({
   selectedFiles,
   actions,
   isVisible,
+  progress,
 }) => {
   const { t } = useTranslation();
 
-  if (!isVisible || selectedFiles.length === 0 || actions.length === 0) {
+  const hasProgress = Boolean(progress);
+
+  if (!isVisible && !hasProgress) {
     return null;
   }
+
+  const total = progress?.total_documents ?? selectedFiles.length;
 
   return (
     <Box
@@ -50,26 +59,33 @@ export const DocumentOperationsTableSelectionToolbar: React.FC<DocumentTableSele
         p: 2,
         top: 0,
         display: "flex",
-        justifyContent: "flex-end",
+        justifyContent: "space-between",
         alignItems: "center",
       }}
     >
-      <Typography pr={2} variant="subtitle2">
-        {t("documentTable.selectedCount", { count: selectedFiles.length })}
-      </Typography>
-      <Box display="flex" gap={1}>
-        {actions.map((action, index) => (
-          <Button
-            key={index}
-            size="small"
-            variant="outlined"
-            startIcon={action.icon}
-            onClick={() => action.handler(selectedFiles)}
-          >
-            {action.name}
-          </Button>
-        ))}
+      <Box display="flex" flexDirection="column" flex={1} mr={2}>
+        <Typography variant="subtitle2">
+          {hasProgress
+            ? t("documentTable.selectedCount", { count: total })
+            : t("documentTable.selectedCount", { count: selectedFiles.length })}
+        </Typography>
       </Box>
+
+      {isVisible && actions.length > 0 && (
+        <Box display="flex" gap={1}>
+          {actions.map((action, index) => (
+            <Button
+              key={index}
+              size="small"
+              variant="outlined"
+              startIcon={action.icon}
+              onClick={() => action.handler(selectedFiles)}
+            >
+              {action.name}
+            </Button>
+          ))}
+        </Box>
+      )}
     </Box>
   );
 };

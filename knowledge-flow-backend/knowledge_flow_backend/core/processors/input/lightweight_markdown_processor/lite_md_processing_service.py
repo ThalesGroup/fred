@@ -17,36 +17,38 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from .csv_lite import CsvLiteMarkdownExtractor
-from .docx_lite import DocxLiteMarkdownExtractor
-from .lite_types import LiteMarkdownOptions, LiteMarkdownResult
-from .pdf_lite import PdfLiteMarkdownExtractor
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_csv_to_md_processor import LiteCsvToMdProcesor
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_docx_to_md_processor import LiteDocxToMdProcessor
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import LiteMarkdownOptions, LiteMarkdownResult
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor import LitePdfToMdProcessor
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pptx_to_md_processor import LitePptxToMdExtractor
 
 logger = logging.getLogger(__name__)
 
 
-class LightweightMarkdownError(Exception):
+class LiteMdError(Exception):
     """Erreur métier pour l'extraction Markdown légère."""
 
 
-class UnsupportedLightweightType(LightweightMarkdownError):
+class LiteTypeNotSupportedError(LiteMdError):
     pass
 
 
-class LightweightExtractionFailed(LightweightMarkdownError):
+class LiteExtractionFailed(LiteMdError):
     pass
 
 
-class LightweightMarkdownService:
+class LiteMdProcessingService:
     """Facade to select the right lightweight extractor based on file suffix.
 
     Raises dedicated business exceptions for clearer error handling at controller level.
     """
 
     def __init__(self) -> None:
-        self._pdf = PdfLiteMarkdownExtractor()
-        self._docx = DocxLiteMarkdownExtractor()
-        self._csv = CsvLiteMarkdownExtractor()
+        self._pdf = LitePdfToMdProcessor()
+        self._docx = LiteDocxToMdProcessor()
+        self._csv = LiteCsvToMdProcesor()
+        self._pptx = LitePptxToMdExtractor()
 
     def extract(self, file_path: Path, options: LiteMarkdownOptions | None = None) -> LiteMarkdownResult:
         ext = (file_path.suffix or "").lower()
@@ -57,8 +59,10 @@ class LightweightMarkdownService:
                 return self._docx.extract(file_path, options)
             if ext == ".csv":
                 return self._csv.extract(file_path, options)
+            if ext == ".pptx":
+                return self._pptx.extract(file_path, options)
         except Exception as e:
             logger.warning(f"Lightweight extraction failed for {file_path.name}: {e}")
-            raise LightweightExtractionFailed(f"Failed to extract lightweight Markdown from '{file_path.name}': {e}")
+            raise LiteExtractionFailed(f"Failed to extract lightweight Markdown from '{file_path.name}': {e}")
 
-        raise UnsupportedLightweightType(f"Unsupported file type for lightweight extraction: '{ext}' (only .pdf, .docx, .csv are supported)")
+        raise LiteTypeNotSupportedError(f"Unsupported file type for lightweight extraction: '{ext}' (only .pdf, .docx, .csv, .pptx are supported)")

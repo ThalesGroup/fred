@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 FROM mirror.gcr.io/python:3.12
 
-ARG USER_NAME=python-user
+ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 ARG UV_VERSION=0.7.12

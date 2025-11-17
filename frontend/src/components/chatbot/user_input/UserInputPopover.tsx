@@ -21,6 +21,7 @@ import StopIcon from "@mui/icons-material/Stop";
 import {
   Box,
   Chip,
+  CircularProgress,
   Divider,
   IconButton,
   ListItemIcon,
@@ -55,6 +56,7 @@ interface UserInputPopoverProps {
   pickerView: PickerView;
   isRecording: boolean;
   sessionId?: string;
+  uploadingFileNames?: string[];
   sessionAttachments: SessionAttachmentRef[];
   selectedDocumentLibrariesIds: string[];
   selectedPromptResourceIds: string[];
@@ -88,6 +90,7 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
   pickerView,
   isRecording,
   sessionId,
+  uploadingFileNames,
   sessionAttachments,
   selectedDocumentLibrariesIds,
   selectedPromptResourceIds,
@@ -191,7 +194,7 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
       {!pickerView && (
         <Box sx={{ display: "flex", flexDirection: "column" }}>
           {/* Attached files (session) */}
-          {!!sessionAttachments?.length && (
+          {(!!uploadingFileNames?.length || !!sessionAttachments?.length) && (
             <>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
                 <AttachFileIcon fontSize="small" />
@@ -201,6 +204,16 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
               </Stack>
               <Box sx={{ mb: 1 }}>
                 <Stack direction="row" flexWrap="wrap" gap={0.75}>
+                  {uploadingFileNames?.map((name, i) => (
+                    <Chip
+                      key={`${name}-${i}-uploading`}
+                      icon={<CircularProgress size={14} />}
+                      label={t("chatbot.uploadingFile", { defaultValue: "Uploading {{name}}...", name })}
+                      color="warning"
+                      variant="outlined"
+                      sx={{ height: 26, fontSize: "0.8rem" }}
+                    />
+                  ))}
                   {sessionAttachments.map((att, i) => (
                     <Chip
                       key={`${att.id}-${i}`}
@@ -320,7 +333,7 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
                           size="small"
                           color="warning"
                           variant="outlined"
-                          sx={{ height: 18, fontSize: "0.68rem" }}
+                          sx={{ height: 15, fontSize: "0.5rem" }}
                         />
                       </Tooltip>
                     </Stack>

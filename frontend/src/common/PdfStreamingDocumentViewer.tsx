@@ -13,15 +13,13 @@
 // limitations under the License.
 
 import CloseIcon from "@mui/icons-material/Close";
-import DownloadIcon from "@mui/icons-material/Download";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import { AppBar, Box, CircularProgress, IconButton, Toolbar, Tooltip, Typography } from "@mui/material";
+import { AppBar, Box, CircularProgress, IconButton, Toolbar, Typography } from "@mui/material";
+import PdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker"; // Vite turns this into a Worker
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
 import { useAuthToken } from "../security/AuthContext";
-import PdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker"; // Vite turns this into a Worker
 
 pdfjs.GlobalWorkerOptions.workerPort = new PdfWorker();
 
@@ -83,13 +81,6 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ document: doc, onC
     setReloadKey((k) => k + 1); // remount Document to reset PDF.js
   }, [doc?.document_uid]);
 
-  const handleRetry = () => {
-    setIsLoading(true);
-    setLoadError(null);
-    setNumPages(null);
-    setReloadKey((k) => k + 1);
-  };
-
   return (
     <Box
       sx={{
@@ -107,28 +98,6 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ document: doc, onC
           <Typography variant="h6" sx={{ flex: 1, pr: 1 }}>
             {doc?.file_name || "PDF Document"}
           </Typography>
-
-          {/* Download keeps using the non-streaming endpoint */}
-          <Tooltip title="Download">
-            <span>
-              <IconButton
-                aria-label="Download"
-                disabled={!doc?.document_uid}
-                onClick={() => {
-                  if (!doc?.document_uid) return;
-                  window.open(`/knowledge-flow/v1/raw_content/${doc.document_uid}`, "_blank");
-                }}
-              >
-                <DownloadIcon />
-              </IconButton>
-            </span>
-          </Tooltip>
-
-          <Tooltip title="Retry">
-            <IconButton onClick={handleRetry} aria-label="Retry">
-              <RefreshIcon />
-            </IconButton>
-          </Tooltip>
 
           <IconButton onClick={onClose} aria-label="Close">
             <CloseIcon />

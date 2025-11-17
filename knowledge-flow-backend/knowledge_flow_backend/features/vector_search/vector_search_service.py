@@ -12,8 +12,8 @@ from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit, LexicalSearchable, SearchFilter
-from knowledge_flow_backend.features.tag.service import TagService
 from knowledge_flow_backend.features.tag.structure import TagType
+from knowledge_flow_backend.features.tag.tag_service import TagService
 from knowledge_flow_backend.features.vector_search.vector_search_hybrid_retriever import HybridRetriever
 from knowledge_flow_backend.features.vector_search.vector_search_strict_retriever import StrictRetriever
 from knowledge_flow_backend.features.vector_search.vector_search_structures import (
@@ -169,7 +169,7 @@ class VectorSearchService:
         Semantic (legacy) — fast but no lexical guardrails.
         Keep available for debugging or recall-heavy exploratory queries.
         """
-        sf = SearchFilter(tag_ids=sorted(library_tags_ids)) if library_tags_ids else None
+        sf = SearchFilter(tag_ids=sorted(library_tags_ids), metadata_terms={"retrievable": [True]}) if library_tags_ids else SearchFilter(metadata_terms={"retrievable": [True]})
         ann_hits: List[AnnHit] = self.vector_store.ann_search(question, k=k, search_filter=sf)
         return await asyncio.gather(*[self._to_hit(h.document, h.score, rank, user) for rank, h in enumerate(ann_hits, start=1)])
 

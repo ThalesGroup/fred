@@ -8,34 +8,34 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        bash-completion \
-        build-essential \
-        ca-certificates \
-        curl \
-        fd-find \
-        git \
-        gnupg \
-        jq \
-        less \
-        libffi-dev \
-        libpq-dev \
-        libsqlite3-dev \
-        libssl-dev \
-        locales \
-        make \
-        pandoc \
-        python3 \
-        python3-venv \
-        python3-pip \
-        sqlite3 \
-        sudo \
-        unzip \
-        wget \
-        xz-utils \
-        zip \
-        libreoffice \
-        fonts-dejavu \
-        tmux && \
+    bash-completion \
+    build-essential \
+    ca-certificates \
+    curl \
+    fd-find \
+    git \
+    gnupg \
+    jq \
+    less \
+    libffi-dev \
+    libpq-dev \
+    libsqlite3-dev \
+    libssl-dev \
+    locales \
+    make \
+    pandoc \
+    python3 \
+    python3-venv \
+    python3-pip \
+    sqlite3 \
+    sudo \
+    unzip \
+    wget \
+    xz-utils \
+    zip \
+    libreoffice \
+    fonts-dejavu \
+    tmux && \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
     npm install -g npm@latest && \
@@ -49,10 +49,14 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mv /root/.local/bin/uv /usr/local/bin/uv && \
     chmod +x /usr/local/bin/uv
 
+# Add man pages back
+RUN --mount=type=bind,source=.devcontainer/scripts/add-man.sh,target=/tmp/add-man.sh \
+    bash /tmp/add-man.sh
+
 RUN if ! id -u ${USERNAME} >/dev/null 2>&1; then \
-        groupadd --gid ${USER_GID} ${USERNAME} && \
-        useradd --uid ${USER_UID} --gid ${USER_GID} -m ${USERNAME} && \
-        usermod -aG sudo ${USERNAME}; \
+    groupadd --gid ${USER_GID} ${USERNAME} && \
+    useradd --uid ${USER_UID} --gid ${USER_GID} -m ${USERNAME} && \
+    usermod -aG sudo ${USERNAME}; \
     fi && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME}
 

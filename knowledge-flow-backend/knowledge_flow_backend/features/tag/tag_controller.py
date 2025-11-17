@@ -26,7 +26,6 @@ from knowledge_flow_backend.core.stores.tags.base_tag_store import (
     TagNotFoundError,
 )
 from knowledge_flow_backend.features.metadata.service import MetadataNotFound
-from knowledge_flow_backend.features.tag.service import TagService
 from knowledge_flow_backend.features.tag.structure import (
     ShareTargetResource,
     TagCreate,
@@ -37,6 +36,7 @@ from knowledge_flow_backend.features.tag.structure import (
     TagUpdate,
     TagWithItemsId,
 )
+from knowledge_flow_backend.features.tag.tag_service import TagService
 
 logger = logging.getLogger(__name__)
 

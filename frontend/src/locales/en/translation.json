@@ -5,7 +5,39 @@
     "close": "Close",
     "remove": "Remove",
     "loading": "Loading…",
-    "beta": "Beta"
+    "beta": "Beta",
+    "retry": "Retry",
+    "error": "Error",
+    "refresh": "Refresh"
+  },
+  "dataHub": {
+    "title": "Data Hub - Document Lineage",
+    "refresh": "Refresh",
+    "error": "Failed to load processing graph",
+    "empty": "No processing graph data available yet. Ingest and process documents to populate this view.",
+    "searchHelp": "Filter documents by name or source",
+    "searchPlaceholder": "Search documents...",
+    "vectorDistributionTitle": "Vectors per document",
+    "vectorDistributionSubtitle": "{{count}} documents with vectors",
+    "vectorDistributionMany": "{{count}} documents",
+    "rowDistributionTitle": "Rows per document",
+    "rowDistributionSubtitle": "{{count}} documents with tables",
+    "rowDistributionMany": "{{count}} documents",
+    "sortLabel": "Sort by",
+    "sortName": "Name (A–Z)",
+    "sortVectorsDesc": "Vectors (high to low)",
+    "sortVectorsAsc": "Vectors (low to high)",
+    "sortRowsDesc": "Rows (high to low)",
+    "sortRowsAsc": "Rows (low to high)",
+    "limitLabel": "Show",
+    "limitAll": "All",
+    "documentColumn": "Document",
+    "vectorsColumn": "Vectors",
+    "rowsColumn": "Rows",
+    "vectorTableTitle": "Documents with vectors",
+    "rowTableTitle": "Documents with tables",
+    "hideSection": "Hide",
+    "showSection": "Show"
   },
   "resource": {
     "kind": {
@@ -58,7 +90,9 @@
       "selectCluster": "Please select a cluster first",
       "monitoring_kpi": "Kpi Dashboard",
       "monitoring_logs": "Log Console",
-      "monitoring_runtime": "Runtime summary"
+      "monitoring_runtime": "Runtime summary",
+      "monitoring_processors": "Processor bench",
+      "monitoring_data": "Data monitoring"
     },
     "theme": {
       "light": "light",
@@ -70,7 +104,9 @@
     },
     "monitoring_kpi": "Kpis",
     "monitoring_logs": "Logs",
-    "monitoring_runtime": "Runtime"
+    "monitoring_runtime": "Runtime",
+    "monitoring_processors": "Processors",
+    "monitoring_data": "Data"
   },
   "runtime": {
     "title": "Runtime Summary",
@@ -80,6 +116,82 @@
     "sessionsWithAttachments": "Sessions with attachments",
     "maxAttachmentsPerSession": "Max attachments/session",
     "error": "Failed to load runtime summary"
+  },
+  "scheduler": {
+    "processingStatusTitle": "Processing Status",
+    "processingStatusSummary": "Processed {{done}}/{{total}} (failed: {{failed}})",
+    "processingStatusIdle": "No active processing. Select documents and click Process to start.",
+    "processingStatusPreview": "Preview ready: {{count}}",
+    "processingStatusVector": "Vectorized: {{count}}",
+    "processingStatusSql": "SQL indexed: {{count}}",
+    "processingStatusProgressLabel": "{{percent}}% complete",
+    "processingStatusDoneLabel": "Done",
+    "processingStatusFailedOnlyLabel": "Failed",
+    "processingStatusRemainingLabel": "Remaining",
+    "refreshProgress": "Refresh",
+    "refreshFailed": "Failed to refresh processing status",
+    "hideProgress": "Hide",
+    "globalStatusTitle": "Library processing",
+    "globalStatusLoading": "Loading library processing status…",
+    "globalStatusSummary": "{{processed}}/{{total}} processed • {{in_progress}} in progress • {{failed}} failed • {{not_started}} not started",
+    "globalStatusEmpty": "No documents in the knowledge base yet.",
+    "globalStatusProcessedLabel": "Processed: {{count}}",
+    "globalStatusInProgressLabel": "In progress: {{count}}",
+    "globalStatusFailedLabel": "Failed: {{count}}",
+    "globalStatusNotStartedLabel": "Not started: {{count}}",
+    "globalStatusProcessedLabelShort": "Processed",
+    "globalStatusInProgressLabelShort": "In progress",
+    "globalStatusFailedLabelShort": "Failed",
+    "globalStatusNotStartedLabelShort": "Not started"
+  },
+  "procbench": {
+    "title": "Document Processor Bench",
+    "description": "Upload a document (pdf, pptx, docx, xlsx) and compare extraction quality and speed across processors.",
+    "uploadTitle": "Upload a document",
+    "uploadSubtitle": "Supported: PDF, DOCX, PPTX, Markdown, Text",
+    "browse": "Browse",
+    "noFile": "No file selected",
+    "run": "Run Bench",
+    "running": "Running...",
+    "clear": "Clear",
+    "runFailed": "Benchmark failed",
+    "runSuccess": "Benchmark complete",
+    "runSuccessDetail": "Processors executed successfully.",
+    "summaryFor": "Summary for '{{name}}'",
+    "processorsCount": "{{count}} processor(s)",
+    "view": { "sideBySide": "Side by side", "stacked": "Stacked" },
+    "metricsTitle": "Processor Metrics",
+    "persistLabel": "Save run",
+    "saved": {
+      "title": "Saved runs",
+      "modified": "Modified",
+      "file": "File",
+      "count": "Processors",
+      "actions": "Actions",
+      "open": "Open",
+      "delete": "Delete",
+      "empty": "No saved runs yet.",
+      "loadFailed": "Failed to load saved run",
+      "deleteFailed": "Failed to delete run"
+    },
+    "col": {
+      "processor": "Processor",
+      "kind": "Kind",
+      "status": "Status",
+      "duration": "Duration",
+      "tokens": "Tokens (est)",
+      "words": "Words",
+      "headings": "Headings",
+      "images": "Images",
+      "tables": "Table-like lines"
+    },
+    "ok": "OK",
+    "error": "Error",
+    "runtime": "{{ms}} ms",
+    "pages": "{{n}} page(s)",
+    "noMarkdown": "No markdown produced",
+    "openLatest": "Open latest run",
+    "detail": { "title": "Run Detail", "expandAll": "Expand all", "collapseAll": "Collapse all" }
   },
   "assetManager": {
     "title": "Manage Assets for {{agentId}}",
@@ -221,6 +333,8 @@
     "noConversation": "No conversation",
     "delete": "Delete",
     "deleteAll": "Delete all",
+    "confirmDeleteAllTitle": "Delete all conversations?",
+    "confirmDeleteAllMessage": "This action will permanently delete all conversations. Do you want to continue?",
     "chatContext": "Chat context",
     "conversationSetup": "Conversation setup",
     "newConversationHelp": "Start a new conversation (not yet saved)",
@@ -436,7 +550,10 @@
     "bulkRemoveFromLibrary": "Remove from library",
     "removedOneResource": "{{typeOne, capitalize}} removed from library.",
     "confirmRemoveTitle": "Remove from library?",
-    "confirmRemoveMessage": "Remove « {{res}} » from « {{folder}} »?"
+    "confirmRemoveMessage": "Remove « {{res}} » from « {{folder}} »?",
+    "emptyLibrariesTitle": "No libraries yet",
+    "emptyLibrariesDescription": "Create your first library to organize your {{typePlural}}.",
+    "emptyLibrariesAction": "Create library"
   },
   "documentLibraryTree": {
     "shareFolder": "Share folder",
@@ -491,7 +608,10 @@
     "documentCountPlural": "{{count}} documents",
     "createLibrary": "Create Document Library",
     "collapseAll": "Collapse all",
-    "expandAll": "Expand all"
+    "expandAll": "Expand all",
+    "emptyFoldersTitle": "No libraries yet",
+    "emptyFoldersDescription": "Create your first library to organize these documents and keep uploads tidy.",
+    "emptyFoldersAction": "Create library"
   },
   "libraryCreateDrawer": {
     "title": "Create New Library",

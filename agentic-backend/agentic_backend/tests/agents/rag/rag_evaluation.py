@@ -2,21 +2,24 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
+from collections import defaultdict
 from pathlib import Path
 
-from datasets import Dataset
-from fred_core import ModelConfiguration, get_embeddings
-from ragas import RunConfig, evaluate
-from ragas.embeddings import LangchainEmbeddingsWrapper
-from ragas.llms import LangchainLLMWrapper
-from ragas.metrics import (
-    answer_relevancy,
-    answer_similarity,
-    context_precision,
-    context_recall,
-    faithfulness,
+from deepeval import evaluate
+from deepeval.evaluate import AsyncConfig
+from deepeval.metrics import (
+    AnswerRelevancyMetric,
+    ContextualPrecisionMetric,
+    ContextualRecallMetric,
+    ContextualRelevancyMetric,
+    FaithfulnessMetric,
 )
+from deepeval.models import GPTModel, OllamaModel
+from deepeval.test_case import LLMTestCase
+from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 
 from agentic_backend.agents.rags.advanced_rag_expert import AdvancedRico
 from agentic_backend.application_context import (
@@ -59,9 +62,6 @@ def load_config():
     """
     Load and configure the application settings for a specified model.
 
-    Args:
-        model_name (str): The name of the model to be used for chat operations.
-
     Returns:
         The updated configuration object.
     """
@@ -71,22 +71,27 @@ def load_config():
     return config
 
 
-def setup_embedding_model(embedding_name: str, config):
+def mapping_langchain_deepeval(langchain_model):
     """
-    Set up and configure an embedding model for use with Ragas.
+    Maps a LangChain model instance to a corresponding DeepEval model instance.
 
     Args:
-        embedding_name (str): The name of the embedding model to be used.
-        config: The application configuration object containing model settings.
+        langchain_model: A LangChain model instance (either ChatOllama or ChatOpenAI).
 
     Returns:
-        LangchainEmbeddingsWrapper: A wrapped embedding model instance ready for use.
+        A DeepEval model instance (OllamaModel or GPTModel) corresponding to the input.
     """
-    default_config = config.ai.default_chat_model.model_dump(exclude_unset=True)
-    # Create a new ModelConfiguration including the desired embedding model name
-    embedding_config = ModelConfiguration(**{**default_config, "model": embedding_name})
-    embedding = get_embeddings(embedding_config)
-    return LangchainEmbeddingsWrapper(embedding)
+    if isinstance(langchain_model, ChatOllama):
+        return OllamaModel(
+            model=langchain_model.model,
+            base_url=langchain_model.base_url,
+            temperature=langchain_model.temperature or 0.0,
+        )
+    if isinstance(langchain_model, ChatOpenAI):
+        return GPTModel(
+            model=langchain_model.model_name,
+            temperature=langchain_model.temperature or 0.0,
+        )
 
 
 async def setup_agent(
@@ -110,8 +115,10 @@ async def setup_agent(
         raise ValueError(f"Agent '{agent_name}' not found. Available: {available}")
 
     agent = AdvancedRico(settings)
-    runtime_context = RuntimeContext()
-    await agent.async_init(runtime_context=runtime_context)
+    await agent.async_init(runtime_context=RuntimeContext())
+    agent.set_runtime_context(
+        context=RuntimeContext(access_token="fake_token")  # nosec B106
+    )
 
     if doc_lib_ids:
         agent.set_runtime_context(
@@ -121,31 +128,53 @@ async def setup_agent(
     return agent.get_compiled_graph()
 
 
-def print_results(results):
+def calculate_metric_averages(result):
     """
-    Print evaluation results in a formatted and visual way.
-    Displays scores for each metric with a progress bar representation.
+    Calculate and display average scores for each metric from evaluation results.
+
+    Args:
+        result: The evaluation result object returned by DeepEval's evaluate function.
+                It should contain test_results with metrics_data for each test case.
     """
+
+    metrics_scores = defaultdict(list)
+
+    for test_result in result.test_results:
+        for metric_data in test_result.metrics_data:
+            metric_name = metric_data.name
+            metrics_scores[metric_name].append(metric_data.score)
+
     print("\n" + "=" * 70)
-    print("📈 RAGAS EVALUATION RESULTS")
+    print("AVERAGES PER METRIC")
     print("=" * 70)
 
-    scores = results.scores[0]
-    metrics = [
-        "faithfulness",
-        "answer_relevancy",
-        "context_precision",
-        "context_recall",
-        "answer_similarity",
-    ]
+    results = {}
+    for metric_name in sorted(metrics_scores.keys()):
+        scores = metrics_scores[metric_name]
+        avg = sum(scores) / len(scores) if scores else 0
+        min_score = min(scores) if scores else 0
+        max_score = max(scores) if scores else 0
 
-    for metric in metrics:
-        if metric in scores:
-            score = scores[metric]
-            bar = "█" * int(score * 20) + "░" * (20 - int(score * 20))
-            print(f"  {metric:20s} : {bar} {score:.3f}")
+        print(f"\n{metric_name}")
+        print(f"{'─' * 70}")
+        percent = round(avg * 100, 2)
+        print(f"  Average:           {avg:.4f} ({percent}%)")
 
-    print("=" * 70 + "\n")
+        results[metric_name] = {
+            "scores": scores,
+            "average": avg,
+            "min": min_score,
+            "max": max_score,
+        }
+
+    all_scores = [score for scores in metrics_scores.values() for score in scores]
+    global_average = sum(all_scores) / len(all_scores) if all_scores else 0
+
+    print("\n" + "=" * 70)
+    print("OVERALL AVERAGE")
+    print("=" * 70)
+    global_percent = round(global_average * 100, 2)
+    print(f"  Overall average:   {global_average:.4f} ({global_percent}%)")
 
 
 async def run_evaluation(
@@ -156,22 +185,25 @@ async def run_evaluation(
     doc_lib_ids: list[str] | None = None,
 ):
     """
-    Run evaluation of an agent using RAGAS metrics.
+    Run evaluation of an agent using DeepEval metrics.
 
     This function loads test data, evaluates the agent's responses, and prints
-    formatted results including various RAGAS metrics.
+    formatted results including various DeepEval metrics.
     """
     logger = logging.getLogger(__name__)
 
     if not test_file.is_file():
         raise FileNotFoundError(f"Test file not found: {test_file}")
-    config = load_config()
 
+    load_config()
+
+    # Setup LLM for evaluation
     llm_as_judge = get_default_model()
-    # Avoid assigning unknown attributes on BaseLanguageModel; set the model name dynamically
-    setattr(llm_as_judge, "model", chat_model)
-    llm = LangchainLLMWrapper(llm_as_judge)
-    embeddings = setup_embedding_model(embedding_model, config)
+    if isinstance(llm_as_judge, ChatOllama):
+        setattr(llm_as_judge, "model", chat_model)
+    if isinstance(llm_as_judge, ChatOpenAI):
+        setattr(llm_as_judge, "model_name", chat_model)
+    deepeval_llm = mapping_langchain_deepeval(llm_as_judge)
 
     logger.info(
         f"🔧 Configuration : chat_model={chat_model}, embedding_model={embedding_model}"
@@ -184,7 +216,23 @@ async def run_evaluation(
     agent = await setup_agent(agent_name, doc_lib_ids)
     logger.info(f"🤖 Agent '{agent_name}' ready")
 
-    evaluation_data = {"question": [], "answer": [], "contexts": [], "ground_truth": []}
+    faithfulness_metric = FaithfulnessMetric(
+        model=deepeval_llm, verbose_mode=True, threshold=0.0
+    )
+    answer_relevancy_metric = AnswerRelevancyMetric(
+        model=deepeval_llm, verbose_mode=True, threshold=0.0
+    )
+    contextual_precision_metric = ContextualPrecisionMetric(
+        model=deepeval_llm, verbose_mode=True, threshold=0.0
+    )
+    contextual_recall_metric = ContextualRecallMetric(
+        model=deepeval_llm, verbose_mode=True, threshold=0.0
+    )
+    contextual_relevancy_metric = ContextualRelevancyMetric(
+        model=deepeval_llm, verbose_mode=True, threshold=0.0
+    )
+
+    test_cases = []
 
     logger.info("🔄 Evaluation in progress...")
     for i, item in enumerate(test_data, 1):
@@ -196,44 +244,49 @@ async def run_evaluation(
         messages = result.get("messages", [])
         documents = result.get("documents", [])
 
-        evaluation_data["question"].append(item["question"])
-        evaluation_data["answer"].append(messages[-1].content if messages else "")
-        evaluation_data["ground_truth"].append(item["expected_answer"])
-        evaluation_data["contexts"].append([doc.content for doc in documents])
+        actual_output = messages[-1].content if messages else ""
+        retrieval_context = [doc.content for doc in documents]
+
+        # Create DeepEval test case
+        test_case = LLMTestCase(
+            input=item["question"],
+            actual_output=actual_output,
+            expected_output=item["expected_answer"],
+            retrieval_context=retrieval_context,
+        )
+        test_cases.append(test_case)
 
         logger.info(f"✓ Question {i}/{len(test_data)}")
 
-    logger.info("📊 Calculation of RAGAS metrics...")
-    dataset = Dataset.from_dict(evaluation_data)
+    logger.info("📊 Calculation of DeepEval metrics...")
 
+    # Evaluate all test cases
     results = evaluate(
-        dataset=dataset,
+        test_cases=test_cases,
         metrics=[
-            faithfulness,
-            answer_relevancy,
-            context_precision,
-            context_recall,
-            answer_similarity,
+            faithfulness_metric,
+            answer_relevancy_metric,
+            contextual_precision_metric,
+            contextual_recall_metric,
+            contextual_relevancy_metric,
         ],
-        llm=llm,
-        embeddings=embeddings,
-        run_config=RunConfig(timeout=3600),
+        async_config=AsyncConfig(run_async=False),
     )
 
-    print_results(results)
+    calculate_metric_averages(results)
 
     return results
 
 
 def parse_args():
     """
-    Parse command-line arguments for the RAGAS evaluation script.
+    Parse command-line arguments for the DeepEval evaluation script.
 
     Returns:
         argparse.Namespace: Parsed arguments including chat_model, embedding_model,
                             dataset_path, and doc_libs.
     """
-    parser = argparse.ArgumentParser(description="RAGAS evaluation for RAG agents")
+    parser = argparse.ArgumentParser(description="DeepEval evaluation for RAG agents")
 
     parser.add_argument("--chat_model", required=True, help="Name of chat model")
     parser.add_argument(
@@ -255,7 +308,7 @@ def parse_args():
 
 async def main():
     """
-    Main function to run the RAGAS evaluation.
+    Main function to run the DeepEval evaluation.
 
     Parses command-line arguments, sets up logging, and executes the evaluation
     process using the specified models and dataset.
@@ -285,5 +338,7 @@ async def main():
 
 
 if __name__ == "__main__":
+    os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "1"
+    os.environ["ERROR_REPORTING"] = "0"
     exit_code = asyncio.run(main())
     sys.exit(exit_code)

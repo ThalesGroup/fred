@@ -58,10 +58,41 @@ class RecursionConfig(BaseModel):
 
 
 class AgentChatOptions(BaseModel):
-    search_policy_selection: bool = False
-    libraries_selection: bool = False
-    record_audio_files: bool = False
-    attach_files: bool = False
+    """
+    UI toggles for the chat input.
+
+    Fred rationale:
+    - These flags control which optional pickers/actions appear next to the user message box.
+    - They do not change agent behavior by themselves; they expose inputs the agent may consume.
+    - All options are opt-in and default to False.
+    """
+
+    search_policy_selection: bool = Field(
+        default=False,
+        description=(
+            "Show a selector to choose the retrieval/search policy (e.g., hybrid, semantic, strict) "
+            "before sending a message."
+        ),
+    )
+    libraries_selection: bool = Field(
+        default=False,
+        description=(
+            "Display a picker to include document libraries/knowledge sources that the agent can use "
+            "for this message (session-scoped context)."
+        ),
+    )
+    record_audio_files: bool = Field(
+        default=False,
+        description=(
+            "Add a microphone control to record a short audio clip and attach it to the message."
+        ),
+    )
+    attach_files: bool = Field(
+        default=False,
+        description=(
+            "Allow attaching local files (e.g., PDFs, images, text) to the message and show existing attachments."
+        ),
+    )
 
 
 # ---------------- Base: shared identity + UX + tuning ----------------

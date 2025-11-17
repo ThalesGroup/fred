@@ -36,7 +36,7 @@ security:
 
 scheduler:
   enabled: true
-  backend: "temporal"
+  backend: "memory"
   temporal:
     host: "localhost:7233"
     namespace: "default"
@@ -45,7 +45,7 @@ scheduler:
     connect_timeout_seconds: 5
 input_processors:
   - prefix: ".pdf"
-    class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+    class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
   - prefix: ".docx"
     class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
   - prefix: ".pptx"
@@ -108,6 +108,10 @@ chat_model:
 #     azure_apim_resource_path: "/genai-aoai-inference/v2"
 #     azure_openai_api_version: "2024-06-01"
 #     azure_tenant_id: "737c6905-f186-4bcf-afb3-43e349ee23a3"
+vision_model:
+  provider: openai
+  name: gpt-4o-mini # or gpt-4o if you want higher fidelity
+
 storage:
   postgres:
     host: localhost

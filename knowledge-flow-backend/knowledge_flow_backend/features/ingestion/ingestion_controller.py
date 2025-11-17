@@ -28,14 +28,14 @@ from pydantic import BaseModel
 
 from knowledge_flow_backend.application_context import get_kpi_writer
 from knowledge_flow_backend.common.structures import Status
-from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_types import LiteMarkdownOptions
-from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.service import (
-    LightweightMarkdownError,
-    LightweightMarkdownService,
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import LiteMarkdownOptions
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_md_processing_service import (
+    LiteMdError,
+    LiteMdProcessingService,
 )
-from knowledge_flow_backend.features.ingestion.service import IngestionService
+from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 from knowledge_flow_backend.features.scheduler.activities import input_process, output_process
-from knowledge_flow_backend.features.scheduler.structure import FileToProcess
+from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,7 @@ class IngestionController:
     def __init__(self, router: APIRouter):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.service = IngestionService()
-        self.lite_md_service = LightweightMarkdownService()
+        self.lite_md_service = LiteMdProcessingService()
         logger.info("IngestionController initialized.")
 
         @router.post(
@@ -235,7 +235,7 @@ class IngestionController:
             # Validate extension
             filename = file.filename or "uploaded"
             suffix = pathlib.Path(filename).suffix.lower()
-            if suffix not in (".pdf", ".docx", ".csv"):
+            if suffix not in (".pdf", ".docx", ".csv", ".pptx"):
                 raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}")
 
             # Store to temp
@@ -257,7 +257,7 @@ class IngestionController:
             # Extract
             try:
                 result = self.lite_md_service.extract(raw_path, options=opts)
-            except LightweightMarkdownError as e:
+            except LiteMdError as e:
                 raise HTTPException(status_code=400, detail=str(e))
             finally:
                 # Best-effort cleanup of temp file; containing dir will be removed separately if needed

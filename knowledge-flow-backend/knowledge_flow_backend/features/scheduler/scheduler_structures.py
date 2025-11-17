@@ -16,12 +16,23 @@
 import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fred_core import KeycloakUser
 from pydantic import BaseModel
 
-from knowledge_flow_backend.common.document_structures import AccessInfo, DocumentMetadata, FileInfo, Identity, Processing, SourceInfo, SourceType, Tagging
+from knowledge_flow_backend.common.document_structures import (
+    AccessInfo,
+    DocumentMetadata,
+    FileInfo,
+    Identity,
+    Processing,
+    ProcessingStage,
+    ProcessingStatus,
+    SourceInfo,
+    SourceType,
+    Tagging,
+)
 from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
 
 
@@ -144,3 +155,34 @@ class PipelineDefinition(BaseModel):
 class ProcessDocumentsRequest(BaseModel):
     files: List[FileToProcessWithoutUser]
     pipeline_name: str
+
+
+class ProcessDocumentsResponse(BaseModel):
+    status: str
+    pipeline_name: str
+    total_files: int
+    workflow_id: str
+    run_id: Optional[str] = None
+
+
+class DocumentProgress(BaseModel):
+    document_uid: str
+    stages: Dict[ProcessingStage, ProcessingStatus]
+    fully_processed: bool = False
+    has_failed: bool = False
+
+
+class ProcessDocumentsProgressRequest(BaseModel):
+    workflow_id: Optional[str] = None
+
+
+class ProcessDocumentsProgressResponse(BaseModel):
+    total_documents: int
+    documents_found: int
+    documents_missing: int
+    documents_with_preview: int
+    documents_vectorized: int
+    documents_sql_indexed: int
+    documents_fully_processed: int
+    documents_failed: int
+    documents: List[DocumentProgress]

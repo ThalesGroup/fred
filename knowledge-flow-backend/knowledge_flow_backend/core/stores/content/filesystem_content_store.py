@@ -23,8 +23,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO, List, Optional, cast  # Added 'cast' here
 
-import pandas as pd
-
 from knowledge_flow_backend.core.stores.content.base_content_store import BaseContentStore, FileMetadata, StoredObjectInfo
 
 logger = logging.getLogger(__name__)
@@ -36,7 +34,7 @@ class FileSystemContentStore(BaseContentStore):
         self.document_root.mkdir(parents=True, exist_ok=True)
         self.object_root = object_root
         self.object_root.mkdir(parents=True, exist_ok=True)
-        logger.info(f"📁 Initialized LocalStorageBackend at: {self.document_root} and {self.object_root}")
+        logger.info(f"[CONTENT] Initialized LocalStorageBackend at: {self.document_root} and {self.object_root}")
 
     def clear(self) -> None:
         """
@@ -49,7 +47,7 @@ class FileSystemContentStore(BaseContentStore):
             shutil.rmtree(self.object_root)
         self.document_root.mkdir(parents=True, exist_ok=True)
         self.object_root.mkdir(parents=True, exist_ok=True)
-        logger.info("🧹 LocalStorageBackend cleared")
+        logger.info("[CONTENT] LocalStorageBackend cleared")
 
     def save_content(self, document_uid: str, document_dir: Path) -> None:
         destination = self.document_root / document_uid
@@ -68,12 +66,12 @@ class FileSystemContentStore(BaseContentStore):
             target = destination / item.name
             if item.is_dir():
                 shutil.copytree(item, target)
-                logger.info(f"📁 Copied directory: {item} -> {target}")
+                logger.info(f"[CONTENT] Copied directory: {item} -> {target}")
             else:
                 shutil.copy2(item, target)
-                logger.info(f"📄 Copied file: {item} -> {target}")
+                logger.info(f"[CONTENT] Copied file: {item} -> {target}")
 
-        logger.info(f"✅ Successfully saved document {document_uid} to {destination}")
+        logger.info(f"[CONTENT] Successfully saved document {document_uid} to {destination}")
 
     def save_input(self, document_uid: str, input_dir: Path) -> None:
         destination = self.document_root / document_uid / "input"
@@ -95,9 +93,9 @@ class FileSystemContentStore(BaseContentStore):
 
         if destination.exists() and destination.is_dir():
             shutil.rmtree(destination)
-            logger.info(f"🗑️ Deleted content for document {document_uid} at {destination}")
+            logger.info(f"[CONTENT] Deleted content for document {document_uid} at {destination}")
         else:
-            logger.warning(f"⚠️ Tried to delete content for document {document_uid}, but it does not exist at {destination}")
+            logger.warning(f"[CONTENT] Tried to delete content for document {document_uid}, but it does not exist at {destination}")
 
     def get_content(self, document_uid: str) -> BinaryIO:
         """
@@ -113,36 +111,20 @@ class FileSystemContentStore(BaseContentStore):
 
         return open(files[0], "rb")
 
-    def get_markdown(self, document_uid: str) -> str:
+    def get_preview_bytes(self, doc_path: str) -> bytes:
         """
-        Returns the content of the `output/output.md` file as a UTF-8 string.
-        If not found, attempts to convert `output/table.csv` to a Markdown table.
+        Returns the content of the `output/output.md` or `output/table.csv` file as bytes.
+        Raises FileNotFoundError if neither file exists.
         """
-        doc_path = self.document_root / document_uid / "output"
-        md_path = doc_path / "output.md"
-        csv_path = doc_path / "table.csv"
-
-        if md_path.exists():
+        document_path = self.document_root / doc_path
+        if document_path.exists():
             try:
-                return md_path.read_text(encoding="utf-8")
+                return document_path.read_bytes()
             except Exception as e:
-                logger.error(f"Error reading markdown file for {document_uid}: {e}")
+                logger.error(f"Error reading document file for {document_path}: {e}")
                 raise
 
-        if csv_path.exists():
-            try:
-                df = pd.read_csv(csv_path)
-                if len(df) > 200:
-                    df = df.head(200)
-                result = df.to_markdown(index=False, tablefmt="github")
-                if not result:
-                    raise ValueError(f"Markdown conversion resulted in empty content for {document_uid}")
-                return result
-            except Exception as e:
-                logger.error(f"Error reading or converting CSV for {document_uid}: {e}")
-                raise
-
-        raise FileNotFoundError(f"Neither markdown nor CSV preview found for document: {document_uid}")
+        raise FileNotFoundError(f"Neither markdown nor CSV preview found for document: {doc_path}")
 
     def get_media(self, document_uid: str, media_id: str) -> BinaryIO:
         """

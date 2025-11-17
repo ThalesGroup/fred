@@ -43,7 +43,7 @@ security:
 
 scheduler:
   enabled: true
-  backend: "temporal"
+  backend: "memory"
   temporal:
     host: "localhost:7233"
     namespace: "default"

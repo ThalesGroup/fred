@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import BinaryIO, List, Optional, cast
 from urllib.parse import urlparse
 
-import pandas as pd
 from minio import Minio
 from minio.error import S3Error
 
@@ -106,7 +105,7 @@ class MinioStorageBackend(BaseContentStore):
         for bucket_name in self.buckets:
             if not self.client.bucket_exists(bucket_name):
                 self.client.make_bucket(bucket_name)
-                logger.info(f"Bucket '{bucket_name}' created successfully.")
+                logger.info(f"[CONTENT] Bucket '{bucket_name}' created successfully.")
 
     # ----------------------------------------------------------------------
     # DOCUMENT-RELATED METHODS (Use self.document_bucket)
@@ -122,9 +121,9 @@ class MinioStorageBackend(BaseContentStore):
                 try:
                     # MODIFIED: Use document_bucket
                     self.client.fput_object(self.document_bucket, object_name, str(file_path))
-                    logger.info(f"Uploaded '{object_name}' to document bucket '{self.document_bucket}'.")
+                    logger.info(f"[CONTENT] object={object_name} to document bucket='{self.document_bucket}'.")
                 except S3Error as e:
-                    logger.error(f"Failed to upload '{file_path}': {e}")
+                    logger.error(f"[CONTENT] Failed to upload path={file_path}: {e}")
                     raise ValueError(f"Failed to upload '{file_path}': {e}")
 
     def _upload_folder(self, document_uid: str, local_path: Path, subfolder: str):
@@ -142,7 +141,7 @@ class MinioStorageBackend(BaseContentStore):
                 try:
                     # MODIFIED: Use document_bucket
                     self.client.fput_object(self.document_bucket, object_name, str(file_path))
-                    logger.info(f"📤 Uploaded '{object_name}' to document bucket '{self.document_bucket}'")
+                    logger.info(f"[CONTENT] object={object_name} to document bucket='{self.document_bucket}'")
                 except S3Error as e:
                     logger.error(f"❌ Failed to upload '{file_path}' as '{object_name}': {e}")
                     raise ValueError(f"Upload failed for '{object_name}': {e}")
@@ -166,43 +165,23 @@ class MinioStorageBackend(BaseContentStore):
                 if obj.object_name is None:
                     raise RuntimeError(f"MinIO object has no name: {obj}")
                 self.client.remove_object(self.document_bucket, obj.object_name)
-                logger.info(f"🗑️ Deleted '{obj.object_name}' from document bucket '{self.document_bucket}'.")
+                logger.info(f"[CONTENT] Deleted object='{obj.object_name}' from document bucket='{self.document_bucket}'.")
                 deleted_any = True
 
             if not deleted_any:
-                logger.warning(f"⚠️ No objects found to delete for document {document_uid}.")
+                logger.warning(f"[CONTENT] No objects found to delete for document_uid={document_uid}.")
 
         except S3Error as e:
-            logger.error(f"❌ Failed to delete objects for document {document_uid}: {e}")
+            logger.error(f"[CONTENT] Failed to delete objects document_uid={document_uid}: {e}")
             raise ValueError(f"Failed to delete document content from MinIO: {e}")
 
-    def get_markdown(self, document_uid: str) -> str:
-        """
-        Fetches the markdown content from 'output/output.md' in the document directory.
-        """
-        md_object = f"{document_uid}/output/output.md"
-        csv_object = f"{document_uid}/output/table.csv"
-
+    def get_preview_bytes(self, doc_path: str) -> bytes:
         try:
-            # MODIFIED: Use document_bucket
-            response = self.client.get_object(self.document_bucket, md_object)
-            return response.read().decode("utf-8")
-        except S3Error as e_md:
-            logger.warning(f"Markdown not found for {document_uid}: {e_md}")
-
-        # Try CSV fallback
-        try:
-            # MODIFIED: Use document_bucket
-            response = self.client.get_object(self.document_bucket, csv_object)
-            csv_bytes = response.read()
-            df = pd.read_csv(io.BytesIO(csv_bytes))
-            return df.to_markdown(index=False, tablefmt="github")
-        except S3Error as e_csv:
-            logger.error(f"CSV also not found for {document_uid}: {e_csv}")
-        except Exception as e:
-            logger.error(f"Error reading or converting CSV for {document_uid}: {e}")
-
-        raise FileNotFoundError(f"Neither markdown nor CSV preview found for document: {document_uid}")
+            response = self.client.get_object(self.document_bucket, doc_path)
+            return response.read()
+        except S3Error as e:
+            logger.error(f"[CONTENT] Error fetching preview path={doc_path}: {e}")
+            raise FileNotFoundError(f"Preview image not found for document {doc_path}")
 
     def get_media(self, document_uid: str, media_id: str) -> BinaryIO:
         media_object = f"{document_uid}/output/media/{media_id}"

@@ -196,6 +196,59 @@ class Processing(BaseModel):
         return all(v == ProcessingStatus.DONE for v in self.stages.values())
 
 
+class ProcessingSummary(BaseModel):
+    """
+    Aggregate processing status across a set of documents.
+
+    Intended for lightweight UI summaries (e.g. total vs processed vs in-progress).
+    """
+
+    total_documents: int
+    fully_processed: int
+    in_progress: int
+    failed: int
+    not_started: int
+
+
+class ProcessingGraphNode(BaseModel):
+    """
+    Node in the processing graph, used to visualize how documents relate
+    to downstream artifacts (tables, vector indexes, etc.).
+    """
+
+    id: str
+    kind: str  # e.g. document, table, vector_index
+    label: str
+
+    # Optional metadata depending on node kind
+    document_uid: Optional[str] = None
+    table_name: Optional[str] = None
+    vector_count: Optional[int] = None
+    row_count: Optional[int] = None
+    file_type: Optional[FileType] = None
+    source_tag: Optional[str] = None
+
+
+class ProcessingGraphEdge(BaseModel):
+    """
+    Directed edge between processing graph nodes.
+    """
+
+    source: str
+    target: str
+    kind: str  # e.g. vectorized, sql_indexed
+
+
+class ProcessingGraph(BaseModel):
+    """
+    Lightweight graph structure that can be consumed directly by the UI
+    to render a data lineage view (documents → tables / vectors).
+    """
+
+    nodes: List[ProcessingGraphNode]
+    edges: List[ProcessingGraphEdge]
+
+
 class DocSummary(BaseModel):
     """
     Fred rationale:
@@ -344,6 +397,11 @@ class DocumentMetadata(BaseModel):
         self.processing.mark_done(stage)
 
     def mark_retrievable(self) -> None:
+        """
+        Mark the source as retrievable (raw file can be re-fetched).
+        That means a vector search can retrieve chunks from this doc.
+        This flags is set after successful ingestion of vectors into the vector store.
+        """
         self.source.retrievable = True
 
     def mark_unretrievable(self) -> None:

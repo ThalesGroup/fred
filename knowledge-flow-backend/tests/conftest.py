@@ -44,7 +44,7 @@ from knowledge_flow_backend.common.structures import (
 from knowledge_flow_backend.core.processors.output.vectorization_processor.embedder import Embedder
 from knowledge_flow_backend.main import create_app
 
-from .test_utils.test_processors import TestMarkdownProcessor, TestOutputProcessor
+from .test_utils.test_processors import TestDocxProcessor, TestMarkdownProcessor, TestOutputProcessor
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -95,7 +95,11 @@ def app_context(monkeypatch, fake_embedder):
                 connect_timeout_seconds=3,
             ),
         ),
-        document_sources={"uploads": PushSourceConfig(type="push", description="Uploaded files for testing")},
+        document_sources={
+            "uploads": PushSourceConfig(type="push", description="Uploaded files for testing"),
+            # Include 'fred' as a valid push source for ingestion tests
+            "fred": PushSourceConfig(type="push", description="Manual ingestion test source"),
+        },
         storage=StorageConfig(
             postgres=PostgresStoreConfig(
                 host="localhost",
@@ -132,13 +136,17 @@ def app_context(monkeypatch, fake_embedder):
         processing=ProcessingConfig(
             generate_summary=True,
             use_gpu=True,
-            process_images=True,
+            process_images=False,
         ),
         input_processors=[
             ProcessorConfig(
                 prefix=".md",
                 class_path=f"{TestMarkdownProcessor.__module__}.{TestMarkdownProcessor.__qualname__}",
-            )
+            ),
+            ProcessorConfig(
+                prefix=".docx",
+                class_path=f"{TestDocxProcessor.__module__}.{TestDocxProcessor.__qualname__}",
+            ),
         ],
         output_processors=[
             ProcessorConfig(

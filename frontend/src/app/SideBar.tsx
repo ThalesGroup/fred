@@ -121,6 +121,30 @@ export default function SideBar({ darkMode, onThemeChange }) {
                     },
                   ]
                 : []),
+              ...(canReadRuntime
+                ? [
+                    {
+                      key: "monitoring-data",
+                      label: t("sidebar.monitoring_data", "Data Hub"),
+                      icon: <MonitorHeartIcon />,
+                      url: `/monitoring/data`,
+                      canBeDisabled: false,
+                      tooltip: t("sidebar.tooltip.monitoring_data", "Data lineage view"),
+                    },
+                  ]
+                : []),
+              ...(canReadRuntime
+                ? [
+                    {
+                      key: "monitoring-processors",
+                      label: t("sidebar.monitoring_processors", "Processors"),
+                      icon: <MonitorHeartIcon />,
+                      url: `/monitoring/processors`,
+                      canBeDisabled: false,
+                      tooltip: t("sidebar.tooltip.monitoring_processors", "Processor bench"),
+                    },
+                  ]
+                : []),
               ...(canReadOpenSearch || canReadLogs
                 ? [
                     {

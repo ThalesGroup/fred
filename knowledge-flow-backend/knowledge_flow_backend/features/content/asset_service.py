@@ -14,8 +14,8 @@ from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.content.base_content_store import StoredObjectInfo
-from knowledge_flow_backend.features.ingestion.service import IngestionService
-from knowledge_flow_backend.features.tag.service import TagCreate, TagService, TagType
+from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
+from knowledge_flow_backend.features.tag.tag_service import TagCreate, TagService, TagType
 
 # Define the scope type for clarity
 ScopeType = Literal["agents", "users"]
@@ -130,7 +130,6 @@ class AssetService:  # RENAMED from AgentAssetService
                     path=None,
                     description="Generic tag for all files uploaded by users",
                     type=TagType.DOCUMENT,
-                    item_ids=[],
                 ),
                 user,
             )

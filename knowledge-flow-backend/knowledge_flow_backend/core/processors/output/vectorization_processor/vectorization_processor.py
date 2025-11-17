@@ -97,6 +97,12 @@ class VectorizationProcessor(BaseOutputProcessor):
         try:
             logger.info(f"Starting vectorization for {file_path}")
 
+            # At this point the raw content is available in our content store,
+            # so mark the document as retrievable *before* we build flat metadata
+            # for the vector index. This ensures stored vectors have retrievable=True
+            # and can be found by SearchFilter(metadata_terms={"retrievable": [True]}).
+            metadata.mark_retrievable()
+
             document: Document = load_langchain_doc_from_metadata(file_path, metadata)
             logger.debug(f"Document loaded: {document}")
             if not document:
@@ -215,7 +221,6 @@ class VectorizationProcessor(BaseOutputProcessor):
                 raise VectorProcessingError("Failed to add documents to Vector Store") from e
 
             metadata.mark_stage_done(ProcessingStage.VECTORIZED)
-            metadata.mark_retrievable()
 
             # Emit success KPI
             duration_ms = (time.perf_counter() - t0) * 1000.0

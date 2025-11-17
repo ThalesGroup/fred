@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Protocol, Sequence, runtime_checkable
+from typing import List, Mapping, Optional, Protocol, Sequence, Union, runtime_checkable
 
 from attr import dataclass
 from langchain_core.documents import Document
@@ -30,7 +30,9 @@ class SearchFilter:
     """
 
     tag_ids: Optional[Sequence[str]] = None
-    metadata_terms: Optional[Dict[str, Sequence[str]]] = None
+    # Accept JSON-like scalar values for metadata filtering (str, int, float, bool)
+    # Use Mapping for covariance to allow callers to pass dict[str, list[bool]] safely.
+    metadata_terms: Optional[Mapping[str, Sequence[Union[str, int, float, bool]]]] = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,13 @@ class BaseVectorStore(ABC):
     def delete_vectors_for_document(self, *, document_uid: str) -> None:
         """Delete all chunks for a logical document."""
         raise NotImplementedError
+
+    def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:  # pragma: no cover - optional capability
+        """
+        Optional capability: update the 'retrievable' flag for all chunks of a document
+        without deleting vectors. Concrete stores that support this should override.
+        """
+        raise NotImplementedError("This vector store does not support retrievable toggling.")
 
     @abstractmethod
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:

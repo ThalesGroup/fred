@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Optional
 
 from fred_core import BaseModelWithId
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 
 class FeedbackRecord(BaseModelWithId):
@@ -34,9 +34,10 @@ class FeedbackRecord(BaseModelWithId):
     )
     user_id: str = Field(..., description="Optional user ID if identity is tracked")
 
-    class Config:
-        populate_by_name = True
-        json_schema_extra = {
+    # Pydantic v2 configuration
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_schema_extra={
             "example": {
                 "id": "fbk_abc123",
                 "session_id": "sess_xyz789",
@@ -47,4 +48,5 @@ class FeedbackRecord(BaseModelWithId):
                 "created_at": "2025-08-06T12:00:00Z",
                 "user_id": "user_456",
             }
-        }
+        },
+    )

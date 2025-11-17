@@ -112,7 +112,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
     } catch (err: any) {
       console.error("Refresh failed:", err);
       showError({
-        summary: t("documentLibrary.refreshFailed"),
+        summary: t("scheduler.refreshFailed"),
         detail: err?.data?.detail || err?.message || "Unknown error occurred while refreshing.",
       });
     }
@@ -122,7 +122,8 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
     if (!selectedSourceTag) return;
     const filters = {
       ...(searchQuery ? { document_name: searchQuery } : {}),
-      ...(selectedLibrary.length > 0 ? { tags: selectedLibrary } : {}),
+      // Filter by tag IDs stored in metadata (tag_ids field in OpenSearch)
+      ...(selectedLibrary.length > 0 ? { tag_ids: selectedLibrary } : {}),
       ...(selectedStages.length > 0
         ? { processing_stages: Object.fromEntries(selectedStages.map((stage) => [stage, "done"])) }
         : {}),

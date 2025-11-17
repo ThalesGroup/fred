@@ -23,7 +23,9 @@ import { useTranslation } from "react-i18next";
 import { LibraryCreateDrawer } from "../../../common/LibraryCreateDrawer";
 import { useTagCommands } from "../../../common/useTagCommands";
 import { usePermissions } from "../../../security/usePermissions";
+import { EmptyState } from "../../EmptyState";
 
+import { useLocalStorageState } from "../../../hooks/useLocalStorageState";
 import {
   DocumentMetadata,
   TagWithItemsId,
@@ -42,7 +44,7 @@ export default function DocumentLibraryList() {
   const { showConfirmationDialog } = useConfirmationDialog();
 
   /* ---------------- State ---------------- */
-  const [expanded, setExpanded] = React.useState<string[]>([]);
+  const [expanded, setExpanded] = useLocalStorageState<string[]>("DocumentLibraryList.expanded", []);
   const [selectedFolder, setSelectedFolder] = React.useState<string | null>(null);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = React.useState(false);
   const [openUploadDrawer, setOpenUploadDrawer] = React.useState(false);
@@ -80,6 +82,7 @@ export default function DocumentLibraryList() {
 
   /* ---------------- Tree building ---------------- */
   const tree = React.useMemo<TagNode | null>(() => (tags ? buildTree(tags) : null), [tags]);
+  const hasFolders = Boolean(tree && tree.children.size > 0);
 
   const getChildren = React.useCallback((n: TagNode) => {
     const arr = Array.from(n.children.values());
@@ -103,7 +106,7 @@ export default function DocumentLibraryList() {
   const allExpanded = React.useMemo(() => expanded.length > 0, [expanded]);
 
   /* ---------------- Commands ---------------- */
-  const { toggleRetrievable, removeFromLibrary, preview, previewPdf, download } = useDocumentCommands({
+  const { toggleRetrievable, removeFromLibrary, bulkRemoveFromLibraryForTag, preview, previewPdf, download } = useDocumentCommands({
     refetchTags: refetch,
     refetchDocs: () => fetchAllDocuments({ filters: {} }),
   });
@@ -162,19 +165,29 @@ export default function DocumentLibraryList() {
     showConfirmationDialog({
       title: t("documentLibrary.confirmBulkRemoveTitle") || "Remove selected?",
       onConfirm: async () => {
-        const docsById = new Map<string, DocumentMetadata>(
-          (allDocuments ?? []).map((d) => [d.identity.document_uid, d]),
-        );
+        const docsById = new Map<string, DocumentMetadata>((allDocuments ?? []).map((d) => [d.identity.document_uid, d]));
+        const docsByTag = new Map<string, { tag: TagWithItemsId; docs: DocumentMetadata[] }>();
+
         for (const [docUid, tag] of entries) {
           const doc = docsById.get(docUid);
           if (!doc) continue;
-          // eslint-disable-next-line no-await-in-loop
-          await removeFromLibrary(doc, tag);
+          const existing = docsByTag.get(tag.id);
+          if (existing) {
+            existing.docs.push(doc);
+          } else {
+            docsByTag.set(tag.id, { tag, docs: [doc] });
+          }
         }
+
+        for (const { tag, docs } of docsByTag.values()) {
+          // eslint-disable-next-line no-await-in-loop
+          await bulkRemoveFromLibraryForTag(docs, tag);
+        }
+
         setSelectedDocs({});
       },
     });
-  }, [selectedDocs, allDocuments, removeFromLibrary, setSelectedDocs, showConfirmationDialog, t]);
+  }, [selectedDocs, allDocuments, bulkRemoveFromLibraryForTag, setSelectedDocs, showConfirmationDialog, t]);
 
   const { confirmDeleteFolder } = useTagCommands({
     refetchTags: refetch,
@@ -285,14 +298,12 @@ export default function DocumentLibraryList() {
       )}
 
       {/* Tree */}
-      {!isLoading && !isError && tree && (
+      {!isLoading && !isError && tree && hasFolders && (
         <Card
           sx={{
             borderRadius: 3,
             display: "flex",
             flexDirection: "column",
-            height: "100%",
-            maxHeight: "70vh",
           }}
         >
           {/* Tree header */}
@@ -339,6 +350,32 @@ export default function DocumentLibraryList() {
               canDeleteFolder={canDeleteFolder}
             />
           </Box>
+        </Card>
+      )}
+      {!isLoading && !isError && tree && !hasFolders && (
+        <Card
+          sx={{
+            borderRadius: 3,
+            display: "flex",
+            flexDirection: "column",
+            flex: 1,
+          }}
+        >
+          <EmptyState
+            icon={<FolderOutlinedIcon color="disabled" />}
+            title={t("documentLibrariesList.emptyFoldersTitle")}
+            description={t("documentLibrariesList.emptyFoldersDescription")}
+            actionButton={
+              canCreateTag
+                ? {
+                    label: t("documentLibrariesList.emptyFoldersAction"),
+                    onClick: () => setIsCreateDrawerOpen(true),
+                    startIcon: <AddIcon />,
+                    variant: "contained",
+                  }
+                : undefined
+            }
+          />
         </Card>
       )}
 

@@ -174,6 +174,61 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             logger.exception("❌ Failed to delete vectors for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to delete vectors from OpenSearch.")
 
+    def get_document_chunk_count(self, *, document_uid: str) -> int:
+        """
+        Return the number of vector chunks stored for a given logical document.
+        This is a convenience method used by diagnostic and visualization features.
+        """
+        try:
+            body = {"query": {"term": {"metadata.document_uid": {"value": document_uid}}}}
+            resp = self._client.count(index=self._index, body=body)
+            count = int(resp.get("count", 0))
+            logger.info(
+                "🔢 Counted %s OpenSearch vector chunks for document_uid=%s in index=%s",
+                count,
+                document_uid,
+                self._index,
+            )
+            return count
+        except Exception:
+            logger.exception(
+                "❌ Failed to count OpenSearch vector chunks for document_uid=%s in index=%s",
+                document_uid,
+                self._index,
+            )
+            return 0
+
+    def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:
+        """
+        Update the 'retrievable' flag for all chunks of a document without deleting vectors.
+        This is used when a user toggles retrievability in the UI.
+        """
+        try:
+            script = {
+                "source": "ctx._source.metadata.retrievable = params.value",
+                "lang": "painless",
+                "params": {"value": bool(value)},
+            }
+            body = {
+                "script": script,
+                "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
+            }
+            resp = self._client.update_by_query(
+                index=self._index,
+                body=body,
+                params={"refresh": "true"},
+            )
+            updated = int(resp.get("updated", 0))
+            logger.info(
+                "✅ Updated retrievable=%s on %s OpenSearch vector chunks for document_uid=%s.",
+                value,
+                updated,
+                document_uid,
+            )
+        except Exception:
+            logger.exception("❌ Failed to update retrievable flag for document_uid=%s in OpenSearch.", document_uid)
+            raise RuntimeError("Failed to update retrievable flag in OpenSearch.")
+
     # ---------- BaseVectorStore: ANN (semantic) ----------
     def _supports_knn_filter(self) -> bool:
         """Detect if OpenSearch supports knn.filter (>=2.19). Cached after first check."""
@@ -198,7 +253,9 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         Tries native knn.filter (2.19+) → falls back to bool+knn (2.18) → LangChain wrapper.
         """
 
+        logger.info("🔍 [OpenSearch ANN] query=%r k=%d search_filter=%s", query, k, search_filter)
         filters = self._to_filter_clause(search_filter)
+        logger.info("🔍 [OpenSearch ANN] computed filters=%s", filters or [])
         now_iso = datetime.now(timezone.utc).isoformat()
         model_name = self._embedding_model_name or "unknown"
 
@@ -212,6 +269,14 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
                 meta = src.get("metadata", {})
                 text = src.get("text", "")
                 cid = meta.get(CHUNK_ID_FIELD) or h.get("_id")
+                logger.info(
+                    "🔍 [OpenSearch ANN] hit rank=%d doc_uid=%s chunk_uid=%s retrievable=%s score=%.4f",
+                    rank,
+                    meta.get("document_uid"),
+                    cid,
+                    meta.get("retrievable"),
+                    float(h.get("_score", 0.0)),
+                )
                 doc = Document(
                     page_content=text,
                     metadata={
@@ -227,6 +292,46 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
                 )
                 results.append(AnnHit(document=doc, score=float(h.get("_score", 0.0))))
             return results
+
+        def _apply_post_filter(hits: List[AnnHit]) -> List[AnnHit]:
+            """
+            Extra safety: enforce retrievable filter client-side in case
+            OpenSearch does not apply metadata filters to knn queries as expected.
+            """
+            if not search_filter or not search_filter.metadata_terms:
+                return hits
+
+            retr_vals = search_filter.metadata_terms.get("retrievable")
+            if not retr_vals:
+                return hits
+
+            want_true = any(bool(v) is True or str(v).lower() == "true" for v in retr_vals)
+            want_false = any(bool(v) is False or str(v).lower() == "false" for v in retr_vals)
+
+            # Only handle simple cases; mixed True/False falls back to server behavior.
+            if want_true and not want_false:
+
+                def keep(md: Dict) -> bool:
+                    return bool(md.get("retrievable")) is True
+            elif want_false and not want_true:
+
+                def keep(md: Dict) -> bool:
+                    return bool(md.get("retrievable")) is False
+            else:
+                return hits
+
+            filtered: List[AnnHit] = []
+            for h in hits:
+                md = h.document.metadata or {}
+                if keep(md):
+                    filtered.append(h)
+
+            logger.info(
+                "🔍 [OpenSearch ANN] post-filter retrievable -> %d/%d hits kept",
+                len(filtered),
+                len(hits),
+            )
+            return filtered
 
         def _try_os_query(body: dict, label: str) -> Optional[List[AnnHit]]:
             """Run a raw OpenSearch query. Returns hits or None if it failed."""
@@ -247,21 +352,23 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             logger.exception("❌ Failed to compute embedding.")
             raise RuntimeError("Embedding model failed.") from e
 
-        # ---- step 2: native knn.filter (2.19+) -------------------------------
+        # ---- step 2: native knn.filter (2.19+, no additional filters) -------
 
-        if self._supports_knn_filter():
+        # Native knn.filter is only used when no extra metadata filters are present.
+        # When filters are present we fall back to the bool+knn pattern below to keep
+        # semantics simple and consistent across OpenSearch versions.
+        if self._supports_knn_filter() and not filters:
+            logger.info("🔍 [OpenSearch ANN] using native knn.filter (no metadata filters)")
             knn_body = {
                 "size": k,
                 "query": {"knn": {"vector_field": {"vector": vector, "k": k}}},
                 "_source": True,
             }
-            if filters:
-                knn_body["query"]["knn"]["vector_field"]["filter"] = {"bool": {"filter": filters}}
             hits = _try_os_query(knn_body, "native knn.filter")
             if hits is not None:
-                return hits
+                return _apply_post_filter(hits)
         else:
-            logger.debug("ℹ️ knn.filter not supported on this OpenSearch version — using bool+knn fallback.")
+            logger.info("🔍 [OpenSearch ANN] using bool+knn path (filters present or knn.filter unsupported)")
 
         # ---- step 3: bool + knn fallback (2.18 and below) --------------------
 
@@ -278,7 +385,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
 
         hits = _try_os_query(bool_knn_body, "bool+knn fallback")
         if hits is not None:
-            return hits
+            return _apply_post_filter(hits)
 
         # ---- step 4: LangChain fallback --------------------------------------
 
@@ -326,7 +433,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             results.append(AnnHit(document=doc, score=float(score)))
 
         logger.info("✅ ANN search (LangChain fallback) returned %d hits", len(results))
-        return results
+        return _apply_post_filter(results)
 
     # ---------- LexicalSearchable capability ----------
 
@@ -463,6 +570,11 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         - LangChain's OpenSearchVectorSearch expects `boolean_filter` to be a LIST of filters.
         - Our raw OS queries also expect that list under `bool.filter`.
         - Returning a dict with `bool.filter` here causes double nesting upstream.
+
+        Backward compatibility:
+        - For the special field `retrievable=True`, we include documents where the
+          field is missing as well. This keeps older indices (that don't yet store
+          `metadata.retrievable`) searchable until re-indexing occurs.
         """
         if not f:
             return None
@@ -471,5 +583,29 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             filters.append({"terms": {"metadata.tag_ids": list(f.tag_ids)}})
         if f.metadata_terms:
             for field, values in f.metadata_terms.items():
-                filters.append({"terms": {f"metadata.{field}": list(values)}})
+                meta_field = f"metadata.{field}"
+                # Special handling for retrievable=True
+                try:
+                    values_list = list(values) if values is not None else []
+                except TypeError:
+                    values_list = [values]
+
+                if field == "retrievable" and any(bool(v) is True or str(v).lower() == "true" for v in values_list):
+                    # Build a should-clause: retrievable:true OR field missing
+                    filters.append(
+                        {
+                            "bool": {
+                                "should": [
+                                    {"terms": {meta_field: [True]}},
+                                    {"bool": {"must_not": {"exists": {"field": meta_field}}}},
+                                ],
+                                "minimum_should_match": 1,
+                            }
+                        }
+                    )
+                    # If caller also passed False, keep it explicit too (rare)
+                    if any(bool(v) is False or str(v).lower() == "false" for v in values_list):
+                        filters.append({"terms": {meta_field: [False]}})
+                else:
+                    filters.append({"terms": {meta_field: values_list}})
         return filters or None

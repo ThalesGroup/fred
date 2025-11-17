@@ -5,7 +5,39 @@
     "close": "Fermer",
     "remove": "Supprimer",
     "loading": "Chargement…",
-    "beta": "Bêta"
+    "beta": "Bêta",
+    "retry": "Réessayer",
+    "error": "Erreur",
+    "refresh": "Rafraîchir"
+  },
+  "dataHub": {
+    "title": "Hub des Données - Lignage des documents",
+    "refresh": "Rafraîchir",
+    "error": "Échec du chargement du graphe de traitement",
+    "empty": "Aucune donnée de graphe de traitement pour le moment. Ingérez et traitez des documents pour alimenter cette vue.",
+    "searchHelp": "Filtrer les documents par nom ou source",
+    "searchPlaceholder": "Rechercher des documents...",
+    "vectorDistributionTitle": "Vecteurs par document",
+    "vectorDistributionSubtitle": "{{count}} documents avec des vecteurs",
+    "vectorDistributionMany": "{{count}} documents",
+    "rowDistributionTitle": "Lignes par document",
+    "rowDistributionSubtitle": "{{count}} documents avec des tables",
+    "rowDistributionMany": "{{count}} documents",
+    "sortLabel": "Trier par",
+    "sortName": "Nom (A–Z)",
+    "sortVectorsDesc": "Vecteurs (du plus grand au plus petit)",
+    "sortVectorsAsc": "Vecteurs (du plus petit au plus grand)",
+    "sortRowsDesc": "Lignes (du plus grand au plus petit)",
+    "sortRowsAsc": "Lignes (du plus petit au plus grand)",
+    "limitLabel": "Afficher",
+    "limitAll": "Tout",
+    "documentColumn": "Document",
+    "vectorsColumn": "Vecteurs",
+    "rowsColumn": "Lignes",
+    "vectorTableTitle": "Documents avec vecteurs",
+    "rowTableTitle": "Documents avec tables",
+    "hideSection": "Masquer",
+    "showSection": "Afficher"
   },
   "resource": {
     "kind": {
@@ -51,14 +83,16 @@
       "optimize": "Consulter les gains d'optimisation",
       "chat": "Discuter avec l'assistant IA",
       "monitoring": "Superviser les appels IA backend",
-      "knowledge": "Consulter le vos bibliothèque de documents et de prompts",
+      "knowledge": "Consulter vos bibliothèques de documents et de prompts",
       "agent": "Voir les agents",
       "workspaces": "Voir les espaces",
       "account": "Voir votre profil",
       "selectCluster": "Veuillez d'abord sélectionner un cluster",
       "monitoring_kpi": "Vue d'ensemble des Kpis",
       "monitoring_logs": "Console de logs",
-      "monitoring_runtime": "Résumé d'exécution"
+      "monitoring_runtime": "Résumé d'exécution",
+      "monitoring_processors": "Banc de test processeurs",
+      "monitoring_data": "Surveillance des données"
     },
     "theme": {
       "light": "clair",
@@ -70,7 +104,9 @@
     },
     "monitoring_kpi": "Kpis",
     "monitoring_logs": "Logs",
-    "monitoring_runtime": "Runtime"
+    "monitoring_runtime": "Runtime",
+    "monitoring_processors": "Processeurs",
+    "monitoring_data": "Données"
   },
   "runtime": {
     "title": "Résumé d'exécution",
@@ -80,6 +116,82 @@
     "sessionsWithAttachments": "Sessions avec pièces jointes",
     "maxAttachmentsPerSession": "Pièces jointes max/session",
     "error": "Échec du chargement du résumé"
+  },
+  "scheduler": {
+    "processingStatusTitle": "Statut de traitement",
+    "processingStatusSummary": "Traité {{done}}/{{total}} (échecs : {{failed}})",
+    "processingStatusIdle": "Aucun traitement actif. Sélectionnez des documents et cliquez sur Traiter pour démarrer.",
+    "processingStatusPreview": "Aperçu prêt : {{count}}",
+    "processingStatusVector": "Vectorisé : {{count}}",
+    "processingStatusSql": "Indexé SQL : {{count}}",
+    "processingStatusProgressLabel": "{{percent}}% traité",
+    "processingStatusDoneLabel": "Terminés",
+    "processingStatusFailedOnlyLabel": "En échec",
+    "processingStatusRemainingLabel": "Restant",
+    "refreshProgress": "Rafraîchir",
+    "refreshFailed": "Échec du rafraîchissement",
+    "hideProgress": "Masquer",
+    "globalStatusTitle": "Traitement de la bibliothèque",
+    "globalStatusLoading": "Chargement de l’état de traitement…",
+    "globalStatusSummary": "{{processed}}/{{total}} traités • {{in_progress}} en cours • {{failed}} en échec • {{not_started}} non démarrés",
+    "globalStatusEmpty": "Aucun document dans la base de connaissances pour le moment.",
+    "globalStatusProcessedLabel": "Traités : {{count}}",
+    "globalStatusInProgressLabel": "En cours : {{count}}",
+    "globalStatusFailedLabel": "En échec : {{count}}",
+    "globalStatusNotStartedLabel": "Non démarrés : {{count}}",
+    "globalStatusProcessedLabelShort": "Traités",
+    "globalStatusInProgressLabelShort": "En cours",
+    "globalStatusFailedLabelShort": "Échecs",
+    "globalStatusNotStartedLabelShort": "Non démarrés"
+  },
+  "procbench": {
+    "title": "Banc de test des processeurs",
+    "description": "Ajoutez un PDF ou DOCX et comparez la qualité et la vitesse d'extraction entre processeurs.",
+    "uploadTitle": "Ajouter un document",
+    "uploadSubtitle": "Pris en charge : PDF, DOCX, PPTX, Markdown, Texte",
+    "browse": "Parcourir",
+    "noFile": "Aucun fichier sélectionné",
+    "run": "Lancer le banc",
+    "running": "Exécution...",
+    "clear": "Effacer",
+    "runFailed": "Échec du banc",
+    "runSuccess": "Banc terminé",
+    "runSuccessDetail": "Processeurs exécutés avec succès.",
+    "summaryFor": "Résumé pour '{{name}}'",
+    "processorsCount": "{{count}} processeur(s)",
+    "view": { "sideBySide": "Côte à côte", "stacked": "Empilé" },
+    "metricsTitle": "Métriques des processeurs",
+    "persistLabel": "Enregistrer l'exécution",
+    "saved": {
+      "title": "Exécutions enregistrées",
+      "modified": "Modifié",
+      "file": "Fichier",
+      "count": "Processeurs",
+      "actions": "Actions",
+      "open": "Ouvrir",
+      "delete": "Supprimer",
+      "empty": "Aucune exécution enregistrée.",
+      "loadFailed": "Échec du chargement de l'exécution",
+      "deleteFailed": "Échec de la suppression"
+    },
+    "col": {
+      "processor": "Processeur",
+      "kind": "Type",
+      "status": "Statut",
+      "duration": "Durée",
+      "tokens": "Jetons (est)",
+      "words": "Mots",
+      "headings": "Titres",
+      "images": "Images",
+      "tables": "Lignes de tableau"
+    },
+    "ok": "OK",
+    "error": "Erreur",
+    "runtime": "{{ms}} ms",
+    "pages": "{{n}} page(s)",
+    "noMarkdown": "Aucun markdown produit",
+    "openLatest": "Ouvrir la dernière exécution",
+    "detail": { "title": "Détail de l'exécution", "expandAll": "Tout déplier", "collapseAll": "Tout replier" }
   },
   "assetManager": {
     "title": "Gérer les ressources pour {{agentId}}",
@@ -144,7 +256,7 @@
       "name": "Nom",
       "nickname": "Diminutif",
       "description": "Description",
-      "role": "Role",
+      "role": "Rôle",
       "base_prompt": "Prompt",
       "agent_type": "Type d'agent",
       "icon": "Icône",
@@ -161,7 +273,7 @@
       }
     },
     "actions": {
-      "add_mcp_server": "+ Ajouter un Serveur MCP"
+      "add_mcp_server": "+ Ajouter un serveur MCP"
     },
     "errors": {
       "updateFailed": "Échec de la mise à jour de l'agent",
@@ -185,7 +297,7 @@
     "attachFiles": "Joindre des fichiers",
     "attachments": {
       "betaNotice": "Les pièces jointes sont en version bêta. Seuls les fichiers CSV, docx et pdf sont pris en charge. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
-      "count": "{{count}} joints"
+      "count": "{{count}} pièces jointes"
     },
     "recordAudio": "Enregistrer de l'audio",
     "sendMessage": "Envoyer le message",
@@ -220,6 +332,8 @@
     "noConversation": "Aucune conversation",
     "delete": "Supprimer",
     "deleteAll": "Tout supprimer",
+    "confirmDeleteAllTitle": "Supprimer toutes les conversations ?",
+    "confirmDeleteAllMessage": "Cette action supprimera toutes les conversations définitivement. Voulez-vous continuer ?",
     "conversationSetup": "Configuration de la conversation",
     "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
     "draftNotSaved": "Brouillon • non encore enregistré",
@@ -424,7 +538,7 @@
     "folderDeleteDetail": "Le dossier « {{name}} » a été supprimé.",
     "searchPlaceholder": "Rechercher un(e) {{typeOne}}",
     "importDrawerTitle": "Importer un(e) {{typeOne}}",
-    "dropFiles": "Deposez vos {{typePlural}} ici",
+    "dropFiles": "Déposez vos {{typePlural}} ici",
     "noFiles": "Aucun(e) {{typeOne}} trouvé(e)",
     "import": "Importer",
     "selected": "Sélectionné",
@@ -435,11 +549,14 @@
     "bulkRemoveFromLibrary": "Supprimer de la bibliothèque",
     "removedOneResource": "{{typeOne, capitalize}} supprimé(e) de la bibliothèque.",
     "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
-    "confirmRemoveMessage": "Supprimer « {{res}} » de « {{folder}} » ?"
+    "confirmRemoveMessage": "Supprimer « {{res}} » de « {{folder}} » ?",
+    "emptyLibrariesTitle": "Aucune bibliothèque pour le moment",
+    "emptyLibrariesDescription": "Créez votre première bibliothèque pour organiser vos {{typePlural}}.",
+    "emptyLibrariesAction": "Créer une bibliothèque"
   },
   "documentLibraryTree": {
     "shareFolder": "Partager le dossier",
-    "shareFolderWithName": "Partagez \"{{name}}\"",
+    "shareFolderWithName": "Partager \"{{name}}\"",
     "deleteFolder": "Supprimer le dossier",
     "deleteFolderDisabled": "Une bibliothèque doit être vide pour être supprimée"
   },
@@ -453,14 +570,14 @@
     "dateAdded": "Date d'ajout",
     "retrievableYes": "Consultable",
     "retrievableNo": "Exclu",
-    "status": "Status",
+    "status": "Statu",
     "actions": "Actions",
     "loadingMetadata": "Chargement des métadonnées...",
     "noMetadata": "Aucune métadonnée disponible.",
     "yes": "Oui",
     "no": "Non",
     "librairies": "Bibliothèques",
-    "nowSearchable": "Maintenant cherchable",
+    "nowSearchable": "Désormais inclus dans la recherche",
     "nowExcluded": "Désormais exclu de la recherche"
   },
   "documentDrawerTable": {
@@ -490,7 +607,10 @@
     "documentCountPlural": "{{count}} documents",
     "createLibrary": "Créer une bibliothèque de documents",
     "collapseAll": "Tout réduire",
-    "expandAll": "Tout développer"
+    "expandAll": "Tout développer",
+    "emptyFoldersTitle": "Aucune bibliothèque pour le moment",
+    "emptyFoldersDescription": "Créez votre première bibliothèque pour organiser les documents et garder les ajouts rangés.",
+    "emptyFoldersAction": "Créer une bibliothèque"
   },
   "libraryCreateDrawer": {
     "title": "Créer une nouvelle bibliothèque",

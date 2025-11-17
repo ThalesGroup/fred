@@ -62,7 +62,10 @@ class StrictRetriever:
             logger.info("[Strict] No scoped documents provided, returning empty list")
             return []
 
-        sf = SearchFilter(tag_ids=scoped_document_ids)
+        # Scope by library tags and include only retrievable documents.
+        # Backward compatibility is handled downstream in the vector store:
+        #   metadata.retrievable=True OR field missing.
+        sf = SearchFilter(tag_ids=scoped_document_ids, metadata_terms={"retrievable": [True]})
 
         # 1) ANN candidates (semantic) — gated
         logger.info("[Strict] Running ANN search with fetch_k=%s", policy.fetch_k)
