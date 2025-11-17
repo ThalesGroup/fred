@@ -37,6 +37,7 @@ class RagGraphState(TypedDict):
     retry_count: Optional[int]
     irrelevant_documents: Optional[List[VectorSearchHit]]
     response_grade: Optional[str]
+    context: Optional[str]
 
 
 class GradeDocumentsOutput(BaseModel):

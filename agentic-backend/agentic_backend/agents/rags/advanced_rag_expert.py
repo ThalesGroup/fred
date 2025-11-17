@@ -23,6 +23,11 @@ from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, StateGraph
 from sentence_transformers import CrossEncoder
 
+from agentic_backend.agents.rags.prompt import (
+    generate_answer_prompt,
+    grade_answer_prompt,
+    grade_documents_prompt,
+)
 from agentic_backend.agents.rags.structures import (
     GradeAnswerOutput,
     GradeDocumentsOutput,
@@ -34,7 +39,7 @@ from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
 from agentic_backend.common.rags_utils import attach_sources_to_llm_response
 from agentic_backend.common.structures import AgentChatOptions, AgentSettings
 from agentic_backend.core.agents.agent_flow import AgentFlow
-from agentic_backend.core.agents.agent_spec import AgentTuning
+from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
@@ -128,13 +133,58 @@ class AdvancedRico(AgentFlow):
     traceability through detailed metadata and tool call handling.
     """
 
-    TOP_K = 25  # Number of top chunks to retrieve during vector search
     MIN_DOCS = 3
-    TOP_R = 6  # Number of top-reranked chunks to consider before grading
     tuning = AgentTuning(
         role="Advanced Document Retrieval Expert",
         description="An advanced expert in retrieving and processing documents using enhanced retrieval-augmented generation techniques. Rico Senior is capable of handling more complex document-related tasks with improved accuracy.",
         tags=["document"],
+        fields=[
+            FieldSpec(
+                key="prompts.grade_documents",
+                type="prompt",
+                title="Grade documents prompt",
+                description="Prompt that evaluates whether a document is relevant or not to answer the user's question",
+                required=True,
+                default=grade_documents_prompt(),
+                ui=UIHints(group="Prompts", multiline=True, markdown=True),
+            ),
+            FieldSpec(
+                key="prompts.generate_answer",
+                type="prompt",
+                title="Generate answer prompt",
+                description="Prompt that generates answers based on retrieved documents",
+                required=True,
+                default=generate_answer_prompt(),
+                ui=UIHints(group="Prompts", multiline=True, markdown=True),
+            ),
+            FieldSpec(
+                key="prompts.grade_answer",
+                type="prompt",
+                title="Grade answer prompt",
+                description="Prompt that evaluates whether an answer adequately addresses a given question.",
+                required=True,
+                default=grade_answer_prompt(),
+                ui=UIHints(group="Prompts", multiline=True, markdown=True),
+            ),
+            FieldSpec(
+                key="search.top_k",
+                type="integer",
+                title="TOP_K documents",
+                description="Number of top chunks to retrieve during vector search",
+                required=False,
+                default=25,
+                ui=UIHints(group="Retrieval"),
+            ),
+            FieldSpec(
+                key="rerankink.top_r",
+                type="integer",
+                title="TOP_R documents",
+                description="Number of top-reranked chunks to consider before grading",
+                required=False,
+                default=6,
+                ui=UIHints(group="Reranking"),
+            ),
+        ],
     )
 
     default_chat_options = AgentChatOptions(
@@ -254,6 +304,7 @@ class AdvancedRico(AgentFlow):
             question = messages[-1].content
 
         retry_count = int(state.get("retry_count", 0) or 0)
+        top_k = self.get_tuned_int("search.top_k", default=25)
 
         # Prepare search context
         runtime_context = self.get_runtime_context()
@@ -264,7 +315,7 @@ class AdvancedRico(AgentFlow):
             # Perform search
             hits: List[VectorSearchHit] = self.search_client.search(
                 question=question or "",
-                top_k=self.TOP_K,
+                top_k=top_k,
                 document_library_tags_ids=document_library_tags_ids,
                 search_policy=search_policy,
             )
@@ -298,7 +349,7 @@ class AdvancedRico(AgentFlow):
             }
             call_args = {
                 "query": question,
-                "top_k": self.TOP_K,
+                "top_k": top_k,
             }
             if document_library_tags_ids:
                 call_args["tags"] = document_library_tags_ids
@@ -350,6 +401,7 @@ class AdvancedRico(AgentFlow):
         # Extract parameters from state
         question = cast(str, state.get("question"))
         documents = cast(List[VectorSearchHit], state["documents"])
+        top_r = self.get_tuned_int("rerankink.top_r", default=6)
 
         # Score and sort documents by relevance
         pairs = [(question, doc.content) for doc in documents]
@@ -357,7 +409,7 @@ class AdvancedRico(AgentFlow):
         sorted_docs = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
 
         # Keep top-R documents
-        reranked_documents = [doc for doc, _ in sorted_docs[: self.TOP_R]]
+        reranked_documents = [doc for doc, _ in sorted_docs[:top_r]]
 
         # Build response
         summary = f"Reranked {len(documents)} documents, keeping top {len(reranked_documents)}."
@@ -392,18 +444,14 @@ class AdvancedRico(AgentFlow):
         )
 
         # Define grading system prompt
-        system_prompt = (
-            "You are a permissive relevance grader for retrieval-augmented generation.\n"
-            "- Return 'yes' unless the document is clearly off-topic for the question.\n"
-            "- Consider shared keywords, entities, acronyms, or overlapping semantics as relevant.\n"
-            "- Minor mismatches or partial overlaps should still be 'yes'.\n"
-            'Return strictly as JSON matching the schema: {{"binary_score": "yes" | "no"}}.'
+        prompt = (
+            self.get_tuned_text("prompts.grade_documents") or grade_documents_prompt()
         )
 
         # Prepare grading chain
         grade_prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", system_prompt),
+                ("system", prompt),
                 (
                     "human",
                     "Document to assess:\n\n{document}\n\nUser question:\n\n{question}",
@@ -513,28 +561,12 @@ class AdvancedRico(AgentFlow):
 
         # Get optional chat context instructions
         chat_context_instructions = self.chat_context_text()
+        programmatic_context = state.get("context", None)
 
         # Build prompt template and variables
-        base_prompt = """
-        You are an expert research assistant who helps users find accurate answers based on documents.
-        
-        SOURCE DOCUMENTS:
-        {context}
-        
-        INSTRUCTIONS:
-        - Carefully analyse the above documents.
-        - Answer the question based EXCLUSIVELY on these documents.
-        - Structure your answer clearly (using paragraphs if necessary).
-        - If several documents address the subject, summarise the information.
-        - Adapt the level of detail to the question asked.
-
-        IMPORTANT:
-        - If information is missing: clearly state that no information is available in the documents.
-        - If the information is partial: provide what you have and mention the limitations
-        - If the sources differ: present the different perspectives
-
-        QUESTION: {question}
-        """
+        base_prompt = (
+            self.get_tuned_text("prompts.generate_answer") or generate_answer_prompt()
+        )
 
         variables = {
             "context": context,
@@ -542,9 +574,10 @@ class AdvancedRico(AgentFlow):
         }
 
         # Add chat context instructions if available
+        if programmatic_context:
+            base_prompt += f"\n\n{programmatic_context}"
         if chat_context_instructions:
-            base_prompt += "\n\n{chat_context_instructions}"
-            variables["chat_context_instructions"] = chat_context_instructions
+            base_prompt += f"\n\n{chat_context_instructions}"
 
         prompt = ChatPromptTemplate.from_template(base_prompt)
 
@@ -631,35 +664,8 @@ class AdvancedRico(AgentFlow):
         generation = cast(AIMessage, state["generation"])
 
         # Define grading prompt
-        system_prompt = """
-        You are an evaluator who determines whether an answer properly answers a question.
-
-        Evaluation criteria:
-        - Does the answer DIRECTLY address the specific question asked?
-        - Does the answer provide CONCRETE and RELEVANT information?
-        - Does the answer contain the key information needed to satisfy the question?
-
-        Return "yes" ONLY if:
-        - The answer provides the specific information requested
-        - The core of the question is addressed with substance
-        - A user would find the answer genuinely helpful
-
-        Return "no" if:
-        - The answer is vague or too general
-        - The answer talks around the topic without answering
-        - The answer is off-topic or irrelevant
-        - The answer is empty or lacks substance
-        - The answer only acknowledges the question without answering it
-
-        Return only "yes" or "no".
-        """
-
-        grade_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", system_prompt),
-                ("human", "Question:\n\n{question}\n\nAnswer:\n\n{generation}"),
-            ]
-        )
+        template = self.get_tuned_text("prompts.grade_answer") or grade_answer_prompt()
+        grade_prompt = ChatPromptTemplate.from_template(template)
 
         # Grade the response
         grader = grade_prompt | self.model.with_structured_output(GradeAnswerOutput)
