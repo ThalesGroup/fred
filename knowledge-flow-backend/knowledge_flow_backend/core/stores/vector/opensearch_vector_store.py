@@ -174,6 +174,30 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             logger.exception("❌ Failed to delete vectors for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to delete vectors from OpenSearch.")
 
+    def get_document_chunk_count(self, *, document_uid: str) -> int:
+        """
+        Return the number of vector chunks stored for a given logical document.
+        This is a convenience method used by diagnostic and visualization features.
+        """
+        try:
+            body = {"query": {"term": {"metadata.document_uid": {"value": document_uid}}}}
+            resp = self._client.count(index=self._index, body=body)
+            count = int(resp.get("count", 0))
+            logger.info(
+                "🔢 Counted %s OpenSearch vector chunks for document_uid=%s in index=%s",
+                count,
+                document_uid,
+                self._index,
+            )
+            return count
+        except Exception:
+            logger.exception(
+                "❌ Failed to count OpenSearch vector chunks for document_uid=%s in index=%s",
+                document_uid,
+                self._index,
+            )
+            return 0
+
     def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:
         """
         Update the 'retrievable' flag for all chunks of a document without deleting vectors.
