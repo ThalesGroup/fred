@@ -16,13 +16,13 @@ from __future__ import annotations
 
 import logging
 import threading
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 from uuid import uuid4
 
 from fastapi import BackgroundTasks
 from fred_core import KeycloakUser
-from pyparsing import abstractmethod
 
 from knowledge_flow_backend.common.document_structures import ProcessingStage, ProcessingStatus
 from knowledge_flow_backend.features.metadata.service import MetadataService
@@ -41,7 +41,7 @@ class WorkflowHandle:
     run_id: Optional[str] = None
 
 
-class BaseScheduler:
+class BaseScheduler(ABC):
     """
     Common logic for ingestion workflow clients, regardless of backend.
 
