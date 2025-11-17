@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+from typing import Iterable
 
 from openfga_sdk.client.client import OpenFgaClient
 from openfga_sdk.client.configuration import ClientConfiguration
@@ -31,7 +32,7 @@ from fred_core.security.rebac.rebac_engine import (
     Relation,
     RelationType,
 )
-from fred_core.security.structure import OpenFgaRebacConfig
+from fred_core.security.structure import M2MSecurity, OpenFgaRebacConfig
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +48,13 @@ class OpenFgaRebacEngine(RebacEngine):
     def __init__(
         self,
         config: OpenFgaRebacConfig,
+        m2m_security: M2MSecurity,
         *,
         token: str | None = None,
         schema: str = DEFAULT_SCHEMA,
     ) -> None:
+        super().__init__(m2m_security)
+
         resolved_token = token or os.getenv(config.token_env_var)
         if not resolved_token:
             raise ValueError(
@@ -119,6 +123,8 @@ class OpenFgaRebacEngine(RebacEngine):
         subject_type: Resource | None = None,
         consistency_token: str | None = None,
     ) -> list[Relation]:
+        # Only used to sync Keycloakc groups with the rebac engine. Not needed
+        # with OpenFGA as we handle this with contextual tuples.
         raise NotImplementedError("OpenFGA relation listing is not implemented yet")
 
     async def lookup_resources(
@@ -126,6 +132,7 @@ class OpenFgaRebacEngine(RebacEngine):
         subject: RebacReference,
         permission: RebacPermission,
         resource_type: Resource,
+        contextual_relations: Iterable[Relation] | None = None,
         *,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
@@ -135,6 +142,10 @@ class OpenFgaRebacEngine(RebacEngine):
             user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
             relation=permission.value,
             type=resource_type.value,
+            contextual_tuples=[
+                OpenFgaRebacEngine._relation_to_tuple(rel)
+                for rel in (contextual_relations or [])
+            ],
         )
 
         response = await client.list_objects(body)
@@ -147,6 +158,7 @@ class OpenFgaRebacEngine(RebacEngine):
         resource: RebacReference,
         relation: RelationType,
         subject_type: Resource,
+        contextual_relations: Iterable[Relation] | None = None,
         *,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
@@ -161,6 +173,10 @@ class OpenFgaRebacEngine(RebacEngine):
             object=FgaObject(type=resource.type.value, id=resource.id),
             relation=relation.value,
             user_filters=userFilters,
+            contextual_tuples=[
+                OpenFgaRebacEngine._relation_to_tuple(rel)
+                for rel in (contextual_relations or [])
+            ],
         )
 
         response = await client.list_users(body)
@@ -175,6 +191,7 @@ class OpenFgaRebacEngine(RebacEngine):
         permission: RebacPermission,
         resource: RebacReference,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> bool:
         client = await self.get_client()
@@ -189,6 +206,10 @@ class OpenFgaRebacEngine(RebacEngine):
             user=OpenFgaRebacEngine._reference_to_openfga_id(subject),
             relation=permission.value,
             object=OpenFgaRebacEngine._reference_to_openfga_id(resource),
+            contextual_tuples=[
+                OpenFgaRebacEngine._relation_to_tuple(rel)
+                for rel in (contextual_relations or [])
+            ],
         )
 
         response = await client.check(body)

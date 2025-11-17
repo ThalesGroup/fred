@@ -78,7 +78,11 @@ from fred_core.security.backend_to_backend_auth import (
     M2MTokenProvider,
     make_m2m_asgi_client,
 )
-from fred_core.security.keycloak import (
+from fred_core.security.keycloak.keycloack_admin_client import (
+    KeycloackDisabled,
+    create_keycloak_admin,
+)
+from fred_core.security.oidc import (
     decode_jwt,
     get_current_user,
     get_keycloak_client_id,
@@ -207,4 +211,6 @@ __all__ = [
     "rebac_factory",
     "get_keycloak_url",
     "get_keycloak_client_id",
+    "KeycloackDisabled",
+    "create_keycloak_admin",
 ]

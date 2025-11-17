@@ -2,11 +2,10 @@ import asyncio
 import logging
 from typing import NamedTuple
 
-from fred_core import RebacDisabledResult, RebacEngine, RebacReference, Relation, RelationType, Resource
+from fred_core import KeycloackDisabled, RebacDisabledResult, RebacEngine, RebacReference, Relation, RelationType, Resource, create_keycloak_admin
 from keycloak import KeycloakAdmin
 
-from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.security.keycloack_admin_client import KeycloackDisabled, create_keycloak_admin
+from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +34,16 @@ class MembershipEdge(NamedTuple):
 async def reconcile_keycloak_groups_with_rebac() -> None:
     """Synchronize Keycloak group memberships into the ReBAC engine."""
     # Create Keycloak and ReBAC clients
-    admin = create_keycloak_admin()
-    if isinstance(admin, KeycloackDisabled):
-        logger.warning("Keycloak admin client could not be created; skipping reconciliation.")
-        return
     rebac_engine = ApplicationContext.get_instance().get_rebac_engine()
     if not rebac_engine.enabled:
         logger.warning("Rebac is disabled; skipping reconciliation.")
+        return
+    if not rebac_engine.need_keycloak_sync:
+        logger.info("Rebac engine does not require Keycloak sync; skipping reconciliation.")
+        return
+    admin = create_keycloak_admin(get_configuration().security.m2m)
+    if isinstance(admin, KeycloackDisabled):
+        logger.warning("Keycloak admin client could not be created; skipping reconciliation.")
         return
 
     # Collect membership edges from both systems

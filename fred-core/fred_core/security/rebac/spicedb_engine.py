@@ -35,21 +35,28 @@ from fred_core.security.rebac.rebac_engine import (
     RelationType,
 )
 from fred_core.security.rebac.spicedb_schema import DEFAULT_SCHEMA
-from fred_core.security.structure import SpiceDbRebacConfig
+from fred_core.security.structure import M2MSecurity, SpiceDbRebacConfig
 
 
 class SpiceDbRebacEngine(RebacEngine):
     """Evaluates permissions by delegating to a SpiceDB instance."""
 
+    @property
+    def need_keycloak_sync(self) -> bool:
+        return True
+
     def __init__(
         self,
         config: SpiceDbRebacConfig,
+        m2m_security: M2MSecurity,
         *,
         token: str | None = None,
         read_consistency: Consistency | None = None,
         write_operation: RelationshipUpdate._Operation.ValueType = RelationshipUpdate.Operation.OPERATION_TOUCH,
         schema: str = DEFAULT_SCHEMA,
     ) -> None:
+        super().__init__(m2m_security)
+
         if not config.endpoint:
             raise ValueError("SpiceDB endpoint must be provided in configuration")
 

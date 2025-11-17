@@ -19,7 +19,7 @@ def rebac_factory(security_config: SecurityConfiguration) -> RebacEngine:
 
     oidc_enabled = security_config.user.enabled and security_config.m2m.enabled
     if not oidc_enabled or rebac_config is None or not rebac_config.enabled:
-        return NoopRebacEngine()
+        return NoopRebacEngine(security_config.m2m)
 
     if isinstance(rebac_config, SpiceDbRebacConfig):
         logger.info(
@@ -27,14 +27,14 @@ def rebac_factory(security_config: SecurityConfiguration) -> RebacEngine:
             rebac_config.endpoint,
             rebac_config.insecure,
         )
-        return SpiceDbRebacEngine(rebac_config)
+        return SpiceDbRebacEngine(rebac_config, security_config.m2m)
     elif isinstance(rebac_config, OpenFgaRebacConfig):
         logger.info(
             "Initializing OpenFGA ReBAC engine (api_url=%s, store_name=%s)",
             rebac_config.api_url,
             rebac_config.store_name,
         )
-        return OpenFgaRebacEngine(rebac_config)
+        return OpenFgaRebacEngine(rebac_config, security_config.m2m)
     else:
         # Should not happen
         raise ValueError(
