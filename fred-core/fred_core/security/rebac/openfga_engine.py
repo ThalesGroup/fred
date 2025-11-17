@@ -45,6 +45,7 @@ class OpenFgaRebacEngine(RebacEngine):
     _config: OpenFgaRebacConfig
     _client_credentials: Credentials
     _schema: str
+    _authorization_model_id: str | None
     _cached_client: OpenFgaClient | None = None
 
     def __init__(
@@ -71,6 +72,7 @@ class OpenFgaRebacEngine(RebacEngine):
 
         self._config = config
         self._schema = schema
+        self._authorization_model_id = config.authorization_model_id
         self._client_lock = asyncio.Lock()
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -86,7 +88,8 @@ class OpenFgaRebacEngine(RebacEngine):
 
         logger.debug("Adding relation %s", relation)
 
-        _ = await client.write(body)
+        options = self._build_options()
+        _ = await client.write(body, options)
 
         # Returning this for now as OpenFGA does not support real consistency tokens (Zanzibar Zookies)
         # for now (https://openfga.dev/docs/interacting/consistency#future-work)
@@ -101,7 +104,8 @@ class OpenFgaRebacEngine(RebacEngine):
 
         logger.debug("Deleting relation %s", relation)
 
-        _ = await client.write(body)
+        options = self._build_options()
+        _ = await client.write(body, options)
 
         # Returning this for now as OpenFGA does not support real consistency tokens (Zanzibar Zookies)
         # for now (https://openfga.dev/docs/interacting/consistency#future-work)
@@ -126,7 +130,7 @@ class OpenFgaRebacEngine(RebacEngine):
         continuation_token: str | None = None
 
         while continuation_token != "":  # nosec: not a secret token (bandit flags it...)
-            options = {}
+            options = self._build_options()
             if continuation_token:
                 options["continuation_token"] = continuation_token
 
@@ -153,7 +157,8 @@ class OpenFgaRebacEngine(RebacEngine):
         # Delete all found tuples
         body_delete = ClientWriteRequest(deletes=to_delete)
         logger.debug("Deleting %d relations of reference %s", len(to_delete), reference)
-        _ = await client.write(body_delete)
+        options = self._build_options()
+        _ = await client.write(body_delete, options)
 
         # Returning this for now as OpenFGA does not support real consistency tokens (Zanzibar Zookies)
         # for now (https://openfga.dev/docs/interacting/consistency#future-work)
@@ -169,7 +174,9 @@ class OpenFgaRebacEngine(RebacEngine):
     ) -> list[Relation]:
         # Only used to sync Keycloakc groups with the rebac engine. Not needed
         # with OpenFGA as we handle this with contextual tuples.
-        raise NotImplementedError("OpenFGA relation listing is not implemented yet")
+        raise NotImplementedError(
+            "OpenFGA relation listing is not implemented as it is not needed"
+        )
 
     async def lookup_resources(
         self,
@@ -191,9 +198,7 @@ class OpenFgaRebacEngine(RebacEngine):
                 for rel in (contextual_relations or [])
             ],
         )
-        options = {
-            "consistency": consistency_token,
-        }
+        options = self._build_options(consistency=consistency_token)
         response = await client.list_objects(body, options)
         return [
             OpenFgaRebacEngine._openfga_id_to_reference(obj) for obj in response.objects
@@ -225,9 +230,7 @@ class OpenFgaRebacEngine(RebacEngine):
             ],
         )
 
-        options = {
-            "consistency": consistency_token,
-        }
+        options = self._build_options(consistency=consistency_token)
 
         response = await client.list_users(body, options)
         return [
@@ -262,9 +265,7 @@ class OpenFgaRebacEngine(RebacEngine):
             ],
         )
 
-        options = {
-            "consistency": consistency_token,
-        }
+        options = self._build_options(consistency=consistency_token)
 
         response = await client.check(body, options)
 
@@ -309,6 +310,7 @@ class OpenFgaRebacEngine(RebacEngine):
         response = await fga_client_with_store.write_authorization_model(
             json.loads(self._schema)
         )
+        self._authorization_model_id = response.authorization_model_id
         return response.authorization_model_id
 
     async def _initialize_client_and_store(self) -> OpenFgaClient:
@@ -344,6 +346,14 @@ class OpenFgaRebacEngine(RebacEngine):
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Helpers
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def _build_options(self, **options: object) -> dict[str, object]:
+        filtered_options = {k: v for k, v in options.items() if v is not None}
+        if self._authorization_model_id:
+            filtered_options.setdefault(
+                "authorization_model_id", self._authorization_model_id
+            )
+        return filtered_options
 
     @staticmethod
     def _relation_to_tuple(relation: Relation) -> ClientTuple:

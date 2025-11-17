@@ -84,7 +84,7 @@ class OpenFgaRebacConfig(RebacBaseConfig):
     )
     authorization_model_id: str | None = Field(
         default=None,
-        description="Optional authorization model ID to use for read operations",
+        description="Optional authorization model ID to use for read operations. Will be overridden if sync_schema_on_init is True.",
     )
     create_store_if_needed: bool = Field(
         default=True,
