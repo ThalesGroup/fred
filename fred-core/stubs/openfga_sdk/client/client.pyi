@@ -4,9 +4,14 @@ from types import TracebackType
 from typing import Mapping
 
 from openfga_sdk.client.configuration import ClientConfiguration
+from openfga_sdk.client.models.check_request import ClientCheckRequest
+from openfga_sdk.client.models.list_objects_request import ClientListObjectsRequest
+from openfga_sdk.client.models.list_users_request import ClientListUsersRequest
+from openfga_sdk.client.models.write_request import ClientWriteRequest
+from openfga_sdk.client.models.write_response import ClientWriteResponse
 from openfga_sdk.models import ListStoresResponse, Store
-from openfga_sdk.models.create_store_request import CreateStoreRequest
 from openfga_sdk.models.check_response import CheckResponse
+from openfga_sdk.models.create_store_request import CreateStoreRequest
 from openfga_sdk.models.list_objects_response import ListObjectsResponse
 from openfga_sdk.models.list_users_response import ListUsersResponse
 from openfga_sdk.models.read_request_tuple_key import ReadRequestTupleKey
@@ -17,11 +22,6 @@ from openfga_sdk.models.write_authorization_model_request import (
 from openfga_sdk.models.write_authorization_model_response import (
     WriteAuthorizationModelResponse,
 )
-from openfga_sdk.client.models.write_request import ClientWriteRequest
-from openfga_sdk.client.models.write_response import ClientWriteResponse
-from openfga_sdk.client.models.check_request import ClientCheckRequest
-from openfga_sdk.client.models.list_objects_request import ClientListObjectsRequest
-from openfga_sdk.client.models.list_users_request import ClientListUsersRequest
 
 class OpenFgaClient:
     def __init__(self, configuration: ClientConfiguration) -> None: ...
