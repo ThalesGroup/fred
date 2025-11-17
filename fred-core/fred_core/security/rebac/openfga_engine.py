@@ -132,8 +132,8 @@ class OpenFgaRebacEngine(RebacEngine):
         subject: RebacReference,
         permission: RebacPermission,
         resource_type: Resource,
-        contextual_relations: Iterable[Relation] | None = None,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
         client = await self.get_client()
@@ -158,8 +158,8 @@ class OpenFgaRebacEngine(RebacEngine):
         resource: RebacReference,
         relation: RelationType,
         subject_type: Resource,
-        contextual_relations: Iterable[Relation] | None = None,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
         client = await self.get_client()

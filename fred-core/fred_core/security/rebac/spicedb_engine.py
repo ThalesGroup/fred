@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from typing import Iterable
 
 from authzed.api.v1 import (
     CheckPermissionRequest,
@@ -144,6 +145,7 @@ class SpiceDbRebacEngine(RebacEngine):
         permission: RebacPermission,
         resource_type: Resource,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
         request_kwargs = {
@@ -170,6 +172,7 @@ class SpiceDbRebacEngine(RebacEngine):
         relation: RelationType,
         subject_type: Resource,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
         request_kwargs = {
@@ -258,6 +261,7 @@ class SpiceDbRebacEngine(RebacEngine):
         permission: RebacPermission,
         resource: RebacReference,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> bool:
         request_kwargs = {

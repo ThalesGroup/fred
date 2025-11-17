@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, cast
 
 import grpc
 import pytest
 import pytest_asyncio
-from pydantic import ValidationError
+from pydantic import AnyUrl, ValidationError
 
 from fred_core import (
     DocumentPermission,
@@ -26,6 +26,7 @@ from fred_core import (
     SpiceDbRebacEngine,
     TagPermission,
 )
+from fred_core.security.structure import M2MSecurity
 
 SPICEDB_ENDPOINT = os.getenv("SPICEDB_TEST_ENDPOINT", "localhost:50051")
 
@@ -61,6 +62,11 @@ async def _load_spicedb_engine() -> SpiceDbRebacEngine:
                     endpoint=SPICEDB_ENDPOINT,
                     insecure=True,
                     sync_schema_on_init=True,
+                ),
+                M2MSecurity(
+                    enabled=True,
+                    realm_url=cast(AnyUrl, ""),
+                    client_id="test-client",
                 ),
                 token=token,
             )
@@ -101,13 +107,18 @@ async def _load_openfga_engine() -> RebacEngine:
             store_name=store,
             sync_schema_on_init=True,
         )
+        mock_m2m = M2MSecurity(
+            enabled=True,
+            realm_url=cast(AnyUrl, ""),
+            client_id="test-client",
+        )
     except ValidationError as exc:
         pytest.skip(f"Invalid OpenFGA configuration: {exc}")
 
     os.environ[config.token_env_var] = "test-token"
 
     try:
-        engine = OpenFgaRebacEngine(config, token=store)
+        engine = OpenFgaRebacEngine(config, mock_m2m, token=store)
     except Exception as exc:
         pytest.skip(f"Failed to create OpenFGA engine: {exc}")
 

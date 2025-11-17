@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Iterable
+
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
     RebacDisabledResult,
@@ -51,6 +53,7 @@ class NoopRebacEngine(RebacEngine):
         permission: RebacPermission,
         resource_type: Resource,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
         return RebacDisabledResult()
@@ -61,6 +64,7 @@ class NoopRebacEngine(RebacEngine):
         relation: RelationType,
         subject_type: Resource,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
         return RebacDisabledResult()
@@ -71,6 +75,7 @@ class NoopRebacEngine(RebacEngine):
         permission: RebacPermission,
         resource: RebacReference,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> bool:
         return True

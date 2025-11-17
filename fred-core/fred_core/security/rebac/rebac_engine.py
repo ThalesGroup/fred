@@ -205,6 +205,7 @@ class RebacEngine(ABC):
         permission: RebacPermission,
         resource_type: Resource,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
         """Return resource identifiers the subject can access for a permission."""
@@ -215,8 +216,8 @@ class RebacEngine(ABC):
         resource: RebacReference,
         relation: RelationType,
         subject_type: Resource,
-        contextual_relations: Iterable[Relation] | None = None,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
         """Return subjects related to the resource by a given relation."""
