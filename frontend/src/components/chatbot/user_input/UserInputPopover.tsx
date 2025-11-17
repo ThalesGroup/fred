@@ -333,7 +333,7 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
                           size="small"
                           color="warning"
                           variant="outlined"
-                          sx={{ height: 18, fontSize: "0.68rem" }}
+                          sx={{ height: 15, fontSize: "0.5rem" }}
                         />
                       </Tooltip>
                     </Stack>

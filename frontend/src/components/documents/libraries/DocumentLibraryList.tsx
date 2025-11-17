@@ -304,8 +304,6 @@ export default function DocumentLibraryList() {
             borderRadius: 3,
             display: "flex",
             flexDirection: "column",
-            height: "100%",
-            maxHeight: "70vh",
           }}
         >
           {/* Tree header */}
