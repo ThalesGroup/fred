@@ -21,7 +21,7 @@ from fred_core import KeycloakUser
 from temporalio import activity, exceptions
 
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage
-from knowledge_flow_backend.features.scheduler.structure import FileToProcess
+from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +39,8 @@ def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
     assert file.external_path, "Pull files must have an external path"
     assert file.source_tag, "Pull files must have a source tag"
     logger = activity.logger
-    logger.info(f"[create_pull_file_metadata] Starting for: {file}")
-    from knowledge_flow_backend.features.ingestion.service import IngestionService
+    logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] Starting file={file}")
+    from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 
     ingestion_service = IngestionService()
 
@@ -57,41 +57,44 @@ def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
         if not full_path.exists() or not full_path.is_file():
             raise FileNotFoundError(f"Pull file not found after fetch: {full_path}")
 
-        logger.info(f"[create_pull_file_metadata] Fetched file at: {full_path}")
+        logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] Fetched file path={full_path}")
 
         # Step 3: Extract and save metadata
         ingestion_service = IngestionService()
         metadata = ingestion_service.extract_metadata(file.processed_by, full_path, tags=file.tags, source_tag=file.source_tag)
         metadata.source.pull_location = file.external_path
-        logger.info(f"[create_pull_file_metadata] Generated metadata: {metadata}")
+        logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] metadata={metadata}")
 
         asyncio.run(ingestion_service.save_metadata(file.processed_by, metadata=metadata))
 
-        logger.info(f"[create_pull_file_metadata] Metadata extracted and saved for pull file: {metadata.document_uid}")
+        logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] Metadata extracted and saved uid={metadata.document_uid}")
         return metadata
 
 
 @activity.defn
 def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
     logger = activity.logger
-    logger.info(f"[get_push_file_metadata] Starting for: {file}")
-    from knowledge_flow_backend.features.ingestion.service import IngestionService
+    logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Starting file={file}")
+    from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 
     ingestion_service = IngestionService()
-    logger.info(f"[get_push_file_metadata] push file UID: {file.document_uid}.")
+    logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] push file uid={file.document_uid}.")
     assert file.document_uid, "Push files must have a document UID"
     metadata = asyncio.run(ingestion_service.get_metadata(file.processed_by, file.document_uid))
     if metadata is None:
-        logger.error(f"[get_push_file_metadata] Metadata not found for push file UID: {file.document_uid}")
+        logger.error(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Metadata not found uid={file.document_uid}")
         raise RuntimeError(f"Metadata missing for push file: {file.document_uid}")
 
-    logger.info(f"[get_push_file_metadata] Metadata found for push file UID: {file.document_uid}, skipping extraction.")
+    logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Metadata found for push file skipping extraction uid={file.document_uid}")
     return metadata
 
 
 @activity.defn
 def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.Path:
-    from knowledge_flow_backend.features.ingestion.service import IngestionService
+    logger = activity.logger
+    logger.info(f"[SCHEDULER][ACTIVITY][LOAD_PUSH_FILE] Loading file uid={metadata.document_uid}")
+
+    from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 
     ingestion_service = IngestionService()
     working_dir = prepare_working_dir(metadata.document_uid)
@@ -109,7 +112,7 @@ def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.P
 @activity.defn
 def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.Path:
     logger = activity.logger
-    logger.info(f"[load_pull_file] Fetching file for: {metadata.document_uid}")
+    logger.info(f"[SCHEDULER][ACTIVITY][LOAD_PULL_FILE] Fetching file uid={metadata.document_uid}")
 
     assert metadata.source_tag, "Missing source_tag in metadata"
     assert metadata.pull_location, "Missing pull_location in metadata"
@@ -128,7 +131,7 @@ def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.P
     if not full_path.exists() or not full_path.is_file():
         raise FileNotFoundError(f"File not found after fetch: {full_path}")
 
-    logger.info(f"[load_pull_file] File copied to working dir: {full_path}")
+    logger.info(f"[SCHEDULER][ACTIVITY][LOAD_PULL_FILE] File copied to working dir: path={full_path}")
     return full_path
 
 
@@ -140,9 +143,9 @@ def input_process(user: KeycloakUser, input_file: pathlib.Path, metadata: Docume
     invokes the ingestion service to save all that to the content store.
     """
     logger = activity.logger
-    logger.info(f"[input_process] Starting for UID: {metadata.document_uid}")
+    logger.info(f"[SCHEDULER][ACTIVITY][INPUT_PROCESS] Starting uid={metadata.document_uid}")
 
-    from knowledge_flow_backend.features.ingestion.service import IngestionService
+    from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 
     ingestion_service = IngestionService()
     working_dir = prepare_working_dir(metadata.document_uid)
@@ -158,17 +161,17 @@ def input_process(user: KeycloakUser, input_file: pathlib.Path, metadata: Docume
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
     asyncio.run(ingestion_service.save_metadata(user, metadata=metadata))
 
-    logger.info(f"[input_process] Done for UID: {metadata.document_uid}")
+    logger.info(f"[SCHEDULER][ACTIVITY][INPUT_PROCESS] completed uid={metadata.document_uid}")
     return metadata
 
 
 @activity.defn
 def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memory_storage: bool = False) -> DocumentMetadata:
     logger = activity.logger
-    logger.info(f"[output_process] Starting for UID: {metadata.document_uid}")
+    logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] Starting uid={metadata.document_uid}")
 
     from knowledge_flow_backend.application_context import ApplicationContext
-    from knowledge_flow_backend.features.ingestion.service import IngestionService
+    from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 
     working_dir = prepare_working_dir(metadata.document_uid)
     output_dir = working_dir / "output"
@@ -195,5 +198,5 @@ def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memor
     # Save the updated metadata
     asyncio.run(ingestion_service.save_metadata(file.processed_by, metadata=metadata))
 
-    logger.info(f"[output_process] Done for UID: {metadata.document_uid}")
+    logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] completed uid={metadata.document_uid}")
     return metadata

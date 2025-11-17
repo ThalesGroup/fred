@@ -33,9 +33,9 @@ from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor
     LiteMdError,
     LiteMdProcessingService,
 )
-from knowledge_flow_backend.features.ingestion.service import IngestionService
+from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 from knowledge_flow_backend.features.scheduler.activities import input_process, output_process
-from knowledge_flow_backend.features.scheduler.structure import FileToProcess
+from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
 logger = logging.getLogger(__name__)
 

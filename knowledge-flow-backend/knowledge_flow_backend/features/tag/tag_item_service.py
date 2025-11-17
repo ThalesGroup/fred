@@ -2,7 +2,7 @@ from typing import Protocol
 
 from fred_core import KeycloakUser
 
-from knowledge_flow_backend.features.metadata.service import MetadataService
+from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
 from knowledge_flow_backend.features.resources.service import ResourceService
 from knowledge_flow_backend.features.tag.structure import TagType
 
@@ -31,7 +31,12 @@ class DocumentTagItemService(TagItemService):
         await self.document_metadata_service.add_tag_id_to_document(user, doc, new_tag_id)
 
     async def remove_tag_id_from_item(self, user: KeycloakUser, item_id: str, tag_id_to_remove: str) -> None:
-        doc = await self.document_metadata_service.get_document_metadata(user, item_id)
+        try:
+            doc = await self.document_metadata_service.get_document_metadata(user, item_id)
+        except MetadataNotFound:
+            # If the document no longer exists, removing a tag from it is a no-op.
+            # This can happen when metadata has been cleaned up after prior operations.
+            return
         await self.document_metadata_service.remove_tag_id_from_document(user, doc, tag_id_to_remove)
 
 

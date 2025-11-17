@@ -92,6 +92,47 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
           detail: t("documentLibrary.removedOneDocument") || "Document removed from the library.",
         });
       } catch (e: any) {
+        const status = e?.status ?? e?.originalStatus ?? e?.data?.status_code;
+        // If the tag or document no longer exists, treat it as a no-op to keep
+        // bulk operations resilient (e.g. when the backend has already cleaned up).
+        if (status === 404) {
+          console.warn("[useDocumentCommands] removeFromLibrary: 404 Not Found, ignoring", e);
+          return;
+        }
+          showError?.({
+          summary: t("validation.error") || "Error",
+          detail: e?.data?.detail || e?.message || "Failed to remove from library.",
+        });
+      }
+    },
+    [updateTag, refresh, showSuccess, showError, t],
+  );
+
+  const bulkRemoveFromLibraryForTag = useCallback(
+    async (docs: DocumentMetadata[], tag: TagWithItemsId) => {
+      if (!docs.length) return;
+      try {
+        const idsToRemove = new Set(docs.map((d) => d.identity.document_uid));
+        const newItemIds = (tag.item_ids || []).filter((id) => !idsToRemove.has(id));
+        await updateTag({
+          tagId: tag.id,
+          tagUpdate: {
+            name: tag.name,
+            description: tag.description,
+            type: tag.type,
+            item_ids: newItemIds,
+          },
+        }).unwrap();
+        await refresh?.();
+        showSuccess?.({
+          summary: t("documentLibrary.removeSuccess") || "Removed",
+          detail:
+            docs.length === 1
+              ? t("documentLibrary.removedOneDocument") || "Document removed from the library."
+              : t("documentLibrary.removedManyDocuments", { count: docs.length }) ||
+                `${docs.length} documents removed from the library.`,
+        });
+      } catch (e: any) {
         showError?.({
           summary: t("validation.error") || "Error",
           detail: e?.data?.detail || e?.message || "Failed to remove from library.",
@@ -143,5 +184,5 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     },
     [triggerDownloadBlob, showError],
   );
-  return { toggleRetrievable, removeFromLibrary, preview, previewPdf, refresh, download };
+  return { toggleRetrievable, removeFromLibrary, bulkRemoveFromLibraryForTag, preview, previewPdf, refresh, download };
 }

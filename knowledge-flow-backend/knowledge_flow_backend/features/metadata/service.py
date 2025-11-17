@@ -17,7 +17,15 @@ from datetime import datetime, timezone
 from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, authorize
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage
+from knowledge_flow_backend.common.document_structures import (
+    DocumentMetadata,
+    ProcessingGraph,
+    ProcessingGraphEdge,
+    ProcessingGraphNode,
+    ProcessingStage,
+    ProcessingStatus,
+    ProcessingSummary,
+)
 from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import MetadataDeserializationError
 
@@ -112,6 +120,210 @@ class MetadataService:
             raise MetadataNotFound(f"No document found with UID {document_uid}")
 
         return metadata
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def get_processing_graph(self, user: KeycloakUser) -> ProcessingGraph:
+        """
+        Build a lightweight processing graph for all documents visible to the user.
+
+        The graph connects:
+        - document nodes to vector_index nodes when the document has been vectorized
+        - document nodes to table nodes when the document has been SQL indexed
+        """
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+
+        try:
+            docs = self.metadata_store.get_all_metadata({})
+        except MetadataDeserializationError as e:
+            logger.error(f"[Metadata] Deserialization error while building processing graph: {e}")
+            raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
+        except Exception as e:
+            logger.error(f"Error retrieving metadata for processing graph: {e}")
+            raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
+
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            visible_docs = docs
+        else:
+            authorized_doc_ids = {d.id for d in authorized_doc_ref}
+            visible_docs = [d for d in docs if d.identity.document_uid in authorized_doc_ids]
+
+        # Lazy-load optional stores only if needed
+        def ensure_vector_store():
+            if self.vector_store is None:
+                try:
+                    self.vector_store = ApplicationContext.get_instance().get_vector_store()
+                except Exception as e:
+                    logger.warning(f"[GRAPH] Could not initialize vector store for graph: {e}")
+            return self.vector_store
+
+        def ensure_tabular_store():
+            if self.csv_input_store is None:
+                try:
+                    self.csv_input_store = ApplicationContext.get_instance().get_csv_input_store()
+                except Exception as e:
+                    logger.warning(f"[GRAPH] Could not initialize tabular store for graph: {e}")
+            return self.csv_input_store
+
+        nodes: list[ProcessingGraphNode] = []
+        edges: list[ProcessingGraphEdge] = []
+
+        # Pre-cache existing tables to avoid repeated roundtrips
+        csv_store = ensure_tabular_store()
+        existing_tables: set[str] = set()
+        if csv_store is not None:
+            try:
+                existing_tables = set(csv_store.list_tables())
+            except Exception as e:
+                logger.warning(f"[GRAPH] Failed to list tables from tabular store: {e}")
+
+        for metadata in visible_docs:
+            doc_uid = metadata.document_uid
+            doc_node_id = f"doc:{doc_uid}"
+
+            nodes.append(
+                ProcessingGraphNode(
+                    id=doc_node_id,
+                    kind="document",
+                    label=metadata.document_name,
+                    document_uid=doc_uid,
+                    file_type=metadata.file.file_type,
+                    source_tag=metadata.source.source_tag,
+                )
+            )
+
+            stages = metadata.processing.stages or {}
+
+            # --- Vector index node (per-document) ---------------------------------
+            if stages.get(ProcessingStage.VECTORIZED) == ProcessingStatus.DONE:
+                vector_store = ensure_vector_store()
+                vector_count: int | None = None
+                if vector_store is not None and hasattr(vector_store, "get_document_chunk_count"):
+                    try:
+                        vector_count = int(vector_store.get_document_chunk_count(document_uid=doc_uid))  # type: ignore[attr-defined]
+                    except Exception as e:
+                        logger.warning(f"[GRAPH] Failed to count vectors for document '{doc_uid}': {e}")
+
+                vec_node_id = f"vec:{doc_uid}"
+                nodes.append(
+                    ProcessingGraphNode(
+                        id=vec_node_id,
+                        kind="vector_index",
+                        label=f"Vectors for {metadata.document_name}",
+                        document_uid=doc_uid,
+                        vector_count=vector_count,
+                    )
+                )
+                edges.append(
+                    ProcessingGraphEdge(
+                        source=doc_node_id,
+                        target=vec_node_id,
+                        kind="vectorized",
+                    )
+                )
+
+            # --- SQL table node (per-document) ------------------------------------
+            if stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE and csv_store is not None:
+                table_name = sanitize_sql_name(metadata.document_name.rsplit(".", 1)[0])
+                row_count: int | None = None
+
+                if table_name in existing_tables:
+                    try:
+                        # Use a lightweight COUNT(*) query to avoid loading full tables.
+                        # table_name is sanitized via sanitize_sql_name, so this is safe from SQL injection.
+                        df = csv_store.execute_sql_query(f'SELECT COUNT(*) AS n FROM "{table_name}"')  # nosec B608
+                        if not df.empty and "n" in df.columns:
+                            row_count = int(df["n"].iloc[0])
+                    except Exception as e:
+                        logger.warning(f"[GRAPH] Failed to count rows for table '{table_name}': {e}")
+
+                table_node_id = f"table:{table_name}"
+                nodes.append(
+                    ProcessingGraphNode(
+                        id=table_node_id,
+                        kind="table",
+                        label=table_name,
+                        document_uid=doc_uid,
+                        table_name=table_name,
+                        row_count=row_count,
+                    )
+                )
+                edges.append(
+                    ProcessingGraphEdge(
+                        source=doc_node_id,
+                        target=table_node_id,
+                        kind="sql_indexed",
+                    )
+                )
+
+        return ProcessingGraph(nodes=nodes, edges=edges)
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def get_processing_summary(self, user: KeycloakUser) -> ProcessingSummary:
+        """
+        Compute a consolidated processing summary across all documents visible to the user.
+        """
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+
+        try:
+            docs = self.metadata_store.get_all_metadata({})
+        except MetadataDeserializationError as e:
+            logger.error(f"[Metadata] Deserialization error while building processing summary: {e}")
+            raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
+        except Exception as e:
+            logger.error(f"Error retrieving metadata for processing summary: {e}")
+            raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
+
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            visible_docs = docs
+        else:
+            authorized_doc_ids = {d.id for d in authorized_doc_ref}
+            visible_docs = [d for d in docs if d.identity.document_uid in authorized_doc_ids]
+
+        total_documents = len(visible_docs)
+        fully_processed = 0
+        in_progress = 0
+        failed = 0
+        not_started = 0
+
+        for metadata in visible_docs:
+            stages = metadata.processing.stages or {}
+            if not stages:
+                not_started += 1
+                continue
+
+            has_failed = any(status == ProcessingStatus.FAILED for status in stages.values())
+            any_in_progress = any(status == ProcessingStatus.IN_PROGRESS for status in stages.values())
+
+            # Mirror the scheduler logic: a document is considered fully processed
+            # when either the VECTOR or SQL_INDEXED stages are DONE.
+            preview_done = stages.get(ProcessingStage.PREVIEW_READY) == ProcessingStatus.DONE
+            vectorized_done = stages.get(ProcessingStage.VECTORIZED) == ProcessingStatus.DONE
+            sql_indexed_done = stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE
+            fully_processed_doc = vectorized_done or sql_indexed_done
+
+            # Has *any* work started (at least one stage DONE) without being fully processed?
+            any_done = any(status == ProcessingStatus.DONE for status in stages.values())
+
+            if has_failed:
+                failed += 1
+            elif fully_processed_doc:
+                fully_processed += 1
+            elif any_in_progress:
+                in_progress += 1
+            elif any_done or preview_done:
+                # Some work has been completed (e.g. preview) but the document
+                # is not yet fully processed or failed.
+                in_progress += 1
+            else:
+                not_started += 1
+
+        return ProcessingSummary(
+            total_documents=total_documents,
+            fully_processed=fully_processed,
+            in_progress=in_progress,
+            failed=failed,
+            not_started=not_started,
+        )
 
     @authorize(Action.UPDATE, Resource.DOCUMENTS)
     async def add_tag_id_to_document(self, user: KeycloakUser, metadata: DocumentMetadata, new_tag_id: str, consistency_token: str | None = None) -> None:
@@ -285,7 +497,7 @@ class MetadataService:
         """
         try:
             # Import here to avoid circular imports
-            from knowledge_flow_backend.features.tag.service import TagService
+            from knowledge_flow_backend.features.tag.tag_service import TagService
 
             tag_service = TagService()
 

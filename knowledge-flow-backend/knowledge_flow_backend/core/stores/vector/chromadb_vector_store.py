@@ -224,6 +224,22 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         self._collection.delete(where={DOC_UID_FIELD: document_uid})
         logger.debug("[SEARCH] Delete operation sent to ChromaDB.")
 
+    def get_document_chunk_count(self, *, document_uid: str) -> int:
+        """
+        Return the number of vector chunks stored for a given logical document.
+        This is a convenience method used by diagnostic and visualization features.
+        """
+        try:
+            # Do not request a custom 'ids' include, as Chroma expects only
+            # standard payload keys like documents / embeddings / metadatas.
+            # The ids are always present in the response.
+            got = self._collection.get(where={DOC_UID_FIELD: document_uid})
+            ids = got.get("ids") or []
+            return len(ids)
+        except Exception:
+            logger.exception("[SEARCH] Failed to count chunks for document_uid=%s", document_uid)
+            return 0
+
     def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:
         """
         Update the 'retrievable' flag for all chunks of a document without deleting vectors.

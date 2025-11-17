@@ -5,7 +5,39 @@
     "close": "Fermer",
     "remove": "Supprimer",
     "loading": "Chargement…",
-    "beta": "Bêta"
+    "beta": "Bêta",
+    "retry": "Réessayer",
+    "error": "Erreur",
+    "refresh": "Rafraîchir"
+  },
+  "dataHub": {
+    "title": "Hub des Données - Lignage des documents",
+    "refresh": "Rafraîchir",
+    "error": "Échec du chargement du graphe de traitement",
+    "empty": "Aucune donnée de graphe de traitement pour le moment. Ingérez et traitez des documents pour alimenter cette vue.",
+    "searchHelp": "Filtrer les documents par nom ou source",
+    "searchPlaceholder": "Rechercher des documents...",
+    "vectorDistributionTitle": "Vecteurs par document",
+    "vectorDistributionSubtitle": "{{count}} documents avec des vecteurs",
+    "vectorDistributionMany": "{{count}} documents",
+    "rowDistributionTitle": "Lignes par document",
+    "rowDistributionSubtitle": "{{count}} documents avec des tables",
+    "rowDistributionMany": "{{count}} documents",
+    "sortLabel": "Trier par",
+    "sortName": "Nom (A–Z)",
+    "sortVectorsDesc": "Vecteurs (du plus grand au plus petit)",
+    "sortVectorsAsc": "Vecteurs (du plus petit au plus grand)",
+    "sortRowsDesc": "Lignes (du plus grand au plus petit)",
+    "sortRowsAsc": "Lignes (du plus petit au plus grand)",
+    "limitLabel": "Afficher",
+    "limitAll": "Tout",
+    "documentColumn": "Document",
+    "vectorsColumn": "Vecteurs",
+    "rowsColumn": "Lignes",
+    "vectorTableTitle": "Documents avec vecteurs",
+    "rowTableTitle": "Documents avec tables",
+    "hideSection": "Masquer",
+    "showSection": "Afficher"
   },
   "resource": {
     "kind": {
@@ -59,7 +91,8 @@
       "monitoring_kpi": "Vue d'ensemble des Kpis",
       "monitoring_logs": "Console de logs",
       "monitoring_runtime": "Résumé d'exécution",
-      "monitoring_processors": "Banc de test processeurs"
+      "monitoring_processors": "Banc de test processeurs",
+      "monitoring_data": "Surveillance des données"
     },
     "theme": {
       "light": "clair",
@@ -72,7 +105,44 @@
     "monitoring_kpi": "Kpis",
     "monitoring_logs": "Logs",
     "monitoring_runtime": "Runtime",
-    "monitoring_processors": "Processeurs"
+    "monitoring_processors": "Processeurs",
+    "monitoring_data": "Données"
+  },
+  "runtime": {
+    "title": "Résumé d'exécution",
+    "sessions": "Sessions",
+    "activeAgents": "Agents actifs",
+    "attachments": "Pièces jointes",
+    "sessionsWithAttachments": "Sessions avec pièces jointes",
+    "maxAttachmentsPerSession": "Pièces jointes max/session",
+    "error": "Échec du chargement du résumé"
+  },
+  "scheduler": {
+    "processingStatusTitle": "Statut de traitement",
+    "processingStatusSummary": "Traité {{done}}/{{total}} (échecs : {{failed}})",
+    "processingStatusIdle": "Aucun traitement actif. Sélectionnez des documents et cliquez sur Traiter pour démarrer.",
+    "processingStatusPreview": "Aperçu prêt : {{count}}",
+    "processingStatusVector": "Vectorisé : {{count}}",
+    "processingStatusSql": "Indexé SQL : {{count}}",
+    "processingStatusProgressLabel": "{{percent}}% traité",
+    "processingStatusDoneLabel": "Terminés",
+    "processingStatusFailedOnlyLabel": "En échec",
+    "processingStatusRemainingLabel": "Restant",
+    "refreshProgress": "Rafraîchir",
+    "refreshFailed": "Échec du rafraîchissement",
+    "hideProgress": "Masquer",
+    "globalStatusTitle": "Traitement de la bibliothèque",
+    "globalStatusLoading": "Chargement de l’état de traitement…",
+    "globalStatusSummary": "{{processed}}/{{total}} traités • {{in_progress}} en cours • {{failed}} en échec • {{not_started}} non démarrés",
+    "globalStatusEmpty": "Aucun document dans la base de connaissances pour le moment.",
+    "globalStatusProcessedLabel": "Traités : {{count}}",
+    "globalStatusInProgressLabel": "En cours : {{count}}",
+    "globalStatusFailedLabel": "En échec : {{count}}",
+    "globalStatusNotStartedLabel": "Non démarrés : {{count}}",
+    "globalStatusProcessedLabelShort": "Traités",
+    "globalStatusInProgressLabelShort": "En cours",
+    "globalStatusFailedLabelShort": "Échecs",
+    "globalStatusNotStartedLabelShort": "Non démarrés"
   },
   "procbench": {
     "title": "Banc de test des processeurs",
@@ -122,15 +192,6 @@
     "noMarkdown": "Aucun markdown produit",
     "openLatest": "Ouvrir la dernière exécution",
     "detail": { "title": "Détail de l'exécution", "expandAll": "Tout déplier", "collapseAll": "Tout replier" }
-  },
-  "runtime": {
-    "title": "Résumé d'exécution",
-    "sessions": "Sessions",
-    "activeAgents": "Agents actifs",
-    "attachments": "Pièces jointes",
-    "sessionsWithAttachments": "Sessions avec pièces jointes",
-    "maxAttachmentsPerSession": "Pièces jointes max/session",
-    "error": "Échec du chargement du résumé"
   },
   "assetManager": {
     "title": "Gérer les ressources pour {{agentId}}",

@@ -29,6 +29,18 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/documents/metadata/${queryArg.documentUid}` }),
     }),
+    getProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGet: build.query<
+      GetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetApiResponse,
+      GetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/documents/processing/graph` }),
+    }),
+    getProcessingSummaryKnowledgeFlowV1DocumentsProcessingSummaryGet: build.query<
+      GetProcessingSummaryKnowledgeFlowV1DocumentsProcessingSummaryGetApiResponse,
+      GetProcessingSummaryKnowledgeFlowV1DocumentsProcessingSummaryGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/documents/processing/summary` }),
+    }),
     updateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPut: build.mutation<
       UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiResponse,
       UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiArg
@@ -603,14 +615,14 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.processDocumentsRequest,
       }),
     }),
-    scheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPost: build.mutation<
-      ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse,
-      ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg
+    processDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPost: build.mutation<
+      ProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostApiResponse,
+      ProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostApiArg
     >({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/schedule-documents`,
+        url: `/knowledge-flow/v1/process-documents/progress`,
         method: "POST",
-        body: queryArg.processDocumentsRequest,
+        body: queryArg.processDocumentsProgressRequest,
       }),
     }),
     listProcessorsKnowledgeFlowV1DevBenchProcessorsGet: build.query<
@@ -667,6 +679,12 @@ export type GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApi
 export type GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApiArg = {
   documentUid: string;
 };
+export type GetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetApiResponse =
+  /** status 200 Successful Response */ ProcessingGraph;
+export type GetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetApiArg = void;
+export type GetProcessingSummaryKnowledgeFlowV1DocumentsProcessingSummaryGetApiResponse =
+  /** status 200 Successful Response */ ProcessingSummary;
+export type GetProcessingSummaryKnowledgeFlowV1DocumentsProcessingSummaryGetApiArg = void;
 export type UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiResponse =
   /** status 200 Successful Response */ any;
 export type UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutApiArg = {
@@ -1044,14 +1062,15 @@ export type ListGroupsKnowledgeFlowV1GroupsGetApiResponse = /** status 200 Succe
 export type ListGroupsKnowledgeFlowV1GroupsGetApiArg = void;
 export type ListUsersKnowledgeFlowV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
 export type ListUsersKnowledgeFlowV1UsersGetApiArg = void;
-export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse = /** status 200 Successful Response */ any;
+export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse =
+  /** status 200 Successful Response */ ProcessDocumentsResponse;
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
   processDocumentsRequest: ProcessDocumentsRequest;
 };
-export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiResponse =
-  /** status 200 Successful Response */ any;
-export type ScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostApiArg = {
-  processDocumentsRequest: ProcessDocumentsRequest;
+export type ProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostApiResponse =
+  /** status 200 Successful Response */ ProcessDocumentsProgressResponse;
+export type ProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostApiArg = {
+  processDocumentsProgressRequest: ProcessDocumentsProgressRequest;
 };
 export type ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiResponse =
   /** status 200 Successful Response */ ProcessorDescriptor[];
@@ -1168,6 +1187,33 @@ export type ValidationError = {
 };
 export type HttpValidationError = {
   detail?: ValidationError[];
+};
+export type ProcessingGraphNode = {
+  id: string;
+  kind: string;
+  label: string;
+  document_uid?: string | null;
+  table_name?: string | null;
+  vector_count?: number | null;
+  row_count?: number | null;
+  file_type?: FileType | null;
+  source_tag?: string | null;
+};
+export type ProcessingGraphEdge = {
+  source: string;
+  target: string;
+  kind: string;
+};
+export type ProcessingGraph = {
+  nodes: ProcessingGraphNode[];
+  edges: ProcessingGraphEdge[];
+};
+export type ProcessingSummary = {
+  total_documents: number;
+  fully_processed: number;
+  in_progress: number;
+  failed: number;
+  not_started: number;
 };
 export type PullDocumentsResponse = {
   total: number;
@@ -1585,6 +1631,13 @@ export type WriteReportRequest = {
   tags?: string[];
   render_formats?: string[];
 };
+export type ProcessDocumentsResponse = {
+  status: string;
+  pipeline_name: string;
+  total_files: number;
+  workflow_id: string;
+  run_id?: string | null;
+};
 export type FileToProcessWithoutUser = {
   source_tag: string;
   tags?: string[];
@@ -1598,6 +1651,28 @@ export type FileToProcessWithoutUser = {
 export type ProcessDocumentsRequest = {
   files: FileToProcessWithoutUser[];
   pipeline_name: string;
+};
+export type DocumentProgress = {
+  document_uid: string;
+  stages: {
+    [key: string]: ProcessingStatus;
+  };
+  fully_processed?: boolean;
+  has_failed?: boolean;
+};
+export type ProcessDocumentsProgressResponse = {
+  total_documents: number;
+  documents_found: number;
+  documents_missing: number;
+  documents_with_preview: number;
+  documents_vectorized: number;
+  documents_sql_indexed: number;
+  documents_fully_processed: number;
+  documents_failed: number;
+  documents: DocumentProgress[];
+};
+export type ProcessDocumentsProgressRequest = {
+  workflow_id?: string | null;
 };
 export type ProcessorDescriptor = {
   id: string;
@@ -1658,6 +1733,10 @@ export const {
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
   useGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
   useLazyGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
+  useGetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetQuery,
+  useLazyGetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetQuery,
+  useGetProcessingSummaryKnowledgeFlowV1DocumentsProcessingSummaryGetQuery,
+  useLazyGetProcessingSummaryKnowledgeFlowV1DocumentsProcessingSummaryGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
   useListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
@@ -1780,7 +1859,7 @@ export const {
   useListUsersKnowledgeFlowV1UsersGetQuery,
   useLazyListUsersKnowledgeFlowV1UsersGetQuery,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
-  useScheduleDocumentsKnowledgeFlowV1ScheduleDocumentsPostMutation,
+  useProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostMutation,
   useListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,
   useLazyListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,
   useRunKnowledgeFlowV1DevBenchRunPostMutation,

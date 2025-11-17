@@ -13,34 +13,17 @@
 // limitations under the License.
 
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
-import {
-  Avatar,
-  Box,
-  Checkbox,
-  Chip,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TableSortLabel,
-  Tooltip,
-  Typography,
-} from "@mui/material";
+import { Avatar, Box, Checkbox, Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel, Tooltip, Typography } from "@mui/material";
 import dayjs from "dayjs";
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import {
-  DocumentMetadata,
-  TagType,
-  TagWithItemsId,
-  useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
-} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { DocumentMetadata, TagType, TagWithItemsId, useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 import { getDocumentIcon } from "../common/DocumentIcon";
 import { useDocumentActions } from "../common/useDocumentActions";
+import { DocumentProcessingStatus } from "./DocumentProcessingStatus";
+import { DocumentOperationsStatus } from "./DocumentOperationsStatus";
 import { CustomRowAction, DocumentTableRowActionsMenu } from "./DocumentOperationsTableRowActionsMenu";
 import { CustomBulkAction, DocumentOperationsTableSelectionToolbar } from "./DocumentOperationsTableSelectionToolbar";
 
@@ -159,7 +142,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
   };
 
   // If actions are undefined, use default actions from useDocumentActions
-  const { defaultBulkActions, defaultRowActions } = useDocumentActions();
+  const { defaultBulkActions, defaultRowActions, progress, refreshProgress } = useDocumentActions(onRefreshData);
   const rowActionsWithDefault = rowActions === undefined ? defaultRowActions : rowActions;
   const bulkActionsWithDefault = bulkActions === undefined ? defaultBulkActions : bulkActions;
 
@@ -183,7 +166,6 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
         ...action,
         handler: async (files: DocumentMetadata[]) => {
           await action.handler(files);
-          setSelectedFiles([]); // Clear selection after action
           onRefreshData?.(); // Refresh data after action
         },
       })),
@@ -216,6 +198,15 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
 
   return (
     <>
+      <Box display="flex" flexDirection={{ xs: "column", md: "row" }} gap={2} mb={2}>
+        <Box flex={1}>
+          <DocumentProcessingStatus />
+        </Box>
+        <Box flex={1}>
+          <DocumentOperationsStatus progress={progress} onRefresh={refreshProgress} />
+        </Box>
+      </Box>
+
       {showSelectionActions && (
         <DocumentOperationsTableSelectionToolbar
           selectedFiles={selectedFiles}
@@ -230,11 +221,15 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
           minHeight: 0,
           height: "100%",
           width: "100%",
-          maxHeight: "40vh",
+          maxHeight: "60vh",
           overflowY: "auto",
+          "& .MuiTableCell-root": {
+            py: 0.5,
+            fontSize: "0.75rem",
+          },
         }}
       >
-        <Table size="medium">
+        <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell padding="checkbox">
@@ -246,6 +241,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                     active={sortBy === "document_name"}
                     direction={sortBy === "document_name" ? sortDirection : "asc"}
                     onClick={() => handleSortChange("document_name")}
+                    sx={{ fontSize: "0.75rem" }}
                   >
                     {t("documentTable.fileName")}
                   </TableSortLabel>
@@ -257,6 +253,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                     active={sortBy === "date_added_to_kb"}
                     direction={sortBy === "date_added_to_kb" ? sortDirection : "asc"}
                     onClick={() => handleSortChange("date_added_to_kb")}
+                    sx={{ fontSize: "0.75rem" }}
                   >
                     {t("documentTable.dateAdded")}
                   </TableSortLabel>
@@ -276,6 +273,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                     <Checkbox
                       checked={selectedFiles.some((f) => f.identity.document_uid === file.identity.document_uid)}
                       onChange={() => handleToggleSelect(file)}
+                      size="small"
                     />
                   </TableCell>
                   {columns.fileName && (
@@ -288,7 +286,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                         sx={{ cursor: nameClickAction ? "pointer" : "default" }}
                       >
                         {getDocumentIcon(file.identity.document_name)}
-                        <Typography variant="body2" noWrap>
+                        <Typography variant="body2" noWrap sx={{ fontSize: "0.8rem" }}>
                           {file.identity.document_name}
                         </Typography>
                       </Box>
@@ -362,9 +360,9 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                                 sx={{
                                   bgcolor: bgColor,
                                   color,
-                                  width: 24,
-                                  height: 24,
-                                  fontSize: "0.75rem",
+                                  width: 18,
+                                  height: 18,
+                                  fontSize: "0.6rem",
                                   fontWeight: 600,
                                 }}
                               >

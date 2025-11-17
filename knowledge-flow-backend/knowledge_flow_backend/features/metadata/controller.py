@@ -21,7 +21,7 @@ from fred_core import KeycloakUser, get_current_user
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingGraph, ProcessingSummary
 from knowledge_flow_backend.common.utils import log_exception
 from knowledge_flow_backend.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
 from knowledge_flow_backend.features.pull.controller import PullDocumentsResponse
@@ -132,6 +132,38 @@ class MetadataController:
         async def get_document_metadata(document_uid: str, user: KeycloakUser = Depends(get_current_user)):
             try:
                 return await self.service.get_document_metadata(user, document_uid)
+            except Exception as e:
+                raise handle_exception(e)
+
+        @router.get(
+            "/documents/processing/graph",
+            tags=["Documents"],
+            response_model=ProcessingGraph,
+            summary="Get processing graph for all documents",
+            description=(
+                "Returns a lightweight graph describing how ingested documents relate to downstream artifacts "
+                "(per-document vector indexes and SQL tables). The graph is expressed as nodes and edges that can "
+                "be consumed directly by the UI for visualization."
+            ),
+        )
+        async def get_processing_graph(user: KeycloakUser = Depends(get_current_user)):
+            try:
+                return await self.service.get_processing_graph(user)
+            except Exception as e:
+                raise handle_exception(e)
+
+        @router.get(
+            "/documents/processing/summary",
+            tags=["Documents"],
+            response_model=ProcessingSummary,
+            summary="Get consolidated processing status for all documents",
+            description=(
+                "Returns an aggregate view of processing status across all documents visible to the current user, including counts of fully processed, in-progress, failed, and not-started documents."
+            ),
+        )
+        async def get_processing_summary(user: KeycloakUser = Depends(get_current_user)):
+            try:
+                return await self.service.get_processing_summary(user)
             except Exception as e:
                 raise handle_exception(e)
 
