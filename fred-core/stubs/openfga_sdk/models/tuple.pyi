@@ -4,7 +4,6 @@ from datetime import datetime
 
 from openfga_sdk.models.tuple_key import TupleKey
 
-
 class Tuple:
     key: TupleKey
     timestamp: datetime

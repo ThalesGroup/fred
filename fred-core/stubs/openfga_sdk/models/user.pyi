@@ -4,7 +4,6 @@ from typing import Any
 
 from openfga_sdk.models.fga_object import FgaObject
 
-
 class User:
     object: FgaObject | None
     userset: Any

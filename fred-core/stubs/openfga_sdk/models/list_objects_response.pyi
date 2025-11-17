@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 class ListObjectsResponse:
     objects: list[str]
 
