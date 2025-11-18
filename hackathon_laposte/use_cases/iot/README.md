@@ -10,6 +10,15 @@
 
 - Proposer un cas d’usage concret pour La Poste, illustrant comment ces agents peuvent analyser des données de capteurs (IoT), détecter des anomalies et assister les équipes opérationnelles.
 
+# 0 - Mise en place de l'environnment
+
+Exécuter dans un terminal :
+
+```
+git cherry-pick b8be2e35            # Met à jour Fred pour le hackathon
+```
+
+
 # 1 - Mise en place du postgres SQL et connexion à knowledge-flow
 
 ## 1.1 - Lancer un Postgres SQL sur votre devcontainer
