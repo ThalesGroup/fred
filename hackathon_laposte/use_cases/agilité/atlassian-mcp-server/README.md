@@ -11,7 +11,9 @@ Se procurer le fichier `.env` avec les variables d'environnement dans le [dossie
 La clé d'accès sera partagée sur l'écran en séance.
 
 ```bash
-# Lancer le service en dehors du devcontainer
+cd hackathon_laposte/use_cases/agilité/atlassian-mcp-server
+
+# Lancer le service
 docker compose -f docker-compose-atlassian-mcp.yml up -d
 
 # Vérifier les logs
@@ -55,7 +57,6 @@ docker compose -f docker-compose-atlassian-mcp.yml up -d
 Le service sera disponible sur le port défini, ici "8885".
 
 ## 5. Vérifier que tout fonctionne
-
 
 Pour vérifier que le container tourne:
 
