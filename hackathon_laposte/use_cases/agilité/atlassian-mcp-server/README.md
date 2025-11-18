@@ -14,10 +14,10 @@ La clé d'accès sera partagée sur l'écran en séance.
 cd hackathon_laposte/use_cases/agilité/atlassian-mcp-server
 
 # Lancer le service
-docker compose -f docker-compose-atlassian-mcp.yml up -d
+docker compose up -d
 
 # Vérifier les logs
-docker compose -f docker-compose-atlassian-mcp.yml logs -f mcp-atlassian
+docker compose logs -f mcp-atlassian
 ```
 
 ## 1. Prérequis
@@ -27,7 +27,7 @@ docker compose -f docker-compose-atlassian-mcp.yml logs -f mcp-atlassian
 
 ## 2. Fichier docker-compose.yml
 
-Voici la configuration à utiliser située dans le ficher `docker-compose-atlassian-mcp.yml`:
+Voici la configuration à utiliser, située dans le ficher `docker-compose.yml`:
 
 ```yaml
 version: "3.8"
@@ -51,7 +51,7 @@ Exécute la commande suivante à la racine du dossier contenant le fichier docke
 
 ```bash
 # Lancer le service en dehors du devcontainer
-docker compose -f docker-compose-atlassian-mcp.yml up -d
+docker compose up -d
 ```
 
 Le service sera disponible sur le port défini, ici "8885".
@@ -67,5 +67,5 @@ docker ps
 Pour voir les logs:
 
 ```bash
-docker compose -f docker-compose-atlassian-mcp.yml logs -f mcp-atlassian
+docker compose logs -f mcp-atlassian
 ```
