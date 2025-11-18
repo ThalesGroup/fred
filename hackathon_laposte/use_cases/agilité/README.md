@@ -39,8 +39,8 @@ Pour vos tests manuels et la vérification des données source, vous avez accès
 
 Nous allons utiliser un **Dev Container** pour isoler l'environnement du serveur.
 
-1. **Ouvrir le Projet :** Dans VS Code, ouvrez le dossier racine du hackathon.
-2. **Lancer le Dev Container :** Suivez l'invite pour rouvrir le projet dans un conteneur de développement.
+1. **Ouvrir le Projet :** Dans VS Code, ouvrez Fred.
+2. **Lancer le Dev Container :** Suivez l'invite pour rouvrir le projet dans un conteneur de développement ou tapez `Ctrl + Shift + P` et entrez `Reopen in container`
 3. **Démarrer le Serveur :** Une fois dans le conteneur, suivez les instructions spécifiques pour lancer le serveur Jira MCP.
    Le guide détaillé pour cette étape se trouve ici : [README du Serveur MCP Atlassian](./atlassian-mcp-server/README.md)
 
