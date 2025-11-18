@@ -10,7 +10,7 @@
     }
   },
   "workspaceFolder": "/workspaces/fred",
-  "runArgs": ["--init"],
+  "runArgs": ["--init", "--network=host"],
   "mounts": [
     // Fred config directory from host
     "source=${localEnv:HOME}/.fred,target=/home/vscode/.fred,type=bind,consistency=cached",
@@ -92,5 +92,8 @@
   },
   "remoteUser": "vscode",
   "overrideCommand": true,
-  "updateRemoteUserUID": true
+  "updateRemoteUserUID": true,
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  }
 }

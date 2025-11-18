@@ -86,10 +86,6 @@ ai:
       type: "agent"
       class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
       enabled: true
-    - name: "Sammy"
-      type: "agent"
-      class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
-      enabled: true
     - name: "Rico"
       type: "agent"
       class_path: "agentic_backend.agents.rags.rag_expert.Rico"
@@ -109,14 +105,9 @@ mcp:
       url: "http://localhost:8111/knowledge-flow/v1/mcp-tabular"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-knowledge-flow-opensearch-ops"
+    - name: "mcp-knowledge-flow-text"
       transport: "streamable_http"
-      url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
-      sse_read_timeout: 2000
-      auth_mode: "user_token"
-    - name: "mcp-kubernetes-server"
-      transport: "streamable_http"
-      url: "http://localhost:8081/mcp"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-text"
       sse_read_timeout: 2000
       auth_mode: "user_token"
     - name: "mcp-atlassian-jira-server"
