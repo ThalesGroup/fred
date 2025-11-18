@@ -15,9 +15,10 @@
 from typing import Annotated, List, Optional, TypedDict
 
 from fred_core import VectorSearchHit
+
 from langchain_core.messages import AIMessage
 from langgraph.graph import add_messages
-from pydantic.v1 import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RagGraphState(TypedDict):
@@ -49,7 +50,9 @@ class GradeDocumentsOutput(BaseModel):
                             are relevant to the user's question.
     """
 
-    binary_score: str
+    binary_score: str = Field(
+        ..., description="Indicates whether a document is relevant (yes/no)"
+    )
 
 
 class GradeAnswerOutput(GradeDocumentsOutput):
@@ -60,7 +63,9 @@ class GradeAnswerOutput(GradeDocumentsOutput):
         binary_score (str): Whether the answer provided is relevant/correct ("yes"/"no").
     """
 
-    pass
+    binary_score: str = Field(
+        ..., description="Indicate whether the answer is relevant/correct (yes/no)"
+    )
 
 
 class RephraseQueryOutput(BaseModel):
@@ -71,4 +76,6 @@ class RephraseQueryOutput(BaseModel):
         rephrase_query (str): The rephrased version of the original query.
     """
 
-    rephrase_query: str
+    rephrase_query: str = Field(
+        ..., description="The rephrased version of the original query."
+    )

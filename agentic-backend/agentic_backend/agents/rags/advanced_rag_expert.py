@@ -27,6 +27,7 @@ from agentic_backend.agents.rags.prompt import (
     generate_answer_prompt,
     grade_answer_prompt,
     grade_documents_prompt,
+    rephrase_query_prompt,
 )
 from agentic_backend.agents.rags.structures import (
     GradeAnswerOutput,
@@ -164,6 +165,15 @@ class AdvancedRico(AgentFlow):
                 description="Prompt that evaluates whether an answer adequately addresses a given question.",
                 required=True,
                 default=grade_answer_prompt(),
+                ui=UIHints(group="Prompts", multiline=True, markdown=True),
+            ),
+            FieldSpec(
+                key="prompts.rephrase_query",
+                type="prompt",
+                title="Rephrase query prompt",
+                description="Prompt for rephrasing an input question to improve vector retrieval performance.",
+                required=True,
+                default=rephrase_query_prompt(),
                 ui=UIHints(group="Prompts", multiline=True, markdown=True),
             ),
             FieldSpec(
@@ -444,20 +454,12 @@ class AdvancedRico(AgentFlow):
         )
 
         # Define grading system prompt
-        prompt = (
+        template = (
             self.get_tuned_text("prompts.grade_documents") or grade_documents_prompt()
         )
 
         # Prepare grading chain
-        grade_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", prompt),
-                (
-                    "human",
-                    "Document to assess:\n\n{document}\n\nUser question:\n\n{question}",
-                ),
-            ]
-        )
+        grade_prompt = ChatPromptTemplate.from_template(template)
         chain = grade_prompt | self.model.with_structured_output(GradeDocumentsOutput)
 
         # Avoid false dedup across retries by using a stable chunk key.
@@ -614,19 +616,10 @@ class AdvancedRico(AgentFlow):
         retry_count = int(state.get("retry_count", 0) or 0) + 1
 
         # Define rephrasing prompt
-        system = (
-            "You are a question re-writer that converts an input question into a better "
-            "version optimized for vector retrieval. Preserve the language of the input. Keep the information from the original question."
+        template = (
+            self.get_tuned_text("prompts.rephrase_query") or rephrase_query_prompt()
         )
-        rewrite_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", system),
-                (
-                    "human",
-                    "Initial question:\n\n{question}\n\nProduce an improved version.",
-                ),
-            ]
-        )
+        rewrite_prompt = ChatPromptTemplate.from_template(template)
 
         # Generate rephrased query
         chain = rewrite_prompt | self.model.with_structured_output(RephraseQueryOutput)
