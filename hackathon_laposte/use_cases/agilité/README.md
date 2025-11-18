@@ -48,7 +48,7 @@ Nous allons utiliser un **Dev Container** pour isoler l'environnement du serveur
 
 # Phase 2 : Configuration de l'Agent et Connexion des Services
 
-## 4. Tour d'horizon des outils fournis par le serveur MCP Atlassian avec `MCP Inspector`
+## 1. Tour d'horizon des outils fournis par le serveur MCP Atlassian avec `MCP Inspector`
 
 Utilisez `MCP Inspector` pour confirmer que le serveur MCP est bien accessible.
 
@@ -66,7 +66,7 @@ Une fois la page web de l'interface utilisateur ouverte, configurez l'outil avec
 
 > **Conseil de Dépannage (Dev Container) :** Si la connexion échoue, vérifiez les ports forwardés dans VS Code. Il arrive que le port `6274` soit mappé sur un autre port externe (ex: `6275`). Si c'est le cas, vous devez utiliser l'URL affichée par l'Inspector dans votre navigateur, par exemple : `http://localhost:6274//?MCP_PROXY_AUTH_TOKEN...`
 
-## 5. Ingestion des Documents (knowledge-flow)
+## 2. Ingestion des Documents (knowledge-flow)
 
 Votre agent a besoin de connaissances. Utilisez l'interface d'administration des ressources pour les importer.
 
@@ -92,7 +92,7 @@ Rendez-vous dans l'onglet **Ressources** et:
 
 2. **Lancer l'Ingestion :** Importez les documents dans les bibliothèques correspondantes.
 
-## 6. Création et Association de l'Agent
+## 3. Création et Association de l'Agent
 
 Créons maintenant votre Agent Agile dans l'**Agent Hub**.
 
@@ -121,7 +121,7 @@ mcp:
       auth_mode: "no_token"
 ```
 
-## 7. Définition du Contexte de Conversation (Personnalisation de l'agent)
+## 4. Définition du Contexte de Conversation (Personnalisation de l'agent)
 
 Pour garantir que l'agent se comporte comme un coach Agile, nous allons lui donner un profil clair.
 
@@ -153,7 +153,7 @@ Vous pouvez jouer à le changer afin d'observer les changements de comportement 
 
 Votre agent est prêt ! Posez-lui des questions et demandez-lui des actions pour vérifier l'intégration complète.
 
-## Testez l'Intégration Jira et Confluence
+## 1. Testez l'Intégration Jira et Confluence
 
 **Requêtes :**
 
@@ -165,12 +165,12 @@ Votre agent est prêt ! Posez-lui des questions et demandez-lui des actions pour
 
 - Passe le ticket XX à "In Progress" et commente "Je peux prendre le point, estimation de travail : 2 story points".
 
-## Testez l'Intégration Documentaire (Knowledge Flow)
+## 2. Testez l'Intégration Documentaire (Knowledge Flow)
 
 - Comment faire une bonne rétrospective de sprint ?
 - En regardant les documents dans Confluence, peux-tu me dire quels sont les points à aborder dans la rétrospective ?
 
-## Testez les Capacités de Génération et d'Action
+## 3. Testez les Capacités de Génération et d'Action
 
 - Crée-moi un plan de rétrospective avec 3 points à améliorer, basé sur les tickets non terminés du Sprint en cours et le document de rétrospective du Sprint 0.
 - Crée une nouvelle page Confluence intitulée 'Rétrospective Sprint 1' et intègre-y le plan généré.

@@ -49,7 +49,7 @@ Clôture et retours
 
 ### Use cases
 
-- [IoT](./use_cases/iot/README.md)
+- [IoT](./use_cases/iot/README.md) avec les [ressources et documents associés](https://thales.cryptobox.com/#/public/jAWtT23gEwzQB-33oZzK-pm2vhifZs5RdntsIlqSwfY/file/48fMqeS9CI6EqkB72h93Ug)
 - [Agilité](./use_cases/agilité/README.md) avec les [ressources et documents associés](https://thales.cryptobox.com/#/public/jAWtT23gEwzQB-33oZzK-pm2vhifZs5RdntsIlqSwfY/file/CwjlaPkSBjX0hc0K2fXIuQ)
 
 ## Objectif
