@@ -1,0 +1,7 @@
+version: '3.8'
+services:
+  mcp-atlassian:
+    image: ghcr.io/sooperset/mcp-atlassian:latest
+    ports:
+      - "8885:8885"
+    env_file: ".env"
