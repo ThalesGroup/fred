@@ -50,7 +50,7 @@ La clé d'accès sera partagée sur l'écran en séance.
 Exécute la commande suivante à la racine du dossier contenant le fichier docker-compose.yml:
 
 ```bash
-# Lancer le service en dehors du devcontainer
+# Lancer le service
 docker compose up -d
 ```
 
