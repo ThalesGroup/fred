@@ -977,6 +977,7 @@ dependencies = [
     { name = "pandas", marker = "sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'linux'" },
     { name = "pyjwt", marker = "sys_platform == 'linux'" },
+    { name = "python-keycloak", marker = "sys_platform == 'linux'" },
     { name = "sqlalchemy", marker = "sys_platform == 'linux'" },
     { name = "sqlparse", marker = "sys_platform == 'linux'" },
 ]
@@ -998,6 +999,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.2.2,<3.0.0" },
     { name = "pydantic", specifier = ">=2.5.2,<3.0.0" },
     { name = "pyjwt", specifier = ">=2.10.1,<3.0.0" },
+    { name = "python-keycloak", specifier = ">=5.8.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
     { name = "sqlalchemy", specifier = ">=2.0.42" },
     { name = "sqlparse", specifier = ">=0.5.3" },

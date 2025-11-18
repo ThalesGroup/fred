@@ -29,6 +29,7 @@ security:
     enabled: true
     client_id: "knowledge-flow"
     realm_url: "http://app-keycloak:8080/realms/app"
+    secret_env_var: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET
   user:
     enabled: true
     client_id: "app"
@@ -37,9 +38,8 @@ security:
     - "http://localhost:5173"
   rebac:
     enabled: false
-    type: spicedb
-    endpoint: "localhost:50051"
-    insecure: true
+    type: openfga
+    api_url: "http://localhost:9080"
 
 scheduler:
   enabled: true

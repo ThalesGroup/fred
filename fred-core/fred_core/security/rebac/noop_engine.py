@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Iterable
+
 from fred_core.security.models import Resource
 from fred_core.security.rebac.rebac_engine import (
     RebacDisabledResult,
@@ -30,7 +32,9 @@ class NoopRebacEngine(RebacEngine):
     async def delete_relation(self, relation: Relation) -> str | None:
         return None
 
-    async def delete_reference_relations(self, reference: RebacReference) -> str | None:
+    async def delete_all_relations_of_reference(
+        self, reference: RebacReference
+    ) -> str | None:
         return None
 
     async def list_relations(
@@ -49,6 +53,7 @@ class NoopRebacEngine(RebacEngine):
         permission: RebacPermission,
         resource_type: Resource,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
         return RebacDisabledResult()
@@ -59,6 +64,7 @@ class NoopRebacEngine(RebacEngine):
         relation: RelationType,
         subject_type: Resource,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
         return RebacDisabledResult()
@@ -69,6 +75,7 @@ class NoopRebacEngine(RebacEngine):
         permission: RebacPermission,
         resource: RebacReference,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> bool:
         return True

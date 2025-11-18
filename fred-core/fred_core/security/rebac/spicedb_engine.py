@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from typing import Iterable
 
 from authzed.api.v1 import (
     CheckPermissionRequest,
@@ -35,21 +36,28 @@ from fred_core.security.rebac.rebac_engine import (
     RelationType,
 )
 from fred_core.security.rebac.spicedb_schema import DEFAULT_SCHEMA
-from fred_core.security.structure import SpiceDbRebacConfig
+from fred_core.security.structure import M2MSecurity, SpiceDbRebacConfig
 
 
 class SpiceDbRebacEngine(RebacEngine):
     """Evaluates permissions by delegating to a SpiceDB instance."""
 
+    @property
+    def need_keycloak_sync(self) -> bool:
+        return True
+
     def __init__(
         self,
         config: SpiceDbRebacConfig,
+        m2m_security: M2MSecurity,
         *,
         token: str | None = None,
         read_consistency: Consistency | None = None,
         write_operation: RelationshipUpdate._Operation.ValueType = RelationshipUpdate.Operation.OPERATION_TOUCH,
         schema: str = DEFAULT_SCHEMA,
     ) -> None:
+        super().__init__(m2m_security)
+
         if not config.endpoint:
             raise ValueError("SpiceDB endpoint must be provided in configuration")
 
@@ -99,7 +107,9 @@ class SpiceDbRebacEngine(RebacEngine):
         response = self._client.WriteRelationships(request)
         return response.written_at.token
 
-    async def delete_reference_relations(self, reference: RebacReference) -> str | None:
+    async def delete_all_relations_of_reference(
+        self, reference: RebacReference
+    ) -> str | None:
         last_token: str | None = None
 
         # Delete all relationships where the reference is the resource
@@ -135,6 +145,7 @@ class SpiceDbRebacEngine(RebacEngine):
         permission: RebacPermission,
         resource_type: Resource,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
         request_kwargs = {
@@ -161,6 +172,7 @@ class SpiceDbRebacEngine(RebacEngine):
         relation: RelationType,
         subject_type: Resource,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference]:
         request_kwargs = {
@@ -249,6 +261,7 @@ class SpiceDbRebacEngine(RebacEngine):
         permission: RebacPermission,
         resource: RebacReference,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> bool:
         request_kwargs = {

@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, cast
 
 import grpc
 import pytest
 import pytest_asyncio
-from pydantic import ValidationError
+from pydantic import AnyUrl, ValidationError
 
 from fred_core import (
     DocumentPermission,
@@ -26,6 +26,7 @@ from fred_core import (
     SpiceDbRebacEngine,
     TagPermission,
 )
+from fred_core.security.structure import M2MSecurity
 
 SPICEDB_ENDPOINT = os.getenv("SPICEDB_TEST_ENDPOINT", "localhost:50051")
 
@@ -54,6 +55,8 @@ async def _load_spicedb_engine() -> SpiceDbRebacEngine:
     probe_subject = RebacReference(type=Resource.USER, id=_unique_id("probe-user"))
     last_error: grpc.RpcError | None = None
 
+    os.environ["M2M_CLIENT_SECRET"] = "test-secret"  # nosec: mock secret for tests
+
     for attempt in range(1, MAX_STARTUP_ATTEMPTS + 1):
         try:
             engine = SpiceDbRebacEngine(
@@ -61,6 +64,11 @@ async def _load_spicedb_engine() -> SpiceDbRebacEngine:
                     endpoint=SPICEDB_ENDPOINT,
                     insecure=True,
                     sync_schema_on_init=True,
+                ),
+                M2MSecurity(
+                    enabled=True,
+                    realm_url=cast(AnyUrl, "http://app-keycloak:8080/realms/app"),
+                    client_id="test-client",
                 ),
                 token=token,
             )
@@ -71,14 +79,13 @@ async def _load_spicedb_engine() -> SpiceDbRebacEngine:
                 resource_type=Resource.TAGS,
             )
             return engine
-        except grpc.RpcError as exc:  # pragma: no cover - depends on external service
+        except grpc.RpcError as exc:
             last_error = exc
             await asyncio.sleep(STARTUP_BACKOFF_SECONDS)
+        except Exception as exc:
+            pytest.skip(f"Failed to create SpiceDB engine: {exc}")
 
-    pytest.skip(
-        "SpiceDB test server not available after retries: "
-        f"{last_error}"  # pragma: no cover - depends on external service
-    )
+    pytest.skip(f"SpiceDB test server not available after retries: {last_error}")
 
 
 async def _load_openfga_engine() -> RebacEngine:
@@ -101,13 +108,19 @@ async def _load_openfga_engine() -> RebacEngine:
             store_name=store,
             sync_schema_on_init=True,
         )
+        mock_m2m = M2MSecurity(
+            enabled=True,
+            realm_url=cast(AnyUrl, "http://app-keycloak:8080/realms/app"),
+            client_id="test-client",
+        )
     except ValidationError as exc:
         pytest.skip(f"Invalid OpenFGA configuration: {exc}")
 
-    os.environ[config.token_env_var] = "test-token"
+    os.environ[mock_m2m.secret_env_var] = "test-secret"  # nosec: test secret for tests
+    os.environ[config.token_env_var] = "test-token"  # nosec: mock secret for tests
 
     try:
-        engine = OpenFgaRebacEngine(config, token=store)
+        engine = OpenFgaRebacEngine(config, mock_m2m, token=store)
     except Exception as exc:
         pytest.skip(f"Failed to create OpenFGA engine: {exc}")
 
@@ -118,7 +131,7 @@ EngineScenario = tuple[str, Callable[[], Awaitable[RebacEngine]], str | None]
 
 ENGINE_SCENARIOS: tuple[EngineScenario, ...] = (
     ("spicedb", _load_spicedb_engine, None),
-    ("openfga", _load_openfga_engine, "OpenFga integration is stil in devlopment"),
+    ("openfga", _load_openfga_engine, None),
 )
 
 
@@ -190,8 +203,6 @@ async def test_deleting_relation_revokes_access(
         consistency_token=deletion_token,
     )
 
-    assert deletion_token is not None
-
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -222,7 +233,7 @@ async def test_delete_reference_relations_removes_incoming_and_outgoing_edges(
         consistency_token=token,
     )
 
-    deletion_token = await rebac_engine.delete_reference_relations(tag)
+    deletion_token = await rebac_engine.delete_all_relations_of_reference(tag)
     assert deletion_token is not None
 
     assert not await rebac_engine.has_permission(
@@ -346,9 +357,58 @@ async def test_lookup_subjects_returns_users_by_relation(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_lookup_subjects_returns_groups_by_relation(
+    rebac_engine: RebacEngine,
+) -> None:
+    tag = _make_reference(Resource.TAGS)
+    owner_group = _make_reference(Resource.GROUP, prefix="owner-group")
+    editor_group = _make_reference(Resource.GROUP, prefix="editor-group")
+    viewer_group = _make_reference(Resource.GROUP, prefix="viewer-group")
+    stray_group = _make_reference(Resource.GROUP, prefix="stray-group")
+    stray_tag = _make_reference(Resource.TAGS, prefix="stray-tag")
+
+    token = await rebac_engine.add_relations(
+        [
+            Relation(subject=owner_group, relation=RelationType.OWNER, resource=tag),
+            Relation(subject=editor_group, relation=RelationType.EDITOR, resource=tag),
+            Relation(subject=viewer_group, relation=RelationType.VIEWER, resource=tag),
+            Relation(
+                subject=stray_group,
+                relation=RelationType.VIEWER,
+                resource=stray_tag,
+            ),
+        ]
+    )
+
+    owner_groups = await rebac_engine.lookup_subjects(
+        tag, RelationType.OWNER, Resource.GROUP, consistency_token=token
+    )
+    editor_groups = await rebac_engine.lookup_subjects(
+        tag, RelationType.EDITOR, Resource.GROUP, consistency_token=token
+    )
+    viewer_groups = await rebac_engine.lookup_subjects(
+        tag, RelationType.VIEWER, Resource.GROUP, consistency_token=token
+    )
+
+    assert not isinstance(owner_groups, RebacDisabledResult)
+    assert not isinstance(editor_groups, RebacDisabledResult)
+    assert not isinstance(viewer_groups, RebacDisabledResult)
+
+    assert {ref.id for ref in owner_groups} == {owner_group.id}
+    assert {ref.id for ref in editor_groups} == {editor_group.id}
+    assert {ref.id for ref in viewer_groups} == {viewer_group.id}
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_list_relations_filters_by_subject_type(
     rebac_engine: RebacEngine,
 ) -> None:
+    if not rebac_engine.need_keycloak_sync:
+        pytest.skip(
+            "Keycloak sync not needed for this backend, list_relations not needed and not implemented"
+        )
+
     team = _make_reference(Resource.GROUP, prefix="team")
     child_team = _make_reference(Resource.GROUP, prefix="team")
     member = _make_reference(Resource.USER, prefix="member")

@@ -119,7 +119,7 @@ spec:
 
               {{- if and $isDuckDB $persistenceEnabled }}
             - name: {{ $applicationName }}-{{ regexReplaceAll "_" $name "-" }}-pvc
-              mountPath: {{ $store.duckdb_path }}
+              mountPath: {{ dir $store.duckdb_path }}
               subPath: "{{ base $store.duckdb_path }}"
               {{- end }}
             

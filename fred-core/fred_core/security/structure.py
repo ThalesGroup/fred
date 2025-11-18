@@ -24,6 +24,7 @@ class KeycloakUser(BaseModel):
     username: str
     roles: list[str]
     email: str | None = None
+    groups: list[str] = []
 
 
 class M2MSecurity(BaseModel):
@@ -33,7 +34,7 @@ class M2MSecurity(BaseModel):
     realm_url: AnyUrl
     client_id: str
     audience: str | None = None
-    # client_secret from ENV. WHY: never commit secrets to config files.
+    secret_env_var: str = "M2M_CLIENT_SECRET"
 
 
 class UserSecurity(BaseModel):
@@ -83,7 +84,7 @@ class OpenFgaRebacConfig(RebacBaseConfig):
     )
     authorization_model_id: str | None = Field(
         default=None,
-        description="Optional authorization model ID to use for read operations",
+        description="Optional authorization model ID to use for read operations. Will be overridden if sync_schema_on_init is True.",
     )
     create_store_if_needed: bool = Field(
         default=True,
