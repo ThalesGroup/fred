@@ -15,7 +15,6 @@
 from typing import Annotated, List, Optional, TypedDict
 
 from fred_core import VectorSearchHit
-
 from langchain_core.messages import AIMessage
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
