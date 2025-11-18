@@ -43,6 +43,7 @@ from fred_core import (
     split_realm_url,
 )
 from langchain_core.embeddings import Embeddings
+from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
 
 from knowledge_flow_backend.common.structures import (
@@ -219,6 +220,7 @@ class ApplicationContext:
     _file_store_instance: Optional[BaseFileStore] = None
     _kpi_writer: Optional[KPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
+    _neo4j_driver: Optional[Driver] = None
 
     def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
@@ -565,6 +567,29 @@ class ApplicationContext:
             connection_class=RequestsHttpConnection,
         )
         return self._opensearch_client
+
+    def get_neo4j_driver(self) -> Driver:
+        """
+        Lazily create and return a shared Neo4j driver.
+
+        Configuration:
+        - NEO4J_URI: bolt URI, e.g. bolt://app-neo4j:7687 (default: bolt://localhost:7687)
+        - NEO4J_USERNAME: username (default: neo4j)
+        - NEO4J_PASSWORD: password (required)
+        """
+        if self._neo4j_driver is not None:
+            return self._neo4j_driver
+
+        uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+        username = os.getenv("NEO4J_USERNAME", "neo4j")
+        password = os.getenv("NEO4J_PASSWORD")
+
+        if not password:
+            raise ValueError("Missing Neo4j credentials: NEO4J_PASSWORD must be set")
+
+        logger.info("🔌 Initializing Neo4j driver uri=%s user=%s", uri, username)
+        self._neo4j_driver = GraphDatabase.driver(uri, auth=(username, password))
+        return self._neo4j_driver
 
     def get_kpi_writer(self) -> BaseKPIWriter:
         if self._kpi_writer is not None:

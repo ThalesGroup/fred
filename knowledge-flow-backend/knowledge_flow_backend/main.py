@@ -69,6 +69,7 @@ from knowledge_flow_backend.features.users import users_controller
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
+from knowledge_flow_backend.features.neo4j.neo4j_controller import Neo4jController
 from knowledge_flow_backend.security.keycloak_rebac_sync import (
     reconcile_keycloak_groups_with_rebac,
 )
@@ -192,7 +193,19 @@ def create_app() -> FastAPI:
     ResourceController(router)
     VectorSearchController(router)
     KPIController(router)
-    OpenSearchOpsController(router)
+
+    # Optional operational/graph controllers used primarily via MCP
+    if configuration.mcp.opensearch_ops_enabled:
+        OpenSearchOpsController(router)
+        logger.info("🧩 OpenSearchOpsController registered (mcp.opensearch_ops_enabled=true)")
+    else:
+        logger.info("🧩 OpenSearchOpsController disabled via configuration.mcp.opensearch_ops_enabled=false")
+
+    if configuration.mcp.neo4j_enabled:
+        Neo4jController(router)
+        logger.info("🧩 Neo4jController registered (mcp.neo4j_enabled=true)")
+    else:
+        logger.info("🧩 Neo4jController disabled via configuration.mcp.neo4j_enabled=false")
     router.include_router(logs_controller.router)
     router.include_router(report_controller.router)
     router.include_router(groups_controller.router)
@@ -234,130 +247,180 @@ def create_app() -> FastAPI:
         auth_config=auth_cfg,
     )
     mcp_reports.mount_http(mount_path=f"{mcp_prefix}/mcp-reports")
-    mcp_opensearch_ops = FastApiMCP(
-        app,
-        name="Knowledge Flow OpenSearch Ops MCP",
-        description=("Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only."),
-        include_tags=["OpenSearch"],  # <-- only export routes tagged OpenSearch as MCP tools
-        describe_all_responses=True,
-        describe_full_response_schema=True,
-        auth_config=auth_cfg,
-    )
-    # Mount via HTTP at a clear, versioned path:
-    mcp_mount_path = f"{mcp_prefix}/mcp-opensearch-ops"
-    mcp_opensearch_ops.mount_http(mount_path=mcp_mount_path)
-    logger.info(f"🔌 MCP OpenSearch Ops mounted at {mcp_mount_path}")
-    mcp_kpi = FastApiMCP(
-        app,
-        name="Knowledge Flow KPI MCP",
-        description=(
-            "Query interface for application KPIs. "
-            "Use these endpoints to run structured aggregations over metrics "
-            "(e.g. vectorization latency, LLM usage, token costs, error counts). "
-            "Provides schema, presets, and query compilation helpers so agents can "
-            "form valid KPI queries without guessing."
-        ),
-        include_tags=["KPI"],
-        describe_all_responses=True,
-        describe_full_response_schema=True,
-        auth_config=auth_cfg,
-    )
-    mcp_kpi.mount_http(mount_path=f"{mcp_prefix}/mcp-kpi")
 
-    mcp_tabular = FastApiMCP(
-        app,
-        name="Knowledge Flow Tabular MCP",
-        description=(
-            "SQL access layer exposed through SQLAlchemy. "
-            "Provides agents with read and query capabilities over relational data "
-            "from configured backends (e.g. PostgreSQL, MySQL, SQLite). "
-            "Use this MCP to explore table schemas, run SELECT queries, and analyze tabular datasets. "
-            "Create, update and drop tables if asked by the user if allowed."
-        ),
-        include_tags=["Tabular"],
-        describe_all_responses=True,
-        describe_full_response_schema=True,
-        auth_config=auth_cfg,
-    )
-    mcp_tabular.mount_http(mount_path=f"{mcp_prefix}/mcp-tabular")
+    # Optional MCP servers: they export only the tagged routes above.
+    if configuration.mcp.opensearch_ops_enabled:
+        mcp_opensearch_ops = FastApiMCP(
+            app,
+            name="Knowledge Flow OpenSearch Ops MCP",
+            description=(
+                "Read-only operational tools for OpenSearch: cluster health, nodes, shards, "
+                "indices, mappings, and sample docs. Monitoring/diagnostics only."
+            ),
+            include_tags=["OpenSearch"],  # <-- only export routes tagged OpenSearch as MCP tools
+            describe_all_responses=True,
+            describe_full_response_schema=True,
+            auth_config=auth_cfg,
+        )
+        # Mount via HTTP at a clear, versioned path:
+        mcp_mount_path = f"{mcp_prefix}/mcp-opensearch-ops"
+        mcp_opensearch_ops.mount_http(mount_path=mcp_mount_path)
+        logger.info(f"🔌 MCP OpenSearch Ops mounted at {mcp_mount_path}")
+    else:
+        logger.info("🔌 MCP OpenSearch Ops disabled via configuration.mcp.opensearch_ops_enabled=false")
 
-    mcp_statistical = FastApiMCP(
-        app,
-        name="Knowledge Flow Statistic MCP",
-        description=(
-            "Provides endpoints to load, explore, and analyze tabular datasets,"
-            "including outlier detection and correlation analysis."
-            "Supports plotting histograms and scatter plots, plus ML operations:"
-            "training, evaluation, saving/loading models, and single-row predictions."
-        ),
-        include_tags=["Statistic"],
-        describe_all_responses=True,
-        describe_full_response_schema=True,
-        auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
-            dependencies=[Depends(get_current_user)]
-        ),
-    )
-    mcp_statistical.mount_http(mount_path=f"{mcp_prefix}/mcp-statistic")
+    if configuration.mcp.neo4j_enabled:
+        mcp_neo4j = FastApiMCP(
+            app,
+            name="Knowledge Flow Neo4j MCP",
+            description=(
+                "Read-only graph exploration interface backed by Neo4j. "
+                "Use this MCP to inspect labels and relationship types, "
+                "sample local neighborhoods, and run parameterized MATCH/RETURN "
+                "Cypher queries for graph-based reasoning."
+            ),
+            include_tags=["Neo4j"],
+            describe_all_responses=True,
+            describe_full_response_schema=True,
+            auth_config=auth_cfg,
+        )
+        neo4j_mount_path = f"{mcp_prefix}/mcp-neo4j"
+        mcp_neo4j.mount_http(mount_path=neo4j_mount_path)
+        logger.info(f"🔌 MCP Neo4j mounted at {neo4j_mount_path}")
+    else:
+        logger.info("🔌 MCP Neo4j disabled via configuration.mcp.neo4j_enabled=false")
+    if configuration.mcp.kpi_enabled:
+        mcp_kpi = FastApiMCP(
+            app,
+            name="Knowledge Flow KPI MCP",
+            description=(
+                "Query interface for application KPIs. "
+                "Use these endpoints to run structured aggregations over metrics "
+                "(e.g. vectorization latency, LLM usage, token costs, error counts). "
+                "Provides schema, presets, and query compilation helpers so agents can "
+                "form valid KPI queries without guessing."
+            ),
+            include_tags=["KPI"],
+            describe_all_responses=True,
+            describe_full_response_schema=True,
+            auth_config=auth_cfg,
+        )
+        mcp_kpi.mount_http(mount_path=f"{mcp_prefix}/mcp-kpi")
+    else:
+        logger.info("🔌 MCP KPI disabled via configuration.mcp.kpi_enabled=false")
 
-    mcp_text = FastApiMCP(
-        app,
-        name="Knowledge Flow Text MCP",
-        description=(
-            "Semantic text search interface backed by the vector store. "
-            "Use this MCP to perform vector similarity search over ingested documents, "
-            "retrieve relevant passages, and ground answers in source material. "
-            "It supports queries by text embedding rather than keyword match."
-        ),
-        include_tags=["Vector Search"],
-        describe_all_responses=True,
-        describe_full_response_schema=True,
-        auth_config=auth_cfg,
-    )
-    mcp_text.mount_http(mount_path=f"{mcp_prefix}/mcp-text")
+    if configuration.mcp.tabular_enabled:
+        mcp_tabular = FastApiMCP(
+            app,
+            name="Knowledge Flow Tabular MCP",
+            description=(
+                "SQL access layer exposed through SQLAlchemy. "
+                "Provides agents with read and query capabilities over relational data "
+                "from configured backends (e.g. PostgreSQL, MySQL, SQLite). "
+                "Use this MCP to explore table schemas, run SELECT queries, and analyze tabular datasets. "
+                "Create, update and drop tables if asked by the user if allowed."
+            ),
+            include_tags=["Tabular"],
+            describe_all_responses=True,
+            describe_full_response_schema=True,
+            auth_config=auth_cfg,
+        )
+        mcp_tabular.mount_http(mount_path=f"{mcp_prefix}/mcp-tabular")
+    else:
+        logger.info("🔌 MCP Tabular disabled via configuration.mcp.tabular_enabled=false")
 
-    mcp_template = FastApiMCP(
-        app,
-        name="Knowledge Flow Text MCP",
-        description="MCP server for Knowledge Flow Text",
-        include_tags=["Templates", "Prompts"],
-        describe_all_responses=True,
-        describe_full_response_schema=True,
-        auth_config=auth_cfg,
-    )
-    mcp_template.mount_http(mount_path=f"{mcp_prefix}/mcp-template")
+    if configuration.mcp.statistic_enabled:
+        mcp_statistical = FastApiMCP(
+            app,
+            name="Knowledge Flow Statistic MCP",
+            description=(
+                "Provides endpoints to load, explore, and analyze tabular datasets,"
+                "including outlier detection and correlation analysis."
+                "Supports plotting histograms and scatter plots, plus ML operations:"
+                "training, evaluation, saving/loading models, and single-row predictions."
+            ),
+            include_tags=["Statistic"],
+            describe_all_responses=True,
+            describe_full_response_schema=True,
+            auth_config=AuthConfig(  # <-- protect with your user auth as a normal dependency
+                dependencies=[Depends(get_current_user)]
+            ),
+        )
+        mcp_statistical.mount_http(mount_path=f"{mcp_prefix}/mcp-statistic")
+    else:
+        logger.info("🔌 MCP Statistic disabled via configuration.mcp.statistic_enabled=false")
 
-    mcp_code = FastApiMCP(
-        app,
-        name="Knowledge Flow Code MCP",
-        description=(
-            "Codebase exploration and search interface. "
-            "Use this MCP to scan and query code repositories, find relevant files, "
-            "and retrieve snippets or definitions. "
-            "Currently supports basic search, with planned improvements for deeper analysis "
-            "such as symbol navigation, dependency mapping, and code understanding."
-        ),
-        include_tags=["Code Search"],
-        describe_all_responses=True,
-        describe_full_response_schema=True,
-        auth_config=auth_cfg,
-    )
-    mcp_code.mount_http(mount_path=f"{mcp_prefix}/mcp-code")
+    if configuration.mcp.text_enabled:
+        mcp_text = FastApiMCP(
+            app,
+            name="Knowledge Flow Text MCP",
+            description=(
+                "Semantic text search interface backed by the vector store. "
+                "Use this MCP to perform vector similarity search over ingested documents, "
+                "retrieve relevant passages, and ground answers in source material. "
+                "It supports queries by text embedding rather than keyword match."
+            ),
+            include_tags=["Vector Search"],
+            describe_all_responses=True,
+            describe_full_response_schema=True,
+            auth_config=auth_cfg,
+        )
+        mcp_text.mount_http(mount_path=f"{mcp_prefix}/mcp-text")
+    else:
+        logger.info("🔌 MCP Text disabled via configuration.mcp.text_enabled=false")
 
-    mcp_resources = FastApiMCP(
-        app,
-        name="Knowledge Flow Resources MCP",
-        description=(
-            "Access to reusable resources for agents. "
-            "Provides prompts, templates, and other content assets that can be used "
-            "to customize agent behavior or generate well-structured custom reports. "
-            "Use this MCP to browse, retrieve, and apply predefined resources when composing answers or building workflows."
-        ),
-        include_tags=["Resources", "Tags"],
-        describe_all_responses=True,
-        describe_full_response_schema=True,
-        auth_config=auth_cfg,
-    )
-    mcp_resources.mount_http(mount_path=f"{mcp_prefix}/mcp-resources")
+    if configuration.mcp.templates_enabled:
+        mcp_template = FastApiMCP(
+            app,
+            name="Knowledge Flow Text MCP",
+            description="MCP server for Knowledge Flow Text",
+            include_tags=["Templates", "Prompts"],
+            describe_all_responses=True,
+            describe_full_response_schema=True,
+            auth_config=auth_cfg,
+        )
+        mcp_template.mount_http(mount_path=f"{mcp_prefix}/mcp-template")
+    else:
+        logger.info("🔌 MCP Templates disabled via configuration.mcp.templates_enabled=false")
+
+    if configuration.mcp.code_enabled:
+        mcp_code = FastApiMCP(
+            app,
+            name="Knowledge Flow Code MCP",
+            description=(
+                "Codebase exploration and search interface. "
+                "Use this MCP to scan and query code repositories, find relevant files, "
+                "and retrieve snippets or definitions. "
+                "Currently supports basic search, with planned improvements for deeper analysis "
+                "such as symbol navigation, dependency mapping, and code understanding."
+            ),
+            include_tags=["Code Search"],
+            describe_all_responses=True,
+            describe_full_response_schema=True,
+            auth_config=auth_cfg,
+        )
+        mcp_code.mount_http(mount_path=f"{mcp_prefix}/mcp-code")
+    else:
+        logger.info("🔌 MCP Code disabled via configuration.mcp.code_enabled=false")
+
+    if configuration.mcp.resources_enabled:
+        mcp_resources = FastApiMCP(
+            app,
+            name="Knowledge Flow Resources MCP",
+            description=(
+                "Access to reusable resources for agents. "
+                "Provides prompts, templates, and other content assets that can be used "
+                "to customize agent behavior or generate well-structured custom reports. "
+                "Use this MCP to browse, retrieve, and apply predefined resources when composing answers or building workflows."
+            ),
+            include_tags=["Resources", "Tags"],
+            describe_all_responses=True,
+            describe_full_response_schema=True,
+            auth_config=auth_cfg,
+        )
+        mcp_resources.mount_http(mount_path=f"{mcp_prefix}/mcp-resources")
+    else:
+        logger.info("🔌 MCP Resources disabled via configuration.mcp.resources_enabled=false")
 
     return app
 
