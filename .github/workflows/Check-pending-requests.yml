@@ -96,8 +96,7 @@ jobs:
           - name: fred-core
             directory: fred-core
             unit-target: test
-            integration-target: test-integration-only
-            use-spicedb: true
+            integration-target: test-integration
             should-run: ${{ needs.detect-changes.outputs.fred-core == 'true' }}
     name: Backend Tests - ${{ matrix.name }}
 
@@ -120,13 +119,6 @@ jobs:
         working-directory: ${{ matrix.directory }}
         env:
           UV: uv
-
-      - name: Start SpiceDB test server
-        if: ${{ matrix.should-run && matrix.use-spicedb }}
-        uses: authzed/action-spicedb@v1
-        with:
-          version: v1.36.0
-          args: --grpc-addr ":60051" --readonly-grpc-addr :60052
 
       - name: Run integration tests
         if: ${{ matrix.should-run }}

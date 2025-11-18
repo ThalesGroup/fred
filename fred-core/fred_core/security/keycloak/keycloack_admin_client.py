@@ -1,10 +1,10 @@
 import logging
 import os
 
-from fred_core import split_realm_url
 from keycloak import KeycloakAdmin
 
-from knowledge_flow_backend.application_context import get_configuration
+from fred_core.security.oidc import split_realm_url
+from fred_core.security.structure import M2MSecurity
 
 logger = logging.getLogger(__name__)
 
@@ -18,21 +18,26 @@ class KeycloackDisabled:
     ...
 
 
-def create_keycloak_admin() -> KeycloakAdmin | KeycloackDisabled:
-    """Create a Keycloak admin client using the configured service account. Returns None if M2M security is not enabled."""
-    config = get_configuration()
-    m2m_security = config.security.m2m
+def create_keycloak_admin(
+    m2m_security: M2MSecurity,
+) -> KeycloakAdmin | KeycloackDisabled:
+    """Create a Keycloak admin client using the configured service account. Returns KeycloackDisabled if M2M security is not enabled."""
+
     if not m2m_security or not m2m_security.enabled:
         return KeycloackDisabled()
 
-    client_secret = os.getenv("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
+    client_secret = os.getenv(m2m_security.secret_env_var)
     if not client_secret:
-        raise RuntimeError("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET is not set; cannot reconcile groups.")
+        raise RuntimeError(
+            f"{m2m_security.secret_env_var} is not set; cannot create Keycloak admin client."
+        )
 
     try:
         server_url, realm = split_realm_url(str(m2m_security.realm_url))
     except ValueError as exc:
-        raise RuntimeError("Invalid Keycloak realm URL configured; cannot reconcile groups.") from exc
+        raise RuntimeError(
+            "Invalid Keycloak realm URL configured; cannot create Keycloak admin client."
+        ) from exc
 
     return KeycloakAdmin(
         server_url=_ensure_trailing_slash(server_url),

@@ -270,6 +270,7 @@ def decode_jwt(token: str) -> KeycloakUser:
         username=payload.get("preferred_username", ""),
         roles=client_roles,
         email=payload.get("email"),
+        groups=payload.get("groups", []),
     )
     logger.debug("KeycloakUser built: %s", user)
     return user

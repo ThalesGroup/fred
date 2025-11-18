@@ -2,12 +2,12 @@ import asyncio
 import logging
 from collections.abc import Iterable
 
-from fred_core import Action, KeycloakUser, Resource, authorize
+from fred_core import Action, KeycloackDisabled, KeycloakUser, Resource, authorize, create_keycloak_admin
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakGetError
 
+from knowledge_flow_backend.application_context import get_configuration
 from knowledge_flow_backend.features.users.users_structures import UserSummary
-from knowledge_flow_backend.security.keycloack_admin_client import KeycloackDisabled, create_keycloak_admin
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ _USER_PAGE_SIZE = 200
 
 @authorize(Action.READ, Resource.USER)
 async def list_users(_curent_user: KeycloakUser) -> list[UserSummary]:
-    admin = create_keycloak_admin()
+    admin = create_keycloak_admin(get_configuration().security.m2m)
     if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; returning empty user list.")
         return []
@@ -42,7 +42,7 @@ async def get_users_by_ids(user_ids: Iterable[str]) -> dict[str, UserSummary]:
     if not unique_ids:
         return {}
 
-    admin = create_keycloak_admin()
+    admin = create_keycloak_admin(get_configuration().security.m2m)
     if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; returning fallback users.")
         return {}

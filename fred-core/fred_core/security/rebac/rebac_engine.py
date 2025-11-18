@@ -6,8 +6,12 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable
 
+from fred_core.security.keycloak.keycloack_admin_client import (
+    KeycloackDisabled,
+    create_keycloak_admin,
+)
 from fred_core.security.models import AuthorizationError, Resource
-from fred_core.security.structure import KeycloakUser
+from fred_core.security.structure import KeycloakUser, M2MSecurity
 
 
 @dataclass(frozen=True)
@@ -77,9 +81,16 @@ class RebacDisabledResult:
 class RebacEngine(ABC):
     """Abstract base for relationship-based authorization providers."""
 
+    def __init__(self, m2m_security: M2MSecurity) -> None:
+        self.keycloak_client = create_keycloak_admin(m2m_security)
+
     @property
     def enabled(self) -> bool:
         return True
+
+    @property
+    def need_keycloak_sync(self) -> bool:
+        return False
 
     @abstractmethod
     async def add_relation(self, relation: Relation) -> str | None:
@@ -96,7 +107,9 @@ class RebacEngine(ABC):
         """
 
     @abstractmethod
-    async def delete_reference_relations(self, reference: RebacReference) -> str | None:
+    async def delete_all_relations_of_reference(
+        self, reference: RebacReference
+    ) -> str | None:
         """Remove all relationships where the reference participates as subject or resource."""
 
     async def add_relations(self, relations: Iterable[Relation]) -> str | None:
@@ -181,7 +194,7 @@ class RebacEngine(ABC):
 
     async def delete_user_relations(self, user: KeycloakUser) -> str | None:
         """Convenience helper to delete all relationships for a user."""
-        return await self.delete_reference_relations(
+        return await self.delete_all_relations_of_reference(
             RebacReference(Resource.USER, user.uid)
         )
 
@@ -192,6 +205,7 @@ class RebacEngine(ABC):
         permission: RebacPermission,
         resource_type: Resource,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
         """Return resource identifiers the subject can access for a permission."""
@@ -203,6 +217,7 @@ class RebacEngine(ABC):
         relation: RelationType,
         subject_type: Resource,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
         """Return subjects related to the resource by a given relation."""
@@ -215,10 +230,13 @@ class RebacEngine(ABC):
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
         """Convenience helper to lookup resources for a user."""
+        group_relations = await self.groups_list_to_relations(user)
+
         return await self.lookup_resources(
             subject=RebacReference(Resource.USER, user.uid),
             permission=permission,
             resource_type=_resource_for_permission(permission),
+            contextual_relations=group_relations,
             consistency_token=consistency_token,
         )
 
@@ -229,6 +247,7 @@ class RebacEngine(ABC):
         permission: RebacPermission,
         resource: RebacReference,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> bool:
         """Evaluate whether a subject can perform an action on a resource."""
@@ -239,11 +258,16 @@ class RebacEngine(ABC):
         permission: RebacPermission,
         resource: RebacReference,
         *,
+        contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> None:
         """Raise if the subject is not authorized to perform the action on the resource."""
         if not await self.has_permission(
-            subject, permission, resource, consistency_token=consistency_token
+            subject,
+            permission,
+            resource,
+            contextual_relations=contextual_relations,
+            consistency_token=consistency_token,
         ):
             raise AuthorizationError(
                 subject.id, permission.value, resource.type, resource.id
@@ -258,10 +282,62 @@ class RebacEngine(ABC):
         consistency_token: str | None = None,
     ) -> None:
         """Convenience helper to check permission for a user, raising if unauthorized."""
+        group_relations = await self.groups_list_to_relations(user)
+
         resource_type = _resource_for_permission(permission)
         await self.check_permission_or_raise(
             RebacReference(Resource.USER, user.uid),
             permission,
             RebacReference(resource_type, resource_id),
+            contextual_relations=group_relations,
             consistency_token=consistency_token,
         )
+
+    async def groups_list_to_relations(self, user: KeycloakUser) -> set[Relation]:
+        """Helper to convert user groups to relations."""
+        if isinstance(self.keycloak_client, KeycloackDisabled):
+            return set()
+
+        relation: set[Relation] = set()
+
+        for group in user.groups:
+            for parent, child in self._iterate_on_parent_child_path(group):
+                relation.add(
+                    Relation(
+                        subject=RebacReference(
+                            Resource.GROUP,
+                            (await self.keycloak_client.a_get_group_by_path(child))[
+                                "id"
+                            ],
+                        ),
+                        relation=RelationType.MEMBER,
+                        resource=RebacReference(
+                            Resource.GROUP,
+                            (await self.keycloak_client.a_get_group_by_path(parent))[
+                                "id"
+                            ],
+                        ),
+                    )
+                )
+            relation.add(
+                Relation(
+                    subject=RebacReference(Resource.USER, user.uid),
+                    relation=RelationType.MEMBER,
+                    resource=RebacReference(
+                        Resource.GROUP,
+                        (await self.keycloak_client.a_get_group_by_path(group))["id"],
+                    ),
+                )
+            )
+
+        return relation
+
+    @staticmethod
+    def _iterate_on_parent_child_path(group_path: str) -> Iterable[tuple[str, str]]:
+        """Helper to iterate over parent-child group paths."""
+        parts = group_path.strip("/").split("/")
+
+        for i in range(len(parts) - 1):
+            parent = "/".join(parts[: i + 1])
+            child = "/".join(parts[: i + 2])
+            yield parent, child
