@@ -93,6 +93,10 @@ ai:
       chat_options:
         search_policy_selection: true
         libraries_selection: true
+    - name: "Tessa"
+      type: "agent"
+      class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
+      enabled: true
 
 mcp:
   servers:
@@ -101,7 +105,7 @@ mcp:
       url: "http://localhost:8111/knowledge-flow/v1/mcp-tabular"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-knowledge-flow-opensearch-ops"
+    - name: "mcp-knowledge-flow-text"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-text"
       sse_read_timeout: 2000
