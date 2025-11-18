@@ -299,7 +299,7 @@
       "betaNotice": "File attachments are in beta. Only CSV, docx and pdf files are supported. Please provide feedback to help us improve this feature.",
       "count": "{{count}} attached"
     },
-
+    "uploadingFile": "Uploading {{name}}...",
     "recordAudio": "Record audio",
     "sendMessage": "Send message",
     "stopResponse": "Stop response",

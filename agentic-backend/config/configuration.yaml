@@ -86,6 +86,10 @@ ai:
       type: "agent"
       class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
       enabled: true
+      chat_options:
+        search_policy_selection: false
+        libraries_selection: false
+        attach_files: true
     - name: "Sammy"
       type: "agent"
       class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"

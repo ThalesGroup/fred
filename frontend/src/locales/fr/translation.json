@@ -299,6 +299,7 @@
       "betaNotice": "Les pièces jointes sont en version bêta. Seuls les fichiers CSV, docx et pdf sont pris en charge. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
       "count": "{{count}} pièces jointes"
     },
+    "uploadingFile": "Téléversement de {{name}}...",
     "recordAudio": "Enregistrer de l'audio",
     "sendMessage": "Envoyer le message",
     "stopResponse": "Arrêter la réponse",
