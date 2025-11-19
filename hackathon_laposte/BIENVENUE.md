@@ -45,7 +45,10 @@ Clôture et retours
 
 ### Exercices pratiques de la matinée
 
-[Accéder aux exercices](../fred-academy/fred%20discovery-eng.MD)
+Accéder aux exercices:
+
+- [Fred academy en français](../fred-academy/fred%20discovery-fr.md)
+- [Fred academy in english](../fred-academy/fred%20discovery-eng.md)
 
 ### Use cases
 
