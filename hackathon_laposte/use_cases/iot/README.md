@@ -15,7 +15,7 @@
 Exécuter dans un terminal :
 
 ```
-git cherry-pick 87e2f2dc            # Met à jour Fred pour le hackathon
+git cherry-pick 8aca609c            # Met à jour Fred pour le hackathon
 ```
 
 # 1 - Mise en place du postgres SQL et connexion à knowledge-flow
