@@ -82,7 +82,7 @@ Sélectionnez **Tools** dans la barre supérieur et cliquez sur **List tools**. 
 
 Vous devriez avoir une réponse comme :
 
-```
+```json
 [
   0:{
     id: "1"
@@ -121,6 +121,41 @@ Rendez-vous sur la page **Ressources** et l'onglet _DOCUMENTS_:
 2. **Ingérer les documents téléchargés depuis cryptobox :**
 
 Ajoutez les documents dans les bibliothèques correspondantes.
+
+3. **(Optionnel) Observer les endpoints knowledge-flow correspondant à la recherche documentaire**
+
+Essayez d'executer une recherche vectorielle sur les documents que vous venez d'ingérer afin d'obtenir une réponse à votre question.
+
+Retrouvez la documentation FastAPI ici : `http://localhost:8111/knowledge-flow/v1/docs`
+
+* Chercher le tag englobant les endpoints pertinents
+<details>
+<summary>Indice</summary>
+ <a href="http://localhost:8111/knowledge-flow/v1/docs#/Vector%20Search">Vector Search</a>
+</details>
+
+* Travailler la requête API afin d'obtenir des résultats et exécutez là
+<details>
+<summary>Indice</summary>
+<ul>
+  <li>Cliquez sur la route <code>/knowledge-flow/v1/vector/search</code> puis sur <code>Try it out</code></li>
+  <li>
+  Modifiez le corps de la requête de cette manière par exemple:
+  <pre><code>
+  {
+    "question": "Comment être un bon manager agile ?",
+    "top_k": 10,
+    "search_policy": "semantic"
+  }
+  </code></pre>
+  </li>
+  <li>Observez le retour de l'API.</li>
+</ul>
+</details>
+
+* Observez le retour de l'API. Ces morceaux de texte sont appelés de chunks et correspondent au résultat de la recherche vectorielle effectuée via RAG (Retrieval Augmented Generation)
+
+Vous pouvez jouer avec les différents endpoints en essayant diverses choses et appeler un membre de l'équipe Thales si vous souhaitez en savoir plus.
 
 ## 3. Création et Association de l'Agent
 
