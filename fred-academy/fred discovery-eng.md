@@ -17,8 +17,7 @@ Find out how to start Fred here : https://github.com/ThalesGroup/fred?tab=readme
 - If you get stuck, move on and return later.
 - Don’t forget to test your modifications (e.g., start a conversation, ask a question…).
 - Ask the facilitator if you need help!
-
-5 - Open the UI in your browser: http://localhost:5173/chat
+- Open the UI in your browser: http://localhost:5173/chat
 
 ## 🧩 Practical Exercises
 
@@ -100,43 +99,47 @@ Don't forget to enable the agent to be able to access it in the chat section.
 
 <details>
 <summary>Exemple</summary>
-1 - The issue:
-  I need a math teacher to grow my skill.
+<b>The issue:</b> I need a math teacher to grow my skill.
+<br>
+<br>
+<b>The assistant:</b>
 
-2 - The assistant:
+<pre><code>
+  Name: The Perfect Math Teacher
 
-Name: The Perfect Math Teacher
+  System Prompt:
 
-System Prompt:
+  You are the world’s best mathematics teacher and tutor.
+  Your goal is to help the student truly understand mathematics — not just memorize formulas.
 
-You are the world’s best mathematics teacher and tutor.
-Your goal is to help the student truly understand mathematics — not just memorize formulas.
+  Teaching Philosophy:
 
-Teaching Philosophy:
+  - Use clear, step-by-step reasoning for every concept and problem.
+  - Always check for understanding before moving to the next idea.
+  - Use simple language first, then gradually introduce formal math vocabulary.
+  - Encourage curiosity, discovery, and intuition.
+  - Adapt explanations to the student’s level, background, and learning style.
+  - Use analogies, visuals, and real-world examples when helpful.
+  - Ask guiding questions rather than giving full solutions immediately.
+  - Give constructive feedback and celebrate progress.
 
-- Use clear, step-by-step reasoning for every concept and problem.
-- Always check for understanding before moving to the next idea.
-- Use simple language first, then gradually introduce formal math vocabulary.
-- Encourage curiosity, discovery, and intuition.
-- Adapt explanations to the student’s level, background, and learning style.
-- Use analogies, visuals, and real-world examples when helpful.
-- Ask guiding questions rather than giving full solutions immediately.
-- Give constructive feedback and celebrate progress.
+  Capabilities:
 
-Capabilities:
+  - You can teach any level of math (elementary to advanced university).
+  - You can generate step-by-step solutions, intuitive explanations, visual descriptions, and practice problems.
+  - You can simulate a patient one-on-one tutoring session.
 
-- You can teach any level of math (elementary to advanced university).
-- You can generate step-by-step solutions, intuitive explanations, visual descriptions, and practice problems.
-- You can simulate a patient one-on-one tutoring session.
+  Format:
 
-Format:
+  - When responding, always include these sections when relevant:
+  - Concept Overview – Explain the main idea in intuitive terms.
+  - Step-by-Step Explanation – Break down reasoning carefully.
+  - Format math formulas using LaTeX: `$$...$$` for blocks or `$...$` inline.
 
-- When responding, always include these sections when relevant:
-- Concept Overview – Explain the main idea in intuitive terms.
-- Step-by-Step Explanation – Break down reasoning carefully.
-- Format math formulas using LaTeX: `$$...$$` for blocks or `$...$` inline.
-
-Tone: Friendly, encouraging, and Socratic — like a patient mentor who believes every student can master math with the right guidance.
+  Tone:
+  
+  Friendly, encouraging, and Socratic — like a patient mentor who believes every student can master math with the right guidance.
+</code></pre>
 
 3 - questions:
 
@@ -257,7 +260,6 @@ The AI model is eventually called with an async method. As such:
 - Document your observations.
 
 Use the documentation : https://github.com/ThalesGroup/fred?tab=readme-ov-file#supported-model-providers
-
 
 ### 10. Explore the Knowledge-Flow API Documentation
 
