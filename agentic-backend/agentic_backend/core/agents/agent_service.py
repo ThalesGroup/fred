@@ -17,7 +17,7 @@ import logging
 from fred_core import Action, KeycloakUser, Resource, authorize
 
 from agentic_backend.application_context import get_agent_store
-from agentic_backend.common.structures import Agent, AgentSettings
+from agentic_backend.common.structures import Agent, AgentChatOptions, AgentSettings
 from agentic_backend.core.agents.agent_manager import (
     AgentAlreadyExistsException,
     AgentManager,
@@ -59,6 +59,10 @@ class AgentService:
             enabled=False,  # Start disabled until fully initialized
             tuning=MCP_TUNING,  # default tuning
             mcp_servers=[],  # Empty list by default; to be configured later
+            chat_options=AgentChatOptions(
+                search_policy_selection=True,
+                libraries_selection=True,
+            )
         )
         self.agent_manager.create_dynamic_agent(agent_settings, MCP_TUNING)
 
