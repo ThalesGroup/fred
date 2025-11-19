@@ -35,14 +35,17 @@ Pour vos tests manuels et la vérification des données source, vous avez accès
 - **Login :** `laposte.jirauser@gmail.com`
 - **Mot de passe :** _Disponible auprès de l'équipe support (Simon Cariou) ou sur le canal Teams dédié._
 
-## 3. Lancement du Serveur MCP Jira
+## 3. Lancement du Dev Container
 
 Nous allons utiliser un **Dev Container** pour isoler l'environnement du serveur.
 
 1. **Ouvrir le Projet :** Dans VS Code, ouvrez Fred.
 2. **Lancer le Dev Container :** Suivez l'invite pour rouvrir le projet dans un conteneur de développement ou tapez `Ctrl + Shift + P` et entrez `Reopen in container`
-3. **Démarrer le Serveur :** Une fois dans le conteneur, suivez les instructions spécifiques pour lancer le serveur Jira MCP.
-   Le guide détaillé pour cette étape se trouve ici : [README du Serveur MCP Atlassian](./atlassian-mcp-server/README.md)
+
+## 4. Lancement du Serveur MCP Jira
+
+Une fois dans le conteneur, suivez les instructions spécifiques pour lancer le serveur Jira MCP.
+Le guide détaillé pour cette étape se trouve ici : [README du Serveur MCP Atlassian](./atlassian-mcp-server/README.md)
 
 ---
 
@@ -52,13 +55,17 @@ Nous allons utiliser un **Dev Container** pour isoler l'environnement du serveur
 
 Utilisez `MCP Inspector` pour confirmer que le serveur MCP est bien accessible.
 
+1. **Lancer MCP Inspector**
+
 Dans le terminal (à l'intérieur ou à l'extérieur du Dev Container), exécutez :
 
 ```bash
 npx @modelcontextprotocol/inspector@0.17.2
 ```
 
-Une fois la page web de l'interface utilisateur ouverte, configurez l'outil avec les paramètres suivants :
+2. **Configurer MCP Inspector**
+
+Une fois la page web de l'interface utilisateur ouverte, configurez l'outil avec les paramètres suivants (en haut à gauche de la page):
 
 - **Transport Type :** `Streamable HTTP`
 - **URL :** `http://127.0.0.1:8885/mcp`
@@ -68,11 +75,30 @@ Sélectionnez **Tools** dans la barre supérieur et cliquez sur **List tools**. 
 
 > **Conseil de Dépannage (Dev Container) :** Si la connexion échoue, vérifiez les ports forwardés dans VS Code. Il arrive que le port `6274` soit mappé sur un autre port externe (ex: `6275`). Si c'est le cas, vous devez utiliser l'URL affichée par l'Inspector dans votre navigateur, par exemple : `http://localhost:6274//?MCP_PROXY_AUTH_TOKEN...`
 
+3. **Vérifier que le serveur MCP fonctionne**
+
+- Aller dans l'onglet tools puis cliquer sur `List Tools`
+- Rechercher le tool : `jira_get_agile_boards` puis cliquer sur `Run Tool`
+
+Vous devriez avoir une réponse comme :
+
+```
+[
+  0:{
+    id: "1"
+    name: "SCRUM Sprint 1"
+    state: "closed"
+    ...
+  }
+  ...
+]
+```
+
 ## 2. Ingestion des Documents (knowledge-flow)
 
 Votre agent a besoin de connaissances. Utilisez l'interface d'administration des ressources pour les importer.
 
-Rendez-vous dans l'onglet **Ressources** et:
+Rendez-vous sur la page **Ressources** et l'onglet _DOCUMENTS_:
 
 1. **Créer les Bibliothèques :** Structurez les bibliothèques documentaires basées sur l'arborescence des données que vous avez téléchargées:
 
@@ -92,7 +118,9 @@ Rendez-vous dans l'onglet **Ressources** et:
 
 ```
 
-2. **Lancer l'Ingestion :** Importez les documents dans les bibliothèques correspondantes.
+2. **Ingérer les documents téléchargés depuis cryptobox :**
+
+Ajoutez les documents dans les bibliothèques correspondantes.
 
 ## 3. Création et Association de l'Agent
 
@@ -100,10 +128,10 @@ Créons maintenant votre Agent Agile dans l'**Agent Hub**.
 
 1. Dans **`Agent Hub`**, cliquez sur **`Créer`** pour instancier un nouvel agent.
 2. Accédez à ses **Réglages**.
-3. Associez-lui les deux serveurs MCP pour qu'il puisse accéder aux données et à Jira :
+3. Modifiez son rôle et sa description pour le personnaliser.
+4. Associez-lui les deux serveurs MCP pour qu'il puisse accéder aux données et à Jira :
    - `mcp-atlassian-jira-server`
    - `mcp-knowledge-flow-text`
-4. Modifiez son rôle et sa description pour le personnaliser.
 5. Terminez en cliquant sur **`APPLIQUER LES MODIFICATIONS POUR TOUS LES UTILISATEURS`**.
 
 _Pour information : La configuration qui rend ces serveurs disponibles dans l'Agent Hub ressemble à ceci :_
@@ -165,11 +193,11 @@ Votre agent est prêt ! Posez-lui des questions et demandez-lui des actions pour
 
 **Actions :**
 
-- Passe le ticket XX à "In Progress" et commente "Je peux prendre le point, estimation de travail : 2 story points".
+- Passez le ticket XX à « In Progress » et commentez : `"Je peux prendre le point, estimation de travail : 2 story points"`.
 
 ## 2. Testez l'Intégration Documentaire (Knowledge Flow)
 
-- Comment faire une bonne rétrospective de sprint ?
+- Recherche dans les documents : Comment faire une bonne rétrospective de sprint ?
 - En regardant les documents dans Confluence, peux-tu me dire quels sont les points à aborder dans la rétrospective ?
 
 ## 3. Testez les Capacités de Génération et d'Action
@@ -203,4 +231,4 @@ En cas de problème technique ou de question sur le contexte, n'hésitez pas à 
 
 Félicitations ! Vous avez suivi les étapes avec brio. Vous avez maintenant toutes les clés en main pour créer un agent coach Agile et expérimenter par vous-mêmes les capacités de Fred.
 
-S'il vous reste un peu de temps vous pouvez imaginer intégrer un autre serveur MCP en cherchant sur des pages telles que [MCP Market > Collaboration tools](https://mcpmarket.com/categories/collaboration-tools) ou une autre catégorie pour surcharger les capacités de votre agent.
+S'il vous reste un peu de temps, vous pouvez imaginer intégrer un autre serveur MCP en cherchant sur des pages telles que [MCP Market > Collaboration tools](https://mcpmarket.com/categories/collaboration-tools) ou une autre catégorie pour surcharger les capacités de votre agent.
