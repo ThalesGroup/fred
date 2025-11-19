@@ -99,16 +99,16 @@ Don't forget to enable the agent to be able to access it in the chat section.
 
 <details>
 <summary>Exemple</summary>
-<b>The issue:</b> I need a math teacher to grow my skill.
 <br>
+<b>1. The issue:</b> I need a math teacher to grow my skill.
 <br>
-<b>The assistant:</b>
 
+<b>2. The assistant:</b>
+
+- **Name:** The Perfect Math Teacher
+
+- **System Prompt:**
 <pre><code>
-  Name: The Perfect Math Teacher
-
-  System Prompt:
-
   You are the world’s best mathematics teacher and tutor.
   Your goal is to help the student truly understand mathematics — not just memorize formulas.
 
@@ -141,7 +141,7 @@ Don't forget to enable the agent to be able to access it in the chat section.
   Friendly, encouraging, and Socratic — like a patient mentor who believes every student can master math with the right guidance.
 </code></pre>
 
-3 - questions:
+<b>3 - Questions:</b>
 
 - "Explain to me the trigonometry basics"
 - "Explain to me the complex numbers"
@@ -170,12 +170,12 @@ Deselect the Live button in Monitoring > Logs to view the logs without them upda
 - Try to view the document using the preview tool.
 - Select the retrieval and QA expert and ask a relevant query and check if the document appears in results.
 - Try to find where is the vector store used to represent the embedded document.
-- (Optional) Try to see what's inside the vectore store using : fred-academy/scripts/inspect_chromadb_collection.py
+- (Optional) Try to see what's inside the vector store using : `fred-academy/scripts/inspect_chromadb_collection.py`
 
 <details>
-<summary>Usage of inspect_chromadb_collection.py </summary>
+<summary>Usage of <code>inspect_chromadb_collection.py</code> </summary>
 
-```
+```bash
 cd /workspaces/fred/fred-academy/scripts
 source /workspaces/fred/knowledge-flow-backend/.venv/bin/activate # Use knowlegde-flow virtual environment
 
@@ -203,20 +203,19 @@ To find the vector store search for keywords in the monitoring page.
 
 ### 7. Upload & Explore a CSV Document
 
-- Import one or more CSV file into Fred (you can use these csvs : fred-academy/documents/Clients.csv and fred-academy/documents/Sales.csv).
+- Import one or more CSV file into Fred (you can use these csvs : `fred-academy/documents/Clients.csv` and `fred-academy/documents/Sales.csv`).
 - Try to view these documents using the preview tool, identify some questions you want to ask the model.
 - Ask your questions.
 - Try to find where the csv documents are saved. (hint : the documents are saved in SQL)
 
 <details>
-<summary>Usage of inspect_duckdb_database.py </summary>
+<summary>Usage of <code>inspect_duckdb_database.py</code> </summary>
 
-```
+```bash
 cd /workspaces/fred/fred-academy/scripts
 source /workspaces/fred/knowledge-flow-backend/.venv/bin/activate # Use knowlegde-flow virtual environment
 
 python3 inspect_duckdb_database.py --path "~/the/path/where/is/my/sql/database"
-
 ```
 
 </details>
@@ -232,9 +231,9 @@ python3 inspect_duckdb_database.py --path "~/the/path/where/is/my/sql/database"
 
 ### 8. Display Messages Between AI, Tools, and Humans (Debug Mode)
 
-- Launch the Agentic backend in debug mode (Debug Agentic Backend using configuration.yaml).
-- Go to agentic-backend/agentic_backend/agents/generalist/generalist_expert.py and set a breakpoint where the AI model is invoked.
-- Run a simple query and observe the input messages and the response message given by the AI. Analyze the content, the additional_kwargs, and the response_metadata.
+- Launch the Agentic backend in debug mode (**Debug Agentic Backend** using `configuration.yaml`).
+- Go to `agentic-backend/agentic_backend/agents/generalist/generalist_expert.py` and set a breakpoint where the AI model is invoked.
+- Run a simple query and observe the input messages and the response message given by the AI. Analyze the `content`, the `additional_kwargs`, and the `response_metadata`.
 - Try the same with a model that uses MCP tools, such as the tabular asistant. How does the AI call a tool? What is the format of the tool’s response?
 
 <details>
@@ -247,7 +246,7 @@ To run vscode in Debug mode got to "Run and Debug" and select the wanted backend
 
 <details>
 <summary>Clue 2</summary>
-The AI model is eventually called with an async method. As such:
+The AI model is eventually called with an <code>async</code> method. As such:
 
 ![alt text](images/image-8.png)
 
@@ -255,7 +254,7 @@ The AI model is eventually called with an async method. As such:
 
 ### 9. Test Another Model Provider
 
-- Modify configuration.yaml in the agentic backend to switch between a “local” vs. “cloud” model.
+- Modify configuration.yaml in the agentic backend to switch between a "local" vs. "cloud" model.
 - Compare results: response time, style, cost, and configuration complexity.
 - Document your observations.
 

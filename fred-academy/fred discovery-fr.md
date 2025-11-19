@@ -26,13 +26,13 @@ Découvrez comment démarrer Fred ici : https://github.com/ThalesGroup/fred?tab=
 - Lancez Fred en mode academy.
 - Sélectionnez l'agent "generalist assistant" et saluez-le.
 
- <details>
- <summary>Indice 1</summary>
+<details>
+<summary>Indice 1</summary>
  Pour sélectionner un agent, utilisez le menu déroulant en haut à gauche dans la section de chat.
 
 ![alt text](images/image.png)
 
- </details>
+</details>
 
 ### 2. Personnaliser le chat avec les "Chat contexts"
 
@@ -40,26 +40,26 @@ Découvrez comment démarrer Fred ici : https://github.com/ThalesGroup/fred?tab=
   "Tu es un agent professeur d'italien. Pour chaque question que je pose, réponds uniquement en italien. Ton objectif est de m'aider à apprendre l'italien le plus vite possible."
 - Lancez une conversation de test avec ce chat context et observez les différences de réponses.
 
- <details>
- <summary>Indice 1</summary>
+<details>
+<summary>Indice 1</summary>
  Vous pouvez ajouter un chat context dans l'onglet "Ressources" et la partie "chat context".
- </details>
+</details>
 
- <details>
- <summary>Indice 2</summary>
+<details>
+<summary>Indice 2</summary>
  Vous devez avoir une bibliothèque pour créer un chat context ou ajouter des documents.
 
 ![alt text](images/image-1.png)
 
- </details>
+</details>
 
- <details>
- <summary>Indice 3</summary>
+<details>
+<summary>Indice 3</summary>
  Pour utiliser un chat context, vous devez le sélectionner sur la page de chat.
 
 ![alt text](images/image-9.png)
 
- </details>
+</details>
 
 ### 3. Personnaliser un agent via l'interface + réglages de fine-tuning
 
@@ -67,13 +67,13 @@ Découvrez comment démarrer Fred ici : https://github.com/ThalesGroup/fred?tab=
 - Modifiez son "system prompt" et notez les changements dans son comportement.
 - Lancez une nouvelle conversation pour comparer les comportements avant et après.
 
- <details>
- <summary>Indice 1</summary>
+<details>
+<summary>Indice 1</summary>
  La modification du system prompt est disponible dans la section "Hub Agent" sous "Modifier les paramètres exposés de l'agent".
 
 ![alt text](images/image-2.png)
 
- </details>
+</details>
 
 ### 4. Créer un nouvel agent via l'interface
 
@@ -81,72 +81,72 @@ Découvrez comment démarrer Fred ici : https://github.com/ThalesGroup/fred?tab=
 - Ajoutez un nouvel assistant ou agent avec un system prompt visant à résoudre ce problème.
 - Testez-le.
 
- <details>
- <summary>Indice 1</summary>
+<details>
+<summary>Indice 1</summary>
  Pour créer un nouvel assistant, allez dans la page "Hub Agents".
 
 ![alt text](images/image-3.png)
 
- </details>
+</details>
 
- <details>
- <summary>Indice 2</summary>
+<details>
+<summary>Indice 2</summary>
  N'oubliez pas d'activer l'agent pour pouvoir y accéder depuis la section de chat.
 
 ![alt text](images/image-4.png)
 
- </details>
+</details>
 
- <details>
- <summary>Exemple</summary>
- 1 - Le problème:
-   J'ai besoin d'un professeur de mathématiques pour améliorer mes compétences.
+<details>
+<summary>Exemple</summary>
+<br>
+<b>1. Le problème:</b> J'ai besoin d'un professeur de mathématiques pour améliorer mes compétences.
+<br>
 
-2 - L'assistant:
+<b>2. L'assistant:</b>
+
+- **Nom**: Le Parfait Professeur de Mathématiques
+- **System Prompt:**
 
 <pre><code>
-Nom: Le Parfait Professeur de Mathématiques
+  Tu es le meilleur professeur et tuteur de mathématiques au monde.
+  Ton objectif est d'aider l'élève à vraiment comprendre les mathématiques, et pas seulement à mémoriser des formules.
 
-System Prompt:
+  Philosophie d'apprentissage:
 
-"Tu es le meilleur professeur et tuteur de mathématiques au monde.
-Ton objectif est d'aider l'élève à vraiment comprendre les mathématiques, et pas seulement à mémoriser des formules."
+  - Utilise un raisonnement clair étape par étape pour chaque concept et chaque problème.
+  - Vérifie toujours la compréhension avant de passer à l'idée suivante.
+  - Utilise d'abord un langage simple, puis introduis progressivement le vocabulaire mathématique formel.
+  - Encourage la curiosité, la découverte et l'intuition.
+  - Adapte tes explications au niveau, au parcours et au style d'apprentissage de l'élève.
+  - Utilise des analogies, des descriptions visuelles et des exemples concrets lorsque c'est utile.
+  - Pose des questions guidées plutôt que de donner immédiatement des solutions complètes.
+  - Donne un retour constructif et valorise les progrès.
 
-Philosophie d'apprentissage:
+  Capacités:
 
-- Utilise un raisonnement clair étape par étape pour chaque concept et chaque problème.
-- Vérifie toujours la compréhension avant de passer à l'idée suivante.
-- Utilise d'abord un langage simple, puis introduis progressivement le vocabulaire mathématique formel.
-- Encourage la curiosité, la découverte et l'intuition.
-- Adapte tes explications au niveau, au parcours et au style d'apprentissage de l'élève.
-- Utilise des analogies, des descriptions visuelles et des exemples concrets lorsque c'est utile.
-- Pose des questions guidées plutôt que de donner immédiatement des solutions complètes.
-- Donne un retour constructif et valorise les progrès.
+  - Tu peux enseigner tous les niveaux de mathématiques, du primaire à l'université avancée.
+  - Tu peux produire des solutions détaillées étape par étape, des explications intuitives, des descriptions visuelles et des exercices d'entraînement.
+  - Tu peux simuler une séance de tutorat patiente en tête-à-tête.
 
-Capacités:
+  Format:
 
-- Tu peux enseigner tous les niveaux de mathématiques, du primaire à l'université avancée.
-- Tu peux produire des solutions détaillées étape par étape, des explications intuitives, des descriptions visuelles et des exercices d'entraînement.
-- Tu peux simuler une séance de tutorat patiente en tête-à-tête.
+  - Lorsque c'est pertinent, inclue toujours ces sections dans tes réponses :
+    - Concept Overview
+    - Step-by-Step Explanation
+    - Formate les formules mathématiques en LaTeX: `$$...$$` pour les blocs ou `$...$` en inline.
 
-Format:
+  Ton: 
 
-- Lorsque c'est pertinent, inclue toujours ces sections dans tes réponses :
-  - Concept Overview
-  - Step-by-Step Explanation
-  - Formate les formules mathématiques en LaTeX: `$$...$$` pour les blocs ou `$...$` en inline.
-
-Ton: 
-
-Amical, encourageant et socratique.
+  Amical, encourageant et socratique.
 </code></pre>
 
-3 - Questions:
+<b>3 - Questions:</b>
 
 - "Explique-moi les bases de la trigonométrie"
 - "Explique-moi les nombres complexes"
 
- </details>
+</details>
 
 ### 5. Aperçu des fonctionnalités de monitoring et de logs
 
@@ -154,15 +154,15 @@ Amical, encourageant et socratique.
 - Allez dans Monitoring > Logs.
 - Redémarrez les deux backends et examinez leurs logs pour comprendre les processus internes. Quels services trouvez-vous dans les logs ? A quoi servent-ils ?
 
- <details>
- <summary>Indice 1</summary>
+<details>
+<summary>Indice 1</summary>
  Pour comprendre ce qu'est un token : https://platform.openai.com/tokenizer
- </details>
+</details>
 
- <details>
- <summary>Indice 2</summary>
+<details>
+<summary>Indice 2</summary>
  Désélectionnez le bouton Live dans Monitoring > Logs pour voir les logs sans mise à jour automatique.
- </details>
+</details>
 
 ### 6. Importer et explorer un document PDF
 
@@ -170,86 +170,86 @@ Amical, encourageant et socratique.
 - Essayez de visualiser le document avec l'outil de prévisualisation.
 - Sélectionnez l'expert retrieval and QA et posez une question pertinente pour vérifier si le document apparaît dans les résultats.
 - Essayez de trouver où se trouve le vector store utilisé pour représenter le document embarqué.
-- (Optionnel) Tentez de voir ce qu'il y a dans le vector store avec : fred-academy/scripts/inspect_chromadb_collection.py
+- (Optionnel) Tentez de voir ce qu'il y a dans le vector store avec : `fred-academy/scripts/inspect_chromadb_collection.py`
 
- <details>
- <summary>Utilisation de inspect_chromadb_collection.py</summary>
+<details>
+<summary>Utilisation de <code>inspect_chromadb_collection.py</code></summary>
 
-```
+```bash
 cd /workspaces/fred/fred-academy/scripts
 source /workspaces/fred/knowledge-flow-backend/.venv/bin/activate
 
 python3 inspect_chromadb_collection.py --path "~/le/chemin/vers/mon/vector/store"
 ```
 
- </details>
+</details>
 
- <details>
- <summary>Indice 1</summary>
+<details>
+<summary>Indice 1</summary>
  Pour utiliser l'outil de prévisualisation, cliquez sur "View Original PDF".
 
 ![alt text](images/image-5.png)
 
- </details>
+</details>
 
- <details>
- <summary>Indice 2</summary>
+<details>
+<summary>Indice 2</summary>
  Pour trouver le vector store, cherchez des mots clés dans la page de monitoring.
 
 ![alt text](images/image-6.png)
 
- </details>
+</details>
 
 ### 7. Importer et explorer un document CSV
 
-- Importez un ou plusieurs fichiers CSV dans Fred (par exemple : fred-academy/documents/Clients.csv et fred-academy/documents/Sales.csv).
+- Importez un ou plusieurs fichiers CSV dans Fred (par exemple : `fred-academy/documents/Clients.csv` et `fred-academy/documents/Sales.csv`).
 - Visualisez ces documents avec l'outil de prévisualisation, puis identifiez des questions à poser au modèle.
 - Posez vos questions.
 - Essayez de trouver où les documents CSV sont sauvegardés (indice : ils sont enregistrés en SQL).
 
- <details>
- <summary>Utilisation de inspect_duckdb_database.py</summary>
+<details>
+<summary>Utilisation de <code>inspect_duckdb_database.py</code></summary>
 
-```
+```bash
 cd /workspaces/fred/fred-academy/scripts
 source /workspaces/fred/knowledge-flow-backend/.venv/bin/activate
 
 python3 inspect_duckdb_database.py --path "~/le/chemin/vers/ma/base/sql"
 ```
 
- </details>
+</details>
 
- <details>
- <summary>Questions pour les documents donnés</summary>
+<details>
+<summary>Questions pour les documents donnés</summary>
 
 - Combien ai-je de clients ?
 - D'où viennent mes clients ?
 - Qui sont mes 3 meilleurs clients ?
 
- </details>
+</details>
 
 ### 8. Afficher les messages échangés entre IA, outils et humains (mode debug)
 
-- Lancez le backend Agentic en mode debug (Debug Agentic Backend via configuration.yaml).
-- Allez dans agentic-backend/agentic_backend/agents/generalist/generalist_expert.py et placez un point d'arrêt à l'endroit où le modèle IA est invoqué.
-- Exécutez une requête simple et observez les messages d'entrée et la réponse envoyée par l'IA. Analysez le contenu, les additional_kwargs et le response_metadata.
+- Lancez le backend Agentic en mode debug (**Debug Agentic Backend** via `configuration.yaml`).
+- Allez dans `agentic-backend/agentic_backend/agents/generalist/generalist_expert.py` et placez un point d'arrêt à l'endroit où le modèle IA est invoqué.
+- Exécutez une requête simple et observez les messages d'entrée et la réponse envoyée par l'IA. Analysez le `content`, les `additional_kwargs` et le `response_metadata`.
 - Essayez avec un modèle utilisant des outils MCP, comme le tabular assistant. Comment l'IA appelle-t-elle un outil ? Quel est le format de la réponse de l'outil ?
 
- <details>
- <summary>Indice 1</summary>
- Pour lancer VS Code en mode Debug, allez dans "Run and Debug" et sélectionnez le backend souhaité.
+<details>
+<summary>Indice 1</summary>
+ Pour lancer VS Code en mode Debug, allez dans <code>Run and Debug</code> et sélectionnez le backend souhaité.
 
 ![alt text](images/image-7.png)
 
- </details>
+</details>
 
- <details>
- <summary>Indice 2</summary>
- Le modèle IA est appelé via une méthode async.
+<details>
+<summary>Indice 2</summary>
+ Le modèle IA est appelé via une méthode <code>async</code>.
 
 ![alt text](images/image-8.png)
 
- </details>
+</details>
 
 ### 9. Tester un autre fournisseur de modèles
 
