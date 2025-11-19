@@ -1,5 +1,5 @@
+from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
-from langgraph.graph import StateGraph, START, END
 
 
 # Définir le schéma d'état
