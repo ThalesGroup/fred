@@ -202,9 +202,11 @@ When you open Fred's VS Code workspace, VS Code will load four folders:
 <details>
   <summary>2. Per‑folder `.vscode/settings.json` files in each Python backend to pin the interpreter.</summary>
 
-Each backend ships its own virtual environment under .venv. We’ve added a per‑folder VS Code setting (see for instance `agentic_backend/.vscode/settings.json`) to automatically pick it:
+Each backend (+ `fred-core` module) ships its own virtual environment under `.venv` (you can build this virtual environment with the `make dev` command inside each of these folders).
 
-This ensures that as soon as you open a Python file under agentic_backend/ (or knowledge_flow_backend/), VS Code will:
+We’ve added a per‑folder VS Code setting (see for instance `agentic_backend/.vscode/settings.json`) to automatically pick it:
+
+This ensures that as soon as you open a Python file under `agentic_backend/` (but also `knowledge_flow_backend/` and `fred-core/`), VS Code will:
 
 - Activate that folder’s virtual environment
 - Provide linting, IntelliSense, formatting, and debugging using the correct Python
