@@ -218,7 +218,7 @@ Rechercher dans tous le dossier courant de VSCode (`ctrl+shift+f`): <code>mcp-st
 
 <details>
 <summary>Indice</summary>
-Le tag des endpoints tabular est : `"Tabular"`.
+Le tag des endpoints tabular est : <code>Tabular</code>.
 </details>
 
 ## 3.3 (OPTIONEL) - Vérifier le serveur MCP avec MCP-inspector
@@ -329,16 +329,16 @@ Note : le fichier analyse.csv prend 2 à 3 minutes à être ingéré car très v
 
 ## 6.3 - Résolution des problématiques
 
-Tips :
-
-- Relancer une conversation par problématique améliore le résultat et réduit la consommation de tokens ;
-- Demander à votre agent de créer des colonnes intermédiaires améliore les réponses et laisse une trace ;
-- Indiquer le SGBD utilisé permet à l’IA de formuler des requêtes adaptées : ici Postgres.
+> **Conseils**
+>
+>- Relancer une conversation par problématique améliore le résultat et réduit la consommation de tokens ;
+>- Demander à votre agent de créer des colonnes intermédiaires améliore les réponses et laisse une trace ;
+>- Indiquer le SGBD utilisé permet à l’IA de formuler des requêtes adaptées : ici Postgres.
 
 ### Exploration des données
 
-- Compter le nombre de lignes par table ;
-- Analyser les données de chaque table ;
+- Compter le nombre de lignes par table
+- Analyser les données de chaque table
 - Compter le nombre de capteurs.
 
 ### Installations non opérantes
