@@ -270,8 +270,8 @@ python3 inspect_duckdb_database.py --path "~/le/chemin/vers/ma/base/sql"
 
 ### 8. Afficher les messages échangés entre IA, outils et humains (mode debug)
 
-- Lancez le backend Agentic en mode debug (**Debug Agentic Backend** via `configuration.yaml`).
-- Allez dans `agentic-backend/agentic_backend/agents/generalist/generalist_expert.py` et placez un point d'arrêt à l'endroit où le modèle IA est invoqué.
+- Lancez le backend Agentique en mode debug (**Debug Agentic Backend** via `configuration.yaml`).
+- Allez dans `agentic-backend/agentic_backend/agents/generalist/generalist_expert.py` et placez un point d'arrêt à l'endroit où le modèle d'IA est invoqué.
 - Exécutez une requête simple et observez les messages d'entrée et la réponse envoyée par l'IA. Analysez le `content`, les `additional_kwargs` et le `response_metadata`.
 - Essayez avec un modèle utilisant des outils MCP, comme le tabular assistant. Comment l'IA appelle-t-elle un outil ? Quel est le format de la réponse de l'outil ?
 
@@ -285,7 +285,7 @@ python3 inspect_duckdb_database.py --path "~/le/chemin/vers/ma/base/sql"
 
 <details>
 <summary>Indice 2</summary>
- Le modèle IA est appelé via une méthode <code>async</code>.
+ Le modèle d'IA est appelé via une méthode <code>async</code>.
 
 ![alt text](images/image-8.png)
 
@@ -293,11 +293,11 @@ python3 inspect_duckdb_database.py --path "~/le/chemin/vers/ma/base/sql"
 
 ### 9. Tester un autre fournisseur de modèles
 
-- Modifiez `configuration.yaml` dans le backend agentic pour passer d'un modèle local à un modèle cloud.
+- Modifiez `configuration.yaml` dans le backend agentic pour passer d'un modèle cloud à un modèle local (via le serveur d'inférence Ollama par exemple, si vous avez une carte graphique adaptée à disposition).
 - Comparez les résultats : temps de réponse, style, coût, complexité de configuration.
 - Documentez vos observations.
 
-Documentation : https://github.com/ThalesGroup/fred?tab=readme-ov-file#supported-model-providers
+Documentation disponible [ici](../README.md#supported-model-providers) !
 
 ### 10. Explorer la documentation de l'API Knowledge-Flow
 
