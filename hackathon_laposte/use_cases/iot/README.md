@@ -10,6 +10,18 @@
 
 - Proposer un cas d’usage concret pour La Poste, illustrant comment ces agents peuvent analyser des données de capteurs (IoT), détecter des anomalies et assister les équipes opérationnelles.
 
+Sommaire : 
+
+- [0 - Mise en place de l'environnment](#0---mise-en-place-de-lenvironnment)
+- [1 - Mise en place du postgres SQL et connexion à knowledge-flow](#1---mise-en-place-du-postgres-sql-et-connexion-à-knowledge-flow)
+- [2 - Exploration de la documentation FastAPI](#2---exploration-de-la-documentation-fastapi)
+- [3 - Exposer les endpoints FastAPI en MCP avec FastAPI-MCP](#3---exposer-les-endpoints-fastapi-en-mcp-avec-fastapi-mcp)
+- [4 - Utiliser le serveur MCP créé précédemment avec un agent dynamique depuis la UI](#4---utiliser-le-serveur-mcp-créé-précédemment-avec-un-agent-dynamique-depuis-la-ui)
+- [5 - Création d'un agent statique dans agentic-backend depuis un template](#5---création-dun-agent-statique-dans-agentic-backend-depuis-un-template)
+- [6 - Le use case IoT](#6---le-use-case-iot)
+- [7 - \[Optionnel\] Revoir l'ensemble du cas d'usage avec le serveur MCP IoT mis à disposition en interne](#7---optionnel-revoir-lensemble-du-cas-dusage-avec-le-serveur-mcp-iot-mis-à-disposition-en-interne)
+
+
 # 0 - Mise en place de l'environnment
 
 Exécuter dans un terminal :
@@ -22,17 +34,23 @@ git cherry-pick 8aca609c            # Met à jour Fred pour le hackathon
 
 ## 1.1 - Lancer un Postgres SQL sur votre devcontainer
 
-Donner les droits d'exécution au script `setup_postgres.zsh` :
+- Se placer dans le dossier suivant: 
 
-```bash
-chmod +x setup_postgres.zsh
-```
+  ```bash
+  cd hackathon_laposte/use_cases/iot/
+  ```
 
-Exécuter le script :
+- Donner les droits d'exécution au script `setup_postgres.zsh` :
 
-```bash
-./setup_postgres.zsh            # Première installation assez longue (<= 10min)
-```
+  ```bash
+  chmod +x setup_postgres.zsh
+  ```
+
+- Exécuter le script :
+
+  ```bash
+  ./setup_postgres.zsh            # Première installation assez longue (<= 10min)
+  ```
 
 <details>
 <summary>Quelques commandes postgres</summary>
@@ -107,7 +125,7 @@ Il supporte plusieurs types de données : documents non structurés (PDF, Markdo
 
 Le backend Knowledge-flow expose des API (via FastAPI) pour manipuler les documents et les données disponibles.
 
-L'objectif de cette section est de découvrir les endpoints mis à disposition par l’API Tabular de knowledge-flow.
+L'objectif de cette section est de découvrir les endpoints mis à disposition par l’API Tabular de Knowledge Flow.
 
 ## 2.1 - Ingestion de documents d'exemples
 
@@ -118,19 +136,31 @@ Pour ingérer quelques documents afin d'avoir des tables disponibles, nous vous 
 
 ## 2.2 - Quelques exercices sur les endpoints Tabular de knowledge-flow
 
-Retrouvez la documentation FastAPI ici : `http://localhost:8111/knowledge-flow/v1/docs`
+Retrouvez la documentation FastAPI ici : `http://localhost:8111/knowledge-flow/v1/docs`. 
 
-Voici la liste des questions à explorer pour comprendre les différents endpoints disponibles sur knowledge-flow :
+Intéressez-vous plus particulièrement aux endpoints de la section "Tabular".
+
+Voici la liste des questions à explorer pour comprendre les différents endpoints disponibles dans cette section :
 
 - Y a-t-il besoin de paramètres en entrée ?
 - Qu’est-ce qu’il renvoie (format et contenu) ? Comment cela pourrait-il être utilisé par un LLM ?
 - Que se passe-t-il en cas d’erreur dans le corps de la requête ?
 
+Essayez ensuite d'effectuer les actions suivantes
+
+<details>
+<summary>Recommandations pour tester les endpoints API</summary>
+
+Il est recommandé de tester les endpoints directement sur la page de documentation via la fonctionnalité "Try it out", présente à droite de l'en-tête "Parameters" de chaque endpoint
+
+![alt text](image.png)
+</details>
+
 ### a - Lister les bases de données disponibles
 
-### b - Lister les tables disponibles pour au moins une base de données
+### b - Lister les tables disponibles pour, au moins, une base de données
 
-### c - Utiliser le endpoint de context
+### c - Utiliser l'endpoint de contexte
 
 ### d - Récupérer le schéma d'une des tables à votre disposition
 
@@ -143,14 +173,17 @@ Voici la liste des questions à explorer pour comprendre les différents endpoin
 
 ```sql
 SELECT * FROM table_name LIMIT 10;
-SELECT COUNT(*) FROM table_name
+```
+
+```sql
+SELECT COUNT(*) FROM table_name;
 ```
 
 </details>
 
 ### g - Essayer avec une commande ou un nom de table erroné
 
-### h - Créer une colonne supplémentaire dans votre base avec le endpoint `write_query`
+### h - Créer une colonne supplémentaire dans votre base avec l'endpoint `write_query`
 
 Idée : créer une colonne `big_sale` si `amount` est supérieur à 250.
 
@@ -163,7 +196,7 @@ ALTER TABLE sales ADD COLUMN new_column new_column_type; UPDATE sales SET new_co
 
 </details>
 
-### i - Essayer de créer cette même colonne avec le endpoint `read_query`
+### i - Essayer de créer cette même colonne avec l'endpoint `read_query`
 
 ### j - Créer une table supplémentaire
 
@@ -223,9 +256,9 @@ Le tag des endpoints tabular est : <code>Tabular</code>.
 
 ## 3.3 (OPTIONEL) - Vérifier le serveur MCP avec MCP-inspector
 
-# 4 - Utiliser le serveur MCP créé précédemment avec un agent dynamique depuis l'UI
+# 4 - Utiliser le serveur MCP créé précédemment avec un agent dynamique depuis la UI
 
-Fred permet de créer des agents MCP depuis l’UI. Nous allons utiliser cette fonctionnalité pour tester le serveur MCP créé précédemment.
+Fred permet de créer des agents MCP depuis la UI (aussi appelé agent "dynamique"). Nous allons utiliser cette fonctionnalité pour tester le serveur MCP créé précédemment.
 
 ## 4.1 - Ajouter le serveur MCP à la configuration
 
@@ -258,7 +291,11 @@ N'oubliez pas d'activer l’agent après l’avoir créé.
 
 # 5 - Création d'un agent statique dans agentic-backend depuis un template
 
-Nous utilisons LangGraph pour construire nos agents.
+L'idée de cette section est de reconstruire "à la main" ce qui a été précédemment fait via la UI lors de la création de l'agent dynamique. 
+
+L'intérêt dans le cadre du hackathon est de permettre aux participants de "mettre les mains dans le cambouis" afin d'être en capacité de créer, en autonomie, toute sorte d'agent beaucoup plus complexe par la suite.
+
+En effet, cette manière de construire des agents directement via des fichiers de code python (d'où le nom d'agent "statique) implique d'aborder LangGraph, qui est le framework Python à la base de toute la composante agentique de Fred.
 
 LangGraph est un framework open-source construit sur LangChain qui permet de créer des agents et workflows d’IA structurés sous forme de graphes. Il facilite la définition d’états, de transitions et de boucles pour contrôler précisément le comportement d’un agent. Grâce à son architecture déterministe, il améliore la fiabilité et la traçabilité des systèmes basés sur les LLM. Il est particulièrement adapté aux applications nécessitant des interactions complexes.
 
@@ -385,4 +422,4 @@ Constater que :
 - (~) en cas d’engorgement, les données arrivent avec des réceptions proches et un délai capture–réception qui diminue. On doit pouvoir détecter début et fin de l’engorgement ;
 - (~) des délais capture–réception presque égaux au délai entre deux positions peuvent indiquer un mélange de dates.
 
-# 7 - Serveur MCP de Jean-Paul
+# 7 - (OPTIONEL) - Revoir l'ensemble du cas d'usage avec le serveur MCP IoT mis à disposition en interne
