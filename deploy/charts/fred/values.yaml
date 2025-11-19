@@ -157,6 +157,19 @@ applications:
           realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
         authorized_origins:
           - "http://fred.dev.fred.thalesgroup.com:80"
+        rebac:
+          enabled: false                    # Set false to bypass ReBAC (warning: all private resources will become public)
+          type: openfga
+          api_url: "http://openfga:8080"    # OpenFGA HTTP endpoint
+          store_name: "fred"                # OpenFGA store name. Reuse the same store across services
+          create_store_if_needed: true      # Automates store bootstrap (disable if pre-provisioned)
+          sync_schema_on_init: true         # Pushes the default Fred authorization model
+          authorization_model_id: null      # Authorization model id to use in case `sync_schema_on_init: false`
+          token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
+          timeout_millisec: 2000            # Optional request timeout
+          headers:
+            # Optional static headers sent to OpenFGA
+            X-Custom-Header: "value"
       frontend_settings:
         feature_flags:
           # If true activate the backend and frontend modules in charge of K8
@@ -509,12 +522,26 @@ applications:
           enabled: true
           client_id: "knowledge-flow"
           realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
+          secret_env_var: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET
         user:
           enabled: true
           client_id: "app"
           realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
         authorized_origins:
           - "http://fred.dev.fred.thalesgroup.com:80"
+        rebac:
+          enabled: false                    # Set false to bypass ReBAC (warning: all private resources will become public)
+          type: openfga
+          api_url: "http://openfga:8080"    # OpenFGA HTTP endpoint
+          # store_name: "fred"                # OpenFGA store name. Reuse the same store across services
+          # create_store_if_needed: true      # Automates store bootstrap (disable if pre-provisioned)
+          # sync_schema_on_init: true         # Pushes the default Fred authorization model
+          # authorization_model_id: null      # Authorization model id to use in case `sync_schema_on_init: false`
+          # token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
+          # timeout_millisec: 2000            # Optional request timeout
+          # headers:
+          #   # Optional static headers sent to OpenFGA
+          #   X-Custom-Header: "value"
       scheduler:
         enabled: true
         backend: "temporal"
@@ -561,7 +588,7 @@ applications:
       chat_model:
         provider: openai # openai | azure | ollama
         name: gpt-4o-mini # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
-        settings:
+        settings: {}
           # openai: nothing else required (keys in .env)
           # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
           # ollama: { base_url: "http://localhost:11434"
