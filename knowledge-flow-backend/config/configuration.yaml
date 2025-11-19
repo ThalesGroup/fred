@@ -33,7 +33,6 @@ security:
     realm_url: "http://app-keycloak:8080/realms/app"
   authorized_origins:
     - "http://localhost:5173"
-
 scheduler:
   enabled: true
   backend: "memory"
@@ -111,7 +110,6 @@ chat_model:
 vision_model:
   provider: openai
   name: gpt-4o-mini # or gpt-4o if you want higher fidelity
-
 storage:
   postgres:
     host: localhost
