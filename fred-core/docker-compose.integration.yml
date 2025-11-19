@@ -1,18 +1,6 @@
 version: "3.9"
 
 services:
-  spicedb:
-    image: authzed/spicedb:v1.36.0
-    command:
-      - serve-testing
-      - --grpc-addr
-      - ":60051"
-      - --readonly-grpc-addr
-      - ":60052"
-    ports:
-      - "60051:60051"
-      - "60052:60052"
-
   openfga:
     image: openfga/openfga:latest
     command:
@@ -20,7 +8,6 @@ services:
     environment:
       OPENFGA_HTTP_ADDR: 0.0.0.0:7080
       OPENFGA_GRPC_ADDR: 0.0.0.0:7081
-      # OPENFGA_PLAYGROUND_ENABLED: false
       OPENFGA_PLAYGROUND_PORT: 4000
       FGA_API_TOKEN: test-token
     ports:
