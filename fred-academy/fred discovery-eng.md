@@ -27,7 +27,13 @@ Find out how to start Fred here : https://github.com/ThalesGroup/fred?tab=readme
 - Select the agent generalist assistant and greet him.
 
 <details>
-<summary>Clue 1</summary>
+<summary>Clue 2</summary>
+Run the agentic backend using:
+ <code>make run-academy</code>
+</details>
+
+<details>
+<summary>Clue 2</summary>
 To select an agent use the dropdown menu on the top left corner of the chat section.
 
 ![alt text](images/image.png)
@@ -166,7 +172,7 @@ Deselect the Live button in Monitoring > Logs to view the logs without them upda
 
 ### 6. Upload & Explore a PDF Document
 
-- Import a Markdown or PDF document into Fred (you can use this document : fred-academy/documents/Generative AI.pdf).
+- Import a Markdown or PDF document into Fred (you can use this document : `fred-academy/documents/Generative AI.pdf`).
 - Try to view the document using the preview tool.
 - Select the retrieval and QA expert and ask a relevant query and check if the document appears in results.
 - Try to find where is the vector store used to represent the embedded document.
@@ -254,7 +260,7 @@ The AI model is eventually called with an <code>async</code> method. As such:
 
 ### 9. Test Another Model Provider
 
-- Modify configuration.yaml in the agentic backend to switch between a "local" vs. "cloud" model.
+- Modify the `configuration.yaml` file in the agentic backend to switch between a "local" vs. "cloud" model.
 - Compare results: response time, style, cost, and configuration complexity.
 - Document your observations.
 

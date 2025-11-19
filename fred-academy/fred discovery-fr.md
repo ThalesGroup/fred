@@ -28,26 +28,33 @@ Découvrez comment démarrer Fred ici : https://github.com/ThalesGroup/fred?tab=
 
 <details>
 <summary>Indice 1</summary>
+Lancez la commande pour le backend agentique:
+ <code>make run-academy</code>
+</details>
+
+<details>
+<summary>Indice 2</summary>
  Pour sélectionner un agent, utilisez le menu déroulant en haut à gauche dans la section de chat.
 
 ![alt text](images/image.png)
 
 </details>
 
-### 2. Personnaliser le chat avec les "Chat contexts"
+### 2. Personnaliser le chat avec les "contextes de conversations"
 
-- Créez un chat context pour donner de nouvelles consignes ou instructions à votre agent. Exemple :
+- Créez un contexte de conversation pour donner de nouvelles consignes ou instructions à votre agent.
+  Exemple :
   "Tu es un agent professeur d'italien. Pour chaque question que je pose, réponds uniquement en italien. Ton objectif est de m'aider à apprendre l'italien le plus vite possible."
-- Lancez une conversation de test avec ce chat context et observez les différences de réponses.
+- Lancez une conversation de test avec ce contexte de conversation et observez les différences de réponses.
 
 <details>
 <summary>Indice 1</summary>
- Vous pouvez ajouter un chat context dans l'onglet "Ressources" et la partie "chat context".
+ Vous pouvez ajouter un contexte de conversation dans l'onglet "Ressources" et la partie "contexte de conversation".
 </details>
 
 <details>
 <summary>Indice 2</summary>
- Vous devez avoir une bibliothèque pour créer un chat context ou ajouter des documents.
+ Vous devez avoir une bibliothèque pour créer un contexte de conversation ou ajouter des documents.
 
 ![alt text](images/image-1.png)
 
@@ -55,7 +62,7 @@ Découvrez comment démarrer Fred ici : https://github.com/ThalesGroup/fred?tab=
 
 <details>
 <summary>Indice 3</summary>
- Pour utiliser un chat context, vous devez le sélectionner sur la page de chat.
+ Pour utiliser un contexte de conversation, vous devez le sélectionner sur la page de chat.
 
 ![alt text](images/image-9.png)
 
@@ -148,10 +155,10 @@ Découvrez comment démarrer Fred ici : https://github.com/ThalesGroup/fred?tab=
 
 </details>
 
-### 5. Aperçu des fonctionnalités de monitoring et de logs
+### 5. Aperçu des fonctionnalités de supervision et de logs
 
-- Allez dans Monitoring > KPIs pour analyser l'utilisation de Fred durant votre session.
-- Allez dans Monitoring > Logs.
+- Allez dans Supervision > KPIs pour analyser l'utilisation de Fred durant votre session.
+- Allez dans Supervision > Logs.
 - Redémarrez les deux backends et examinez leurs logs pour comprendre les processus internes. Quels services trouvez-vous dans les logs ? A quoi servent-ils ?
 
 <details>
@@ -161,12 +168,12 @@ Découvrez comment démarrer Fred ici : https://github.com/ThalesGroup/fred?tab=
 
 <details>
 <summary>Indice 2</summary>
- Désélectionnez le bouton Live dans Monitoring > Logs pour voir les logs sans mise à jour automatique.
+ Désélectionnez le bouton Live dans Supervision > Logs pour voir les logs sans mise à jour automatique.
 </details>
 
 ### 6. Importer et explorer un document PDF
 
-- Importez un document Markdown ou PDF dans Fred (par exemple : fred-academy/documents/Generative AI.pdf).
+- Importez un document Markdown ou PDF dans Fred (par exemple : `fred-academy/documents/Generative AI.pdf`).
 - Essayez de visualiser le document avec l'outil de prévisualisation.
 - Sélectionnez l'expert retrieval and QA et posez une question pertinente pour vérifier si le document apparaît dans les résultats.
 - Essayez de trouver où se trouve le vector store utilisé pour représenter le document embarqué.
@@ -194,7 +201,7 @@ python3 inspect_chromadb_collection.py --path "~/le/chemin/vers/mon/vector/store
 
 <details>
 <summary>Indice 2</summary>
- Pour trouver le vector store, cherchez des mots clés dans la page de monitoring.
+ Pour trouver le vector store, cherchez des mots clés dans la page de supervision.
 
 ![alt text](images/image-6.png)
 
@@ -253,7 +260,7 @@ python3 inspect_duckdb_database.py --path "~/le/chemin/vers/ma/base/sql"
 
 ### 9. Tester un autre fournisseur de modèles
 
-- Modifiez configuration.yaml dans le backend agentic pour passer d'un modèle local à un modèle cloud.
+- Modifiez `configuration.yaml` dans le backend agentic pour passer d'un modèle local à un modèle cloud.
 - Comparez les résultats : temps de réponse, style, coût, complexité de configuration.
 - Documentez vos observations.
 
