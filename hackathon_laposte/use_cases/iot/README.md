@@ -15,9 +15,8 @@
 Exécuter dans un terminal :
 
 ```
-git cherry-pick b8be2e35            # Met à jour Fred pour le hackathon
+git cherry-pick 87e2f2dc            # Met à jour Fred pour le hackathon
 ```
-
 
 # 1 - Mise en place du postgres SQL et connexion à knowledge-flow
 
@@ -25,13 +24,13 @@ git cherry-pick b8be2e35            # Met à jour Fred pour le hackathon
 
 Donner les droits d'exécution au script `setup_postgres.zsh` :
 
-```
+```bash
 chmod +x setup_postgres.zsh
 ```
 
 Exécuter le script :
 
-```
+```bash
 ./setup_postgres.zsh            # Première installation assez longue (<= 10min)
 ```
 
@@ -40,36 +39,53 @@ Exécuter le script :
 
 Connexion à la base de données en ligne de commande :
 
-```
-psql -h localhost -U postgres -W # entrer le mot de passe
+```bash
+psql -h localhost -U postgres -W # entrer le mot de passe ("postgres")
 ```
 
 Lister les bases de données du postgres :
 
-```
+```bash
 \l
 ```
 
+Utiliser la base de données `base_database`:
+```bash
+\c base_database; # entrer le mot de passe ("postgres")
+```
+
+Créer une table et insérer une ligne:
+
+```bash
+CREATE TABLE ma_table (
+    id INTEGER PRIMARY KEY,
+    nom TEXT,
+    valeur FLOAT
+);
+
+INSERT INTO ma_table (id, nom, valeur)
+VALUES (1, 'Exemple', 12.34);
+```
 Lister les tables :
 
-```
+```bash
 \d
 ```
 
-Afficher les 5 premières lignes de `ma_table` :
+Afficher la ligne nouvellement ajoutée dans `ma_table` :
 
-```
-SELECT \* FROM ma_table LIMIT 5;
+```bash
+SELECT * FROM ma_table;
 ```
 
 </details>
 
-## 1.2 - Configurer knwoledge-flow backend pour ajouter la base de données postgres SQL
+## 1.2 - Configurer knowledge-flow backend pour ajouter la base de données PostgreSQL
 
 Dans le fichier `knowledge-flow-backend/config/configuration.yaml`, remplacer dans la section `tabular_stores` :
 
-```
-tabular_stores:
+```yaml
+  tabular_stores:
     postgres_store:
       type: "sql"
       driver: "postgresql+psycopg2"
@@ -83,7 +99,7 @@ tabular_stores:
 
 # 2 - Exploration de la documentation FastAPI
 
-“Knowledge Flow” est le composant backend de Fred dédié à la gestion des connaissances : ingestion de documents, transformation, vectorisation, recherche, etc.
+"Knowledge Flow" est le composant backend de Fred dédié à la gestion des connaissances : ingestion de documents, transformation, vectorisation, recherche, etc.
 
 Il supporte plusieurs types de données : documents non structurés (PDF, Markdown), mais aussi des données structurées comme des CSV et des bases SQL.
 
@@ -100,7 +116,7 @@ Pour ingérer quelques documents afin d'avoir des tables disponibles, nous vous 
 
 ## 2.2 - Quelques exercices sur les endpoints Tabular de knowledge-flow
 
-Retrouvez la documentation FastAPI ici : `http://localhost:8111/knowledge-flow/v1/docs#/`
+Retrouvez la documentation FastAPI ici : `http://localhost:8111/knowledge-flow/v1/docs`
 
 Voici la liste des questions à explorer pour comprendre les différents endpoints disponibles sur knowledge-flow :
 
@@ -123,7 +139,7 @@ Voici la liste des questions à explorer pour comprendre les différents endpoin
 <details>
 <summary>Exemples de commandes SQL</summary>
 
-```
+```sql
 SELECT * FROM table_name LIMIT 10;
 SELECT COUNT(*) FROM table_name
 ```
@@ -139,7 +155,7 @@ Idée : créer une colonne `big_sale` si `amount` est supérieur à 250.
 <details>
 <summary>Exemple de commande Postgres SQL pour créer une colonne</summary>
 
-```
+```sql
 ALTER TABLE sales ADD COLUMN new_column new_column_type; UPDATE sales SET new_column = value WHERE condition;
 ```
 
@@ -152,7 +168,7 @@ ALTER TABLE sales ADD COLUMN new_column new_column_type; UPDATE sales SET new_co
 <details>
 <summary>Exemple de commande SQL</summary>
 
-```
+```sql
 CREATE TABLE nouvelle_table (
     id INTEGER PRIMARY KEY,
     nom TEXT,
@@ -189,11 +205,11 @@ En général, l’exposition via FastAPI des endpoints d’un backend se fait da
 
 ### 3.1.a - Regarder comment les autres services sont exposés en MCP
 
-Etudier comment est créé le seveur MCP : `mcp-statistic`.
+Etudier comment est créé le serveur MCP : `mcp-statistic`.
 
 <details>
 <summary>Indice</summary>
-Rechercher dans tous le dossier courant de VSCode (`ctrl+shift+f`): mcp-statistic
+Rechercher dans tous le dossier courant de VSCode (`ctrl+shift+f`): <code>mcp-statistic</code>
 </details>
 
 ## 3.2 - Ajouter le code nécessaire à la création du serveur mcp : **mcp-tabular**
@@ -266,7 +282,7 @@ Note : ce fichier permet de lancer Fred en mode "academy" avec des agents de dé
 
 ### 5.2.a - Récupérer le code de l’agent Sage
 
-- Copier le fichier `statistics_expert.py` dans un nouveau dossier `tabular` :  `agentic-backend/agentic_backend/agents/tabular/`
+- Copier le fichier `statistics_expert.py` dans un nouveau dossier `tabular` : `agentic-backend/agentic_backend/agents/tabular/`
 - renommer le `tabular_expert.py`
 
 ### 5.2.b - Modifier le code pour obtenir un agent qui requête le serveur MCP
@@ -277,14 +293,13 @@ Une première itération peut consister à modifier la section `STATISTIC_TUNING
 
 Pour ajouter un agent statique dans Fred : dans `agentic-backend/config/configuration.yaml`, ajouter à la section `agents` :
 
-```
+```yaml
 agents:
     - name: "agent_name"
       type: "agent"
       class_path: "agentic_backend.agents.agent_folder.python_filename.agent_class_name"
       enabled: true
 ```
-
 
 ## 5.3 - Tester cet agent avec les questions de la section 2.2
 
@@ -342,7 +357,7 @@ Tips :
 
 <details>
 <summary>Indice</summary>
-- Créer une colonne `diff_mesure_reception`.  
+- Créer une colonne <code>diff_mesure_reception</code>.  
 - Créer une vue avec moyenne, médiane, minimum, maximum, quartiles et écart type.
 </details>
 
