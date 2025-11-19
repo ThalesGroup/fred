@@ -6,19 +6,19 @@ import logging
 import re
 import uuid
 from typing import List, Optional, TypedDict
-from typing_extensions import Annotated
 
 import httpx
-from langchain_core.messages import AIMessage, HumanMessage, AnyMessage
-from langgraph.constants import START, END
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langgraph.constants import END, START
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.graph.message import add_messages
+from typing_extensions import Annotated
 
-from agentic_backend.core.chatbot.chat_schema import TextPart, MessagePart
-from agentic_backend.core.runtime_source import expose_runtime_source
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.chatbot.chat_schema import MessagePart, TextPart
+from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ TRAVEL_TUNING = AgentTuning(
         ),
     ],
 )
+
 
 # ---------------------------
 # Agent State
@@ -73,6 +74,7 @@ class Travel(AgentFlow):
         await super().async_init(runtime_context)
         if getattr(self, "model", None) is None:
             from agentic_backend.application_context import get_default_chat_model
+
             self.model = get_default_chat_model()
         self._graph = self._build_graph()
 
@@ -84,7 +86,7 @@ class Travel(AgentFlow):
         builder.add_node("parse_city_and_category", self.parse_city_and_category_node)
         builder.add_node("osm_search", self.osm_search_node)
         builder.add_node("fetch_pois", self.fetch_pois_node)
-        builder.add_node("format_pois", self.format_pois_node)  
+        builder.add_node("format_pois", self.format_pois_node)
 
         builder.add_edge(START, "parse_city_and_category")
         builder.add_edge("parse_city_and_category", "osm_search")
@@ -102,7 +104,9 @@ class Travel(AgentFlow):
     ) -> TravelAgentState:
         user_msg = state["messages"][-1]
         query_text = str(getattr(user_msg, "content", "")).strip()
-        logger.info(f"[TravelAgent] Parsing city and category from query: {query_text!r}")
+        logger.info(
+            f"[TravelAgent] Parsing city and category from query: {query_text!r}"
+        )
 
         system_prompt = (
             "You are a travel assistant. "
@@ -113,23 +117,29 @@ class Travel(AgentFlow):
 
         city, category_tag = "", "tourism"
         try:
-            response = await self.model.ainvoke([
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ])
+            response = await self.model.ainvoke(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ]
+            )
             text = getattr(response, "content", "").strip()
             parts = [p.strip() for p in text.split(",")]
             if len(parts) == 2:
                 city, category_tag = parts[0], parts[1]
             else:
-                logger.warning(f"[TravelAgent] LLM returned unexpected format: {text!r}")
+                logger.warning(
+                    f"[TravelAgent] LLM returned unexpected format: {text!r}"
+                )
         except Exception as e:
             logger.warning(f"[TravelAgent] Failed to parse city and category: {e}")
 
-        state["city"] = city
-        state["category_tag"] = category_tag
-
-        return state
+        # IMPORTANT: return only the updated fields, not the full state,
+        # so that `messages` are not replayed as new observations.
+        return {
+            "city": city,
+            "category_tag": category_tag,
+        }
 
     # ---------------------------
     # Node 2: OSM search
@@ -138,14 +148,15 @@ class Travel(AgentFlow):
         city = state.get("city", "")
         if not city:
             logger.warning("[TravelAgent] No city provided for OSM search")
-            state["osm_results"] = []
-            state["lat"] = None
-            state["lon"] = None
-            return state
+            return {
+                "osm_results": [],
+                "lat": None,
+                "lon": None,
+            }
 
         logger.info(f"[TravelAgent] Performing OSM search for city: {city!r}")
 
-        url = "https://nominatim.openstreetmap.org/search"
+        url = "https://bbbbnominatim.openstreetmap.org/search"
         params = {"q": city, "format": "json", "limit": 1}
         headers = {"User-Agent": "AgenticTravelBot/1.0 (contact@example.com)"}
 
@@ -164,11 +175,14 @@ class Travel(AgentFlow):
         except Exception as e:
             logger.exception(f"[TravelAgent] Unexpected error in OSM search: {e}")
 
-        logger.info(f"[TravelAgent] OSM search results: {len(results)} items, lat={lat}, lon={lon}")
-        state["osm_results"] = results
-        state["lat"] = lat
-        state["lon"] = lon
-        return state
+        logger.info(
+            f"[TravelAgent] OSM search results: {len(results)} items, lat={lat}, lon={lon}"
+        )
+        return {
+            "osm_results": results,
+            "lat": lat,
+            "lon": lon,
+        }
 
     # ---------------------------
     # Node 3: Fetch POIs
@@ -182,12 +196,12 @@ class Travel(AgentFlow):
 
         lat = state.get("lat")
         lon = state.get("lon")
-        category_tag = state.get("category_tag", "amenity")
 
         if lat is None or lon is None:
-            state["pois"] = []
-            state["top_n"] = top_n
-            return state
+            return {
+                "pois": [],
+                "top_n": top_n,
+            }
 
         overpass_url = "https://overpass-api.de/api/interpreter"
         query = f"""
@@ -209,9 +223,10 @@ class Travel(AgentFlow):
         except Exception as e:
             logger.exception(f"[TravelAgent] Unexpected error fetching POIs: {e}")
 
-        state["pois"] = data
-        state["top_n"] = top_n
-        return state
+        return {
+            "pois": data,
+            "top_n": top_n,
+        }
 
     # ---------------------------
     # Node 4: Format POIs
@@ -228,17 +243,22 @@ class Travel(AgentFlow):
         elif not pois:
             final_text = "*Aucun point d'intérêt trouvé. (catégorie manquante)*"
         else:
-            md_output = f"## {top_n} POI les plus proches de {lat}, {lon} ({category_tag})\n\n"
+            md_output = (
+                f"## {top_n} POI les plus proches de {lat}, {lon} ({category_tag})\n\n"
+            )
             md_output += "| Nom | Lien OpenStreetMap |\n"
             md_output += "| --- | --- |\n"
             for e in pois[:top_n]:
                 tags = e.get("tags", {})
                 name = tags.get("name", "-")
-                osm_url = f"https://www.openstreetmap.org/node/{e.get('id','')}"
+                osm_url = f"https://www.openstreetmap.org/node/{e.get('id', '')}"
                 md_output += f"| {name} | [OSM]({osm_url}) |\n"
             final_text = md_output
 
-        state["poi_markdown"] = final_text
-
         response = AIMessage(content=final_text)
-        return {"messages": [response]}
+        # Only emit the new assistant message (plus optional markdown),
+        # never the full `messages` history.
+        return {
+            "poi_markdown": final_text,
+            "messages": [response],
+        }
