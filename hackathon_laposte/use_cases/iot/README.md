@@ -14,7 +14,7 @@
 
 Exécuter dans un terminal :
 
-```
+```bash
 git cherry-pick 8aca609c            # Met à jour Fred pour le hackathon
 ```
 
@@ -231,7 +231,7 @@ Fred permet de créer des agents MCP depuis l’UI. Nous allons utiliser cette f
 
 Dans `agentic-backend/config/configuration.yaml`, ajouter dans la section `servers` :
 
-```
+```yaml
 servers :
     - name: "mcp-knowledge-flow-mcp-tabular"
         transport: "streamable_http"
@@ -325,7 +325,7 @@ Le use case s'appuie sur trois fichiers :
 
 - Importer les fichiers CSV téléchargés dans Fred depuis la page `ressources>documents`.
 
-Note : le fichier analyse.csv prend 2 à 3 minutes à être ingéré car très volumineux.
+>**Note**: le fichier `analyse.csv` prend 2 à 3 minutes à être ingéré car très volumineux.
 
 ## 6.3 - Résolution des problématiques
 
