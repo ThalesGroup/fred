@@ -57,6 +57,26 @@ You can plug in real backends incrementally, agent by agent.
 
 ---
 
+## 🎓 Fred Academy (Agent Examples)
+
+If you want to learn how to build agents in Fred, start with the **Academy** samples:
+
+- [`agentic_backend/academy/ACADEMY.md`](agentic_backend/academy/ACADEMY.md) – overview of all training steps
+- Each step has its own folder and (for most) a local README:
+  - `agentic_backend/academy/00-echo/README.md` – minimal echo agent
+  - `agentic_backend/academy/01-llm-responder/README.md` – simple LLM responder
+  - `agentic_backend/academy/02-dual-model-responder/README.md` – router/generator pattern
+  - `agentic_backend/academy/03_asset_responder/README.md` – agents working with assets
+  - `agentic_backend/academy/04_slide_maker/README.md` – slide/outline generator
+  - `agentic_backend/academy/05_gps_agent/README.md` – basic geo/GPS agent
+  - `agentic_backend/academy/06_simple_leader/README.md` – simple leader/orchestrator
+  - `agentic_backend/academy/07_travel_agent/README.md` – OpenStreetMap travel agent
+  - `agentic_backend/academy/08_ecoadviser/README.md` – eco‑advisor using open data
+
+On GitHub, these links are clickable and let readers drill down from the top‑level README to any sample.
+
+---
+
 ## Configuring Fred's AI Model Provider
 
 Fred supports multiple AI model providers through a flexible YAML configuration and environment-based secret management.
@@ -150,4 +170,3 @@ AZURE_APIM_SUBSCRIPTION_KEY=your-subscription-key
 Yes — everything works out of the box on a developer laptop. You can later plug in production storage or APIs.
 
 ---
-
