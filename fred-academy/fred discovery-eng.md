@@ -4,18 +4,15 @@ Objective: Get hands-on with Thales’ Fred project, explore its AI agent capabi
 
 ## Prerequisites and ressources
 
-Last prerequisites and ressources updated and available at : https://github.com/ThalesGroup/fred
-
-Find out how to launch the devcontainer in this section : https://github.com/ThalesGroup/fred?tab=readme-ov-file#development-environment-setup
-
-Find out how to start Fred here : https://github.com/ThalesGroup/fred?tab=readme-ov-file#start-fred-components
+- Find out how to launch the devcontainer in this section [here](../README.md#option-1-recommended-let-the-dev-container-do-it-for-you)
+- Find out how to start Fred [here](../README.md#start-fred-components).
 
 ## Tips for Success
 
-- Start by launching the system and familiarize yourself with the UI.
+- Start by launching all Fred components (frontend and both backends) and familiarize yourself with the UI.
 - For each exercise, note your changes and observe their effects.
-- If you get stuck, move on and return later.
-- Don’t forget to test your modifications (e.g., start a conversation, ask a question…).
+- If you get stuck, move onto the next exercise and return to the blocking point later.
+- Don’t forget to test your code/UI modifications through some UI-based checks (e.g., start a conversation, ask a question…).
 - Ask the facilitator if you need help!
 - Open the UI in your browser: http://localhost:5173/chat
 
