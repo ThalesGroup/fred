@@ -39,13 +39,15 @@ To select an agent use the dropdown menu on the top left corner of the chat sect
 
 ### 2. Customize Chat with “Chat Context"
 
-- Create a chat context to give your agent new guidelines or instructions. Example:
-  "You are an Italian teacher agent. For every question I ask, respond only in Italian. Your goal is to help me learn Italian as fast as possible."
+- Create a chat context to give your agent new guidelines or instructions.
+
+  For example: "_You are an Italian teacher agent. For every question I ask, respond only in Italian. Your goal is to help me learn Italian as fast as possible_."
+
 - Start a test conversation using this profile and observe how responses differ.
 
 <details>
 <summary>Clue 1</summary>
-You can add a chat context in the ressources/chat_contexts segment.
+You can add a chat context in the ``ressources`` > ``chat_contexts`` segment (The exact URI is ``knowledge?view=chatContexts``). 
 </details>
 
 <details>
