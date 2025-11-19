@@ -1,10 +1,11 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
 from neo4j import Driver
 from pydantic import BaseModel
+from typing_extensions import LiteralString
 
 from knowledge_flow_backend.application_context import get_app_context
 
@@ -12,6 +13,9 @@ logger = logging.getLogger(__name__)
 
 
 class CypherQueryRequest(BaseModel):
+    # Use a plain string here so Pydantic can generate a schema.
+    # LiteralString is still used for internal helper functions where static
+    # analysis can enforce read-only query usage.
     query: str
     parameters: Optional[Dict[str, Any]] = None
     database: Optional[str] = None
@@ -33,7 +37,7 @@ class Neo4jController:
         # Lazily obtained driver from ApplicationContext so we share connections.
         self.driver: Driver = get_app_context().get_neo4j_driver()
 
-        def run_read(query: str, parameters: Optional[Dict[str, Any]] = None, database: Optional[str] = None) -> List[Dict[str, Any]]:
+        def run_read(query: LiteralString, parameters: Optional[Dict[str, Any]] = None, database: Optional[str] = None) -> List[Dict[str, Any]]:
             """Execute a read-only Cypher query and return list of dict records."""
             try:
                 with self.driver.session(database=database) as session:
@@ -135,8 +139,10 @@ class Neo4jController:
             """
             authorize_or_raise(user, Action.READ, Resource.NEO4J)
 
-            cypher = """
-            MATCH (n:`%s`)-[r]-(m)
+            # Use parameterized query to avoid string injection and maintain LiteralString type
+            cypher: LiteralString = """
+            MATCH (n)-[r]-(m)
+            WHERE $label IN labels(n)
             RETURN DISTINCT
                 id(n) AS source_id,
                 labels(n) AS source_labels,
@@ -147,11 +153,9 @@ class Neo4jController:
                 labels(m) AS target_labels,
                 m AS target_properties
             LIMIT $limit
-            """ % label.replace(
-                "`", "``"
-            )
+            """
 
-            rows = run_read(cypher, parameters={"limit": limit}, database=database)
+            rows = run_read(cypher, parameters={"label": label, "limit": limit}, database=database)
 
             nodes: Dict[int, Dict[str, Any]] = {}
             relationships: List[Dict[str, Any]] = []
@@ -199,7 +203,7 @@ class Neo4jController:
             authorize_or_raise(user, Action.READ, Resource.NEO4J)
             ensure_read_only(body.query)
 
-            rows = run_read(body.query, parameters=body.parameters, database=body.database)
+            rows = run_read(cast(LiteralString, body.query), parameters=body.parameters, database=body.database)
             if body.limit is not None and body.limit >= 0:
                 rows = rows[: body.limit]
             return {"rows": rows}

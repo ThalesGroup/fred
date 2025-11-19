@@ -178,16 +178,12 @@ class MCPConfig(BaseModel):
         default=True,
         description="Expose the Template MCP server for prompts/templates.",
     )
-    code_enabled: bool = Field(
-        default=True,
-        description="Expose the Code MCP server for code search.",
-    )
     resources_enabled: bool = Field(
         default=True,
         description="Expose the Resources MCP server for resource/tag management.",
     )
     opensearch_ops_enabled: bool = Field(
-        default=True,
+        default=False,
         description="Expose OpenSearch operational endpoints and the corresponding MCP server.",
     )
     neo4j_enabled: bool = Field(

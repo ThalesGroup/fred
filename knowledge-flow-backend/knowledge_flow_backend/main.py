@@ -58,6 +58,7 @@ from knowledge_flow_backend.features.kpi.opensearch_controller import (
     OpenSearchOpsController,
 )
 from knowledge_flow_backend.features.metadata.controller import MetadataController
+from knowledge_flow_backend.features.neo4j.neo4j_controller import Neo4jController
 from knowledge_flow_backend.features.pull.controller import PullDocumentController
 from knowledge_flow_backend.features.pull.service import PullDocumentService
 from knowledge_flow_backend.features.resources.controller import ResourceController
@@ -69,7 +70,6 @@ from knowledge_flow_backend.features.users import users_controller
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
-from knowledge_flow_backend.features.neo4j.neo4j_controller import Neo4jController
 from knowledge_flow_backend.security.keycloak_rebac_sync import (
     reconcile_keycloak_groups_with_rebac,
 )
@@ -179,42 +179,60 @@ def create_app() -> FastAPI:
     MonitoringController(router)
 
     pull_document_service = PullDocumentService()
-    # Register controllers
+    # Register base controllers. These are the one always needed.
     MetadataController(router, pull_document_service)
     CatalogController(router)
     PullDocumentController(router, pull_document_service)
     ContentController(router)
     AssetController(router)
     IngestionController(router)
-    TabularController(router)
-    StatisticController(router)
-    # CodeSearchController(router)
     TagController(app, router)
-    ResourceController(router)
     VectorSearchController(router)
     KPIController(router)
+    ResourceController(router)
+    router.include_router(logs_controller.router)
+    router.include_router(groups_controller.router)
+    router.include_router(users_controller.router)
+    # Developer benchmarking tools (always mounted; auth-protected)
+    BenchmarkController(router)
 
-    # Optional operational/graph controllers used primarily via MCP
+    if configuration.mcp.tabular_enabled:
+        # Required for Tessa
+        TabularController(router)
+        logger.info("🧩 TabularController registered (mcp.tabular_enabled=true)")
+    else:
+        logger.warning("🧩 TabularController disabled via configuration.mcp.tabular_enabled=false")
+
+    if configuration.mcp.statistic_enabled:
+        # Required for the statistical analysis agent
+        StatisticController(router)
+        logger.info("🧩 StatisticController registered (mcp.statistic_enabled=true)")
+    else:
+        logger.warning("🧩 StatisticController disabled via configuration.mcp.statistic_enabled=false")
+
     if configuration.mcp.opensearch_ops_enabled:
         OpenSearchOpsController(router)
         logger.info("🧩 OpenSearchOpsController registered (mcp.opensearch_ops_enabled=true)")
     else:
-        logger.info("🧩 OpenSearchOpsController disabled via configuration.mcp.opensearch_ops_enabled=false")
+        logger.warning("🧩 OpenSearchOpsController disabled via configuration.mcp.opensearch_ops_enabled=false")
 
     if configuration.mcp.neo4j_enabled:
         Neo4jController(router)
         logger.info("🧩 Neo4jController registered (mcp.neo4j_enabled=true)")
     else:
-        logger.info("🧩 Neo4jController disabled via configuration.mcp.neo4j_enabled=false")
-    router.include_router(logs_controller.router)
-    router.include_router(report_controller.router)
-    router.include_router(groups_controller.router)
-    router.include_router(users_controller.router)
+        logger.warning("🧩 Neo4jController disabled via configuration.mcp.neo4j_enabled=false")
+
+    if configuration.mcp.reports_enabled:
+        logger.info("🧩 ReportsController registered (mcp.reports_enabled=true)")
+        router.include_router(report_controller.router)
+    else:
+        logger.warning("🧩 ReportsController disabled via configuration.mcp.reports_enabled=false")
+
     if configuration.scheduler.enabled:
         logger.info("🧩 Activating ingestion scheduler controller.")
         SchedulerController(router)
-    # Developer benchmarking tools (always mounted; auth-protected)
-    BenchmarkController(router)
+    else:
+        logger.warning("🧩 Ingestion scheduler controller disabled via configuration.scheduler.enabled=false")
 
     logger.info("🧩 All controllers registered.")
     app.include_router(router)
@@ -253,10 +271,7 @@ def create_app() -> FastAPI:
         mcp_opensearch_ops = FastApiMCP(
             app,
             name="Knowledge Flow OpenSearch Ops MCP",
-            description=(
-                "Read-only operational tools for OpenSearch: cluster health, nodes, shards, "
-                "indices, mappings, and sample docs. Monitoring/diagnostics only."
-            ),
+            description=("Read-only operational tools for OpenSearch: cluster health, nodes, shards, indices, mappings, and sample docs. Monitoring/diagnostics only."),
             include_tags=["OpenSearch"],  # <-- only export routes tagged OpenSearch as MCP tools
             describe_all_responses=True,
             describe_full_response_schema=True,
@@ -267,7 +282,7 @@ def create_app() -> FastAPI:
         mcp_opensearch_ops.mount_http(mount_path=mcp_mount_path)
         logger.info(f"🔌 MCP OpenSearch Ops mounted at {mcp_mount_path}")
     else:
-        logger.info("🔌 MCP OpenSearch Ops disabled via configuration.mcp.opensearch_ops_enabled=false")
+        logger.warning("🔌 MCP OpenSearch Ops disabled via configuration.mcp.opensearch_ops_enabled=false")
 
     if configuration.mcp.neo4j_enabled:
         mcp_neo4j = FastApiMCP(
@@ -288,7 +303,8 @@ def create_app() -> FastAPI:
         mcp_neo4j.mount_http(mount_path=neo4j_mount_path)
         logger.info(f"🔌 MCP Neo4j mounted at {neo4j_mount_path}")
     else:
-        logger.info("🔌 MCP Neo4j disabled via configuration.mcp.neo4j_enabled=false")
+        logger.warning("🔌 MCP Neo4j disabled via configuration.mcp.neo4j_enabled=false")
+
     if configuration.mcp.kpi_enabled:
         mcp_kpi = FastApiMCP(
             app,
@@ -307,7 +323,7 @@ def create_app() -> FastAPI:
         )
         mcp_kpi.mount_http(mount_path=f"{mcp_prefix}/mcp-kpi")
     else:
-        logger.info("🔌 MCP KPI disabled via configuration.mcp.kpi_enabled=false")
+        logger.warning("🔌 MCP KPI disabled via configuration.mcp.kpi_enabled=false")
 
     if configuration.mcp.tabular_enabled:
         mcp_tabular = FastApiMCP(
@@ -383,25 +399,25 @@ def create_app() -> FastAPI:
     else:
         logger.info("🔌 MCP Templates disabled via configuration.mcp.templates_enabled=false")
 
-    if configuration.mcp.code_enabled:
-        mcp_code = FastApiMCP(
-            app,
-            name="Knowledge Flow Code MCP",
-            description=(
-                "Codebase exploration and search interface. "
-                "Use this MCP to scan and query code repositories, find relevant files, "
-                "and retrieve snippets or definitions. "
-                "Currently supports basic search, with planned improvements for deeper analysis "
-                "such as symbol navigation, dependency mapping, and code understanding."
-            ),
-            include_tags=["Code Search"],
-            describe_all_responses=True,
-            describe_full_response_schema=True,
-            auth_config=auth_cfg,
-        )
-        mcp_code.mount_http(mount_path=f"{mcp_prefix}/mcp-code")
-    else:
-        logger.info("🔌 MCP Code disabled via configuration.mcp.code_enabled=false")
+    # if configuration.mcp.code_enabled:
+    #     mcp_code = FastApiMCP(
+    #         app,
+    #         name="Knowledge Flow Code MCP",
+    #         description=(
+    #             "Codebase exploration and search interface. "
+    #             "Use this MCP to scan and query code repositories, find relevant files, "
+    #             "and retrieve snippets or definitions. "
+    #             "Currently supports basic search, with planned improvements for deeper analysis "
+    #             "such as symbol navigation, dependency mapping, and code understanding."
+    #         ),
+    #         include_tags=["Code Search"],
+    #         describe_all_responses=True,
+    #         describe_full_response_schema=True,
+    #         auth_config=auth_cfg,
+    #     )
+    #     mcp_code.mount_http(mount_path=f"{mcp_prefix}/mcp-code")
+    # else:
+    #     logger.info("🔌 MCP Code disabled via configuration.mcp.code_enabled=false")
 
     if configuration.mcp.resources_enabled:
         mcp_resources = FastApiMCP(
