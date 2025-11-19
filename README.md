@@ -288,6 +288,14 @@ No matter which development environment you choose, both backends rely on two pa
     yq eval 'del(.ai.default_chat_model.settings)' -i agentic-backend/config/configuration.yaml
     ```
 
+  - Language model
+
+    ```bash
+    yq eval '.ai.default_language_model.provider = "openai"' -i agentic-backend/config/configuration.yaml
+    yq eval '.ai.default_language_model.name = "<your-openai-model-name>"' -i agentic-backend/config/configuration.yaml
+    yq eval 'del(.ai.default_language_model.settings)' -i agentic-backend/config/configuration.yaml
+    ```
+
 - knowledge flow backend configuration
 
   - Chat model
@@ -325,6 +333,16 @@ No matter which development environment you choose, both backends rely on two pa
     yq eval 'del(.ai.default_chat_model.settings)' -i agentic-backend/config/configuration.yaml
     yq eval '.ai.default_chat_model.settings.azure_endpoint = "<your-azure-openai-endpoint>"' -i agentic-backend/config/configuration.yaml
     yq eval '.ai.default_chat_model.settings.azure_openai_api_version = "<your-azure-openai-api-version>"' -i agentic-backend/config/configuration.yaml
+    ```
+
+  - Language model
+
+    ```bash
+    yq eval '.ai.default_language_model.provider = "azure-openai"' -i agentic-backend/config/configuration.yaml
+    yq eval '.ai.default_language_model.name = "<your-azure-openai-deployment-name>"' -i agentic-backend/config/configuration.yaml
+    yq eval 'del(.ai.default_language_model.settings)' -i agentic-backend/config/configuration.yaml
+    yq eval '.ai.default_language_model.settings.azure_endpoint = "<your-azure-openai-endpoint>"' -i agentic-backend/config/configuration.yaml
+    yq eval '.ai.default_language_model.settings.azure_openai_api_version = "<your-azure-openai-api-version>"' -i agentic-backend/config/configuration.yaml
     ```
 
 - knowledge flow backend configuration
@@ -377,6 +395,15 @@ No matter which development environment you choose, both backends rely on two pa
     yq eval '.ai.default_chat_model.settings.base_url = "<your-ollama-endpoint>"' -i agentic-backend/config/configuration.yaml
     ```
 
+  - Language model
+
+    ```bash
+    yq eval '.ai.default_language_model.provider = "ollama"' -i agentic-backend/config/configuration.yaml
+    yq eval '.ai.default_language_model.name = "<your-ollama-model-name>"' -i agentic-backend/config/configuration.yaml
+    yq eval 'del(.ai.default_language_model.settings)' -i agentic-backend/config/configuration.yaml
+    yq eval '.ai.default_language_model.settings.base_url = "<your-ollama-endpoint>"' -i agentic-backend/config/configuration.yaml
+    ```
+
 - knowledge flow backend configuration
 
   - Chat model
@@ -416,6 +443,20 @@ No matter which development environment you choose, both backends rely on two pa
     yq eval '.ai.default_chat_model.settings.azure_apim_resource_path = "<your-azure-apim-resource-path>"' -i agentic-backend/config/configuration.yaml
     yq eval '.ai.default_chat_model.settings.azure_openai_api_version = "<your-azure-openai-api-version>"' -i agentic-backend/config/configuration.yaml
     yq eval '.ai.default_chat_model.settings.azure_tenant_id = "<your-azure-tenant-id>"' -i agentic-backend/config/configuration.yaml
+    ```
+
+  - Language model
+
+    ```bash
+    yq eval '.ai.default_language_model.provider = "azure-apim"' -i agentic-backend/config/configuration.yaml
+    yq eval '.ai.default_language_model.name = "<your-azure-openai-deployment-name>"' -i agentic-backend/config/configuration.yaml
+    yq eval 'del(.ai.default_language_model.settings)' -i agentic-backend/config/configuration.yaml
+    yq eval '.ai.default_language_model.settings.azure_ad_client_id = "<your-azure-apim-client-id>"' -i agentic-backend/config/configuration.yaml
+    yq eval '.ai.default_language_model.settings.azure_ad_client_scope = "<your-azure-apim-client-scope>"' -i agentic-backend/config/configuration.yaml
+    yq eval '.ai.default_language_model.settings.azure_apim_base_url = "<your-azure-apim-endpoint>"' -i agentic-backend/config/configuration.yaml
+    yq eval '.ai.default_language_model.settings.azure_apim_resource_path = "<your-azure-apim-resource-path>"' -i agentic-backend/config/configuration.yaml
+    yq eval '.ai.default_language_model.settings.azure_openai_api_version = "<your-azure-openai-api-version>"' -i agentic-backend/config/configuration.yaml
+    yq eval '.ai.default_language_model.settings.azure_tenant_id = "<your-azure-tenant-id>"' -i agentic-backend/config/configuration.yaml
     ```
 
 - knowledge flow backend configuration
