@@ -50,6 +50,7 @@ Lister les bases de données du postgres :
 ```
 
 Utiliser la base de données `base_database`:
+
 ```bash
 \c base_database; # entrer le mot de passe ("postgres")
 ```
@@ -66,6 +67,7 @@ CREATE TABLE ma_table (
 INSERT INTO ma_table (id, nom, valeur)
 VALUES (1, 'Exemple', 12.34);
 ```
+
 Lister les tables :
 
 ```bash
@@ -85,16 +87,16 @@ SELECT * FROM ma_table;
 Dans le fichier `knowledge-flow-backend/config/configuration.yaml`, remplacer dans la section `tabular_stores` :
 
 ```yaml
-  tabular_stores:
-    postgres_store:
-      type: "sql"
-      driver: "postgresql+psycopg2"
-      host: "localhost"
-      port: 5432
-      database: "base_database"
-      username: postgres
-      password: postgres
-      mode: "read_and_write"
+tabular_stores:
+  postgres_store:
+    type: "sql"
+    driver: "postgresql+psycopg2"
+    host: "localhost"
+    port: 5432
+    database: "base_database"
+    username: postgres
+    password: postgres
+    mode: "read_and_write"
 ```
 
 # 2 - Exploration de la documentation FastAPI
@@ -295,10 +297,10 @@ Pour ajouter un agent statique dans Fred : dans `agentic-backend/config/configur
 
 ```yaml
 agents:
-    - name: "agent_name"
-      type: "agent"
-      class_path: "agentic_backend.agents.agent_folder.python_filename.agent_class_name"
-      enabled: true
+  - name: "agent_name"
+    type: "agent"
+    class_path: "agentic_backend.agents.agent_folder.python_filename.agent_class_name"
+    enabled: true
 ```
 
 ## 5.3 - Tester cet agent avec les questions de la section 2.2
@@ -347,7 +349,7 @@ Tips :
 ### Capteurs en panne
 
 - Créer une table contenant, pour chaque capteur, sa dernière émission.
-- Identifier les capteurs Ineosense n’ayant pas émis depuis 48 h.
+- Identifier les capteurs Ineosense n’ayant pas émis depuis plus de 48 h depuis le 22 octobre 2025 à 16:18.
 - Identifier ceux qui n’ont pas émis depuis plus de 100 h : ils sont HS.
 - (~) Comparer les dernières transmissions sur plusieurs jours pour repérer les fluctuations.
 
@@ -365,8 +367,8 @@ Tips :
 
 <details>
 <summary>Indice</summary>
-- Créer une colonne mesurant la différence entre la mesure n et n-1 (temps de réception).  
-- Créer une vue avec les statistiques principales.
+- Créer une colonne mesurant la différence entre le temps de réception n et n-1 .  
+- Créer une vue avec moyenne, médiane, minimum, maximum, quartiles et écart type.
 </details>
 
 ### Comportement en entrée et sortie de plateforme
