@@ -2,33 +2,38 @@
 
 Objectif: Prendre en main le projet Fred de Thales, explorer ses capacités d'agent IA, ses fonctionnalités de gestion de la connaissance et personnaliser quelques composants.
 
-## Prérequis et ressources
+## Prérequis
 
-Derniers prérequis et ressources mis à jour et disponibles ici : https://github.com/ThalesGroup/fred
+Avoir l'ensemble des composants de Fred _up and running_ !
 
-Découvrez comment lancer le devcontainer dans cette section : https://github.com/ThalesGroup/fred?tab=readme-ov-file#development-environment-setup
+## Ressources
 
-Découvrez comment démarrer Fred ici : https://github.com/ThalesGroup/fred?tab=readme-ov-file#start-fred-components
+- Découvrez [ici](../README.md) des informations génériques sur Fred, son architecture, ses composants, etc.
+- Découvrez comment lancer le Dev Container dans cette section [ici](../README.md#option-1-recommended-let-the-dev-container-do-it-for-you)
+- Découvrez comment démarrer les différents composants de Fred [ici](../README.md#start-fred-components)
 
 ## Conseils pour réussir
 
-- Commencez par lancer le système et familiarisez-vous avec l'interface.
-- Pour chaque exercice, notez vos modifications et observez leurs effets.
-- Si vous êtes bloqué, passez à la suite et revenez plus tard.
-- N'oubliez pas de tester vos modifications (par exemple, démarrer une conversation, poser une question...).
-- Demandez de l'aide au facilitateur si nécessaire.
-- Ouvrez l'interface dans votre navigateur : http://localhost:5173/chat
+- Familiarisez-vous avec l'interface graphique de Fred !
+- Pour chaque exercice, notez vos modifications et observez leurs effets
+- Si vous êtes bloqué, laissez de côté le point bloquant, passez à la suite (les exercices sont indépendants !) et revenez-y plus tard
+- N'oubliez pas de tester vos modifications via des interactions avec l'interface graphiqu de Fred (par exemple, démarrer une conversation, poser une question...)
+- Demandez de l'aide au facilitateur si nécessaire
+- Ouvrez [l'interface graphique de Fred](http://localhost:5173) dans votre navigateur !
+- Configurez l'interface en français (Modifiez ce paramètre dans votre "Profil")
 
 ## 🧩 Exercices pratiques
 
 ### 1. Premiers pas avec l'interface et l'agent de base
 
-- Lancez Fred !
-- Sélectionnez l'agent géneraliste "Georges" et saluez-le.
+- Lancez Fred et rendez-vous sur l'interface graphique [ici](http://localhost:5173) !
+- Rendez-vous dans la page dédiée aux discussions
+- Sélectionnez Georges, l'agent géneraliste, et saluez-le.
 
 <details>
 <summary>Indice 1</summary>
-Lancez la commande pour le backend agentique:
+
+Lancez la commande pour démarrer le backend agentique:
 
 ```bash
 make run
@@ -37,8 +42,10 @@ make run
 </details>
 
 <details>
+
 <summary>Indice 2</summary>
- Pour sélectionner un agent, utilisez le menu déroulant en haut à gauche dans la section de chat.
+
+Pour sélectionner un agent, utilisez le menu déroulant en haut à gauche dans la section de chat.
 
 ![alt text](images/image.png)
 
@@ -47,18 +54,22 @@ make run
 ### 2. Personnaliser le chat avec les "contextes de conversations"
 
 - Créez un contexte de conversation pour donner de nouvelles consignes ou instructions à votre agent.
-  Exemple :
-  "Tu es un agent professeur d'italien. Pour chaque question que je pose, réponds uniquement en italien. Ton objectif est de m'aider à apprendre l'italien le plus vite possible."
+
+  Par exemple : "_Tu es un agent professeur d'italien. Pour chaque question que je pose, réponds uniquement en italien. Ton objectif est de m'aider à apprendre l'italien le plus vite possible._"
+
 - Lancez une conversation de test avec ce contexte de conversation et observez les différences de réponses.
 
 <details>
 <summary>Indice 1</summary>
- Vous pouvez ajouter un contexte de conversation dans l'onglet "Ressources" et la partie "contexte de conversation".
+
+Vous pouvez ajouter un contexte de conversation via la page `Ressources` > onglet `contextes de conversation`.
+
 </details>
 
 <details>
 <summary>Indice 2</summary>
- Vous devez avoir une bibliothèque pour créer un contexte de conversation ou ajouter des documents.
+
+Vous devez avoir une bibliothèque pour créer un contexte de conversation ou ajouter des documents.
 
 ![alt text](images/image-1.png)
 
@@ -66,7 +77,8 @@ make run
 
 <details>
 <summary>Indice 3</summary>
- Pour utiliser un contexte de conversation, vous devez le sélectionner sur la page de chat.
+
+Pour utiliser un contexte de conversation, vous devez le sélectionner sur la page de chat.
 
 ![alt text](images/image-9.png)
 
@@ -74,8 +86,8 @@ make run
 
 ### 3. Personnaliser un agent via l'interface + réglages de fine-tuning
 
-- Sélectionnez l'agent généraliste Georges dans l'interface et posez-lui une question.
-- Modifiez son "system prompt" et notez les changements dans son comportement.
+- Sélectionnez l'agent généraliste "Georges" dans l'interface et posez-lui une question.
+- Modifiez son "_system prompt_" et notez les changements dans son comportement.
 - Lancez une nouvelle conversation pour comparer les comportements avant et après.
 
 <details>
