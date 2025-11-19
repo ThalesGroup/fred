@@ -264,9 +264,7 @@ No matter which development environment you choose, both backends rely on two pa
    cp knowledge-flow-backend/config/.env.template knowledge-flow-backend/config/.env
    ```
 
-2. **Edit the `.env` files** to set the API keys, base URLs, and deployment names that match your model provider.
-
-3. **Update each backend’s `configuration.yaml`** so the `provider`, `name`, and optional settings align with the same provider. Use the recipes below as a starting point.
+2. **Update each backend’s `configuration.yaml` and `.env`** files so that the `provider`, `name`, and optional settings align with the same provider (in addition to required secrets such as API Keys). Use the recipes below as a starting point.
 
 <details>
   <summary>OpenAI</summary>
