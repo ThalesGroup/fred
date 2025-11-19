@@ -2,23 +2,6 @@
 
 Objectif: Prendre en main le projet Fred de Thales, explorer ses capacités d'agent IA, ses fonctionnalités de gestion de la connaissance et personnaliser quelques composants.
 
-  - [Prérequis](#prérequis)
-    - [Ressources](#ressources)
-  - [Conseils pour réussir](#conseils-pour-réussir)
-  - [🧩 Exercices pratiques](#-exercices-pratiques)
-    - [1. Premiers pas avec l'interface et l'agent de base](#1-premiers-pas-avec-linterface-et-lagent-de-base)
-    - [2. Personnaliser le chat avec les "contextes de conversations"](#2-personnaliser-le-chat-avec-les-contextes-de-conversations)
-    - [3. Personnaliser un agent via l'interface + réglages de fine-tuning](#3-personnaliser-un-agent-via-linterface--réglages-de-fine-tuning)
-    - [4. Créer un nouvel agent via l'interface](#4-créer-un-nouvel-agent-via-linterface)
-    - [5. Aperçu des fonctionnalités de supervision et de logs](#5-aperçu-des-fonctionnalités-de-supervision-et-de-logs)
-    - [6. Importer et explorer un document PDF](#6-importer-et-explorer-un-document-pdf)
-    - [7. Importer et explorer un document CSV](#7-importer-et-explorer-un-document-csv)
-    - [8. Afficher les messages échangés entre IA, outils et humains (mode debug)](#8-afficher-les-messages-échangés-entre-ia-outils-et-humains-mode-debug)
-    - [9. Tester un autre fournisseur de modèles](#9-tester-un-autre-fournisseur-de-modèles)
-    - [10. Explorer la documentation de l'API Knowledge-Flow](#10-explorer-la-documentation-de-lapi-knowledge-flow)
-
-
-
 ## Prérequis
 
 Avoir l'ensemble des composants de Fred _up and running_ !
@@ -40,6 +23,17 @@ Avoir l'ensemble des composants de Fred _up and running_ !
 - Configurez l'interface en français (Modifiez ce paramètre dans votre "Profil")
 
 ## 🧩 Exercices pratiques
+
+- [1. Premiers pas avec l'interface et l'agent de base](#1-premiers-pas-avec-linterface-et-lagent-de-base)
+- [2. Personnaliser le chat avec les "contextes de conversations"](#2-personnaliser-le-chat-avec-les-contextes-de-conversations)
+- [3. Personnaliser un agent via l'interface + réglages de fine-tuning](#3-personnaliser-un-agent-via-linterface--réglages-de-fine-tuning)
+- [4. Créer un nouvel agent via l'interface](#4-créer-un-nouvel-agent-via-linterface)
+- [5. Aperçu des fonctionnalités de supervision et de logs](#5-aperçu-des-fonctionnalités-de-supervision-et-de-logs)
+- [6. Importer et explorer un document PDF](#6-importer-et-explorer-un-document-pdf)
+- [7. Importer et explorer un document CSV](#7-importer-et-explorer-un-document-csv)
+- [8. Afficher les messages échangés entre IA, outils et humains (mode debug)](#8-afficher-les-messages-échangés-entre-ia-outils-et-humains-mode-debug)
+- [9. Tester un autre fournisseur de modèles](#9-tester-un-autre-fournisseur-de-modèles)
+- [10. Explorer la documentation de l'API Knowledge-Flow](#10-explorer-la-documentation-de-lapi-knowledge-flow)
 
 ### 1. Premiers pas avec l'interface et l'agent de base
 
