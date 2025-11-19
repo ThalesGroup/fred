@@ -92,22 +92,20 @@ class MCPAgent(AgentFlow):
     # Graph
     # ---------------------------
     def _build_graph(self) -> StateGraph:
-        if self.mcp.toolkit is None:
-            raise RuntimeError(
-                "MCPAgent: toolkit must be initialized before building the graph."
-            )
-
         builder = StateGraph(MessagesState)
 
-        # LLM node
-        builder.add_node("reasoner", self.reasoner)
-        # Use shared ToolNode factory with standardized human-friendly MCP error handling
-        builder.add_node("tools", self.mcp.get_tool_nodes())
+        # If no Toolkit, we create a simple agent
+        if not getattr(self.mcp, "toolkit", None):
+            logger.info("MCPAgent: no toolkit detected, building simple graph.")
+            builder.add_node("reasoner", self.reasoner)
+            builder.add_edge(START, "reasoner")
+            return builder
 
+        # Otherwise, we create an MCP agent with a tool node and all
+        builder.add_node("reasoner", self.reasoner)
+        builder.add_node("tools", self.mcp.get_tool_nodes())
         builder.add_edge(START, "reasoner")
-        builder.add_conditional_edges(
-            "reasoner", tools_condition
-        )  # → "tools" when tool calls are requested
+        builder.add_conditional_edges("reasoner", tools_condition)
         builder.add_edge("tools", "reasoner")
         return builder
 
