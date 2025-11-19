@@ -197,7 +197,7 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
         )
         if not name:
             raise ValueError("Azure embeddings require 'name' (deployment).")
-        api_version = settings.pop("azure_openai_api_version")
+        api_version = str(settings.pop("azure_openai_api_version"))
         _info_provider(cfg)
         return AzureOpenAIEmbeddings(
             azure_deployment=name, api_version=api_version, **settings

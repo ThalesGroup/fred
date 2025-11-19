@@ -42,7 +42,6 @@
   },
   // Init zsh and bash conf in dev cache volume
   "postStartCommand": "./.devcontainer/scripts/init-shell.sh",
-  "forwardPorts": [5173, 8000, 8111],
   "portsAttributes": {
     "5173": { "label": "frontend (Vite)" },
     "8000": { "label": "agentic backend" },
