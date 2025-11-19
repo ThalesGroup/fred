@@ -23,13 +23,17 @@ Découvrez comment démarrer Fred ici : https://github.com/ThalesGroup/fred?tab=
 
 ### 1. Premiers pas avec l'interface et l'agent de base
 
-- Lancez Fred en mode academy.
-- Sélectionnez l'agent "generalist assistant" et saluez-le.
+- Lancez Fred !
+- Sélectionnez l'agent géneraliste "Georges" et saluez-le.
 
 <details>
 <summary>Indice 1</summary>
 Lancez la commande pour le backend agentique:
- <code>make run-academy</code>
+
+```bash
+make run
+```
+
 </details>
 
 <details>
