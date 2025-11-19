@@ -264,6 +264,23 @@ def create_app() -> FastAPI:
     )
     mcp_kpi.mount_http(mount_path=f"{mcp_prefix}/mcp-kpi")
 
+    mcp_tabular = FastApiMCP(
+        app,
+        name="Knowledge Flow Tabular MCP",
+        description=(
+            "SQL access layer exposed through SQLAlchemy. "
+            "Provides agents with read and query capabilities over relational data "
+            "from configured backends (e.g. PostgreSQL, MySQL, SQLite). "
+            "Use this MCP to explore table schemas, run SELECT queries, and analyze tabular datasets. "
+            "Create, update and drop tables if asked by the user if allowed."
+        ),
+        include_tags=["Tabular"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+        auth_config=auth_cfg,
+    )
+    mcp_tabular.mount_http(mount_path=f"{mcp_prefix}/mcp-tabular")
+
     mcp_statistical = FastApiMCP(
         app,
         name="Knowledge Flow Statistic MCP",
