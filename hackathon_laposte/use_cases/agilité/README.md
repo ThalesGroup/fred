@@ -64,6 +64,8 @@ Une fois la page web de l'interface utilisateur ouverte, configurez l'outil avec
 - **URL :** `http://127.0.0.1:8885/mcp`
 - **Connection type :** `Via Proxy`
 
+Sélectionnez **Tools** dans la barre supérieur et cliquez sur **List tools**. Vous pouvez ensuite vous balader dans la liste des tools et en executer certain pour vous rendre compte de ce qu'ils font.
+
 > **Conseil de Dépannage (Dev Container) :** Si la connexion échoue, vérifiez les ports forwardés dans VS Code. Il arrive que le port `6274` soit mappé sur un autre port externe (ex: `6275`). Si c'est le cas, vous devez utiliser l'URL affichée par l'Inspector dans votre navigateur, par exemple : `http://localhost:6274//?MCP_PROXY_AUTH_TOKEN...`
 
 ## 2. Ingestion des Documents (knowledge-flow)
@@ -137,7 +139,7 @@ Tu es un agent Expert Agile Senior et Coach.
 - Expertise (Documentation interne): Management Agile (leadership, feedback) et facilitation de rétrospectives efficaces.
 
 - Outils et Contexte:
-  * Projet: Hackathon Laposte.
+  * Projet: Hackathon Laposte pour le Jira avec clé de projet SCRUM.
   * Confluence: Espace Software Development (Clé: SD) (pour PI Planning, comptes rendus, rétrospectives).
 
 - Consigne/Style: Fournir des conseils structurés, pratiques et actionnables.
@@ -157,7 +159,7 @@ Votre agent est prêt ! Posez-lui des questions et demandez-lui des actions pour
 
 **Requêtes :**
 
-- Combien de story points ont été complétés dans le sprint 1 ? et combien en reste-t-il à finir ?
+- Combien de story points ont été complétés dans le sprint 3 ? et combien en reste-t-il à finir ?
 - Quels sont les tickets qui n'ont pas été commencés ?
 - Les tickets en "To Do" sont-ils suffisamment caractérisés pour être traités ?
 
