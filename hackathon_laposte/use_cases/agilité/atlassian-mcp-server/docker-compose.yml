@@ -5,3 +5,14 @@ services:
     ports:
       - "8885:8885"
     env_file: ".env"
+    ################################################################################
+    # In case you are behind a proxy and the MCP server cannot access the Jira URL #
+    ################################################################################
+    # network_mode: "host"
+    # environment:
+    #   HTTP_PROXY: "http://xx_your_proxy_ip_xx:8080"
+    #   HTTPS_PROXY: "http://xx_your_proxy_ip_xx:8080"
+    #   http_proxy: "http://xx_your_proxy_ip_xx:8080"
+    #   https_proxy: "http://xx_your_proxy_ip_xx.65:8080"
+    #   NO_PROXY: " 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8, localhost, host.docker.internal, gateway.docker.internal"
+    #   no_proxy: " 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8, localhost, host.docker.internal, gateway.docker.internal"
