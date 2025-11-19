@@ -47,8 +47,7 @@ Clôture et retours
 
 Accéder aux exercices:
 
-- [Fred academy en français](../fred-academy/fred%20discovery-fr.md)
-- [Fred academy in english](../fred-academy/fred%20discovery-eng.md)
+- [Fred academy](../fred-academy/fred%20discovery-fr.md)
 
 ### Use cases
 
