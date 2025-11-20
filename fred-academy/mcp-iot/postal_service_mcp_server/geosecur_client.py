@@ -9,7 +9,7 @@ Usage:
     from postal_service_mcp_server.geosecur_client import GeosecurClient
 
     client = GeosecurClient(
-        api_url="https://geosecur-api.run.innovation-laposte.io:443",
+        api_url="xxx",
         engine_id="tenant-geosecur-laposte",
         username="geosecur-admin",
         password="pass"
@@ -365,6 +365,6 @@ def create_default_client() -> GeosecurClient:
         Configured GeosecurClient instance
     """
     return GeosecurClient(
-        api_url="https://geosecur-api.run.innovation-laposte.io:443",
+        api_url="xxx",
         engine_id="tenant-geosecur-laposte",
     )
