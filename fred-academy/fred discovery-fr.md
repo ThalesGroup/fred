@@ -1,4 +1,4 @@
-# Hackathon Express sur Express Hackathon – Découverte de Fred
+# Hackathon - Découverte de Fred
 
 Objectif: Prendre en main le projet Fred de Thales, explorer ses capacités d'agent IA, ses fonctionnalités de gestion de la connaissance et personnaliser quelques composants.
 
