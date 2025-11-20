@@ -13,7 +13,21 @@ Ce guide explique comment configurer et lancer le service "mcp-atlassian" avec D
 
 ### 1. Fichier .env
 
+Vous avez 2 options, soit utiliser votre propre compte, soit utiliser un compte générique créé pour l'occasion.
+
+#### Crédentials génériques
+
 Se procurer le fichier `.env` avec les variables d'environnement dans `serveur mcp atlassian` du [dossier partagé "Agilité" sur Cryptobox](https://thales.cryptobox.com/#/public/jAWtT23gEwzQB-33oZzK-pm2vhifZs5RdntsIlqSwfY/file/CwjlaPkSBjX0hc0K2fXIuQ) et le sauvegarder ici : `hackathon_laposte/use_cases/agilité/atlassian-mcp-server`.
+
+#### Votre propre compte
+
+1. Rendez vous sur votre page Atlassian admin: https://id.atlassian.com/manage-profile/security/api-tokens et créez un Jeton API, copiez la soigneusement.
+
+2. Rejoignez le projet via les liens d'invitation:
+* [Confluence](https://id.atlassian.com/invite/p/confluence?id=sqJT6hLORkuPsZoI5A_tVA&cloudId=f76bb79a-1a14-4905-91c4-f0807b3e8a24)
+* [Jira](https://id.atlassian.com/invite/p/jira-software?id=qIbBhYfhTaGhMMGW3sjtOQ)
+
+---
 
 La clé d'accès à cryptobox sera partagée sur l'écran en séance.
 

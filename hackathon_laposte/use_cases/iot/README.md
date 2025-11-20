@@ -423,3 +423,32 @@ Constater que :
 - (~) des délais capture–réception presque égaux au délai entre deux positions peuvent indiquer un mélange de dates.
 
 # 7 - (OPTIONEL) - Revoir l'ensemble du cas d'usage avec le serveur MCP IoT mis à disposition en interne
+
+Un serveur MCP a été créé par Jean-Paul, voici la manière de le mettre en marche et de l'intégrer dans Fred:
+
+**1. Lancer le serveur MCP**
+
+```bash
+cd fred-academy/mcp-iot
+make install
+make run
+```
+
+**2. Ajouter le serveur MCP dans la configuration de Fred**
+
+Modifier le fichier `configuration.yaml` et y ajouter dans `mcp.servers`:
+
+```yaml
+    - name: "mcp-jean-paul"
+      transport: "streamable_http"
+      url: "http://localhost:9797/mcp"
+      sse_read_timeout: 2000
+      auth_mode: "no_token"
+```
+
+**3. Créez un agent**
+
+* Créez ensuite un agent dynamique en lui attachant le serveur MCP nouvellement déployé.
+
+
+Lancer ensuite le backend agentique et laissez-vous guider par Jean-Paul.

@@ -1,0 +1,31 @@
+{
+    "gatewayId": "GW-001-PARIS-NORD",
+    "timestamp": 1700314567,
+    "detectedTags": [
+        {
+            "id": "BLE-TAG-12345",
+            "age": 2.5,
+            "rssi": -65
+        },
+        {
+            "id": "BLE-TAG-67890",
+            "age": 5.1,
+            "rssi": -72
+        },
+        {
+            "id": "BLE-TAG-11223",
+            "age": 1.8,
+            "rssi": -58
+        }
+    ],
+    "batteryLevel": 87,
+    "location": {
+        "timeOfFix": 1700314560,
+        "latitude": 48.8566,
+        "longitude": 2.3522,
+        "altitude": 35.0,
+        "heading": 125.5,
+        "horizontalSpeed": 12.3,
+        "verticalSpeed": 0.2
+    }
+}

@@ -1,0 +1,189 @@
+        {
+        "/_/gestionmaintenance/getMaintenanceEvents": {
+            "post": {
+                "summary": "gestionmaintenance:getMaintenanceEvents",
+                "description": "Liste les événements de maintenance dans une période de temps spécifiée. Récupère tous les événements avec différents formats de sortie (JSON, CSV, XML) pour l'analyse et l'export des données.",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "engineId",
+                        "schema": {
+                            "type": "string",
+                            "example": "tenant-geosecur-laposte"
+                        },
+                        "required": true,
+                        "description": "Tenant ID (e.g., tenant-geosecur-laposte)"
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "startAt": {
+                                        "type": "string",
+                                        "description": "Start date in French format (dd-mm-yyyy hh:mm:ss) in local time",
+                                        "example": "23-10-2023 00:00:00"
+                                    },
+                                    "endAt": {
+                                        "type": "string",
+                                        "description": "End date in French format (dd-mm-yyyy hh:mm:ss) in local time. If empty, 24 hours after startAt",
+                                        "default": "",
+                                        "example": "24-10-2023 00:00:00"
+                                    },
+                                    "timezone": {
+                                        "type": "string",
+                                        "description": "Timezone for date interpretation",
+                                        "default": "Europe/Paris",
+                                        "example": "Europe/Paris"
+                                    },
+                                    "size": {
+                                        "type": "number",
+                                        "description": "Number of results to return",
+                                        "default": 100,
+                                        "example": 50
+                                    },
+                                    "format": {
+                                        "type": "string",
+                                        "enum": [
+                                            "json",
+                                            "csv",
+                                            "xml"
+                                        ],
+                                        "description": "Output format",
+                                        "default": "json",
+                                        "example": "json"
+                                    },
+                                    "csvseparator": {
+                                        "type": "string",
+                                        "enum": [
+                                            ",",
+                                            ";"
+                                        ],
+                                        "description": "CSV separator character",
+                                        "default": ",",
+                                        "example": ","
+                                    }
+                                },
+                                "required": [
+                                    "startAt"
+                                ],
+                                "example": {
+                                    "startAt": "23-10-2023 00:00:00",
+                                    "endAt": "24-10-2023 00:00:00",
+                                    "timezone": "Europe/Paris",
+                                    "size": 50,
+                                    "format": "json",
+                                    "csvseparator": ","
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Maintenance events retrieved successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "_id": {
+                                                "type": "string",
+                                                "description": "Event ID",
+                                                "example": "64f8a1b2c3d4e5f6789abcde"
+                                            },
+                                            "assetId": {
+                                                "type": "string",
+                                                "description": "Asset ID",
+                                                "example": "asset123"
+                                            },
+                                            "codeLTS": {
+                                                "type": "string",
+                                                "description": "LTS code",
+                                                "example": "A123456789"
+                                            },
+                                            "deviceModel": {
+                                                "type": "string",
+                                                "description": "Device model",
+                                                "example": "ineosensetrk"
+                                            },
+                                            "imei": {
+                                                "type": "string",
+                                                "description": "Device IMEI",
+                                                "example": "123456789012345"
+                                            },
+                                            "asset_status": {
+                                                "type": "string",
+                                                "description": "Asset status",
+                                                "example": "OPERATIONVALIDATED"
+                                            },
+                                            "dt_operation": {
+                                                "type": "string",
+                                                "format": "date-time",
+                                                "description": "Operation timestamp",
+                                                "example": "2023-10-23T10:30:00.000Z"
+                                            },
+                                            "assetImmat": {
+                                                "type": "string",
+                                                "description": "Asset registration",
+                                                "example": "AB-123-CD"
+                                            }
+                                        }
+                                    },
+                                    "example": [
+                                        {
+                                            "_id": "64f8a1b2c3d4e5f6789abcde",
+                                            "assetId": "asset123",
+                                            "codeLTS": "A123456789",
+                                            "deviceModel": "ineosensetrk",
+                                            "imei": "123456789012345",
+                                            "asset_status": "OPERATIONVALIDATED",
+                                            "dt_operation": "2023-10-23T10:30:00.000Z",
+                                            "assetImmat": "AB-123-CD"
+                                        }
+                                    ]
+                                }
+                            },
+                            "text/csv": {
+                                "schema": {
+                                    "type": "string",
+                                    "description": "CSV formatted maintenance events data",
+                                    "example": "_id,assetId,codeLTS,deviceModel,imei,asset_status,dt_operation,assetImmat\n64f8a1b2c3d4e5f6789abcde,asset123,A123456789,ineosensetrk,123456789012345,OPERATIONVALIDATED,2023-10-23T10:30:00.000Z,AB-123-CD"
+                                }
+                            },
+                            "text/xml": {
+                                "schema": {
+                                    "type": "string",
+                                    "description": "XML formatted maintenance events data",
+                                    "example": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<events>\n  <event>\n    <_id>64f8a1b2c3d4e5f6789abcde</_id>\n    <assetId>asset123</assetId>\n    <codeLTS>A123456789</codeLTS>\n    <deviceModel>ineosensetrk</deviceModel>\n    <imei>123456789012345</imei>\n    <asset_status>OPERATIONVALIDATED</asset_status>\n    <dt_operation>2023-10-23T10:30:00.000Z</dt_operation>\n    <assetImmat>AB-123-CD</assetImmat>\n  </event>\n</events>"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - validation error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string",
+                                            "description": "Error message"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "gestionmaintenance"
+                ]
+            }
+        }
+    }
