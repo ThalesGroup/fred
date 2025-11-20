@@ -439,7 +439,7 @@ make run
 Modifier le fichier `configuration.yaml` et y ajouter dans `mcp.servers`:
 
 ```yaml
-    - name: "mcp-jean-paul"
+    - name: "mcp-iot"
       transport: "streamable_http"
       url: "http://localhost:9797/mcp"
       sse_read_timeout: 2000
