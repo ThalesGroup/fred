@@ -19,7 +19,7 @@ from fred_core import Action, KeycloakUser, Resource, authorize
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, SourceType
-from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
+from knowledge_flow_backend.core.processing_pipeline_manager import ProcessingPipelineManager
 from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
 
 logger = logging.getLogger(__name__)
@@ -38,6 +38,10 @@ class IngestionService:
         self.context = ApplicationContext.get_instance()
         self.content_store = ApplicationContext.get_instance().get_content_store()
         self.metadata_service = MetadataService()
+        # Library-aware pipeline manager. For now it contains only the default
+        # pipeline mirroring legacy behaviour, but it is ready to support
+        # per-library pipelines via tag-based routing.
+        self.pipeline_manager = ProcessingPipelineManager.create_with_default(self.context)
 
     @authorize(Action.CREATE, Resource.DOCUMENTS)
     def save_input(self, user: KeycloakUser, metadata: DocumentMetadata, input_dir: pathlib.Path) -> None:
@@ -119,52 +123,20 @@ class IngestionService:
         Processes an input document from input_path and writes outputs to output_dir.
         Saves metadata.json alongside.
         """
-        suffix = input_path.suffix.lower()
-        processor = self.context.get_input_processor_instance(suffix)
-
-        # 📝 Save metadata.json
-        # metadata_path = output_dir / "metadata.json"
-        # with open(metadata_path, "w", encoding="utf-8") as meta_file:
-        #    json.dump(metadata.model_dump(mode="json"), meta_file, indent=4, ensure_ascii=False)
-
-        # 🗂️ Ensure output directory exists
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        if isinstance(processor, BaseMarkdownProcessor):
-            processor.convert_file_to_markdown(input_path, output_dir, metadata.document_uid)
-        elif isinstance(processor, BaseTabularProcessor):
-            df = processor.convert_file_to_table(input_path)
-            df.to_csv(output_dir / "table.csv", index=False)
-        else:
-            raise RuntimeError(f"Unknown processor type for: {input_path}")
+        pipeline = self.pipeline_manager.get_pipeline_for_metadata(metadata)
+        pipeline.process_input(input_path=input_path, output_dir=output_dir, metadata=metadata)
 
     @authorize(Action.CREATE, Resource.DOCUMENTS)
     def process_output(self, user: KeycloakUser, input_file_name: str, output_dir: pathlib.Path, input_file_metadata: DocumentMetadata) -> DocumentMetadata:
         """
         Processes data resulting from the input processing.
         """
-        suffix = pathlib.Path(input_file_name).suffix.lower()
-        processor = self.context.get_output_processor_instance(suffix)
-        # check the content of the working dir 'output' directory and if there are some 'output.md' or 'output.csv' files
-        # get their path and pass them to the processor
-        if not output_dir.exists():
-            raise ValueError(f"Output directory {output_dir} does not exist")
-        if not output_dir.is_dir():
-            raise ValueError(f"Output directory {output_dir} is not a directory")
-        # check if the output_dir contains "output.md" or "output.csv" files
-        if not any(output_dir.glob("*.*")):
-            raise ValueError(f"Output directory {output_dir} does not contain output files")
-        # get the first file in the output_dir
-        file_to_process = next(output_dir.glob("*.*"))
-        # check if the file is a markdown, csv or duckdb file
-        if file_to_process.suffix.lower() not in [".md", ".csv", ".duckdb"]:
-            raise ValueError(f"Output file {file_to_process} is not a markdown or csv file")
-        # check if the file is empty
-        if file_to_process.stat().st_size == 0:
-            raise ValueError(f"Output file {file_to_process} is empty")
-        # check if the file is a markdown or csv file
-        file_to_process_abs_str = str(file_to_process.resolve())
-        return processor.process(file_path=file_to_process_abs_str, metadata=input_file_metadata)
+        pipeline = self.pipeline_manager.get_pipeline_for_metadata(input_file_metadata)
+        return pipeline.process_output(
+            input_file_name=input_file_name,
+            output_dir=output_dir,
+            input_file_metadata=input_file_metadata,
+        )
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     def get_preview_file(self, user: KeycloakUser, metadata: DocumentMetadata, output_dir: pathlib.Path) -> pathlib.Path:

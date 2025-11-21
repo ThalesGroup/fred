@@ -26,13 +26,12 @@ from fastapi.responses import Response, StreamingResponse
 from fred_core import KeycloakUser, KPIActor, KPIWriter, get_current_user
 from pydantic import BaseModel
 
-from knowledge_flow_backend.application_context import get_kpi_writer
-from knowledge_flow_backend.common.structures import Status
+from knowledge_flow_backend.application_context import ApplicationContext, get_kpi_writer
+from knowledge_flow_backend.common.structures import ProcessorConfig, Status
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import LiteMarkdownOptions
-from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_md_processing_service import (
-    LiteMdError,
-    LiteMdProcessingService,
-)
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_md_processing_service import LiteMdError, LiteMdProcessingService
+from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 from knowledge_flow_backend.features.scheduler.activities import input_process, output_process
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
@@ -61,6 +60,69 @@ class ProcessingProgress(BaseModel):
     status: Status
     error: Optional[str] = None
     document_uid: Optional[str] = None
+
+
+def _dynamic_import_processor(class_path: str):
+    """
+    Lightweight dynamic import helper for processor classes.
+
+    We keep this local to avoid exposing ApplicationContext internals while
+    still allowing admins to assemble pipelines from known processor classes.
+    """
+    module_path, class_name = class_path.rsplit(".", 1)
+    module = __import__(module_path, fromlist=[class_name])
+    return getattr(module, class_name)
+
+
+class AvailableProcessorsResponse(BaseModel):
+    """
+    Describes the currently configured input and output processors that can be
+    used to assemble processing pipelines.
+    """
+
+    input_processors: List[ProcessorConfig]
+    output_processors: List[ProcessorConfig]
+
+
+class ProcessingPipelineDefinition(BaseModel):
+    """
+    Declarative definition of a processing pipeline.
+
+    For now:
+      - 'name' identifies the pipeline in the runtime registry.
+      - 'input_processors' is optional; if omitted, defaults are used.
+      - 'output_processors' must be provided as a mapping from suffix → list of class paths.
+    """
+
+    name: str
+    input_processors: Optional[List[ProcessorConfig]] = None
+    output_processors: List[ProcessorConfig]
+
+
+class PipelineAssignment(BaseModel):
+    """
+    Bind a processing pipeline to a library tag id.
+
+    At runtime this populates ProcessingPipelineManager.tag_to_pipeline so that
+    documents tagged with this library go through the selected pipeline.
+    """
+
+    library_tag_id: str
+    pipeline_name: str
+
+
+class ProcessingPipelineInfo(BaseModel):
+    """
+    Describes the effective processing pipeline for a library.
+
+    Contains the pipeline name, whether it is the default for this library,
+    and the flattened input/output processor configs per extension.
+    """
+
+    name: str
+    is_default_for_library: bool
+    input_processors: List[ProcessorConfig]
+    output_processors: List[ProcessorConfig]
 
 
 def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
@@ -96,6 +158,200 @@ class IngestionController:
         self.service = IngestionService()
         self.lite_md_service = LiteMdProcessingService()
         logger.info("IngestionController initialized.")
+
+        # ------------------------------------------------------------------
+        # Processing pipeline management endpoints
+        # ------------------------------------------------------------------
+
+        @router.get(
+            "/processing/pipelines/available-processors",
+            tags=["Processing"],
+            summary="List available input/output processors for pipelines",
+            response_model=AvailableProcessorsResponse,
+        )
+        async def list_available_processors(
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> AvailableProcessorsResponse:
+            """
+            Returns the processors currently configured in Fred that can be used
+            to build processing pipelines.
+
+            This is derived from the active configuration (input_processors and
+            output_processors), falling back to default output processors when
+            no explicit mapping is present.
+            """
+            app_context = ApplicationContext.get_instance()
+            cfg = app_context.get_config()
+
+            input_cfg = cfg.input_processors
+
+            # For outputs: if explicit config exists, use it.
+            # Otherwise, synthesise ProcessorConfig entries from the default pipeline.
+            if cfg.output_processors:
+                output_cfg = list(cfg.output_processors)
+            else:
+                # Use the default pipeline to discover effective output processors
+                from knowledge_flow_backend.core.processing_pipeline import ProcessingPipeline
+
+                default_pipeline = ProcessingPipeline.build_default(app_context)
+                output_cfg = []
+                for suffix, procs in default_pipeline.output_processors.items():
+                    for proc in procs:
+                        class_path = f"{proc.__class__.__module__}.{proc.__class__.__name__}"
+                        output_cfg.append(ProcessorConfig(prefix=suffix, class_path=class_path))
+
+            # Always expose the summarization output processor for markdown outputs,
+            # so admins can choose to make summarization an explicit pipeline step.
+            try:
+                summary_class_path = (
+                    "knowledge_flow_backend.core.processors.output.summarizer."
+                    "summarization_output_processor.SummarizationOutputProcessor"
+                )
+                # Avoid duplicates if it is already configured
+                if not any(
+                    p.prefix.lower() == ".md" and p.class_path == summary_class_path for p in output_cfg
+                ):
+                    output_cfg.append(
+                        ProcessorConfig(prefix=".md", class_path=summary_class_path),
+                    )
+            except Exception:
+                logger.exception("Failed to register SummarizationOutputProcessor in available processors list")
+
+            return AvailableProcessorsResponse(
+                input_processors=input_cfg,
+                output_processors=output_cfg,
+            )
+
+        @router.post(
+            "/processing/pipelines",
+            tags=["Processing"],
+            summary="Register or update a processing pipeline (runtime only)",
+        )
+        async def register_processing_pipeline(
+            definition: ProcessingPipelineDefinition,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            """
+            Register or update a named processing pipeline.
+
+            Notes:
+            - Pipelines are kept in-memory for now (no persistence).
+            - Input processors are optional; when omitted, the default pipeline's
+              input processors are reused.
+            - Output processors must be valid classes importable as BaseOutputProcessor.
+            """
+            pipeline_manager = self.service.pipeline_manager
+
+            from knowledge_flow_backend.core.processing_pipeline import ProcessingPipeline
+
+            # Start from default pipeline, then override per definition.
+            default_pipeline = pipeline_manager.default_pipeline
+
+            input_map = dict(default_pipeline.input_processors)
+            if definition.input_processors:
+                for pc in definition.input_processors:
+                    cls = _dynamic_import_processor(pc.class_path)
+                    if not issubclass(cls, BaseMarkdownProcessor) and not issubclass(cls, BaseTabularProcessor):
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Class {pc.class_path} is not a supported input processor.",
+                        )
+                    input_map[pc.prefix.lower()] = cls()
+
+            output_map: dict[str, list[BaseOutputProcessor]] = {}
+            for pc in definition.output_processors:
+                cls = _dynamic_import_processor(pc.class_path)
+                if not issubclass(cls, BaseOutputProcessor):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Class {pc.class_path} is not a BaseOutputProcessor.",
+                    )
+                output_map.setdefault(pc.prefix.lower(), []).append(cls())
+
+            pipeline = ProcessingPipeline(
+                name=definition.name,
+                input_processors=input_map,
+                output_processors=output_map,
+            )
+
+            pipeline_manager.pipelines[definition.name] = pipeline
+
+            return {"status": "ok", "name": definition.name}
+
+        @router.post(
+            "/processing/pipelines/assign-library",
+            tags=["Processing"],
+            summary="Assign a processing pipeline to a library tag (runtime only)",
+        )
+        async def assign_pipeline_to_library(
+            assignment: PipelineAssignment,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            """
+            Assign an existing processing pipeline to a given library tag id.
+
+            This updates the in-memory ProcessingPipelineManager.tag_to_pipeline map
+            and affects subsequent ingestions for documents tagged with this library.
+            """
+            pipeline_manager = self.service.pipeline_manager
+
+            if assignment.pipeline_name not in pipeline_manager.pipelines:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Pipeline '{assignment.pipeline_name}' not found.",
+                )
+
+            pipeline_manager.tag_to_pipeline[assignment.library_tag_id] = assignment.pipeline_name
+
+            return {"status": "ok", "library_tag_id": assignment.library_tag_id, "pipeline_name": assignment.pipeline_name}
+
+        @router.get(
+            "/processing/pipelines/library/{library_tag_id}",
+            tags=["Processing"],
+            summary="Get effective processing pipeline for a library tag",
+            response_model=ProcessingPipelineInfo,
+        )
+        async def get_library_pipeline(
+            library_tag_id: str,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> ProcessingPipelineInfo:
+            """
+            Returns the pipeline currently associated with a library tag id.
+
+            If no explicit pipeline is mapped to this tag, the default pipeline is returned
+            and is_default_for_library is set to True.
+            """
+            pipeline_manager = self.service.pipeline_manager
+
+            # Decide which pipeline name is in effect for this tag id
+            mapped_name = pipeline_manager.tag_to_pipeline.get(library_tag_id)
+            if mapped_name and mapped_name in pipeline_manager.pipelines:
+                pipeline_name = mapped_name
+                is_default = False
+            else:
+                pipeline_name = pipeline_manager.default_pipeline.name
+                is_default = True
+
+            pipeline = pipeline_manager.pipelines.get(pipeline_name, pipeline_manager.default_pipeline)
+
+            # Reconstruct ProcessorConfig lists from instantiated processors
+            input_cfg: List[ProcessorConfig] = []
+            for prefix, proc in pipeline.input_processors.items():
+                class_path = f"{proc.__class__.__module__}.{proc.__class__.__name__}"
+                input_cfg.append(ProcessorConfig(prefix=prefix, class_path=class_path))
+
+            output_cfg: List[ProcessorConfig] = []
+            for prefix, procs in pipeline.output_processors.items():
+                for proc in procs:
+                    class_path = f"{proc.__class__.__module__}.{proc.__class__.__name__}"
+                    output_cfg.append(ProcessorConfig(prefix=prefix, class_path=class_path))
+
+            return ProcessingPipelineInfo(
+                name=pipeline_name,
+                is_default_for_library=is_default,
+                input_processors=input_cfg,
+                output_processors=output_cfg,
+            )
 
         @router.post(
             "/upload-documents",
