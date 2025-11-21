@@ -150,7 +150,7 @@ mcp:
       url: "http://localhost:8111/knowledge-flow/v1/mcp-statistics"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-postal-service"
+    - name: "minimal-mcp-service"
       transport: "streamable_http"
       url: "http://localhost:9797/mcp"
       sse_read_timeout: 2000

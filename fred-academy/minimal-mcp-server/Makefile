@@ -7,7 +7,7 @@ PYTHON := $(VENV_DIR)/bin/python
 UVICORN := $(PYTHON) -m uvicorn
 PORT := 9797
 HOST := 127.0.0.1
-APP_MODULE := postal_service_mcp_server.server_mcp:app
+APP_MODULE := minimal_mcp_server.server_mcp:app
 
 .PHONY: help venv install server clean
 

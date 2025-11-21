@@ -144,9 +144,12 @@ storage:
   vector_store:
     type: chroma
   tabular_stores:
-    base_database: # Minimal configuration to enable CSV document ingestion
+    postgres_store:
       type: "sql"
-      driver: "duckdb"
+      driver: "postgresql+psycopg2"
+      host: "localhost"
+      port: 5432
       database: "base_database"
-      path: "~/.fred/knowledge-flow/db.duckdb"
+      username: postgres
+      password: postgres
       mode: "read_and_write"
