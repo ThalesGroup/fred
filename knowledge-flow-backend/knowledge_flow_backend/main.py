@@ -138,7 +138,7 @@ def create_app() -> FastAPI:
                 try:
                     await reconcile_keycloak_groups_with_rebac()
                 except Exception:  # noqa: BLE001
-                    logger.exception("Scheduled Keycloak→SpiceDB reconciliation failed.")
+                    logger.exception("Scheduled Keycloak→Rebac reconciliation failed.")
                 await asyncio.sleep(15 * 60)
 
         # Reconcile Keycloak groups with ReBAC every 15 minutes

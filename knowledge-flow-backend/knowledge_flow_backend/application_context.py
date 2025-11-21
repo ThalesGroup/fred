@@ -29,6 +29,7 @@ from fred_core import (
     LogStoreConfig,
     ModelConfiguration,
     ModelProvider,
+    OpenFgaRebacConfig,
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
     OpenSearchLogStore,
@@ -827,14 +828,21 @@ class ApplicationContext:
                 raise ValueError("Invalid Keycloak URL") from e
             _require_env("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
 
-        rebac = self.configuration.security.rebac
-        if rebac:
-            logger.info("  🕸️ ReBAC engine: %s", rebac.type)
-            logger.info("     • sync_schema_on_init: %s", rebac.sync_schema_on_init)
-            env_name = rebac.token_env_var
-            self._log_sensitive(env_name, os.getenv(env_name))
+        rebac_cfg = self.configuration.security.rebac
+        if rebac_cfg and rebac_cfg.enabled:
+            # Print rebac type
+            logger.info("  🕸️ Rebac Enabled:")
+            logger.info("     • Type: %s", rebac_cfg.type)
+            if isinstance(rebac_cfg, OpenFgaRebacConfig):
+                logger.info("     • API URL: %s", rebac_cfg.api_url)
+                logger.info("     • Store Name: %s", rebac_cfg.store_name)
+                logger.info("     • Sync Schema on Init: %s", rebac_cfg.sync_schema_on_init)
+                logger.info(
+                    "     • Create Store if Needed: %s",
+                    rebac_cfg.create_store_if_needed,
+                )
         else:
-            logger.info("  🕸️ ReBAC engine: disabled")
+            logger.info("  🕸️ Rebac Disabled")
 
         embedding = self.configuration.embedding_model
         # Non-secret settings from YAML

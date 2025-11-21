@@ -17,8 +17,7 @@ Find out how to start Fred here : https://github.com/ThalesGroup/fred?tab=readme
 - If you get stuck, move on and return later.
 - Don’t forget to test your modifications (e.g., start a conversation, ask a question…).
 - Ask the facilitator if you need help!
-
-5 - Open the UI in your browser: http://localhost:5173/chat
+- Open the UI in your browser: http://localhost:5173/chat
 
 ## 🧩 Practical Exercises
 
@@ -28,7 +27,13 @@ Find out how to start Fred here : https://github.com/ThalesGroup/fred?tab=readme
 - Select the agent generalist assistant and greet him.
 
 <details>
-<summary>Clue 1</summary>
+<summary>Clue 2</summary>
+Run the agentic backend using:
+ <code>make run-academy</code>
+</details>
+
+<details>
+<summary>Clue 2</summary>
 To select an agent use the dropdown menu on the top left corner of the chat section.
 
 ![alt text](images/image.png)
@@ -100,45 +105,49 @@ Don't forget to enable the agent to be able to access it in the chat section.
 
 <details>
 <summary>Exemple</summary>
-1 - The issue:
-  I need a math teacher to grow my skill.
+<br>
+<b>1. The issue:</b> I need a math teacher to grow my skill.
+<br>
 
-2 - The assistant:
+<b>2. The assistant:</b>
 
-Name: The Perfect Math Teacher
+- **Name:** The Perfect Math Teacher
 
-System Prompt:
+- **System Prompt:**
+<pre><code>
+  You are the world’s best mathematics teacher and tutor.
+  Your goal is to help the student truly understand mathematics — not just memorize formulas.
 
-You are the world’s best mathematics teacher and tutor.
-Your goal is to help the student truly understand mathematics — not just memorize formulas.
+  Teaching Philosophy:
 
-Teaching Philosophy:
+  - Use clear, step-by-step reasoning for every concept and problem.
+  - Always check for understanding before moving to the next idea.
+  - Use simple language first, then gradually introduce formal math vocabulary.
+  - Encourage curiosity, discovery, and intuition.
+  - Adapt explanations to the student’s level, background, and learning style.
+  - Use analogies, visuals, and real-world examples when helpful.
+  - Ask guiding questions rather than giving full solutions immediately.
+  - Give constructive feedback and celebrate progress.
 
-- Use clear, step-by-step reasoning for every concept and problem.
-- Always check for understanding before moving to the next idea.
-- Use simple language first, then gradually introduce formal math vocabulary.
-- Encourage curiosity, discovery, and intuition.
-- Adapt explanations to the student’s level, background, and learning style.
-- Use analogies, visuals, and real-world examples when helpful.
-- Ask guiding questions rather than giving full solutions immediately.
-- Give constructive feedback and celebrate progress.
+  Capabilities:
 
-Capabilities:
+  - You can teach any level of math (elementary to advanced university).
+  - You can generate step-by-step solutions, intuitive explanations, visual descriptions, and practice problems.
+  - You can simulate a patient one-on-one tutoring session.
 
-- You can teach any level of math (elementary to advanced university).
-- You can generate step-by-step solutions, intuitive explanations, visual descriptions, and practice problems.
-- You can simulate a patient one-on-one tutoring session.
+  Format:
 
-Format:
+  - When responding, always include these sections when relevant:
+  - Concept Overview – Explain the main idea in intuitive terms.
+  - Step-by-Step Explanation – Break down reasoning carefully.
+  - Format math formulas using LaTeX: `$$...$$` for blocks or `$...$` inline.
 
-- When responding, always include these sections when relevant:
-- Concept Overview – Explain the main idea in intuitive terms.
-- Step-by-Step Explanation – Break down reasoning carefully.
-- Format math formulas using LaTeX: `$$...$$` for blocks or `$...$` inline.
+  Tone:
+  
+  Friendly, encouraging, and Socratic — like a patient mentor who believes every student can master math with the right guidance.
+</code></pre>
 
-Tone: Friendly, encouraging, and Socratic — like a patient mentor who believes every student can master math with the right guidance.
-
-3 - questions:
+<b>3 - Questions:</b>
 
 - "Explain to me the trigonometry basics"
 - "Explain to me the complex numbers"
@@ -163,16 +172,16 @@ Deselect the Live button in Monitoring > Logs to view the logs without them upda
 
 ### 6. Upload & Explore a PDF Document
 
-- Import a Markdown or PDF document into Fred (you can use this document : fred-academy/documents/Generative AI.pdf).
+- Import a Markdown or PDF document into Fred (you can use this document : `fred-academy/documents/Generative AI.pdf`).
 - Try to view the document using the preview tool.
 - Select the retrieval and QA expert and ask a relevant query and check if the document appears in results.
 - Try to find where is the vector store used to represent the embedded document.
-- (Optional) Try to see what's inside the vectore store using : fred-academy/scripts/inspect_chromadb_collection.py
+- (Optional) Try to see what's inside the vector store using : `fred-academy/scripts/inspect_chromadb_collection.py`
 
 <details>
-<summary>Usage of inspect_chromadb_collection.py </summary>
+<summary>Usage of <code>inspect_chromadb_collection.py</code> </summary>
 
-```
+```bash
 cd /workspaces/fred/fred-academy/scripts
 source /workspaces/fred/knowledge-flow-backend/.venv/bin/activate # Use knowlegde-flow virtual environment
 
@@ -200,20 +209,19 @@ To find the vector store search for keywords in the monitoring page.
 
 ### 7. Upload & Explore a CSV Document
 
-- Import one or more CSV file into Fred (you can use these csvs : fred-academy/documents/Clients.csv and fred-academy/documents/Sales.csv).
+- Import one or more CSV file into Fred (you can use these csvs : `fred-academy/documents/Clients.csv` and `fred-academy/documents/Sales.csv`).
 - Try to view these documents using the preview tool, identify some questions you want to ask the model.
 - Ask your questions.
 - Try to find where the csv documents are saved. (hint : the documents are saved in SQL)
 
 <details>
-<summary>Usage of inspect_duckdb_database.py </summary>
+<summary>Usage of <code>inspect_duckdb_database.py</code> </summary>
 
-```
+```bash
 cd /workspaces/fred/fred-academy/scripts
 source /workspaces/fred/knowledge-flow-backend/.venv/bin/activate # Use knowlegde-flow virtual environment
 
 python3 inspect_duckdb_database.py --path "~/the/path/where/is/my/sql/database"
-
 ```
 
 </details>
@@ -229,9 +237,9 @@ python3 inspect_duckdb_database.py --path "~/the/path/where/is/my/sql/database"
 
 ### 8. Display Messages Between AI, Tools, and Humans (Debug Mode)
 
-- Launch the Agentic backend in debug mode (Debug Agentic Backend using configuration.yaml).
-- Go to agentic-backend/agentic_backend/agents/generalist/generalist_expert.py and set a breakpoint where the AI model is invoked.
-- Run a simple query and observe the input messages and the response message given by the AI. Analyze the content, the additional_kwargs, and the response_metadata.
+- Launch the Agentic backend in debug mode (**Debug Agentic Backend** using `configuration.yaml`).
+- Go to `agentic-backend/agentic_backend/agents/generalist/generalist_expert.py` and set a breakpoint where the AI model is invoked.
+- Run a simple query and observe the input messages and the response message given by the AI. Analyze the `content`, the `additional_kwargs`, and the `response_metadata`.
 - Try the same with a model that uses MCP tools, such as the tabular asistant. How does the AI call a tool? What is the format of the tool’s response?
 
 <details>
@@ -244,7 +252,7 @@ To run vscode in Debug mode got to "Run and Debug" and select the wanted backend
 
 <details>
 <summary>Clue 2</summary>
-The AI model is eventually called with an async method. As such:
+The AI model is eventually called with an <code>async</code> method. As such:
 
 ![alt text](images/image-8.png)
 
@@ -252,12 +260,11 @@ The AI model is eventually called with an async method. As such:
 
 ### 9. Test Another Model Provider
 
-- Modify configuration.yaml in the agentic backend to switch between a “local” vs. “cloud” model.
+- Modify the `configuration.yaml` file in the agentic backend to switch between a "local" vs. "cloud" model.
 - Compare results: response time, style, cost, and configuration complexity.
 - Document your observations.
 
 Use the documentation : https://github.com/ThalesGroup/fred?tab=readme-ov-file#supported-model-providers
-
 
 ### 10. Explore the Knowledge-Flow API Documentation
 

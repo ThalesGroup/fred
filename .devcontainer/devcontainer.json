@@ -11,6 +11,7 @@
   },
   "workspaceFolder": "/workspaces/fred",
   "runArgs": ["--init"],
+  "initializeCommand": "mkdir -p ${localEnv:HOME}/.fred",
   "mounts": [
     // Fred config directory from host
     "source=${localEnv:HOME}/.fred,target=/home/vscode/.fred,type=bind,consistency=cached",

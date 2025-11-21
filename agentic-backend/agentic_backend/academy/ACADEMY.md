@@ -39,7 +39,7 @@ Fred then compiles your graph later (wiring streaming memory) and manages execut
 
 ---
 
-## 2) Folder structure for this academy
+## 2 Folder structure for this academy
 
 You can mirror this structure in your repo:
 
@@ -47,50 +47,145 @@ You can mirror this structure in your repo:
 academy/
   ACADEMY.md
   00-echo/
-    echo.py
   01-llm-responder/
-    llm-responder.py
   02-dual-model-responder/
-    dual-model-responder.py
+  03_asset_responder/
+  04_slide_maker/
+  05_gps_agent/
+  06_simple_leader/
+  07_travel_agent/
+  08_ecoadviser/
 ```
+
+Each folder contains one or more agent implementations and, when present, a local `README.md` with extra details.
 
 ---
 
-## Steps
+## 3 Step‑by‑step modules
 
-### 0) Echo: the MOST minimal viable agent
+### 00 – Echo: the MOST minimal viable agent
+
+Folder: `academy/00-echo`  
+Code: `echo.py`  
+Docs: `README.md`
 
 **What you’ll learn**
 
 - AgentTuning + `async_init()` + one node that returns a **delta** (the new AI message only).
+- Using `MessagesState` and a `StateGraph` with a single node.
 
-`academy/00-echo/echo.py`:[View Source](https://github.com/YourOrg/YourRepo/blob/main/academy/00-echo/echo.py)
-
-**Key idea:** _Return only the new `AIMessage`_.  
-Fred’s stream transcoder already knows the history; the typical logic of an agent is only to add new replies to the conversation.
-
----
-
-### 1) Responder: LLM call, no tools
-
-**What you’ll learn**
-
-- Inject a system instruction with `with_system(...)`.
-- Call your configured model with `await self.model.ainvoke(messages)`.
-- Keep the delta pattern.
-
-`academy/01-responder-llm/responder.py` [View Source](https://github.com/YourOrg/YourRepo/blob/main/academy/01-responder-llm/responder.py)
+Key idea: _Return only the new `AIMessage`_.  
+Fred’s stream transcoder already knows the history; the agent only appends new replies.
 
 ---
 
-## 2) Dual-Model Responder (The Router/Generator Pattern)
+### 01 – LLM Responder: single-model answer, no tools
+
+Folder: `academy/01-llm-responder`  
+Code: `llm-responder.py`  
+Docs: `README.md`
 
 **What you’ll learn**
 
-- **Model Specialization**: Use two separate, specialized models to optimize for **speed** and **quality**.
-- **State Extension**: Define a custom `TypedDict` state (`DualModelResponderState`) to pass internal results (the `classification`) between nodes.
-- **Sequential Graph**: Build a linear LangGraph (`router` $\to$ `generator`) to enforce multi-model workflow order.
+- Injecting a tuned system prompt with `with_system(...)`.
+- Calling your configured model via `get_default_chat_model()`.
+- Using `ask_model(...)` and the `delta(...)` helper to return a clean state update.
 
-`academy/02-dual-model-responder/dual_model_responder.py` [View Source] (using the final, corrected code)
+This is the first **“real” LLM agent** in the academy.
 
-**Key idea:** _A small, fast model (Router) executes first to classify the request and update the shared state. A powerful model (Generator) executes second, using the classification saved in the state to inform its final, high-quality response._
+---
+
+### 02 – Dual‑Model Responder (Router / Generator)
+
+Folder: `academy/02-dual-model-responder`  
+Code: `dual-model-responder.py`  
+Docs: `README.md`
+
+**What you’ll learn**
+
+- **Model specialization**: a fast router model vs a powerful generator model.
+- **State extension**: `DualModelResponderState` carries a `classification` between nodes.
+- **Sequential graphs**: `router` → `generator` pattern in LangGraph.
+
+Key idea: _A small, fast model classifies the request; a stronger model uses that classification to craft the final answer._
+
+---
+
+### 03 – Asset Responder: working with files/assets
+
+Folder: `academy/03_asset_responder`  
+Code: `asset_responder.py` (see folder)  
+Docs: `README.md`
+
+**What you’ll learn**
+
+- How agents can interact with uploaded assets/blobs.
+- Where to hook asset logic into the graph (before/after LLM calls).
+
+---
+
+### 04 – Slide Maker: generating content + structure
+
+Folder: `academy/04_slide_maker`  
+Code: see `slide_maker.py` in the folder.  
+Docs: `README.md`
+
+**What you’ll learn**
+
+- Turning a free‑form request into a structured artifact (slides/sections).
+- Returning Markdown that the UI can render nicely.
+
+---
+
+### 05 – GPS Agent: coordinates and simple mapping
+
+Folder: `academy/05_gps_agent`  
+Docs: `README.md`
+
+**What you’ll learn**
+
+- Handling latitude/longitude in agent state.
+- Emitting geo‑friendly outputs for the UI.
+
+---
+
+### 06 – Simple Leader: multi‑step orchestration
+
+Folder: `academy/06_simple_leader`  
+Docs: `README.md`
+
+**What you’ll learn**
+
+- Orchestrating several sub‑steps (or sub‑agents) from a single “leader” agent.
+- Basic control‑flow and state passing patterns.
+
+---
+
+### 07 – Travel Agent: OpenStreetMap / Overpass demo
+
+Folder: `academy/07_travel_agent`  
+Code: `travel_agent.py`  
+Docs: `README.md` (already present)
+
+**What you’ll learn**
+
+- Calling external HTTP APIs (Nominatim, Overpass) from LangGraph nodes.
+- Converting natural‑language queries into OSM tag filters.
+- Implementing a fallback LLM answer when external services fail.
+- Emitting “thought” traces so the UI can show per‑step progress.
+
+Example question: “Nice vegetarian restaurants near Bordeaux?”
+
+---
+
+### 08 – EcoAdvisor: low‑carbon mobility helper
+
+Folder: `academy/08_ecoadviser`  
+Code: see `ecoadviser_agent.py` and helpers.  
+Docs: `README.md` (already present)
+
+**What you’ll learn**
+
+- Combining open data (e.g. Lyon bike lanes, transit stops) with LLM reasoning.
+- Using CSV/Tabular tools to answer impact / mobility questions.
+- Producing user‑friendly reports with CO₂ estimates and alternatives.

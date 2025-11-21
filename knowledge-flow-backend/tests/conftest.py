@@ -22,7 +22,6 @@ from fred_core import (
     OpenSearchStoreConfig,
     PostgresStoreConfig,
     SecurityConfiguration,
-    SpiceDbRebacConfig,
     UserSecurity,
 )
 from langchain_community.embeddings import FakeEmbeddings
@@ -62,17 +61,13 @@ def app_context(monkeypatch, fake_embedder):
     """Fixture to initialize ApplicationContext with full duckdb/local config."""
     ApplicationContext._instance = None
     monkeypatch.setenv("OPENAI_API_KEY", "test")
-    monkeypatch.setenv("SPICEDB_TOKEN", "test")
 
     duckdb = DuckdbStoreConfig(type="duckdb", duckdb_path="/tmp/testdb.duckdb")
     fake_security_config = SecurityConfiguration(
         m2m=M2MSecurity(enabled=False, realm_url=AnyUrl("http://localhost:8080/realms/fake-m2m-realm"), client_id="fake-m2m-client", audience="fake-audience"),
         user=UserSecurity(enabled=False, realm_url=AnyUrl("http://localhost:8080/realms/fake-user-realm"), client_id="fake-user-client"),
         authorized_origins=[AnyHttpUrl("http://localhost:5173")],
-        rebac=SpiceDbRebacConfig(
-            endpoint="localhost:50051",
-            insecure=True,
-        ),
+        rebac=None,
     )
     config = Configuration(
         app=AppConfig(

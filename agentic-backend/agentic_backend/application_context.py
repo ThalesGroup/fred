@@ -43,12 +43,12 @@ from fred_core import (
     KpiLogStore,
     KPIWriter,
     LogStoreConfig,
+    OpenFgaRebacConfig,
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
     OpenSearchLogStore,
     RamLogStore,
     RebacEngine,
-    SpiceDbRebacConfig,
     SQLStorageConfig,
     get_model,
     rebac_factory,
@@ -785,24 +785,21 @@ class ApplicationContext:
             )
 
         rebac_cfg = cfg.security.rebac
-        if isinstance(rebac_cfg, SpiceDbRebacConfig):
-            logger.info("  🕸️ ReBAC engine: %s", rebac_cfg.type)
-            logger.info("     • endpoint: %s", rebac_cfg.endpoint)
-            logger.info("     • insecure: %s", rebac_cfg.insecure)
-            logger.info("     • sync_schema_on_init: %s", rebac_cfg.sync_schema_on_init)
-            token_value = os.getenv(rebac_cfg.token_env_var, "")
-            if token_value:
+        if rebac_cfg and rebac_cfg.enabled:
+            # Print rebac type
+            logger.info("  🕸️ Rebac Enabled:")
+            logger.info("     • Type: %s", rebac_cfg.type)
+            if isinstance(rebac_cfg, OpenFgaRebacConfig):
+                logger.info("     • API URL: %s", rebac_cfg.api_url)
+                logger.info("     • Store Name: %s", rebac_cfg.store_name)
                 logger.info(
-                    "     • %s: present (%s)",
-                    rebac_cfg.token_env_var,
-                    _mask(token_value),
+                    "     • Sync Schema on Init: %s", rebac_cfg.sync_schema_on_init
                 )
-            else:
-                logger.warning(
-                    "     ⚠️ %s is not set — ReBAC authorization calls will fail.",
-                    rebac_cfg.token_env_var,
+                logger.info(
+                    "     • Create Store if Needed: %s",
+                    rebac_cfg.create_store_if_needed,
                 )
         else:
-            logger.info("  🕸️ ReBAC engine: disabled")
+            logger.info("  🕸️ Rebac Disabled")
 
         logger.info("────────────────────────────────────────────────────────────────")
