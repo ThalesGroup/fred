@@ -132,6 +132,11 @@ mcp:
       url: "http://localhost:8885/mcp"
       sse_read_timeout: 2000
       auth_mode: "no_token"
+    - name: "mcp-co2-service"
+      transport: "streamable_http"
+      url: "http://localhost:9798/mcp"
+      sse_read_timeout: 2000
+      auth_mode: "no_token"
 
 storage:
   postgres:

@@ -33,9 +33,67 @@ Ressources :
 - https://data.grandlyon.com
 - https://transport.data.gouv.fr
 
+## ⚙️ Étape 0 — Baseline stable
+
+1. **Charger les CSV via l’UI Fred / Knowledge Flow**  
+   - Ouvrir l’interface d’ingestion tabulaire.  
+   - Importer `bike_infra_demo.csv` et `tcl_stops_demo.csv` dans la base DuckDB exposée par le serveur MCP tabulaire (mêmes noms de tables).  
+   - Vérifier via l’outil “Lister les datasets” que les deux tables sont bien disponibles.
+2. **Démarrer Knowledge Flow + Agentic Backend** puis sélectionner l’agent *EcoAdvisor*.
+3. **Conduite attendue** : l’agent suit le pattern Tessa (reasoner → tools → reasoner) et produit un bilan CO₂ markdown avec :
+   - un tableau comparant voiture / TCL / vélo,
+   - des hypothèses explicites (distance, fréquence, facteurs),
+   - 2–3 suggestions pour réduire l’empreinte.
+
+Extrait attendu :
+
+```markdown
+| Mode | CO₂ / semaine | Hypothèses |
+| --- | --- | --- |
+| Voiture | 19.2 kg | 10 km x 2 trajets x 5 j, 0.192 kg/km |
+| TCL | 1.0 kg | même distance, 0.01 kg/km |
+| Vélo | 0 kg | émission nulle |
+
+**Hypothèses** : distance estimée via utilisateur, facteurs ADEME simplifiés.  
+**Pistes bas carbone** : tester TCL les jours de pluie, mix vélo + TCL quand météo clémente.
+```
+
 ---
 
-# 🧱 Étape 1 — Inspection des données
+## 🧱 Étape 1 — Workflow structuré (reasoner → tools → compute_co2 → reasoner_final)
+
+Cette étape applique la roadmap :
+
+- `EcoState` transporte désormais des champs structurés (`distance_km`, `frequency_days`, `mode`).  
+  Ils sont extraits automatiquement des derniers messages utilisateur (regex FR/EN basiques).
+- Nouveau nœud LangGraph `compute_co2` (Python pur) qui :
+  - applique les facteurs d’émission (`voiture=0.192`, `tcl=0.01`, `vélo=0`)
+  - produit un tableau Markdown standard + hypothèses + suggestions bas carbone
+  - renvoie un `ToolMessage` interne consommé par `reasoner_final`.
+- Le graphe suit la séquence :  
+  `START → reasoner → tools ↺ (…) → compute_co2 → reasoner_final → END`
+  - Tant que le LLM demande un tool MCP, on boucle `reasoner ↔ tools`.  
+  - Dès que `tools_condition` signale la fin des appels, on passe par `compute_co2`.  
+  - `reasoner_final` réutilise **strictement** le tableau fourni pour rédiger la réponse.
+
+✅ Résultat : calculs auditables, structure claire entre raisonnement LLM et calcul Python, et format de sortie stable pour la démo.
+
+---
+
+## 🧱 Étape 2 — Référentiel CO₂ externe (HTTP)
+
+- Lancer le serveur MCP de référence CO₂ (`academy/co2-estimation-service`):  
+  `uvicorn co2_estimation_service.server_mcp:app --host 127.0.0.1 --port 9798`
+- Ajouter sa configuration MCP (`mcp-co2-demo`) côté Agentic Backend, puis relancer l’app.
+- EcoAdvisor n’embarque plus de facteurs dans le prompt :  
+  - les tools `list_emission_modes`, `get_emission_factor`, `compare_trip_modes` fournissent les facteurs, la source et la date de mise à jour,  
+  - le nœud `compute_co2` consomme ces tools pour bâtir le tableau Markdown,  
+  - `reasoner_final` cite explicitement les sources ADEME renvoyées par le service.
+- En cas d’indisponibilité du service, un calcul de secours (facteurs statiques) est conservé pour la démo.
+
+---
+
+## 🧱 Préparation des données (pipeline historique)
 
 Fichier : `rhone_inspect.py`
 

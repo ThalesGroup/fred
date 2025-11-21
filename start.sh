@@ -12,5 +12,8 @@ trap "echo 'Stopping...'; kill 0" SIGINT
 # frontend
 (cd frontend && make run 2>&1 | sed "s/^/[FRONTEND] /") &
 
+# CO₂ emission reference MCP server
+(cd academy/co2-estimation-service && make run 2>&1 | sed "s/^/[CO2] /") &
+
 # wait for all background jobs
 wait

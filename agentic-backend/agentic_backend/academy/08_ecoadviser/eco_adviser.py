@@ -28,27 +28,21 @@ Fred rationale:
   quitte à séparer plus tard un noeud compute_co2 dédié.
 """
 
-import asyncio
-import csv
 import json
 import logging
-import sqlite3
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Annotated, Any, Dict, List, Optional, TypedDict
+import re
+import unicodedata
+from typing import Annotated, Any, Dict, List, NotRequired, Optional, TypedDict
 
 from langchain_core.messages import AnyMessage, HumanMessage, ToolMessage
-from langchain_core.tools import BaseTool
-from langgraph.constants import START
+from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import tools_condition
-from pydantic import BaseModel, Field, PrivateAttr
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.common.structures import AgentSettings
-from agentic_backend.common.tool_node_utils import create_mcp_tool_node
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import (
     AgentTuning,
@@ -59,319 +53,46 @@ from agentic_backend.core.agents.agent_spec import (
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.runtime_source import expose_runtime_source
 
+
 logger = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Local CSV → SQLite dataset + LangChain tool wrappers
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class DemoCSVSpec:
-    table_name: str
-    file_name: str
-    description: str = ""
-
-
-class LocalTabularDataset:
-    """Loads the academy CSV files into a lightweight SQLite database."""
-
-    def __init__(
-        self,
-        dataset_name: str,
-        csv_specs: List[DemoCSVSpec],
-        data_dir: Optional[Path] = None,
-        db_root: Optional[Path] = None,
-    ):
-        self.dataset_name = dataset_name
-        self.csv_specs = csv_specs
-        self.data_dir = data_dir or Path(__file__).parent
-        self.db_root = db_root or (Path.home() / ".fred" / "academy" / "eco_adviser")
-        self.db_path = self.db_root / f"{dataset_name}.sqlite"
-        self._schemas: Dict[str, List[str]] = {}
-        self._row_counts: Dict[str, int] = {}
-        self.ready = False
-
-    # -------------------------- bootstrap helpers ---------------------------
-
-    def _sanitize_headers(self, headers: List[str]) -> List[str]:
-        seen: Dict[str, int] = {}
-        result: List[str] = []
-        for header in headers:
-            candidate = (
-                header.strip()
-                .lower()
-                .replace(" ", "_")
-                .replace("-", "_")
-                .replace("/", "_")
-            )
-            candidate = "".join(ch for ch in candidate if ch.isalnum() or ch == "_")
-            if not candidate:
-                candidate = "col"
-            if candidate in seen:
-                seen[candidate] += 1
-                candidate = f"{candidate}_{seen[candidate]}"
-            else:
-                seen[candidate] = 0
-            result.append(candidate)
-        return result
-
-    def _detect_delimiter(self, file_path: Path) -> str:
-        try:
-            sample = file_path.read_text(encoding="utf-8", errors="ignore")[:4096]
-            if not sample:
-                return ","
-            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
-            return dialect.delimiter
-        except Exception:
-            logger.warning(
-                "EcoAdvisor: delimiter detection failed for %s, defaulting to comma.",
-                file_path,
-            )
-            return ","
-
-    def _load_csv_into_sqlite(self, conn: sqlite3.Connection, spec: DemoCSVSpec) -> None:
-        csv_path = self.data_dir / spec.file_name
-        if not csv_path.exists():
-            raise FileNotFoundError(
-                f"Missing CSV dataset: {csv_path} (expected for table '{spec.table_name}')"
-            )
-
-        delimiter = self._detect_delimiter(csv_path)
-        table_name = spec.table_name
-
-        with open(csv_path, "r", encoding="utf-8", errors="ignore", newline="") as handle:
-            reader = csv.reader(handle, delimiter=delimiter)
-            try:
-                raw_headers = next(reader)
-            except StopIteration as exc:  # pragma: no cover - defensive
-                raise ValueError(f"CSV file {csv_path} is empty.") from exc
-
-            headers = self._sanitize_headers(raw_headers)
-            columns_def = ", ".join(f'"{col}" TEXT' for col in headers)
-            column_names = ", ".join(f'"{col}"' for col in headers)
-            placeholders = ", ".join("?" for _ in headers)
-            insert_sql = f'INSERT INTO "{table_name}" ({column_names}) VALUES ({placeholders})'
-
-            conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
-            conn.execute(f'CREATE TABLE "{table_name}" ({columns_def})')
-
-            batch: List[tuple[str, ...]] = []
-            total_rows = 0
-            for row in reader:
-                if not row:
-                    continue
-                if len(row) < len(headers):
-                    row.extend([""] * (len(headers) - len(row)))
-                elif len(row) > len(headers):
-                    row = row[: len(headers)]
-                batch.append(tuple(row))
-                if len(batch) >= 500:
-                    conn.executemany(insert_sql, batch)
-                    total_rows += len(batch)
-                    batch.clear()
-
-            if batch:
-                conn.executemany(insert_sql, batch)
-                total_rows += len(batch)
-
-        self._schemas[table_name] = list(headers)
-        self._row_counts[table_name] = total_rows
-
-    def bootstrap(self) -> bool:
-        """Converts all CSVs to tables stored in a dedicated SQLite file."""
-        self._schemas.clear()
-        self._row_counts.clear()
-        try:
-            self.db_root.mkdir(parents=True, exist_ok=True)
-            if self.db_path.exists():
-                self.db_path.unlink()
-
-            with sqlite3.connect(self.db_path) as conn:
-                for spec in self.csv_specs:
-                    self._load_csv_into_sqlite(conn, spec)
-            self.ready = True
-            logger.info(
-                "EcoAdvisor local dataset ready at %s with tables %s",
-                self.db_path,
-                list(self._schemas.keys()),
-            )
-            return True
-        except Exception:
-            logger.exception("EcoAdvisor failed to transform CSV files into SQLite.")
-            self.ready = False
-            return False
-
-    # ------------------------------- metadata -------------------------------
-
-    def list_tables(self) -> List[str]:
-        if not self.ready:
-            return []
-        return [spec.table_name for spec in self.csv_specs if spec.table_name in self._schemas]
-
-    def describe_table(self, table_name: str) -> Dict[str, Any]:
-        if not self.ready:
-            raise RuntimeError("Local dataset not available. Check CSV files and permissions.")
-        table = table_name.strip()
-        if table not in self._schemas:
-            raise ValueError(f"Unknown table '{table}'. Available: {self.list_tables()}")
-        return {
-            "database": self.dataset_name,
-            "table": table,
-            "columns": self._schemas[table],
-            "row_count": self._row_counts.get(table, 0),
-        }
-
-    def describe_all_tables(self) -> List[Dict[str, Any]]:
-        if not self.ready:
-            raise RuntimeError("Local dataset not available. Check CSV files and permissions.")
-        descriptions: List[Dict[str, Any]] = []
-        for table in self.list_tables():
-            payload = self.describe_table(table)
-            descriptions.append(
-                {
-                    **payload,
-                    "description": next(
-                        (spec.description for spec in self.csv_specs if spec.table_name == table),
-                        "",
-                    ),
-                }
-            )
-        return descriptions
-
-    def get_context_entry(self) -> Optional[Dict[str, Any]]:
-        if not self.ready:
-            return None
-        return {
-            "database": self.dataset_name,
-            "tables": self.list_tables(),
-            "source": "local_csv_demo",
-        }
-
-    # -------------------------------- queries -------------------------------
-
-    def run_query(self, sql: str, limit: int = 50) -> Dict[str, Any]:
-        if not self.ready:
-            raise RuntimeError("Local dataset not available. Check CSV files and permissions.")
-        cleaned_sql = sql.strip()
-        if not cleaned_sql.lower().startswith("select"):
-            raise ValueError("Only SELECT statements are allowed on the demo database.")
-        limit = max(1, min(limit, 200))
-        wrapped_query = cleaned_sql
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.execute(wrapped_query)
-                raw_rows = cursor.fetchmany(limit + 1)
-                columns = [meta[0] for meta in cursor.description or []]
-                truncated = len(raw_rows) > limit
-                rows = raw_rows[:limit]
-            return {
-                "database": self.dataset_name,
-                "query": cleaned_sql,
-                "columns": columns,
-                "rows": [dict(row) for row in rows],
-                "row_count": len(rows),
-                "truncated": truncated,
-            }
-        except sqlite3.Error as exc:
-            raise ValueError(f"SQLite error: {exc}") from exc
-
-
-class _ListTablesArgs(BaseModel):
-    refresh: bool = Field(
-        default=False,
-        description="Set to true to rebuild the SQLite database from the CSV files before listing tables.",
-    )
-
-
-class _DescribeTableArgs(BaseModel):
-    table_name: str = Field(..., description="Name of the table to describe (e.g. 'bike_infra_demo').")
-
-
-class _SQLQueryArgs(BaseModel):
-    sql: str = Field(..., description="SELECT statement to run against the local EcoAdvisor demo dataset.")
-    limit: int = Field(
-        default=50,
-        ge=1,
-        le=200,
-        description="Maximum number of rows returned from the local database (default 50, max 200).",
-    )
-
-
-class LocalListTablesTool(BaseTool):
-    name: str = "eco_demo_list_tables"
-    description: str = (
-        "List the locally bundled EcoAdvisor tables converted from CSV files. "
-        "Returns column names, row counts, and a short description for each table."
-    )
-    args_schema: type[BaseModel] = _ListTablesArgs
-    _dataset: LocalTabularDataset = PrivateAttr()
-
-    def __init__(self, dataset: LocalTabularDataset):
-        super().__init__()
-        self._dataset = dataset
-
-    def _run(self, refresh: bool = False) -> str:
-        if refresh:
-            self._dataset.bootstrap()
-        try:
-            payload = self._dataset.describe_all_tables()
-        except Exception as exc:  # noqa: BLE001
-            return json.dumps({"error": str(exc)})
-        return json.dumps(payload, ensure_ascii=False)
-
-    async def _arun(self, refresh: bool = False) -> str:
-        return await asyncio.to_thread(self._run, refresh)
-
-
-class LocalDescribeTableTool(BaseTool):
-    name: str = "eco_demo_describe_table"
-    description: str = (
-        "Return schema information (columns, row count) for a single local EcoAdvisor table. "
-        "Use this before writing SQL queries."
-    )
-    args_schema: type[BaseModel] = _DescribeTableArgs
-    _dataset: LocalTabularDataset = PrivateAttr()
-
-    def __init__(self, dataset: LocalTabularDataset):
-        super().__init__()
-        self._dataset = dataset
-
-    def _run(self, table_name: str) -> str:
-        try:
-            payload = self._dataset.describe_table(table_name)
-        except Exception as exc:  # noqa: BLE001
-            return json.dumps({"error": str(exc)})
-        return json.dumps(payload, ensure_ascii=False)
-
-    async def _arun(self, table_name: str) -> str:
-        return await asyncio.to_thread(self._run, table_name)
-
-
-class LocalSQLQueryTool(BaseTool):
-    name: str = "eco_demo_sql_query"
-    description: str = (
-        "Execute a read-only SQL SELECT query against the EcoAdvisor local SQLite database. "
-        "Only SELECT statements are allowed."
-    )
-    args_schema: type[BaseModel] = _SQLQueryArgs
-    _dataset: LocalTabularDataset = PrivateAttr()
-
-    def __init__(self, dataset: LocalTabularDataset):
-        super().__init__()
-        self._dataset = dataset
-
-    def _run(self, sql: str, limit: int = 50) -> str:
-        try:
-            payload = self._dataset.run_query(sql, limit=limit)
-        except Exception as exc:  # noqa: BLE001
-            return json.dumps({"error": str(exc), "sql": sql})
-        return json.dumps(payload, ensure_ascii=False)
-
-    async def _arun(self, sql: str, limit: int = 50) -> str:
-        return await asyncio.to_thread(self._run, sql, limit)
+FALLBACK_EMISSION_FACTORS = {
+    "voiture": 0.192,  # kg CO₂/km – ADEME (démo simplifiée)
+    "tcl": 0.01,
+    "velo": 0.0,
+}
+MODE_KEYWORDS = {
+    "voiture": ("voiture", "auto", "car", "covoiturage", "voitures", "vehicule"),
+    "tcl": (
+        "tcl",
+        "bus",
+        "tram",
+        "metro",
+        "métro",
+        "train",
+        "rer",
+        "transport en commun",
+        "transports en commun",
+        "tc",
+    ),
+    "velo": ("velo", "vélo", "bike", "bicyclette", "vtt"),
+}
+DISTANCE_PATTERN = re.compile(r"(\d+(?:[.,]\d+)?)\s*(?:km|kilometres?)")
+FREQUENCY_PATTERN = re.compile(
+    r"(\d+)\s*(?:j|jour|jours|fois)\s*(?:/?\s*(?:par)?\s*(?:sem|semaine))?"
+)
+DAILY_KEYWORDS = ("quotidien", "quotidienne", "tous les jours", "chaque jour")
+SERVICE_MODE_MAP = {
+    "voiture": "car_thermal",
+    "tcl": "public_transport",
+    "velo": "bike",
+}
+SERVICE_MODE_LABELS = {
+    "car_thermal": "Voiture",
+    "public_transport": "TCL",
+    "bike": "Vélo",
+}
+SERVICE_DISPLAY_ORDER = ["car_thermal", "public_transport", "bike"]
 
 
 # ---------------------------------------------------------------------------
@@ -409,12 +130,11 @@ ECO_TUNING = AgentTuning(
                 "- First, **list the available datasets and their schema** using the tools.\n"
                 "- Then, select the relevant tables and run queries to inspect nearby bike lanes\n"
                 "  and public transport options.\n\n"
-                "### CO₂ Estimates (simplified factors)\n"
-                "When you need to estimate CO₂ emissions, you can use the following factors:\n"
-                "- Car (thermal): 0.192 kg CO₂ per km\n"
-                "- Public transport (average): 0.01 kg CO₂ per km\n"
-                "- Bike / walking: 0 kg CO₂ per km\n"
-                "These are simplified emission factors inspired by ADEME data, for demo purposes.\n\n"
+                "### CO₂ Reference Service (Étape 2)\n"
+                "- Do NOT store emission factors in the prompt.\n"
+                "- Use the dedicated tools (`list_emission_modes`, `get_emission_factor`, `compare_trip_modes`) "
+                "provided by the CO₂ MCP server.\n"
+                "- Always cite the `source` and `last_update` returned by the tool in your final answer.\n\n"
                 "### Workflow\n"
                 "1. Clarify the user's context:\n"
                 "   - origin and destination (city or district is enough)\n"
@@ -439,130 +159,129 @@ ECO_TUNING = AgentTuning(
                 "- If the user did not provide enough information (distance, frequency),\n"
                 "  ask targeted follow-up questions before estimating CO₂.\n"
                 "- If you are unsure about a detail, state your assumptions explicitly.\n\n"
+                "### Mandatory Markdown Output (Étape 0)\n"
+                "At the end of every answer you MUST append:\n"
+                "1. A table with the columns `Mode | CO₂ / semaine | Hypothèses`.\n"
+                "   The rows must be **Voiture**, **TCL**, **Vélo** (in that order).\n"
+                "2. A bold heading `**Hypothèses** :` followed by the explicit assumptions\n"
+                "   (distance, fréquence, facteurs utilisés).\n"
+                "3. A bold heading `**Pistes bas carbone** :` followed by 2–3 actionable suggestions\n"
+                "   tailored to the context.\n"
+                "If distance/frequency are missing, ask before producing the table.\n\n"
                 "Current date: {today}.\n\n"
             ),
         ),
     ],
+    # EcoAdvisor utilise le même MCP server tabulaire que Tessa.
+    # Fred rationale:
+    # - On ne réinvente pas l'intégration back; on exploite la même passerelle MCP.
     mcp_servers=[
         MCPServerRef(name="mcp-knowledge-flow-mcp-tabular"),
+        MCPServerRef(name="mcp-co2-service"),
     ],
 )
 
 
 class EcoState(TypedDict):
-    """State LangGraph pour EcoAdvisor."""
+    """
+    State LangGraph pour EcoAdvisor.
+
+    Fred rationale:
+    - On garde le même shape que Tessa pour rester compatible avec les helpers génériques:
+      * messages: historique multi-turn
+      * database_context: info "quels datasets / tables sont accessibles ?"
+    - On pourra enrichir plus tard (ex: champs structurés pour distance, mode...).
+    """
 
     messages: Annotated[list[AnyMessage], add_messages]
     database_context: List[Dict[str, Any]]
+    distance_km: NotRequired[Optional[float]]
+    frequency_days: NotRequired[Optional[int]]
+    mode: NotRequired[Optional[str]]
+    co2_payload: NotRequired[Optional[Dict[str, Any]]]
 
 
 @expose_runtime_source("agent.EcoAdvisor")
 class EcoAdvisor(AgentFlow):
-    """EcoAdvisor — Agent Fred spécialisé mobilité / CO₂, basé sur le pattern Tessa."""
+    """
+    EcoAdvisor — Agent Fred spécialisé mobilité / CO₂, basé sur le pattern Tessa.
+
+    Pattern commun Fred:
+    - Class-level `tuning` (décrit l'agent, les prompts éditables, les MCP liés).
+    - __init__ minimal: on stocke les settings et on instancie MCPRuntime.
+    - async_init():
+      - récupère un modèle par défaut
+      - initialise le runtime MCP (connexion au server tabulaire)
+      - bind les tools au modèle
+      - construit le graphe LangGraph
+    - _build_graph():
+      - noeud LLM `reasoner`
+      - noeuds tools (délégués à MCPRuntime)
+      - boucle reasoner <-> tools contrôlée par tools_condition
+    """
 
     tuning = ECO_TUNING
 
     def __init__(self, agent_settings: AgentSettings):
         super().__init__(agent_settings=agent_settings)
+        # Runtime MCP partagé avec Tessa: même principe, agent différent.
         self.mcp = MCPRuntime(agent=self)
-        self.local_dataset: Optional[LocalTabularDataset] = None
-        self._local_demo_tools: List[BaseTool] = []
-        self._local_db_context: Optional[Dict[str, Any]] = None
-        self._tool_node = None
 
     # -----------------------------------------------------------------------
     # Bootstrap: modèle + MCP + graphe
     # -----------------------------------------------------------------------
     async def async_init(self, runtime_context: RuntimeContext):
         await super().async_init(runtime_context)
+        # Modele "par défaut" de Fred pour le chat (fourni par la factory centrale).
         self.model = get_default_chat_model()
 
+        # Démarre la stack MCP tabulaire (client JSON-RPC, discovery des tools, etc.).
         await self.mcp.init()
 
-        await self._bootstrap_local_demo_dataset()
+        # On bind les tools MCP directement au modèle:
+        # cela permet au LLM d'appeler des tools "nativement" via l'OpenAI tool-calling.
+        self.model = self.model.bind_tools(self.mcp.get_tools())
 
-        tool_list = list(self.mcp.get_tools())
-        if self._local_demo_tools:
-            tool_list.extend(self._local_demo_tools)
-
-        if tool_list:
-            self.model = self.model.bind_tools(tool_list)
-            self._tool_node = create_mcp_tool_node(tool_list)
-        else:
-            self._tool_node = self.mcp.get_tool_nodes()
-
+        # Construction du graphe LangGraph pour cet agent.
         self._graph = self._build_graph()
 
     async def aclose(self):
+        # Fred rationale:
+        # - EcoAdvisor, comme Tessa, possède un runtime MCP à fermer proprement.
         await self.mcp.aclose()
 
     # -----------------------------------------------------------------------
     # Helpers MCP / contexte tabulaire
     # -----------------------------------------------------------------------
-
-    async def _bootstrap_local_demo_dataset(self) -> None:
-        """Charge les CSV académiques dans une base SQLite locale."""
-
-        csv_specs = [
-            DemoCSVSpec(
-                table_name="bike_infra_demo",
-                file_name="bike_infra_demo.csv",
-                description="Bike lanes and cycling infrastructure for the Lyon metro area.",
-            ),
-            DemoCSVSpec(
-                table_name="tcl_stops_demo",
-                file_name="tcl_stops_demo.csv",
-                description="Public transport stops (TCL) with served lines and coordinates.",
-            ),
-        ]
-
-        dataset = LocalTabularDataset(
-            dataset_name="eco_local_mobility",
-            csv_specs=csv_specs,
-            data_dir=Path(__file__).parent,
-        )
-
-        try:
-            success = await asyncio.to_thread(dataset.bootstrap)
-        except Exception:
-            logger.exception(
-                "EcoAdvisor: unexpected error while preparing the local CSV dataset. "
-                "Continuing with MCP tools only."
-            )
-            success = False
-
-        if not success:
-            logger.warning(
-                "EcoAdvisor: local CSV files could not be converted to SQLite. Tools will rely on MCP only."
-            )
-            self.local_dataset = None
-            self._local_demo_tools = []
-            self._local_db_context = None
-            return
-
-        self.local_dataset = dataset
-        self._local_db_context = dataset.get_context_entry()
-        self._local_demo_tools = [
-            LocalListTablesTool(dataset),
-            LocalDescribeTableTool(dataset),
-            LocalSQLQueryTool(dataset),
-        ]
-
     def _maybe_parse_json(self, payload: Any) -> Any:
         if isinstance(payload, str):
             try:
                 return json.loads(payload)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 return payload
         return payload
 
     def _latest_tool_output(self, state: EcoState, tool_name: str) -> Any:
+        """
+        Récupère le dernier ToolMessage d'un tool donné.
+
+        Fred rationale:
+        - Permettrait de factoriser l'accès aux résultats (list datasets, query, etc.).
+        - Non utilisé dans la v1, mais utile pour de futures post-analyses côté agent.
+        """
         for msg in reversed(state["messages"]):
             if isinstance(msg, ToolMessage) and getattr(msg, "name", "") == tool_name:
                 return self._maybe_parse_json(msg.content)
         return None
 
     def _format_context_for_prompt(self, database_context: List[Dict[str, Any]]) -> str:
+        """
+        Formatte la liste des bases / tables accessibles pour injection dans le prompt.
+
+        Fred rationale:
+        - On donne au LLM une vue synthétique des datasets disponibles
+          → il n'a pas à "deviner" les noms de tables.
+        """
         if not database_context:
             return "No databases or tables currently loaded.\n"
 
@@ -574,16 +293,18 @@ class EcoAdvisor(AgentFlow):
             lines.append(f"- Database: `{db}` with tables: {tables}")
         return "\n".join(lines) + "\n\n"
 
-    def _merge_local_context(self, context: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
-        base: List[Dict[str, Any]] = list(context or [])
-        if self._local_db_context:
-            local_db_name = self._local_db_context.get("database")
-            already_present = any(entry.get("database") == local_db_name for entry in base)
-            if not already_present:
-                base.append(self._local_db_context)
-        return base
+    async def _ensure_database_context(self, state: EcoState) -> List[Dict[str, Any]]:
+        """
+        Charge la liste des bases/tables disponibles via un tool MCP (ex: get_context).
 
-    async def _fetch_remote_database_context(self) -> List[Dict[str, Any]]:
+        Fred rationale:
+        - L'agent n'a pas besoin de connaître la config de Knowledge Flow.
+        - Il suffit d'interroger MCP une fois et de garder le résultat en cache
+          dans l'état du graphe.
+        """
+        if state.get("database_context"):
+            return state["database_context"]
+
         logger.info("EcoAdvisor: fetching database context via MCP (get_context)...")
         try:
             tools = self.mcp.get_tools()
@@ -595,34 +316,288 @@ class EcoAdvisor(AgentFlow):
                 return []
 
             raw_context = await tool.ainvoke({})
-            return json.loads(raw_context) if isinstance(raw_context, str) else raw_context
 
-        except Exception as e:  # noqa: BLE001
+            context = (
+                json.loads(raw_context) if isinstance(raw_context, str) else raw_context
+            )
+
+            state["database_context"] = context
+            return context
+
+        except Exception as e:
             logger.warning(f"EcoAdvisor: could not load database context: {e}")
             return []
 
-    async def _ensure_database_context(self, state: EcoState) -> List[Dict[str, Any]]:
-        context = state.get("database_context")
-        if not context:
-            context = await self._fetch_remote_database_context()
+    # -----------------------------------------------------------------------
+    # Helpers champs structurés / CO₂
+    # -----------------------------------------------------------------------
+    async def _invoke_tool(self, tool_name: str, payload: Dict[str, Any]) -> Any:
+        tools = self.mcp.get_tools()
+        tool = next((t for t in tools if t.name == tool_name), None)
+        if not tool:
+            raise ValueError(f"EcoAdvisor: tool '{tool_name}' not available via MCP.")
+        return await tool.ainvoke(payload)
 
-        merged = self._merge_local_context(context)
-        state["database_context"] = merged
+    def _message_to_text(self, message: HumanMessage) -> str:
+        content = message.content
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            segments = []
+            for block in content:
+                if isinstance(block, dict):
+                    segments.append(block.get("text") or "")
+                else:
+                    segments.append(str(block))
+            return " ".join(segments)
+        return str(content)
+
+    def _normalize_text(self, text: str) -> str:
+        lowered = text.lower()
+        normalized = unicodedata.normalize("NFKD", lowered)
+        return "".join(ch for ch in normalized if not unicodedata.combining(ch))
+
+    def _detect_mode(self, normalized_text: str) -> Optional[str]:
+        for mode, keywords in MODE_KEYWORDS.items():
+            if any(keyword in normalized_text for keyword in keywords):
+                return mode
+        return None
+
+    def _extract_trip_hints(self, state: EcoState) -> Dict[str, Optional[Any]]:
+        for message in reversed(state.get("messages", [])):
+            if isinstance(message, HumanMessage):
+                raw_text = self._message_to_text(message)
+                normalized = self._normalize_text(raw_text)
+                hints: Dict[str, Optional[Any]] = {}
+                if match := DISTANCE_PATTERN.search(normalized):
+                    try:
+                        hints["distance_km"] = float(match.group(1).replace(",", "."))
+                    except ValueError:
+                        pass
+                if match := FREQUENCY_PATTERN.search(normalized):
+                    try:
+                        hints["frequency_days"] = int(match.group(1))
+                    except ValueError:
+                        pass
+                else:
+                    if any(keyword in normalized for keyword in DAILY_KEYWORDS):
+                        hints["frequency_days"] = 5
+                if mode := self._detect_mode(normalized):
+                    hints["mode"] = mode
+                return hints
+        return {}
+
+    def _merge_trip_fields(
+        self, state: EcoState, hints: Dict[str, Optional[Any]]
+    ) -> Dict[str, Optional[Any]]:
+        merged = {
+            "distance_km": state.get("distance_km"),
+            "frequency_days": state.get("frequency_days"),
+            "mode": state.get("mode"),
+        }
+        for key, value in hints.items():
+            if value is not None:
+                merged[key] = value
         return merged
+
+    def _service_mode(self, user_mode: Optional[str]) -> str:
+        if not user_mode:
+            return "car_thermal"
+        return SERVICE_MODE_MAP.get(user_mode, "car_thermal")
+
+    def _service_alternatives(self, current_service_mode: str) -> List[str]:
+        return [m for m in SERVICE_DISPLAY_ORDER if m != current_service_mode]
+
+    def _generate_suggestions(self, current_mode: Optional[str]) -> List[str]:
+        suggestions: List[str] = []
+        if current_mode != "tcl":
+            suggestions.append(
+                "Tester une combinaison TCL + marche pour réduire de 90 % les émissions."
+            )
+        if current_mode != "velo":
+            suggestions.append(
+                "Planifier 1 à 2 trajets hebdo à vélo lorsque la météo est clémente."
+            )
+        suggestions.append(
+            "Optimiser le remplissage de la voiture (covoiturage) les jours où elle reste nécessaire."
+        )
+        return suggestions[:3]
+
+    async def _compare_modes_via_mcp(
+        self, distance_km: float, frequency_days: int, current_mode: Optional[str]
+    ) -> Optional[Dict[str, Any]]:
+        if not self.mcp:
+            return None
+        current_service_mode = self._service_mode(current_mode)
+        alternatives = self._service_alternatives(current_service_mode)
+        daily_distance = round(max(distance_km, 0.0) * 2.0, 3)
+        try:
+            raw = await self._invoke_tool(
+                "compare_trip_modes",
+                {
+                    "distance_km": daily_distance,
+                    "frequency_days_per_week": frequency_days,
+                    "current_mode": current_service_mode,
+                    "alternatives": alternatives,
+                    "weeks_per_year": 47,
+                },
+            )
+            comparison = self._maybe_parse_json(raw)
+            if isinstance(comparison, dict) and comparison.get("ok"):
+                comparison["_daily_distance_km"] = daily_distance
+                comparison["_service_current_mode"] = current_service_mode
+                return comparison
+        except Exception:
+            logger.exception("EcoAdvisor: compare_trip_modes tool call failed.")
+        return None
+
+    def _collate_service_entries(self, comparison: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        entries: Dict[str, Dict[str, Any]] = {}
+        for entry in [comparison.get("current")] + comparison.get("alternatives", []):
+            if isinstance(entry, dict) and entry.get("mode"):
+                entries[entry["mode"]] = entry
+        return entries
+
+    def _build_service_table(
+        self,
+        comparison: Dict[str, Any],
+        frequency_days: int,
+    ) -> str:
+        entries = self._collate_service_entries(comparison)
+        rows = ["| Mode | CO₂ / semaine | Hypothèses |", "| --- | --- | --- |"]
+        for service_mode in SERVICE_DISPLAY_ORDER:
+            entry = entries.get(service_mode)
+            label = SERVICE_MODE_LABELS.get(service_mode, service_mode)
+            if not entry:
+                rows.append(f"| {label} | n.d. | Facteur indisponible |")
+                continue
+            weekly = float(entry.get("weekly_kg_co2", 0.0))
+            factor = float(entry.get("factor_kg_per_km", 0.0))
+            per_day = float(entry.get("distance_km_per_day", comparison.get("_daily_distance_km", 0.0)))
+            freq = int(entry.get("frequency_days_per_week", frequency_days))
+            rows.append(
+                f"| {label} | {weekly:.2f} kg | {per_day:.1f} km/j x {freq} j x {factor:.3f} kg/km |"
+            )
+        return "\n".join(rows)
+
+    def _sources_from_comparison(self, comparison: Dict[str, Any]) -> List[str]:
+        entries = self._collate_service_entries(comparison)
+        sources = set()
+        for entry in entries.values():
+            source = entry.get("source")
+            update = entry.get("last_update")
+            if source:
+                label = entry.get("label") or SERVICE_MODE_LABELS.get(entry.get("mode"), entry.get("mode"))
+                sources.add(f"{label} — {source} (maj {update})")
+        return sorted(sources)
+
+    def _generate_service_suggestions(
+        self,
+        comparison: Dict[str, Any],
+        current_service_mode: str,
+    ) -> List[str]:
+        suggestions: List[str] = []
+        savings = comparison.get("savings") or []
+        positive_savings = [
+            s for s in savings if s.get("delta_yearly_kg_co2", 0) > 0
+        ]
+        if positive_savings:
+            best = max(positive_savings, key=lambda s: s["delta_yearly_kg_co2"])
+            best_mode = best.get("to_mode")
+            label = SERVICE_MODE_LABELS.get(best_mode, best_mode)
+            delta = best.get("delta_yearly_kg_co2", 0.0)
+            suggestions.append(
+                f"Basculer vers {label} permettrait d'éviter environ {delta:.1f} kg CO₂/an."
+            )
+        if current_service_mode != "bike":
+            suggestions.append(
+                "Planifier quelques trajets à vélo ou vélo + TCL pour réduire encore les émissions."
+            )
+        suggestions.append(
+            "S'appuyer sur les facteurs officiels ADEME (via le service CO₂) pour suivre les progrès."
+        )
+        return suggestions[:3]
+
+    def _build_service_payload(
+        self,
+        comparison: Dict[str, Any],
+        distance_km: float,
+        frequency_days: int,
+        suggestions: List[str],
+    ) -> Dict[str, Any]:
+        table_markdown = self._build_service_table(comparison, frequency_days)
+        sources = self._sources_from_comparison(comparison)
+        daily_distance = comparison.get("_daily_distance_km", distance_km * 2)
+        assumptions = (
+            f"{distance_km:.1f} km aller ({daily_distance:.1f} km AR), "
+            f"{frequency_days} jours/semaine. Facteurs fournis par le service CO₂."
+        )
+        if sources:
+            assumptions += f" Sources: {', '.join(sources)}."
+        return {
+            "table_markdown": table_markdown,
+            "assumptions": assumptions,
+            "suggestions": suggestions,
+            "weekly_distance_km": daily_distance * frequency_days / 2,
+            "distance_km": distance_km,
+            "frequency_days": frequency_days,
+        }
+
+    def _build_co2_payload(
+        self,
+        distance_km: float,
+        frequency_days: int,
+        current_mode: Optional[str],
+    ) -> Dict[str, Any]:
+        weekly_distance = round(distance_km * 2 * frequency_days, 2)
+        rows = ["| Mode | CO₂ / semaine | Hypothèses |", "| --- | --- | --- |"]
+        for label, key in (("Voiture", "voiture"), ("TCL", "tcl"), ("Vélo", "velo")):
+            factor = FALLBACK_EMISSION_FACTORS[key]
+            emission = round(weekly_distance * factor, 2)
+            rows.append(
+                f"| {label} | {emission:.2f} kg | {weekly_distance:.1f} km x {factor:.3f} kg/km |"
+            )
+        table_markdown = "\n".join(rows)
+        assumptions = (
+            f"{distance_km:.1f} km aller, {frequency_days} jours/semaine, "
+            "2 trajets quotidiens."
+        )
+        suggestions = self._generate_suggestions(current_mode)
+        return {
+            "table_markdown": table_markdown,
+            "assumptions": assumptions,
+            "suggestions": suggestions,
+            "weekly_distance_km": weekly_distance,
+            "distance_km": distance_km,
+            "frequency_days": frequency_days,
+        }
 
     # -----------------------------------------------------------------------
     # 2) Construction du graphe LangGraph
     # -----------------------------------------------------------------------
     def _build_graph(self) -> StateGraph:
+        """
+        Graphe structuré :
+        - reasoner ↔ tools : boucle agentique pour explorer les datasets tabulaires.
+        - compute_co2      : calcul Python via le service CO₂ (fallback statique si service indispo).
+        - reasoner_final   : synthèse finale réutilisant le tableau calculé.
+        """
         builder = StateGraph(EcoState)
 
         builder.add_node("reasoner", self.reasoner)
-        tool_node = self._tool_node or self.mcp.get_tool_nodes()
-        builder.add_node("tools", tool_node)
+        builder.add_node("tools", self.mcp.get_tool_nodes())
+        builder.add_node("compute_co2", self.compute_co2)
+        builder.add_node("reasoner_final", self.reasoner_final)
 
         builder.add_edge(START, "reasoner")
-        builder.add_conditional_edges("reasoner", tools_condition)
+        builder.add_conditional_edges(
+            "reasoner",
+            tools_condition,
+            {"tools": "tools", "__end__": "compute_co2"},
+        )
         builder.add_edge("tools", "reasoner")
+        builder.add_edge("compute_co2", "reasoner_final")
+        builder.add_edge("reasoner_final", END)
 
         return builder
 
@@ -630,31 +605,50 @@ class EcoAdvisor(AgentFlow):
     # 3) Noeud LLM principal
     # -----------------------------------------------------------------------
     async def reasoner(self, state: EcoState):
+        """
+        Noeud LLM principal d'EcoAdvisor.
+
+        Fred rationale:
+        - C'est ici que l'on applique le prompt système "éco/mobilité".
+        - On enrichit ce prompt avec le contexte des datasets accessibles.
+        - On laisse le modèle choisir:
+          - quand appeler les tools MCP (list, schema, query)
+          - quand passer à la formulation des recommandations CO₂.
+        """
+
         if self.model is None:
             raise RuntimeError(
                 "EcoAdvisor: model is not initialized. Call async_init() first."
             )
 
+        # 1) Récupérer le prompt système tunable (via YAML/UI)
         tpl = self.get_tuned_text("prompts.system") or ""
 
+        # 2) Charger / mettre à jour le contexte des bases/tabulaires
         database_context = await self._ensure_database_context(state)
         tpl += self._format_context_for_prompt(database_context)
         system_text = self.render(tpl)
 
+        # 3) Construire l'historique de conversation minimal
         recent_history = self.recent_messages(state["messages"], max_messages=5)
         messages = self.with_system(system_text, recent_history)
         messages = self.with_chat_context_text(messages)
 
+        trip_hints = self._extract_trip_hints(state)
+        merged_trip = self._merge_trip_fields(state, trip_hints)
+
         try:
+            # 4) LLM + tool-calling: le modèle peut décider d'appeler MCP ou non
             response = await self.model.ainvoke(messages)
 
+            # 5) Injecter dans les metadata les payloads des tools déjà appelés
             tool_payloads: Dict[str, Any] = {}
             for msg in state["messages"]:
                 if isinstance(msg, ToolMessage) and getattr(msg, "name", ""):
                     raw = msg.content
                     try:
                         normalized = json.loads(raw) if isinstance(raw, str) else raw
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         normalized = raw
                     tool_payloads[msg.name or "unknown_tool"] = normalized
 
@@ -664,12 +658,17 @@ class EcoAdvisor(AgentFlow):
             md["tools"] = tools_md
             response.response_metadata = md
 
-            return {
+            result: Dict[str, Any] = {
                 "messages": [response],
                 "database_context": database_context,
             }
+            for field in ("distance_km", "frequency_days", "mode"):
+                value = merged_trip.get(field)
+                if value is not None:
+                    result[field] = value
+            return result
 
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("EcoAdvisor failed during reasoning.")
             fallback = await self.model.ainvoke(
                 [
@@ -685,3 +684,75 @@ class EcoAdvisor(AgentFlow):
                 "messages": [fallback],
                 "database_context": [],
             }
+
+    # -----------------------------------------------------------------------
+    # 4) Noeud compute_co2
+    # -----------------------------------------------------------------------
+    async def compute_co2(self, state: EcoState):
+        trip_hints = self._extract_trip_hints(state)
+        merged_trip = self._merge_trip_fields(state, trip_hints)
+        distance = merged_trip.get("distance_km")
+        frequency = merged_trip.get("frequency_days")
+        current_mode = merged_trip.get("mode")
+
+        payload: Optional[Dict[str, Any]] = None
+        if distance is not None and frequency is not None and frequency > 0:
+            comparison = await self._compare_modes_via_mcp(distance, frequency, current_mode)
+            if comparison:
+                service_mode = comparison.get("_service_current_mode", "car_thermal")
+                suggestions = self._generate_service_suggestions(comparison, service_mode)
+                payload = self._build_service_payload(
+                    comparison, distance, frequency, suggestions
+                )
+            else:
+                payload = self._build_co2_payload(distance, frequency, current_mode)
+        result: Dict[str, Any] = {"messages": [], "co2_payload": payload}
+        for field, value in (
+            ("distance_km", distance),
+            ("frequency_days", frequency),
+            ("mode", current_mode),
+        ):
+            if value is not None:
+                result[field] = value
+        return result
+
+    # -----------------------------------------------------------------------
+    # 5) Noeud reasoner_final
+    # -----------------------------------------------------------------------
+    async def reasoner_final(self, state: EcoState):
+        if self.model is None:
+            raise RuntimeError(
+                "EcoAdvisor: model is not initialized. Call async_init() first."
+            )
+
+        tpl = self.get_tuned_text("prompts.system") or ""
+        database_context = await self._ensure_database_context(state)
+        tpl += self._format_context_for_prompt(database_context)
+
+        co2_payload = state.get("co2_payload")
+        if co2_payload:
+            suggestions_md = "\n".join(f"- {s}" for s in co2_payload["suggestions"])
+            tpl += (
+                "### Precomputed weekly CO₂ summary\n"
+                f"{co2_payload['table_markdown']}\n\n"
+                f"**Hypothèses (ne pas modifier)** : {co2_payload['assumptions']}\n"
+                f"**Pistes bas carbone suggérées** :\n{suggestions_md}\n"
+                "Réutilise ces valeurs exactes dans ta réponse finale.\n\n"
+            )
+        else:
+            tpl += (
+                "### compute_co2 status\n"
+                "Les champs `distance_km` et `frequency_days` sont manquants. "
+                "Demande ces informations à l'utilisateur avant de conclure.\n\n"
+            )
+
+        system_text = self.render(tpl)
+        recent_history = self.recent_messages(state["messages"], max_messages=8)
+        messages = self.with_system(system_text, recent_history)
+        messages = self.with_chat_context_text(messages)
+        response = await self.model.ainvoke(messages)
+
+        return {
+            "messages": [response],
+            "database_context": database_context,
+        }

@@ -11,6 +11,7 @@ Avant d’ajouter du live ou de la complexité, on fixe une version stable d’E
 - Fonctionne avec les datasets tabulaires locaux :
   - `bike_infra_demo`
   - `tcl_stops_demo`
+- Script `load_demo_tables.py` charge ces CSV dans la base DuckDB exposée par MCP.
 - Utilise le pattern Tessa : `reasoner → tools → reasoner` (tool-calling)
 - Produit un bilan CO₂ clair en Markdown :
   - comparaison voiture / TCL / vélo
@@ -199,7 +200,6 @@ C’est la fondation qui permet ensuite :
 - scénarios packagés.
 
 Et qui ancre EcoAdvisor dans une architecture propre, testable et maintenable.
-
 
 
 
