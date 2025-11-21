@@ -488,7 +488,30 @@
     "confirmDeleteFolderMessage": "Delete empty folder « {{name}} »?",
     "folderDeleted": "Folder deleted",
     "deleteFolder": "Delete folder",
-    "download": "Download"
+    "download": "Download",
+    "pipeline": {
+      "title": "Configure Processing Pipeline",
+      "description": "Choose the chain of processors to apply for each file type in this library.",
+      "library": "Library",
+      "inputLabel": "Input processor",
+      "extensionLabel": "File extension",
+      "stepsLabel": "Processors chain",
+      "addStep": "Add processor",
+      "removeStep": "Remove",
+      "cancel": "Cancel",
+      "save": "Save pipeline",
+      "loadErrorSummary": "Failed to load processors",
+      "noLibrarySummary": "No library selected",
+      "noLibraryDetail": "Please select a library first.",
+      "emptyPipelineSummary": "Pipeline is empty",
+      "emptyPipelineDetail": "Add at least one processor.",
+      "savedSummary": "Pipeline saved",
+      "savedDetail": "Processing pipeline has been configured for library \"{{name}}\".",
+      "saveErrorSummary": "Failed to save pipeline",
+      "current": "Pipeline",
+      "currentDefault": "Pipeline",
+      "defaultTag": "default"
+    }
   },
   "documentLibraryShareDialog": {
     "subtitle": "Add users or groups and manage access permissions for this library.",

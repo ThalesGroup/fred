@@ -17,6 +17,7 @@ import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
 import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
 import UploadIcon from "@mui/icons-material/Upload";
+import SchemaOutlinedIcon from "@mui/icons-material/SchemaOutlined";
 import { Box, Breadcrumbs, Button, Card, Chip, IconButton, Link, TextField, Tooltip, Typography } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -38,6 +39,7 @@ import { useDocumentCommands } from "../common/useDocumentCommands";
 import { docHasAnyTag, matchesDocByName } from "./documentHelper";
 import { DocumentLibraryTree } from "./DocumentLibraryTree";
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
+import { LibraryPipelineDrawer } from "./LibraryPipelineDrawer";
 
 export default function DocumentLibraryList() {
   const { t } = useTranslation();
@@ -49,6 +51,9 @@ export default function DocumentLibraryList() {
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = React.useState(false);
   const [openUploadDrawer, setOpenUploadDrawer] = React.useState(false);
   const [uploadTargetTagId, setUploadTargetTagId] = React.useState<string | null>(null);
+  const [isPipelineDrawerOpen, setIsPipelineDrawerOpen] = React.useState(false);
+  const [pipelineLibraryTagId, setPipelineLibraryTagId] = React.useState<string | null>(null);
+  const [pipelineLibraryLabel, setPipelineLibraryLabel] = React.useState<string | null>(null);
   // Search + selection (docUid -> tag)
   const [query, setQuery] = React.useState<string>("");
   const [selectedDocs, setSelectedDocs] = React.useState<Record<string, TagWithItemsId>>({});
@@ -102,6 +107,17 @@ export default function DocumentLibraryList() {
     };
     walk(tree);
     setExpanded(expand ? ids : []);
+  };
+
+  const handleOpenPipelineDrawer = () => {
+    if (!tree || !selectedFolder) return;
+    const node = findNode(tree, selectedFolder);
+    // Heuristic: first tag at this node represents the library
+    const firstTag = node.tagsHere[0];
+    if (!firstTag) return;
+    setPipelineLibraryTagId(firstTag.id);
+    setPipelineLibraryLabel(firstTag.name);
+    setIsPipelineDrawerOpen(true);
   };
   const allExpanded = React.useMemo(() => expanded.length > 0, [expanded]);
 
@@ -311,13 +327,29 @@ export default function DocumentLibraryList() {
             <Typography variant="subtitle2" color="text.secondary">
               {t("documentLibrary.folders")}
             </Typography>
-            <Tooltip
-              title={allExpanded ? t("documentLibrariesList.collapseAll") : t("documentLibrariesList.expandAll")}
-            >
-              <IconButton size="small" onClick={() => setAllExpanded(!allExpanded)} disabled={!tree}>
-                {allExpanded ? <UnfoldLessIcon fontSize="small" /> : <UnfoldMoreIcon fontSize="small" />}
-              </IconButton>
-            </Tooltip>
+            <Box display="flex" alignItems="center" gap={1}>
+              {selectedFolder && (
+                <Tooltip title={t("documentLibrary.configurePipeline") || "Configure processing pipeline"}>
+                  <span>
+                    <IconButton
+                      size="small"
+                      color="primary"
+                      onClick={handleOpenPipelineDrawer}
+                      disabled={!tree}
+                    >
+                      <SchemaOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
+              <Tooltip
+                title={allExpanded ? t("documentLibrariesList.collapseAll") : t("documentLibrariesList.expandAll")}
+              >
+                <IconButton size="small" onClick={() => setAllExpanded(!allExpanded)} disabled={!tree}>
+                  {allExpanded ? <UnfoldLessIcon fontSize="small" /> : <UnfoldMoreIcon fontSize="small" />}
+                </IconButton>
+              </Tooltip>
+            </Box>
           </Box>
 
           {/* Scrollable tree content */}
@@ -399,6 +431,14 @@ export default function DocumentLibraryList() {
         }}
         mode="document"
         currentPath={selectedFolder}
+      />
+
+      {/* Pipeline configuration drawer */}
+      <LibraryPipelineDrawer
+        isOpen={isPipelineDrawerOpen}
+        onClose={() => setIsPipelineDrawerOpen(false)}
+        libraryTagId={pipelineLibraryTagId}
+        libraryLabel={pipelineLibraryLabel}
       />
     </Box>
   );

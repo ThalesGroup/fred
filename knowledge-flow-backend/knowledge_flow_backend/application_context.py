@@ -336,6 +336,10 @@ class ApplicationContext:
         return registry
 
     def get_config(self) -> Configuration:
+        """
+        Get the application configuration. This corresponds to the initial YAML file
+        loaded at startup.
+        """
         return self.configuration
 
     def _get_input_processor_class(self, extension: str) -> Optional[Type[BaseInputProcessor]]:
