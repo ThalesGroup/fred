@@ -34,7 +34,7 @@ services:
 Run the following command at the root of the folder containing the `docker-compose.yml` file:
 
 ```bash
-cd hackathon_laposte/use_cases/agilité/atlassian-mcp-server
+cd fred-academy/Use cases/Agility/atlassian-mcp-server
 
 # Start the service
 docker compose up -d
