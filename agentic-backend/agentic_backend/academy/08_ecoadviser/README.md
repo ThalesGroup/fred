@@ -82,14 +82,15 @@ Cette étape applique la roadmap :
 
 ## 🧱 Étape 2 — Référentiel CO₂ externe (HTTP)
 
-- Lancer le serveur MCP de référence CO₂ (`academy/co2-estimation-service`):  
-  `uvicorn co2_estimation_service.server_mcp:app --host 127.0.0.1 --port 9798`
-- Ajouter sa configuration MCP (`mcp-co2-demo`) côté Agentic Backend, puis relancer l’app.
-- EcoAdvisor n’embarque plus de facteurs dans le prompt :  
-  - les tools `list_emission_modes`, `get_emission_factor`, `compare_trip_modes` fournissent les facteurs, la source et la date de mise à jour,  
-  - le nœud `compute_co2` consomme ces tools pour bâtir le tableau Markdown,  
-  - `reasoner_final` cite explicitement les sources ADEME renvoyées par le service.
-- En cas d’indisponibilité du service, un calcul de secours (facteurs statiques) est conservé pour la démo.
+- Lancer le serveur MCP de référence CO₂ situé dans `agentic_backend/academy/08_ecoadviser/co2_estimation_service/`:  
+  ```bash
+  uvicorn agentic_backend.academy.08_ecoadviser.co2_estimation_service.server_mcp:app \
+      --host 127.0.0.1 --port 9798
+  ```
+- La configuration `mcp-co2-service` est déjà déclarée dans `config/configuration*.yaml`. Vérifier que le port correspond puis relancer l’Agentic Backend.
+- Les tools exposés (`list_emission_modes`, `get_emission_factor`, `compare_trip_modes`, `reload_emission_cache`) retournent systématiquement la source, la date de mise à jour et un lien ADEME/SYTRAL.
+- EcoAdvisor n’embarque plus les facteurs dans son prompt : il doit appeler ces tools et **citer la source** (`source`, `last_update`) dans sa réponse.
+- En cas de panne du service, l’agent bascule automatiquement sur les facteurs de secours (car 0.192 kg/km, TCL 0.01 kg/km, vélo/marche 0 kg/km) et le mentionne clairement.
 
 ---
 

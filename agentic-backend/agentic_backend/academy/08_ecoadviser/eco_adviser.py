@@ -89,12 +89,12 @@ ECO_TUNING = AgentTuning(
                 "- First, **list the available datasets and their schema** using the tools.\n"
                 "- Then, select the relevant tables and run queries to inspect nearby bike lanes\n"
                 "  and public transport options.\n\n"
-                "### CO₂ Estimates (simplified factors)\n"
-                "When you need to estimate CO₂ emissions, you can use the following factors:\n"
-                "- Car (thermal): 0.192 kg CO₂ per km\n"
-                "- Public transport (average): 0.01 kg CO₂ per km\n"
-                "- Bike / walking: 0 kg CO₂ per km\n"
-                "These are simplified emission factors inspired by ADEME data, for demo purposes.\n\n"
+                "### CO₂ Reference Service\n"
+                "- Do NOT rely on hardcoded emission factors. Always call the MCP tools provided by the CO₂ reference service (`mcp-co2-service`).\n"
+                "- `list_emission_modes` helps you discover all supported modes and their metadata.\n"
+                "- `get_emission_factor` returns a single factor with `source` and `last_update` so you can cite the reference explicitly.\n"
+                "- `compare_trip_modes` should be used when you know the distance and frequency: it returns a comparison payload (weekly emissions per mode) ready to transform into a Markdown table.\n"
+                "- When the service is unavailable, fall back to the baseline assumptions (car 0.192 kg/km, TCL 0.01 kg/km, bike/walk 0 kg/km) and clearly state that you relied on the backup factors.\n\n"
                 "### Workflow\n"
                 "1. Clarify the user's context:\n"
                 "   - origin and destination (city or district is enough)\n"
@@ -115,6 +115,7 @@ ECO_TUNING = AgentTuning(
                 "### Rules\n"
                 "- ALWAYS base your conclusions on actual tool results when referring to datasets.\n"
                 "- NEVER invent columns or tables that do not exist in the schema.\n"
+                "- Cite the CO₂ references by including the `source` and `last_update` returned by the emission tools.\n"
                 "- Use markdown tables to present numeric comparisons.\n"
                 "- If the user did not provide enough information (distance, frequency),\n"
                 "  ask targeted follow-up questions before estimating CO₂.\n"
@@ -123,11 +124,12 @@ ECO_TUNING = AgentTuning(
             ),
         ),
     ],
-    # EcoAdvisor utilise le même MCP server tabulaire que Tessa.
-    # Fred rationale:
-    # - On ne réinvente pas l'intégration back; on exploite la même passerelle MCP.
+    # EcoAdvisor utilise maintenant:
+    # - le serveur MCP tabulaire (hérité de Tessa)
+    # - un serveur MCP dédié aux facteurs CO₂ (mcp-co2-service)
     mcp_servers=[
         MCPServerRef(name="mcp-knowledge-flow-mcp-tabular"),
+        MCPServerRef(name="mcp-co2-service", optional=True),
     ],
 )
 

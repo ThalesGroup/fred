@@ -12,8 +12,9 @@ trap "echo 'Stopping...'; kill 0" SIGINT
 # frontend
 (cd frontend && make run 2>&1 | sed "s/^/[FRONTEND] /") &
 
-# CO₂ emission reference MCP server
-(cd academy/co2-estimation-service && make run 2>&1 | sed "s/^/[CO2] /") &
+# CO₂ emission reference MCP server (local FastAPI+MCP)
+(cd agentic-backend && uv run uvicorn agentic_backend.academy.08_ecoadviser.co2_estimation_service.server_mcp:app \
+    --host 127.0.0.1 --port 9798 2>&1 | sed "s/^/[CO2] /") &
 
 # wait for all background jobs
 wait
