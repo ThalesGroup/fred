@@ -1,6 +1,5 @@
 import logging
 
-from fred_core import get_model
 from langchain.agents import create_agent
 from langgraph.graph.state import CompiledStateGraph
 
@@ -62,11 +61,9 @@ class BasicReActAgent(AgentFlow):
         await self.mcp.aclose()
 
     def get_compiled_graph(self) -> CompiledStateGraph:
-        agent = create_agent(
+        return create_agent(
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[*self.mcp.get_tools()],
             checkpointer=self.streaming_memory,
         )
-
-        return agent
