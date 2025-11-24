@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 def _class_path(obj_or_type) -> str:
-    """Return fully-qualified class path, e.g. 'agentic_backend.agents.mcp.mcp_agent.MCPAgent'."""
+    """Return fully-qualified class path, e.g. 'agentic_backend.agents.basic_react_agent.BasicReActAgent'."""
     t = obj_or_type if isinstance(obj_or_type, type) else type(obj_or_type)
     return f"{t.__module__}.{t.__name__}"
 
@@ -42,7 +42,7 @@ class AgentService:
         self.agent_manager = agent_manager
 
     @authorize(action=Action.CREATE, resource=Resource.AGENTS)
-    async def create_mcp_agent(self, user: KeycloakUser, name: str):
+    async def create_agent(self, user: KeycloakUser, name: str):
         """
         Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
         """
@@ -55,7 +55,6 @@ class AgentService:
             # If .get raises when not found, ignore; if it returns None when not found, also fine
             raise e
 
-        # Ensure class_path points to MCPAgent
         agent_settings = Agent(
             name=name,
             class_path=_class_path(BasicReActAgent),
