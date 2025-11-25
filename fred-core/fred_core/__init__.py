@@ -27,7 +27,11 @@ from fred_core.common.structures import (
     StoreConfig,
 )
 from fred_core.common.utils import raise_internal_error
-from fred_core.filesystem.structures import BaseFilesystem, StatResource, StatResult
+from fred_core.filesystem.structures import (
+    BaseFilesystem,
+    FilesystemResourceInfo,
+    FilesystemResourceInfoResult,
+)
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_reader_structures import (
@@ -143,8 +147,8 @@ __all__ = [
     "TODO_PASS_REAL_USER",
     "NO_AUTHZ_CHECK_USER",
     "BaseFilesystem",
-    "StatResult",
-    "StatResource",
+    "FilesystemResourceInfoResult",
+    "FilesystemResourceInfo",
     "RBACProvider",
     "Action",
     "Resource",

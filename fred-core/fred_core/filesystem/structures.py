@@ -14,7 +14,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, List, Literal, Protocol
+from typing import List, Literal, Protocol
 
 
 class BaseFilesystem(Protocol):
@@ -26,162 +26,73 @@ class BaseFilesystem(Protocol):
     """
 
     async def read(self, path: str) -> bytes:
-        """
-        Read the contents of a file.
-
-        Args:
-            path (str): Path to the file relative to the filesystem root.
-
-        Returns:
-            bytes: File content as bytes.
-        
-        Raises:
-            FileNotFoundError: If the file does not exist.
-            IOError: For general read errors.
-        """
+        """Read the raw bytes of a file."""
         ...
 
     async def write(self, path: str, data: bytes) -> None:
-        """
-        Write data to a file, creating directories as needed.
-
-        Args:
-            path (str): Path to the file relative to the filesystem root.
-            data (bytes): Data to write.
-
-        Raises:
-            IOError: If writing fails.
-        """
+        """Write bytes to a file."""
         ...
 
-    async def list(self, prefix: str = "") -> List[str]:
-        """
-        List all files under a given prefix/directory.
-
-        Args:
-            prefix (str, optional): Directory prefix to list. Defaults to "" (root).
-
-        Returns:
-            List[str]: List of relative file paths.
-        """
+    async def list(self, prefix: str = "") -> List["FilesystemResourceInfoResult"]:
+        """List all files and directories under a given prefix."""
         ...
 
     async def delete(self, path: str) -> None:
-        """
-        Delete a file at the specified path.
-
-        Args:
-            path (str): Path to the file relative to the filesystem root.
-
-        Raises:
-            FileNotFoundError: If the file does not exist.
-            IOError: If deletion fails.
-        """
+        """Delete a file or directory."""
         ...
 
     async def pwd(self) -> str:
-        """
-        Return the logical root path of the filesystem.
-
-        For local filesystems, this is an absolute directory path.
-        For MinIO/S3, this is the endpoint plus bucket (e.g., http://host:port/bucket).
-
-        Returns:
-            str: Filesystem root path or URI.
-        """
+        """Return the filesystem root (absolute path or bucket URI)."""
         ...
 
-    # --- Unix-style utilities ---
-
     async def mkdir(self, path: str) -> None:
-        """
-        Simulate a directory in MinIO by relying on the prefix.
-        
-        No placeholder object is created. 
-        A "directory" exists if at least one object has that prefix.
-
-        Args:
-            path (str): Directory path relative to the bucket.
-        """
-        # Nothing is created in the bucket for an empty directory.
-        # The directory will implicitly exist once a file is written under this prefix.
-        pass
-
+        """Create a directory (empty or implicit for MinIO)."""
+        ...
 
     async def exists(self, path: str) -> bool:
-        """
-        Check if a file or directory exists at the given path.
-
-        Args:
-            path (str): Path relative to the filesystem root.
-
-        Returns:
-            bool: True if the file or directory exists, False otherwise.
-        """
+        """Check if a file or directory exists."""
         ...
 
     async def cat(self, path: str) -> str:
-        """
-        Read a file and return its contents as a string.
-
-        Args:
-            path (str): Path relative to the filesystem root.
-
-        Returns:
-            str: File contents as a UTF-8 string.
-        """
+        """Read a file and return it as a UTF-8 string."""
         ...
 
-    async def stat(self, path: str) -> dict[str, Any]:
+    async def stat(self, path: str) -> "FilesystemResourceInfoResult":
         """
         Return metadata about a file or directory.
 
-        Args:
-            path (str): Path relative to the filesystem root.
-
         Returns:
-            dict: Metadata including:
-                - size (int | None): Size in bytes (None for directories if unknown)
-                - type (str): "file" or "directory"
-                - modified (datetime | None): Last modification time
+            FilesystemResourceInfoResult
         """
         ...
 
     async def grep(self, pattern: str, prefix: str = "") -> List[str]:
-        """
-        Search for files containing a regex pattern under a given prefix.
-
-        Args:
-            pattern (str): Regular expression to search for.
-            prefix (str, optional): Directory prefix to search under. Defaults to root.
-
-        Returns:
-            List[str]: List of file paths matching the pattern.
-        """
+        """Search for regex pattern in files under a prefix."""
         ...
 
-class StatResource:
+class FilesystemResourceInfo:
     FILE = "file"
     DIRECTORY = "directory"
 
 @dataclass
-class StatResult:
+class FilesystemResourceInfoResult:
     """
     Represents metadata about a file or directory.
     """
+    path: str
     size: int | None
-    type: Literal[StatResource.FILE, StatResource.DIRECTORY]
+    type: Literal[FilesystemResourceInfo.FILE, FilesystemResourceInfo.DIRECTORY]
     modified: datetime | None
 
     def is_file(self) -> bool:
-        """Return True if the object is a file."""
-        return self.type == StatResource.FILE
+        """Return True if this is a file."""
+        return self.type == FilesystemResourceInfo.FILE
 
     def is_dir(self) -> bool:
-        """Return True if the object is a directory."""
-        return self.type == StatResource.DIRECTORY
+        """Return True if this is a directory."""
+        return self.type == FilesystemResourceInfo.DIRECTORY
 
     def __repr__(self) -> str:
         size_str = f"{self.size} bytes" if self.size is not None else "Unknown size"
         mod_str = self.modified.isoformat() if self.modified else "Unknown"
-        return f"<StatResult type={self.type} size={size_str} modified={mod_str}>"
+        return f"<FilesystemResourceInfoResult path={self.path} type={self.type} size={size_str} modified={mod_str}>"

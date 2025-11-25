@@ -5,7 +5,11 @@ from typing import List
 
 import aiofiles
 
-from fred_core import BaseFilesystem, StatResource, StatResult
+from fred_core import (
+    BaseFilesystem,
+    FilesystemResourceInfo,
+    FilesystemResourceInfoResult,
+)
 
 
 class LocalFilesystem(BaseFilesystem):
@@ -55,18 +59,43 @@ class LocalFilesystem(BaseFilesystem):
         async with aiofiles.open(full, "wb") as f:
             await f.write(data)
 
-    async def list(self, prefix: str = "") -> List[str]:
-        """
-        List all files under a given prefix recursively.
+    async def list(self, prefix: str = "") -> List[FilesystemResourceInfoResult]:
+        base = self.root / prefix
+        results: List[FilesystemResourceInfoResult] = []
 
-        Args:
-            prefix (str): Directory path relative to root. Defaults to "" (root).
+        for p in base.rglob("*"):
+            st = p.stat()
+            typ = FilesystemResourceInfo.FILE if p.is_file() else FilesystemResourceInfo.DIRECTORY
+            results.append(FilesystemResourceInfoResult(
+                path=str(p.relative_to(self.root)),
+                size=st.st_size if p.is_file() else None,
+                type=typ,
+                modified=datetime.fromtimestamp(st.st_mtime)
+            ))
 
-        Returns:
-            List[str]: List of relative file paths.
-        """
-        root = self.root / prefix
-        return [str(p.relative_to(self.root)) for p in root.rglob("*") if p.is_file()]
+        # Add empty directories
+        for d in base.rglob("*"):
+            if d.is_dir() and not any(d.iterdir()):
+                results.append(FilesystemResourceInfoResult(
+                    path=str(d.relative_to(self.root)),
+                    size=None,
+                    type=FilesystemResourceInfo.DIRECTORY,
+                    modified=datetime.fromtimestamp(d.stat().st_mtime)
+                ))
+
+        # Sort by path
+        results.sort(key=lambda x: x.path)
+        return results
+
+    async def grep(self, pattern: str, prefix: str = "") -> List[str]:
+        regex = re.compile(pattern)
+        matches = []
+        for entry in await self.list(prefix):
+            if entry.is_file():
+                content = await self.cat(entry.path)
+                if regex.search(content):
+                    matches.append(entry.path)
+        return matches
 
     async def delete(self, path: str) -> None:
         """
@@ -86,8 +115,6 @@ class LocalFilesystem(BaseFilesystem):
             str: Absolute path to root directory.
         """
         return str(self.root)
-
-    # --- Unix-style utilities ---
 
     async def mkdir(self, path: str) -> None:
         """
@@ -124,25 +151,32 @@ class LocalFilesystem(BaseFilesystem):
         data = await self.read(path)
         return data.decode("utf-8")
 
-    async def stat(self, path: str) -> StatResult:
+    async def stat(self, path: str) -> FilesystemResourceInfoResult:
         """
-        Return file or folder metadata.
+        Return metadata about a file or directory as a FilesystemResourceInfoResult.
 
         Args:
-            path (str): Path relative to root.
+            path (str): Path relative to the filesystem root.
 
         Returns:
-            dict: Metadata including:
-                - size (int | None): File size in bytes.
-                - type (str): "file" or "directory".
-                - modified (datetime | None): Last modification time.
+            FilesystemResourceInfoResult: Metadata about the file or directory.
+
+        Raises:
+            FileNotFoundError: If the file or directory does not exist.
         """
         full = self.root / path
-        st = full.stat()
-        return StatResult(
-            size=st.st_size,
-            type=StatResource.FILE if full.is_file() else StatResource.DIRECTORY,
-            modified=datetime.fromtimestamp(st.st_mtime)
+        if not full.exists():
+            raise FileNotFoundError(f"{path} not found")
+
+        typ = FilesystemResourceInfo.FILE if full.is_file() else FilesystemResourceInfo.DIRECTORY
+        size = full.stat().st_size if full.is_file() else None
+        modified = datetime.fromtimestamp(full.stat().st_mtime)
+
+        return FilesystemResourceInfoResult(
+            path=str(full.relative_to(self.root)),
+            size=size,
+            type=typ,
+            modified=modified
         )
 
     async def grep(self, pattern: str, prefix: str = "") -> List[str]:
@@ -158,8 +192,9 @@ class LocalFilesystem(BaseFilesystem):
         """
         regex = re.compile(pattern)
         matches = []
-        for path_str in await self.list(prefix):
-            content = await self.cat(path_str)
-            if regex.search(content):
-                matches.append(path_str)
+        for entry in await self.list(prefix):
+            if entry.is_file():
+                content = await self.cat(entry.path)
+                if regex.search(content):
+                    matches.append(entry.path)
         return matches

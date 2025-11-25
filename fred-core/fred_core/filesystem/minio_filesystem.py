@@ -16,12 +16,16 @@ import logging
 import re
 from datetime import datetime
 from io import BytesIO
-from typing import List
+from typing import List, Set
 from urllib.parse import urlparse
 
 from minio import Minio
 
-from fred_core import BaseFilesystem, StatResult
+from fred_core import (
+    BaseFilesystem,
+    FilesystemResourceInfo,
+    FilesystemResourceInfoResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +79,48 @@ class MinioFilesystem(BaseFilesystem):
     async def write(self, path: str, data: bytes) -> None:
         self.client.put_object(self.bucket_name, path, data=BytesIO(data), length=len(data))
 
-    async def list(self, prefix: str = "") -> List[str]:
-        return [obj.object_name for obj in self.client.list_objects(self.bucket_name, prefix=prefix, recursive=True)]
+    async def list(self, prefix: str = "") -> List[FilesystemResourceInfoResult]:
+        """
+        List all files and "directories" in the bucket under the given prefix,
+        returning FilesystemResourceInfoResult objects for each.
+
+        Args:
+            prefix (str): Object key prefix (like a folder path).
+
+        Returns:
+            List[FilesystemResourceInfoResult]: List of files and directories.
+        """
+        all_objects = list(self.client.list_objects(self.bucket_name, prefix=prefix, recursive=True))
+        results: List[FilesystemResourceInfoResult] = []
+
+        # Files
+        for obj in all_objects:
+            results.append(FilesystemResourceInfoResult(
+                path=obj.object_name,
+                size=obj.size,
+                type=FilesystemResourceInfo.FILE,
+                modified=obj.last_modified
+            ))
+
+        # Infer directories from prefixes
+        dirs: Set[str] = set()
+        for obj in all_objects:
+            parts = obj.object_name.split("/")
+            for i in range(1, len(parts)):
+                dirs.add("/".join(parts[:i]))
+
+        for d in dirs:
+            if not any(r.path == d and r.type == FilesystemResourceInfo.DIRECTORY for r in results):
+                results.append(FilesystemResourceInfoResult(
+                    path=d,
+                    size=None,
+                    type=FilesystemResourceInfo.DIRECTORY,
+                    modified=None
+                ))
+
+        # Sort by path to emulate 'ls -alh'
+        results.sort(key=lambda x: x.path)
+        return results
 
     async def delete(self, path: str) -> None:
         self.client.remove_object(self.bucket_name, path)
@@ -85,8 +129,6 @@ class MinioFilesystem(BaseFilesystem):
         """Return the logical root URI of the filesystem."""
         scheme = "https" if self.secure else "http"
         return f"{scheme}://{self._clean_endpoint}/{self.bucket_name}"
-
-    # --- Unix-style utilities ---
 
     async def mkdir(self, path: str) -> None:
         """
@@ -114,32 +156,44 @@ class MinioFilesystem(BaseFilesystem):
         data = await self.read(path)
         return data.decode("utf-8")
 
-    async def stat(self, path: str) -> StatResult:
-        """
-        Return metadata about a file or "directory" as a StatResult.
 
-        Raises FileNotFoundError if neither file nor prefix exists.
+    async def stat(self, path: str) -> FilesystemResourceInfoResult:
+        """
+        Return metadata about a file or "directory" as a FilesystemResourceInfoResult.
+        In MinIO, directories are virtual: even empty prefixes are reported as directories.
+
+        Args:
+            path (str): Object key or directory prefix.
+
+        Returns:
+            FilesystemResourceInfoResult
         """
         try:
+            # Try as a file
             obj = self.client.stat_object(self.bucket_name, path)
-            return StatResult(size=obj.size, type="file", modified=obj.last_modified)
+            return FilesystemResourceInfoResult(
+                path=path,
+                size=obj.size,
+                type=FilesystemResourceInfo.FILE,
+                modified=obj.last_modified
+            )
         except Exception:
-            # Check if prefix exists (directory)
-            objs = list(self.client.list_objects(self.bucket_name, prefix=path.rstrip("/") + "/", recursive=False))
-            if objs:
-                return StatResult(size=None, type="directory", modified=None)
-            raise FileNotFoundError(f"{path} not found in bucket")
-
+            # File not found, treat as directory (even if empty)
+            prefix = path.rstrip("/") + "/"
+            objs = list(self.client.list_objects(self.bucket_name, prefix=prefix, recursive=False))
+            return FilesystemResourceInfoResult(
+                path=path,
+                size=None,
+                type=FilesystemResourceInfo.DIRECTORY,
+                modified=None
+            )
+        
     async def grep(self, pattern: str, prefix: str = "") -> List[str]:
-        """
-        Search for regex pattern in all files under a prefix.
-
-        Returns list of object keys matching the pattern.
-        """
         regex = re.compile(pattern)
         matches = []
-        for key in await self.list(prefix):
-            content = await self.cat(key)
-            if regex.search(content):
-                matches.append(key)
+        for entry in await self.list(prefix):
+            if entry.is_file():
+                content = await self.cat(entry.path)
+                if regex.search(content):
+                    matches.append(entry.path)
         return matches
