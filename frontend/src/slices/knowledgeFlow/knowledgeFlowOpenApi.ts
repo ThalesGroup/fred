@@ -658,7 +658,9 @@ export type ReadyKnowledgeFlowV1ReadyGetApiArg = void;
 export type SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiResponse =
   /** status 200 Successful Response */ DocumentMetadata[];
 export type SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiArg = {
-  filters: object;
+  filters: {
+    [key: string]: any;
+  };
 };
 export type GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApiResponse =
   /** status 200 Successful Response */ DocumentMetadata;
@@ -749,7 +751,9 @@ export type GetAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyGetApiArg = {
   range?: string | null;
 };
 export type DeleteAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteApiResponse =
-  /** status 200 Successful Response */ object;
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
 export type DeleteAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteApiArg = {
   agent: string;
   key: string;
@@ -772,7 +776,9 @@ export type GetUserAssetKnowledgeFlowV1UserAssetsKeyGetApiArg = {
   /** [AGENT USE ONLY] Explicit user ID of the asset owner (Header) */
   "X-Asset-User-ID"?: string | null;
 };
-export type DeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteApiResponse = /** status 200 Successful Response */ object;
+export type DeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
 export type DeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteApiArg = {
   key: string;
   /** [AGENT USE ONLY] Explicit user ID of the asset owner (Header) */
@@ -875,8 +881,9 @@ export type QueryKnowledgeFlowV1KpiQueryPostApiResponse = /** status 200 Success
 export type QueryKnowledgeFlowV1KpiQueryPostApiArg = {
   kpiQuery: KpiQuery;
 };
-export type GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiResponse =
-  /** status 200 Successful Response */ object;
+export type GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
 export type GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiArg = void;
 export type CreateResourceKnowledgeFlowV1ResourcesPostApiResponse = /** status 201 Successful Response */ Resource;
 export type CreateResourceKnowledgeFlowV1ResourcesPostApiArg = {
@@ -928,11 +935,15 @@ export type GetRunKnowledgeFlowV1DevBenchRunsRunIdGetApiResponse =
 export type GetRunKnowledgeFlowV1DevBenchRunsRunIdGetApiArg = {
   runId: string;
 };
-export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiResponse = /** status 200 Successful Response */ object;
+export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
 export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiArg = {
   runId: string;
 };
-export type GetContextApiResponse = /** status 200 Successful Response */ object[];
+export type GetContextApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+}[];
 export type GetContextApiArg = void;
 export type ListDatabasesApiResponse = /** status 200 Successful Response */ string[];
 export type ListDatabasesApiArg = void;
@@ -1134,7 +1145,9 @@ export type DocumentMetadata = {
   preview_url?: string | null;
   viewer_url?: string | null;
   /** Processor-specific additional attributes (namespaced keys). */
-  extensions?: object | null;
+  extensions?: {
+    [key: string]: any;
+  } | null;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -1183,7 +1196,9 @@ export type BrowseDocumentsRequest = {
   /** Tag of the document source to browse (pull or push) */
   source_tag: string;
   /** Optional metadata filters */
-  filters?: object | null;
+  filters?: {
+    [key: string]: any;
+  } | null;
   offset?: number;
   limit?: number;
   sort_by?: SortOption[] | null;
@@ -1215,7 +1230,9 @@ export type AssetMeta = {
   etag?: string | null;
   modified?: string | null;
   document_uid?: string | null;
-  extra?: object;
+  extra?: {
+    [key: string]: any;
+  };
 };
 export type BodyUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPost = {
   /** Binary payload (e.g., .pptx) */
@@ -1407,7 +1424,9 @@ export type SearchRequest = {
   search_policy?: SearchPolicyName | null;
 };
 export type KpiQueryResultRow = {
-  group: object;
+  group: {
+    [key: string]: any;
+  };
   metrics: {
     [key: string]: number;
   };
@@ -1509,7 +1528,9 @@ export type LogEventDto = {
   line: number;
   msg: string;
   service?: string | null;
-  extra?: object | null;
+  extra?: {
+    [key: string]: any;
+  } | null;
 };
 export type LogQueryResult = {
   events?: LogEventDto[];
@@ -1596,7 +1617,11 @@ export type GetSchemaResponse = {
 export type RawSqlResponse = {
   db_name: string;
   sql_query: string;
-  rows?: object[] | null;
+  rows?:
+    | {
+        [key: string]: any;
+      }[]
+    | null;
   error?: string | null;
 };
 export type RawSqlRequest = {
@@ -1623,7 +1648,9 @@ export type TrainModelRequest = {
   model_type?: "linear" | "random_forest";
 };
 export type PredictRowRequest = {
-  row: object;
+  row: {
+    [key: string]: any;
+  };
 };
 export type SaveModelRequest = {
   name: string;
