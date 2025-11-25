@@ -34,7 +34,7 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
 logger = logging.getLogger(__name__)
 
 
-def _run_ingestion_pipeline(definition: PipelineDefinition) -> str:
+async def _run_ingestion_pipeline(definition: PipelineDefinition) -> str:
     """
     Local, in-process ingestion pipeline used when Temporal is disabled.
 
@@ -57,15 +57,15 @@ def _run_ingestion_pipeline(definition: PipelineDefinition) -> str:
             time.sleep(simulated_delay_seconds)
 
         if file.is_pull():
-            metadata = create_pull_file_metadata(file)
-            local_file_path = load_pull_file(file, metadata)
-            metadata = input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
-            metadata = output_process(file=file, metadata=metadata, accept_memory_storage=True)
+            metadata = await create_pull_file_metadata(file)
+            local_file_path = await load_pull_file(file, metadata)
+            metadata = await input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
+            _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
         else:
-            metadata = get_push_file_metadata(file)
-            local_file_path = load_push_file(file, metadata)
-            metadata = input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
-            metadata = output_process(file=file, metadata=metadata, accept_memory_storage=True)
+            metadata = await get_push_file_metadata(file)
+            local_file_path = await load_push_file(file, metadata)
+            metadata = await input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
+            _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
 
     return "success"
 
@@ -91,7 +91,7 @@ class InMemoryScheduler(BaseScheduler):
         else:
             # Fallback for non-HTTP contexts; this will block the caller.
             logger.warning("[SCHEDULER][IN_MEMORY] BackgroundTasks not provided, running ingestion pipeline synchronously")
-            _run_ingestion_pipeline(definition)
+            await _run_ingestion_pipeline(definition)
 
         return handle
 

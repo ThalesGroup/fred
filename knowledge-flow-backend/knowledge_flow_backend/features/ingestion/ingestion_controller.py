@@ -504,7 +504,7 @@ class IngestionController:
             summary="Upload and process documents immediately (end-to-end)",
             description="Ingest and process one or more documents synchronously in a single step.",
         )
-        def process_documents_sync(
+        async def process_documents_sync(
             files: List[UploadFile] = File(...),
             metadata_json: str = Form(...),
             user: KeycloakUser = Depends(get_current_user),
@@ -528,7 +528,7 @@ class IngestionController:
 
                 total = len(preloaded_files)
 
-                def event_stream():
+                async def event_stream():
                     success = 0
                     for filename, input_temp_file in preloaded_files:
                         try:
@@ -546,13 +546,13 @@ class IngestionController:
 
                             current_step = "input processing"
                             yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                            metadata = input_process(user=user, input_file=input_temp_file, metadata=metadata)
+                            metadata = await input_process(user=user, input_file=input_temp_file, metadata=metadata)
                             yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
 
                             current_step = "output processing"
                             file_to_process = FileToProcess(document_uid=metadata.document_uid, external_path=None, source_tag=source_tag, tags=tags, processed_by=user)
                             yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                            metadata = output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
+                            metadata = await output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
                             yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                             yield ProcessingProgress(step="Finished", filename=filename, status=Status.FINISHED, document_uid=metadata.document_uid).model_dump_json() + "\n"
                             success += 1

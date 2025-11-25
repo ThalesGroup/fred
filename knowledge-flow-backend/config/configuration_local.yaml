@@ -73,17 +73,19 @@ document_sources:
     description: "Personal local documents available for pull-mode ingestion"
 embedding_model:
   provider: ollama
-  name: bge-m3:567m-fp16
+  name: bge-m3:latest
+  settings:
+    base_url: http://localhost:11434
 # Configuration for the LLM used for summary, keyword generation
 # and other text generation tasks.
 #chat_model:
 #  provider: openai # openai | azure | ollama
 #  name: gpt-4o-mini # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
 chat_model:
-   provider: ollama
-   name: mistral-small3.2:24b-instruct-2506-fp16         # any chat-capable Ollama model you pulled
-   settings:
-     base_url: http://localhost:31434
+  provider: ollama
+  name: granite4:3b-h
+  settings:
+    base_url: http://localhost:11434
 #      temperature: 0.7                # optional, forwarded to LangChain Ollama wrapper
 # chat_model:
 #   provider: azure
