@@ -271,6 +271,9 @@ applications:
           type: "log"
           level: "INFO"
 
+      filesystem:
+        type: local
+
     dotenv:
       AZURE_OPENAI_API_KEY: ""
       KEYCLOAK_AGENTIC_CLIENT_SECRET: ""
