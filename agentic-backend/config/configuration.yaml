@@ -155,3 +155,6 @@ storage:
   kpi_store:
     type: "log"
     level: "INFO"
+
+filesystem:
+  type: local

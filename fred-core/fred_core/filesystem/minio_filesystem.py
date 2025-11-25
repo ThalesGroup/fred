@@ -1,0 +1,145 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# You may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import logging
+import re
+from datetime import datetime
+from io import BytesIO
+from typing import List
+from urllib.parse import urlparse
+
+from minio import Minio
+
+from fred_core import BaseFilesystem, StatResult
+
+logger = logging.getLogger(__name__)
+
+
+class MinioFilesystem(BaseFilesystem):
+    """
+    Async MinIO/S3 filesystem with Unix-style utilities.
+
+    Each instance is tied to a single bucket.
+    Dossiers sont simulés via préfixe.
+    """
+
+    def __init__(self, endpoint: str, access_key: str, secret_key: str, bucket_name: str, secure: bool):
+        """
+        Initialize MinIO client and ensure bucket exists.
+
+        Args:
+            endpoint (str): MinIO/S3 endpoint (scheme://host:port, no path)
+            access_key (str): Access key
+            secret_key (str): Secret key
+            bucket_name (str): Bucket to use
+            secure (bool): Whether to use TLS (https)
+        """
+        parsed = urlparse(endpoint)
+        if parsed.path not in (None, "") and parsed.path != "/":
+            raise RuntimeError(f"Invalid MinIO endpoint: '{endpoint}'. Must not include path.")
+        
+        self._clean_endpoint = parsed.netloc or endpoint.replace("https://", "").replace("http://", "")
+        self.secure = secure
+        self.bucket_name = bucket_name
+
+        self.client = Minio(
+            self._clean_endpoint,
+            access_key=access_key,
+            secret_key=secret_key,
+            secure=secure
+        )
+
+        if not self.client.bucket_exists(bucket_name):
+            self.client.make_bucket(bucket_name)
+            logger.info(f"Bucket '{bucket_name}' created.")
+
+    # --- Core FS API ---
+
+    async def read(self, path: str) -> bytes:
+        obj = self.client.get_object(self.bucket_name, path)
+        data = obj.read()
+        obj.close()
+        return data
+
+    async def write(self, path: str, data: bytes) -> None:
+        self.client.put_object(self.bucket_name, path, data=BytesIO(data), length=len(data))
+
+    async def list(self, prefix: str = "") -> List[str]:
+        return [obj.object_name for obj in self.client.list_objects(self.bucket_name, prefix=prefix, recursive=True)]
+
+    async def delete(self, path: str) -> None:
+        self.client.remove_object(self.bucket_name, path)
+
+    async def pwd(self) -> str:
+        """Return the logical root URI of the filesystem."""
+        scheme = "https" if self.secure else "http"
+        return f"{scheme}://{self._clean_endpoint}/{self.bucket_name}"
+
+    # --- Unix-style utilities ---
+
+    async def mkdir(self, path: str) -> None:
+        """
+        Simulate a directory in MinIO by relying on the prefix.
+        No object is created; a folder exists only if it contains objects.
+        """
+        # Nothing to do; directories are implicit in MinIO
+        pass
+
+    async def exists(self, path: str) -> bool:
+        """
+        Check if a file or "directory" exists.
+
+        Returns True if object exists or at least one object has this prefix.
+        """
+        try:
+            self.client.stat_object(self.bucket_name, path)
+            return True
+        except Exception:
+            objs = list(self.client.list_objects(self.bucket_name, prefix=path.rstrip("/") + "/", recursive=False))
+            return len(objs) > 0
+
+    async def cat(self, path: str) -> str:
+        """Read a file and return its content as a UTF-8 string."""
+        data = await self.read(path)
+        return data.decode("utf-8")
+
+    async def stat(self, path: str) -> StatResult:
+        """
+        Return metadata about a file or "directory" as a StatResult.
+
+        Raises FileNotFoundError if neither file nor prefix exists.
+        """
+        try:
+            obj = self.client.stat_object(self.bucket_name, path)
+            return StatResult(size=obj.size, type="file", modified=obj.last_modified)
+        except Exception:
+            # Check if prefix exists (directory)
+            objs = list(self.client.list_objects(self.bucket_name, prefix=path.rstrip("/") + "/", recursive=False))
+            if objs:
+                return StatResult(size=None, type="directory", modified=None)
+            raise FileNotFoundError(f"{path} not found in bucket")
+
+    async def grep(self, pattern: str, prefix: str = "") -> List[str]:
+        """
+        Search for regex pattern in all files under a prefix.
+
+        Returns list of object keys matching the pattern.
+        """
+        regex = re.compile(pattern)
+        matches = []
+        for key in await self.list(prefix):
+            content = await self.cat(key)
+            if regex.search(content):
+                matches.append(key)
+        return matches

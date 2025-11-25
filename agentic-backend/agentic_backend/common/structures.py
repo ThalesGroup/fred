@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import os
 from typing import Annotated, Dict, List, Literal, Optional, Union
 
 from fred_core import (
@@ -24,7 +25,7 @@ from fred_core import (
     StoreConfig,
 )
 from langchain_core.messages import SystemMessage
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerConfiguration
 
@@ -250,6 +251,33 @@ class McpConfiguration(BaseModel):
         return {s.name: s for s in self.servers if s.enabled}
 
 
+# ---------- Agent filesystem config, used for listing, reading, creating & deleting files.  ---------- #
+
+class LocalFilesystemConfig(BaseModel):
+    type: Literal["local"] = "local"
+    root: str = Field("~/.fred/agentic/filesystem/", description="Local filesystem root directory.")
+
+class MinioFilesystemConfig(BaseModel):
+    type: Literal["minio"] = "minio"
+    endpoint: str = Field(..., description="MinIO or S3 compatible endpoint.")
+    access_key: str = Field(..., description="MinIO access key.")
+    secret_key: str = Field(..., description="MinIO secret key.")
+    bucket_name: Optional[str] = Field("filesystem", description="MinIO bucket name.")
+    secure: bool = Field(False, description="Use TLS for the MinIO client.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_secrets(cls, values: dict) -> dict:
+        values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
+        if not values.get("secret_key"):
+            raise ValueError("Missing MINIO_SECRET_KEY environment variable")
+        return values
+
+FilesystemConfig = Annotated[
+    Union[LocalFilesystemConfig, MinioFilesystemConfig],
+    Field(discriminator="type")
+]
+
 class Configuration(BaseModel):
     app: AppConfig
     security: SecurityConfiguration
@@ -260,7 +288,10 @@ class Configuration(BaseModel):
         description="Microservice Communication Protocol (MCP) server configurations.",
     )
     storage: StorageConfig
-
+    filesystem: FilesystemConfig = Field(
+        ...,
+        description="Filesystem backend configuration."
+    )
 
 class ChatContextMessage(SystemMessage):
     def __init__(self, content: str):

@@ -22,7 +22,6 @@ Includes:
 - Dynamic agent class loading and access
 - Context service management
 """
-
 import asyncio
 import logging
 import os
@@ -34,6 +33,7 @@ from threading import Lock
 from typing import Any, Callable, Dict, List, Optional
 
 from fred_core import (
+    BaseFilesystem,
     BaseKPIStore,
     BaseLogStore,
     BearerAuth,
@@ -54,13 +54,17 @@ from fred_core import (
     rebac_factory,
     split_realm_url,
 )
+from fred_core.filesystem.local_filesystem import LocalFilesystem
+from fred_core.filesystem.minio_filesystem import MinioFilesystem
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_core.language_models.chat_models import BaseChatModel
 from requests.auth import AuthBase
 
 from agentic_backend.common.structures import (
     Configuration,
+    LocalFilesystemConfig,
     McpConfiguration,
+    MinioFilesystemConfig,
 )
 from agentic_backend.core.agents.store.base_agent_store import BaseAgentStore
 from agentic_backend.core.feedback.store.base_feedback_store import BaseFeedbackStore
@@ -122,6 +126,8 @@ def get_configuration() -> Configuration:
 def get_session_store() -> BaseSessionStore:
     return get_app_context().get_session_store()
 
+def get_filesystem() -> BaseFilesystem:
+    return get_app_context().get_filesystem()
 
 def get_mcp_configuration() -> McpConfiguration:
     return get_app_context().get_mcp_configuration()
@@ -263,6 +269,7 @@ class ApplicationContext:
     _kpi_writer: Optional[KPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
     _io_executor: ThreadPoolExecutor | None = None
+    _filesystem_instance = None
 
     def __new__(cls, configuration: Configuration):
         with cls._lock:
@@ -590,6 +597,36 @@ class ApplicationContext:
         else:
             raise ValueError("Unsupported sessions storage backend")
 
+    def get_filesystem(self):
+        """
+        Factory function to create the filesystem backend based on configuration.
+
+        Returns:
+            Filesystem: Instance of the configured filesystem backend.
+        """
+        if self._filesystem_instance is not None:
+            return self._filesystem_instance
+
+        fs_cfg = self.configuration.filesystem
+
+        # ---- Local filesystem ----
+        if fs_cfg.type == "local":
+            self._filesystem_instance = LocalFilesystem(root=fs_cfg.root)
+            return self._filesystem_instance
+
+        # ---- Minio filesystem ----
+        if fs_cfg.type == "minio":
+            self._filesystem_instance = MinioFilesystem(
+                endpoint=fs_cfg.endpoint,
+                access_key=fs_cfg.access_key,
+                secret_key=fs_cfg.secret_key,
+                bucket_name=fs_cfg.bucket_name, # type: ignore
+                secure=fs_cfg.secure,
+            )
+            return self._filesystem_instance
+
+        raise ValueError(f"Unsupported filesystem type '{fs_cfg.type}'")
+
     def get_outbound_auth(self) -> OutboundAuth:
         """
         Get the client credentials provider for outbound requests.
@@ -637,7 +674,6 @@ class ApplicationContext:
         Does NOT print secrets; only presence/masked hints.
         """
         cfg = self.configuration
-
         logger.info("🔧 Agentic configuration summary")
         logger.info("────────────────────────────────────────────────────────────────")
 
@@ -728,6 +764,22 @@ class ApplicationContext:
             logger.warning(
                 "  ⚠️ Failed to read storage section (some variables may be missing)."
             )
+
+        # Filesystem
+        logger.info("  📁 Agent filesystem:")
+        fs = cfg.filesystem
+        logger.info("     • %-14s %s", "filesystem", type(fs).__name__)
+        if isinstance(fs, LocalFilesystemConfig):
+            logger.info("        backend=local  root=%s", fs.root)
+        elif isinstance(fs, MinioFilesystemConfig):
+            logger.info(
+                "        backend=minio  endpoint=%s  access_key=%s  secret_key=%s",
+                fs.endpoint,
+                fs.access_key,
+                _mask(fs.secret_key),
+            )
+        else:
+            logger.info("        backend=<unknown>")
 
         # Inbound security (UI -> Agentic)
         user_sec = cfg.security.user
