@@ -43,6 +43,8 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
     - Same output contract as other lightweight extractors (in-memory strings only).
     """
 
+    description = "Fast DOCX-to-Markdown converter using markitdown for lightweight agent workflows."
+
     def __init__(self) -> None:
         # Single MarkItDown instance is cheap and reusable.
         self._md = MarkItDown()
@@ -203,6 +205,8 @@ class LiteDocxMarkdownProcessor(BaseMarkdownProcessor):
     Adapter so the lightweight DOCX processor can be used as a full
     ingestion-time BaseMarkdownProcessor while reusing LiteDocxToMdProcessor.
     """
+
+    description = "Lightweight DOCX ingestion that saves Markdown previews using the lite extractor."
 
     def __init__(self) -> None:
         super().__init__()

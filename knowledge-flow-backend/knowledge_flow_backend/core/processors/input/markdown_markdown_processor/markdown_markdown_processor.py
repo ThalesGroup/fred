@@ -20,6 +20,8 @@ from knowledge_flow_backend.core.processors.input.common.base_input_processor im
 
 
 class MarkdownMarkdownProcessor(BaseMarkdownProcessor):
+    description = "Normalizes existing Markdown files into the expected output.md preview."
+
     def check_file_validity(self, file_path: Path) -> bool:
         return file_path.exists() and file_path.suffix in [".md"]
 

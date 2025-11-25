@@ -43,6 +43,8 @@ class LiteCsvToMdProcesor(BaseLiteMdProcessor):
     - No images or complex formatting
     """
 
+    description = "Lightweight CSV-to-Markdown table extractor with row/column truncation."
+
     def __init__(self):
         # Instantiate the robust processor once
         self._tabular_processor = CsvTabularProcessor()
@@ -101,6 +103,8 @@ class LiteCsvMarkdownProcessor(BaseMarkdownProcessor):
     Adapter so the lightweight CSV → Markdown extractor can be used as a
     BaseMarkdownProcessor during ingestion, instead of the tabular path.
     """
+
+    description = "Lightweight CSV ingestion that outputs Markdown tables instead of tabular storage."
 
     def __init__(self) -> None:
         super().__init__()

@@ -31,6 +31,8 @@ class PpsTabularProcessor(BaseTabularProcessor):
     It is a subclass of the BaseTabularProcessor class.
     """
 
+    description = "Extracts curated fields from PPS Excel/XLSM workbooks into a clean table."
+
     def __init__(self):
         # the expected sheet name in the Excel file
         self._default_sheet = "Fiche d'affaire"

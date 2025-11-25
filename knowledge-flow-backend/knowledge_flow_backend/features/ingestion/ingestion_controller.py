@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import dataclasses
+import inspect
 import json
 import json as _json
 import logging
@@ -73,6 +74,66 @@ def _dynamic_import_processor(class_path: str):
     module_path, class_name = class_path.rsplit(".", 1)
     module = __import__(module_path, fromlist=[class_name])
     return getattr(module, class_name)
+
+
+def _derive_description(class_path: str) -> Optional[str]:
+    """
+    Attempt to build a concise, human-friendly description for a processor class.
+
+    Prefers the first line of the class docstring; falls back to the class name
+    when a docstring is not present.
+    """
+    try:
+        cls = _dynamic_import_processor(class_path)
+    except Exception:
+        logger.debug("Unable to import %s to derive description", class_path, exc_info=True)
+        return None
+
+    explicit = getattr(cls, "description", None)
+    if explicit:
+        return str(explicit)
+
+    getter = getattr(cls, "get_description", None)
+    if callable(getter):
+        try:
+            value = getter()
+            if value:
+                return str(value)
+        except Exception:
+            logger.debug("get_description failed for %s", class_path, exc_info=True)
+
+    doc = inspect.getdoc(cls) or ""
+    if doc:
+        first_line = doc.strip().splitlines()[0]
+        if first_line:
+            return first_line
+    return cls.__name__
+
+
+def _with_description(config: ProcessorConfig) -> ProcessorConfig:
+    """
+    Ensure ProcessorConfig instances always carry a description for UI display.
+    """
+    if config.description:
+        return config
+
+    description = _derive_description(config.class_path)
+    if description:
+        return config.model_copy(update={"description": description})
+    return config
+
+
+def _with_library_description(config: LibraryProcessorConfig) -> LibraryProcessorConfig:
+    """
+    Ensure LibraryProcessorConfig instances always carry a description for UI display.
+    """
+    if config.description:
+        return config
+
+    description = _derive_description(config.class_path)
+    if description:
+        return config.model_copy(update={"description": description})
+    return config
 
 
 class AvailableProcessorsResponse(BaseModel):
@@ -189,12 +250,12 @@ class IngestionController:
             app_context = ApplicationContext.get_instance()
             cfg = app_context.get_config()
 
-            input_cfg = cfg.input_processors
+            input_cfg = [_with_description(pc) for pc in cfg.input_processors]
 
             # For outputs: if explicit config exists, use it.
             # Otherwise, synthesise ProcessorConfig entries from the default pipeline.
             if cfg.output_processors:
-                output_cfg = list(cfg.output_processors)
+                output_cfg = [_with_description(pc) for pc in cfg.output_processors]
             else:
                 # Use the default pipeline to discover effective output processors
                 from knowledge_flow_backend.core.processing_pipeline import ProcessingPipeline
@@ -204,9 +265,9 @@ class IngestionController:
                 for suffix, procs in default_pipeline.output_processors.items():
                     for proc in procs:
                         class_path = f"{proc.__class__.__module__}.{proc.__class__.__name__}"
-                        output_cfg.append(ProcessorConfig(prefix=suffix, class_path=class_path))
+                        output_cfg.append(_with_description(ProcessorConfig(prefix=suffix, class_path=class_path)))
 
-            library_output_cfg: List[LibraryProcessorConfig] = list(cfg.library_output_processors or [])
+            library_output_cfg: List[LibraryProcessorConfig] = [_with_library_description(lp) for lp in cfg.library_output_processors or []]
 
             # Always expose the summarization output processor for markdown outputs,
             # so admins can choose to make summarization an explicit pipeline step.
@@ -215,7 +276,7 @@ class IngestionController:
                 # Avoid duplicates if it is already configured
                 if not any(p.prefix.lower() == ".md" and p.class_path == summary_class_path for p in output_cfg):
                     output_cfg.append(
-                        ProcessorConfig(prefix=".md", class_path=summary_class_path),
+                        _with_description(ProcessorConfig(prefix=".md", class_path=summary_class_path)),
                     )
             except Exception:
                 logger.exception("Failed to register SummarizationOutputProcessor in available processors list")
@@ -224,7 +285,7 @@ class IngestionController:
             try:
                 toc_class_path = "knowledge_flow_backend.core.library_processors.library_toc_output_processor.LibraryTocOutputProcessor"
                 if not any(p.class_path == toc_class_path for p in library_output_cfg):
-                    library_output_cfg.append(LibraryProcessorConfig(class_path=toc_class_path))
+                    library_output_cfg.append(_with_library_description(LibraryProcessorConfig(class_path=toc_class_path)))
             except Exception:
                 logger.exception("Failed to register LibraryTocOutputProcessor in available processors list")
 
@@ -361,18 +422,18 @@ class IngestionController:
             input_cfg: List[ProcessorConfig] = []
             for prefix, proc in pipeline.input_processors.items():
                 class_path = f"{proc.__class__.__module__}.{proc.__class__.__name__}"
-                input_cfg.append(ProcessorConfig(prefix=prefix, class_path=class_path))
+                input_cfg.append(_with_description(ProcessorConfig(prefix=prefix, class_path=class_path)))
 
             output_cfg: List[ProcessorConfig] = []
             for prefix, procs in pipeline.output_processors.items():
                 for proc in procs:
                     class_path = f"{proc.__class__.__module__}.{proc.__class__.__name__}"
-                    output_cfg.append(ProcessorConfig(prefix=prefix, class_path=class_path))
+                    output_cfg.append(_with_description(ProcessorConfig(prefix=prefix, class_path=class_path)))
 
             library_output_cfg: List[LibraryProcessorConfig] = []
             for proc in getattr(pipeline, "library_output_processors", []):
                 class_path = f"{proc.__class__.__module__}.{proc.__class__.__name__}"
-                library_output_cfg.append(LibraryProcessorConfig(class_path=class_path))
+                library_output_cfg.append(_with_library_description(LibraryProcessorConfig(class_path=class_path)))
 
             return ProcessingPipelineInfo(
                 name=pipeline_name,

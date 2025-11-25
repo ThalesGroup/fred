@@ -1,5 +1,22 @@
-import SettingsEthernetIcon from "@mui/icons-material/SettingsEthernet";
-import { Box, Button, Chip, Drawer, FormControl, InputLabel, MenuItem, Select, Stack, Typography } from "@mui/material";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import SchemaOutlinedIcon from "@mui/icons-material/SchemaOutlined";
+import {
+  Box,
+  Button,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Drawer,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  Tooltip,
+  Typography,
+} from "@mui/material";
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -78,6 +95,19 @@ const ProcessorLabel: React.FC<{ classPath: string }> = ({ classPath }) => {
   );
 };
 
+const ProcessorOption: React.FC<{ classPath: string; description?: string | null }> = ({ classPath, description }) => (
+  <Stack direction="row" spacing={1} alignItems="flex-start">
+    <Box flex={1} minWidth={0}>
+      <ProcessorLabel classPath={classPath} />
+    </Box>
+    {description ? (
+      <Tooltip title={description}>
+        <InfoOutlinedIcon sx={{ fontSize: 18, mt: 0.25, color: "text.secondary" }} />
+      </Tooltip>
+    ) : null}
+  </Stack>
+);
+
 export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
   isOpen,
   onClose,
@@ -95,6 +125,7 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
   const [librarySteps, setLibrarySteps] = useState<PipelineStep[]>([]);
   const [pipelineName, setPipelineName] = useState<string | null>(null);
   const [pipelineIsDefault, setPipelineIsDefault] = useState<boolean>(false);
+  const [helpOpen, setHelpOpen] = useState<boolean>(false);
 
   const { data: availableFromApi, isLoading: isLoadingAvailable } =
     useListAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGetQuery(undefined, {
@@ -252,12 +283,32 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
     return available?.library_output_processors || [];
   }, [available]);
 
+  const outputLookup = useMemo(() => {
+    const map = new Map<string, ProcessorConfig>();
+    (available?.output_processors || []).forEach((p) => map.set(p.class_path, p));
+    return map;
+  }, [available]);
+
+  const inputLookup = useMemo(() => {
+    const map = new Map<string, ProcessorConfig>();
+    (available?.input_processors || []).forEach((p) => map.set(p.class_path, p));
+    return map;
+  }, [available]);
+
+  const libraryLookup = useMemo(() => {
+    const map = new Map<string, LibraryProcessorConfig>();
+    (available?.library_output_processors || []).forEach((p) => map.set(p.class_path, p));
+    return map;
+  }, [available]);
+
   const currentSteps = stepsByExt[selectedExt] || [];
+  const existingOutputClassPaths = new Set(currentSteps.map((s) => s.classPath));
+  const libraryClassPaths = new Set(librarySteps.map((s) => s.classPath));
 
   const handleAddStep = () => {
     const opts = outputOptionsByExt[selectedExt] || [];
-    if (!opts.length) return;
-    const first = opts[0];
+    const first = opts.find((p) => !existingOutputClassPaths.has(p.class_path));
+    if (!first) return;
     const id = buildKey(selectedExt, `${first.class_path}-${Date.now()}-${currentSteps.length}`);
     const next: PipelineStep = { id, classPath: first.class_path };
     setStepsByExt((prev) => ({
@@ -284,7 +335,8 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
 
   const handleAddLibraryProcessor = () => {
     if (!libraryOutputOptions.length) return;
-    const first = libraryOutputOptions[0];
+    const first = libraryOutputOptions.find((p) => !libraryClassPaths.has(p.class_path));
+    if (!first) return;
     setLibrarySteps((prev) => {
       const id = buildKey("library", `${first.class_path}-${Date.now()}-${prev.length}`);
       return [...prev, { id, classPath: first.class_path }];
@@ -315,9 +367,11 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
       const allSteps: ProcessorConfig[] = [];
       Object.entries(stepsByExt).forEach(([ext, steps]) => {
         steps.forEach((s) => {
+          const candidate = outputLookup.get(s.classPath);
           allSteps.push({
             prefix: ext,
             class_path: s.classPath,
+            description: candidate?.description,
           });
         });
       });
@@ -332,10 +386,18 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
 
       const inputDefs: ProcessorConfig[] = Object.entries(inputByExt)
         .filter(([, classPath]) => !!classPath)
-        .map(([prefix, class_path]) => ({ prefix, class_path }));
-      const libraryDefs: LibraryProcessorConfig[] = librarySteps.map((step) => ({
-        class_path: step.classPath,
-      }));
+        .map(([prefix, class_path]) => ({
+          prefix,
+          class_path,
+          description: inputLookup.get(class_path)?.description,
+        }));
+      const libraryDefs: LibraryProcessorConfig[] = librarySteps.map((step) => {
+        const candidate = libraryLookup.get(step.classPath);
+        return {
+          class_path: step.classPath,
+          description: candidate?.description,
+        };
+      });
 
       await registerPipeline({
         processingPipelineDefinition: {
@@ -391,11 +453,21 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
         },
       }}
     >
-      <Box display="flex" alignItems="center" gap={1} mb={2}>
-        <SettingsEthernetIcon color="primary" />
-        <Typography variant="h5" fontWeight="bold">
-          {t("documentLibrary.pipeline.title") || "Configure Processing Pipeline"}
-        </Typography>
+      <Box display="flex" alignItems="center" justifyContent="space-between" gap={1} mb={2}>
+        <Box display="flex" alignItems="center" gap={1}>
+          <SchemaOutlinedIcon color="primary" />
+          <Typography variant="h5" fontWeight="bold">
+            {t("documentLibrary.pipeline.title") || "Configure Processing Pipeline"}
+          </Typography>
+        </Box>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<InfoOutlinedIcon />}
+          onClick={() => setHelpOpen(true)}
+        >
+          {t("documentLibrary.pipeline.helpButton") || "How it works"}
+        </Button>
       </Box>
 
       <Typography variant="body2" color="text.secondary" mb={2}>
@@ -478,7 +550,7 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
         >
           {(inputOptionsByExt[selectedExt] || []).map((p) => (
             <MenuItem key={buildKey(p.prefix, p.class_path)} value={p.class_path}>
-              <ProcessorLabel classPath={p.class_path} />
+              <ProcessorOption classPath={p.class_path} description={p.description} />
             </MenuItem>
           ))}
         </Select>
@@ -504,7 +576,7 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
                   >
                     {opts.map((p) => (
                       <MenuItem key={buildKey(p.prefix, p.class_path)} value={p.class_path}>
-                        <ProcessorLabel classPath={p.class_path} />
+                        <ProcessorOption classPath={p.class_path} description={p.description} />
                       </MenuItem>
                     ))}
                   </Select>
@@ -553,7 +625,7 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
                 >
                   {libraryOutputOptions.map((p) => (
                     <MenuItem key={p.class_path} value={p.class_path}>
-                      <ProcessorLabel classPath={p.class_path} />
+                      <ProcessorOption classPath={p.class_path} description={p.description} />
                     </MenuItem>
                   ))}
                 </Select>
@@ -587,6 +659,36 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
           {t("documentLibrary.pipeline.save") || "Save pipeline"}
         </Button>
       </Box>
+
+      <Dialog open={helpOpen} onClose={() => setHelpOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>{t("documentLibrary.pipeline.helpTitle") || "How pipelines work"}</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" paragraph>
+            {t("documentLibrary.pipeline.helpIntro") ||
+              "Pipelines let you decide which processors run on your documents and when."}
+          </Typography>
+          <Typography variant="subtitle2">{t("documentLibrary.pipeline.helpInputTitle") || "Input processors"}</Typography>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            {t("documentLibrary.pipeline.helpInputBody") ||
+              "Turn raw files into normalized previews (Markdown or tables) per file type."}
+          </Typography>
+          <Typography variant="subtitle2">{t("documentLibrary.pipeline.helpOutputTitle") || "Output processors"}</Typography>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            {t("documentLibrary.pipeline.helpOutputBody") ||
+              "Post-process each document (vectorize, tabular load, summarize). They can run right after ingestion or later from Operations."}
+          </Typography>
+          <Typography variant="subtitle2">
+            {t("documentLibrary.pipeline.helpLibraryTitle") || "Library output processors"}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            {t("documentLibrary.pipeline.helpLibraryBody") ||
+              "Run once per library to build shared assets (e.g., library TOC). They run from the Operations tab, not during ingestion."}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpOpen(false)}>{t("documentLibrary.pipeline.close") || "Close"}</Button>
+        </DialogActions>
+      </Dialog>
     </Drawer>
   );
 };

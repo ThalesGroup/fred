@@ -519,6 +519,16 @@
       "defaultTag": "default",
       "libraryProcessors": "Library processors",
       "libraryProcessorsHelper": "These processors run once at the library level after documents have been processed.",
+      "helpButton": "How it works",
+      "helpTitle": "How pipelines work",
+      "helpIntro": "Pipelines let you decide which processors run on your documents and when.",
+      "helpInputTitle": "Input processors",
+      "helpInputBody": "Convert raw files into normalized previews (Markdown or tables) per file type.",
+      "helpOutputTitle": "Output processors",
+      "helpOutputBody": "Post-process each document (vectorize, load tables, summarize). They can run right after ingestion or later from the Operations tab.",
+      "helpLibraryTitle": "Library output processors",
+      "helpLibraryBody": "Run once per library to build shared assets (like a library TOC). They run later from the Operations tab, not during ingestion.",
+      "close": "Close",
       "addLibraryProcessor": "Add library processor",
       "noLibraryProcessorAvailable": "No library processors available."
     }

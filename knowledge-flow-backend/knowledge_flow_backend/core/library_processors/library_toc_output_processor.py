@@ -34,6 +34,8 @@ class LibraryTocOutputProcessor(LibraryOutputProcessor):
     - Adds a `library_toc` extension to each document's metadata.
     """
 
+    description = "Aggregates library-level stats and publishes a TOC summary JSON for each collection."
+
     def __init__(self) -> None:
         self.context = ApplicationContext.get_instance()
         self.content_store = self.context.get_content_store()

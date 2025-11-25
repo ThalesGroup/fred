@@ -23,6 +23,8 @@ class SummarizationOutputProcessor(BaseOutputProcessor):
     admins can control when it runs.
     """
 
+    description = "Generates document abstracts and keywords without vectorizing content."
+
     def __init__(self) -> None:
         self.context = ApplicationContext.get_instance()
         self.splitter = self.context.get_text_splitter()
