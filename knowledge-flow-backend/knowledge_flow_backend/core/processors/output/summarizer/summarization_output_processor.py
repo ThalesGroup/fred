@@ -76,4 +76,3 @@ class SummarizationOutputProcessor(BaseOutputProcessor):
             )
 
         return metadata
-

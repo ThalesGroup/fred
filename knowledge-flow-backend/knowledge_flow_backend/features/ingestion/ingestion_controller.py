@@ -31,7 +31,7 @@ from knowledge_flow_backend.common.structures import LibraryProcessorConfig, Pro
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import LiteMarkdownOptions
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_md_processing_service import LiteMdError, LiteMdProcessingService
-from knowledge_flow_backend.core.processors.output.base_corpus_output_processor import LibraryOutputProcessor
+from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 from knowledge_flow_backend.features.scheduler.activities import input_process, output_process
@@ -211,14 +211,9 @@ class IngestionController:
             # Always expose the summarization output processor for markdown outputs,
             # so admins can choose to make summarization an explicit pipeline step.
             try:
-                summary_class_path = (
-                    "knowledge_flow_backend.core.processors.output.summarizer."
-                    "summarization_output_processor.SummarizationOutputProcessor"
-                )
+                summary_class_path = "knowledge_flow_backend.core.processors.output.summarizer.summarization_output_processor.SummarizationOutputProcessor"
                 # Avoid duplicates if it is already configured
-                if not any(
-                    p.prefix.lower() == ".md" and p.class_path == summary_class_path for p in output_cfg
-                ):
+                if not any(p.prefix.lower() == ".md" and p.class_path == summary_class_path for p in output_cfg):
                     output_cfg.append(
                         ProcessorConfig(prefix=".md", class_path=summary_class_path),
                     )
@@ -227,10 +222,7 @@ class IngestionController:
 
             # Expose a default library-level processor unless already present.
             try:
-                toc_class_path = (
-                    "knowledge_flow_backend.core.library_processors.library_toc_output_processor."
-                    "LibraryTocOutputProcessor"
-                )
+                toc_class_path = "knowledge_flow_backend.core.library_processors.library_toc_output_processor.LibraryTocOutputProcessor"
                 if not any(p.class_path == toc_class_path for p in library_output_cfg):
                     library_output_cfg.append(LibraryProcessorConfig(class_path=toc_class_path))
             except Exception:

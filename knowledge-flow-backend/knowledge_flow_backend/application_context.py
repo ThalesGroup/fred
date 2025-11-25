@@ -59,7 +59,7 @@ from knowledge_flow_backend.common.structures import (
     WeaviateVectorStorage,
 )
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
-from knowledge_flow_backend.core.processors.output.base_corpus_output_processor import LibraryOutputProcessor
+from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 from knowledge_flow_backend.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 from knowledge_flow_backend.core.stores.catalog.base_catalog_store import BaseCatalogStore
