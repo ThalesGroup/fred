@@ -627,6 +627,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.processDocumentsRequest,
       }),
     }),
+    processLibraryKnowledgeFlowV1ProcessLibraryPost: build.mutation<
+      ProcessLibraryKnowledgeFlowV1ProcessLibraryPostApiResponse,
+      ProcessLibraryKnowledgeFlowV1ProcessLibraryPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/process-library`,
+        method: "POST",
+        body: queryArg.processLibraryRequest,
+      }),
+    }),
     processDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPost: build.mutation<
       ProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostApiResponse,
       ProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostApiArg
@@ -648,9 +658,7 @@ export type ReadyKnowledgeFlowV1ReadyGetApiArg = void;
 export type SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiResponse =
   /** status 200 Successful Response */ DocumentMetadata[];
 export type SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiArg = {
-  filters: {
-    [key: string]: any;
-  };
+  filters: object;
 };
 export type GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApiResponse =
   /** status 200 Successful Response */ DocumentMetadata;
@@ -741,9 +749,7 @@ export type GetAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyGetApiArg = {
   range?: string | null;
 };
 export type DeleteAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteApiResponse =
-  /** status 200 Successful Response */ {
-    [key: string]: any;
-  };
+  /** status 200 Successful Response */ object;
 export type DeleteAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteApiArg = {
   agent: string;
   key: string;
@@ -766,9 +772,7 @@ export type GetUserAssetKnowledgeFlowV1UserAssetsKeyGetApiArg = {
   /** [AGENT USE ONLY] Explicit user ID of the asset owner (Header) */
   "X-Asset-User-ID"?: string | null;
 };
-export type DeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteApiResponse = /** status 200 Successful Response */ {
-  [key: string]: any;
-};
+export type DeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteApiResponse = /** status 200 Successful Response */ object;
 export type DeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteApiArg = {
   key: string;
   /** [AGENT USE ONLY] Explicit user ID of the asset owner (Header) */
@@ -871,9 +875,8 @@ export type QueryKnowledgeFlowV1KpiQueryPostApiResponse = /** status 200 Success
 export type QueryKnowledgeFlowV1KpiQueryPostApiArg = {
   kpiQuery: KpiQuery;
 };
-export type GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiResponse = /** status 200 Successful Response */ {
-  [key: string]: any;
-};
+export type GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiResponse =
+  /** status 200 Successful Response */ object;
 export type GetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetApiArg = void;
 export type CreateResourceKnowledgeFlowV1ResourcesPostApiResponse = /** status 201 Successful Response */ Resource;
 export type CreateResourceKnowledgeFlowV1ResourcesPostApiArg = {
@@ -925,15 +928,11 @@ export type GetRunKnowledgeFlowV1DevBenchRunsRunIdGetApiResponse =
 export type GetRunKnowledgeFlowV1DevBenchRunsRunIdGetApiArg = {
   runId: string;
 };
-export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiResponse = /** status 200 Successful Response */ {
-  [key: string]: any;
-};
+export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiResponse = /** status 200 Successful Response */ object;
 export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiArg = {
   runId: string;
 };
-export type GetContextApiResponse = /** status 200 Successful Response */ {
-  [key: string]: any;
-}[];
+export type GetContextApiResponse = /** status 200 Successful Response */ object[];
 export type GetContextApiArg = void;
 export type ListDatabasesApiResponse = /** status 200 Successful Response */ string[];
 export type ListDatabasesApiArg = void;
@@ -1041,6 +1040,11 @@ export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse =
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
   processDocumentsRequest: ProcessDocumentsRequest;
 };
+export type ProcessLibraryKnowledgeFlowV1ProcessLibraryPostApiResponse =
+  /** status 200 Successful Response */ ProcessLibraryResponse;
+export type ProcessLibraryKnowledgeFlowV1ProcessLibraryPostApiArg = {
+  processLibraryRequest: ProcessLibraryRequest;
+};
 export type ProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostApiResponse =
   /** status 200 Successful Response */ ProcessDocumentsProgressResponse;
 export type ProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostApiArg = {
@@ -1130,9 +1134,7 @@ export type DocumentMetadata = {
   preview_url?: string | null;
   viewer_url?: string | null;
   /** Processor-specific additional attributes (namespaced keys). */
-  extensions?: {
-    [key: string]: any;
-  } | null;
+  extensions?: object | null;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -1181,9 +1183,7 @@ export type BrowseDocumentsRequest = {
   /** Tag of the document source to browse (pull or push) */
   source_tag: string;
   /** Optional metadata filters */
-  filters?: {
-    [key: string]: any;
-  } | null;
+  filters?: object | null;
   offset?: number;
   limit?: number;
   sort_by?: SortOption[] | null;
@@ -1215,9 +1215,7 @@ export type AssetMeta = {
   etag?: string | null;
   modified?: string | null;
   document_uid?: string | null;
-  extra?: {
-    [key: string]: any;
-  };
+  extra?: object;
 };
 export type BodyUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPost = {
   /** Binary payload (e.g., .pptx) */
@@ -1246,14 +1244,20 @@ export type ProcessorConfig = {
   /** Dotted import path of the processor class */
   class_path: string;
 };
+export type LibraryProcessorConfig = {
+  /** Dotted import path of the library output processor class */
+  class_path: string;
+};
 export type AvailableProcessorsResponse = {
   input_processors: ProcessorConfig[];
   output_processors: ProcessorConfig[];
+  library_output_processors: LibraryProcessorConfig[];
 };
 export type ProcessingPipelineDefinition = {
   name: string;
   input_processors?: ProcessorConfig[] | null;
   output_processors: ProcessorConfig[];
+  library_output_processors?: LibraryProcessorConfig[] | null;
 };
 export type PipelineAssignment = {
   library_tag_id: string;
@@ -1264,6 +1268,7 @@ export type ProcessingPipelineInfo = {
   is_default_for_library: boolean;
   input_processors: ProcessorConfig[];
   output_processors: ProcessorConfig[];
+  library_output_processors: LibraryProcessorConfig[];
 };
 export type BodyUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost = {
   files: Blob[];
@@ -1402,9 +1407,7 @@ export type SearchRequest = {
   search_policy?: SearchPolicyName | null;
 };
 export type KpiQueryResultRow = {
-  group: {
-    [key: string]: any;
-  };
+  group: object;
   metrics: {
     [key: string]: number;
   };
@@ -1506,9 +1509,7 @@ export type LogEventDto = {
   line: number;
   msg: string;
   service?: string | null;
-  extra?: {
-    [key: string]: any;
-  } | null;
+  extra?: object | null;
 };
 export type LogQueryResult = {
   events?: LogEventDto[];
@@ -1595,11 +1596,7 @@ export type GetSchemaResponse = {
 export type RawSqlResponse = {
   db_name: string;
   sql_query: string;
-  rows?:
-    | {
-        [key: string]: any;
-      }[]
-    | null;
+  rows?: object[] | null;
   error?: string | null;
 };
 export type RawSqlRequest = {
@@ -1626,9 +1623,7 @@ export type TrainModelRequest = {
   model_type?: "linear" | "random_forest";
 };
 export type PredictRowRequest = {
-  row: {
-    [key: string]: any;
-  };
+  row: object;
 };
 export type SaveModelRequest = {
   name: string;
@@ -1681,6 +1676,18 @@ export type FileToProcessWithoutUser = {
 export type ProcessDocumentsRequest = {
   files: FileToProcessWithoutUser[];
   pipeline_name: string;
+};
+export type ProcessLibraryResponse = {
+  status: string;
+  library_tag: string;
+  workflow_id: string;
+  run_id?: string | null;
+  document_count?: number | null;
+};
+export type ProcessLibraryRequest = {
+  library_tag: string;
+  processor: string;
+  document_uids?: string[] | null;
 };
 export type DocumentProgress = {
   document_uid: string;
@@ -1832,5 +1839,6 @@ export const {
   useRunPcaMutation,
   useWriteReportKnowledgeFlowV1McpReportsWritePostMutation,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
+  useProcessLibraryKnowledgeFlowV1ProcessLibraryPostMutation,
   useProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostMutation,
 } = injectedRtkApi;

@@ -184,5 +184,7 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
     progress,
     clearProgress,
     refreshProgress,
+    processDocuments: handleProcess,
+    isProcessing,
   };
 };

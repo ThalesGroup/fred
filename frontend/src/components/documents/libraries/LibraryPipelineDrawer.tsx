@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useToast } from "../../../components/ToastProvider";
 import {
   AvailableProcessorsResponse,
+  LibraryProcessorConfig,
   ProcessorConfig,
   useAssignPipelineToLibraryKnowledgeFlowV1ProcessingPipelinesAssignLibraryPostMutation,
   useListAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGetQuery,
@@ -22,6 +23,7 @@ type PipelineInfo = {
   is_default_for_library: boolean;
   input_processors: ProcessorConfig[];
   output_processors: ProcessorConfig[];
+  library_output_processors: LibraryProcessorConfig[];
 };
 
 export interface LibraryPipelineDrawerProps {
@@ -90,6 +92,7 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
   const [selectedExt, setSelectedExt] = useState<string>(".pdf");
   const [stepsByExt, setStepsByExt] = useState<Record<string, PipelineStep[]>>({});
   const [inputByExt, setInputByExt] = useState<Record<string, string>>({});
+  const [librarySteps, setLibrarySteps] = useState<PipelineStep[]>([]);
   const [pipelineName, setPipelineName] = useState<string | null>(null);
   const [pipelineIsDefault, setPipelineIsDefault] = useState<boolean>(false);
 
@@ -137,6 +140,7 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
         }
       }
       setInputByExt(inputInit);
+      setLibrarySteps([]);
     } catch (err: any) {
       console.error("Failed to initialise pipeline editor:", err);
       showError({
@@ -195,6 +199,12 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
         });
         setStepsByExt(byExtSteps);
 
+        const libraryStepsFromApi: PipelineStep[] = (data.library_output_processors || []).map((p, idx) => ({
+          id: buildKey("library", `${p.class_path}-${idx}`),
+          classPath: p.class_path,
+        }));
+        setLibrarySteps(libraryStepsFromApi);
+
         // Input processors per extension
         const byExtInput: Record<string, string> = { ...inputByExt };
         (data.input_processors || []).forEach((p) => {
@@ -238,6 +248,10 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
     return map;
   }, [available]);
 
+  const libraryOutputOptions = useMemo<LibraryProcessorConfig[]>(() => {
+    return available?.library_output_processors || [];
+  }, [available]);
+
   const currentSteps = stepsByExt[selectedExt] || [];
 
   const handleAddStep = () => {
@@ -266,6 +280,23 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
       ...prev,
       [selectedExt]: (prev[selectedExt] || []).filter((s) => s.id !== stepId),
     }));
+  };
+
+  const handleAddLibraryProcessor = () => {
+    if (!libraryOutputOptions.length) return;
+    const first = libraryOutputOptions[0];
+    setLibrarySteps((prev) => {
+      const id = buildKey("library", `${first.class_path}-${Date.now()}-${prev.length}`);
+      return [...prev, { id, classPath: first.class_path }];
+    });
+  };
+
+  const handleChangeLibraryProcessor = (stepId: string, newClassPath: string) => {
+    setLibrarySteps((prev) => prev.map((s) => (s.id === stepId ? { ...s, classPath: newClassPath } : s)));
+  };
+
+  const handleRemoveLibraryProcessor = (stepId: string) => {
+    setLibrarySteps((prev) => prev.filter((s) => s.id !== stepId));
   };
 
   const handleSave = async () => {
@@ -302,12 +333,16 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
       const inputDefs: ProcessorConfig[] = Object.entries(inputByExt)
         .filter(([, classPath]) => !!classPath)
         .map(([prefix, class_path]) => ({ prefix, class_path }));
+      const libraryDefs: LibraryProcessorConfig[] = librarySteps.map((step) => ({
+        class_path: step.classPath,
+      }));
 
       await registerPipeline({
         processingPipelineDefinition: {
           name: pipelineName,
           input_processors: inputDefs,
           output_processors: allSteps,
+          library_output_processors: libraryDefs,
         },
       }).unwrap();
 
@@ -340,6 +375,7 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
     setStepsByExt({});
     setInputByExt({});
     setSelectedExt(".pdf");
+    setLibrarySteps([]);
     onClose();
   };
 
@@ -492,6 +528,54 @@ export const LibraryPipelineDrawer: React.FC<LibraryPipelineDrawerProps> = ({
           >
             {t("documentLibrary.pipeline.addStep") || "Add processor"}
           </Button>
+        </Stack>
+      </Box>
+
+      {/* Library-level processors (run once per library) */}
+      <Box mb={2}>
+        <Typography variant="subtitle2" gutterBottom>
+          {t("documentLibrary.pipeline.libraryProcessors") || "Library processors"}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" mb={1}>
+          {t("documentLibrary.pipeline.libraryProcessorsHelper") ||
+            "These processors run at the library level, after documents have been processed."}
+        </Typography>
+        <Stack spacing={1}>
+          {librarySteps.map((step, idx) => (
+            <Stack key={step.id} direction="row" spacing={1} alignItems="center">
+              <Typography variant="body2" color="text.secondary" sx={{ minWidth: 40 }}>
+                {idx + 1}.
+              </Typography>
+              <FormControl fullWidth size="small">
+                <Select
+                  value={step.classPath}
+                  onChange={(e) => handleChangeLibraryProcessor(step.id, e.target.value as string)}
+                >
+                  {libraryOutputOptions.map((p) => (
+                    <MenuItem key={p.class_path} value={p.class_path}>
+                      <ProcessorLabel classPath={p.class_path} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Button variant="outlined" size="small" color="error" onClick={() => handleRemoveLibraryProcessor(step.id)}>
+                {t("documentLibrary.pipeline.removeStep") || "Remove"}
+              </Button>
+            </Stack>
+          ))}
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={handleAddLibraryProcessor}
+            disabled={loading || !libraryOutputOptions.length}
+          >
+            {t("documentLibrary.pipeline.addLibraryProcessor") || "Add library processor"}
+          </Button>
+          {!libraryOutputOptions.length && (
+            <Typography variant="caption" color="text.secondary">
+              {t("documentLibrary.pipeline.noLibraryProcessorAvailable") || "No library processors available."}
+            </Typography>
+          )}
         </Stack>
       </Box>
 

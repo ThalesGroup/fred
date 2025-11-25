@@ -510,7 +510,11 @@
       "saveErrorSummary": "Failed to save pipeline",
       "current": "Pipeline",
       "currentDefault": "Pipeline",
-      "defaultTag": "default"
+      "defaultTag": "default",
+      "libraryProcessors": "Library processors",
+      "libraryProcessorsHelper": "These processors run once at the library level after documents have been processed.",
+      "addLibraryProcessor": "Add library processor",
+      "noLibraryProcessorAvailable": "No library processors available."
     }
   },
   "documentLibraryShareDialog": {

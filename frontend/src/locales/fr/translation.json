@@ -510,7 +510,11 @@
       "saveErrorSummary": "Échec de l'enregistrement du pipeline",
       "current": "Pipeline",
       "currentDefault": "Pipeline",
-      "defaultTag": "par défaut"
+      "defaultTag": "par défaut",
+      "libraryProcessors": "Processeurs de bibliothèque",
+      "libraryProcessorsHelper": "Ces processeurs s'exécutent une fois au niveau de la bibliothèque après le traitement des documents.",
+      "addLibraryProcessor": "Ajouter un processeur de bibliothèque",
+      "noLibraryProcessorAvailable": "Aucun processeur de bibliothèque disponible."
     }
   },
   "documentLibraryShareDialog": {
