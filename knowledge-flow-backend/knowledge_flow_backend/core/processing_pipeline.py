@@ -10,6 +10,7 @@ from knowledge_flow_backend.core.processors.input.common.base_input_processor im
     BaseMarkdownProcessor,
     BaseTabularProcessor,
 )
+from knowledge_flow_backend.core.processors.output.base_corpus_output_processor import LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ class ProcessingPipeline:
     name: str
     input_processors: Dict[str, BaseInputProcessor] = field(default_factory=dict)
     output_processors: Dict[str, List[BaseOutputProcessor]] = field(default_factory=dict)
+    library_output_processors: List[LibraryOutputProcessor] = field(default_factory=list)
 
     @classmethod
     def build_default(cls, context: ApplicationContext) -> "ProcessingPipeline":
@@ -40,9 +42,11 @@ class ProcessingPipeline:
         This preserves current behaviour:
         - One input processor per extension (from configuration.input_processors).
         - One output processor per extension (or defaulted via EXTENSION_CATEGORY).
+        - Optional library-level processors (if configured).
         """
         input_processors: Dict[str, BaseInputProcessor] = {}
         output_processors: Dict[str, List[BaseOutputProcessor]] = {}
+        library_output_processors: List[LibraryOutputProcessor] = []
 
         for ext in EXTENSION_CATEGORY.keys():
             try:
@@ -58,8 +62,26 @@ class ProcessingPipeline:
             except ValueError:
                 logger.debug("No output processor configured for extension %s; skipping output pipeline.", ext)
 
-        logger.info("📚 Default LibraryProcessingPipeline built with extensions: %s", sorted(input_processors.keys()))
-        return cls(name="default", input_processors=input_processors, output_processors=output_processors)
+        # Instantiate configured library-level processors if any
+        cfg = context.get_config()
+        for entry in cfg.library_output_processors or []:
+            try:
+                module_path, class_name = entry.class_path.rsplit(".", 1)
+                module = __import__(module_path, fromlist=[class_name])
+                cls_ref = getattr(module, class_name)
+                if not issubclass(cls_ref, LibraryOutputProcessor):
+                    raise TypeError(f"{entry.class_path} is not a LibraryOutputProcessor")
+                library_output_processors.append(cls_ref())
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to instantiate library output processor %s: %s", entry.class_path, exc)
+
+        logger.info("[PROCESSOR][LIBRARY] Default LibraryProcessingPipeline built with extensions: %s", sorted(input_processors.keys()))
+        return cls(
+            name="default",
+            input_processors=input_processors,
+            output_processors=output_processors,
+            library_output_processors=library_output_processors,
+        )
 
     # ------------------------------------------------------------------
     # Helpers

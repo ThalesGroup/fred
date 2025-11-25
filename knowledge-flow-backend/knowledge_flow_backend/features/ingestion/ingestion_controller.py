@@ -27,10 +27,11 @@ from fred_core import KeycloakUser, KPIActor, KPIWriter, get_current_user
 from pydantic import BaseModel
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_kpi_writer
-from knowledge_flow_backend.common.structures import ProcessorConfig, Status
+from knowledge_flow_backend.common.structures import LibraryProcessorConfig, ProcessorConfig, Status
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import LiteMarkdownOptions
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_md_processing_service import LiteMdError, LiteMdProcessingService
+from knowledge_flow_backend.core.processors.output.base_corpus_output_processor import LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 from knowledge_flow_backend.features.scheduler.activities import input_process, output_process
@@ -82,6 +83,7 @@ class AvailableProcessorsResponse(BaseModel):
 
     input_processors: List[ProcessorConfig]
     output_processors: List[ProcessorConfig]
+    library_output_processors: List[LibraryProcessorConfig]
 
 
 class ProcessingPipelineDefinition(BaseModel):
@@ -92,11 +94,13 @@ class ProcessingPipelineDefinition(BaseModel):
       - 'name' identifies the pipeline in the runtime registry.
       - 'input_processors' is optional; if omitted, defaults are used.
       - 'output_processors' must be provided as a mapping from suffix → list of class paths.
+      - 'library_output_processors' is optional; if provided, these run at library scope.
     """
 
     name: str
     input_processors: Optional[List[ProcessorConfig]] = None
     output_processors: List[ProcessorConfig]
+    library_output_processors: Optional[List[LibraryProcessorConfig]] = None
 
 
 class PipelineAssignment(BaseModel):
@@ -116,13 +120,15 @@ class ProcessingPipelineInfo(BaseModel):
     Describes the effective processing pipeline for a library.
 
     Contains the pipeline name, whether it is the default for this library,
-    and the flattened input/output processor configs per extension.
+    and the flattened input/output processor configs per extension plus
+    any library-level processors.
     """
 
     name: str
     is_default_for_library: bool
     input_processors: List[ProcessorConfig]
     output_processors: List[ProcessorConfig]
+    library_output_processors: List[LibraryProcessorConfig]
 
 
 def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
@@ -200,6 +206,8 @@ class IngestionController:
                         class_path = f"{proc.__class__.__module__}.{proc.__class__.__name__}"
                         output_cfg.append(ProcessorConfig(prefix=suffix, class_path=class_path))
 
+            library_output_cfg: List[LibraryProcessorConfig] = list(cfg.library_output_processors or [])
+
             # Always expose the summarization output processor for markdown outputs,
             # so admins can choose to make summarization an explicit pipeline step.
             try:
@@ -217,9 +225,21 @@ class IngestionController:
             except Exception:
                 logger.exception("Failed to register SummarizationOutputProcessor in available processors list")
 
+            # Expose a default library-level processor unless already present.
+            try:
+                toc_class_path = (
+                    "knowledge_flow_backend.core.library_processors.library_toc_output_processor."
+                    "LibraryTocOutputProcessor"
+                )
+                if not any(p.class_path == toc_class_path for p in library_output_cfg):
+                    library_output_cfg.append(LibraryProcessorConfig(class_path=toc_class_path))
+            except Exception:
+                logger.exception("Failed to register LibraryTocOutputProcessor in available processors list")
+
             return AvailableProcessorsResponse(
                 input_processors=input_cfg,
                 output_processors=output_cfg,
+                library_output_processors=library_output_cfg,
             )
 
         @router.post(
@@ -268,10 +288,21 @@ class IngestionController:
                     )
                 output_map.setdefault(pc.prefix.lower(), []).append(cls())
 
+            library_processors: list[LibraryOutputProcessor] = []
+            for lp in definition.library_output_processors or []:
+                cls = _dynamic_import_processor(lp.class_path)
+                if not issubclass(cls, LibraryOutputProcessor):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Class {lp.class_path} is not a LibraryOutputProcessor.",
+                    )
+                library_processors.append(cls())
+
             pipeline = ProcessingPipeline(
                 name=definition.name,
                 input_processors=input_map,
                 output_processors=output_map,
+                library_output_processors=library_processors,
             )
 
             pipeline_manager.pipelines[definition.name] = pipeline
@@ -346,11 +377,17 @@ class IngestionController:
                     class_path = f"{proc.__class__.__module__}.{proc.__class__.__name__}"
                     output_cfg.append(ProcessorConfig(prefix=prefix, class_path=class_path))
 
+            library_output_cfg: List[LibraryProcessorConfig] = []
+            for proc in getattr(pipeline, "library_output_processors", []):
+                class_path = f"{proc.__class__.__module__}.{proc.__class__.__name__}"
+                library_output_cfg.append(LibraryProcessorConfig(class_path=class_path))
+
             return ProcessingPipelineInfo(
                 name=pipeline_name,
                 is_default_for_library=is_default,
                 input_processors=input_cfg,
                 output_processors=output_cfg,
+                library_output_processors=library_output_cfg,
             )
 
         @router.post(

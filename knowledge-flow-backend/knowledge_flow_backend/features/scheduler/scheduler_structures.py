@@ -186,3 +186,17 @@ class ProcessDocumentsProgressResponse(BaseModel):
     documents_fully_processed: int
     documents_failed: int
     documents: List[DocumentProgress]
+
+
+class ProcessLibraryRequest(BaseModel):
+    library_tag: str
+    processor: str  # fully qualified class path for a LibraryOutputProcessor
+    document_uids: Optional[List[str]] = None  # optional subset; defaults to all docs in tag
+
+
+class ProcessLibraryResponse(BaseModel):
+    status: str
+    library_tag: str
+    workflow_id: str
+    run_id: Optional[str] = None
+    document_count: Optional[int] = None

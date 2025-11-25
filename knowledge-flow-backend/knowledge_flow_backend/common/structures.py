@@ -66,6 +66,17 @@ class ProcessorConfig(BaseModel):
     class_path: str = Field(..., description="Dotted import path of the processor class")
 
 
+class LibraryProcessorConfig(BaseModel):
+    """
+    Configuration structure for a library-level output processor.
+
+    Attributes:
+        class_path (str): Dotted import path of the processor class.
+    """
+
+    class_path: str = Field(..., description="Dotted import path of the library output processor class")
+
+
 ###########################################################
 #
 #  --- Content Storage Configuration
@@ -356,6 +367,7 @@ class Configuration(BaseModel):
     security: SecurityConfiguration
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
+    library_output_processors: Optional[List[LibraryProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
     scheduler: SchedulerConfig
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")
