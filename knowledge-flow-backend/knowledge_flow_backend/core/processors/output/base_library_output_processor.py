@@ -15,7 +15,7 @@
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Sequence
+from typing import List, Optional, Sequence
 
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
 
@@ -41,6 +41,8 @@ class LibraryOutputProcessor(ABC):
     multiple documents (e.g., build a shared graph). It is intentionally
     separate from BaseOutputProcessor, which is strictly per-document.
     """
+
+    description: Optional[str] = None
 
     @abstractmethod
     def process_library(

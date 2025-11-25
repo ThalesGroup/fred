@@ -60,10 +60,16 @@ class ProcessorConfig(BaseModel):
     Attributes:
         prefix (str): The file extension this processor handles (e.g., '.pdf').
         class_path (str): Dotted import path of the processor class.
+        description (str): Human readable explanation of what the processor does.
     """
 
     prefix: str = Field(..., description="The file extension this processor handles (e.g., '.pdf')")
     class_path: str = Field(..., description="Dotted import path of the processor class")
+    description: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        description="Human-readable description of the processor purpose shown in the UI.",
+    )
 
 
 class LibraryProcessorConfig(BaseModel):
@@ -72,9 +78,15 @@ class LibraryProcessorConfig(BaseModel):
 
     Attributes:
         class_path (str): Dotted import path of the processor class.
+        description (str): Human readable explanation of what the processor does.
     """
 
     class_path: str = Field(..., description="Dotted import path of the library output processor class")
+    description: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        description="Human-readable description of the library output processor purpose shown in the UI.",
+    )
 
 
 ###########################################################

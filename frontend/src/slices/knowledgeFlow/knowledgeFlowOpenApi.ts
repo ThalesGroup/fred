@@ -1260,10 +1260,14 @@ export type ProcessorConfig = {
   prefix: string;
   /** Dotted import path of the processor class */
   class_path: string;
+  /** Human-readable description of the processor purpose shown in the UI. */
+  description?: string | null;
 };
 export type LibraryProcessorConfig = {
   /** Dotted import path of the library output processor class */
   class_path: string;
+  /** Human-readable description of the library output processor purpose shown in the UI. */
+  description?: string | null;
 };
 export type AvailableProcessorsResponse = {
   input_processors: ProcessorConfig[];

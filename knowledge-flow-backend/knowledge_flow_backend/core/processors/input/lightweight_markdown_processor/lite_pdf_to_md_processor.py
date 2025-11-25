@@ -53,6 +53,8 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
     - Keep token budgets predictable via normalization + max_chars cap.
     """
 
+    description = "Fast PDF-to-Markdown converter optimized for lightweight, page-aware extraction."
+
     def __init__(self) -> None:
         self._md = MarkItDown() if MarkItDown else None
 
@@ -198,6 +200,8 @@ class LitePdfMarkdownProcessor(BaseMarkdownProcessor):
     - convert_file_to_markdown writes an 'output.md' file, as expected by
       IngestionService.process_input and downstream processors.
     """
+
+    description = "Lightweight PDF ingestion path that writes Markdown previews via a fast extractor."
 
     def __init__(self) -> None:
         super().__init__()

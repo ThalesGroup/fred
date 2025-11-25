@@ -519,6 +519,16 @@
       "defaultTag": "par défaut",
       "libraryProcessors": "Processeurs de bibliothèque",
       "libraryProcessorsHelper": "Ces processeurs s'exécutent une fois au niveau de la bibliothèque après le traitement des documents.",
+      "helpButton": "Comment ça marche",
+      "helpTitle": "Comment fonctionnent les pipelines",
+      "helpIntro": "Les pipelines vous permettent de choisir quels processeurs s'exécutent et à quel moment.",
+      "helpInputTitle": "Processeurs d'entrée",
+      "helpInputBody": "Convertissent les fichiers bruts en aperçus normalisés (Markdown ou tableaux) selon l'extension.",
+      "helpOutputTitle": "Processeurs de sortie",
+      "helpOutputBody": "Post-traitent chaque document (vectorisation, chargement tabulaire, résumé). Ils peuvent s'exécuter juste après l'ingestion ou plus tard depuis l'onglet Opérations.",
+      "helpLibraryTitle": "Processeurs de bibliothèque",
+      "helpLibraryBody": "S'exécutent une fois par bibliothèque pour produire des artefacts partagés (ex. sommaire de bibliothèque). Ils s'exécutent plus tard depuis l'onglet Opérations, pas pendant l'ingestion.",
+      "close": "Fermer",
       "addLibraryProcessor": "Ajouter un processeur de bibliothèque",
       "noLibraryProcessorAvailable": "Aucun processeur de bibliothèque disponible."
     }
