@@ -666,6 +666,7 @@ export type FrontendFlags = {
 };
 export type Properties = {
   logoName?: string;
+  logoNameDark?: string;
   siteDisplayName?: string;
 };
 export type FrontendSettings = {
