@@ -305,6 +305,7 @@
       "betaNotice": "File attachments are in beta. Only CSV, docx and pdf files are supported. Please provide feedback to help us improve this feature.",
       "count": "{{count}} attached"
     },
+    "uploadingFile": "Uploading {{name}}...",
     "recordAudio": "Record audio",
     "sendMessage": "Send message",
     "stopResponse": "Stop response",
@@ -493,7 +494,34 @@
     "confirmDeleteFolderMessage": "Delete empty folder « {{name}} »?",
     "folderDeleted": "Folder deleted",
     "deleteFolder": "Delete folder",
-    "download": "Download"
+    "download": "Download",
+    "pipeline": {
+      "title": "Configure Processing Pipeline",
+      "description": "Choose the chain of processors to apply for each file type in this library.",
+      "library": "Library",
+      "inputLabel": "Input processor",
+      "extensionLabel": "File extension",
+      "stepsLabel": "Processors chain",
+      "addStep": "Add processor",
+      "removeStep": "Remove",
+      "cancel": "Cancel",
+      "save": "Save pipeline",
+      "loadErrorSummary": "Failed to load processors",
+      "noLibrarySummary": "No library selected",
+      "noLibraryDetail": "Please select a library first.",
+      "emptyPipelineSummary": "Pipeline is empty",
+      "emptyPipelineDetail": "Add at least one processor.",
+      "savedSummary": "Pipeline saved",
+      "savedDetail": "Processing pipeline has been configured for library \"{{name}}\".",
+      "saveErrorSummary": "Failed to save pipeline",
+      "current": "Pipeline",
+      "currentDefault": "Pipeline",
+      "defaultTag": "default",
+      "libraryProcessors": "Library processors",
+      "libraryProcessorsHelper": "These processors run once at the library level after documents have been processed.",
+      "addLibraryProcessor": "Add library processor",
+      "noLibraryProcessorAvailable": "No library processors available."
+    }
   },
   "documentLibraryShareDialog": {
     "subtitle": "Add users or groups and manage access permissions for this library.",

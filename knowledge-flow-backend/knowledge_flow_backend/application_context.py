@@ -44,6 +44,7 @@ from fred_core import (
     split_realm_url,
 )
 from langchain_core.embeddings import Embeddings
+from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
 
 from knowledge_flow_backend.common.structures import (
@@ -58,6 +59,7 @@ from knowledge_flow_backend.common.structures import (
     WeaviateVectorStorage,
 )
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
+from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 from knowledge_flow_backend.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 from knowledge_flow_backend.core.stores.catalog.base_catalog_store import BaseCatalogStore
@@ -193,6 +195,22 @@ def validate_output_processor_config(config: Configuration):
             raise ImportError(f"Output Processor '{entry.class_path}' could not be loaded: {e}")
 
 
+def validate_library_output_processor_config(config: Configuration):
+    """Ensure all library output processor classes can be imported and subclass LibraryOutputProcessor."""
+    if not config.library_output_processors:
+        return
+    for entry in config.library_output_processors:
+        module_path, class_name = entry.class_path.rsplit(".", 1)
+        try:
+            module = importlib.import_module(module_path)
+            cls = getattr(module, class_name)
+            if not issubclass(cls, LibraryOutputProcessor):
+                raise TypeError(f"{entry.class_path} is not a subclass of LibraryOutputProcessor")
+            logger.debug("Validated library output processor: %s", entry.class_path)
+        except (ImportError, AttributeError, TypeError) as e:
+            raise ImportError(f"Library Output Processor '{entry.class_path}' could not be loaded: {e}")
+
+
 def _require_env(var: str) -> None:
     """Log presence of a required env var or raise loudly if missing."""
     val = os.getenv(var, "")
@@ -220,6 +238,7 @@ class ApplicationContext:
     _file_store_instance: Optional[BaseFileStore] = None
     _kpi_writer: Optional[KPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
+    _neo4j_driver: Optional[Driver] = None
 
     def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
@@ -230,6 +249,7 @@ class ApplicationContext:
         self.configuration = configuration
         validate_input_processor_config(configuration)
         validate_output_processor_config(configuration)
+        validate_library_output_processor_config(configuration)
         self.input_processor_registry: Dict[str, Type[BaseInputProcessor]] = self._load_input_processor_registry()
         self.output_processor_registry: Dict[str, Type[BaseOutputProcessor]] = self._load_output_processor_registry()
         ApplicationContext._instance = self
@@ -335,6 +355,10 @@ class ApplicationContext:
         return registry
 
     def get_config(self) -> Configuration:
+        """
+        Get the application configuration. This corresponds to the initial YAML file
+        loaded at startup.
+        """
         return self.configuration
 
     def _get_input_processor_class(self, extension: str) -> Optional[Type[BaseInputProcessor]]:
@@ -566,6 +590,29 @@ class ApplicationContext:
             connection_class=RequestsHttpConnection,
         )
         return self._opensearch_client
+
+    def get_neo4j_driver(self) -> Driver:
+        """
+        Lazily create and return a shared Neo4j driver.
+
+        Configuration:
+        - NEO4J_URI: bolt URI, e.g. bolt://app-neo4j:7687 (default: bolt://localhost:7687)
+        - NEO4J_USERNAME: username (default: neo4j)
+        - NEO4J_PASSWORD: password (required)
+        """
+        if self._neo4j_driver is not None:
+            return self._neo4j_driver
+
+        uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+        username = os.getenv("NEO4J_USERNAME", "neo4j")
+        password = os.getenv("NEO4J_PASSWORD")
+
+        if not password:
+            raise ValueError("Missing Neo4j credentials: NEO4J_PASSWORD must be set")
+
+        logger.info("🔌 Initializing Neo4j driver uri=%s user=%s", uri, username)
+        self._neo4j_driver = GraphDatabase.driver(uri, auth=(username, password))
+        return self._neo4j_driver
 
     def get_kpi_writer(self) -> BaseKPIWriter:
         if self._kpi_writer is not None:

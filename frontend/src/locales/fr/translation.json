@@ -305,6 +305,7 @@
       "betaNotice": "Les pièces jointes sont en version bêta. Seuls les fichiers CSV, docx et pdf sont pris en charge. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
       "count": "{{count}} pièces jointes"
     },
+    "uploadingFile": "Téléversement de {{name}}...",
     "recordAudio": "Enregistrer de l'audio",
     "sendMessage": "Envoyer le message",
     "stopResponse": "Arrêter la réponse",
@@ -493,7 +494,34 @@
     "confirmDeleteFolderMessage": "Supprimer le dossier vide « {{name}} » ?",
     "folderDeleted": "Dossier supprimé",
     "deleteFolder": "Supprimer le dossier",
-    "download": "Télécharger"
+    "download": "Télécharger",
+    "pipeline": {
+      "title": "Configurer le pipeline de traitement",
+      "description": "Définissez la chaîne de processeurs à appliquer pour chaque type de fichier de cette bibliothèque.",
+      "library": "Bibliothèque",
+      "inputLabel": "Processeur d'entrée",
+      "extensionLabel": "Extension de fichier",
+      "stepsLabel": "Chaîne de processeurs",
+      "addStep": "Ajouter un processeur",
+      "removeStep": "Supprimer",
+      "cancel": "Annuler",
+      "save": "Enregistrer le pipeline",
+      "loadErrorSummary": "Échec du chargement des processeurs",
+      "noLibrarySummary": "Aucune bibliothèque sélectionnée",
+      "noLibraryDetail": "Veuillez d'abord sélectionner une bibliothèque.",
+      "emptyPipelineSummary": "Pipeline vide",
+      "emptyPipelineDetail": "Ajoutez au moins un processeur.",
+      "savedSummary": "Pipeline enregistré",
+      "savedDetail": "Le pipeline de traitement a été configuré pour la bibliothèque « {{name}} ».",
+      "saveErrorSummary": "Échec de l'enregistrement du pipeline",
+      "current": "Pipeline",
+      "currentDefault": "Pipeline",
+      "defaultTag": "par défaut",
+      "libraryProcessors": "Processeurs de bibliothèque",
+      "libraryProcessorsHelper": "Ces processeurs s'exécutent une fois au niveau de la bibliothèque après le traitement des documents.",
+      "addLibraryProcessor": "Ajouter un processeur de bibliothèque",
+      "noLibraryProcessorAvailable": "Aucun processeur de bibliothèque disponible."
+    }
   },
   "documentLibraryShareDialog": {
     "subtitle": "Ajoutez des utilisateurs ou des groupes et gérez les permissions d'accès pour cette bibliothèque.",

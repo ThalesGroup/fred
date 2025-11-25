@@ -66,6 +66,17 @@ class ProcessorConfig(BaseModel):
     class_path: str = Field(..., description="Dotted import path of the processor class")
 
 
+class LibraryProcessorConfig(BaseModel):
+    """
+    Configuration structure for a library-level output processor.
+
+    Attributes:
+        class_path (str): Dotted import path of the processor class.
+    """
+
+    class_path: str = Field(..., description="Dotted import path of the library output processor class")
+
+
 ###########################################################
 #
 #  --- Content Storage Configuration
@@ -142,6 +153,54 @@ class ProcessingConfig(BaseModel):
     use_gpu: bool = Field(default=True, description="Enable/disable GPU usage for processing (if supported by the processor)")
     process_images: bool = Field(default=True, description="Enable/disable image content extraction")
     generate_summary: bool = Field(default=True, description="Enable/disable human-centric abstract and keyword generation for documents.")
+
+
+class MCPConfig(BaseModel):
+    """
+    Feature toggles for MCP-only HTTP/MCP surfaces.
+
+    These do NOT affect core storage backends (e.g., using OpenSearch
+    as vector store or metadata store). They only control whether
+    optional monitoring/exploration controllers and their MCP servers
+    are exposed.
+    """
+
+    reports_enabled: bool = Field(
+        default=True,
+        description="Expose the Reports MCP server (Markdown-first report generation).",
+    )
+    kpi_enabled: bool = Field(
+        default=True,
+        description="Expose the KPI MCP server for querying application KPIs.",
+    )
+    tabular_enabled: bool = Field(
+        default=True,
+        description="Expose the Tabular MCP server for SQL/table exploration.",
+    )
+    statistic_enabled: bool = Field(
+        default=True,
+        description="Expose the Statistical MCP server for data analysis helpers.",
+    )
+    text_enabled: bool = Field(
+        default=True,
+        description="Expose the Text MCP server for semantic vector search.",
+    )
+    templates_enabled: bool = Field(
+        default=True,
+        description="Expose the Template MCP server for prompts/templates.",
+    )
+    resources_enabled: bool = Field(
+        default=True,
+        description="Expose the Resources MCP server for resource/tag management.",
+    )
+    opensearch_ops_enabled: bool = Field(
+        default=False,
+        description="Expose OpenSearch operational endpoints and the corresponding MCP server.",
+    )
+    neo4j_enabled: bool = Field(
+        default=False,
+        description="Expose Neo4j graph exploration endpoints and the corresponding MCP server.",
+    )
 
 
 class TemporalSchedulerConfig(BaseModel):
@@ -308,8 +367,10 @@ class Configuration(BaseModel):
     security: SecurityConfiguration
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
+    library_output_processors: Optional[List[LibraryProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
     scheduler: SchedulerConfig
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
     storage: StorageConfig
+    mcp: MCPConfig = Field(default_factory=MCPConfig, description="Feature toggles for MCP-only endpoints and servers.")
