@@ -80,6 +80,17 @@ RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
 COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
 
+# Download the crossencoder model
+ENV SENTENCE_TRANSFORMERS_HOME=/app/models
+ENV RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-12-v2
+ENV HF_HOME=/app/models
+RUN mkdir -p ${HF_HOME}
+
+RUN python -c "\
+from sentence_transformers import CrossEncoder; \
+import os; \
+CrossEncoder(model_name_or_path=os.environ['RERANKER_MODEL'], cache_folder=os.environ['HF_HOME'])"
+
 # Set working directory
 WORKDIR /app
 
