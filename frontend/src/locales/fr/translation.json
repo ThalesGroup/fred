@@ -159,7 +159,10 @@
     "runSuccessDetail": "Processeurs exécutés avec succès.",
     "summaryFor": "Résumé pour '{{name}}'",
     "processorsCount": "{{count}} processeur(s)",
-    "view": { "sideBySide": "Côte à côte", "stacked": "Empilé" },
+    "view": {
+      "sideBySide": "Côte à côte",
+      "stacked": "Empilé"
+    },
     "metricsTitle": "Métriques des processeurs",
     "persistLabel": "Enregistrer l'exécution",
     "saved": {
@@ -191,7 +194,11 @@
     "pages": "{{n}} page(s)",
     "noMarkdown": "Aucun markdown produit",
     "openLatest": "Ouvrir la dernière exécution",
-    "detail": { "title": "Détail de l'exécution", "expandAll": "Tout déplier", "collapseAll": "Tout replier" }
+    "detail": {
+      "title": "Détail de l'exécution",
+      "expandAll": "Tout déplier",
+      "collapseAll": "Tout replier"
+    }
   },
   "assetManager": {
     "title": "Gérer les ressources pour {{agentId}}",
@@ -243,8 +250,7 @@
     "search": "Rechercher",
     "filter": "Filtrer",
     "create": "Créer",
-    "createMcpAgent": "Créer un Nouvel Agent MCP",
-    "createMcpAgentNote": "Créer un nouvel agent MCP avec la configuration par défaut.",
+    "createAgent": "Créer un nouvel agent",
     "noAgents": "Aucun agent trouvé",
     "noFavorites": "Vous n'avez pas encore ajouté d'agents à vos favoris",
     "noTag": "Aucun agent avec le tag \"{{tag}}\"",
