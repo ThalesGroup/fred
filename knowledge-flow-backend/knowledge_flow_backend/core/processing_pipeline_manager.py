@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.processors import DocumentMetadata
 from knowledge_flow_backend.core.processing_pipeline import ProcessingPipeline
 
 logger = logging.getLogger(__name__)

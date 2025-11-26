@@ -17,7 +17,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.processors.document_structures import DocumentMetadata
 
 logger = logging.getLogger(__name__)
 

@@ -21,7 +21,7 @@ from typing import Dict, List, Optional
 from fred_core import KeycloakUser
 from pydantic import BaseModel
 
-from knowledge_flow_backend.common.document_structures import (
+from fred_core.processors import (
     AccessInfo,
     DocumentMetadata,
     FileInfo,

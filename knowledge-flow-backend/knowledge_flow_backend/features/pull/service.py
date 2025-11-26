@@ -3,7 +3,7 @@ from typing import List, Tuple
 from fred_core import Action, KeycloakUser, Resource, authorize
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.processors import DocumentMetadata
 from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
 from knowledge_flow_backend.features.metadata.metadata_utils import file_entry_to_metadata
 

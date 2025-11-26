@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from fred_core import KeycloakUser
 
-from knowledge_flow_backend.common.document_structures import (
+from fred_core.processors import (
     DocumentMetadata,
     FileInfo,
     FileType,

@@ -18,7 +18,7 @@ import pathlib
 from fred_core import Action, KeycloakUser, Resource, authorize
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, SourceType
+from fred_core.processors import DocumentMetadata, ProcessingStage, SourceType
 from knowledge_flow_backend.core.processing_pipeline_manager import ProcessingPipelineManager
 from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
 

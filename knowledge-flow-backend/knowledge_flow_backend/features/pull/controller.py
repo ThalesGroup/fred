@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fred_core import KeycloakUser, get_current_user
 from pydantic import BaseModel
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.processors import DocumentMetadata
 from knowledge_flow_backend.features.pull.service import PullDocumentService, SourceNotFoundError
 
 

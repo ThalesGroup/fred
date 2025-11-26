@@ -4,14 +4,12 @@ from dataclasses import dataclass, field
 from typing import Dict, List
 
 from knowledge_flow_backend.application_context import EXTENSION_CATEGORY, ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.processors import DocumentMetadata, BaseOutputProcessor, LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import (
     BaseInputProcessor,
     BaseMarkdownProcessor,
     BaseTabularProcessor,
 )
-from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
-from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 
 logger = logging.getLogger(__name__)
 

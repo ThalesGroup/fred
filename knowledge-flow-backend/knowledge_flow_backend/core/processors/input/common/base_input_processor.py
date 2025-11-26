@@ -21,15 +21,7 @@ from typing import Any, Dict, Optional
 
 import pandas  # kept because BaseTabularProcessor references it
 
-from knowledge_flow_backend.common.document_structures import (
-    DocumentMetadata,
-    FileInfo,
-    FileType,
-    Identity,
-    SourceInfo,
-    SourceType,
-    Tagging,
-)
+from fred_core.processors import DocumentMetadata, FileInfo, FileType, Identity, SourceInfo, SourceType, Tagging
 from knowledge_flow_backend.common.source_utils import resolve_source_type
 from knowledge_flow_backend.core.processors.input.common.enrichment import normalize_enrichment
 

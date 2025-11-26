@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, authorize
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import (
+from fred_core.processors import (
     DocumentMetadata,
     ProcessingGraph,
     ProcessingGraphEdge,

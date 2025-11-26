@@ -7,9 +7,8 @@ from fred_core import validate_index_mapping
 from opensearchpy import OpenSearch, OpenSearchException, RequestsHttpConnection
 from pydantic import ValidationError
 
-from knowledge_flow_backend.common.document_structures import (
+from fred_core.processors import (
     AccessInfo,
-    DocSummary,
     DocumentMetadata,
     FileInfo,
     FileType,
@@ -21,6 +20,7 @@ from knowledge_flow_backend.common.document_structures import (
     SourceType,
     Tagging,
 )
+from fred_core.processors.document_structures import DocSummary
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import (
     BaseMetadataStore,
     MetadataDeserializationError,

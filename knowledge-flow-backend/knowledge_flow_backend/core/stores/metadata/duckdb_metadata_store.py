@@ -20,7 +20,7 @@ from typing import List, Optional
 from fred_core.store.duckdb_store import DuckDBTableStore
 from pydantic import ValidationError
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.processors import DocumentMetadata
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import (
     BaseMetadataStore,
     MetadataDeserializationError,

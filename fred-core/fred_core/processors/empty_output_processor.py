@@ -16,8 +16,8 @@
 
 import logging
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
-from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
+from fred_core.processors.base_output_processor import BaseOutputProcessor
+from fred_core.processors.document_structures import DocumentMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +29,15 @@ class EmptyOutputProcessor(BaseOutputProcessor):
     Used to intentionally skip output processing for specific file types.
     """
 
-    description = "Skips output processing for file types that should not be post-processed."
+    description = (
+        "Skips output processing for file types that should not be post-processed."
+    )
 
     def __init__(self):
         super().__init__()
 
     def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
-        logger.info(f"Skipping output processing for document UID: {metadata.document_uid}")
+        logger.info(
+            f"Skipping output processing for document UID: {metadata.document_uid}"
+        )
         return metadata

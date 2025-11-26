@@ -21,11 +21,8 @@ from fred_core import BaseKPIWriter, KPIActor
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocSummary, DocumentMetadata, ProcessingStage
-from knowledge_flow_backend.core.processors.output.base_output_processor import (
-    BaseOutputProcessor,
-    VectorProcessingError,
-)
+from fred_core.processors import BaseOutputProcessor, DocumentMetadata, ProcessingStage, VectorProcessingError
+from fred_core.processors.document_structures import DocSummary
 from knowledge_flow_backend.core.processors.output.summarizer.smart_llm_summarizer import SmartDocSummarizer
 from knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_utils import (
     flat_metadata_from,

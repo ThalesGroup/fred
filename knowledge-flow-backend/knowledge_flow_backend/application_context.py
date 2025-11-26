@@ -43,6 +43,7 @@ from fred_core import (
     rebac_factory,
     split_realm_url,
 )
+from fred_core.processors import BaseOutputProcessor, LibraryOutputProcessor
 from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
@@ -59,8 +60,6 @@ from knowledge_flow_backend.common.structures import (
     WeaviateVectorStorage,
 )
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
-from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
-from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 from knowledge_flow_backend.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
 from knowledge_flow_backend.core.stores.catalog.base_catalog_store import BaseCatalogStore
 from knowledge_flow_backend.core.stores.catalog.duckdb_catalog_store import DuckdbCatalogStore

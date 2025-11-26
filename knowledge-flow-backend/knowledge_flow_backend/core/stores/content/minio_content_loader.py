@@ -19,7 +19,7 @@ from typing import List
 from minio import Minio
 from minio.error import S3Error
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.processors import DocumentMetadata
 from knowledge_flow_backend.common.structures import MinioPullSource
 from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
 from knowledge_flow_backend.core.stores.content.base_content_loader import BaseContentLoader

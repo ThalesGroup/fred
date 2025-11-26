@@ -16,7 +16,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.processors.document_structures import DocumentMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -58,5 +58,9 @@ class BaseOutputProcessor(ABC):
         Returns:
             DocumentMetadata: The updated metadata to reflect the progress in processing stages.
         """
-        logger.error(f"No implementation found for ouput processor: {file_path} with metadata {metadata}")
-        raise NotImplementedError("Output processor not implemented for this file type.")
+        logger.error(
+            f"No implementation found for ouput processor: {file_path} with metadata {metadata}"
+        )
+        raise NotImplementedError(
+            "Output processor not implemented for this file type."
+        )

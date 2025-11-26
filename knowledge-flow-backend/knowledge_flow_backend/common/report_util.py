@@ -1,7 +1,7 @@
 # app/features/reports/utils.py
 from typing import Any, Dict, Optional
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata, ReportExtensionV1
+from fred_core.processors.document_structures import DocumentMetadata, ReportExtensionV1
 
 REPORT_EXT_KEY = "report"  # single, stable namespace key
 
