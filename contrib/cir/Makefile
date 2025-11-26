@@ -2,6 +2,10 @@ PY_PACKAGE=cir
 APP ?= cir.main:app
 # Avoid clashes with agentic (8000), knowledge-flow (8111), and MCP deps (8081/8885/9797)
 PORT ?= 8205
+UV_CACHE_DIR ?= /tmp/uv-cache
+# Use unsafe-best-match so uv can pick PyPI packages (e.g., networkx) even though
+# the PyTorch CPU index is listed first.
+HIPPO_UV_FLAGS ?= --index-strategy unsafe-best-match -v
 
 include ../../scripts/makefiles/python-vars.mk
 include ../../scripts/makefiles/python-deps.mk
@@ -9,14 +13,19 @@ include ../../scripts/makefiles/python-code-quality.mk
 include ../../scripts/makefiles/python-clean.mk
 include ../../scripts/makefiles/help.mk
 
-.PHONY: install hipporag run test clean-egg
+.PHONY: install hipporag hipporag-reset-lock run test clean-egg
 
 install: dev ## Create venv and install dependencies
 
-hipporag: dev ## Force-install HippoRAG without deps (upstream pin is broken)
-	$(UV) pip install --no-deps hipporag==2.0.0a4
+hipporag-reset-lock:
+	rm -f uv.lock
 
-run: install ## Start FastAPI with uvicorn
+hipporag: dev ## Install HippoRAG fork (uses UV_CACHE_DIR, extras=hipporag,dev)
+	@echo "📦 Installing HippoRAG extras (dev+hipporag) with UV_CACHE_DIR=$(UV_CACHE_DIR)"
+	UV_CACHE_DIR=$(UV_CACHE_DIR) $(UV) sync --extra dev --extra hipporag --python 3.12 $(HIPPO_UV_FLAGS)
+	@echo "✅ HippoRAG install attempt finished; check logs above for details."
+
+run: hipporag ## Start FastAPI with uvicorn (ensures HippoRAG extras installed)
 	$(UV) run uvicorn $(APP) --reload --host 0.0.0.0 --port $(PORT)
 
 test: dev ## Run unit tests
@@ -26,7 +35,7 @@ test: dev ## Run unit tests
 clean: clean-egg
 
 clean-egg:
-	rm -rf *.egg-info
+	rm -rf *.egg-info uv.lock
 
 # Ensure tooling targets bootstrap the venv first
 lint: dev

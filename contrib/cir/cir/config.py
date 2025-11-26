@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     embedding_batch_size: int = 8
     max_new_tokens: int = 512
     openie_mode: str = "online"
-    save_openie: bool = True
+    save_openie: bool = False
     openie_model: str = "openie_openai_gpt"
     temperature: float = 0.0
     directed_graph: bool = True

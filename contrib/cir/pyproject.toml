@@ -3,7 +3,7 @@ name = "cir-hipporag-service"
 version = "0.1.0"
 description = "Standalone CIR HippoRAG library processor service"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi==0.116.1",
   "uvicorn[standard]==0.34.0",
@@ -15,8 +15,10 @@ dependencies = [
 
 [project.optional-dependencies]
 # Upstream hipporag==2.0.0a4 has an invalid openai pin (1.91.1 not on PyPI).
-# Keep the extra empty to avoid resolver failure; install hipporag manually with --no-deps if needed.
-hipporag = []
+# Use a fork with a fixed OpenAI pin
+hipporag = [
+  "hipporag @ git+https://github.com/dimitri-tombroff/HippoRAG.git@openai-dependency-fix"
+]
 dev = [
   "ruff",
   "bandit[baseline]",
@@ -34,3 +36,11 @@ include = ["cir*"]
 
 [tool.uv.sources]
 fred-core = { path = "../../fred-core", editable = true }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+
+[tool.uv]
+override-dependencies = ["torch==2.5.1+cpu"]
+index-strategy = "unsafe-best-match"

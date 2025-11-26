@@ -5,6 +5,7 @@ import logging
 import shutil
 import tempfile
 import base64
+import importlib.resources as pkg_resources
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Sequence
@@ -221,21 +222,40 @@ class CirLibraryOutputProcessor(LibraryOutputProcessor):
     ) -> bool:
         try:
             from hipporag import HippoRAG
-            from HippoRAG2.src.hipporag.utils.config_utils import BaseConfig
+            from hipporag.utils.config_utils import BaseConfig
         except ImportError:
             logger.info(
                 "CirLibraryOutputProcessor: hipporag dependency not installed; only corpus is exported."
             )
             return False
 
+        # Resolve rerank prompt path
+        rerank_path: str | None = None
+        if self.settings.rerank_prompt_path:
+            candidate = Path(self.settings.rerank_prompt_path)
+            if candidate.exists():
+                rerank_path = str(candidate)
+            else:
+                logger.warning("Configured rerank prompt path does not exist: %s", candidate)
+        if rerank_path is None:
+            try:
+                pkg_path = pkg_resources.files("hipporag.prompts.dspy_prompts") / "filter_llama3.3-70B-Instruct.json"  # type: ignore[arg-type]
+                if pkg_path.is_file():
+                    rerank_path = str(pkg_path)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to resolve default rerank prompt from hipporag package: %s", exc)
+
+        if rerank_path is None:
+            logger.warning("No rerank prompt found; falling back to HippoRAG built-in default prompt.")
+
         s = self.settings
         config = BaseConfig(
-            save_dir=graph_dir,
+            save_dir=str(graph_dir),
             llm_base_url=s.llm_base_url,
             llm_name=s.llm_model,
             dataset=str(graph_dir),
             embedding_model_name=s.embedding_model,
-            rerank_dspy_file_path=s.rerank_prompt_path,
+            rerank_dspy_file_path=rerank_path,
             retrieval_top_k=s.retrieval_top_k,
             linking_top_k=s.linking_top_k,
             max_qa_steps=s.max_qa_steps,
