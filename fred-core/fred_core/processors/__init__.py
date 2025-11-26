@@ -21,6 +21,12 @@ from fred_core.processors.base_output_processor import (
     TabularProcessingError,
     VectorProcessingError,
 )
+from fred_core.processors.contracts import (
+    LibraryProcessorBundle,
+    LibraryProcessorDocument,
+    LibraryProcessorRequest,
+    LibraryProcessorResponse,
+)
 from fred_core.processors.document_structures import (
     AccessInfo,
     DocumentMetadata,
@@ -42,6 +48,10 @@ from fred_core.processors.document_structures import (
 
 __all__ = [
     "AccessInfo",
+    "LibraryProcessorBundle",
+    "LibraryProcessorDocument",
+    "LibraryProcessorRequest",
+    "LibraryProcessorResponse",
     "BaseOutputProcessor",
     "DocumentMetadata",
     "FileInfo",

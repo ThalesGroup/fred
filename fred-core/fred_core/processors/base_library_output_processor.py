@@ -31,6 +31,7 @@ class LibraryDocumentInput:
 
     file_path: str
     metadata: DocumentMetadata
+    preview_markdown: Optional[str] = None
 
 
 class LibraryOutputProcessor(ABC):
