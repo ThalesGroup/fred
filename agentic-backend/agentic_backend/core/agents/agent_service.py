@@ -22,16 +22,13 @@ from agentic_backend.core.agents.agent_manager import (
     AgentAlreadyExistsException,
     AgentManager,
 )
-from agentic_backend.core.agents.basic_react_agent import (
-    BASIC_REACT_TUNING,
-    BasicReActAgent,
-)
+from agentic_backend.core.agents.mcp_agent import MCP_TUNING, MCPAgent
 
 logger = logging.getLogger(__name__)
 
 
 def _class_path(obj_or_type) -> str:
-    """Return fully-qualified class path, e.g. 'agentic_backend.agents.basic_react_agent.BasicReActAgent'."""
+    """Return fully-qualified class path, e.g. 'agentic_backend.agents.mcp.mcp_agent.MCPAgent'."""
     t = obj_or_type if isinstance(obj_or_type, type) else type(obj_or_type)
     return f"{t.__module__}.{t.__name__}"
 
@@ -42,7 +39,7 @@ class AgentService:
         self.agent_manager = agent_manager
 
     @authorize(action=Action.CREATE, resource=Resource.AGENTS)
-    async def create_agent(self, user: KeycloakUser, name: str):
+    async def create_mcp_agent(self, user: KeycloakUser, name: str):
         """
         Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
         """
@@ -55,14 +52,15 @@ class AgentService:
             # If .get raises when not found, ignore; if it returns None when not found, also fine
             raise e
 
+        # Ensure class_path points to MCPAgent
         agent_settings = Agent(
             name=name,
-            class_path=_class_path(BasicReActAgent),
+            class_path=_class_path(MCPAgent),
             enabled=False,  # Start disabled until fully initialized
-            tuning=BASIC_REACT_TUNING,  # default tuning
+            tuning=MCP_TUNING,  # default tuning
             mcp_servers=[],  # Empty list by default; to be configured later
         )
-        self.agent_manager.create_dynamic_agent(agent_settings, BASIC_REACT_TUNING)
+        self.agent_manager.create_dynamic_agent(agent_settings, MCP_TUNING)
 
     @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
     async def update_agent(

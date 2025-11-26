@@ -159,10 +159,7 @@
     "runSuccessDetail": "Processors executed successfully.",
     "summaryFor": "Summary for '{{name}}'",
     "processorsCount": "{{count}} processor(s)",
-    "view": {
-      "sideBySide": "Side by side",
-      "stacked": "Stacked"
-    },
+    "view": { "sideBySide": "Side by side", "stacked": "Stacked" },
     "metricsTitle": "Processor Metrics",
     "persistLabel": "Save run",
     "saved": {
@@ -194,11 +191,7 @@
     "pages": "{{n}} page(s)",
     "noMarkdown": "No markdown produced",
     "openLatest": "Open latest run",
-    "detail": {
-      "title": "Run Detail",
-      "expandAll": "Expand all",
-      "collapseAll": "Collapse all"
-    }
+    "detail": { "title": "Run Detail", "expandAll": "Expand all", "collapseAll": "Collapse all" }
   },
   "assetManager": {
     "title": "Manage Assets for {{agentId}}",
@@ -250,7 +243,8 @@
     "search": "Search",
     "filter": "Filter",
     "create": "Create",
-    "createAgent": "Create new agent",
+    "createMcpAgent": "Create New MCP Agent",
+    "createMcpAgentNote": "Create a new MCP agent with default configuration.",
     "noAgents": "No agents found",
     "noFavorites": "You haven't added any agents to your favorites yet",
     "noTag": "No agents with tag \"{{tag}}\"",
@@ -305,6 +299,7 @@
       "betaNotice": "File attachments are in beta. Only CSV, docx and pdf files are supported. Please provide feedback to help us improve this feature.",
       "count": "{{count}} attached"
     },
+
     "recordAudio": "Record audio",
     "sendMessage": "Send message",
     "stopResponse": "Stop response",
