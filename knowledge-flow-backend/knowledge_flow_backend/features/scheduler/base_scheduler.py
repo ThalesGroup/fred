@@ -24,7 +24,7 @@ from uuid import uuid4
 from fastapi import BackgroundTasks
 from fred_core import KeycloakUser
 
-from knowledge_flow_backend.common.document_structures import ProcessingStage, ProcessingStatus
+from fred_core.processors import ProcessingStage, ProcessingStatus
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     DocumentProgress,

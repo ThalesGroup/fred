@@ -20,7 +20,7 @@ from typing import BinaryIO, Tuple
 import pandas as pd
 from fred_core import Action, KeycloakUser, Resource, authorize
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.processors import DocumentMetadata
 from knowledge_flow_backend.core.stores.content.base_content_store import FileMetadata
 
 logger = logging.getLogger(__name__)

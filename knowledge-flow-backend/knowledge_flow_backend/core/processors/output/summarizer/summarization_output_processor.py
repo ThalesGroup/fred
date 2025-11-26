@@ -4,8 +4,8 @@ from typing import List, Optional, override
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocSummary, DocumentMetadata
-from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
+from fred_core.processors import BaseOutputProcessor, DocumentMetadata
+from fred_core.processors.document_structures import DocSummary
 from knowledge_flow_backend.core.processors.output.summarizer.smart_llm_summarizer import SmartDocSummarizer
 from knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_utils import (
     load_langchain_doc_from_metadata,

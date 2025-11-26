@@ -19,8 +19,7 @@ from datetime import datetime, timezone
 from typing import List, Sequence, override
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
-from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryDocumentInput, LibraryOutputProcessor
+from fred_core.processors import DocumentMetadata, LibraryDocumentInput, LibraryOutputProcessor
 
 logger = logging.getLogger(__name__)
 

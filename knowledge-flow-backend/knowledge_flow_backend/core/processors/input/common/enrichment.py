@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from knowledge_flow_backend.common.document_structures import FileType
+from fred_core.processors import FileType
 
 # Strings that should be treated as “unknown”
 _UNKNOWN = {"", "unknown", "non disponible", "none", "-", "n/a"}

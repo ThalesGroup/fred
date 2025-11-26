@@ -15,7 +15,7 @@
 
 import logging
 
-from knowledge_flow_backend.common.document_structures import SourceType
+from fred_core.processors import SourceType
 from knowledge_flow_backend.common.structures import DocumentSourceConfig
 
 logger = logging.getLogger(__name__)

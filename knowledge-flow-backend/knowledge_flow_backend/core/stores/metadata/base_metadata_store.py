@@ -15,7 +15,7 @@
 from abc import abstractmethod
 from typing import List
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.processors import DocumentMetadata
 
 
 class MetadataDeserializationError(Exception):
