@@ -185,7 +185,7 @@ export function DocumentLibraryTree({
                 setSelectedFolder(isSelected ? null : c.full); // toggle
               }}
             >
-              {/* Left: tri-state + folder icon + name */}
+              {/* Left: tri-state + folder icon + name + count */}
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flex: 1 }}>
                 <Checkbox
                   size="small"
@@ -200,6 +200,25 @@ export function DocumentLibraryTree({
                 />
                 {isExpanded ? <FolderOpenOutlinedIcon fontSize="small" /> : <FolderOutlinedIcon fontSize="small" />}
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+                <Tooltip key={`${c.name}_count`} title={`${docsHere.length} Documents`} arrow>
+                  <Box
+                    sx={{
+                      bgcolor: "#e0e0e0",
+                      color: "#757575",
+                      width: "auto",
+                      height: 18,
+                      paddingLeft: 1.2,
+                      paddingRight: 1.2,
+                      borderRadius: 25,
+                      fontSize: "0.6rem",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {docsHere.length}
+                  </Box>
+                </Tooltip>
               </Box>
 
               {/* Right: share + delete */}
