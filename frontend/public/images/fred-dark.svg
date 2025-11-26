@@ -6,7 +6,7 @@
    fill="none"
    version="1.1"
    id="svg1"
-   sodipodi:docname="fred.svg"
+   sodipodi:docname="fred_dark.svg"
    inkscape:version="1.4.2 (2aeb623e1d, 2025-05-12)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -39,5 +39,5 @@
      stroke-width="3.84"
      stroke-linecap="round"
      id="path1"
-     style="stroke:#ffffff;stroke-opacity:1;stroke-width:2;stroke-dasharray:none;stroke-dashoffset:0" />
+     style="stroke:#000000;stroke-opacity:1;fill:#ffffff;fill-opacity:1;stroke-width:2;stroke-dasharray:none" />
 </svg>

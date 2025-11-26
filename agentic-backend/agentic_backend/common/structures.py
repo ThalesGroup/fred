@@ -207,6 +207,7 @@ class FrontendFlags(BaseModel):
 
 class Properties(BaseModel):
     logoName: str = "fred"
+    logoNameDark: str = "fred-dark"
     siteDisplayName: str = "Fred"
 
 
