@@ -62,20 +62,18 @@ ai:
     connect: 5 # Time to wait for a connection in seconds
     read: 15 # Time to wait for a response in seconds
   default_chat_model:
-    # Required in .env:
-    # - OPENAI_API_KEY
     provider: "ollama"
     name: "granite4:3b-h"
     settings:
+      base_url: http://localhost:11434
       temperature: 0.0
       max_retries: 2
       request_timeout: 30
   default_language_model:
-    # Required in .env:
-    # - OPENAI_API_KEY
     provider: "ollama"
     name: "granite4:3b-h"
     settings:
+      base_url: http://localhost:11434
       temperature: 0.0
       max_retries: 2
       request_timeout: 30
