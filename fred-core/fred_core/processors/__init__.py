@@ -12,8 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred_core.processors.base_library_output_processor import LibraryDocumentInput, LibraryOutputProcessor
-from fred_core.processors.base_output_processor import BaseOutputProcessor, TabularProcessingError, VectorProcessingError
+from fred_core.processors.base_library_output_processor import (
+    LibraryDocumentInput,
+    LibraryOutputProcessor,
+)
+from fred_core.processors.base_output_processor import (
+    BaseOutputProcessor,
+    TabularProcessingError,
+    VectorProcessingError,
+)
 from fred_core.processors.document_structures import (
     AccessInfo,
     DocumentMetadata,

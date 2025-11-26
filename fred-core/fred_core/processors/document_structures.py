@@ -98,19 +98,32 @@ class Identity(BaseModel):
 
 class SourceInfo(BaseModel):
     source_type: SourceType
-    source_tag: Optional[str] = Field(None, description="Repository/connector id, e.g. 'uploads', 'github'")
-    pull_location: Optional[str] = Field(None, description="Path or URI to the original pull file")
+    source_tag: Optional[str] = Field(
+        None, description="Repository/connector id, e.g. 'uploads', 'github'"
+    )
+    pull_location: Optional[str] = Field(
+        None, description="Path or URI to the original pull file"
+    )
 
-    retrievable: bool = Field(default=False, description="True if raw file can be re-fetched")
+    retrievable: bool = Field(
+        default=False, description="True if raw file can be re-fetched"
+    )
     date_added_to_kb: datetime = Field(
         default_factory=lambda: datetime.now(tz=timezone.utc),
         description="When the document was added to the system",
     )
-    repository_web: Optional[AnyHttpUrl] = Field(  # AnyHttpUrl allows http/https + custom ports
-        default=None, description="Web base of the repository, e.g. https://git/org/repo"
+    repository_web: Optional[AnyHttpUrl] = (
+        Field(  # AnyHttpUrl allows http/https + custom ports
+            default=None,
+            description="Web base of the repository, e.g. https://git/org/repo",
+        )
     )
-    repo_ref: Optional[str] = Field(default=None, description="Commit SHA or branch used when pulling")
-    file_path: Optional[str] = Field(default=None, description="Path within the repository (POSIX style)")
+    repo_ref: Optional[str] = Field(
+        default=None, description="Commit SHA or branch used when pulling"
+    )
+    file_path: Optional[str] = Field(
+        default=None, description="Path within the repository (POSIX style)"
+    )
 
 
 class FileInfo(BaseModel):
@@ -133,7 +146,11 @@ class FileInfo(BaseModel):
                 self.file_type = FileType.DOCX
             elif "powerpoint" in self.mime_type or "ppt" in self.mime_type:
                 self.file_type = FileType.PPTX
-            elif "excel" in self.mime_type or "spreadsheet" in self.mime_type or "xlsx" in self.mime_type:
+            elif (
+                "excel" in self.mime_type
+                or "spreadsheet" in self.mime_type
+                or "xlsx" in self.mime_type
+            ):
                 self.file_type = FileType.XLSX
             elif "csv" in self.mime_type:
                 self.file_type = FileType.CSV
@@ -152,8 +169,12 @@ class Tagging(BaseModel):
     Optionally store one canonical breadcrumb path for the UI.
     """
 
-    tag_ids: List[str] = Field(default_factory=list, description="Stable tag IDs (UUIDs)")
-    tag_names: List[str] = Field(default_factory=list, description="Display names for chips")
+    tag_ids: List[str] = Field(
+        default_factory=list, description="Stable tag IDs (UUIDs)"
+    )
+    tag_names: List[str] = Field(
+        default_factory=list, description="Display names for chips"
+    )
 
     @field_validator("tag_ids", "tag_names")
     @classmethod
@@ -257,11 +278,21 @@ class DocSummary(BaseModel):
     - UI reads this to show 'Abstract' and 'Key terms' on demand.
     """
 
-    abstract: Optional[str] = Field(default=None, description="Concise doc abstract for humans (UI).")
-    keywords: Optional[List[str]] = Field(default=None, description="Top key terms for navigation and filters.")
-    model_name: Optional[str] = Field(default=None, description="LLM/flow used to produce this summary.")
-    method: Optional[str] = Field(default=None, description="Algorithm/flow id (e.g., 'SmartDocSummarizer@v1').")
-    created_at: Optional[datetime] = Field(default=None, description="UTC when this summary was computed.")
+    abstract: Optional[str] = Field(
+        default=None, description="Concise doc abstract for humans (UI)."
+    )
+    keywords: Optional[List[str]] = Field(
+        default=None, description="Top key terms for navigation and filters."
+    )
+    model_name: Optional[str] = Field(
+        default=None, description="LLM/flow used to produce this summary."
+    )
+    method: Optional[str] = Field(
+        default=None, description="Algorithm/flow id (e.g., 'SmartDocSummarizer@v1')."
+    )
+    created_at: Optional[datetime] = Field(
+        default=None, description="UTC when this summary was computed."
+    )
 
 
 class ReportExtensionV1(BaseModel):
@@ -280,13 +311,23 @@ class ReportExtensionV1(BaseModel):
 
     # Canonical source (always present)
     md_url: str = Field(..., description="Public URL to the canonical Markdown file")
-    md_type: FileType = Field(default=FileType.MD, description="Redundant but explicit typing")
+    md_type: FileType = Field(
+        default=FileType.MD, description="Redundant but explicit typing"
+    )
 
     # Optional exports
-    html_url: Optional[str] = Field(default=None, description="URL to rendered HTML, if built")
-    pdf_url: Optional[str] = Field(default=None, description="URL to rendered PDF, if built")
-    html_type: Optional[FileType] = Field(default=None, description="= FileType.HTML when html_url is set")
-    pdf_type: Optional[FileType] = Field(default=None, description="= FileType.PDF when pdf_url is set")
+    html_url: Optional[str] = Field(
+        default=None, description="URL to rendered HTML, if built"
+    )
+    pdf_url: Optional[str] = Field(
+        default=None, description="URL to rendered PDF, if built"
+    )
+    html_type: Optional[FileType] = Field(
+        default=None, description="= FileType.HTML when html_url is set"
+    )
+    pdf_type: Optional[FileType] = Field(
+        default=None, description="= FileType.PDF when pdf_url is set"
+    )
 
     # Convenience (computed) – which formats are currently available
     @property
@@ -331,7 +372,10 @@ class DocumentMetadata(BaseModel):
     preview_url: Optional[str] = None
     viewer_url: Optional[str] = None
 
-    extensions: Optional[Dict[str, Any]] = Field(default=None, description="Processor-specific additional attributes (namespaced keys).")
+    extensions: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Processor-specific additional attributes (namespaced keys).",
+    )
 
     # - Optional summary lets us ingest at scale and compute value later.
     # - Helpers keep call-sites explicit and avoid None gymnastics.
@@ -410,7 +454,9 @@ class DocumentMetadata(BaseModel):
     def mark_stage_error(self, stage: ProcessingStage, error_msg: str) -> None:
         self.processing.mark_error(stage, error_msg)
 
-    def set_stage_status(self, stage: ProcessingStage, status: ProcessingStatus) -> None:
+    def set_stage_status(
+        self, stage: ProcessingStage, status: ProcessingStatus
+    ) -> None:
         self.processing.set_status(stage, status)
 
     def is_fully_processed(self) -> bool:
