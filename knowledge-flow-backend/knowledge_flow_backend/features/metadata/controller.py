@@ -18,10 +18,10 @@ from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fred_core import KeycloakUser, get_current_user
+from fred_core.processors import DocumentMetadata, ProcessingGraph, ProcessingSummary
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from fred_core.processors import DocumentMetadata, ProcessingGraph, ProcessingSummary
 from knowledge_flow_backend.common.utils import log_exception
 from knowledge_flow_backend.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
 from knowledge_flow_backend.features.pull.controller import PullDocumentsResponse
