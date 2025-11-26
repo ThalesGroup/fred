@@ -1,0 +1,36 @@
+[project]
+name = "cir-hipporag-service"
+version = "0.1.0"
+description = "Standalone CIR HippoRAG library processor service"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.116.1",
+  "uvicorn[standard]==0.34.0",
+  "pydantic>=2.7,<3.0",
+  "httpx>=0.28.1",
+  "fred-core",
+  "pydantic-settings>=2.12.0",
+]
+
+[project.optional-dependencies]
+# Upstream hipporag==2.0.0a4 has an invalid openai pin (1.91.1 not on PyPI).
+# Keep the extra empty to avoid resolver failure; install hipporag manually with --no-deps if needed.
+hipporag = []
+dev = [
+  "ruff",
+  "bandit[baseline]",
+  "detect-secrets",
+  "basedpyright",
+  "pytest",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["cir*"]
+
+[tool.uv.sources]
+fred-core = { path = "../../fred-core", editable = true }
