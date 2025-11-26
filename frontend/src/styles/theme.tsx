@@ -304,7 +304,7 @@ const lightTheme = createTheme({
         enterDelay: 800,
         enterNextDelay: 300,
         leaveDelay: 80,
-        enterTouchDelay: 600,
+        enterTouchDelay: 0,
         leaveTouchDelay: 2500,
         slotProps: {
           popper: {

@@ -291,6 +291,9 @@
     "success": {
       "summary": "Agent créé",
       "detail": "L'agent a été créé avec succès."
+    },
+    "toolsSelection": {
+      "title": "Outils"
     }
   },
   "chatbot": {

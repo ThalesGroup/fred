@@ -74,7 +74,7 @@ ai:
     # Required in .env:
     # - OPENAI_API_KEY
     provider: "openai"
-    name: "gpt-4o"
+    name: "gpt-5.1"
     settings:
       temperature: 0.0
       max_retries: 2
@@ -112,27 +112,27 @@ ai:
 
 mcp:
   servers:
-    - name: "mcp-knowledge-flow-mcp-tabular"
+    - name: "Search in documents"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-tabular"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-knowledge-flow-opensearch-ops"
+    - name: "Search in opensearch"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-kubernetes-server"
+    - name: "Kubernetes access"
       transport: "streamable_http"
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-atlassian-jira-server"
+    - name: "Jira access"
       transport: "streamable_http"
       url: "http://localhost:8885/mcp"
       sse_read_timeout: 2000
       auth_mode: "no_token"
-    - name: "mcp-neo4j-graph-db"
+    - name: "Neo4j access"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-neo4j"
       sse_read_timeout: 2000

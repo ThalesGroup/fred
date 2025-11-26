@@ -1,0 +1,54 @@
+import InfoIcon from "@mui/icons-material/Info";
+import { Card, Stack, Switch, Tooltip, Typography } from "@mui/material";
+import { useTranslation } from "react-i18next";
+import {
+  McpServerConfiguration,
+  useListMcpServersAgenticV1AgentsMcpServersGetQuery,
+} from "../../slices/agentic/agenticOpenApi";
+
+export function AgentToolsSelection() {
+  const { t } = useTranslation();
+  const { data: mcpServersData, isFetching: isFetchingMcpServers } =
+    useListMcpServersAgenticV1AgentsMcpServersGetQuery();
+
+  if (isFetchingMcpServers) {
+    return <div>Loading tools...</div>;
+  }
+
+  if (!mcpServersData || mcpServersData.length === 0) {
+    return <div>No tools available.</div>;
+  }
+
+  return (
+    <Stack spacing={1}>
+      <Typography variant="h6" color="text.secondary">
+        {t("agentHub.toolsSelection.title")}
+      </Typography>
+
+      <Stack spacing={1}>
+        {mcpServersData.map((conf, index) => (
+          <AgentToolSelectionCard key={index} conf={conf} />
+        ))}
+      </Stack>
+    </Stack>
+  );
+}
+
+export interface AgentToolSelectionCardProps {
+  conf: McpServerConfiguration;
+}
+
+export function AgentToolSelectionCard({ conf }: AgentToolSelectionCardProps) {
+  return (
+    <Card sx={{ padding: 0.5 }}>
+      <Stack direction="row" spacing={1} alignItems="center">
+        <Switch />
+        <Typography>{conf.name}</Typography>
+        {/* todo: add description to tools (mcp servers now) */}
+        <Tooltip title="todo..." enterTouchDelay={0}>
+          <InfoIcon />
+        </Tooltip>
+      </Stack>
+    </Card>
+  );
+}
