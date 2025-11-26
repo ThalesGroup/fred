@@ -36,6 +36,7 @@ from agentic_backend.core.agents.agent_manager import (
 from agentic_backend.core.agents.agent_service import (
     AgentService,
 )
+from agentic_backend.core.agents.agent_spec import MCPServerConfiguration
 from agentic_backend.core.runtime_source import get_runtime_source_registry
 
 
@@ -149,6 +150,7 @@ async def delete_agent(
 @router.get(
     "/agents/mcp-servers",
     summary="List MCP servers known to all agents",
+    response_model=list[MCPServerConfiguration],
 )
 async def list_mcp_servers(
     user: KeycloakUser = Depends(get_current_user),

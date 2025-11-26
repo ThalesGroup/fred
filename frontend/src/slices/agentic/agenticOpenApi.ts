@@ -199,7 +199,8 @@ export type DeleteAgentAgenticV1AgentsNameDeleteApiResponse = /** status 200 Suc
 export type DeleteAgentAgenticV1AgentsNameDeleteApiArg = {
   name: string;
 };
-export type ListMcpServersAgenticV1AgentsMcpServersGetApiResponse = /** status 200 Successful Response */ any;
+export type ListMcpServersAgenticV1AgentsMcpServersGetApiResponse =
+  /** status 200 Successful Response */ McpServerConfiguration[];
 export type ListMcpServersAgenticV1AgentsMcpServersGetApiArg = void;
 export type ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiResponse = /** status 200 Successful Response */ any;
 export type ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiArg = void;
