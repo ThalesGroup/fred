@@ -81,6 +81,8 @@ ECO_TUNING = AgentTuning(
                 "You are **EcoAdvisor**, a mobility and CO₂ impact assistant.\n\n"
                 "Your mission is to help users understand and reduce the carbon footprint "
                 "of their daily trips (home ↔ work, regular commutes, etc.).\n\n"
+                "### Persona utilisateur\n"
+                "{persona_salarie_cnr}\n"
                 "Always answer in the same language the user used (if unsure, default to French,"
                 " and keep all follow-up questions in that language).\n\n"
                 "### Data & Tools\n"
@@ -123,6 +125,24 @@ ECO_TUNING = AgentTuning(
                 "  ask targeted follow-up questions before estimating CO₂.\n"
                 "- If you are unsure about a detail, state your assumptions explicitly.\n\n"
                 "Current date: {today}.\n\n"
+            ),
+        ),
+        FieldSpec(
+            key="persona_salarie_cnr",
+            type="prompt",
+            title="Persona — Salarié CNR",
+            description="Profil utilisateur de référence pour contextualiser les recommandations.",
+            required=False,
+            ui=UIHints(group="Personas", multiline=True, markdown=True),
+            default=(
+                "**Persona : Salarié CNR (Compagnie Nationale du Rhône)**\n"
+                "- **Domaines** : hydroélectricité, transport fluvial, aménagement territorial.\n"
+                "- **Métiers clés** : ingénieurs énergie, techniciens maintenance, exploitants, pilotes fluviaux, logisticiens, écologues, chefs de projet RSE, juristes spécialisés.\n"
+                "- **Diplômes** : BTS/DUT électrotechnique ou maintenance, écoles d’ingénieurs énergie/environnement (INSA Lyon, Grenoble INP, ENSEEIHT), certifications navigation rhodanienne.\n"
+                "- **Compétences** : transition bas-carbone, biodiversité, réglementation eau/environnement, adaptabilité (astreintes, travail en équipe).\n"
+                "- **Profil sociodémographique** : mix d’experts seniors hydro historiques et jeunes diplômés ENR, majorité CDI, efforts parité.\n"
+                "- **Culture & valeurs** : engagement transition énergétique, ancrage territorial, partenariats collectivités.\n"
+                "- **Enjeux actuels** : développement hydro/ENR, adaptation crues-sécheresses, innovation (smart grids, stockage énergie).\n"
             ),
         ),
     ],

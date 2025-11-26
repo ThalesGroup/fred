@@ -33,11 +33,14 @@ Ressources :
 - https://data.grandlyon.com
 - https://transport.data.gouv.fr
 
+> Les extraits nettoyés utilisés dans la démo sont déjà versionnés dans `agentic_backend/academy/08_ecoadviser/data/` (`bike_infra_demo.csv`, `tcl_stops_demo.csv`). Il suffit de les réimporter dans DuckDB pour rejouer le scénario.
+
 ## ⚙️ Étape 0 — Baseline stable
 
 1. **Charger les CSV via l’UI Fred / Knowledge Flow**  
    - Ouvrir l’interface d’ingestion tabulaire.  
-   - Importer `bike_infra_demo.csv` et `tcl_stops_demo.csv` dans la base DuckDB exposée par le serveur MCP tabulaire (mêmes noms de tables).  
+   - Importer `agentic_backend/academy/08_ecoadviser/data/bike_infra_demo.csv` et `agentic_backend/academy/08_ecoadviser/data/tcl_stops_demo.csv` dans la base DuckDB exposée par le serveur MCP tabulaire (mêmes noms de tables).  
+   - (Optionnel) Importer également les autres jeux présents dans `agentic_backend/academy/08_ecoadviser/data/` si vous souhaitez enrichir la démonstration (consommations énergétiques par parcelle, temps de parcours voiture, temps de parcours modes doux, etc.).
    - Vérifier via l’outil “Lister les datasets” que les deux tables sont bien disponibles.
 2. **Démarrer Knowledge Flow + Agentic Backend** puis sélectionner l’agent *EcoAdvisor*.
 3. **Conduite attendue** : l’agent suit le pattern Tessa (reasoner → tools → reasoner) et produit un bilan CO₂ markdown avec :
@@ -139,8 +142,11 @@ Fichier à générer : `prepare_rhone_demo_tables.py`
 
 Sortie :
 
-- `bike_infra_demo.csv`
-- `tcl_stops_demo.csv`
+- `data/bike_infra_demo.csv`
+- `data/tcl_stops_demo.csv`
+- `data/consommations-energetiques-2020-a-parcelle-territoire-metropole-lyon.csv`
+- `data/temps-parcours-automobile-metropole-lyon.csv`
+- `data/temps-parcours-modes-doux-metropole-lyon.csv`
 
 **Idée générale :**
 
@@ -168,8 +174,8 @@ Sortie :
 
 2. **Node 2 — Tabular lookup**
 
-   - interroger `bike_infra_demo.csv`
-   - interroger `tcl_stops_demo.csv`
+   - interroger `data/bike_infra_demo.csv`
+   - interroger `data/tcl_stops_demo.csv`
    - récupérer pistes cyclables / arrêts proches
 
 3. **Node 3 — CO₂ compute (Python pur)**
