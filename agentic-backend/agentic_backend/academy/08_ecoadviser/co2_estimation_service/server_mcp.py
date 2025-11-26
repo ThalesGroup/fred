@@ -12,6 +12,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi_mcp import FastApiMCP
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
+from .base_carbone_client import (
+    BaseCarboneClient,
+    BaseCarboneQuery,
+    DEFAULT_TRANSPORT_QUERIES,
+)
 from .data import DEFAULT_EMISSION_FACTORS
 
 logger = logging.getLogger(__name__)
@@ -159,16 +164,27 @@ def _load_dynamic_dataset() -> List[Dict[str, Any]]:
 
 
 class EmissionFactorStore:
-    def __init__(self, initial_dataset: Sequence[Dict[str, Any]]):
+    def __init__(
+        self,
+        initial_dataset: Sequence[Dict[str, Any]],
+        base_carbone_client: Optional[BaseCarboneClient] = None,
+        base_carbone_queries: Optional[Sequence[BaseCarboneQuery]] = None,
+    ):
         self._raw_dataset = list(initial_dataset)
         self._records: Dict[str, EmissionFactor] = {}
         self._alias_index: Dict[str, str] = {}
+        self._base_carbone_client = base_carbone_client
+        self._base_carbone_queries = list(base_carbone_queries or [])
         self.reload()
 
     def reload(self) -> None:
         dataset = list(DEFAULT_EMISSION_FACTORS)
         dataset.extend(self._raw_dataset)
         dataset.extend(_load_dynamic_dataset())
+        if self._base_carbone_client and self._base_carbone_queries:
+            dataset.extend(
+                self._base_carbone_client.fetch_all(self._base_carbone_queries)
+            )
         normalized: Dict[str, EmissionFactor] = {}
         aliases: Dict[str, str] = {}
         for entry in dataset:
@@ -245,7 +261,13 @@ app = FastAPI(
     ),
 )
 
-store = EmissionFactorStore(initial_dataset=[])
+base_carbone_client = BaseCarboneClient.from_env()
+
+store = EmissionFactorStore(
+    initial_dataset=[],
+    base_carbone_client=base_carbone_client,
+    base_carbone_queries=DEFAULT_TRANSPORT_QUERIES,
+)
 
 
 @app.get(

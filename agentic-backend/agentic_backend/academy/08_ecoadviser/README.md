@@ -92,6 +92,27 @@ Cette étape applique la roadmap :
 - EcoAdvisor n’embarque plus les facteurs dans son prompt : il doit appeler ces tools et **citer la source** (`source`, `last_update`) dans sa réponse.
 - En cas de panne du service, l’agent bascule automatiquement sur les facteurs de secours (car 0.192 kg/km, TCL 0.01 kg/km, vélo/marche 0 kg/km) et le mentionne clairement.
 
+### 🌐 Nouveau : interrogation directe de l’API ADEME (Base Carbone)
+
+Le service MCP interroge désormais `https://data.ademe.fr/data-fair/api/v1/datasets/base-carboner/lines` pour récupérer les facteurs d’émission à jour par mode de transport.
+
+- Chaque appel à `reload_emission_cache` combine :
+  1. Les facteurs embarqués (`DEFAULT_EMISSION_FACTORS`) pour garantir un fallback.
+  2. Les éventuelles surcharges locales (JSON / HTTP).
+  3. Les résultats live de l’API ADEME, en priorisant les modes principaux (voiture, bus, tram, métro, train, vélo, marche).
+- Les champs fournis par ADEME (`Source`, `Date_de_modification`, `Unité_français`, `Commentaire_français`, etc.) sont injectés dans les réponses du tool pour être cités côté agent.
+- Les paramètres de cette intégration sont configurables via variables d’environnement :
+
+| Variable | Défaut | Description |
+| --- | --- | --- |
+| `ADEME_BASECARBONE_ENABLED` | `true` | Active/désactive les appels HTTP. |
+| `ADEME_BASECARBONE_URL` | `https://data.ademe.fr/data-fair/api/v1/datasets/base-carboner` | Endpoint de base. |
+| `ADEME_BASECARBONE_API_KEY` | _vide_ | Clé optionnelle si vous utilisez un compte authentifié. |
+| `ADEME_BASECARBONE_TIMEOUT` | `8.0` | Timeout HTTP en secondes. |
+| `ADEME_BASECARBONE_MAX_RESULTS` | `5` | Nombre de lignes ADEME inspectées par mode. |
+
+⚠️ Si l’environnement n’autorise pas les appels réseau, `BaseCarboneClient` se désactive automatiquement et les facteurs statiques continuent d’être servis.
+
 ---
 
 ## 🧱 Préparation des données (pipeline historique)

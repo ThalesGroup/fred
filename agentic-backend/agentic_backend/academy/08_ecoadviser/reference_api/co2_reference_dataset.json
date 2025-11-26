@@ -1,0 +1,89 @@
+[
+  {
+    "mode": "car_thermal",
+    "label": "Voiture particulière (thermique)",
+    "category": "road_private",
+    "factor_kg_per_km": 0.192,
+    "unit": "kgCO2e/km",
+    "source": "ADEME Base Carbone – export local",
+    "source_url": "https://data.ademe.fr/datasets/base-carboner",
+    "last_update": "2024-05-10",
+    "geography": "France métropolitaine",
+    "notes": "Valeur moyenne WLTP incluant amont carburant.",
+    "aliases": [
+      "voiture",
+      "car",
+      "auto",
+      "voiture_thermique"
+    ]
+  },
+  {
+    "mode": "car_electric",
+    "label": "Voiture particulière (électrique)",
+    "category": "road_private",
+    "factor_kg_per_km": 0.012,
+    "unit": "kgCO2e/km",
+    "source": "ADEME Base Carbone – export local",
+    "source_url": "https://data.ademe.fr/datasets/base-carboner",
+    "last_update": "2024-05-10",
+    "geography": "Mix électrique français 2023",
+    "notes": "Berline électrique ~15 kWh/100km, inclut production d'électricité.",
+    "aliases": [
+      "voiture_electrique",
+      "voiture électrique",
+      "car_ev",
+      "ev"
+    ]
+  },
+  {
+    "mode": "tcl_bus_hybrid",
+    "label": "Bus urbain (hybride)",
+    "category": "public_transport",
+    "factor_kg_per_km": 0.089,
+    "unit": "kgCO2e/km",
+    "source": "SYTRAL Mobilités 2023",
+    "source_url": "https://www.sytral.fr/",
+    "last_update": "2023-12-01",
+    "geography": "Réseau TCL",
+    "notes": "Inclut exploitation, carburant et remplissage moyen.",
+    "aliases": [
+      "bus",
+      "tcl",
+      "tcl_bus"
+    ]
+  },
+  {
+    "mode": "regional_train",
+    "label": "Train régional / TER",
+    "category": "rail",
+    "factor_kg_per_km": 0.006,
+    "unit": "kgCO2e/km",
+    "source": "ADEME & SNCF 2024",
+    "source_url": "https://www.sncf.com/fr/empreinte",
+    "last_update": "2024-01-20",
+    "geography": "France",
+    "notes": "mix électrique/diesel, facteur par passager.",
+    "aliases": [
+      "train",
+      "ter",
+      "sncf"
+    ]
+  },
+  {
+    "mode": "bike",
+    "label": "Vélo",
+    "category": "active",
+    "factor_kg_per_km": 0.0,
+    "unit": "kgCO2e/km",
+    "source": "ADEME Base Carbone – emissions directes",
+    "source_url": "https://data.ademe.fr/datasets/base-carboner",
+    "last_update": "2023-11-01",
+    "geography": "Usage urbain",
+    "notes": "Émissions directes nulles, hors fabrication.",
+    "aliases": [
+      "velo",
+      "vélo",
+      "bicycle"
+    ]
+  }
+]
