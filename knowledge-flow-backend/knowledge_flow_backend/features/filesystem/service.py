@@ -126,3 +126,15 @@ class FilesystemService:
         except Exception as e:
             logger.exception("Failed to get user FS root")
             raise e
+
+    @authorize(action=Action.CREATE, resource=Resource.FILES)
+    async def mkdir(self, user: KeycloakUser, path: str) -> None:
+        """
+        Create a directory inside the user's namespace.
+        """
+        try:
+            full_path = self._resolve(user, path)
+            await self.fs.mkdir(full_path)
+        except Exception as e:
+            logger.exception(f"Failed to create directory {path}")
+            raise e

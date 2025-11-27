@@ -150,3 +150,18 @@ class FilesystemController:
                 return await self.service.pwd(user)
             except Exception as e:
                 self._handle_exception(e, "Pwd")
+
+        @router.post(
+            "/fs/mkdir/{path:path}",
+            tags=["Filesystem"],
+            summary="Create a directory/folder"
+        )
+        async def mkdir(
+            path: str,
+            user: KeycloakUser = Depends(get_current_user)
+        ):
+            authorize_or_raise(user, Action.CREATE, Resource.FILES)
+            try:
+                return await self.service.mkdir(user, path)
+            except Exception as e:
+                self._handle_exception(e, "Mkdir")
