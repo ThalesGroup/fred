@@ -56,13 +56,15 @@ export interface AgentToolSelectionCardProps {
 }
 
 export function AgentToolSelectionCard({ conf, selected, onSelectedChange }: AgentToolSelectionCardProps) {
+  const { t } = useTranslation();
+
   return (
     <Card sx={{ padding: 0.5 }}>
       <Stack direction="row" spacing={1} alignItems="center">
         <Switch checked={selected} onChange={(event) => onSelectedChange(event.target.checked)} />
-        <Typography>{conf.name}</Typography>
+        <Typography>{t(conf.name)}</Typography>
         {conf.description && (
-          <Tooltip title={conf.description} enterTouchDelay={0}>
+          <Tooltip title={t(conf.description)} enterTouchDelay={0}>
             <InfoIcon />
           </Tooltip>
         )}

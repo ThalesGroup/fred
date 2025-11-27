@@ -137,32 +137,32 @@ ai:
       enabled: true
 mcp:
   servers:
-    - name: "Search in documents"
-      description: "Allow your agent to perform semantic search in documents uploaded to Fred (RAG)"
+    - name: "mcp.servers.search_documents.name"
+      description: "mcp.servers.search_documents.description"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-tabular"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "Search in opensearch"
-      description: "Allow your agent to search in opensearch indices"
+    - name: "mcp.servers.search_opensearch.name"
+      description: "mcp.servers.search_opensearch.description"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "Kubernetes access"
-      description: "Allow your agent to interact with Kubernetes clusters"
+    - name: "mcp.servers.kubernetes.name"
+      description: "mcp.servers.kubernetes.description"
       transport: "streamable_http"
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "Jira access"
-      description: "Allow your agent to interact with Jira"
+    - name: "mcp.servers.jira.name"
+      description: "mcp.servers.jira.description"
       transport: "streamable_http"
       url: "http://localhost:8885/mcp"
       sse_read_timeout: 2000
       auth_mode: "no_token"
-    - name: "Neo4j access"
-      description: "Allow your agent to interact with Neo4j graph databases"
+    - name: "mcp.servers.neo4j.name"
+      description: "mcp.servers.neo4j.description"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-neo4j"
       sse_read_timeout: 2000

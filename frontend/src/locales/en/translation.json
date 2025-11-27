@@ -746,5 +746,29 @@
   },
   "agentSelector": {
     "sendTo": "Send to"
+  },
+  "mcp": {
+    "servers": {
+      "search_documents": {
+        "name": "Search in documents",
+        "description": "Allow your agent to perform semantic search in documents uploaded to Fred (RAG)"
+      },
+      "search_opensearch": {
+        "name": "Search in opensearch",
+        "description": "Allow your agent to search in opensearch indices"
+      },
+      "kubernetes": {
+        "name": "Kubernetes access",
+        "description": "Allow your agent to interact with Kubernetes clusters"
+      },
+      "jira": {
+        "name": "Jira access",
+        "description": "Allow your agent to interact with Jira"
+      },
+      "neo4j": {
+        "name": "Neo4j access",
+        "description": "Allow your agent to interact with Neo4j graph databases"
+      }
+    }
   }
 }

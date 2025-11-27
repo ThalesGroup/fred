@@ -77,9 +77,11 @@ class MCPServerConfiguration(BaseModel):
     Configuration for an MCP server.
     """
 
-    name: str
+    name: str = Field(
+        ..., description="react-i18next key for the name of the MCP server."
+    )
     description: Optional[str] = Field(
-        None, description="Description of the MCP server."
+        None, description="react-i18next key for the description of the MCP server."
     )
     transport: Optional[str] = Field(
         "sse",
