@@ -20,6 +20,8 @@ from knowledge_flow_backend.core.processors.input.common.base_input_processor im
 
 
 class TextMarkdownProcessor(BaseMarkdownProcessor):
+    description = "Wraps plain text files into Markdown without modifying content."
+
     def check_file_validity(self, file_path: Path) -> bool:
         return file_path.exists() and file_path.suffix in [".txt", ".md"]
 

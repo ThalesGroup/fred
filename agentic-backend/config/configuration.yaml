@@ -86,6 +86,10 @@ ai:
       type: "agent"
       class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
       enabled: true
+      chat_options:
+        search_policy_selection: false
+        libraries_selection: false
+        attach_files: true
     - name: "Sammy"
       type: "agent"
       class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
@@ -133,6 +137,11 @@ mcp:
       url: "http://localhost:8885/mcp"
       sse_read_timeout: 2000
       auth_mode: "no_token"
+    - name: "mcp-neo4j-graph-db"
+      transport: "streamable_http"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-neo4j"
+      sse_read_timeout: 2000
+      auth_mode: "user_token"
 
 storage:
   postgres:

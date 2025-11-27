@@ -27,6 +27,8 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     ProcessDocumentsProgressResponse,
     ProcessDocumentsRequest,
     ProcessDocumentsResponse,
+    ProcessLibraryRequest,
+    ProcessLibraryResponse,
 )
 from knowledge_flow_backend.features.scheduler.temporal_scheduler import TemporalScheduler
 
@@ -72,7 +74,7 @@ class SchedulerController:
                     # Assign file to the authenticated user
                     files=[FileToProcess.from_file_to_process_without_user(f, user) for f in req.files],
                 )
-                handle = await self.workflow_client.start_ingestion(user, definition, background_tasks)
+                handle = await self.workflow_client.start_document_processing(user, definition, background_tasks)
 
                 return ProcessDocumentsResponse(
                     status="queued",
@@ -83,6 +85,37 @@ class SchedulerController:
                 )
             except Exception as e:
                 raise_internal_error(logger, "Failed to submit process-documents workflow", e)
+
+        @router.post(
+            "/process-library",
+            tags=["Processing"],
+            response_model=ProcessLibraryResponse,
+            summary="Run a library-level processor for a given tag (in-process when using memory scheduler)",
+        )
+        async def process_library(
+            req: ProcessLibraryRequest,
+            background_tasks: BackgroundTasks,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            authorize_or_raise(user, Action.PROCESS, Resource.DOCUMENTS)
+
+            try:
+                handle = await self.workflow_client.start_library_processing(
+                    user=user,
+                    library_tag=req.library_tag,
+                    processor_path=req.processor,
+                    document_uids=req.document_uids,
+                    background_tasks=background_tasks,
+                )
+                return ProcessLibraryResponse(
+                    status="queued",
+                    library_tag=req.library_tag,
+                    workflow_id=handle.workflow_id,
+                    run_id=handle.run_id,
+                    document_count=len(req.document_uids) if req.document_uids else None,
+                )
+            except Exception as e:
+                raise_internal_error(logger, "Failed to submit process-library workflow", e)
 
         @router.post(
             "/process-documents/progress",

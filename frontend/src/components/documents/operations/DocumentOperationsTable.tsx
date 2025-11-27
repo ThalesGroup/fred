@@ -50,6 +50,8 @@ interface DocumentOperationsTableProps {
   rowActions?: CustomRowAction[]; // Action in the 3 dots menu of each row. If empty list is passed, not actions.
   bulkActions?: CustomBulkAction[]; // Actions on selected documents, in the selection toolbar. If empty list is passed, no actions.
   nameClickAction?: null | ((file: DocumentMetadata) => void); // Action when clicking on file name. If undefined, open document preview. If null, no action.
+  onSelectionChange?: (files: DocumentMetadata[]) => void;
+  resetSelectionSignal?: number;
 }
 
 export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = ({
@@ -66,6 +68,8 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
   rowActions,
   bulkActions,
   nameClickAction,
+  onSelectionChange,
+  resetSelectionSignal,
 }) => {
   const { t } = useTranslation();
 
@@ -128,17 +132,38 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
     fetchTags();
   }, [files, columns.librairies, getTag]);
 
+  // Keep selection in sync when the underlying list of files changes.
+  useEffect(() => {
+    setSelectedFiles((prev) => {
+      const next = prev.filter((sel) => files.some((f) => f.identity.document_uid === sel.identity.document_uid));
+      if (next.length !== prev.length) {
+        onSelectionChange?.(next);
+      }
+      return next;
+    });
+  }, [files, onSelectionChange]);
+
+  useEffect(() => {
+    if (resetSelectionSignal === undefined) return;
+    setSelectedFiles([]);
+    onSelectionChange?.([]);
+  }, [resetSelectionSignal, onSelectionChange]);
+
   // Internal handlers
   const handleToggleSelect = (file: DocumentMetadata) => {
-    setSelectedFiles((prev) =>
-      prev.some((f) => f.identity.document_uid === file.identity.document_uid)
+    setSelectedFiles((prev) => {
+      const next = prev.some((f) => f.identity.document_uid === file.identity.document_uid)
         ? prev.filter((f) => f.identity.document_uid !== file.identity.document_uid)
-        : [...prev, file],
-    );
+        : [...prev, file];
+      onSelectionChange?.(next);
+      return next;
+    });
   };
 
   const handleToggleAll = (checked: boolean) => {
-    setSelectedFiles(checked ? [...files] : []);
+    const next = checked ? [...files] : [];
+    setSelectedFiles(next);
+    onSelectionChange?.(next);
   };
 
   // If actions are undefined, use default actions from useDocumentActions

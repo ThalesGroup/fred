@@ -38,7 +38,7 @@ frontend_settings:
     enableElecWarfare: false
   properties:
     logoName: "fred"
-    siteDisplayName: "Fred Academy"
+    siteDisplayName: "Fred"
 ai:
   # In production  activate the configuration persistence mechanism
   # that allow users to create/update agents at runtime and change
@@ -55,72 +55,49 @@ ai:
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
   max_concurrent_agents: 128
 
+  # Knowledge Flow service URL. Used by agents to access tools and knowledge bases.
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
   # Timeout settings for the client
   timeout:
     connect: 5 # Time to wait for a connection in seconds
     read: 15 # Time to wait for a response in seconds
   default_chat_model:
-    # Required in .env:
-    # - OPENAI_API_KEY
-    provider: "openai"
-    name: "gpt-4o"
+    provider: "ollama"
+    name: "granite4:3b-h"
     settings:
+      base_url: http://localhost:11434
+      temperature: 0.0
+      max_retries: 2
+      request_timeout: 30
+  default_language_model:
+    provider: "ollama"
+    name: "granite4:3b-h"
+    settings:
+      base_url: http://localhost:11434
       temperature: 0.0
       max_retries: 2
       request_timeout: 30
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:
-    - name: "Echo"
-      type: "agent"
-      class_path: "agentic_backend.academy.00-echo.echo.Echo"
-      enabled: true
-    - name: "Responder"
-      type: "agent"
-      class_path: "agentic_backend.academy.01-llm-responder.llm-responder.Responder"
-      enabled: true
-    - name: "DualModelResponder"
-      type: "agent"
-      class_path: "agentic_backend.academy.02-dual-model-responder.dual-model-responder.DualModelResponder"
-      enabled: true
-    - name: "AssetResponder"
-      type: "agent"
-      class_path: "agentic_backend.academy.03_asset_responder.asset_responder.AssetResponder"
-      enabled: true
-      chat_model: {}
-    - name: "SlideMaker"
-      type: "agent"
-      class_path: "agentic_backend.academy.04_slide_maker.slide_maker.SlideMaker"
-      enabled: true
-    - name: "GpsAgent"
-      type: "agent"
-      role: "Academy sample GPS agent"
-      class_path: "agentic_backend.academy.05_gps_agent.gps_agent.GpsAgent"
-      enabled: true
-    - name: "MiniRagExpert"
-      type: "agent"
-      class_path: "agentic_backend.academy.06_simple_leader.mini_rag_expert.MiniRagExpert"
-      enabled: true
-    - name: "MiniDataExpert"
-      type: "agent"
-      class_path: "agentic_backend.academy.06_simple_leader.mini_data_expert.MiniDataExpert"
-      enabled: true
-    - name: "Appolo"
-      type: "leader"
-      class_path: "agentic_backend.academy.06_simple_leader.mini_llm_orchestrator.MiniLLMOrchestrator"
-      enabled: true
     - name: "Georges"
       type: "agent"
       class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
       enabled: true
-    - name: "Sage"
+    - name: "Sammy"
       type: "agent"
-      class_path: "agentic_backend.agents.statistics.statistics_expert.Sage"
+      class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
       enabled: true
-    - name: "EcoAdviser"
+    - name: "Rico"
       type: "agent"
-      class_path: "agentic_backend.academy.07_ecoadviser.eco_adviser.EcoAdvisor"
+      class_path: "agentic_backend.agents.rags.rag_expert.Rico"
+      enabled: true
+      chat_options:
+        search_policy_selection: true
+        libraries_selection: true
+    - name: "Tessa"
+      type: "agent"
+      class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
       enabled: true
 
 mcp:
@@ -143,16 +120,6 @@ mcp:
     - name: "mcp-atlassian-jira-server"
       transport: "streamable_http"
       url: "http://localhost:8885/mcp"
-      sse_read_timeout: 2000
-      auth_mode: "no_token"
-    - name: "mcp-knowledge-flow-statistics"
-      transport: "streamable_http"
-      url: "http://localhost:8111/knowledge-flow/v1/mcp-statistics"
-      sse_read_timeout: 2000
-      auth_mode: "user_token"
-    - name: "minimal-mcp-service"
-      transport: "streamable_http"
-      url: "http://localhost:9797/mcp"
       sse_read_timeout: 2000
       auth_mode: "no_token"
 

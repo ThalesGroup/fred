@@ -48,6 +48,7 @@ const normalizeFlags = (ff?: FrontendFlags): Record<string, boolean> => ({
 const normalizeProps = (p?: Properties): Record<string, string> => {
   const out: Record<string, string> = {};
   if (p?.logoName !== undefined) out.logoName = String(p.logoName);
+  if (p?.logoNameDark !== undefined) out.logoNameDark = String((p as any).logoNameDark);
   return out;
 };
 

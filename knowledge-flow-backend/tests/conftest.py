@@ -137,20 +137,24 @@ def app_context(monkeypatch, fake_embedder):
             ProcessorConfig(
                 prefix=".md",
                 class_path=f"{TestMarkdownProcessor.__module__}.{TestMarkdownProcessor.__qualname__}",
+                description="Test markdown input processor for unit tests",
             ),
             ProcessorConfig(
                 prefix=".docx",
                 class_path=f"{TestDocxProcessor.__module__}.{TestDocxProcessor.__qualname__}",
+                description="Test docx input processor for unit tests",
             ),
         ],
         output_processors=[
             ProcessorConfig(
                 prefix=".pdf",
                 class_path=f"{TestOutputProcessor.__module__}.{TestOutputProcessor.__qualname__}",
+                description="Test output processor for pdf files",
             ),
             ProcessorConfig(
                 prefix=".docx",
                 class_path=f"{TestOutputProcessor.__module__}.{TestOutputProcessor.__qualname__}",
+                description="Test output processor for docx files",
             ),
         ],
     )
