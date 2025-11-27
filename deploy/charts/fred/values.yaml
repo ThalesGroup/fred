@@ -271,9 +271,6 @@ applications:
           type: "log"
           level: "INFO"
 
-      filesystem:
-        type: local
-
     dotenv:
       AZURE_OPENAI_API_KEY: ""
       KEYCLOAK_AGENTIC_CLIENT_SECRET: ""
@@ -640,6 +637,13 @@ applications:
             database: "base_database"
             path: "/home/fred-user/.fred/knowledge-flow/db.duckdb"
             mode: "read_and_write"
+      filesystem:
+        type: local
+        # type: minio
+        # endpoint: http://localhost:9000
+        # access_key: admin
+        # bucket_name: filesystem
+        # secure: false
 
     dotenv:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
