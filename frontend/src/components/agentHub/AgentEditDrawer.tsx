@@ -11,13 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import { Autocomplete, Box, Button, Chip, Divider, Drawer, Stack, TextField, Typography } from "@mui/material";
+import { Box, Button, Divider, Drawer, Stack, TextField, Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../common/agent";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
 import { FieldSpec, McpServerConfiguration, McpServerRef } from "../../slices/agentic/agenticOpenApi";
 import { TagsInput } from "./AgentTagsInput";
+import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
 
 // -----------------------------------------------------------
@@ -59,7 +60,7 @@ export function AgentEditDrawer({
     tags: [],
   });
   const [mcpServerRefs, setMcpServerRefs] = useState<McpServerRef[]>([]);
-
+  console.log("mcpServerRefs", mcpServerRefs);
   // --- Effects ---
 
   useEffect(() => {
@@ -226,67 +227,7 @@ export function AgentEditDrawer({
               onChange={(next) => onTopLevelChange("tags", next)}
             />
 
-            <Autocomplete<KnownMcpServer, true, false, false>
-              multiple
-              disableCloseOnSelect
-              options={normalizedKnownServers}
-              value={selectedKnownServers}
-              loading={isLoadingKnownMcpServers}
-              onChange={(_event, value) => {
-                setMcpServerRefs(
-                  value.map((server) => ({
-                    name: server.name,
-                    require_tools:
-                      server.require_tools && server.require_tools.length > 0 ? server.require_tools : undefined,
-                  })),
-                );
-              }}
-              isOptionEqualToValue={(option, value) => option.name === value.name}
-              getOptionLabel={(option) => option.name}
-              disablePortal
-              renderOption={(props, option) => (
-                <li {...props} key={option.name}>
-                  <Box sx={{ display: "flex", flexDirection: "column" }}>
-                    <Typography variant="body2">{option.name}</Typography>
-                    {(option.transport || option.url) && (
-                      <Typography variant="caption" color="text.secondary">
-                        {option.transport}
-                        {option.transport && option.url ? " · " : ""}
-                        {option.url}
-                      </Typography>
-                    )}
-                  </Box>
-                </li>
-              )}
-              renderTags={(value, getTagProps) =>
-                value.map((option, index) => (
-                  <Chip {...getTagProps({ index })} key={option.name} label={option.name} size="small" />
-                ))
-              }
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  size="small"
-                  label={t("agentHub.fields.mcp_servers", "MCP Servers")}
-                  placeholder={t("agentEditDrawer.selectMcpServers")}
-                  sx={{
-                    // Label (normal + shrunk)
-                    "& .MuiInputLabel-root": (theme) => ({
-                      fontSize: theme.typography.body2.fontSize,
-                    }),
-                    "& .MuiInputLabel-shrink": (theme) => ({
-                      fontSize: theme.typography.body2.fontSize,
-                    }),
-                    // Input text (for consistency)
-                    "& .MuiInputBase-input": (theme) => ({
-                      fontSize: theme.typography.body2.fontSize,
-                    }),
-                  }}
-                  helperText={normalizedKnownServers.length === 0 ? t("agentEditDrawer.noMcpServers") : undefined}
-                />
-              )}
-              noOptionsText={isLoadingKnownMcpServers ? t("common.loading") : t("agentEditDrawer.noMcpServers")}
-            />
+            <AgentToolsSelection mcpServerRefs={mcpServerRefs} onMcpServerRefsChange={setMcpServerRefs} />
 
             {/* Dynamic Fields */}
             {fields.length === 0 ? (

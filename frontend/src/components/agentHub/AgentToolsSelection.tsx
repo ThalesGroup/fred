@@ -3,10 +3,16 @@ import { Card, Stack, Switch, Tooltip, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import {
   McpServerConfiguration,
+  McpServerRef,
   useListMcpServersAgenticV1AgentsMcpServersGetQuery,
 } from "../../slices/agentic/agenticOpenApi";
 
-export function AgentToolsSelection() {
+export interface AgentToolsSelectionProps {
+  mcpServerRefs: McpServerRef[];
+  onMcpServerRefsChange: (newMcpServerRefs: McpServerRef[]) => void;
+}
+
+export function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: AgentToolsSelectionProps) {
   const { t } = useTranslation();
   const { data: mcpServersData, isFetching: isFetchingMcpServers } =
     useListMcpServersAgenticV1AgentsMcpServersGetQuery();
@@ -27,7 +33,18 @@ export function AgentToolsSelection() {
 
       <Stack spacing={1}>
         {mcpServersData.map((conf, index) => (
-          <AgentToolSelectionCard key={index} conf={conf} />
+          <AgentToolSelectionCard
+            key={index}
+            conf={conf}
+            selected={mcpServerRefs.some((ref) => ref.name === conf.name)}
+            onSelectedChange={(selected) => {
+              if (selected) {
+                onMcpServerRefsChange([...mcpServerRefs, { name: conf.name }]);
+              } else {
+                onMcpServerRefsChange(mcpServerRefs.filter((ref) => ref.name !== conf.name));
+              }
+            }}
+          />
         ))}
       </Stack>
     </Stack>
@@ -36,13 +53,15 @@ export function AgentToolsSelection() {
 
 export interface AgentToolSelectionCardProps {
   conf: McpServerConfiguration;
+  selected: boolean;
+  onSelectedChange: (selected: boolean) => void;
 }
 
-export function AgentToolSelectionCard({ conf }: AgentToolSelectionCardProps) {
+export function AgentToolSelectionCard({ conf, selected, onSelectedChange }: AgentToolSelectionCardProps) {
   return (
     <Card sx={{ padding: 0.5 }}>
       <Stack direction="row" spacing={1} alignItems="center">
-        <Switch />
+        <Switch checked={selected} onChange={(event) => onSelectedChange(event.target.checked)} />
         <Typography>{conf.name}</Typography>
         {/* todo: add description to tools (mcp servers now) */}
         <Tooltip title="todo..." enterTouchDelay={0}>
