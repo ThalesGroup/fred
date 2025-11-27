@@ -107,7 +107,7 @@ embedding_model:
   provider: openai
   name: text-embedding-3-large # or text-embedding-3-small
   settings: {}
-vision:
+vision_model:
   provider: openai
   name: gpt-4o-mini # or gpt-4o if you want higher fidelity
   settings:
