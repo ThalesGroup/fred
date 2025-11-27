@@ -65,7 +65,7 @@ SENTINEL_TUNING = AgentTuning(
         ),
     ],
     mcp_servers=[
-        MCPServerRef(name="mcp-kubernetes-server"),
+        MCPServerRef(id="mcp-kubernetes-server"),
         # MCPServerRef(name="knowledge-ops"),
     ],
 )

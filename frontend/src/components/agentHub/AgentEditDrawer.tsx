@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import { Box, Button, Divider, Drawer, Stack, TextField, Typography } from "@mui/material";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../common/agent";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
-import { FieldSpec, McpServerConfiguration, McpServerRef } from "../../slices/agentic/agenticOpenApi";
+import { FieldSpec, McpServerRef } from "../../slices/agentic/agenticOpenApi";
 import { TagsInput } from "./AgentTagsInput";
 import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
@@ -30,25 +30,14 @@ type TopLevelTuningState = {
   tags: string[];
 };
 
-type KnownMcpServer = McpServerConfiguration & McpServerRef;
-
 type Props = {
   open: boolean;
   agent: AnyAgent | null;
   onClose: () => void;
   onSaved?: () => void;
-  knownMcpServers: McpServerConfiguration[];
-  isLoadingKnownMcpServers?: boolean;
 };
 
-export function AgentEditDrawer({
-  open,
-  agent,
-  onClose,
-  onSaved,
-  knownMcpServers,
-  isLoadingKnownMcpServers = false,
-}: Props) {
+export function AgentEditDrawer({ open, agent, onClose, onSaved }: Props) {
   const { updateTuning, isLoading } = useAgentUpdater();
   const { t } = useTranslation();
   // State for dynamic fields
@@ -83,45 +72,6 @@ export function AgentEditDrawer({
       setMcpServerRefs([]);
     }
   }, [agent]);
-
-  const normalizedKnownServers = useMemo<KnownMcpServer[]>(() => {
-    const seen = new Set<string>();
-    const result: KnownMcpServer[] = [];
-
-    knownMcpServers.forEach((server) => {
-      if (!server) return;
-      const name = typeof server.name === "string" ? server.name.trim() : "";
-      if (!name || seen.has(name)) return;
-
-      const requireTools =
-        Array.isArray((server as Partial<McpServerRef>).require_tools) &&
-        (server as Partial<McpServerRef>).require_tools!.length > 0
-          ? (server as Partial<McpServerRef>).require_tools
-          : undefined;
-
-      result.push({ ...server, name, require_tools: requireTools });
-      seen.add(name);
-    });
-
-    return result;
-  }, [knownMcpServers]);
-
-  const selectedKnownServers = useMemo<KnownMcpServer[]>(() => {
-    if (mcpServerRefs.length === 0) return [];
-
-    const byName = new Map(normalizedKnownServers.map((server) => [server.name, server]));
-
-    return mcpServerRefs.map((ref) => {
-      const base = byName.get(ref.name);
-      if (!base) {
-        return { name: ref.name, require_tools: ref.require_tools } as KnownMcpServer;
-      }
-      return {
-        ...base,
-        require_tools: ref.require_tools ?? base.require_tools,
-      };
-    });
-  }, [mcpServerRefs, normalizedKnownServers]);
 
   // --- Handlers ---
 

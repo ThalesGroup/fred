@@ -137,39 +137,45 @@ ai:
       enabled: true
 mcp:
   servers:
-    - name: "mcp.servers.search_documents.name"
+    - id: "mcp-knowledge-flow-mcp-text"
+      name: "mcp.servers.search_documents.name"
       description: "mcp.servers.search_documents.description"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-text"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp.servers.tabular.name"
+    - id: "mcp-knowledge-flow-mcp-tabular"
+      name: "mcp.servers.tabular.name"
       description: "mcp.servers.tabular.description"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-tabular"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp.servers.search_opensearch.name"
+    - id: "mcp-knowledge-flow-opensearch-ops"
+      name: "mcp.servers.search_opensearch.name"
       description: "mcp.servers.search_opensearch.description"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp.servers.kubernetes.name"
+    - id: "mcp-kubernetes-server"
+      name: "mcp.servers.kubernetes.name"
       description: "mcp.servers.kubernetes.description"
       enabled: false
       transport: "streamable_http"
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp.servers.jira.name"
+    - id: "mcp-atlassian-jira-server"
+      name: "mcp.servers.jira.name"
       description: "mcp.servers.jira.description"
       enabled: false
       transport: "streamable_http"
       url: "http://localhost:8885/mcp"
       sse_read_timeout: 2000
       auth_mode: "no_token"
-    - name: "mcp.servers.neo4j.name"
+    - id: "mcp-neo4j-graph-db"
+      name: "mcp.servers.neo4j.name"
       description: "mcp.servers.neo4j.description"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-neo4j"

@@ -348,7 +348,7 @@ export type FieldSpec = {
   ui?: UiHints;
 };
 export type McpServerRef = {
-  name: string;
+  id: string;
   require_tools?: string[];
 };
 export type AgentTuning = {
@@ -372,8 +372,10 @@ export type AgentChatOptions = {
 };
 export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
+  id: string;
+  /** react-i18next key for the name of the MCP server. */
   name: string;
-  /** Description of the MCP server for easier identification. */
+  /** react-i18next key for the description of the MCP server. */
   description?: string | null;
   /** MCP server transport. Can be sse, stdio, websocket or streamable_http */
   transport?: string | null;

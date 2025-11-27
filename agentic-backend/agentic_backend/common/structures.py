@@ -232,13 +232,13 @@ class McpConfiguration(BaseModel):
         description="List of MCP servers defined for this environment.",
     )
 
-    def get_server(self, name: str) -> Optional[MCPServerConfiguration]:
+    def get_server(self, id: str) -> Optional[MCPServerConfiguration]:
         """
         Retrieve an MCP server by logical name.
         Returns None if not found or disabled.
         """
         for s in self.servers:
-            if s.name == name and s.enabled:
+            if s.id == id and s.enabled:
                 return s
         return None
 
@@ -248,7 +248,7 @@ class McpConfiguration(BaseModel):
         - Useful for fast lookup and resolver integration.
         - Used by RuntimeContext → MCPRuntime to resolve URLs dynamically.
         """
-        return {s.name: s for s in self.servers if s.enabled}
+        return {s.id: s for s in self.servers if s.enabled}
 
 
 class Configuration(BaseModel):
