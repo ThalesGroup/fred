@@ -184,6 +184,15 @@ applications:
         # that allow users to create/update agents at runtime and change
         # their configuration without redeploying the application.
         use_static_config_only: false
+        # Number of past exchanges to restore when initializing an agent session
+        # This setting is used to limit the amount of historical context
+        # that is loaded into the agent at the beginning of a session. It typically occur after a restart of the application
+        # or when an agent session is re-initialized for any reason.
+        agentic_restore_max_exchanges: 20
+
+        # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
+        max_concurrent_agents: 128
+
         # Base URL for the Knowledge Flow service
         knowledge_flow_url: "http://knowledge-flow-backend:8111/knowledge-flow/v1"
         # Timeout settings for the client
@@ -199,6 +208,16 @@ applications:
             temperature: 0.0
             max_retries: 2
             request_timeout: 30
+        default_language_model:
+          # Required in .env:
+          # - OPENAI_API_KEY
+          provider: "openai"
+          name: "gpt-4o"
+          settings:
+            temperature: 0.0
+            max_retries: 2
+            request_timeout: 30
+
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the chat model
         agents:
@@ -276,7 +295,8 @@ applications:
       KEYCLOAK_AGENTIC_CLIENT_SECRET: ""
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
-
+      M2M_CLIENT_SECRET: ""
+  
   frontend:
     enabled: true
     applicationName: frontend
