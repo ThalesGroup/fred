@@ -23,13 +23,13 @@ Find out how to start Fred here : https://github.com/ThalesGroup/fred?tab=readme
 
 ### 1. Getting Started with the UI & Basic Agent
 
-- Launch Fred in academy mode.
+- Launch Fred in academy mode. Simply add to your agentic-backend/config/.env file CONFIG_FILE="./config/configuration_academy.yaml"
 - Select the agent generalist assistant and greet him.
 
 <details>
 <summary>Clue 2</summary>
 Run the agentic backend using:
- <code>make run-academy</code>
+ <code>make run</code>
 </details>
 
 <details>

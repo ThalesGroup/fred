@@ -637,6 +637,16 @@ applications:
             database: "base_database"
             path: "/home/fred-user/.fred/knowledge-flow/db.duckdb"
             mode: "read_and_write"
+      mcp:
+        reports_enabled: true
+        kpi_enabled: true
+        tabular_enabled: true
+        statistic_enabled: true
+        text_enabled: true
+        templates_enabled: true
+        resources_enabled: true
+        opensearch_ops_enabled: false
+        neo4j_enabled: false
 
     dotenv:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""

@@ -19,21 +19,9 @@ run-local: ## Run the app assuming dependencies already exist
 		--host ${HOST} \
 		--port ${PORT} \
 		--log-level ${LOG_LEVEL} \
-		--loop ${UVICORN_LOOP} \
-		--reload \
-		--reload-dir $(ROOT_DIR)/config \
-		--reload-dir $(ROOT_DIR)/../fred-core \
-		--reload-include *.py \
-        --reload-include *.yaml
+		--loop ${UVICORN_LOOP}
 
 
 .PHONY: run
-run: dev run-local ## Install dependencies and run the app with the dev storages activated (duckDB)
+run: dev run-local ## run the app, installing dependencies if needed
 
-.PHONY: run-prod
-run-prod: CONFIG_FILE=$(CONFIG_FILE_PROD)
-run-prod: run ## Install dependencies and run the app with the prod storages activated (OpenSearch, MinIO & cie.)
-
-PHONY: run-academy
-run-academy: CONFIG_FILE=$(CONFIG_FILE_ACADEMY)
-run-academy: run ## Install dependencies and run the app with the academy storages activated (DuckDB)

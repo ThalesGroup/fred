@@ -31,6 +31,7 @@ from agentic_backend.core.agents.agent_spec import (
     UIHints,
 )
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 
@@ -65,12 +66,12 @@ SENTINEL_TUNING = AgentTuning(
         ),
     ],
     mcp_servers=[
-        MCPServerRef(name="mcp-kubernetes-server"),
-        # MCPServerRef(name="knowledge-ops"),
+        MCPServerRef(name="mcp-knowledge-flow-opensearch-ops"),
     ],
 )
 
 
+@expose_runtime_source("agent.Sammy")
 class SentinelExpert(AgentFlow):
     """
     Sentinel — Ops & Monitoring agent (OpenSearch + KPIs).
