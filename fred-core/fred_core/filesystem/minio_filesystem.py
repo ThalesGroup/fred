@@ -74,11 +74,20 @@ class MinioFilesystem(BaseFilesystem):
     async def write(self, path: str, data: bytes | str) -> None:
         """
         Write data to a file in MinIO. Accepts both bytes and str.
+        Will raise an error if the parent "directory" does not exist.
         """
         if isinstance(data, str):
             data_bytes = data.encode("utf-8")
         else:
             data_bytes = data
+
+        # Check that parent prefix exists
+        parent = "/".join(path.rstrip("/").split("/")[:-1])
+        if parent:
+            # list_objects with recursive=False checks direct children only
+            objs = list(self.client.list_objects(self.bucket_name, prefix=parent + "/", recursive=False))
+            if not objs:
+                raise FileNotFoundError(f"Parent path '{parent}' does not exist. Cannot write '{path}'.")
 
         self.client.put_object(
             self.bucket_name,

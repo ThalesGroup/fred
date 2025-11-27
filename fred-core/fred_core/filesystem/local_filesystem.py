@@ -46,7 +46,9 @@ class LocalFilesystem(BaseFilesystem):
     # ---------------------------------------------------------
     async def write(self, path: str, data: str | bytes) -> None:
         full = self._resolve_path(path)
-        full.parent.mkdir(parents=True, exist_ok=True)
+
+        if not full.parent.exists():
+            raise FileNotFoundError(f"Parent directory does not exist: '{full.parent}'")
 
         if isinstance(data, str):
             data = data.encode("utf-8")

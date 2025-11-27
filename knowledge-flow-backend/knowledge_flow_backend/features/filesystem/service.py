@@ -27,28 +27,46 @@ class FilesystemService:
     """
     Business-facing service for asynchronous filesystem operations.
 
-    This service acts as a unified interface to different filesystem backends
-    (e.g., local filesystem, Minio/S3). It provides high-level methods for
-    listing, reading, writing, deleting files, searching with regex, and
-    retrieving filesystem metadata. 
-
-    All methods are decorated with authorization checks to enforce user
-    permissions based on the `KeycloakUser` and the corresponding `Action`
-    on the `Resource.FILES`.
-
-    Attributes:
-        fs (BaseFilesystem): The underlying filesystem backend obtained from
-            the ApplicationContext. This can be a local or cloud-based filesystem.
+    Each user has an isolated filesystem namespace:
+        <root>/<user_id>
+    where <root> comes from the filesystem backend configuration:
+        - Local: ~/.fred/knowledge-flow/filesystem/
+        - MinIO: bucket "filesystem"
     """
 
     def __init__(self):
         context = ApplicationContext.get_instance()
         self.fs = context.get_filesystem()
 
+    #
+    # User-scoping logic
+    #
+
+    def _user_root(self, user: KeycloakUser) -> str:
+        """
+        Returns the root directory for the user.
+        Example: <root>/<user_id>
+        """
+        return user.uid
+
+    def _resolve(self, user: KeycloakUser, path: str) -> str:
+        """
+        Builds the full path inside the user's namespace.
+        """
+        path = path.lstrip("/")
+        if path:
+            return f"{self._user_root(user)}/{path}"
+        return self._user_root(user)
+
+    #
+    # Operations
+    #
+
     @authorize(action=Action.READ, resource=Resource.FILES)
     async def list(self, user: KeycloakUser, prefix: str = "") -> List[FilesystemResourceInfoResult]:
         try:
-            return await self.fs.list(prefix)
+            full_prefix = self._resolve(user, prefix)
+            return await self.fs.list(full_prefix)
         except Exception as e:
             logger.exception("Failed to list filesystem entries")
             raise e
@@ -56,7 +74,8 @@ class FilesystemService:
     @authorize(action=Action.READ, resource=Resource.FILES)
     async def stat(self, user: KeycloakUser, path: str) -> FilesystemResourceInfoResult:
         try:
-            return await self.fs.stat(path)
+            full_path = self._resolve(user, path)
+            return await self.fs.stat(full_path)
         except Exception as e:
             logger.exception(f"Failed to stat {path}")
             raise e
@@ -64,7 +83,8 @@ class FilesystemService:
     @authorize(action=Action.READ, resource=Resource.FILES)
     async def cat(self, user: KeycloakUser, path: str) -> str:
         try:
-            return await self.fs.cat(path)
+            full_path = self._resolve(user, path)
+            return await self.fs.cat(full_path)
         except Exception as e:
             logger.exception(f"Failed to read {path}")
             raise e
@@ -72,7 +92,8 @@ class FilesystemService:
     @authorize(action=Action.CREATE, resource=Resource.FILES)
     async def write(self, user: KeycloakUser, path: str, data: str) -> None:
         try:
-            await self.fs.write(path, data)
+            full_path = self._resolve(user, path)
+            await self.fs.write(full_path, data)
         except Exception as e:
             logger.exception(f"Failed to write {path}")
             raise e
@@ -80,7 +101,8 @@ class FilesystemService:
     @authorize(action=Action.DELETE, resource=Resource.FILES)
     async def delete(self, user: KeycloakUser, path: str) -> None:
         try:
-            await self.fs.delete(path)
+            full_path = self._resolve(user, path)
+            await self.fs.delete(full_path)
         except Exception as e:
             logger.exception(f"Failed to delete {path}")
             raise e
@@ -88,15 +110,19 @@ class FilesystemService:
     @authorize(action=Action.READ, resource=Resource.FILES)
     async def grep(self, user: KeycloakUser, pattern: str, prefix: str = "") -> List[str]:
         try:
-            return await self.fs.grep(pattern, prefix)
+            full_prefix = self._resolve(user, prefix)
+            return await self.fs.grep(pattern, full_prefix)
         except Exception as e:
             logger.exception(f"Grep failed for pattern '{pattern}' with prefix '{prefix}'")
             raise e
 
     @authorize(action=Action.READ, resource=Resource.FILES)
     async def pwd(self, user: KeycloakUser) -> str:
+        """
+        Returns the user's root relative to the filesystem backend.
+        """
         try:
-            return await self.fs.pwd()
+            return self._user_root(user)
         except Exception as e:
-            logger.exception("Failed to get FS root")
+            logger.exception("Failed to get user FS root")
             raise e
