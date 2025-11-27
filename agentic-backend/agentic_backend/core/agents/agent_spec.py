@@ -78,6 +78,9 @@ class MCPServerConfiguration(BaseModel):
     """
 
     name: str
+    description: Optional[str] = Field(
+        None, description="Description of the MCP server."
+    )
     transport: Optional[str] = Field(
         "sse",
         description="MCP server transport. Can be sse, stdio, websocket or streamable_http",

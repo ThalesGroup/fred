@@ -373,6 +373,8 @@ export type AgentChatOptions = {
 export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
   name: string;
+  /** Description of the MCP server for easier identification. */
+  description?: string | null;
   /** MCP server transport. Can be sse, stdio, websocket or streamable_http */
   transport?: string | null;
   /** URL and endpoint of the MCP server */

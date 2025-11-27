@@ -27,9 +27,7 @@ export function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: Ag
 
   return (
     <Stack spacing={1}>
-      <Typography variant="h6" color="text.secondary">
-        {t("agentHub.toolsSelection.title")}
-      </Typography>
+      <Typography variant="subtitle2">{t("agentHub.toolsSelection.title")}</Typography>
 
       <Stack spacing={1}>
         {mcpServersData.map((conf, index) => (
