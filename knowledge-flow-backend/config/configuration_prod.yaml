@@ -226,3 +226,10 @@ storage:
       database: "base_database"
       path: "~/.fred/knowledge-flow/db.duckdb"
       mode: "read_and_write"
+
+filesystem:
+  type: minio
+  endpoint: http://localhost:9000
+  access_key: admin
+  bucket_name: filesystem
+  secure: false

@@ -150,3 +150,6 @@ storage:
       database: "base_database"
       path: "~/.fred/knowledge-flow/db.duckdb"
       mode: "read_and_write"
+
+filesystem:
+  type: local

@@ -194,10 +194,3 @@ storage:
   log_store:
     type: "opensearch"
     index: log-index
-
-filesystem:
-  type: minio
-  endpoint: http://localhost:9000
-  access_key: admin
-  bucket_name: filesystem
-  secure: false

@@ -118,6 +118,11 @@ mcp:
       url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
       sse_read_timeout: 2000
       auth_mode: "user_token"
+    - name: "mcp-fs"
+      transport: "streamable_http"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-filesystem"
+      sse_read_timeout: 2000
+      auth_mode: "user_token"
     - name: "mcp-kubernetes-server"
       transport: "streamable_http"
       url: "http://localhost:8081/mcp"
@@ -155,6 +160,3 @@ storage:
   kpi_store:
     type: "log"
     level: "INFO"
-
-filesystem:
-  type: local

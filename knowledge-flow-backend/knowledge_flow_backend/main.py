@@ -69,6 +69,7 @@ from knowledge_flow_backend.features.users import users_controller
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
+from knowledge_flow_backend.features.filesystem.controller import FilesystemController
 from knowledge_flow_backend.security.keycloak_rebac_sync import (
     reconcile_keycloak_groups_with_rebac,
 )
@@ -193,6 +194,7 @@ def create_app() -> FastAPI:
     VectorSearchController(router)
     KPIController(router)
     OpenSearchOpsController(router)
+    FilesystemController(router)
     router.include_router(logs_controller.router)
     router.include_router(report_controller.router)
     router.include_router(groups_controller.router)
@@ -358,6 +360,24 @@ def create_app() -> FastAPI:
         auth_config=auth_cfg,
     )
     mcp_resources.mount_http(mount_path=f"{mcp_prefix}/mcp-resources")
+
+    mcp_fs = FastApiMCP(
+        app,
+        name="Knowledge Flow Filesystem MCP",
+        description=(
+            "Provides unified filesystem access for agents. "
+            "Exposes a virtual filesystem backed by the server's configured storage "
+            "(such as local or MinIO) and allows agents to browse directories, inspect metadata, "
+            "read and write files, delete resources, and search content using regex. "
+            "Use this MCP when an agent needs to retrieve data, persist intermediate results, "
+            "inspect logs, or navigate structured file-based resources during workflow execution."
+        ),
+        include_tags=["Filesystem"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+        auth_config=auth_cfg,
+    )
+    mcp_fs.mount_http(mount_path=f"{mcp_prefix}/mcp-filesystem")
 
     return app
 

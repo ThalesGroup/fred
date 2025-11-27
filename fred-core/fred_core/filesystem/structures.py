@@ -29,8 +29,8 @@ class BaseFilesystem(Protocol):
         """Read the raw bytes of a file."""
         ...
 
-    async def write(self, path: str, data: bytes) -> None:
-        """Write bytes to a file."""
+    async def write(self, path: str, data: bytes | str) -> None:
+        """Write data to a file."""
         ...
 
     async def list(self, prefix: str = "") -> List["FilesystemResourceInfoResult"]:

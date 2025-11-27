@@ -300,6 +300,34 @@ class StorageConfig(BaseModel):
     log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")
 
 
+# ---------- Agent filesystem config, used for listing, reading, creating & deleting files.  ---------- #
+
+class LocalFilesystemConfig(BaseModel):
+    type: Literal["local"] = "local"
+    root: str = Field("~/.fred/knowledge-flow/filesystem/", description="Local filesystem root directory.")
+
+class MinioFilesystemConfig(BaseModel):
+    type: Literal["minio"] = "minio"
+    endpoint: str = Field(..., description="MinIO or S3 compatible endpoint.")
+    access_key: str = Field(..., description="MinIO access key.")
+    secret_key: str = Field(..., description="MinIO secret key.")
+    bucket_name: Optional[str] = Field("filesystem", description="MinIO bucket name.")
+    secure: Optional[bool] = Field(False, description="Use TLS for the MinIO client.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_secrets(cls, values: dict) -> dict:
+        values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
+        if not values.get("secret_key"):
+            raise ValueError("Missing MINIO_SECRET_KEY environment variable")
+        return values
+
+FilesystemConfig = Annotated[
+    Union[LocalFilesystemConfig, MinioFilesystemConfig],
+    Field(discriminator="type")
+]
+
+
 class Configuration(BaseModel):
     app: AppConfig
     chat_model: ModelConfiguration
@@ -313,3 +341,4 @@ class Configuration(BaseModel):
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
     storage: StorageConfig
+    filesystem: FilesystemConfig = Field(...,description="Filesystem backend configuration.")

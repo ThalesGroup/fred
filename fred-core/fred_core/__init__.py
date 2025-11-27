@@ -27,6 +27,8 @@ from fred_core.common.structures import (
     StoreConfig,
 )
 from fred_core.common.utils import raise_internal_error
+from fred_core.filesystem.local_filesystem import LocalFilesystem
+from fred_core.filesystem.minio_filesystem import MinioFilesystem
 from fred_core.filesystem.structures import (
     BaseFilesystem,
     FilesystemResourceInfo,
@@ -147,6 +149,8 @@ __all__ = [
     "TODO_PASS_REAL_USER",
     "NO_AUTHZ_CHECK_USER",
     "BaseFilesystem",
+    "LocalFilesystem",
+    "MinioFilesystem",
     "FilesystemResourceInfoResult",
     "FilesystemResourceInfo",
     "RBACProvider",

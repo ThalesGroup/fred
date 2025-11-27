@@ -44,6 +44,7 @@ class Resource(str, Enum):
     KPIS = "kpi"
     OPENSEARCH = "opensearch"
     LOGS = "logs"
+    FILES="files"
 
     # Agentic Backend resources
     FEEDBACK = "feedback"

@@ -14,18 +14,13 @@
 
 import logging
 import re
-from datetime import datetime
 from io import BytesIO
 from typing import List, Set
 from urllib.parse import urlparse
 
 from minio import Minio
 
-from fred_core import (
-    BaseFilesystem,
-    FilesystemResourceInfo,
-    FilesystemResourceInfoResult,
-)
+from fred_core.filesystem.structures import BaseFilesystem, FilesystemResourceInfo, FilesystemResourceInfoResult
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +71,21 @@ class MinioFilesystem(BaseFilesystem):
         obj.close()
         return data
 
-    async def write(self, path: str, data: bytes) -> None:
-        self.client.put_object(self.bucket_name, path, data=BytesIO(data), length=len(data))
+    async def write(self, path: str, data: bytes | str) -> None:
+        """
+        Write data to a file in MinIO. Accepts both bytes and str.
+        """
+        if isinstance(data, str):
+            data_bytes = data.encode("utf-8")
+        else:
+            data_bytes = data
+
+        self.client.put_object(
+            self.bucket_name,
+            path,
+            data=BytesIO(data_bytes),
+            length=len(data_bytes)
+        )
 
     async def list(self, prefix: str = "") -> List[FilesystemResourceInfoResult]:
         """
