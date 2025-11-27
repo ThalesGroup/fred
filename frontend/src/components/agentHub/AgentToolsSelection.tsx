@@ -61,10 +61,11 @@ export function AgentToolSelectionCard({ conf, selected, onSelectedChange }: Age
       <Stack direction="row" spacing={1} alignItems="center">
         <Switch checked={selected} onChange={(event) => onSelectedChange(event.target.checked)} />
         <Typography>{conf.name}</Typography>
-        {/* todo: add description to tools (mcp servers now) */}
-        <Tooltip title="todo..." enterTouchDelay={0}>
-          <InfoIcon />
-        </Tooltip>
+        {conf.description && (
+          <Tooltip title={conf.description} enterTouchDelay={0}>
+            <InfoIcon />
+          </Tooltip>
+        )}
       </Stack>
     </Card>
   );
