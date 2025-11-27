@@ -1,3 +1,17 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Path, Body
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
@@ -17,6 +31,18 @@ class FilesystemController:
         self.service = FilesystemService()
         self._register_routes(router)
 
+    # ----------- Helper for consistent error handling -----------
+
+    def _handle_exception(self, e: Exception, context: str):
+        if isinstance(e, PermissionError):
+            raise HTTPException(400, str(e))
+        if isinstance(e, FileNotFoundError):
+            raise HTTPException(404, "Path not found")
+        logger.exception("%s failed", context)
+        raise HTTPException(500, "Internal server error")
+
+    # ----------- Routes -----------
+
     def _register_routes(self, router: APIRouter):
 
         @router.get(
@@ -32,8 +58,7 @@ class FilesystemController:
             try:
                 return await self.service.list(user, prefix)
             except Exception as e:
-                logger.exception("List failed")
-                raise HTTPException(500, str(e))
+                self._handle_exception(e, "List")
 
         @router.get(
             "/fs/stat/{path:path}",
@@ -48,8 +73,7 @@ class FilesystemController:
             try:
                 return await self.service.stat(user, path)
             except Exception as e:
-                logger.exception("Stat failed")
-                raise HTTPException(500, str(e))
+                self._handle_exception(e, "Stat")
 
         @router.get(
             "/fs/cat/{path:path}",
@@ -64,8 +88,7 @@ class FilesystemController:
             try:
                 return await self.service.cat(user, path)
             except Exception as e:
-                logger.exception("Cat failed")
-                raise HTTPException(500, str(e))
+                self._handle_exception(e, "Cat")
 
         @router.post(
             "/fs/write/{path:path}",
@@ -81,8 +104,7 @@ class FilesystemController:
             try:
                 return await self.service.write(user, path, data)
             except Exception as e:
-                logger.exception("Write failed")
-                raise HTTPException(500, str(e))
+                self._handle_exception(e, "Write")
 
         @router.delete(
             "/fs/delete/{path:path}",
@@ -97,8 +119,7 @@ class FilesystemController:
             try:
                 return await self.service.delete(user, path)
             except Exception as e:
-                logger.exception("Delete failed")
-                raise HTTPException(500, str(e))
+                self._handle_exception(e, "Delete")
 
         @router.get(
             "/fs/grep",
@@ -114,8 +135,7 @@ class FilesystemController:
             try:
                 return await self.service.grep(user, pattern, prefix)
             except Exception as e:
-                logger.exception("Grep failed")
-                raise HTTPException(500, str(e))
+                self._handle_exception(e, "Grep")
 
         @router.get(
             "/fs/pwd",
@@ -129,5 +149,4 @@ class FilesystemController:
             try:
                 return await self.service.pwd(user)
             except Exception as e:
-                logger.exception("Pwd failed")
-                raise HTTPException(500, str(e))
+                self._handle_exception(e, "Pwd")
