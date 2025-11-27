@@ -140,6 +140,12 @@ mcp:
     - name: "mcp.servers.search_documents.name"
       description: "mcp.servers.search_documents.description"
       transport: "streamable_http"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-text"
+      sse_read_timeout: 2000
+      auth_mode: "user_token"
+    - name: "mcp.servers.tabular.name"
+      description: "mcp.servers.tabular.description"
+      transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-tabular"
       sse_read_timeout: 2000
       auth_mode: "user_token"

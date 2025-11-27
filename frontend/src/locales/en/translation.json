@@ -753,6 +753,10 @@
         "name": "Search in documents",
         "description": "Allow your agent to perform semantic search in documents uploaded to Fred (RAG)"
       },
+      "tabular": {
+        "name": "Tabular data access",
+        "description": "Allow your agent to query tabular data sources (spreadsheets, csv...)"
+      },
       "search_opensearch": {
         "name": "Search in opensearch",
         "description": "Allow your agent to search in opensearch indices"

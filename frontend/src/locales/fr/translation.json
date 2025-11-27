@@ -753,6 +753,10 @@
         "name": "Rechercher dans les documents",
         "description": "Permet à votre agent d'effectuer des recherches sémantiques dans les documents téléversés dans Fred (RAG)"
       },
+      "tabular": {
+        "name": "Accès aux données tabulaires",
+        "description": "Permet à votre agent d'interroger des sources de données tabulaires (feuilles de calcul, csv...)"
+      },
       "search_opensearch": {
         "name": "Rechercher dans opensearch",
         "description": "Permet à votre agent de rechercher dans les indices opensearch"
