@@ -530,6 +530,7 @@ class ApplicationContext:
                 verify_certs=opensearch_config.verify_certs,
                 bulk_size=store.bulk_size,
             )
+            self._vector_store_instance.validate_index_or_fail()
             return self._vector_store_instance
         # elif isinstance(store, WeaviateVectorStorage):
         #     if self._vector_store_instance is None:
