@@ -65,7 +65,7 @@ ai:
     # Required in .env:
     # - OPENAI_API_KEY
     provider: "openai"
-    name: "gpt-4o"
+    name: "gpt-5.1"
     settings:
       temperature: 0.0
       max_retries: 2
