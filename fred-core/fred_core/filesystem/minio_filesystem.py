@@ -149,12 +149,20 @@ class MinioFilesystem(BaseFilesystem):
 
     async def mkdir(self, path: str) -> None:
         """
-        Simulate a directory in MinIO by relying on the prefix.
-        No object is created; a folder exists only if it contains objects.
+        Simulate a directory in MinIO by creating a zero-byte object
+        with a trailing slash. This ensures the directory appears in listings.
         """
-        # Nothing to do; directories are implicit in MinIO
-        pass
-
+        # Ensure path ends with a slash
+        dir_path = path.rstrip("/") + "/"
+        
+        # Put empty object to represent the directory
+        from io import BytesIO
+        self.client.put_object(
+            self.bucket_name,
+            dir_path,
+            data=BytesIO(b""),
+            length=0
+        )
     async def exists(self, path: str) -> bool:
         """
         Check if a file or "directory" exists.
