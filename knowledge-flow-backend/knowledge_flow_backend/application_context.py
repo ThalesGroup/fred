@@ -20,8 +20,6 @@ from typing import Dict, Optional, Type, Union
 
 from fred_core import (
     BaseFilesystem,
-    LocalFilesystem,
-    MinioFilesystem,
     BaseKPIStore,
     BaseKPIWriter,
     BaseLogStore,
@@ -29,7 +27,9 @@ from fred_core import (
     InMemoryLogStorageConfig,
     KpiLogStore,
     KPIWriter,
+    LocalFilesystem,
     LogStoreConfig,
+    MinioFilesystem,
     ModelConfiguration,
     ModelProvider,
     OpenFgaRebacConfig,
@@ -46,19 +46,20 @@ from fred_core import (
     rebac_factory,
     split_realm_url,
 )
-# from fred_core.filesystem.local_filesystem import LocalFilesystem
-# from fred_core.filesystem.minio_filesystem import MinioFilesystem
-from knowledge_flow_backend.common.structures import LocalFilesystemConfig, MinioFilesystemConfig
 from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
 
+# from fred_core.filesystem.local_filesystem import LocalFilesystem
+# from fred_core.filesystem.minio_filesystem import MinioFilesystem
 from knowledge_flow_backend.common.structures import (
     ChromaVectorStorageConfig,
     Configuration,
     FileSystemPullSource,
     InMemoryVectorStorage,
     LocalContentStorageConfig,
+    LocalFilesystemConfig,
+    MinioFilesystemConfig,
     MinioPullSource,
     MinioStorageConfig,
     OpenSearchVectorIndexConfig,

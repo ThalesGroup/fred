@@ -50,6 +50,7 @@ from knowledge_flow_backend.features.catalog.controller import CatalogController
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.asset_controller import AssetController
 from knowledge_flow_backend.features.content.content_controller import ContentController
+from knowledge_flow_backend.features.filesystem.controller import FilesystemController
 from knowledge_flow_backend.features.groups import groups_controller
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
 from knowledge_flow_backend.features.kpi import logs_controller
@@ -70,7 +71,6 @@ from knowledge_flow_backend.features.users import users_controller
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
-from knowledge_flow_backend.features.filesystem.controller import FilesystemController
 from knowledge_flow_backend.security.keycloak_rebac_sync import (
     reconcile_keycloak_groups_with_rebac,
 )

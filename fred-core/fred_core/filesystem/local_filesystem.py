@@ -5,7 +5,11 @@ from typing import List
 
 import aiofiles
 
-from fred_core.filesystem.structures import BaseFilesystem, FilesystemResourceInfo, FilesystemResourceInfoResult
+from fred_core.filesystem.structures import (
+    BaseFilesystem,
+    FilesystemResourceInfo,
+    FilesystemResourceInfoResult,
+)
 
 
 class LocalFilesystem(BaseFilesystem):

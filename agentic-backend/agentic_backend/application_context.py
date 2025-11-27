@@ -53,7 +53,6 @@ from fred_core import (
     rebac_factory,
     split_realm_url,
 )
-
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_core.language_models.chat_models import BaseChatModel
 from requests.auth import AuthBase

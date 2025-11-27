@@ -20,7 +20,11 @@ from urllib.parse import urlparse
 
 from minio import Minio
 
-from fred_core.filesystem.structures import BaseFilesystem, FilesystemResourceInfo, FilesystemResourceInfoResult
+from fred_core.filesystem.structures import (
+    BaseFilesystem,
+    FilesystemResourceInfo,
+    FilesystemResourceInfoResult,
+)
 
 logger = logging.getLogger(__name__)
 

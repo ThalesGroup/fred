@@ -14,11 +14,10 @@
 
 import logging
 from typing import List
+
+from fred_core import Action, FilesystemResourceInfoResult, KeycloakUser, Resource, authorize
+
 from knowledge_flow_backend.application_context import ApplicationContext
-
-from fred_core import Action, KeycloakUser, Resource, authorize
-
-from fred_core import FilesystemResourceInfoResult
 
 logger = logging.getLogger(__name__)
 
