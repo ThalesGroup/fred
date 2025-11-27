@@ -30,20 +30,25 @@ export function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: Ag
       <Typography variant="subtitle2">{t("agentHub.toolsSelection.title")}</Typography>
 
       <Stack spacing={1}>
-        {mcpServersData.map((conf, index) => (
-          <AgentToolSelectionCard
-            key={index}
-            conf={conf}
-            selected={mcpServerRefs.some((ref) => ref.name === conf.name)}
-            onSelectedChange={(selected) => {
-              if (selected) {
-                onMcpServerRefsChange([...mcpServerRefs, { name: conf.name }]);
-              } else {
-                onMcpServerRefsChange(mcpServerRefs.filter((ref) => ref.name !== conf.name));
-              }
-            }}
-          />
-        ))}
+        {mcpServersData.map((conf, index) => {
+          if (conf.enabled === false) {
+            return null;
+          }
+          return (
+            <AgentToolSelectionCard
+              key={index}
+              conf={conf}
+              selected={mcpServerRefs.some((ref) => ref.name === conf.name)}
+              onSelectedChange={(selected) => {
+                if (selected) {
+                  onMcpServerRefsChange([...mcpServerRefs, { name: conf.name }]);
+                } else {
+                  onMcpServerRefsChange(mcpServerRefs.filter((ref) => ref.name !== conf.name));
+                }
+              }}
+            />
+          );
+        })}
       </Stack>
     </Stack>
   );

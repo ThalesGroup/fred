@@ -60,7 +60,7 @@ export function AgentEditDrawer({
     tags: [],
   });
   const [mcpServerRefs, setMcpServerRefs] = useState<McpServerRef[]>([]);
-  console.log("mcpServerRefs", mcpServerRefs);
+
   // --- Effects ---
 
   useEffect(() => {

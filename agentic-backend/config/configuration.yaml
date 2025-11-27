@@ -132,12 +132,14 @@ mcp:
       auth_mode: "user_token"
     - name: "mcp.servers.kubernetes.name"
       description: "mcp.servers.kubernetes.description"
+      enabled: false
       transport: "streamable_http"
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000
       auth_mode: "user_token"
     - name: "mcp.servers.jira.name"
       description: "mcp.servers.jira.description"
+      enabled: false
       transport: "streamable_http"
       url: "http://localhost:8885/mcp"
       sse_read_timeout: 2000
