@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import os
 from typing import Annotated, Dict, List, Literal, Optional, Union
 
 from fred_core import (
@@ -24,7 +25,7 @@ from fred_core import (
     StoreConfig,
 )
 from langchain_core.messages import SystemMessage
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerConfiguration
 

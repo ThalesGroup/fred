@@ -237,3 +237,10 @@ mcp:
   resources_enabled: true
   opensearch_ops_enabled: true
   neo4j_enabled: false
+
+filesystem:
+  type: minio
+  endpoint: http://localhost:9000
+  access_key: admin
+  bucket_name: filesystem
+  secure: false

@@ -91,7 +91,7 @@ def create_app() -> FastAPI:
         store=application_context.get_log_store(),
     )
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
-
+    application_context._log_config_summary()
     # The correct and final code to use
     @asynccontextmanager
     async def lifespan(app: FastAPI):

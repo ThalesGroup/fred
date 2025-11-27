@@ -18,9 +18,9 @@ from deepeval.metrics import (
 )
 from deepeval.models import GPTModel, OllamaModel
 from deepeval.test_case import LLMTestCase
+from langchain_core.messages import HumanMessage
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
 
 from agentic_backend.agents.rags.rag_expert import Rico
 from agentic_backend.application_context import (

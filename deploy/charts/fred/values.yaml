@@ -668,6 +668,14 @@ applications:
         opensearch_ops_enabled: false
         neo4j_enabled: false
 
+      filesystem:
+        type: local
+        # type: minio
+        # endpoint: http://localhost:9000
+        # access_key: admin
+        # bucket_name: filesystem
+        # secure: false
+
     dotenv:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
       MINIO_SECRET_KEY: ""
