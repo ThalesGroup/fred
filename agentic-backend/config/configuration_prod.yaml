@@ -24,7 +24,7 @@ security:
     enabled: true
     client_id: "agentic"
     realm_url: "http://app-keycloak:8080/realms/app"
-    secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET
+    secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET # pragma: allowlist secret (env var name only)
   user:
     enabled: true
     client_id: "app"
