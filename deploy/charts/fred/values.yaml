@@ -296,7 +296,7 @@ applications:
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
       M2M_CLIENT_SECRET: ""
-  
+
   frontend:
     enabled: true
     applicationName: frontend
@@ -524,6 +524,7 @@ applications:
     configuration_type:
       backend: true
       frontend: false
+      
     configuration:
       app:
         name: "Knowledge Flow Backend"
