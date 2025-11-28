@@ -280,6 +280,87 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
             )
             raise
 
+    # -------- Introspection / Diagnostics --------
+    def get_vectors_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
+        """
+        Return all vectors (embeddings) for the given document along with their chunk ids.
+
+        Structure of the returned list:
+        [ { "chunk_uid": str, "vector": list[float] }, ... ]
+
+        Notes:
+        - This is primarily intended for diagnostics/visualization and small result sets.
+        - Chroma always returns ids; embeddings must be explicitly included.
+        """
+        try:
+            logger.info("[SEARCH] Fetching vectors for document_uid=%s from collection '%s'", document_uid, self.collection_name)
+            got = self._collection.get(where={DOC_UID_FIELD: document_uid}, include=["embeddings"])  # type: ignore[list-item]
+            logger.info("[SEARCH] Fetched vectors for document_uid=%s from collection '%s'", document_uid, self.collection_name)
+
+            raw_ids = got.get("ids", [])
+            raw_vectors = got.get("embeddings", [])
+
+            ids: List[str] = raw_ids  # type: ignore[assignment]
+            logger.debug(ids)
+            vectors: List[List[float]] = raw_vectors  # type: ignore[assignment]
+            logger.debug(vectors)
+
+            if not ids:
+                logger.warning("[SEARCH] No vectors found for document_uid=%s from collection '%s'", document_uid, self.collection_name)
+                return []
+
+            # Normalize lengths if backend returns mismatched arrays
+            if isinstance(vectors, list) and len(vectors) != len(ids):
+                logger.warning(
+                    "[SEARCH] Mismatch between ids (%d) and embeddings (%d) for document_uid=%s",
+                    len(ids),
+                    len(vectors) if isinstance(vectors, list) else -1,
+                    document_uid,
+                )
+
+            logger.info("[SEARCH] Retrieved %d vectors for document_uid=%s from collection '%s'", len(ids), document_uid, self.collection_name)
+            out: List[Dict[str, Any]] = []
+            for cid, vec in zip(ids, vectors):
+                out.append({"chunk_uid": cid, "vector": vec})
+            return out
+        except Exception:
+            logger.exception("[SEARCH] Failed to fetch vectors for document_uid=%s", document_uid)
+            return []
+
+    def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
+        """
+        Return all chunks (texts + metadata) for the given document.
+
+        Structure of the returned list:
+        [ { "chunk_uid": str, "text": str, "metadata": dict }, ... ]
+        """
+        try:
+            logger.info("[SEARCH] Fetching chunks for document_uid=%s from collection '%s'", document_uid, self.collection_name)
+            got = self._collection.get(where={DOC_UID_FIELD: document_uid}, include=["documents", "metadatas"])  # type: ignore[list-item]
+            logger.info("[SEARCH] Fetched chunks for document_uid=%s from collection '%s'", document_uid, self.collection_name)
+
+            raw_ids = got.get("ids", [])
+            raw_texts = got.get("documents", [])
+            raw_metadatas = got.get("metadatas", [])
+
+            ids: List[str] = raw_ids  # type: ignore[assignment]
+            texts: List[str] = raw_texts  # type: ignore[assignment]
+            metadatas: List[Mapping[str, Any]] = raw_metadatas  # type: ignore[assignment]
+
+            if not ids:
+                logger.warning("[SEARCH] No chunks found for document_uid=%s from collection '%s'", document_uid, self.collection_name)
+                return []
+
+            logger.info("[SEARCH] Retrieved %d chunks for document_uid=%s from collection '%s'", len(ids), document_uid, self.collection_name)
+            out: List[Dict[str, Any]] = []
+            for cid, text, meta in zip(ids, texts, metadatas):
+                restored_meta = restore_metadata(meta or {})
+                out.append({"chunk_uid": cid, "text": text, "metadata": restored_meta})
+            return out
+        except Exception:
+            logger.exception("[SEARCH] Failed to fetch chunks for document_uid=%s", document_uid)
+            return []
+
     # -------- Search --------
     def ann_search(
         self,
@@ -301,7 +382,7 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         # ---- Embed query ----
         logger.debug("[SEARCH] Embedding query...")
         query_vector = self.embeddings.embed_query(query)
-        logger.debug(f"[SEARCH] Query vector generated: dimension={len(query_vector)}, model={self.embedding_model_name}")
+        logger.debug(f"[SEARCH] Query vector generated: dimension={len(query_vector)},model={self.embedding_model_name}")
 
         # ---- Query Chroma ----
         logger.debug(f"[SEARCH] Calling ChromaDB query: n_results={k}, where={where}")

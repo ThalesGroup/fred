@@ -637,7 +637,6 @@ class ApplicationContext:
         Does NOT print secrets; only presence/masked hints.
         """
         cfg = self.configuration
-
         logger.info("🔧 Agentic configuration summary")
         logger.info("────────────────────────────────────────────────────────────────")
 

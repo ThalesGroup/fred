@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import List, Mapping, Optional, Protocol, Sequence, Union, runtime_checkable
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Union, runtime_checkable
 
 from attr import dataclass
 from langchain_core.documents import Document
@@ -74,6 +74,14 @@ class BaseVectorStore(ABC):
         without deleting vectors. Concrete stores that support this should override.
         """
         raise NotImplementedError("This vector store does not support retrievable toggling.")
+
+    def get_vectors_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
+        """Optional capability: fetch raw vector data for all chunks of a document."""
+        raise NotImplementedError("This vector store does not support fetching raw vectors.")
+
+    def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
+        """Optional capability: fetch raw chunk data for all chunks of a document."""
+        raise NotImplementedError("This vector store does not support fetching raw chunks.")
 
     @abstractmethod
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:

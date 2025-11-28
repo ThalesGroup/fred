@@ -45,6 +45,7 @@ class Resource(str, Enum):
     OPENSEARCH = "opensearch"
     NEO4J = "neo4j"
     LOGS = "logs"
+    FILES="files"
 
     # Agentic Backend resources
     FEEDBACK = "feedback"

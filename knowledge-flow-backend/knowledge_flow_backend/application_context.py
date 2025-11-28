@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Dict, Optional, Type, Union
 
 from fred_core import (
+    BaseFilesystem,
     BaseKPIStore,
     BaseKPIWriter,
     BaseLogStore,
@@ -26,7 +27,9 @@ from fred_core import (
     InMemoryLogStorageConfig,
     KpiLogStore,
     KPIWriter,
+    LocalFilesystem,
     LogStoreConfig,
+    MinioFilesystem,
     ModelConfiguration,
     ModelProvider,
     OpenFgaRebacConfig,
@@ -47,12 +50,16 @@ from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
 
+# from fred_core.filesystem.local_filesystem import LocalFilesystem
+# from fred_core.filesystem.minio_filesystem import MinioFilesystem
 from knowledge_flow_backend.common.structures import (
     ChromaVectorStorageConfig,
     Configuration,
     FileSystemPullSource,
     InMemoryVectorStorage,
     LocalContentStorageConfig,
+    LocalFilesystemConfig,
+    MinioFilesystemConfig,
     MinioPullSource,
     MinioStorageConfig,
     OpenSearchVectorIndexConfig,
@@ -165,6 +172,10 @@ def get_app_context() -> "ApplicationContext":
     return ApplicationContext._instance
 
 
+def get_filesystem() -> BaseFilesystem:
+    return get_app_context().get_filesystem()
+
+
 def validate_input_processor_config(config: Configuration):
     """Ensure all input processor classes can be imported and subclass BaseProcessor."""
     for entry in config.input_processors:
@@ -239,6 +250,7 @@ class ApplicationContext:
     _kpi_writer: Optional[KPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
     _neo4j_driver: Optional[Driver] = None
+    _filesystem_instance: Optional[BaseFilesystem] = None
 
     def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
@@ -530,6 +542,7 @@ class ApplicationContext:
                 verify_certs=opensearch_config.verify_certs,
                 bulk_size=store.bulk_size,
             )
+            self._vector_store_instance.validate_index_or_fail()
             return self._vector_store_instance
         # elif isinstance(store, WeaviateVectorStorage):
         #     if self._vector_store_instance is None:
@@ -817,6 +830,36 @@ class ApplicationContext:
         else:
             raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
 
+    def get_filesystem(self):
+        """
+        Factory function to create the filesystem backend based on configuration.
+
+        Returns:
+            Filesystem: Instance of the configured filesystem backend.
+        """
+        if self._filesystem_instance is not None:
+            return self._filesystem_instance
+
+        fs_cfg = self.configuration.filesystem
+
+        if isinstance(fs_cfg, LocalFilesystemConfig):
+            instance = LocalFilesystem(root=fs_cfg.root)
+
+        elif isinstance(fs_cfg, MinioFilesystemConfig):
+            instance = MinioFilesystem(
+                endpoint=fs_cfg.endpoint,
+                access_key=fs_cfg.access_key,
+                secret_key=fs_cfg.secret_key,
+                bucket_name=fs_cfg.bucket_name,  # type: ignore
+                secure=fs_cfg.secure,
+            )
+
+        else:
+            raise ValueError(f"Unsupported filesystem type '{fs_cfg.type}'")
+
+        self._filesystem_instance = instance
+        return instance
+
     def is_summary_generation_enabled(self) -> bool:
         """
         Checks if the summary generation feature is enabled in the configuration.
@@ -955,6 +998,22 @@ class ApplicationContext:
 
         except Exception:
             logger.warning("  ⚠️ Failed to read storage section (some variables may be missing).")
+
+        # Filesystem
+        logger.info("  📁 Agent filesystem:")
+        fs = self.configuration.filesystem
+        logger.info("     • %-14s %s", "filesystem", type(fs).__name__)
+        if isinstance(fs, LocalFilesystemConfig):
+            logger.info("        backend=local  root=%s", fs.root)
+        elif isinstance(fs, MinioFilesystemConfig):
+            logger.info(
+                "        backend=minio  endpoint=%s  access_key=%s  secret_key=%s",
+                fs.endpoint,
+                fs.access_key,
+                _mask(fs.secret_key),
+            )
+        else:
+            logger.info("        backend=<unknown>")
 
         logger.info(f"  📁 Content storage backend: {self.configuration.content_storage.type}")
         if isinstance(self.configuration.content_storage, MinioStorageConfig):
