@@ -524,6 +524,7 @@ applications:
     configuration_type:
       backend: true
       frontend: false
+      
     configuration:
       app:
         name: "Knowledge Flow Backend"
