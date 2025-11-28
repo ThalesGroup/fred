@@ -52,10 +52,17 @@ class FilesystemService:
         """
         Builds the full path inside the user's namespace.
         """
+        user_root = self._user_root(user).strip("/")
         path = path.lstrip("/")
-        if path:
-            return f"{self._user_root(user)}/{path}"
-        return self._user_root(user)
+
+        if not path:
+            return user_root
+
+        # Avoid double-prefixing when the caller already included the user root
+        if path == user_root or path.startswith(f"{user_root}/"):
+            return path
+
+        return f"{user_root}/{path}"
 
     #
     # Operations
@@ -132,8 +139,8 @@ class FilesystemService:
         Create a directory inside the user's namespace.
         """
         try:
-            user_path = f"{user.uid}/{path}".lstrip("/")
-            await self.fs.mkdir(user_path)
+            full_path = self._resolve(user, path)
+            await self.fs.mkdir(full_path)
         except Exception as e:
             logger.exception(f"Failed to create directory {path}")
             raise e
