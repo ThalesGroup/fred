@@ -31,6 +31,8 @@ from agentic_backend.application_context import (
 from agentic_backend.common.utils import parse_server_configuration
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 
+TEST_ACCESS_TOKEN = os.getenv("TEST_ACCESS_TOKEN", "test-access-token")
+
 
 def setup_colored_logging():
     """
@@ -115,10 +117,8 @@ async def setup_agent(agent_name: str = "Rico", doc_lib_ids: list[str] | None = 
 
     agent = Rico(settings)
 
-    agent.set_runtime_context(
-        context=RuntimeContext(access_token="fake_token")  # nosec B106
-    )
-    await agent.async_init(RuntimeContext(access_token="fake_token"))
+    agent.set_runtime_context(context=RuntimeContext(access_token=TEST_ACCESS_TOKEN))
+    await agent.async_init(RuntimeContext(access_token=TEST_ACCESS_TOKEN))
 
     if doc_lib_ids:
         agent.set_runtime_context(
