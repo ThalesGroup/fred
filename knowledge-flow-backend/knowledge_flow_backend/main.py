@@ -463,8 +463,6 @@ def create_app() -> FastAPI:
     else:
         logger.info("%s MCP Filesystem disabled via configuration.mcp.filesystem_enabled=false", LOG_PREFIX)
 
-
-
     return app
 
 

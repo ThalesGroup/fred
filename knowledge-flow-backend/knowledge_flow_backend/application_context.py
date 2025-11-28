@@ -171,8 +171,10 @@ def get_app_context() -> "ApplicationContext":
         raise RuntimeError("ApplicationContext is not yet initialized")
     return ApplicationContext._instance
 
+
 def get_filesystem() -> BaseFilesystem:
     return get_app_context().get_filesystem()
+
 
 def validate_input_processor_config(config: Configuration):
     """Ensure all input processor classes can be imported and subclass BaseProcessor."""
@@ -248,7 +250,7 @@ class ApplicationContext:
     _kpi_writer: Optional[KPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
     _neo4j_driver: Optional[Driver] = None
-    _filesystem_instance: Optional[BaseFilesystem]= None
+    _filesystem_instance: Optional[BaseFilesystem] = None
 
     def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
@@ -848,7 +850,7 @@ class ApplicationContext:
                 endpoint=fs_cfg.endpoint,
                 access_key=fs_cfg.access_key,
                 secret_key=fs_cfg.secret_key,
-                bucket_name=fs_cfg.bucket_name, # type: ignore
+                bucket_name=fs_cfg.bucket_name,  # type: ignore
                 secure=fs_cfg.secure,
             )
 
@@ -1012,7 +1014,6 @@ class ApplicationContext:
             )
         else:
             logger.info("        backend=<unknown>")
-
 
         logger.info(f"  📁 Content storage backend: {self.configuration.content_storage.type}")
         if isinstance(self.configuration.content_storage, MinioStorageConfig):

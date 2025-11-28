@@ -63,6 +63,18 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.browseDocumentsRequest,
       }),
     }),
+    documentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGet: build.query<
+      DocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetApiResponse,
+      DocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/document/${queryArg.documentUid}/vectors` }),
+    }),
+    documentChunksKnowledgeFlowV1DocumentDocumentUidChunksGet: build.query<
+      DocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetApiResponse,
+      DocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/document/${queryArg.documentUid}/chunks` }),
+    }),
     listCatalogFilesKnowledgeFlowV1PullCatalogFilesGet: build.query<
       ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiResponse,
       ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiArg
@@ -425,6 +437,45 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/resources/${queryArg.resourceId}`, method: "DELETE" }),
     }),
+    listFiles: build.query<ListFilesApiResponse, ListFilesApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/list`,
+        params: {
+          prefix: queryArg.prefix,
+        },
+      }),
+    }),
+    statFileOrDirectory: build.query<StatFileOrDirectoryApiResponse, StatFileOrDirectoryApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/stat/${queryArg.path}` }),
+    }),
+    catFile: build.query<CatFileApiResponse, CatFileApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/cat/${queryArg.path}` }),
+    }),
+    writeFile: build.mutation<WriteFileApiResponse, WriteFileApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/write/${queryArg.path}`,
+        method: "POST",
+        body: queryArg.bodyWriteFile,
+      }),
+    }),
+    deleteFile: build.mutation<DeleteFileApiResponse, DeleteFileApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/delete/${queryArg.path}`, method: "DELETE" }),
+    }),
+    grepFileRegex: build.query<GrepFileRegexApiResponse, GrepFileRegexApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/grep`,
+        params: {
+          pattern: queryArg.pattern,
+          prefix: queryArg.prefix,
+        },
+      }),
+    }),
+    printRootDirectory: build.query<PrintRootDirectoryApiResponse, PrintRootDirectoryApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/fs/print_root_dir` }),
+    }),
+    createDirectory: build.mutation<CreateDirectoryApiResponse, CreateDirectoryApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/mkdir/${queryArg.path}`, method: "POST" }),
+    }),
     queryLogsKnowledgeFlowV1LogsQueryPost: build.mutation<
       QueryLogsKnowledgeFlowV1LogsQueryPostApiResponse,
       QueryLogsKnowledgeFlowV1LogsQueryPostApiArg
@@ -684,6 +735,18 @@ export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiResponse =
 export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiArg = {
   browseDocumentsRequest: BrowseDocumentsRequest;
 };
+export type DocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetApiResponse =
+  /** status 200 Successful Response */ VectorChunk[];
+export type DocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetApiArg = {
+  documentUid: string;
+};
+export type DocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  }[];
+export type DocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetApiArg = {
+  documentUid: string;
+};
 export type ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiResponse =
   /** status 200 Successful Response */ PullFileEntry[];
 export type ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiArg = {
@@ -912,6 +975,38 @@ export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiResponse =
   /** status 200 Successful Response */ any;
 export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiArg = {
   resourceId: string;
+};
+export type ListFilesApiResponse = /** status 200 Successful Response */ any;
+export type ListFilesApiArg = {
+  prefix?: string;
+};
+export type StatFileOrDirectoryApiResponse = /** status 200 Successful Response */ any;
+export type StatFileOrDirectoryApiArg = {
+  path: string;
+};
+export type CatFileApiResponse = /** status 200 Successful Response */ any;
+export type CatFileApiArg = {
+  path: string;
+};
+export type WriteFileApiResponse = /** status 200 Successful Response */ any;
+export type WriteFileApiArg = {
+  path: string;
+  bodyWriteFile: BodyWriteFile;
+};
+export type DeleteFileApiResponse = /** status 200 Successful Response */ any;
+export type DeleteFileApiArg = {
+  path: string;
+};
+export type GrepFileRegexApiResponse = /** status 200 Successful Response */ any;
+export type GrepFileRegexApiArg = {
+  pattern: string;
+  prefix?: string;
+};
+export type PrintRootDirectoryApiResponse = /** status 200 Successful Response */ any;
+export type PrintRootDirectoryApiArg = void;
+export type CreateDirectoryApiResponse = /** status 200 Successful Response */ any;
+export type CreateDirectoryApiArg = {
+  path: string;
 };
 export type QueryLogsKnowledgeFlowV1LogsQueryPostApiResponse = /** status 200 Successful Response */ LogQueryResult;
 export type QueryLogsKnowledgeFlowV1LogsQueryPostApiArg = {
@@ -1202,6 +1297,12 @@ export type BrowseDocumentsRequest = {
   offset?: number;
   limit?: number;
   sort_by?: SortOption[] | null;
+};
+export type VectorChunk = {
+  /** Identifiant unique du chunk */
+  chunk_uid: string;
+  /** Embedding du chunk */
+  vector: number[];
 };
 export type PullFileEntry = {
   path: string;
@@ -1524,6 +1625,9 @@ export type ResourceUpdate = {
   description?: string | null;
   labels?: string[] | null;
 };
+export type BodyWriteFile = {
+  data: string;
+};
 export type LogEventDto = {
   ts: number;
   level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";
@@ -1756,6 +1860,10 @@ export const {
   useLazyGetProcessingSummaryKnowledgeFlowV1DocumentsProcessingSummaryGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
+  useDocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetQuery,
+  useLazyDocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetQuery,
+  useDocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetQuery,
+  useLazyDocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetQuery,
   useListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
   useLazyListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
   useRescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostMutation,
@@ -1818,6 +1926,19 @@ export const {
   useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
   useLazyGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
   useDeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteMutation,
+  useListFilesQuery,
+  useLazyListFilesQuery,
+  useStatFileOrDirectoryQuery,
+  useLazyStatFileOrDirectoryQuery,
+  useCatFileQuery,
+  useLazyCatFileQuery,
+  useWriteFileMutation,
+  useDeleteFileMutation,
+  useGrepFileRegexQuery,
+  useLazyGrepFileRegexQuery,
+  usePrintRootDirectoryQuery,
+  useLazyPrintRootDirectoryQuery,
+  useCreateDirectoryMutation,
   useQueryLogsKnowledgeFlowV1LogsQueryPostMutation,
   useListGroupsKnowledgeFlowV1GroupsGetQuery,
   useLazyListGroupsKnowledgeFlowV1GroupsGetQuery,

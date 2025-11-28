@@ -95,9 +95,7 @@ def mapping_langchain_deepeval(langchain_model):
         )
 
 
-async def setup_agent(
-    agent_name: str = "Rico", doc_lib_ids: list[str] | None = None
-):
+async def setup_agent(agent_name: str = "Rico", doc_lib_ids: list[str] | None = None):
     """
     Initialize and configure an agent by name, optionally setting document libraries.
 
@@ -116,12 +114,11 @@ async def setup_agent(
         raise ValueError(f"Agent '{agent_name}' not found. Available: {available}")
 
     agent = Rico(settings)
-    
+
     agent.set_runtime_context(
         context=RuntimeContext(access_token="fake_token")  # nosec B106
     )
     await agent.async_init(RuntimeContext(access_token="fake_token"))
-
 
     if doc_lib_ids:
         agent.set_runtime_context(
@@ -240,14 +237,16 @@ async def run_evaluation(
     logger.info("🔄 Evaluation in progress...")
     for i, item in enumerate(test_data, 1):
         result = await agent.ainvoke(
-          {"messages": [HumanMessage(content=item["question"])]},
-          config={"configurable": {"thread_id": f"eval_{i}"}},
+            {"messages": [HumanMessage(content=item["question"])]},
+            config={"configurable": {"thread_id": f"eval_{i}"}},
         )
 
         messages = result.get("messages", [])
 
         actual_output = messages[-1].content if messages else ""
-        retrieval_context_list = messages[-1].additional_kwargs.get("sources", []) if messages else []
+        retrieval_context_list = (
+            messages[-1].additional_kwargs.get("sources", []) if messages else []
+        )
         retrieval_context = [doc["content"] for doc in retrieval_context_list]
 
         # Create DeepEval test case

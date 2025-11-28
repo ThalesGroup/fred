@@ -306,26 +306,19 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
             logger.debug(vectors)
 
             if not ids:
-                logger.warning(
-                    "[SEARCH] No vectors found for document_uid=%s from collection '%s'",
-                    document_uid,
-                    self.collection_name
-                )
+                logger.warning("[SEARCH] No vectors found for document_uid=%s from collection '%s'", document_uid, self.collection_name)
                 return []
 
             # Normalize lengths if backend returns mismatched arrays
             if isinstance(vectors, list) and len(vectors) != len(ids):
                 logger.warning(
                     "[SEARCH] Mismatch between ids (%d) and embeddings (%d) for document_uid=%s",
-                    len(ids), len(vectors) if isinstance(vectors, list) else -1, document_uid,
+                    len(ids),
+                    len(vectors) if isinstance(vectors, list) else -1,
+                    document_uid,
                 )
 
-            logger.info(
-                "[SEARCH] Retrieved %d vectors for document_uid=%s from collection '%s'",
-                len(ids),
-                document_uid,
-                self.collection_name
-            )
+            logger.info("[SEARCH] Retrieved %d vectors for document_uid=%s from collection '%s'", len(ids), document_uid, self.collection_name)
             out: List[Dict[str, Any]] = []
             for cid, vec in zip(ids, vectors):
                 out.append({"chunk_uid": cid, "vector": vec})
@@ -355,19 +348,10 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
             metadatas: List[Mapping[str, Any]] = raw_metadatas  # type: ignore[assignment]
 
             if not ids:
-                logger.warning(
-                    "[SEARCH] No chunks found for document_uid=%s from collection '%s'",
-                    document_uid,
-                    self.collection_name
-                )
+                logger.warning("[SEARCH] No chunks found for document_uid=%s from collection '%s'", document_uid, self.collection_name)
                 return []
 
-            logger.info(
-                "[SEARCH] Retrieved %d chunks for document_uid=%s from collection '%s'",
-                len(ids),
-                document_uid,
-                self.collection_name
-            )
+            logger.info("[SEARCH] Retrieved %d chunks for document_uid=%s from collection '%s'", len(ids), document_uid, self.collection_name)
             out: List[Dict[str, Any]] = []
             for cid, text, meta in zip(ids, texts, metadatas):
                 restored_meta = restore_metadata(meta or {})
@@ -398,10 +382,7 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         # ---- Embed query ----
         logger.debug("[SEARCH] Embedding query...")
         query_vector = self.embeddings.embed_query(query)
-        logger.debug(
-            f"[SEARCH] Query vector generated: dimension={len(query_vector)},"
-            f"model={self.embedding_model_name}"
-        )
+        logger.debug(f"[SEARCH] Query vector generated: dimension={len(query_vector)},model={self.embedding_model_name}")
 
         # ---- Query Chroma ----
         logger.debug(f"[SEARCH] Calling ChromaDB query: n_results={k}, where={where}")
