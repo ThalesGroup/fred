@@ -49,7 +49,8 @@ class FilesystemController:
         @router.get(
             "/fs/list",
             tags=["Filesystem"],
-            summary="List files and directories in the root"
+            summary="List files and directories in the root",
+            operation_id="list_files"
         )
         async def list_entries(
             prefix: str = "",
@@ -64,7 +65,8 @@ class FilesystemController:
         @router.get(
             "/fs/stat/{path:path}",
             tags=["Filesystem"],
-            summary="Get file information"
+            summary="Get file information",
+            operation_id="stat_file_or_directory"
         )
         async def stat(
             path: str,
@@ -79,7 +81,8 @@ class FilesystemController:
         @router.get(
             "/fs/cat/{path:path}",
             tags=["Filesystem"],
-            summary="Read a file"
+            summary="Read a file",
+            operation_id="cat_file"
         )
         async def cat(
             path: str,
@@ -94,7 +97,8 @@ class FilesystemController:
         @router.post(
             "/fs/write/{path:path}",
             tags=["Filesystem"],
-            summary="Write a file"
+            summary="Write a file",
+            operation_id="write_file"
         )
         async def write(
             path: str,
@@ -110,7 +114,8 @@ class FilesystemController:
         @router.delete(
             "/fs/delete/{path:path}",
             tags=["Filesystem"],
-            summary="Delete a file"
+            summary="Delete a file",
+            operation_id="delete_file"
         )
         async def delete(
             path: str,
@@ -125,7 +130,8 @@ class FilesystemController:
         @router.get(
             "/fs/grep",
             tags=["Filesystem"],
-            summary="Search files by regex"
+            summary="Search files by regex",
+            operation_id="grep_file_regex"
         )
         async def grep(
             pattern: str,
@@ -139,23 +145,25 @@ class FilesystemController:
                 self._handle_exception(e, "Grep")
 
         @router.get(
-            "/fs/pwd",
+            "/fs/print_root_dir",
             tags=["Filesystem"],
-            summary="Get root path of the filesystem"
+            summary="Get root path of the filesystem",
+            operation_id="print_root_directory"
         )
-        async def pwd(
+        async def print_root_dir(
             user: KeycloakUser = Depends(get_current_user)
         ):
             authorize_or_raise(user, Action.READ, Resource.FILES)
             try:
-                return await self.service.pwd(user)
+                return await self.service.print_root_dir(user)
             except Exception as e:
-                self._handle_exception(e, "Pwd")
+                self._handle_exception(e, "print_root_dir")
 
         @router.post(
             "/fs/mkdir/{path:path}",
             tags=["Filesystem"],
-            summary="Create a directory/folder"
+            summary="Create a directory/folder",
+            operation_id="create_directory"
         )
         async def mkdir(
             path: str,

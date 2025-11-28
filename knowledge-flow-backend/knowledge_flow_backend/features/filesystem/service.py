@@ -116,7 +116,7 @@ class FilesystemService:
             raise e
 
     @authorize(action=Action.READ, resource=Resource.FILES)
-    async def pwd(self, user: KeycloakUser) -> str:
+    async def print_root_dir(self, user: KeycloakUser) -> str:
         """
         Returns the user's root relative to the filesystem backend.
         """
@@ -132,8 +132,8 @@ class FilesystemService:
         Create a directory inside the user's namespace.
         """
         try:
-            full_path = self._resolve(user, path)
-            await self.fs.mkdir(full_path)
+            user_path = f"{user.uid}/{path}".lstrip("/")
+            await self.fs.mkdir(user_path)
         except Exception as e:
             logger.exception(f"Failed to create directory {path}")
             raise e

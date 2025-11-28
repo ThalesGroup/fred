@@ -152,6 +152,11 @@ mcp:
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000
       auth_mode: "user_token"
+    - name: "mcp-fs"
+      transport: "streamable_http"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-filesystem"
+      sse_read_timeout: 2000
+      auth_mode: "user_token"
     - name: "mcp-atlassian-jira-server"
       transport: "streamable_http"
       url: "http://localhost:8885/mcp"
