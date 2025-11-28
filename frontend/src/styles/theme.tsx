@@ -375,7 +375,7 @@ const lightTheme = createTheme({
         root: ({ theme }) => ({
           background: theme.palette.surfaces.raised,
           border: `1px solid ${theme.palette.divider}`,
-          borderRadius: 16,
+          borderRadius: 8,
         }),
       },
     },
@@ -489,7 +489,7 @@ const darkTheme = createTheme({
         root: ({ theme }) => ({
           background: theme.palette.surfaces.raised,
           border: `1px solid ${theme.palette.divider}`,
-          borderRadius: 16,
+          borderRadius: 8,
         }),
       },
     },
