@@ -119,10 +119,13 @@ class MCPServerRef(BaseModel):
     """
 
     model_config = ConfigDict(
-        validate_by_name=True, validate_by_alias=True
-    )  # Accept both 'id' and 'name' during deserialization for retrocompatibility
+        validate_by_name=True,
+        validate_by_alias=True,
+    )
 
-    id: str = Field(..., alias="name")  # alias for retrocompatibility
+    id: str = Field(
+        ..., alias="name", serialization_alias="id"
+    )  # Accept "name" when deserializing for backward compatibility but always serialize as "id"
     require_tools: list[str] = []  # optional: "os.*", "kpi.*" capabilities
 
 
