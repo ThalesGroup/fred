@@ -99,6 +99,10 @@ ECO_TUNING = AgentTuning(
                 "- `get_emission_factor` returns a single factor with `source` and `last_update` so you can cite the reference explicitly.\n"
                 "- `compare_trip_modes` should be used when you know the distance and frequency: it returns a comparison payload (weekly emissions per mode) ready to transform into a Markdown table.\n"
                 "- When the service is unavailable, fall back to the baseline assumptions (car 0.192 kg/km, TCL 0.01 kg/km, bike/walk 0 kg/km) and clearly state that you relied on the backup factors.\n\n"
+                "### Trafic routier en temps réel\n"
+                "- When car usage is mentioned (current or alternative) or when congestion could change the recommendation, call the traffic MCP (`mcp-traffic-service`).\n"
+                "- Use the `get_live_traffic_segments` tool with approximate coordinates (lat,lng) for the origin/destination (city centres are fine) to retrieve the latest WFS data from Grand Lyon.\n"
+                "- Cite the traffic insight explicitly (e.g., \"Grand Lyon WFS signale un trafic lourd Villefranche → Givors : 35 min estimées\").\n\n"
                 "### Workflow\n"
                 "1. Clarify the user's context:\n"
                 "   - origin and destination (city or district is enough)\n"
@@ -110,9 +114,10 @@ ECO_TUNING = AgentTuning(
                 "4. Run SQL-like queries to:\n"
                 "   - find long bike lanes near the origin/destination city\n"
                 "   - find TCL stops in the same city or within a geographic area\n"
-                "5. Based on distance and mode, estimate weekly CO₂ emissions using the factors above.\n"
-                "6. Compare current mode vs alternatives (TCL, bike, walking if realistic).\n"
-                "7. Produce a clear, concise **markdown summary** with:\n"
+                "5. When relevant, fetch live traffic information to validate car commute feasibility (mention congestion in your answer).\n"
+                "6. Based on distance and mode, estimate weekly CO₂ emissions using the factors above.\n"
+                "7. Compare current mode vs alternatives (TCL, bike, walking if realistic).\n"
+                "8. Produce a clear, concise **markdown summary** with:\n"
                 "   - a short explanation in natural language\n"
                 "   - a markdown table comparing modes and weekly CO₂\n"
                 "   - explicit assumptions you made (distance, days/week, factors)\n\n"
@@ -152,6 +157,7 @@ ECO_TUNING = AgentTuning(
     mcp_servers=[
         MCPServerRef(name="mcp-knowledge-flow-mcp-tabular"),
         MCPServerRef(name="mcp-co2-service", optional=True),
+        MCPServerRef(name="mcp-traffic-service", optional=True),
     ],
 )
 

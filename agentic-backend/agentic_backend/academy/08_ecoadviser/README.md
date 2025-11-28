@@ -118,6 +118,32 @@ Le service MCP interroge désormais `https://data.ademe.fr/data-fair/api/v1/data
 
 ---
 
+## 🧱 Étape 3 — Trafic routier live (Grand Lyon WFS)
+
+Nous exploitons maintenant l’API **WFS** du portail data.grandlyon.com pour récupérer en temps (quasi) réel les métriques de trafic (`pvo_patrimoine_voirie.pvotrafic`). Le service MCP `mcp-traffic-service` interroge cette API en fonction d’un bounding box construit à partir de l’origine/destination (lat/lon) et retourne les segments correspondants.
+
+### Pré-requis
+1. Créer un compte sur https://data.grandlyon.com et générer un **API key** ou un couple *login/mot de passe* permettant d’appeler les services WFS.
+2. Renseigner les variables suivantes dans `agentic-backend/config/.env` :
+   ```bash
+   GRANDLYON_WFS_URL="https://data.grandlyon.com/geoserver/metropole-de-lyon/ows"
+   GRANDLYON_WFS_TYPENAME="metropole-de-lyon:pvo_patrimoine_voirie.pvotrafic"
+   GRANDLYON_WFS_API_KEY="votre_token"         # ou laisser vide si vous préférez l'authentification Basic
+   GRANDLYON_WFS_USERNAME="votre_login"        # optionnel
+   GRANDLYON_WFS_PASSWORD="votre_motdepasse"   # optionnel
+   GRANDLYON_WFS_TIMEOUT="10"
+   ```
+   (Il suffit d’avoir soit un `API_KEY`, soit un couple `USERNAME/PASSWORD`. Redémarrer `./start.sh` après modification.)
+
+### Utilisation
+- Le tool MCP exposé est `get_live_traffic_segments`. Il prend des coordonnées (approximation lat/lon) pour l’origine et la destination, construit une bbox (avec une marge `buffer_deg`) et interroge le WFS.
+- Les réponses contiennent les propriétés fournies par Grand Lyon (vitesse km/h, état du trafic, communes, etc.) ainsi qu’un aperçu des coordonnées.
+- EcoAdvisor cite explicitement la provenance (“Grand Lyon WFS”) et s’appuie sur ces données pour recommander ou déconseiller l’usage de la voiture.
+
+> Remarque : les fichiers CSV `data/temps-parcours-*.csv` restent dans le dépôt comme référence historique, mais ne sont plus utilisés par défaut.
+
+---
+
 ## 🧱 Préparation des données (pipeline historique)
 
 Fichier : `rhone_inspect.py`
