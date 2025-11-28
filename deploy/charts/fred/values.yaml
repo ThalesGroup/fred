@@ -296,7 +296,7 @@ applications:
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
       M2M_CLIENT_SECRET: ""
-  
+
   frontend:
     enabled: true
     applicationName: frontend

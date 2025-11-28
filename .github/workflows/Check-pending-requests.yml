@@ -13,9 +13,9 @@ jobs:
     outputs:
       frontend: ${{ steps.changes.outputs.frontend }}
       agentic: ${{ steps.changes.outputs.agentic }}
-      knowledge-flow: ${{ steps.changes.outputs.knowledge-flow }}
-      deploy-chart: ${{ steps.changes.outputs.deploy-chart }}
-      fred-core: ${{ steps.changes.outputs.fred-core }}
+      knowledge-flow: ${{ steps.changes.outputs['knowledge-flow'] }}
+      deploy-chart: ${{ steps.changes.outputs['deploy-chart'] }}
+      fred-core: ${{ steps.changes.outputs['fred-core'] }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
   code-quality:
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
+    if: needs['detect-changes'].outputs.agentic == 'true' || needs['detect-changes'].outputs['knowledge-flow'] == 'true' || needs['detect-changes'].outputs['fred-core'] == 'true'
     strategy:
       matrix:
         directory: [agentic-backend, knowledge-flow-backend, fred-core]
@@ -56,13 +56,13 @@ jobs:
         include:
           # Agentic backend runs when agentic or fred-core changes
           - directory: agentic-backend
-            condition: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.fred-core == 'true'
+            condition: needs['detect-changes'].outputs.agentic == 'true' || needs['detect-changes'].outputs['fred-core'] == 'true'
           # Knowledge flow backend runs when knowledge-flow or fred-core changes
           - directory: knowledge-flow-backend
-            condition: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
+            condition: needs['detect-changes'].outputs['knowledge-flow'] == 'true' || needs['detect-changes'].outputs['fred-core'] == 'true'
           # Fred core runs when fred-core changes
           - directory: fred-core
-            condition: needs.detect-changes.outputs.fred-core == 'true'
+            condition: needs['detect-changes'].outputs['fred-core'] == 'true'
     name: Code Quality - ${{ matrix.directory }} - ${{ matrix.check }}
 
     steps:
@@ -88,7 +88,7 @@ jobs:
   backend-tests:
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
+    if: needs['detect-changes'].outputs.agentic == 'true' || needs['detect-changes'].outputs['knowledge-flow'] == 'true' || needs['detect-changes'].outputs['fred-core'] == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -97,7 +97,7 @@ jobs:
             directory: fred-core
             unit-target: test
             integration-target: test-integration
-            should-run: ${{ needs.detect-changes.outputs.fred-core == 'true' }}
+            should-run: ${{ needs['detect-changes'].outputs['fred-core'] == 'true' }}
     name: Backend Tests - ${{ matrix.name }}
 
     steps:
@@ -131,7 +131,7 @@ jobs:
   frontend-checks:
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.frontend == 'true'
+    if: needs['detect-changes'].outputs.frontend == 'true'
 
     steps:
       - name: Checkout code
@@ -158,7 +158,7 @@ jobs:
   deploy-charts-checks:
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.deploy-chart == 'true'
+    if: needs['detect-changes'].outputs['deploy-chart'] == 'true'
 
     steps:
       - name: Checkout charts
@@ -174,7 +174,7 @@ jobs:
   agentic-backend-checks:
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.fred-core == 'true'
+    if: needs['detect-changes'].outputs.agentic == 'true' || needs['detect-changes'].outputs['fred-core'] == 'true'
 
     steps:
       - name: Checkout code
@@ -201,7 +201,7 @@ jobs:
   knowledge-flow-backend-checks:
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
+    if: needs['detect-changes'].outputs['knowledge-flow'] == 'true' || needs['detect-changes'].outputs['fred-core'] == 'true'
 
     steps:
       - name: Checkout code
@@ -228,7 +228,7 @@ jobs:
   openapi-drift-check:
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.frontend == 'true'
+    if: needs['detect-changes'].outputs.agentic == 'true' || needs['detect-changes'].outputs['knowledge-flow'] == 'true' || needs['detect-changes'].outputs.frontend == 'true'
 
     steps:
       - name: Checkout code
@@ -247,13 +247,13 @@ jobs:
           python-version: "3.12.8"
 
       - name: Setup agentic backend dependencies
-        if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.frontend == 'true'
+        if: needs['detect-changes'].outputs.agentic == 'true' || needs['detect-changes'].outputs.frontend == 'true'
         run: |
           cd agentic-backend/
           make dev
 
       - name: Setup knowledge-flow backend dependencies
-        if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.frontend == 'true'
+        if: needs['detect-changes'].outputs['knowledge-flow'] == 'true' || needs['detect-changes'].outputs.frontend == 'true'
         run: |
           cd knowledge-flow-backend/
           make dev
@@ -265,13 +265,13 @@ jobs:
           cp -f frontend/src/slices/knowledgeFlow/knowledgeFlowOpenApi.ts /tmp/openapi-backup/ 2>/dev/null || true
 
       - name: Regenerate agentic OpenAPI slice
-        if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.frontend == 'true'
+        if: needs['detect-changes'].outputs.agentic == 'true' || needs['detect-changes'].outputs.frontend == 'true'
         run: |
           cd frontend/
           make update-agentic-api
 
       - name: Regenerate knowledge-flow OpenAPI slice
-        if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.frontend == 'true'
+        if: needs['detect-changes'].outputs['knowledge-flow'] == 'true' || needs['detect-changes'].outputs.frontend == 'true'
         run: |
           cd frontend/
           make update-knowledge-flow-api
@@ -281,7 +281,7 @@ jobs:
           echo "Checking for differences in generated OpenAPI files..."
           DRIFT_DETECTED=false
 
-          if [ "${{ needs.detect-changes.outputs.agentic }}" == "true" ] || [ "${{ needs.detect-changes.outputs.frontend }}" == "true" ]; then
+          if [ "${{ needs['detect-changes'].outputs.agentic }}" == "true" ] || [ "${{ needs['detect-changes'].outputs.frontend }}" == "true" ]; then
             if ! diff -q /tmp/openapi-backup/agenticOpenApi.ts frontend/src/slices/agentic/agenticOpenApi.ts > /dev/null 2>&1; then
               echo "❌ DRIFT DETECTED: agentic OpenAPI slice has changed but wasn't updated in the PR"
               echo "Please run 'make update-agentic-api' in frontend/ and commit the changes"
@@ -291,7 +291,7 @@ jobs:
             fi
           fi
 
-          if [ "${{ needs.detect-changes.outputs.knowledge-flow }}" == "true" ] || [ "${{ needs.detect-changes.outputs.frontend }}" == "true" ]; then
+          if [ "${{ needs['detect-changes'].outputs['knowledge-flow'] }}" == "true" ] || [ "${{ needs['detect-changes'].outputs.frontend }}" == "true" ]; then
             if ! diff -q /tmp/openapi-backup/knowledgeFlowOpenApi.ts frontend/src/slices/knowledgeFlow/knowledgeFlowOpenApi.ts > /dev/null 2>&1; then
               echo "❌ DRIFT DETECTED: knowledge-flow OpenAPI slice has changed but wasn't updated in the PR"
               echo "Please run 'make update-knowledge-flow-api' in frontend/ and commit the changes"
@@ -314,7 +314,9 @@ jobs:
   config-keys-check:
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.knowledge-flow == 'true'
+    if: needs['detect-changes'].outputs.agentic == 'true' ||
+        needs['detect-changes'].outputs['knowledge-flow'] == 'true' ||
+        needs['detect-changes'].outputs['deploy-chart'] == 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
