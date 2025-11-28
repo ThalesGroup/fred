@@ -70,7 +70,7 @@ export function AgentToolSelectionCard({ conf, selected, onSelectedChange }: Age
         <Typography>{t(conf.name)}</Typography>
         {conf.description && (
           <Tooltip title={t(conf.description)} enterTouchDelay={0}>
-            <InfoIcon />
+            <InfoIcon color="disabled" />
           </Tooltip>
         )}
       </Stack>
