@@ -309,3 +309,84 @@ jobs:
           fi
 
           echo "✅ No OpenAPI drift detected - all slices are up to date"
+
+
+  config-keys-check:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.knowledge-flow == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Check backend configuration keys
+        run: |
+          python3 - <<'EOF'
+          import yaml, sys, os
+
+          backends = [
+              {
+                  "name": "agentic-backend",
+                  "config_file": "agentic-backend/config/configuration.yaml"
+              },
+              {
+                  "name": "knowledge-flow-backend",
+                  "config_file": "knowledge-flow-backend/config/configuration.yaml"
+              }
+          ]
+
+          VALUES_FILE = "deploy/charts/fred/values.yaml"
+
+          def load_yaml(path):
+              with open(path) as f:
+                  return yaml.safe_load(f)
+
+          def flatten_keys(d, parent=''):
+              keys = set()
+              for k, v in d.items():
+                  full_key = f"{parent}.{k}" if parent else k
+                  if isinstance(v, dict):
+                      keys |= flatten_keys(v, full_key)
+                  else:
+                      keys.add(full_key)
+              return keys
+
+          values_yaml = load_yaml(VALUES_FILE)
+
+          failed = False
+
+          for backend in backends:
+              config_file = backend["config_file"]
+              backend_name = backend["name"]
+
+              if not os.path.exists(config_file):
+                  print(f"⚠️  {backend_name} configuration.yaml not found, skipping")
+                  continue
+
+              config_yaml = load_yaml(config_file)
+              values_backend_conf = values_yaml.get("applications", {}).get(backend_name, {}).get("configuration", {})
+
+              config_keys = flatten_keys(config_yaml)
+              values_keys = flatten_keys(values_backend_conf)
+
+              if config_keys != values_keys:
+                  print(f"❌ Divergence detected for {backend_name}")
+                  print("Missing keys in values.yaml:", config_keys - values_keys)
+                  print("Extra keys in values.yaml:", values_keys - config_keys)
+                  failed = True
+              else:
+                  print(f"✅ Keys are consistent for {backend_name}")
+
+          if failed:
+              sys.exit(1)
+          EOF
