@@ -99,6 +99,11 @@ class MetadataController:
         self.content_store = ApplicationContext.get_instance().get_content_store()
         self.pull_document_service = pull_document_service
 
+        # ---- Schemas locaux pour les réponses ----
+        class VectorChunk(BaseModel):
+            chunk_uid: str = Field(..., description="Identifiant unique du chunk")
+            vector: List[float] = Field(..., description="Embedding du chunk")
+
         @router.post(
             "/documents/metadata/search",
             tags=["Documents"],
@@ -231,3 +236,41 @@ class MetadataController:
 
             else:
                 raise HTTPException(status_code=400, detail=f"Unsupported source type '{config.type}'")
+
+        @router.get(
+            "/document/{document_uid}/vectors",
+            tags=["Documents"],
+            summary="Get document chunk vectors (embeddings)",
+            description=(
+                "Returns the list of chunk vectors (embeddings) associated with the given document."
+            ),
+            response_model=List[VectorChunk],
+        )
+        async def document_vectors(
+            document_uid: str,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                raw = await self.service.get_document_vectors(user, document_uid)
+                return [VectorChunk(**item) for item in raw]
+            except Exception as e:
+                raise handle_exception(e)
+
+        @router.get(
+            "/document/{document_uid}/chunks",
+            tags=["Documents"],
+            summary="Get document chunks with metadata",
+            description=(
+                "Returns the list of chunks associated with the given document, including their metadata."
+            ),
+            response_model=List[Dict[str, Any]],
+        )
+        async def document_chunks(
+            document_uid: str,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                chunks = await self.service.get_document_chunks(user, document_uid)
+                return chunks
+            except Exception as e:
+                raise handle_exception(e)

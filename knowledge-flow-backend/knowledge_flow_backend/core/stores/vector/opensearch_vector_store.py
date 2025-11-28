@@ -15,7 +15,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_core.documents import Document
@@ -228,6 +228,68 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         except Exception:
             logger.exception("❌ Failed to update retrievable flag for document_uid=%s in OpenSearch.", document_uid)
             raise RuntimeError("Failed to update retrievable flag in OpenSearch.")
+
+    # ---------- Introspection / Diagnostics ----------
+    def get_vectors_for_document(self, document_uid: str) -> List[Dict[str, Any]]:  # type: ignore[name-defined]
+        """
+        Return all embeddings for the given document along with their chunk ids.
+
+        Return format: [{"chunk_uid": str, "vector": list[float]}, ...]
+        """
+        try:
+            logger.info("🔎 Fetching vectors for document_uid=%s in index=%s", document_uid, self._index)
+            body = {
+                "size": 10000,
+                "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
+                "_source": ["metadata", "vector_field"],
+            }
+            res = self._client.search(index=self._index, body=body)
+            hits = res.get("hits", {}).get("hits", [])
+            out: List[Dict[str, Any]] = []  # type: ignore[name-defined]
+            for h in hits:
+                src = h.get("_source", {}) or {}
+                meta = src.get("metadata", {}) or {}
+                vec = src.get("vector_field")
+                if vec is None:
+                    # Some indices do not expose the vector in _source; skip cleanly.
+                    logger.debug("No vector in _source for _id=%s (document_uid=%s)", h.get("_id"), document_uid)
+                    continue
+                cid = meta.get(CHUNK_ID_FIELD) or h.get("_id")
+                out.append({"chunk_uid": cid, "vector": vec})
+            logger.info("🔎 Retrieved %d vectors for document_uid=%s", len(out), document_uid)
+            return out
+        except Exception:
+            logger.exception("❌ Failed to fetch vectors for document_uid=%s from OpenSearch", document_uid)
+            return []
+
+    def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:  # type: ignore[name-defined]
+        """
+        Return all chunks (text + metadata) for the given document.
+
+        Return format: [{"chunk_uid": str, "text": str, "metadata": dict}, ...]
+        """
+        try:
+            logger.info("📄 Fetching chunks for document_uid=%s in index=%s", document_uid, self._index)
+            body = {
+                "size": 10000,
+                "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
+                "_source": ["text", "metadata"],
+            }
+            res = self._client.search(index=self._index, body=body)
+            hits = res.get("hits", {}).get("hits", [])
+            out: List[Dict[str, Any]] = []  # type: ignore[name-defined]
+            for h in hits:
+                src = h.get("_source", {}) or {}
+                text = src.get("text", "")
+                meta = src.get("metadata", {}) or {}
+                cid = meta.get(CHUNK_ID_FIELD) or h.get("_id")
+                # Ensure the chunk_uid is present in the metadata returned to the UI if needed
+                out.append({"chunk_uid": cid, "text": text, "metadata": meta})
+            logger.info("📄 Retrieved %d chunks for document_uid=%s", len(out), document_uid)
+            return out
+        except Exception:
+            logger.exception("❌ Failed to fetch chunks for document_uid=%s from OpenSearch", document_uid)
+            return []
 
     # ---------- BaseVectorStore: ANN (semantic) ----------
     def _supports_knn_filter(self) -> bool:
