@@ -44,6 +44,8 @@ class VectorizationProcessor(BaseOutputProcessor):
     Emits KPIs for duration, sizes, counts, and failures.
     """
 
+    description = "Splits documents, embeds chunks, and stores vectors plus summaries for retrieval."
+
     def __init__(self):
         self.context = ApplicationContext.get_instance()
         self.content_loader = self.context.get_content_store()

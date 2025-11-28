@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import logging
 import pathlib
 import tempfile
@@ -35,7 +34,7 @@ def prepare_working_dir(document_uid: str) -> pathlib.Path:
 
 
 @activity.defn
-def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
+async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
     assert file.external_path, "Pull files must have an external path"
     assert file.source_tag, "Pull files must have a source tag"
     logger = activity.logger
@@ -65,14 +64,14 @@ def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
         metadata.source.pull_location = file.external_path
         logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] metadata={metadata}")
 
-        asyncio.run(ingestion_service.save_metadata(file.processed_by, metadata=metadata))
+        await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
 
         logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] Metadata extracted and saved uid={metadata.document_uid}")
         return metadata
 
 
 @activity.defn
-def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
+async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
     logger = activity.logger
     logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Starting file={file}")
     from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
@@ -80,7 +79,7 @@ def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
     ingestion_service = IngestionService()
     logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] push file uid={file.document_uid}.")
     assert file.document_uid, "Push files must have a document UID"
-    metadata = asyncio.run(ingestion_service.get_metadata(file.processed_by, file.document_uid))
+    metadata = await ingestion_service.get_metadata(file.processed_by, file.document_uid)
     if metadata is None:
         logger.error(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Metadata not found uid={file.document_uid}")
         raise RuntimeError(f"Metadata missing for push file: {file.document_uid}")
@@ -90,7 +89,7 @@ def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
 
 
 @activity.defn
-def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.Path:
+async def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.Path:
     logger = activity.logger
     logger.info(f"[SCHEDULER][ACTIVITY][LOAD_PUSH_FILE] Loading file uid={metadata.document_uid}")
 
@@ -110,7 +109,7 @@ def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.P
 
 
 @activity.defn
-def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.Path:
+async def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.Path:
     logger = activity.logger
     logger.info(f"[SCHEDULER][ACTIVITY][LOAD_PULL_FILE] Fetching file uid={metadata.document_uid}")
 
@@ -136,7 +135,7 @@ def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.P
 
 
 @activity.defn
-def input_process(user: KeycloakUser, input_file: pathlib.Path, metadata: DocumentMetadata) -> DocumentMetadata:
+async def input_process(user: KeycloakUser, input_file: pathlib.Path, metadata: DocumentMetadata) -> DocumentMetadata:
     """
     Processes the provided local input file and saves the metadata.
     This method generates the output files (preview, markdown, CSV) and
@@ -159,14 +158,14 @@ def input_process(user: KeycloakUser, input_file: pathlib.Path, metadata: Docume
     ingestion_service.save_output(user, metadata=metadata, output_dir=output_dir)
 
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
-    asyncio.run(ingestion_service.save_metadata(user, metadata=metadata))
+    await ingestion_service.save_metadata(user, metadata=metadata)
 
     logger.info(f"[SCHEDULER][ACTIVITY][INPUT_PROCESS] completed uid={metadata.document_uid}")
     return metadata
 
 
 @activity.defn
-def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memory_storage: bool = False) -> DocumentMetadata:
+async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memory_storage: bool = False) -> DocumentMetadata:
     logger = activity.logger
     logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] Starting uid={metadata.document_uid}")
 
@@ -196,7 +195,7 @@ def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memor
     metadata = ingestion_service.process_output(file.processed_by, output_dir=output_dir, input_file_name=preview_file.name, input_file_metadata=metadata)
 
     # Save the updated metadata
-    asyncio.run(ingestion_service.save_metadata(file.processed_by, metadata=metadata))
+    await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
 
     logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] completed uid={metadata.document_uid}")
     return metadata

@@ -17,7 +17,7 @@ import logging
 import mimetypes
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import pandas  # kept because BaseTabularProcessor references it
 
@@ -41,6 +41,8 @@ class BaseInputProcessor(ABC):
     Base class for all processors that handle file metadata extraction and processing.
     Creates the initial DocumentMetadata for a newly ingested file.
     """
+
+    description: Optional[str] = None
 
     # ---------- internal helpers ----------
 

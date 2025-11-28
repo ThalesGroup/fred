@@ -37,9 +37,7 @@ class GetPushFileMetadata:
         return await workflow.execute_activity(get_push_file_metadata, args=[file], schedule_to_close_timeout=timedelta(seconds=60))
 
 
-workflow.defn
-
-
+@workflow.defn
 class LoadPullFile:
     @workflow.run
     async def run(self, file, metadata):
@@ -47,9 +45,7 @@ class LoadPullFile:
         return await workflow.execute_activity(load_pull_file, args=[file, metadata], schedule_to_close_timeout=timedelta(seconds=60))
 
 
-workflow.defn
-
-
+@workflow.defn
 class LoadPushFile:
     @workflow.run
     async def run(self, file, metadata):

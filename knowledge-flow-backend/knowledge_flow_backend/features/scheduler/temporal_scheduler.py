@@ -44,7 +44,7 @@ class TemporalScheduler(BaseScheduler):
         super().__init__(metadata_service)
         self._scheduler_config = scheduler_config
 
-    async def start_ingestion(
+    async def start_document_processing(
         self,
         user: KeycloakUser,
         definition: PipelineDefinition,
@@ -68,3 +68,13 @@ class TemporalScheduler(BaseScheduler):
         logger.info("🛠️ started temporal workflow=%s", workflow_handle.id)
 
         return WorkflowHandle(workflow_id=workflow_handle.id, run_id=workflow_handle.first_execution_run_id)
+
+    async def start_library_processing(
+        self,
+        user: KeycloakUser,
+        library_tag: str,
+        processor_path: str,
+        document_uids: Optional[list[str]] = None,
+        background_tasks: Optional[BackgroundTasks] = None,
+    ) -> WorkflowHandle:
+        raise NotImplementedError("Library processing is not yet supported with the Temporal scheduler.")

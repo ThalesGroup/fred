@@ -213,6 +213,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
   }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const logoName = getProperty("logoName") || "fred";
+  const logoNameDark = getProperty("logoNameDark") || "fred-dark";
 
   return (
     <Box
@@ -262,8 +263,9 @@ export default function SideBar({ darkMode, onThemeChange }) {
               height: 42,
               backgroundColor: "transparent",
             }}
+            variant="square"
           >
-            <ImageComponent name={logoName} width="36px" height="36px" />
+            <ImageComponent name={darkMode ? logoNameDark : logoName} width="36px" height="36px" />
           </Avatar>
         </Box>
       </Box>

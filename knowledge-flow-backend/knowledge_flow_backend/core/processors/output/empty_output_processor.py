@@ -29,6 +29,8 @@ class EmptyOutputProcessor(BaseOutputProcessor):
     Used to intentionally skip output processing for specific file types.
     """
 
+    description = "Skips output processing for file types that should not be post-processed."
+
     def __init__(self):
         super().__init__()
 

@@ -29,6 +29,8 @@ class CsvTabularProcessor(BaseTabularProcessor):
     Extracts header and rows from a simple CSV file.
     """
 
+    description = "Parses CSV files, detects delimiters, and loads rows into tabular data frames."
+
     def check_file_validity(self, file_path: Path) -> bool:
         return file_path.suffix.lower() == ".csv" and file_path.is_file()
 

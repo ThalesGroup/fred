@@ -152,13 +152,13 @@ class OpenSearchKPIStore(BaseKPIStore):
         try:
             if not self.client.indices.exists(index=self.index):
                 self.client.indices.create(index=self.index, body=KPI_INDEX_MAPPING)
-                logger.info(f"[KPI] created index '{self.index}'.")
+                logger.info(f"[OPENSEARCH][KPI] created index '{self.index}'.")
             else:
-                logger.info(f"[KPI] index '{self.index}' already exists.")
+                logger.info(f"[OPENSEARCH][KPI] index '{self.index}' already exists.")
                 # Validate existing mapping matches expected mapping
                 validate_index_mapping(self.client, self.index, KPI_INDEX_MAPPING)
         except OpenSearchException as e:
-            logger.error(f"[KPI] ensure_ready failed: {e}")
+            logger.error(f"[OPENSEARCH][KPI] ensure_ready failed: {e}")
             raise
 
     # -- writes ----------------------------------------------------------------
@@ -166,7 +166,7 @@ class OpenSearchKPIStore(BaseKPIStore):
         try:
             self.client.index(index=self.index, body=event.to_doc())
         except OpenSearchException as e:
-            logger.error(f"[KPI] index_event failed: {e}")
+            logger.error(f"[OPENSEARCH][KPI] index_event failed: {e}")
             raise
 
     def bulk_index(self, events: List[KPIEvent]) -> None:
@@ -181,7 +181,7 @@ class OpenSearchKPIStore(BaseKPIStore):
             if resp.get("errors"):
                 logger.warning("[KPI] bulk_index completed with partial errors.")
         except OpenSearchException as e:
-            logger.error(f"[KPI] bulk_index failed: {e}")
+            logger.error(f"[OPENSEARCH][KPI] bulk_index failed: {e}")
             raise
 
     # -- reads -----------------------------------------------------------------

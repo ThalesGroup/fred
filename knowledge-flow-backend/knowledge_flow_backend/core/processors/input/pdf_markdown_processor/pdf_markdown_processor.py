@@ -33,6 +33,8 @@ logger = logging.getLogger(__name__)
 
 
 class PdfMarkdownProcessor(BaseMarkdownProcessor):
+    description = "Converts PDF documents to Markdown with optional image descriptions and table markers."
+
     def __init__(self):
         super().__init__()
         self.image_describer = None

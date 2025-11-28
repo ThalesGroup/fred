@@ -64,15 +64,24 @@ def load_environment(dotenv_path: str = "./config/.env"):
         logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
 
 
+def load_configuration() -> Configuration:
+    load_environment()
+    default_config_file = "./config/configuration.yaml"
+    config_file = os.environ.get("CONFIG_FILE", default_config_file)
+    if not os.path.exists(config_file):
+        raise FileNotFoundError(f"Configuration file not found: {config_file}")
+    configuration: Configuration = parse_server_configuration(config_file)
+    logger.info(f"✅ Loaded configuration from: {config_file}")
+    return configuration
+
+
 # -----------------------
 # APP CREATION
 # -----------------------
 
 
 def create_app() -> FastAPI:
-    load_environment()
-    config_file = os.environ["CONFIG_FILE"]
-    configuration: Configuration = parse_server_configuration(config_file)
+    configuration: Configuration = load_configuration()
     base_url = configuration.app.base_url
 
     application_context = ApplicationContext(configuration)
@@ -82,7 +91,7 @@ def create_app() -> FastAPI:
         store=application_context.get_log_store(),
     )
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
-
+    application_context._log_config_summary()
     # The correct and final code to use
     @asynccontextmanager
     async def lifespan(app: FastAPI):

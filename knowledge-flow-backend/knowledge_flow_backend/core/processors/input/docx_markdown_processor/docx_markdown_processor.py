@@ -30,6 +30,8 @@ def default_or_unknown(value: str, default="None") -> str:
 
 
 class DocxMarkdownProcessor(BaseMarkdownProcessor):
+    description = "Converts DOCX files to Markdown while preserving headings, tables, and basic formatting."
+
     def check_file_validity(self, file_path: Path) -> bool:
         try:
             with zipfile.ZipFile(file_path, "r") as docx_zip:

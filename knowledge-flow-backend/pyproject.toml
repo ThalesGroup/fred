@@ -49,6 +49,7 @@ dependencies = [
   "matplotlib>=3.10.7",
   "scikit-learn>=1.7.2",
   "langchain-text-splitters>=1.0.0",
+  "neo4j>=5.27.0",
   # MarkItDown extras: ensure .docx support is available for the lite DOCX path
   # Note: keep python-docx pinned above; markitdown[docx] will ensure runtime deps
   "markitdown[all]>=0.1.3",

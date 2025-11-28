@@ -71,7 +71,7 @@ def minimal_generalist_config() -> Configuration:
             feature_flags=FrontendFlags(
                 enableK8Features=False, enableElecWarfare=False
             ),
-            properties=Properties(logoName="fred"),
+            properties=Properties(logoName="fred", logoNameDark="fred-dark", siteDisplayName="Fred"),
         ),
         security=fake_security_config,
         ai=AIConfig(

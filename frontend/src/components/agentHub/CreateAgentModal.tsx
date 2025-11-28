@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from "@mui/material";
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Typography } from "@mui/material";
 import Grid2 from "@mui/material/Grid2";
 import React from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -22,7 +22,7 @@ import { z } from "zod";
 
 // OpenAPI-generated types & hook
 import {
-  CreateAgentRequest,
+  CreateMcpAgentRequest,
   useCreateAgentAgenticV1AgentsCreatePostMutation,
 } from "../../slices/agentic/agenticOpenApi";
 
@@ -63,12 +63,12 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({ open, onClos
   const submit = async (data: FormData) => {
     // 2. Construct the request object.
     // Set all suppressed fields to safe, empty values to satisfy the API contract.
-    const req: CreateAgentRequest = {
+    const req: CreateMcpAgentRequest = {
       name: data.name.trim(),
     };
 
     try {
-      await createAgent({ createAgentRequest: req }).unwrap();
+      await createAgent({ createMcpAgentRequest: req }).unwrap();
       onCreated();
       reset();
       onClose();
@@ -82,18 +82,21 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({ open, onClos
         summary: t("agentHub.errors.creationFailedSummary"),
         detail: e?.data?.detail || e.message || e.toString(),
       });
-      console.error("Create agent failed:", e);
+      console.error("Create MCP agent failed:", e);
     }
   };
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
-      <DialogTitle>{t("agentHub.createAgent")}</DialogTitle>
+      <DialogTitle>{t("agentHub.createMcpAgent")}</DialogTitle>
       <DialogContent dividers>
         {/* Note: The <form> element is required for handleSubmit, but we'll manually trigger it below */}
         <form onSubmit={handleSubmit(submit)}>
           <Grid2 container spacing={2}>
             <Grid2 size={12}>
+              <Typography variant="body2" color="textSecondary" mb={2}>
+                {t("agentHub.createMcpAgent")}
+              </Typography>
               {/* Only the 'name' field remains in the UI */}
               <Controller
                 name="name"

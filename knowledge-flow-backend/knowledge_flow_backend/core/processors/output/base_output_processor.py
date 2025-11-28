@@ -14,6 +14,7 @@
 
 import logging
 from abc import ABC, abstractmethod
+from typing import Optional
 
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
 
@@ -41,6 +42,8 @@ class BaseOutputProcessor(ABC):
     - Testability: enables unit testing of post-processing logic without involving actual file I/O.
     - Uniformity: keeps the processing pipeline modular and easy to extend.
     """
+
+    description: Optional[str] = None
 
     @abstractmethod
     def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:

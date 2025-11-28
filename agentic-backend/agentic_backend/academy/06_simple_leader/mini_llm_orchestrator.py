@@ -87,7 +87,7 @@ class OrchestratorState(TypedDict):
 # ----------------------------------------------------------------------
 ## 2. Minimal Orchestrator Agent
 # ----------------------------------------------------------------------
-@expose_runtime_source("agent.MiniLLMOrchestrator")
+@expose_runtime_source("agent.Appollo")
 class MiniLLMOrchestrator(LeaderFlow):
     """
     A minimal leader: uses LLMAgentSelector to Route, delegates to one Expert,

@@ -96,8 +96,11 @@ data:
             "method": {
               "name": "hnsw",
               "engine": "lucene",
-              "space_type": "l2",
-              "parameters": { "ef_construction": 512, "m": 16 }
+              "space_type": "cosinesimil",
+              "parameters": {
+                "ef_construction": 512,
+                "m": 16
+              }
             }
           },
           "metadata": {

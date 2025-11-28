@@ -48,6 +48,7 @@ import {
   DocumentMetadata,
   RescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostApiArg,
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
+  useProcessLibraryKnowledgeFlowV1ProcessLibraryPostMutation,
   useRescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
@@ -55,11 +56,12 @@ import { EmptyState } from "../../EmptyState";
 import { TableSkeleton } from "../../TableSkeleton";
 import { useToast } from "../../ToastProvider";
 import { DocumentOperationsTable } from "./DocumentOperationsTable";
+import { useDocumentActions } from "../common/useDocumentActions";
 
 interface DocumentsViewProps {}
 
 export const DocumentOperations = ({}: DocumentsViewProps) => {
-  const { showError } = useToast();
+  const { showError, showSuccess } = useToast();
   const { t } = useTranslation();
   const theme = useTheme();
 
@@ -70,6 +72,7 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
   const tagMap = new Map(allDocumentLibraries.map((tag) => [tag.id, tag.name]));
 
   const [rescanCatalogSource] = useRescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostMutation();
+  const [processLibrary, { isLoading: isProcessingLibrary }] = useProcessLibraryKnowledgeFlowV1ProcessLibraryPostMutation();
 
   // UI States
   const [documentsPerPage, setDocumentsPerPage] = useState(20);
@@ -85,6 +88,8 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
   // Backend Data States
   const [allDocuments, setAllDocuments] = useState<DocumentMetadata[]>([]);
   const [totalDocCount, setTotalDocCount] = useState<number>();
+  const [selectedDocuments, setSelectedDocuments] = useState<DocumentMetadata[]>([]);
+  const [selectionResetCounter, setSelectionResetCounter] = useState(0);
 
   // Source + Permissions
   const selectedSource = allSources?.find((s) => s.tag === selectedSourceTag);
@@ -114,6 +119,63 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
       showError({
         summary: t("scheduler.refreshFailed"),
         detail: err?.data?.detail || err?.message || "Unknown error occurred while refreshing.",
+      });
+    }
+  };
+
+  const handleProcessLibrary = async () => {
+    if (!selectedLibrary.length) {
+      showError({
+        summary: "No library selected",
+        detail: "Select a single library to run library processors.",
+      });
+      return;
+    }
+    const libraryTagId = selectedLibrary[0];
+
+    try {
+      // Default to library TOC processor for now; later this could be user-selectable.
+      const processorPath =
+        "knowledge_flow_backend.core.library_processors.library_toc_output_processor.LibraryTocOutputProcessor";
+      await processLibrary({
+        processLibraryRequest: {
+          library_tag: libraryTagId,
+          processor: processorPath,
+          document_uids: undefined,
+        },
+      }).unwrap();
+
+      showSuccess({
+        summary: "Library processing started",
+        detail: `Processing queued for library ${tagMap.get(libraryTagId) ?? libraryTagId}.`,
+      });
+    } catch (err: any) {
+      console.error("Process library failed:", err);
+      showError({
+        summary: "Failed to start library processing",
+        detail: err?.data?.detail || err?.message || "Unknown error occurred while submitting the job.",
+      });
+    }
+  };
+
+  const handleProcessDocuments = async () => {
+    if (!selectedDocuments.length) {
+      showError({
+        summary: "No documents selected",
+        detail: "Select one or more documents to process.",
+      });
+      return;
+    }
+
+    try {
+      await processDocumentsAction(selectedDocuments);
+      setSelectedDocuments([]);
+      setSelectionResetCounter((prev) => prev + 1);
+    } catch (err: any) {
+      console.error("Process documents failed:", err);
+      showError({
+        summary: "Failed to start document processing",
+        detail: err?.data?.detail || err?.message || "Unknown error occurred while submitting the job.",
       });
     }
   };
@@ -150,6 +212,8 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
       });
     }
   };
+
+  const { processDocuments: processDocumentsAction, isProcessing: isProcessingDocuments } = useDocumentActions(fetchFiles);
 
   useEffect(() => {
     if (allSources && selectedSourceTag === null) {
@@ -303,6 +367,27 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
                 )}
               </Grid2>
             </Grid2>
+
+            <Box display="flex" justifyContent="flex-end" mt={2} gap={1}>
+              {(selectedDocuments.length > 0 || isProcessingDocuments) && (
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  onClick={handleProcessDocuments}
+                  disabled={!selectedDocuments.length || isProcessingDocuments}
+                >
+                  {isProcessingDocuments ? "Processing documents..." : "Process documents"}
+                </Button>
+              )}
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleProcessLibrary}
+                disabled={!selectedLibrary.length || isProcessingLibrary}
+              >
+                {isProcessingLibrary ? "Processing library..." : "Process library"}
+              </Button>
+            </Box>
           </Grid2>
         </Grid2>
       </Paper>
@@ -330,7 +415,13 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
               {t("documentLibrary.documents", { count: totalDocCount })}
             </Typography>
 
-            <DocumentOperationsTable files={allDocuments} onRefreshData={fetchFiles} showSelectionActions={true} />
+            <DocumentOperationsTable
+              files={allDocuments}
+              onRefreshData={fetchFiles}
+              showSelectionActions={false}
+              onSelectionChange={setSelectedDocuments}
+              resetSelectionSignal={selectionResetCounter}
+            />
 
             <Box display="flex" alignItems="center" mt={3} justifyContent="space-between">
               <Pagination

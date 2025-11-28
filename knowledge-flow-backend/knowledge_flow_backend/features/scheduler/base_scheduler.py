@@ -58,7 +58,7 @@ class BaseScheduler(ABC):
         self._last_workflow_by_user: Dict[str, str] = {}
 
     @abstractmethod
-    async def start_ingestion(
+    async def start_document_processing(
         self,
         user: KeycloakUser,
         definition: PipelineDefinition,
@@ -68,6 +68,26 @@ class BaseScheduler(ABC):
         Start an ingestion workflow for the given user and pipeline definition.
 
         Returns a WorkflowHandle containing the workflow_id (and optionally run_id).
+        """
+        pass
+
+    @abstractmethod
+    async def start_library_processing(
+        self,
+        user: KeycloakUser,
+        library_tag: str,
+        processor_path: str,
+        document_uids: Optional[List[str]] = None,
+        background_tasks: Optional[BackgroundTasks] = None,
+    ) -> WorkflowHandle:
+        """
+        Start a library-level processing workflow.
+
+        Args:
+            user: Caller identity.
+            library_tag: Tag identifying the library to process.
+            processor_path: Fully qualified class path for a LibraryOutputProcessor.
+            document_uids: Optional subset of documents within the library tag.
         """
         pass
 
@@ -85,6 +105,9 @@ class BaseScheduler(ABC):
 
     def _register_workflow(self, user: KeycloakUser, definition: PipelineDefinition) -> WorkflowHandle:
         document_uids = self._extract_document_uids(definition)
+        return self._register_workflow_for_uids(user, document_uids)
+
+    def _register_workflow_for_uids(self, user: KeycloakUser, document_uids: List[str]) -> WorkflowHandle:
         workflow_id = f"wf-{uuid4()}"
 
         with self._lock:

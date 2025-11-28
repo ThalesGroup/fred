@@ -67,6 +67,7 @@ export const AgentCard = ({
   const theme = useTheme();
   const tags = agent.tuning.tags ?? [];
   const tagLabel = tags.join(", ");
+  const tooltipBg = theme.palette.mode === "dark" ? "rgba(19, 23, 31, 0.94)" : theme.palette.background.paper;
 
   return (
     <Card
@@ -170,23 +171,48 @@ export const AgentCard = ({
         }}
       >
         {/* Description — clamp to 3 lines for uniform height */}
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          sx={{
-            mb: 0.5,
-            display: "-webkit-box",
-            WebkitBoxOrient: "vertical",
-            WebkitLineClamp: 3,
-            overflow: "hidden",
-            minHeight: "3.6em", // ~3 lines @ 1.2 line-height
-            flexGrow: 1,
-            opacity: agent.enabled ? 1 : 0.5,
-          }}
+        <Tooltip
           title={agent.tuning.description || ""}
+          placement="top-start"
+          arrow
+          disableHoverListener={!agent.tuning.description}
+          slotProps={{
+            tooltip: {
+              sx: {
+                bgcolor: tooltipBg,
+                color: theme.palette.text.primary,
+                border: `1.5px solid ${theme.palette.divider}`,
+                boxShadow: theme.shadows[8],
+                borderRadius: 1.5,
+                px: 3.75,
+                py: 3.25,
+                maxWidth: 420,
+              },
+            },
+            arrow: {
+              sx: {
+                color: tooltipBg,
+              },
+            },
+          }}
         >
-          {agent.tuning.description}
-        </Typography>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{
+              mb: 0.5,
+              display: "-webkit-box",
+              WebkitBoxOrient: "vertical",
+              WebkitLineClamp: 3,
+              overflow: "hidden",
+              minHeight: "3.6em", // ~3 lines @ 1.2 line-height
+              flexGrow: 1,
+              opacity: agent.enabled ? 1 : 0.5,
+            }}
+          >
+            {agent.tuning.description}
+          </Typography>
+        </Tooltip>
         {/* Footer actions (unchanged) */}
         <Stack direction="row" gap={0.5} sx={{ ml: "auto" }}>
           {agent.type === "leader" && onManageCrew && (

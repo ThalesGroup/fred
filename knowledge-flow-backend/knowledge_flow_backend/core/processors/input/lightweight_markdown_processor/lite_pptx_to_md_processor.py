@@ -52,6 +52,8 @@ class LitePptxToMdExtractor(BaseLiteMdProcessor):
     - Always enforce token discipline: normalize + max_chars cap.
     """
 
+    description = "Fast PPTX-to-Markdown extractor supporting slide-wise or whole-deck paths."
+
     def __init__(self) -> None:
         self._md = MarkItDown()
 
@@ -326,6 +328,8 @@ class LitePptxMarkdownProcessor(BaseMarkdownProcessor):
     Adapter so the lightweight PPTX extractor can be used as a full
     ingestion-time BaseMarkdownProcessor while reusing LitePptxToMdExtractor.
     """
+
+    description = "Lightweight PPTX ingestion that converts slides to Markdown previews."
 
     def __init__(self) -> None:
         super().__init__()

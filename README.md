@@ -475,11 +475,16 @@ Open <http://localhost:5173> in your browser.
 
 ## Production mode
 
-For production mode, please reach out to your DevOps team so that they tune Fred configuration to match your needs. See [this section](#advanced-configuration) on advanced configuration.
+For production deployments (Kubernetes, VMs, on-prem or cloud), refer to:
+
+- [`docs/DEPLOYMENT_GUIDE.md`](./docs/DEPLOYMENT_GUIDE.md) – high-level deployment guide (components, configuration, external dependencies).
+- [`docs/DEPLOYMENT_GUIDE_OPENSEARCH.md`](./docs/DEPLOYMENT_GUIDE_OPENSEARCH.md) – **mandatory** OpenSearch requirements for vector search.
+
+The rest of this `README.md` focuses on local developer setup and model configuration.
 
 ## Agent coding academy
 
-Refer to the sample third-party application in [academy samples](./academy/README.md).
+Refer to the sample third-party applications in [academy samples](./academy/README.md).
 Refer to the [academy agents](./agentic-backend/agentic_backend/academy/ACADEMY.md) for a number of sample agents.
 
 ## Advanced configuration

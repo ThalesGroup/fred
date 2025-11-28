@@ -73,38 +73,14 @@ document_sources:
     description: "Personal local documents available for pull-mode ingestion"
 embedding_model:
   provider: ollama
-  name: bge-m3:567m-fp16
-# Configuration for the LLM used for summary, keyword generation
-# and other text generation tasks.
-#chat_model:
-#  provider: openai # openai | azure | ollama
-#  name: gpt-4o-mini # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
+  name: bge-m3:latest
+  settings:
+    base_url: http://localhost:11434
 chat_model:
-   provider: ollama
-   name: mistral-small3.2:24b-instruct-2506-fp16         # any chat-capable Ollama model you pulled
-   settings:
-     base_url: http://localhost:31434
-#      temperature: 0.7                # optional, forwarded to LangChain Ollama wrapper
-# chat_model:
-#   provider: azure
-#   # azure use deployment name instead of a plain model name as OpenAI does. The principle
-#   # is the same.
-#   name: fred-gpt-4o              # Azure deployment name for your chat model
-#   settings:
-#     azure_endpoint: https://<your-azure-openai>.openai.azure.com
-#     api_version: 2024-05-01-preview
-# chat_model:
-#   provider: azure-apim        # openai | azure | ollama
-#   # azure use deployment name instead of a plain model name as openai. The principle
-#   # is the same.
-#   name: fred-gpt-4o       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
-#   settings:
-#     azure_ad_client_id: "5e5d67c9-22af-4044-bc8e-5df58d7a5e6e"
-#     azure_ad_client_scope: "api://5e5d67c9-22af-4044-bc8e-5df58d7a5e6e/.default"
-#     azure_apim_base_url: "https://tehopenai.openai.azure.com/"
-#     azure_apim_resource_path: "/genai-aoai-inference/v2"
-#     azure_openai_api_version: "2024-06-01"
-#     azure_tenant_id: "737c6905-f186-4bcf-afb3-43e349ee23a3"
+  provider: ollama
+  name: granite4:3b-h
+  settings:
+    base_url: http://localhost:11434
 storage:
   postgres:
     host: localhost

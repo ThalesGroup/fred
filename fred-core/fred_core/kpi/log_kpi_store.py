@@ -52,10 +52,10 @@ class KpiLogStore(BaseKPIStore):
         )
 
     def bulk_index(self, events: List[KPIEvent]) -> None:
-        self._log(f"[KPI][log] bulk_index: {len(events)} events")
+        self._log(f"[KPI][LOG] bulk_index: {len(events)} events")
 
     def query(self, q: KPIQuery) -> KPIQueryResult:
-        self._log(f"[KPI][log] query: {q.model_dump(exclude_none=True)}")
+        self._log(f"[KPI][LOG] query: {q.model_dump(exclude_none=True)}")
         return KPIQueryResult(rows=[])
 
     def _log(self, msg: str) -> None:

@@ -22,7 +22,6 @@ Includes:
 - Dynamic agent class loading and access
 - Context service management
 """
-
 import asyncio
 import logging
 import os
@@ -637,7 +636,6 @@ class ApplicationContext:
         Does NOT print secrets; only presence/masked hints.
         """
         cfg = self.configuration
-
         logger.info("🔧 Agentic configuration summary")
         logger.info("────────────────────────────────────────────────────────────────")
 

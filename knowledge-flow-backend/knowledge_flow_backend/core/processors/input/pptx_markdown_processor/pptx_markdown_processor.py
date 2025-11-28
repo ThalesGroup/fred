@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 
 class PptxMarkdownProcessor(BaseMarkdownProcessor):
+    description = "Converts PPTX slide decks into Markdown sections, slide by slide."
+
     def check_file_validity(self, file_path: Path) -> bool:
         """Checks if the PPTX file is valid and can be opened."""
         try:

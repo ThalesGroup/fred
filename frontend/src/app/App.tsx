@@ -29,13 +29,14 @@ function FredUi() {
   const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
   const siteDisplayName = frontendConfig?.frontend_settings?.properties?.siteDisplayName || "Fred";
   const logoName = frontendConfig?.frontend_settings?.properties?.logoName || "fred";
+  const logoNameDark = frontendConfig?.frontend_settings?.properties?.logoNameDark || "fred-dark";
 
   useEffect(() => {
     document.title = siteDisplayName;
-    const favicon = document.getElementById("favicon") as HTMLLinkElement | null;
-    if (favicon) {
-      favicon.href = `/images/${logoName}.svg`;
-    }
+    const favicon = document.getElementById("favicon") as HTMLLinkElement;
+    const isDark = window.matchMedia("(prefers-color-scheme: dark)");
+    if (isDark.matches) favicon.href = `/images/${logoNameDark}.svg`;
+    else favicon.href = `/images/${logoName}.svg`;
   }, [siteDisplayName, logoName]);
 
   useEffect(() => {
