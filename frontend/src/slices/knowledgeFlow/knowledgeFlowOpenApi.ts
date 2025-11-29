@@ -437,6 +437,45 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/resources/${queryArg.resourceId}`, method: "DELETE" }),
     }),
+    listFiles: build.query<ListFilesApiResponse, ListFilesApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/list`,
+        params: {
+          prefix: queryArg.prefix,
+        },
+      }),
+    }),
+    statFileOrDirectory: build.query<StatFileOrDirectoryApiResponse, StatFileOrDirectoryApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/stat/${queryArg.path}` }),
+    }),
+    catFile: build.query<CatFileApiResponse, CatFileApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/cat/${queryArg.path}` }),
+    }),
+    writeFile: build.mutation<WriteFileApiResponse, WriteFileApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/write/${queryArg.path}`,
+        method: "POST",
+        body: queryArg.bodyWriteFile,
+      }),
+    }),
+    deleteFile: build.mutation<DeleteFileApiResponse, DeleteFileApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/delete/${queryArg.path}`, method: "DELETE" }),
+    }),
+    grepFileRegex: build.query<GrepFileRegexApiResponse, GrepFileRegexApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/grep`,
+        params: {
+          pattern: queryArg.pattern,
+          prefix: queryArg.prefix,
+        },
+      }),
+    }),
+    printRootDirectory: build.query<PrintRootDirectoryApiResponse, PrintRootDirectoryApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/fs/print_root_dir` }),
+    }),
+    createDirectory: build.mutation<CreateDirectoryApiResponse, CreateDirectoryApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/mkdir/${queryArg.path}`, method: "POST" }),
+    }),
     listEntriesKnowledgeFlowV1FsListGet: build.query<
       ListEntriesKnowledgeFlowV1FsListGetApiResponse,
       ListEntriesKnowledgeFlowV1FsListGetApiArg
@@ -996,6 +1035,38 @@ export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiResponse =
   /** status 200 Successful Response */ any;
 export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiArg = {
   resourceId: string;
+};
+export type ListFilesApiResponse = /** status 200 Successful Response */ any;
+export type ListFilesApiArg = {
+  prefix?: string;
+};
+export type StatFileOrDirectoryApiResponse = /** status 200 Successful Response */ any;
+export type StatFileOrDirectoryApiArg = {
+  path: string;
+};
+export type CatFileApiResponse = /** status 200 Successful Response */ any;
+export type CatFileApiArg = {
+  path: string;
+};
+export type WriteFileApiResponse = /** status 200 Successful Response */ any;
+export type WriteFileApiArg = {
+  path: string;
+  bodyWriteFile: BodyWriteFile;
+};
+export type DeleteFileApiResponse = /** status 200 Successful Response */ any;
+export type DeleteFileApiArg = {
+  path: string;
+};
+export type GrepFileRegexApiResponse = /** status 200 Successful Response */ any;
+export type GrepFileRegexApiArg = {
+  pattern: string;
+  prefix?: string;
+};
+export type PrintRootDirectoryApiResponse = /** status 200 Successful Response */ any;
+export type PrintRootDirectoryApiArg = void;
+export type CreateDirectoryApiResponse = /** status 200 Successful Response */ any;
+export type CreateDirectoryApiArg = {
+  path: string;
 };
 export type ListEntriesKnowledgeFlowV1FsListGetApiResponse = /** status 200 Successful Response */ any;
 export type ListEntriesKnowledgeFlowV1FsListGetApiArg = {
@@ -1646,6 +1717,9 @@ export type ResourceUpdate = {
   description?: string | null;
   labels?: string[] | null;
 };
+export type BodyWriteFile = {
+  data: string;
+};
 export type BodyWriteKnowledgeFlowV1FsWritePathPost = {
   data: string;
 };
@@ -1947,6 +2021,19 @@ export const {
   useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
   useLazyGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
   useDeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteMutation,
+  useListFilesQuery,
+  useLazyListFilesQuery,
+  useStatFileOrDirectoryQuery,
+  useLazyStatFileOrDirectoryQuery,
+  useCatFileQuery,
+  useLazyCatFileQuery,
+  useWriteFileMutation,
+  useDeleteFileMutation,
+  useGrepFileRegexQuery,
+  useLazyGrepFileRegexQuery,
+  usePrintRootDirectoryQuery,
+  useLazyPrintRootDirectoryQuery,
+  useCreateDirectoryMutation,
   useListEntriesKnowledgeFlowV1FsListGetQuery,
   useLazyListEntriesKnowledgeFlowV1FsListGetQuery,
   useStatKnowledgeFlowV1FsStatPathGetQuery,

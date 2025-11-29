@@ -49,7 +49,7 @@ def parse_server_configuration(configuration_path: str) -> Configuration:
 def get_class_path(cls: type) -> str:
     """
     Returns the fully qualified class path as a string, e.g.:
-    'agentic_backend.core.agents.mcp_agent.MCPAgent'
+    'agentic_backend.core.agents.basic_react_agent.BasicReActAgent'
     """
     module = inspect.getmodule(cls)
     if not module or not hasattr(cls, "__name__"):
