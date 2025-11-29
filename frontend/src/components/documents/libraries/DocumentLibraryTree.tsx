@@ -149,12 +149,15 @@ export function DocumentLibraryTree({
       const isExpanded = expanded.includes(c.full);
       const isSelected = selectedFolder === c.full;
 
-      const docsHere = documents.filter((doc) => docBelongsToNode(doc, c));
+      const directDocs = documents.filter((doc) => docBelongsToNode(doc, c));
       const folderTag = getPrimaryTag(c);
 
       // Folder tri-state against THIS folder’s tag.
-      const subtree = docsInSubtree(c, documents, getChildren);
-      const eligibleDocs = folderTag ? subtree.filter((d) => (d.tags?.tag_ids ?? []).includes(folderTag.id)) : [];
+      const subtreeDocs = docsInSubtree(c, documents, getChildren);
+      const eligibleDocs = folderTag
+        ? subtreeDocs.filter((d) => (d.tags?.tag_ids ?? []).includes(folderTag.id))
+        : [];
+      const totalDocCount = new Set(subtreeDocs.map((d) => d.identity.document_uid)).size;
       const totalForTag = eligibleDocs.length;
       const selectedForTag = folderTag
         ? eligibleDocs.filter((d) => selectedDocs[d.identity.document_uid]?.id === folderTag.id).length
@@ -200,7 +203,7 @@ export function DocumentLibraryTree({
                 />
                 {isExpanded ? <FolderOpenOutlinedIcon fontSize="small" /> : <FolderOutlinedIcon fontSize="small" />}
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
-                <Tooltip key={`${c.name}_count`} title={`${docsHere.length} Documents`} arrow>
+                <Tooltip key={`${c.name}_count`} title={`${totalDocCount} Documents`} arrow>
                   <Box
                     sx={{
                       bgcolor: "#e0e0e0",
@@ -216,7 +219,7 @@ export function DocumentLibraryTree({
                       justifyContent: "center",
                     }}
                   >
-                    {docsHere.length}
+                    {totalDocCount}
                   </Box>
                 </Tooltip>
               </Box>
@@ -265,7 +268,7 @@ export function DocumentLibraryTree({
           {c.children.size ? renderTree(c) : null}
 
           {/* Documents directly in this folder */}
-          {docsHere.map((doc) => {
+          {directDocs.map((doc) => {
             const docId = doc.identity.document_uid;
             const tag = folderTag; // context tag for row selection/delete
             const isSelectedHere = tag ? selectedDocs[docId]?.id === tag.id : false;
