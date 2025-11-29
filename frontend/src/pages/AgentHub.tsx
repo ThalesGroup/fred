@@ -40,10 +40,8 @@ import { CrewEditor } from "../components/agentHub/CrewEditor";
 // OpenAPI
 import {
   Leader,
-  McpServerConfiguration,
   useDeleteAgentAgenticV1AgentsNameDeleteMutation,
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
-  useListMcpServersAgenticV1AgentsMcpServersGetQuery,
 } from "../slices/agentic/agenticOpenApi";
 
 // UI union facade
@@ -116,8 +114,7 @@ export const AgentHub = () => {
   const [agentForAssetManagement, setAgentForAssetManagement] = useState<AnyAgent | null>(null);
 
   const [triggerGetFlows, { isFetching }] = useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
-  const { data: mcpServersData, isFetching: isFetchingMcpServers } =
-    useListMcpServersAgenticV1AgentsMcpServersGetQuery();
+
   const { updateEnabled } = useAgentUpdater();
   const [triggerGetSource] = useLazyGetRuntimeSourceTextQuery();
 
@@ -193,27 +190,6 @@ export const AgentHub = () => {
   }, []);
 
   const handleTabChange = (_event: SyntheticEvent, newValue: number) => setTabValue(newValue);
-
-  const knownMcpServers = useMemo<McpServerConfiguration[]>(() => {
-    if (!mcpServersData) return [];
-
-    const ensureArray = Array.isArray(mcpServersData)
-      ? mcpServersData
-      : Array.isArray((mcpServersData as { items?: unknown }).items)
-        ? ((mcpServersData as { items?: unknown }).items as unknown[])
-        : [];
-
-    return ensureArray
-      .filter((server): server is McpServerConfiguration => {
-        if (!server || typeof server !== "object") return false;
-        const name = (server as { name?: unknown }).name;
-        return typeof name === "string" && name.trim().length > 0;
-      })
-      .map((server) => ({
-        ...(server as McpServerConfiguration),
-        name: ((server as { name: string }).name || "").trim(),
-      }));
-  }, [mcpServersData]);
 
   const filteredAgents = useMemo(() => {
     if (tabValue === 0) return agents;
@@ -489,14 +465,7 @@ export const AgentHub = () => {
           </Card>
         </Fade>
         {/* Drawers / Modals */}
-        <AgentEditDrawer
-          open={editOpen}
-          agent={selected}
-          onClose={() => setEditOpen(false)}
-          onSaved={fetchAgents}
-          knownMcpServers={knownMcpServers}
-          isLoadingKnownMcpServers={isFetchingMcpServers}
-        />
+        <AgentEditDrawer open={editOpen} agent={selected} onClose={() => setEditOpen(false)} onSaved={fetchAgents} />
         <CrewEditor
           open={crewOpen}
           leader={selected && isLeader(selected) ? (selected as Leader & { type: "leader" }) : null}

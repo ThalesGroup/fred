@@ -37,7 +37,14 @@ class MinioFilesystem(BaseFilesystem):
     Dossiers sont simulés via préfixe.
     """
 
-    def __init__(self, endpoint: str, access_key: str, secret_key: str, bucket_name: str, secure: bool):
+    def __init__(
+        self,
+        endpoint: str,
+        access_key: str,
+        secret_key: str,
+        bucket_name: str,
+        secure: bool,
+    ):
         """
         Initialize a MinIO client and create the bucket if it does not exist.
 
@@ -50,9 +57,13 @@ class MinioFilesystem(BaseFilesystem):
         """
         parsed = urlparse(endpoint)
         if parsed.path not in (None, "") and parsed.path != "/":
-            raise RuntimeError(f"Invalid MinIO endpoint: '{endpoint}'. Must not include path.")
-        
-        self._clean_endpoint = parsed.netloc or endpoint.replace("https://", "").replace("http://", "")
+            raise RuntimeError(
+                f"Invalid MinIO endpoint: '{endpoint}'. Must not include path."
+            )
+
+        self._clean_endpoint = parsed.netloc or endpoint.replace(
+            "https://", ""
+        ).replace("http://", "")
         self.secure = secure
         self.bucket_name = bucket_name
 
@@ -60,7 +71,7 @@ class MinioFilesystem(BaseFilesystem):
             self._clean_endpoint,
             access_key=access_key,
             secret_key=secret_key,
-            secure=secure
+            secure=secure,
         )
 
         # Prefix injected externally by the app if needed (ex: user_id/)
@@ -89,7 +100,7 @@ class MinioFilesystem(BaseFilesystem):
 
         # Remove existing prefix if present
         if path.startswith(self.prefix):
-            path = path[len(self.prefix):]
+            path = path[len(self.prefix) :]
 
         return f"{self.prefix}{path}"
 
@@ -132,15 +143,18 @@ class MinioFilesystem(BaseFilesystem):
         parent = "/".join(full.rstrip("/").split("/")[:-1])
         if parent:
             # list_objects with recursive=False checks direct children only
-            objs = list(self.client.list_objects(self.bucket_name, prefix=parent + "/", recursive=False))
+            objs = list(
+                self.client.list_objects(
+                    self.bucket_name, prefix=parent + "/", recursive=False
+                )
+            )
             if not objs:
-                raise FileNotFoundError(f"Parent path '{parent}' does not exist. Cannot write '{full}'.")
+                raise FileNotFoundError(
+                    f"Parent path '{parent}' does not exist. Cannot write '{full}'."
+                )
 
         self.client.put_object(
-            self.bucket_name,
-            full,
-            data=BytesIO(data_bytes),
-            length=len(data_bytes)
+            self.bucket_name, full, data=BytesIO(data_bytes), length=len(data_bytes)
         )
 
     async def list(self, prefix: str = "") -> List[FilesystemResourceInfoResult]:
@@ -156,33 +170,46 @@ class MinioFilesystem(BaseFilesystem):
         """
         full_prefix = self._resolve_path(prefix)
 
-        all_objects = list(self.client.list_objects(self.bucket_name, prefix=full_prefix, recursive=True))
+        all_objects = list(
+            self.client.list_objects(
+                self.bucket_name, prefix=full_prefix, recursive=True
+            )
+        )
         results: List[FilesystemResourceInfoResult] = []
 
         # Files
         for obj in all_objects:
-            results.append(FilesystemResourceInfoResult(
-                path=obj.object_name,
-                size=obj.size,
-                type=FilesystemResourceInfo.FILE,
-                modified=obj.last_modified
-            ))
+            if obj.object_name is not None:
+                results.append(
+                    FilesystemResourceInfoResult(
+                        path=obj.object_name,
+                        size=obj.size,
+                        type=FilesystemResourceInfo.FILE,
+                        modified=obj.last_modified,
+                    )
+                )
 
         # Infer directories from prefixes
         dirs: Set[str] = set()
         for obj in all_objects:
-            parts = obj.object_name.split("/")
-            for i in range(1, len(parts)):
-                dirs.add("/".join(parts[:i]))
+            if obj.object_name is not None:
+                parts = obj.object_name.split("/")
+                for i in range(1, len(parts)):
+                    dirs.add("/".join(parts[:i]))
 
         for d in dirs:
-            if not any(r.path == d and r.type == FilesystemResourceInfo.DIRECTORY for r in results):
-                results.append(FilesystemResourceInfoResult(
-                    path=d,
-                    size=None,
-                    type=FilesystemResourceInfo.DIRECTORY,
-                    modified=None
-                ))
+            if not any(
+                r.path == d and r.type == FilesystemResourceInfo.DIRECTORY
+                for r in results
+            ):
+                results.append(
+                    FilesystemResourceInfoResult(
+                        path=d,
+                        size=None,
+                        type=FilesystemResourceInfo.DIRECTORY,
+                        modified=None,
+                    )
+                )
 
         # Sort by path to emulate 'ls -alh'
         results.sort(key=lambda x: x.path)
@@ -219,15 +246,11 @@ class MinioFilesystem(BaseFilesystem):
 
         # Ensure path ends with a slash
         dir_path = self._resolve_path(path).rstrip("/") + "/"
-        
+
         # Put empty object to represent the directory
         from io import BytesIO
-        self.client.put_object(
-            self.bucket_name,
-            dir_path,
-            data=BytesIO(b""),
-            length=0
-        )
+
+        self.client.put_object(self.bucket_name, dir_path, data=BytesIO(b""), length=0)
 
     async def exists(self, path: str) -> bool:
         """
@@ -246,7 +269,11 @@ class MinioFilesystem(BaseFilesystem):
             self.client.stat_object(self.bucket_name, full)
             return True
         except Exception:
-            objs = list(self.client.list_objects(self.bucket_name, prefix=full.rstrip("/") + "/", recursive=False))
+            objs = list(
+                self.client.list_objects(
+                    self.bucket_name, prefix=full.rstrip("/") + "/", recursive=False
+                )
+            )
             return len(objs) > 0
 
     async def cat(self, path: str) -> str:
@@ -264,7 +291,6 @@ class MinioFilesystem(BaseFilesystem):
         """
         data = await self.read(path)
         return data.decode("utf-8")
-
 
     async def stat(self, path: str) -> FilesystemResourceInfoResult:
         """
@@ -285,19 +311,19 @@ class MinioFilesystem(BaseFilesystem):
                 path=full,
                 size=obj.size,
                 type=FilesystemResourceInfo.FILE,
-                modified=obj.last_modified
+                modified=obj.last_modified,
             )
         except Exception:
             # File not found, treat as directory (even if empty)
-            prefix = full.rstrip("/") + "/"
-            objs = list(self.client.list_objects(self.bucket_name, prefix=prefix, recursive=False))
+            # cd freprefix = full.rstrip("/") + "/"
+            # objs = list(self.client.list_objects(self.bucket_name, prefix=prefix, recursive=False))
             return FilesystemResourceInfoResult(
                 path=full,
                 size=None,
                 type=FilesystemResourceInfo.DIRECTORY,
-                modified=None
+                modified=None,
             )
-        
+
     async def grep(self, pattern: str, prefix: str = "") -> List[str]:
         """
         Search for a regex pattern in files under a given prefix.

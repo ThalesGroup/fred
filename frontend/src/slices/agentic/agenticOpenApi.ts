@@ -199,7 +199,8 @@ export type DeleteAgentAgenticV1AgentsNameDeleteApiResponse = /** status 200 Suc
 export type DeleteAgentAgenticV1AgentsNameDeleteApiArg = {
   name: string;
 };
-export type ListMcpServersAgenticV1AgentsMcpServersGetApiResponse = /** status 200 Successful Response */ any;
+export type ListMcpServersAgenticV1AgentsMcpServersGetApiResponse =
+  /** status 200 Successful Response */ McpServerConfiguration[];
 export type ListMcpServersAgenticV1AgentsMcpServersGetApiArg = void;
 export type ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiResponse = /** status 200 Successful Response */ any;
 export type ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiArg = void;
@@ -347,7 +348,7 @@ export type FieldSpec = {
   ui?: UiHints;
 };
 export type McpServerRef = {
-  name: string;
+  id: string;
   require_tools?: string[];
 };
 export type AgentTuning = {
@@ -371,7 +372,11 @@ export type AgentChatOptions = {
 };
 export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
+  id: string;
+  /** react-i18next key for the name of the MCP server. */
   name: string;
+  /** react-i18next key for the description of the MCP server. */
+  description?: string | null;
   /** MCP server transport. Can be sse, stdio, websocket or streamable_http */
   transport?: string | null;
   /** URL and endpoint of the MCP server */

@@ -14,6 +14,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from typing import List, Literal, Protocol
 
 
@@ -70,15 +71,18 @@ class BaseFilesystem(Protocol):
         """Search for regex pattern in files under a prefix."""
         ...
 
-class FilesystemResourceInfo:
+
+class FilesystemResourceInfo(Enum):
     FILE = "file"
     DIRECTORY = "directory"
+
 
 @dataclass
 class FilesystemResourceInfoResult:
     """
     Represents metadata about a file or directory.
     """
+
     path: str
     size: int | None
     type: Literal[FilesystemResourceInfo.FILE, FilesystemResourceInfo.DIRECTORY]
