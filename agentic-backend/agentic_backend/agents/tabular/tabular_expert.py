@@ -75,7 +75,7 @@ TABULAR_TUNING = AgentTuning(
         ),
     ],
     mcp_servers=[
-        MCPServerRef(id="mcp-knowledge-flow-mcp-tabular"),
+        MCPServerRef(name="mcp-knowledge-flow-mcp-tabular"),
     ],
 )
 

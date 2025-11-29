@@ -9,37 +9,37 @@ BANDIT_IGNORED_RULES ?= B101,B108
 ##@ Code quality
 
 .PHONY: lint
-lint: ## Run the linter (ruff)
+lint: dev ## Run the linter (ruff)
 	@echo "************ Executing Ruff linter ************"
 	$(UV) run ruff check
 
 .PHONY: lint-fix
-lint-fix: ## Run the linter (ruff) to fix all the auto fixable linter error
+lint-fix: dev ## Run the linter (ruff) to fix all the auto fixable linter error
 	@echo "************ Executing Ruff linter and apply fix if possible ************"
 	$(UV) run ruff check --fix
 
 .PHONY: import-order
-import-order: ## Run the formatter (ruff) to check import order
+import-order: dev ## Run the formatter (ruff) to check import order
 	@echo "************ Executing Ruff check for import order ************"
 	$(UV) run ruff check --select I
 
 .PHONY: import-order-fix
-import-order-fix: ## Run the formatter (ruff) to fix import order
+import-order-fix: dev ## Run the formatter (ruff) to fix import order
 	@echo "************ Executing Ruff check to fix import order ************"
 	$(UV) run ruff check --select I --fix
 
 .PHONY: format
-format: ## Run the formatter (ruff) to check for format errors
+format: dev ## Run the formatter (ruff) to check for format errors
 	@echo "************ Executing Ruff formatter ************"
 	$(UV) run ruff format --check
 
 .PHONY: format
-format-fix: ## Run the formatter (ruff) to fix format errors
+format-fix: dev ## Run the formatter (ruff) to fix format errors
 	@echo "************ Executing Ruff formatter ************"
 	$(UV) run ruff format
 
 .PHONY: sast
-sast: ## Run bandit
+sast: dev ## Run bandit
 	@echo "************ Executing Bandit with rules ${BANDIT_IGNORED_RULES} ingored (B101: assert_used, B108: hardcoded_tmp_directory) ************"
 	$(UV) run bandit \
 		-r ${PY_PACKAGE} \
@@ -47,16 +47,16 @@ sast: ## Run bandit
 		--baseline ${BANDIT_BASELINE_FILE}
 
 .PHONY: detect-secret
-detect-secret: ## Run a secret detection tool
+detect-secret: dev ## Run a secret detection tool
 	cd .. && git ls-files -z ${CURDIR} | xargs -0 ${VENV}/bin/detect-secrets-hook --baseline ${DETECT_SECRET_BASELINE_FILE}
 
 .PHONY: type-check
-type-check: ## Run type checker (basedpyright)
+type-check: dev ## Run type checker (basedpyright)
 	@echo "************ Executing Basedpyright type checker ************"
 	$(UV) run basedpyright --baseline-file ${BASEDPYRIGHT_BASELINE_FILE}
 
 .PHONY: code-quality
-code-quality: lint format sast detect-secret type-check ## Run all code quality checks
+code-quality: dev lint format sast detect-secret type-check ## Run all code quality checks
 	@echo "************ All code quality checks completed ************"
 
 # ------------------------------------------------------------

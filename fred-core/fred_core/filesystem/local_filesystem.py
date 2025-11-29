@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
@@ -10,6 +11,8 @@ from fred_core.filesystem.structures import (
     FilesystemResourceInfo,
     FilesystemResourceInfoResult,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class LocalFilesystem(BaseFilesystem):
@@ -42,7 +45,9 @@ class LocalFilesystem(BaseFilesystem):
         """
         final_path = (self.root / path).resolve()
         if not str(final_path).startswith(str(self.root)):
-            raise PermissionError(f"Access outside of filesystem root is forbidden: '{path}'")
+            raise PermissionError(
+                f"Access outside of filesystem root is forbidden: '{path}'"
+            )
         return final_path
 
     async def read(self, path: str) -> bytes:
@@ -103,10 +108,15 @@ class LocalFilesystem(BaseFilesystem):
                 if not str(p).startswith(str(self.root)):
                     continue
             except Exception:
+                logger.warning("Failed to resolve path during listing: %s", p)
                 continue
 
             st = p.stat()
-            typ = FilesystemResourceInfo.FILE if p.is_file() else FilesystemResourceInfo.DIRECTORY
+            typ = (
+                FilesystemResourceInfo.FILE
+                if p.is_file()
+                else FilesystemResourceInfo.DIRECTORY
+            )
 
             results.append(
                 FilesystemResourceInfoResult(
@@ -192,7 +202,11 @@ class LocalFilesystem(BaseFilesystem):
         if not full.exists():
             raise FileNotFoundError(f"{path} not found")
 
-        typ = FilesystemResourceInfo.FILE if full.is_file() else FilesystemResourceInfo.DIRECTORY
+        typ = (
+            FilesystemResourceInfo.FILE
+            if full.is_file()
+            else FilesystemResourceInfo.DIRECTORY
+        )
         size = full.stat().st_size if full.is_file() else None
         modified = datetime.fromtimestamp(full.stat().st_mtime)
 
@@ -200,7 +214,7 @@ class LocalFilesystem(BaseFilesystem):
             path=str(full.relative_to(self.root)),
             size=size,
             type=typ,
-            modified=modified
+            modified=modified,
         )
 
     async def grep(self, pattern: str, prefix: str = "") -> List[str]:

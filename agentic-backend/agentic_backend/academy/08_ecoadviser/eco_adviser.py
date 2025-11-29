@@ -127,7 +127,7 @@ ECO_TUNING = AgentTuning(
     # Fred rationale:
     # - On ne réinvente pas l'intégration back; on exploite la même passerelle MCP.
     mcp_servers=[
-        MCPServerRef(id="mcp-knowledge-flow-mcp-tabular"),
+        MCPServerRef(name="mcp-knowledge-flow-mcp-tabular"),
     ],
 )
 

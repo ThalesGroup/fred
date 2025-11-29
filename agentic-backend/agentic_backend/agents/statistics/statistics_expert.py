@@ -73,7 +73,7 @@ STATISTIC_TUNING = AgentTuning(
         ),
     ],
     mcp_servers=[
-        MCPServerRef(id="mcp-knowledge-flow-statistics"),
+        MCPServerRef(name="mcp-knowledge-flow-statistics"),
     ],
 )
 

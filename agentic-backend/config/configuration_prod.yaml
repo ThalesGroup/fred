@@ -158,13 +158,6 @@ mcp:
       url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - id: "mcp-fs"
-      name: "mcp.servers.filesystem.name"
-      description: "mcp.servers.filesystem.description"
-      transport: "streamable_http"
-      url: "http://localhost:8111/knowledge-flow/v1/mcp-filesystem"
-      sse_read_timeout: 2000
-      auth_mode: "user_token"
     - id: "mcp-kubernetes-server"
       name: "mcp.servers.kubernetes.name"
       description: "mcp.servers.kubernetes.description"
@@ -173,11 +166,10 @@ mcp:
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - id: "mcp-atlassian-jira-server"
-      name: "mcp.servers.jira.name"
-      description: "mcp.servers.jira.description"
-      enabled: false
-    - name: "mcp-fs"
+    - id: "mcp-fs"
+      name: "mcp.servers.filesystem.name"
+      description: "mcp.servers.filesystem.description"
+      enabled: true
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-filesystem"
       sse_read_timeout: 2000

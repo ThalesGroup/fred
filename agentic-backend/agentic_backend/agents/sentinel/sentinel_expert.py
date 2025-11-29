@@ -66,7 +66,7 @@ SENTINEL_TUNING = AgentTuning(
         ),
     ],
     mcp_servers=[
-        MCPServerRef(id="mcp-knowledge-flow-opensearch-ops"),
+        MCPServerRef(name="mcp-knowledge-flow-opensearch-ops"),
     ],
 )
 

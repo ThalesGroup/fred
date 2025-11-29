@@ -851,7 +851,7 @@ class ApplicationContext:
                 access_key=fs_cfg.access_key,
                 secret_key=fs_cfg.secret_key,
                 bucket_name=fs_cfg.bucket_name,  # type: ignore
-                secure=fs_cfg.secure,
+                secure=bool(fs_cfg.secure),
             )
 
         else:
