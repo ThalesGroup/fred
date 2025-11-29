@@ -41,12 +41,12 @@ class BaseFilesystem(Protocol):
         """Delete a file or directory."""
         ...
 
-    async def pwd(self) -> str:
+    async def print_root_dir(self) -> str:
         """Return the filesystem root (absolute path or bucket URI)."""
         ...
 
     async def mkdir(self, path: str) -> None:
-        """Create a directory (empty or implicit for MinIO)."""
+        """Create a directory."""
         ...
 
     async def exists(self, path: str) -> bool:

@@ -5,7 +5,7 @@ const injectedRtkApi = api.injectEndpoints({
       CreateAgentAgenticV1AgentsCreatePostApiResponse,
       CreateAgentAgenticV1AgentsCreatePostApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/agents/create`, method: "POST", body: queryArg.createMcpAgentRequest }),
+      query: (queryArg) => ({ url: `/agentic/v1/agents/create`, method: "POST", body: queryArg.createAgentRequest }),
     }),
     updateAgentAgenticV1AgentsUpdatePut: build.mutation<
       UpdateAgentAgenticV1AgentsUpdatePutApiResponse,
@@ -182,7 +182,7 @@ const injectedRtkApi = api.injectEndpoints({
 export { injectedRtkApi as agenticApi };
 export type CreateAgentAgenticV1AgentsCreatePostApiResponse = /** status 200 Successful Response */ any;
 export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
-  createMcpAgentRequest: CreateMcpAgentRequest;
+  createAgentRequest: CreateAgentRequest;
 };
 export type UpdateAgentAgenticV1AgentsUpdatePutApiResponse = /** status 200 Successful Response */ any;
 export type UpdateAgentAgenticV1AgentsUpdatePutApiArg = {
@@ -295,7 +295,7 @@ export type ValidationError = {
 export type HttpValidationError = {
   detail?: ValidationError[];
 };
-export type CreateMcpAgentRequest = {
+export type CreateAgentRequest = {
   name: string;
 };
 export type UiHints = {

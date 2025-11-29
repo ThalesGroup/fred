@@ -177,10 +177,11 @@ mcp:
       name: "mcp.servers.jira.name"
       description: "mcp.servers.jira.description"
       enabled: false
+    - name: "mcp-fs"
       transport: "streamable_http"
-      url: "http://localhost:8885/mcp"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-filesystem"
       sse_read_timeout: 2000
-      auth_mode: "no_token"
+      auth_mode: "user_token"
     - id: "mcp-neo4j-graph-db"
       name: "mcp.servers.neo4j.name"
       description: "mcp.servers.neo4j.description"
