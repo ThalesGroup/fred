@@ -577,25 +577,16 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         # 2) Engine (we standardize on lucene)
         if (method_engine or "") != spec.engine:
             if (method_engine or "").lower() == "nmslib":
-                warnings.append(
-                    "- Engine mismatch: index uses 'nmslib', expected 'lucene'. "
-                    "Continuing for backward compatibility, but expect reduced recall and less reliable filtering."
-                )
+                warnings.append("- Engine mismatch: index uses 'nmslib', expected 'lucene'. Continuing for backward compatibility, but expect reduced recall and less reliable filtering.")
             else:
-                problems.append(
-                    f"- Engine mismatch: index uses '{method_engine}', expected '{spec.engine}'. "
-                    "Lucene is recommended; nmslib may degrade recall and complicate filters."
-                )
+                problems.append(f"- Engine mismatch: index uses '{method_engine}', expected '{spec.engine}'. Lucene is recommended; nmslib may degrade recall and complicate filters.")
 
         # 3) Space type (cosine for OpenAI)
         if (method_space or "") != spec.space_type:
             msg = f"- Space mismatch: index uses '{method_space}', expected '{spec.space_type}' for OpenAI embeddings."
             if (method_space or "").lower() in {"l2", "euclidean"}:
                 # Do not hard fail to stay compatible with old indices, but warn loudly.
-                warnings.append(
-                    f"{msg} L2 is deprecated; reindex with '{spec.space_type}'. "
-                    "Until then, L2-normalize vectors at ingest and query time."
-                )
+                warnings.append(f"{msg} L2 is deprecated; reindex with '{spec.space_type}'. Until then, L2-normalize vectors at ingest and query time.")
             else:
                 problems.append(msg)
 
