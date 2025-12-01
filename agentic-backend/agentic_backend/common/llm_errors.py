@@ -19,11 +19,14 @@ This keeps guardrail/refusal detection centralized so agents do not each hand-ro
 slightly different error handling logic.
 """
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 # Best-effort detection of OpenAI guardrail errors without a hard dependency on openai symbols.
 _UNPROCESSABLE_NAMES = {"UnprocessableEntityError"}
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -48,6 +51,7 @@ def _extract_body(response: Any) -> Any:
     try:
         return response.json()
     except Exception:
+        logger.warning("Failed to extract JSON body from response", exc_info=True)
         pass
     return response.text if hasattr(response, "text") else None
 
