@@ -15,7 +15,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_core.documents import Document
@@ -60,6 +60,18 @@ def _norm_str(value: object) -> str:
     if isinstance(value, (list, tuple)):
         return str(value[0]).lower() if value else ""
     return str(value or "").lower()
+
+
+def _is_true_value(value: object) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return value is True
+
+
+def _is_false_value(value: object) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() == "false"
+    return value is False
 
 
 class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
@@ -245,68 +257,6 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             logger.exception("[VECTOR][OPENSEARCH] failed to update retrievable flag for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to update retrievable flag in OpenSearch.")
 
-    # ---------- Introspection / Diagnostics ----------
-    def get_vectors_for_document(self, document_uid: str) -> List[Dict[str, Any]]:  # type: ignore[name-defined]
-        """
-        Return all embeddings for the given document along with their chunk ids.
-
-        Return format: [{"chunk_uid": str, "vector": list[float]}, ...]
-        """
-        try:
-            logger.info("🔎 Fetching vectors for document_uid=%s in index=%s", document_uid, self._index)
-            body = {
-                "size": 10000,
-                "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
-                "_source": ["metadata", "vector_field"],
-            }
-            res = self._client.search(index=self._index, body=body)
-            hits = res.get("hits", {}).get("hits", [])
-            out: List[Dict[str, Any]] = []  # type: ignore[name-defined]
-            for h in hits:
-                src = h.get("_source", {}) or {}
-                meta = src.get("metadata", {}) or {}
-                vec = src.get("vector_field")
-                if vec is None:
-                    # Some indices do not expose the vector in _source; skip cleanly.
-                    logger.debug("No vector in _source for _id=%s (document_uid=%s)", h.get("_id"), document_uid)
-                    continue
-                cid = meta.get(CHUNK_ID_FIELD) or h.get("_id")
-                out.append({"chunk_uid": cid, "vector": vec})
-            logger.info("🔎 Retrieved %d vectors for document_uid=%s", len(out), document_uid)
-            return out
-        except Exception:
-            logger.exception("❌ Failed to fetch vectors for document_uid=%s from OpenSearch", document_uid)
-            return []
-
-    def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:  # type: ignore[name-defined]
-        """
-        Return all chunks (text + metadata) for the given document.
-
-        Return format: [{"chunk_uid": str, "text": str, "metadata": dict}, ...]
-        """
-        try:
-            logger.info("📄 Fetching chunks for document_uid=%s in index=%s", document_uid, self._index)
-            body = {
-                "size": 10000,
-                "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
-                "_source": ["text", "metadata"],
-            }
-            res = self._client.search(index=self._index, body=body)
-            hits = res.get("hits", {}).get("hits", [])
-            out: List[Dict[str, Any]] = []  # type: ignore[name-defined]
-            for h in hits:
-                src = h.get("_source", {}) or {}
-                text = src.get("text", "")
-                meta = src.get("metadata", {}) or {}
-                cid = meta.get(CHUNK_ID_FIELD) or h.get("_id")
-                # Ensure the chunk_uid is present in the metadata returned to the UI if needed
-                out.append({"chunk_uid": cid, "text": text, "metadata": meta})
-            logger.info("📄 Retrieved %d chunks for document_uid=%s", len(out), document_uid)
-            return out
-        except Exception:
-            logger.exception("❌ Failed to fetch chunks for document_uid=%s from OpenSearch", document_uid)
-            return []
-
     # ---------- BaseVectorStore: ANN (semantic) ----------
     def _supports_knn_filter(self) -> bool:
         """Detect if OpenSearch supports knn.filter (>=2.19). Cached after first check."""
@@ -383,25 +333,43 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             if not retr_vals:
                 return hits
 
-            want_true = any(bool(v) is True or str(v).lower() == "true" for v in retr_vals)
-            want_false = any(bool(v) is False or str(v).lower() == "false" for v in retr_vals)
+            want_true = any(_is_true_value(v) for v in retr_vals)
+            want_false = any(_is_false_value(v) for v in retr_vals)
+            logger.info(
+                "[VECTOR][OPENSEARCH][ANN][POST] retrievable filter requested: raw=%s want_true=%s want_false=%s",
+                retr_vals,
+                want_true,
+                want_false,
+            )
 
-            # Only handle simple cases; mixed True/False falls back to server behavior.
-            if want_true and not want_false:
-
-                def keep(md: Dict) -> bool:
-                    return bool(md.get("retrievable")) is True
-            elif want_false and not want_true:
-
-                def keep(md: Dict) -> bool:
-                    return bool(md.get("retrievable")) is False
-            else:
+            if not (want_true or want_false):
                 return hits
+
+            def keep(md: Dict) -> bool:
+                # Missing field stays retrievable for backward compatibility with old indices.
+                val = md.get("retrievable")
+                if val is None:
+                    return True
+                if want_true and _is_true_value(val):
+                    return True
+                if want_false and _is_false_value(val):
+                    return True
+                return False
 
             filtered: List[AnnHit] = []
             for h in hits:
                 md = h.document.metadata or {}
-                if keep(md):
+                chunk_id = md.get(CHUNK_ID_FIELD) or md.get("_id")
+                val = md.get("retrievable")
+                decision = "keep" if keep(md) else "drop"
+                logger.info(
+                    "[VECTOR][OPENSEARCH][ANN][POST] %s chunk=%s retrievable=%s md_keys=%s",
+                    decision,
+                    chunk_id,
+                    val,
+                    list(md.keys()),
+                )
+                if decision == "keep":
                     filtered.append(h)
 
             logger.info(
@@ -600,6 +568,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             spec = ExpectedIndexSpec(dim=expected_dim, engine="lucene", space_type="cosinesimil", method_name="hnsw")
 
         problems: list[str] = []
+        warnings: list[str] = []
 
         # 1) Dimension
         if actual_dim != spec.dim:
@@ -607,14 +576,28 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
 
         # 2) Engine (we standardize on lucene)
         if (method_engine or "") != spec.engine:
-            problems.append(f"- Engine mismatch: index uses '{method_engine}', expected '{spec.engine}'. Lucene is recommended; nmslib may degrade recall and complicate filters.")
+            if (method_engine or "").lower() == "nmslib":
+                warnings.append(
+                    "- Engine mismatch: index uses 'nmslib', expected 'lucene'. "
+                    "Continuing for backward compatibility, but expect reduced recall and less reliable filtering."
+                )
+            else:
+                problems.append(
+                    f"- Engine mismatch: index uses '{method_engine}', expected '{spec.engine}'. "
+                    "Lucene is recommended; nmslib may degrade recall and complicate filters."
+                )
 
         # 3) Space type (cosine for OpenAI)
         if (method_space or "") != spec.space_type:
             msg = f"- Space mismatch: index uses '{method_space}', expected '{spec.space_type}' for OpenAI embeddings."
             if (method_space or "").lower() in {"l2", "euclidean"}:
-                msg += " If you must keep L2, you must L2-normalize vectors at ingest and query time (not recommended)."
-            problems.append(msg)
+                # Do not hard fail to stay compatible with old indices, but warn loudly.
+                warnings.append(
+                    f"{msg} L2 is deprecated; reindex with '{spec.space_type}'. "
+                    "Until then, L2-normalize vectors at ingest and query time."
+                )
+            else:
+                problems.append(msg)
 
         # 4) Method name (HNSW)
         if (method_name or "") != spec.method_name:
@@ -660,6 +643,16 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
                 f"   engine={spec.engine}, space_type={spec.space_type}, name={spec.method_name}, dimension={spec.dim}\n"
                 "Fix: recreate the index with the correct index mappin"
             )
+        if warnings:
+            for w in warnings:
+                logger.warning("[VECTOR][OPENSEARCH] %s", w)
+            logger.warning(
+                "[VECTOR][OPENSEARCH] index mapping accepted with warnings: engine=%s space=%s method=%s dim=%s",
+                method_engine,
+                method_space,
+                method_name,
+                actual_dim,
+            )
         else:
             logger.info("[VECTOR][OPENSEARCH] index mapping compatible: engine=%s space=%s method=%s dim=%s", method_engine, method_space, method_name, actual_dim)
 
@@ -684,28 +677,60 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         if f.metadata_terms:
             for field, values in f.metadata_terms.items():
                 meta_field = f"metadata.{field}"
-                # Special handling for retrievable=True
                 try:
                     values_list = list(values) if values is not None else []
                 except TypeError:
                     values_list = [values]
 
-                if field == "retrievable" and any(bool(v) is True or str(v).lower() == "true" for v in values_list):
-                    # Build a should-clause: retrievable:true OR field missing
-                    filters.append(
-                        {
+                if field == "retrievable":
+                    want_true = any(_is_true_value(v) for v in values_list)
+                    want_false = any(_is_false_value(v) for v in values_list)
+                    if not (want_true or want_false):
+                        continue
+
+                    logger.info(
+                        "[VECTOR][OPENSEARCH][FILTER] building retrievable filter: field=%s values=%s want_true=%s want_false=%s",
+                        meta_field,
+                        values_list,
+                        want_true,
+                        want_false,
+                    )
+
+                    def _retrievable_clause(value: bool) -> Dict:
+                        # Accept missing field for backward compatibility with legacy indices.
+                        return {
                             "bool": {
                                 "should": [
-                                    {"terms": {meta_field: [True]}},
+                                    {"terms": {meta_field: [value]}},
                                     {"bool": {"must_not": {"exists": {"field": meta_field}}}},
                                 ],
                                 "minimum_should_match": 1,
                             }
                         }
-                    )
-                    # If caller also passed False, keep it explicit too (rare)
-                    if any(bool(v) is False or str(v).lower() == "false" for v in values_list):
-                        filters.append({"terms": {meta_field: [False]}})
+
+                    if want_true and want_false:
+                        filters.append(
+                            {
+                                "bool": {
+                                    "should": [
+                                        _retrievable_clause(True),
+                                        _retrievable_clause(False),
+                                    ],
+                                    "minimum_should_match": 1,
+                                }
+                            }
+                        )
+                    elif want_true:
+                        filters.append(_retrievable_clause(True))
+                    elif want_false:
+                        filters.append(_retrievable_clause(False))
                 else:
+                    logger.info(
+                        "[VECTOR][OPENSEARCH][FILTER] adding terms filter: field=%s values=%s",
+                        meta_field,
+                        values_list,
+                    )
                     filters.append({"terms": {meta_field: values_list}})
+        if filters:
+            logger.info("[VECTOR][OPENSEARCH][FILTER] final filter list=%s", filters)
         return filters or None

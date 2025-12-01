@@ -64,7 +64,9 @@ def normalize_llm_exception(exc: Exception) -> LlmErrorInfo:
     if body is None and response is not None:
         body = _extract_body(response)
 
-    request_id = getattr(exc, "request_id", None) or getattr(response, "request_id", None)
+    request_id = getattr(exc, "request_id", None) or getattr(
+        response, "request_id", None
+    )
     headers = getattr(response, "headers", None)
     headers_dict = dict(headers) if headers else None
 
@@ -104,7 +106,9 @@ def guardrail_fallback_message(
     return default_message
 
 
-def error_log_context(info: LlmErrorInfo, *, extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def error_log_context(
+    info: LlmErrorInfo, *, extra: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """
     Builds a dict that can be unpacked into logger calls for consistent telemetry.
     """
