@@ -241,9 +241,7 @@ class MetadataController:
             "/document/{document_uid}/vectors",
             tags=["Documents"],
             summary="Get document chunk vectors (embeddings)",
-            description=(
-                "Returns the list of chunk vectors (embeddings) associated with the given document."
-            ),
+            description=("Returns the list of chunk vectors (embeddings) associated with the given document."),
             response_model=List[VectorChunk],
         )
         async def document_vectors(
@@ -260,9 +258,7 @@ class MetadataController:
             "/document/{document_uid}/chunks",
             tags=["Documents"],
             summary="Get document chunks with metadata",
-            description=(
-                "Returns the list of chunks associated with the given document, including their metadata."
-            ),
+            description=("Returns the list of chunks associated with the given document, including their metadata."),
             response_model=List[Dict[str, Any]],
         )
         async def document_chunks(

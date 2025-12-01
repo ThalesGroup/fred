@@ -237,6 +237,7 @@ mcp:
   resources_enabled: true
   opensearch_ops_enabled: true
   neo4j_enabled: false
+  filesystem_enabled: false
 
 filesystem:
   type: minio

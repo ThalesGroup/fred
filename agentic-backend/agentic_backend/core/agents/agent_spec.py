@@ -17,7 +17,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 FieldType = Literal[
     "string",
@@ -77,7 +77,13 @@ class MCPServerConfiguration(BaseModel):
     Configuration for an MCP server.
     """
 
-    name: str
+    id: str
+    name: str = Field(
+        ..., description="react-i18next key for the name of the MCP server."
+    )
+    description: Optional[str] = Field(
+        None, description="react-i18next key for the description of the MCP server."
+    )
     transport: Optional[str] = Field(
         "sse",
         description="MCP server transport. Can be sse, stdio, websocket or streamable_http",
@@ -112,7 +118,14 @@ class MCPServerRef(BaseModel):
     - Resolution (URL/transport/env) is done at runtime per env/tenant/user.
     """
 
-    name: str  # e.g., "knowledge-ops", "kubernetes"
+    model_config = ConfigDict(
+        validate_by_name=True,
+        validate_by_alias=True,
+    )
+
+    id: str = Field(
+        ..., alias="name", serialization_alias="id"
+    )  # Accept "name" when deserializing for backward compatibility but always serialize as "id"
     require_tools: list[str] = []  # optional: "os.*", "kpi.*" capabilities
 
 

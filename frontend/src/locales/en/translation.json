@@ -159,7 +159,10 @@
     "runSuccessDetail": "Processors executed successfully.",
     "summaryFor": "Summary for '{{name}}'",
     "processorsCount": "{{count}} processor(s)",
-    "view": { "sideBySide": "Side by side", "stacked": "Stacked" },
+    "view": {
+      "sideBySide": "Side by side",
+      "stacked": "Stacked"
+    },
     "metricsTitle": "Processor Metrics",
     "persistLabel": "Save run",
     "saved": {
@@ -191,7 +194,11 @@
     "pages": "{{n}} page(s)",
     "noMarkdown": "No markdown produced",
     "openLatest": "Open latest run",
-    "detail": { "title": "Run Detail", "expandAll": "Expand all", "collapseAll": "Collapse all" }
+    "detail": {
+      "title": "Run Detail",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all"
+    }
   },
   "assetManager": {
     "title": "Manage Assets for {{agentId}}",
@@ -243,8 +250,7 @@
     "search": "Search",
     "filter": "Filter",
     "create": "Create",
-    "createMcpAgent": "Create New MCP Agent",
-    "createMcpAgentNote": "Create a new MCP agent with default configuration.",
+    "createAgent": "Create new agent",
     "noAgents": "No agents found",
     "noFavorites": "You haven't added any agents to your favorites yet",
     "noTag": "No agents with tag \"{{tag}}\"",
@@ -285,6 +291,9 @@
     "success": {
       "summary": "Agent created",
       "detail": "The agent has been successfully created."
+    },
+    "toolsSelection": {
+      "title": "Tools"
     }
   },
   "chatbot": {
@@ -737,5 +746,37 @@
   },
   "agentSelector": {
     "sendTo": "Send to"
+  },
+  "mcp": {
+    "servers": {
+      "search_documents": {
+        "name": "Search in documents",
+        "description": "Allow your agent to perform semantic search in documents uploaded to Fred (RAG)"
+      },
+      "tabular": {
+        "name": "Tabular data access",
+        "description": "Allow your agent to query tabular data sources (spreadsheets, csv...)"
+      },
+      "filesystem": {
+        "name": "Filesystem access",
+        "description": "Allow your agent to access a filesystem (local or Minio)"
+      },
+      "search_opensearch": {
+        "name": "Search in opensearch",
+        "description": "Allow your agent to search in opensearch indices"
+      },
+      "kubernetes": {
+        "name": "Kubernetes access",
+        "description": "Allow your agent to interact with Kubernetes clusters"
+      },
+      "jira": {
+        "name": "Jira access",
+        "description": "Allow your agent to interact with Jira"
+      },
+      "neo4j": {
+        "name": "Neo4j access",
+        "description": "Allow your agent to interact with Neo4j graph databases"
+      }
+    }
   }
 }

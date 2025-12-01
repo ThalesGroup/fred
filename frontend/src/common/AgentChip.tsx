@@ -58,71 +58,90 @@ export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
 
   // Visual constants
   const ICON_SIZE = 14;
-  const ICON_GAP = 6; // distance between icon and text
-  const ICON_BOX_W = ICON_SIZE + ICON_GAP; // mirrored on the right
-  const CHIP_HEIGHT = 24;
-  const PILL_RADIUS = 999;
-  const SIDE_PAD = 8; // equal padding from chip borders (L & R)
-  const NAME_MAX_W = 160; // cap; keep if you want ellipsis sooner
+  const NAME_MAX_W = 200; // allow a bit more breathing room
+  const ROLE_MAX_W = 260;
+  const GAP_X = 0.75;
+  const ICON_PAD = ICON_SIZE + 6;
 
   return (
-    <Chip
-      variant="outlined"
-      label={
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: `${ICON_BOX_W}px minmax(0, 1fr)`,
-            alignItems: "center",
-            columnGap: 0,
-            minWidth: 0,
-            px: `${SIDE_PAD}px`,
-          }}
-        >
-          {/* Left icon track */}
-          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-start", width: ICON_BOX_W }}>
-            <ChipIcon sx={{ fontSize: ICON_SIZE, color: chipColor }} />
-          </Box>
-
-          {/* Middle: flex-centered text to be *geometrically* centered */}
-          <Box sx={{ display: "flex", justifyContent: "center", minWidth: 0 }}>
-            <Typography
-              variant="caption"
-              fontWeight="medium"
-              sx={{
-                color: chipColor,
-                lineHeight: "18px",
-                letterSpacing: 0.2,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                maxWidth: NAME_MAX_W,
-              }}
-              title={agent.name}
-            >
-              {agent.name}
-            </Typography>
-          </Box>
-        </Box>
-      }
+    <Box
       sx={[
         {
-          height: CHIP_HEIGHT,
-          borderRadius: PILL_RADIUS,
-          borderColor: chipColor,
-          color: chipColor,
-          boxShadow: "none",
-          p: 0, // IMPORTANT: no root padding; we control side padding in the grid
-
-          "& .MuiChip-label": {
-            p: 0,
-            display: "block",
-            minWidth: 0,
-          },
+          position: "relative",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: `${GAP_X}rem`,
+          textAlign: "center",
+          minWidth: 0,
+          py: 0.15,
+          pl: `${ICON_PAD}px`,
         },
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
-    />
+    >
+      <ChipIcon
+        sx={{
+          fontSize: ICON_SIZE,
+          color: chipColor,
+          flexShrink: 0,
+          display: "block",
+          position: "absolute",
+          left: 0,
+          top: "50%",
+          transform: "translateY(-50%)",
+        }}
+      />
+
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: `${GAP_X}rem`,
+          minWidth: 0,
+          flexShrink: 1,
+          justifyContent: "center",
+          textAlign: "center",
+        }}
+      >
+        <Typography
+          variant="body1"
+          fontWeight={700}
+          sx={{
+            color: chipColor,
+            lineHeight: 1.1,
+            letterSpacing: 0.2,
+            fontSize: "14px",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            maxWidth: NAME_MAX_W,
+            textAlign: "center",
+          }}
+          title={agent.name}
+        >
+          {agent.name}
+        </Typography>
+
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{
+            minWidth: 0,
+            maxWidth: ROLE_MAX_W,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            lineHeight: 1.1,
+            textTransform: "none",
+            textAlign: "center",
+            fontSize: "12.5px",
+          }}
+          title={agent.tuning.role}
+        >
+          {agent.tuning.role}
+        </Typography>
+      </Box>
+    </Box>
   );
 };
 

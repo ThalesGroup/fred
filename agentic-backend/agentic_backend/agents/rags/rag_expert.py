@@ -22,6 +22,11 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
+from agentic_backend.common.llm_errors import (
+    error_log_context,
+    guardrail_fallback_message,
+    normalize_llm_exception,
+)
 from agentic_backend.common.rags_utils import (
     attach_sources_to_llm_response,
     ensure_ranks,
@@ -65,6 +70,15 @@ RAG_TUNING = AgentTuning(
                 "Be concise and factual. If evidence is weak or missing, say so."
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
+        ),
+        FieldSpec(
+            key="prompts.response_language",
+            type="text",
+            title="Response Language",
+            description="Language to use for all answers (e.g., 'français', 'English').",
+            required=False,
+            default="français",
+            ui=UIHints(group="Prompts"),
         ),
         FieldSpec(
             key="rag.top_k",
@@ -130,6 +144,9 @@ class Rico(AgentFlow):
             logger.warning("Rico: no tuned system prompt found, using fallback.")
             raise RuntimeError("Rico: no tuned system prompt found.")
         sys_text = self.render(sys_tpl)  # token-safe rendering (e.g. {today})
+        response_language = self.get_tuned_text("prompts.response_language")
+        if response_language:
+            sys_text = f"{sys_text}\n\nRéponds en {response_language}."
 
         return sys_text
 
@@ -155,6 +172,13 @@ class Rico(AgentFlow):
             doc_tag_ids = get_document_library_tags_ids(self.get_runtime_context())
             search_policy = get_search_policy(self.get_runtime_context())
             top_k = self.get_tuned_int("search.top_k", default=3)
+            logger.info(
+                "Rico: reasoning start question=%r doc_tag_ids=%s search_policy=%s top_k=%s",
+                question,
+                doc_tag_ids,
+                search_policy,
+                top_k,
+            )
 
             # 2) Vector search
             hits: List[VectorSearchHit] = self.search_client.search(
@@ -163,6 +187,7 @@ class Rico(AgentFlow):
                 document_library_tags_ids=doc_tag_ids,
                 search_policy=search_policy,
             )
+            logger.info(["[AGENT] vector search returned %d hit(s)", len(hits)])
             if not hits:
                 warn = "I couldn't find any relevant documents. Try rephrasing or expanding your query?"
                 messages = self.with_chat_context_text([HumanMessage(content=warn)])
@@ -178,6 +203,11 @@ class Rico(AgentFlow):
             #    - One HumanMessage with task + formatted sources
             sys_msg = SystemMessage(content=self._system_prompt())
             sources_block = format_sources_for_prompt(hits, snippet_chars=500)
+            logger.debug(
+                "[AGENT] prepared %d source(s) for prompt (chars=%s)",
+                len(hits),
+                len(sources_block),
+            )
             human_msg = HumanMessage(
                 content=(
                     "Use ONLY the sources below. When you state a fact, add citations like [1] or [1][2]. "
@@ -191,6 +221,12 @@ class Rico(AgentFlow):
             messages = [sys_msg, human_msg]
             messages = self.with_chat_context_text(messages)
 
+            logger.debug(
+                "[AGENT] invoking model with %d messages (sys_len=%d human_len=%d)",
+                len(messages),
+                len(sys_msg.content),
+                len(human_msg.content),
+            )
             answer = await self.model.ainvoke(messages)
 
             # 6) Attach rich sources metadata for the UI
@@ -198,13 +234,30 @@ class Rico(AgentFlow):
 
             return {"messages": [answer]}
 
-        except Exception:
-            logger.exception("Rico: error in reasoning step.")
-            fallback = await self.model.ainvoke(
-                [
-                    HumanMessage(
-                        content="An unexpected error occurred while searching documents. Please try again."
-                    )
-                ]
+        except Exception as e:
+            info = normalize_llm_exception(e)
+            hits_count = (
+                len(locals().get("hits", []))
+                if isinstance(locals().get("hits", None), list)
+                else 0
             )
+            log_ctx = error_log_context(
+                info,
+                extra={
+                    "question": question,
+                    "doc_tag_ids": locals().get("doc_tag_ids"),
+                    "search_policy": locals().get("search_policy"),
+                    "top_k": locals().get("top_k"),
+                    "hits_count": hits_count,
+                },
+            )
+            logger.exception(
+                "[AGENT] error in reasoning step.", extra={"err_ctx": log_ctx}
+            )
+
+            fallback_text = guardrail_fallback_message(
+                info,
+                default_message="An unexpected error occurred while searching documents. Please try again.",
+            )
+            fallback = await self.model.ainvoke([HumanMessage(content=fallback_text)])
             return {"messages": [fallback]}

@@ -52,10 +52,17 @@ class FilesystemService:
         """
         Builds the full path inside the user's namespace.
         """
+        user_root = self._user_root(user).strip("/")
         path = path.lstrip("/")
-        if path:
-            return f"{self._user_root(user)}/{path}"
-        return self._user_root(user)
+
+        if not path:
+            return user_root
+
+        # Avoid double-prefixing when the caller already included the user root
+        if path == user_root or path.startswith(f"{user_root}/"):
+            return path
+
+        return f"{user_root}/{path}"
 
     #
     # Operations
@@ -116,7 +123,7 @@ class FilesystemService:
             raise e
 
     @authorize(action=Action.READ, resource=Resource.FILES)
-    async def pwd(self, user: KeycloakUser) -> str:
+    async def print_root_dir(self, user: KeycloakUser) -> str:
         """
         Returns the user's root relative to the filesystem backend.
         """

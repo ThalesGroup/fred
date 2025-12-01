@@ -181,7 +181,7 @@ async def get_connected_mcp_client_for_agent(
         if should_send_client_token and not token_to_use:
             logger.warning(
                 "[MCP] server=%s: Auth mode is '%s', but no user token is available. Connection may fail 401.",
-                server.name,
+                server.id,
                 auth_mode,
             )
         headers = _auth_headers(token_to_use)
@@ -192,11 +192,11 @@ async def get_connected_mcp_client_for_agent(
             logger.warning(
                 "[MCP][%s] connect pre-fail for server=%s: Failed to build connection config: %s",
                 agent_name,
-                server.name,
+                server.id,
                 e,
             )
             raise
-        connections[server.name] = conn_cfg
+        connections[server.id] = conn_cfg
 
     client = MultiServerMCPClient(connections)
 
@@ -204,7 +204,7 @@ async def get_connected_mcp_client_for_agent(
     exceptions: list[Exception] = []
     total_tools = 0
     for server in mcp_servers:
-        conn_entry = connections.get(server.name) or {}
+        conn_entry = connections.get(server.id) or {}
         url_for_log = conn_entry.get("url", "")
         auth_label = _mask_auth_value(
             (conn_entry.get("headers") or {}).get("Authorization")
@@ -214,16 +214,16 @@ async def get_connected_mcp_client_for_agent(
             logger.debug(
                 "[MCP][%s] validate name=%s transport=streamable_http url=%s auth=%s",
                 agent_name,
-                server.name,
+                server.id,
                 url_for_log,
                 auth_label,
             )
-            tools = await client.get_tools(server_name=server.name)
+            tools = await client.get_tools(server_name=server.id)
             dur_ms = (time.perf_counter() - start) * 1000
             logger.info(
                 "[MCP][%s] connected name=%s transport=streamable_http url=%s tools=%d dur_ms=%.0f",
                 agent_name,
-                server.name,
+                server.id,
                 url_for_log,
                 len(tools),
                 dur_ms,
@@ -234,7 +234,7 @@ async def get_connected_mcp_client_for_agent(
             logger.warning(
                 "[MCP][%s] connect fail name=%s url=%s err=%s dur_ms=%.0f: %s",
                 agent_name,
-                server.name,
+                server.id,
                 url_for_log,
                 e.__class__.__name__,
                 dur_ms,

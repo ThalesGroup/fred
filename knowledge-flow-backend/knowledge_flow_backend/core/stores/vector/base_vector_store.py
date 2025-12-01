@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import List, Mapping, Optional, Protocol, Sequence, Union, runtime_checkable, Dict, Any
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Union, runtime_checkable
 
 from attr import dataclass
 from langchain_core.documents import Document

@@ -665,6 +665,7 @@ applications:
         text_enabled: true
         templates_enabled: true
         resources_enabled: true
+        filesystem_enabled: false
         opensearch_ops_enabled: false
         neo4j_enabled: false
 

@@ -34,7 +34,7 @@ export function AgentSelector({ sx, currentAgent, agents, onSelectNewAgent }: Ag
           paddingX: 2,
           paddingY: 0.5,
           display: "flex",
-          gap: 0.5,
+          gap: 1,
           alignItems: "center",
           justifyContent: "center",
           ...sx,
@@ -46,12 +46,31 @@ export function AgentSelector({ sx, currentAgent, agents, onSelectNewAgent }: Ag
             color: "inherit",
             padding: 0.5,
             borderRadius: "16px",
+            textTransform: "none",
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pr: 3.5, // leave room for the arrow without shifting the text
           }}
           onClick={handleOpen}
         >
           <AgentChipWithIcon agent={currentAgent} />
 
-          {isPickerOpen ? <KeyboardArrowUpIcon sx={{ ml: 0.5 }} /> : <KeyboardArrowDownIcon sx={{ ml: 0.5 }} />}
+          <Box
+            component="span"
+            sx={{
+              position: "absolute",
+              right: 4,
+              top: "50%",
+              transform: "translateY(-50%)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {isPickerOpen ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+          </Box>
         </Button>
       </Box>
 

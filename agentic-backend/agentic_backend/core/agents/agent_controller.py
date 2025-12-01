@@ -36,6 +36,7 @@ from agentic_backend.core.agents.agent_manager import (
 from agentic_backend.core.agents.agent_service import (
     AgentService,
 )
+from agentic_backend.core.agents.agent_spec import MCPServerConfiguration
 from agentic_backend.core.runtime_source import get_runtime_source_registry
 
 
@@ -90,22 +91,22 @@ def _resolve_attr(root: object, qualname: str) -> object:
 router = APIRouter(tags=["Agents"])
 
 
-class CreateMcpAgentRequest(BaseModel):
+class CreateAgentRequest(BaseModel):
     name: str
 
 
 @router.post(
     "/agents/create",
-    summary="Create a Dynamic Agent that can access MCP tools",
+    summary="Create a Dynamic Agent that can access tools",
 )
 async def create_agent(
-    request: CreateMcpAgentRequest,
+    request: CreateAgentRequest,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
 ):
     try:
         service = AgentService(agent_manager=agent_manager)
-        await service.create_mcp_agent(user, request.name)
+        await service.create_agent(user, request.name)
     except Exception as e:
         log_exception(e)
         raise handle_exception(e)
@@ -149,6 +150,7 @@ async def delete_agent(
 @router.get(
     "/agents/mcp-servers",
     summary="List MCP servers known to all agents",
+    response_model=list[MCPServerConfiguration],
 )
 async def list_mcp_servers(
     user: KeycloakUser = Depends(get_current_user),

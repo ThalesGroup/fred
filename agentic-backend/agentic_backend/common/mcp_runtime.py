@@ -62,11 +62,11 @@ class MCPRuntime:
         self.agent_instance = agent
         self.available_servers: List[MCPServerConfiguration] = []
         for s in self.tunings.mcp_servers:
-            server_configuration = get_mcp_configuration().get_server(s.name)
+            server_configuration = get_mcp_configuration().get_server(s.id)
             if not server_configuration:
                 raise ValueError(
                     f"[MCP][{self.agent_instance.get_name()}] "
-                    f"Server '{s.name}' not found or disabled in global MCP configuration."
+                    f"Server '{s.id}' not found or disabled in global MCP configuration."
                 )
             self.available_servers.append(server_configuration)
 

@@ -12,8 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useEffect, useMemo, useState, useRef, useLayoutEffect } from "react";
-import { ProcessingGraphNode } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+import React, { useEffect, useMemo, useRef, useLayoutEffect, useState } from "react";
+import {
+  ProcessingGraphNode,
+  useDocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetQuery,
+  useDocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetQuery
+} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { useDrawer } from "../../DrawerProvider.tsx";
 import {
   Accordion,
@@ -141,59 +145,49 @@ const DocumentDataDrawerContent: React.FC<{ doc: ProcessingGraphNode }> = ({ doc
     return id.startsWith("doc:") ? id.slice(4) : id;
   }, [doc.document_uid, doc.id]);
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [vectors, setVectors] = useState<VectorItem[]>([]);
-  const [chunks, setChunks] = useState<ChunkItem[]>([]);
+  const {
+    data: vectorsData,
+    isLoading: vectorsLoading,
+    error: vectorsError,
+  } = useDocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetQuery(
+    { documentUid: backendDocId },
+    { skip: !backendDocId },
+  );
+  const {
+    data: chunksData,
+    isLoading: chunksLoading,
+    error: chunksError,
+  } = useDocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetQuery(
+    { documentUid: backendDocId },
+    { skip: !backendDocId },
+  );
 
-  useEffect(() => {
-    let aborted = false;
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
+  const vectors = useMemo(() => {
+    if (!vectorsData) return [];
+    return Array.isArray(vectorsData) ? vectorsData : (vectorsData as any)?.items ?? [];
+  }, [vectorsData]);
 
-    async function load() {
-      try {
-        const [vecRes, chkRes] = await Promise.all([
-          fetch(`/knowledge-flow/v1/document/${encodeURIComponent(backendDocId)}/vectors`, {
-            signal: controller.signal,
-          }),
-          fetch(`/knowledge-flow/v1/document/${encodeURIComponent(backendDocId)}/chunks`, {
-            signal: controller.signal,
-          }),
-        ]);
+  const chunks = useMemo(() => {
+    if (!chunksData) return [];
+    return Array.isArray(chunksData) ? chunksData : (chunksData as any)?.items ?? [];
+  }, [chunksData]);
 
-        if (!vecRes.ok) {
-          throw new Error(`Erreur chargement vecteurs: ${vecRes.status}`);
-        }
-        if (!chkRes.ok) {
-          throw new Error(`Erreur chargement chunks: ${chkRes.status}`);
-        }
-        const vecJson = await vecRes.json();
-        const chkJson = await chkRes.json();
-
-        // Assumer que l'API renvoie soit une liste brute, soit un objet { items: [...] }
-        const vecItems: VectorItem[] = Array.isArray(vecJson) ? vecJson : vecJson?.items ?? [];
-        const chkItems: ChunkItem[] = Array.isArray(chkJson) ? chkJson : chkJson?.items ?? [];
-
-        if (!aborted) {
-          setVectors(vecItems);
-          setChunks(chkItems);
-          setLoading(false);
-        }
-      } catch (e: any) {
-        if (aborted) return;
-        setError(e?.message || "Erreur inconnue");
-        setLoading(false);
-      }
+  const formatError = (err: unknown): string => {
+    if (!err) return "";
+    if (typeof err === "string") return err;
+    if (err && typeof err === "object" && "status" in err) {
+      const anyErr = err as any;
+      const detail = anyErr?.data?.detail ?? anyErr?.data;
+      const detailStr =
+        detail == null ? "" : typeof detail === "string" ? detail : JSON.stringify(detail);
+      return `Erreur ${anyErr.status}${detailStr ? `: ${detailStr}` : ""}`;
     }
+    if (err instanceof Error) return err.message;
+    return "Erreur inconnue";
+  };
 
-    load();
-    return () => {
-      aborted = true;
-      controller.abort();
-    };
-  }, [backendDocId]);
+  const error = vectorsError ? formatError(vectorsError) : chunksError ? formatError(chunksError) : null;
+  const loading = vectorsLoading || chunksLoading;
 
   const pairs = useMemo(() => {
     const len = Math.max(vectors.length, chunks.length);

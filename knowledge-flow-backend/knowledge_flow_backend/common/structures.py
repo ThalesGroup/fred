@@ -377,9 +377,11 @@ class StorageConfig(BaseModel):
 
 # ---------- Agent filesystem config, used for listing, reading, creating & deleting files.  ---------- #
 
+
 class LocalFilesystemConfig(BaseModel):
     type: Literal["local"] = "local"
     root: str = Field("~/.fred/knowledge-flow/filesystem/", description="Local filesystem root directory.")
+
 
 class MinioFilesystemConfig(BaseModel):
     type: Literal["minio"] = "minio"
@@ -397,10 +399,8 @@ class MinioFilesystemConfig(BaseModel):
             raise ValueError("Missing MINIO_SECRET_KEY environment variable")
         return values
 
-FilesystemConfig = Annotated[
-    Union[LocalFilesystemConfig, MinioFilesystemConfig],
-    Field(discriminator="type")
-]
+
+FilesystemConfig = Annotated[Union[LocalFilesystemConfig, MinioFilesystemConfig], Field(discriminator="type")]
 
 
 class Configuration(BaseModel):
@@ -418,4 +418,4 @@ class Configuration(BaseModel):
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
     storage: StorageConfig
     mcp: MCPConfig = Field(default_factory=MCPConfig, description="Feature toggles for MCP-only endpoints and servers.")
-    filesystem: FilesystemConfig = Field(...,description="Filesystem backend configuration.")
+    filesystem: FilesystemConfig = Field(..., description="Filesystem backend configuration.")
