@@ -197,7 +197,6 @@ poetry.toml
 .nfs*
 secrets/openai-api-key.sh
 
-/Makefile
 /media/
 
 # Helm dependency files
