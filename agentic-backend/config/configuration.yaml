@@ -109,9 +109,9 @@ ai:
       type: "agent"
       class_path: "agentic_backend.academy.07_travel_agent.travel_agent.Travel"
       enabled: true
-    - name: "Kelly"
+    - name: "Kellia"
       type: "agent"
-      class_path: "agentic_backend.agents.knowledge_extractor.knowledge_extractor.Kelly"
+      class_path: "agentic_backend.agents.knowledge_extractor.slide_maker.SlideMaker"
       enabled: true
 
 mcp:

@@ -3,19 +3,13 @@ import re
 from pptx import Presentation
 
 
-def fill_slide_from_json_schema(ppt_path, json_schema, slide_number, output_path):
-
+def fill_slide_from_structured_response(
+    ppt_path, structured_response, slide_number, output_path
+):
     prs = Presentation(ppt_path)
 
     # Support 1-based slide numbering
     slide = prs.slides[slide_number - 1]
-
-    schema_properties = json_schema.get("properties", {})
-
-    # Exemple: { "name": {"type": "string", "description": "..."} }
-    schema_map = {
-        prop: data.get("description", "") for prop, data in schema_properties.items()
-    }
 
     # Pattern: {name}, {email}, {phone}, etc.
     pattern = re.compile(r"\{([^}]+)\}")
@@ -30,11 +24,10 @@ def fill_slide_from_json_schema(ppt_path, json_schema, slide_number, output_path
                 matches = pattern.findall(text)
 
                 for key in matches:
-                    if key in schema_map:
-                       
-                        text = text.replace(f"{{{key}}}", schema_map[key])
+                    if key in structured_response.keys():
+                        text = text.replace(f"{{{key}}}", structured_response[key])
 
-                run.text = text  
+                run.text = text
 
     prs.save(output_path)
     return output_path

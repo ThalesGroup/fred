@@ -271,7 +271,6 @@ enjeuxBesoinsSchema = {
     },
 }
 
-
 cvSchema = {
     "type": "object",
     "description": "Le CV de l'intervenant Thalès Services Numériques.",
