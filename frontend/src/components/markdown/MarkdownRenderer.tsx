@@ -65,6 +65,17 @@ function replaceStageDirectionsWithEmoji(text: string): string {
     .replace(/\bclears throat\b/gi, "😶‍🌫️");
 }
 
+const TIME_COLON_REGEX = /(\b\d{1,2}):(\d{2})/g;
+
+function escapeClockTimes(text: string): string {
+  return text.replace(TIME_COLON_REGEX, (match, hours: string, minutes: string, offset: number, full: string) => {
+    if (offset > 0 && full[offset - 1] === "\\") {
+      return match;
+    }
+    return `${hours}\\:${minutes}`;
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* CODE BLOCK CONTAINER FOR COPY/DOWNLOAD FUNCTIONALITY (Mermaid Removed)     */
 /* -------------------------------------------------------------------------- */
@@ -401,6 +412,7 @@ export default function MarkdownRenderer({
   const finalContent = enableEmojiSubstitution
     ? replaceStageDirectionsWithEmoji(content || "")
     : content || "No markdown content provided.";
+  const safeContent = escapeClockTimes(finalContent);
 
   const baseComponents = getMarkdownComponents({
     theme,
@@ -479,7 +491,7 @@ export default function MarkdownRenderer({
         ]}
         rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeKatex]}
       >
-        {finalContent}
+        {safeContent}
       </ReactMarkdown>
     </Box>
   );

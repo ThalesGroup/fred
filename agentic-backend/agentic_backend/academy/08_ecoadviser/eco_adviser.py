@@ -30,6 +30,7 @@ Fred rationale:
 
 import json
 import logging
+import os
 from typing import Annotated, Any, Dict, List, TypedDict
 
 from langchain_core.messages import AnyMessage, HumanMessage, ToolMessage
@@ -52,6 +53,8 @@ from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
+
+MAX_TOOL_MESSAGE_CHARS = int(os.getenv("ECO_MAX_TOOL_MESSAGE_CHARS", "4000"))
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +106,12 @@ ECO_TUNING = AgentTuning(
                 "- When car usage is mentioned (current or alternative) or when congestion could change the recommendation, call the traffic MCP (`mcp-traffic-service`).\n"
                 "- Use the `get_live_traffic_segments` tool with approximate coordinates (lat,lng) for the origin/destination (city centres are fine) to retrieve the latest WFS data from Grand Lyon.\n"
                 "- Cite the traffic insight explicitly (e.g., \"Grand Lyon WFS signale un trafic lourd Villefranche → Givors : 35 min estimées\").\n\n"
+                "### Informations TCL temps réel\n"
+                "- Si l'utilisateur envisage les transports en commun TCL, identifie l'arrêt concerné dans les datasets tabulaires (colonnes `identifiantarret`, `stop_name`).\n"
+                "- Appelle ensuite le MCP `mcp-tcl-service` via `get_tcl_realtime_passages` pour récupérer les passages à venir (ligne, destination, heure prévue).\n"
+                "- Présente les résultats sous forme de liste ou petit tableau : `Ligne | Direction | Passage prévu | Dans X min` (heure locale HH:MM) afin que l'utilisateur visualise immédiatement la fréquence.\n"
+                "- Ajoute une phrase de contexte (ex: \"Prochains départs à République-Villeurbanne\" ou \"Données TCL actualisées à 12:34\").\n"
+                "- Lorsque plusieurs lignes existent, regroupe-les par ligne avant de donner les horaires pour limiter la verbosity.\n\n"
                 "### Workflow\n"
                 "1. Clarify the user's context:\n"
                 "   - origin and destination (city or district is enough)\n"
@@ -121,6 +130,12 @@ ECO_TUNING = AgentTuning(
                 "   - a short explanation in natural language\n"
                 "   - a markdown table comparing modes and weekly CO₂\n"
                 "   - explicit assumptions you made (distance, days/week, factors)\n\n"
+                "### Présentation UI\n"
+                "- Structure ta réponse avec des sous-titres Markdown (`### Synthèse rapide`, `### Options détaillées`, `### Données & hypothèses`).\n"
+                "- Mets en évidence les données ou ordres de grandeur critiques avec du gras limité (`**CO₂ actuel**`, `**Trafic impactant**`).\n"
+                "- Utilise des pastilles couleurs via emoji standards pour qualifier les options: `🟢` (option bas carbone), `🟠` (point de vigilance), `🔴` (action à éviter). Ne dépasse jamais trois pastilles par réponse.\n"
+                "- Termine les recommandations chiffrées par un tableau Markdown (colonnes `Mode | CO₂ hebdo | Hypothèses`) et ajoute un bloc `Hypothèses` en liste courte.\n"
+                "- Fractionne les paragraphes en listes ou phrases courtes pour rester lisible dans l'UI.\n\n"
                 "### Rules\n"
                 "- ALWAYS base your conclusions on actual tool results when referring to datasets.\n"
                 "- NEVER invent columns or tables that do not exist in the schema.\n"
@@ -158,6 +173,7 @@ ECO_TUNING = AgentTuning(
         MCPServerRef(name="mcp-knowledge-flow-mcp-tabular"),
         MCPServerRef(name="mcp-co2-service", optional=True),
         MCPServerRef(name="mcp-traffic-service", optional=True),
+        MCPServerRef(name="mcp-tcl-service", optional=True),
     ],
 )
 
@@ -331,6 +347,51 @@ class EcoAdvisor(AgentFlow):
 
         return builder
 
+    def _truncate_tool_message(self, message: ToolMessage) -> ToolMessage:
+        """
+        Limit the amount of tool output we send back to the LLM to keep the
+        conversation under the model's context window.
+        """
+        if MAX_TOOL_MESSAGE_CHARS <= 0:
+            return message
+
+        content = message.content
+        if isinstance(content, str):
+            serialized = content
+        else:
+            try:
+                serialized = json.dumps(content, ensure_ascii=False)
+            except Exception:
+                serialized = str(content)
+
+        if len(serialized) <= MAX_TOOL_MESSAGE_CHARS:
+            return message
+
+        trimmed = serialized[:MAX_TOOL_MESSAGE_CHARS]
+        trimmed += (
+            f"... [EcoAdvisor truncated {len(serialized) - MAX_TOOL_MESSAGE_CHARS} "
+            f"chars from tool '{message.name or 'tool'}']"
+        )
+        logger.info(
+            "EcoAdvisor truncated tool output for %s from %s chars to %s chars",
+            message.name or "tool",
+            len(serialized),
+            MAX_TOOL_MESSAGE_CHARS,
+        )
+        return ToolMessage(
+            content=trimmed,
+            name=message.name or "tool",
+            tool_call_id=(message.tool_call_id or ""),
+            additional_kwargs=getattr(message, "additional_kwargs", {}),
+            id=getattr(message, "id", None),
+        )
+
+    def _compact_messages_for_llm(self, messages: List[AnyMessage]) -> List[AnyMessage]:
+        return [
+            self._truncate_tool_message(msg) if isinstance(msg, ToolMessage) else msg
+            for msg in messages
+        ]
+
     # -----------------------------------------------------------------------
     # 3) Noeud LLM principal
     # -----------------------------------------------------------------------
@@ -363,6 +424,7 @@ class EcoAdvisor(AgentFlow):
         recent_history = self.recent_messages(state["messages"], max_messages=5)
         messages = self.with_system(system_text, recent_history)
         messages = self.with_chat_context_text(messages)
+        messages = self._compact_messages_for_llm(messages)
 
         try:
             # 4) LLM + tool-calling: le modèle peut décider d'appeler MCP ou non

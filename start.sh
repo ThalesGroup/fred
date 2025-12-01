@@ -60,5 +60,9 @@ prefix_logs() {
 (cd agentic-backend && uv run uvicorn agentic_backend.academy.08_ecoadviser.traffic_service.server_mcp:app \
     --host 127.0.0.1 --port 9799 2>&1 | prefix_logs "TRAFFIC") &
 
+# TCL real-time MCP server
+(cd agentic-backend && uv run uvicorn agentic_backend.academy.08_ecoadviser.tcl_service.server_mcp:app \
+    --host 127.0.0.1 --port 9800 2>&1 | prefix_logs "TCL") &
+
 # wait for all background jobs
 wait
