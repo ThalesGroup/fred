@@ -65,7 +65,7 @@ ai:
     # Required in .env:
     # - OPENAI_API_KEY
     provider: "openai"
-    name: "gpt-4o"
+    name: "gpt-5.1"
     settings:
       temperature: 0.0
       max_retries: 2
@@ -74,7 +74,7 @@ ai:
     # Required in .env:
     # - OPENAI_API_KEY
     provider: "openai"
-    name: "gpt-4o"
+    name: "gpt-5.1"
     settings:
       temperature: 0.0
       max_retries: 2
@@ -109,6 +109,10 @@ ai:
       type: "agent"
       class_path: "agentic_backend.academy.07_travel_agent.travel_agent.Travel"
       enabled: true
+    - name: "Kelly"
+      type: "agent"
+      class_path: "agentic_backend.agents.knowledge_extractor.knowledge_extractor.Kelly"
+      enabled: true
 
 mcp:
   servers:
@@ -135,6 +139,11 @@ mcp:
     - name: "mcp-neo4j-graph-db"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-neo4j"
+      sse_read_timeout: 2000
+      auth_mode: "user_token"
+    - name: "mcp-knowledge-flow-mcp-text"
+      transport: "streamable_http"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-text"
       sse_read_timeout: 2000
       auth_mode: "user_token"
 
