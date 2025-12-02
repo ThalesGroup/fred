@@ -14,6 +14,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, List, Optional, TypedDict
 
+from jsonschema import Draft7Validator
 from langchain.agents import AgentState, create_agent
 from langchain.agents.structured_output import ProviderStrategy
 from langchain_core.messages import AIMessage, AnyMessage
@@ -103,7 +104,7 @@ class SlideMaker(AgentFlow):
 
     tuning = TUNING
     _graph: Optional[StateGraph] = None
-    TARGET_PLACEHOLDER_INDEX = 1  # Hardcoded index for content insertion
+    # TARGET_PLACEHOLDER_INDEX = 1  # Hardcoded index for content insertion
 
     async def async_init(self, runtime_context: RuntimeContext):
         await super().async_init(runtime_context)
@@ -137,6 +138,7 @@ class SlideMaker(AgentFlow):
     # --------------------------------------------------------------------------
     # Node 1: Plan Node (LLM Content Generation)
     # --------------------------------------------------------------------------
+
     async def plan_node(self, state: SlideMakerState) -> dict:
         """Generates a concise text block from the LLM based on the user's request."""
         user_ask = self._last_user_message_text(state)
@@ -146,9 +148,7 @@ class SlideMaker(AgentFlow):
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[*self.mcp.get_tools()],
             checkpointer=self.streaming_memory,
-            response_format=ProviderStrategy(
-                globalSchema["properties"]["enjeuxBesoins"]
-            ),  # type: ignore
+            response_format=ProviderStrategy(globalSchema),
         )
         resp = await agent.ainvoke(
             {
@@ -157,7 +157,28 @@ class SlideMaker(AgentFlow):
                 ]
             }
         )
-
+        validator = Draft7Validator(globalSchema)
+        errors = list(validator.iter_errors(resp["structured_response"]))
+        validation_errors = 0
+        while errors and validation_errors < 0:
+            validation_errors += 1
+            resp = await agent.ainvoke(
+                {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": (
+                                "Your response did not fit the json schema validation."
+                                "If it is too long, summarize it."
+                                f"Here is the error message: {[err.message for err in errors]}."
+                            ),
+                        },
+                    ]
+                }
+            )
+            validator = Draft7Validator(globalSchema)
+            errors = list(validator.iter_errors(resp["structured_response"]))
+        logger.info(f"{validation_errors} retries to validate the JSON schema.")
         return {"structured_response": resp["structured_response"]}
 
     # --------------------------------------------------------------------------
@@ -193,7 +214,7 @@ class SlideMaker(AgentFlow):
             ) as out:
                 output_path = Path(out.name)
                 fill_slide_from_structured_response(
-                    template_path, state.get("structured_response"), 3, output_path
+                    template_path, state.get("structured_response"), output_path
                 )
 
             # 3. Upload the generated asset to user storage

@@ -105,115 +105,157 @@ globalSchema = {
                     "type": "string",
                     "description": "L'intitulé du poste rempli par l'intervenant.",
                 },
-                "formations": {
-                    "type": "array",
-                    "description": "Les écoles et formations qu'a suivi l'intervenant.",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "date": {
-                                "type": "string",
-                                "description": "La date de la de diplôme ou de la formation.",
-                            },
-                            "nom": {
-                                "type": "string",
-                                "description": "Le nom de l'établissement ou de la formation.",
-                            },
-                        },
-                    },
+                "date1": {
+                    "type": "string",
+                    "description": "La date du premier diplôme ou formation.",
                 },
-                "langues": {
-                    "type": "array",
-                    "description": "Les langues parlées par l'intervenant.",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "langue": {
-                                "type": "string",
-                                "description": "La langue parlée.",
-                            },
-                            "maitrise": {
-                                "type": "integer",
-                                "description": "La maitrise de la langue parlée.",
-                            },
-                        },
-                    },
+                "formation1": {
+                    "type": "string",
+                    "description": "Le nom du premier diplôme ou formation.",
                 },
-                "competencesManagement": {
-                    "type": "array",
-                    "description": "Les compétences en management de l'intervenant.",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "competence": {
-                                "type": "string",
-                                "description": "Le nom de la compétence en management.",
-                            },
-                            "maitrise": {
-                                "type": "integer",
-                                "description": "La maitrise de la compétence en management.",
-                            },
-                        },
-                    },
+                "date2": {
+                    "type": "string",
+                    "description": "La date du second diplôme ou formation.",
                 },
-                "competencesInformatique": {
-                    "type": "array",
-                    "description": "Les compétences informatiques de l'intervenant.",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "competence": {
-                                "type": "string",
-                                "description": "Le nom de la compétence informatique.",
-                            },
-                            "maitrise": {
-                                "type": "integer",
-                                "description": "La maitrise de la compétence informatique.",
-                            },
-                        },
-                    },
+                "formation2": {
+                    "type": "string",
+                    "description": "Le nom du second diplôme ou formation.",
                 },
-                "competencesGestionProjet": {
-                    "type": "array",
-                    "description": "Les compétences en gestion de projet de l'intervenant.",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "competence": {
-                                "type": "string",
-                                "description": "Le nom de la compétence en gestion de projet.",
-                            },
-                            "maitrise": {
-                                "type": "integer",
-                                "description": "La maitrise de la compétence en gestion de projet.",
-                            },
-                        },
-                    },
+                "date3": {
+                    "type": "string",
+                    "description": "La date du troisième diplôme ou formation.",
                 },
-                "experiences": {
-                    "type": "array",
-                    "description": "Les expériences de l'intervenant.",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "entreprise": {
-                                "type": "string",
-                                "description": "Le nom de l'entreprise.",
-                            },
-                            "poste": {
-                                "type": "string",
-                                "description": "Le nom du poste.",
-                            },
-                            "duree": {
-                                "type": "string",
-                                "description": "La durée de l'expérience.",
-                            },
-                            "realisations": {
-                                "type": "string",
-                                "description": "Description des taches réalisées.",
-                            },
-                        },
-                    },
+                "formation3": {
+                    "type": "string",
+                    "description": "Le nom du troisième diplôme ou formation.",
+                },
+                "langue1": {
+                    "type": "string",
+                    "description": "La première langue parlée.",
+                },
+                "maitrise1": {
+                    "type": "integer",
+                    "description": "La maitrise de la première langue parlée.",
+                },
+                "competenceManagement1": {
+                    "type": "string",
+                    "description": "Le nom de la première compétence en management.",
+                },
+                "maitriseManagement1": {
+                    "type": "integer",
+                    "description": "La maitrise de la première compétence en management.",
+                },
+                "competenceManagement2": {
+                    "type": "string",
+                    "description": "Le nom de la seconde compétence en management.",
+                },
+                "maitriseManagement2": {
+                    "type": "integer",
+                    "description": "La maitrise de la seconde compétence en management.",
+                },
+                "competenceManagement3": {
+                    "type": "string",
+                    "description": "Le nom de la troisième compétence en management.",
+                },
+                "maitriseManagement3": {
+                    "type": "integer",
+                    "description": "La maitrise de la troisième compétence en management.",
+                },
+                "competenceInformatique1": {
+                    "type": "string",
+                    "description": "Le nom de la première compétence informatique.",
+                },
+                "maitriseInformatique1": {
+                    "type": "integer",
+                    "description": "La maitrise de la première compétence informatique.",
+                },
+                "competenceInformatique2": {
+                    "type": "string",
+                    "description": "Le nom de la seconde compétence informatique.",
+                },
+                "maitriseInformatique2": {
+                    "type": "integer",
+                    "description": "La maitrise de la seconde compétence informatique.",
+                },
+                "competenceInformatique3": {
+                    "type": "string",
+                    "description": "Le nom de la troisième compétence informatique.",
+                },
+                "maitriseInformatique3": {
+                    "type": "integer",
+                    "description": "La maitrise de la troisième compétence informatique.",
+                },
+                "competenceGestionProjet1": {
+                    "type": "string",
+                    "description": "Le nom de la première compétence en gestion de projet.",
+                },
+                "maitriseGestionProjet1": {
+                    "type": "integer",
+                    "description": "La maitrise de la première compétence en gestion de projet.",
+                },
+                "competenceGestionProjet2": {
+                    "type": "string",
+                    "description": "Le nom de la seconde compétence en gestion de projet.",
+                },
+                "maitriseGestionProjet2": {
+                    "type": "integer",
+                    "description": "La maitrise de la seconde compétence en gestion de projet.",
+                },
+                "competenceGestionProjet3": {
+                    "type": "string",
+                    "description": "Le nom de la troisième compétence en gestion de projet.",
+                },
+                "maitriseGestionProjet3": {
+                    "type": "integer",
+                    "description": "La maitrise de la troisième compétence en gestion de projet.",
+                },
+                "entreprise1": {
+                    "type": "string",
+                    "description": "Le nom de la première entreprise.",
+                },
+                "poste1": {
+                    "type": "string",
+                    "description": "Le nom du premier poste.",
+                },
+                "duree1": {
+                    "type": "string",
+                    "description": "La durée de la première expérience.",
+                },
+                "realisations1": {
+                    "type": "string",
+                    "description": "Description des taches réalisées lors de la première expérience.",
+                },
+                "entreprise2": {
+                    "type": "string",
+                    "description": "Le nom de la seconde entreprise.",
+                },
+                "poste2": {
+                    "type": "string",
+                    "description": "Le nom du second poste.",
+                },
+                "duree2": {
+                    "type": "string",
+                    "description": "La durée de la seconde expérience.",
+                },
+                "realisations2": {
+                    "type": "string",
+                    "description": "Description des taches réalisées lors de la seconde expérience.",
+                },
+                "entreprise3": {
+                    "type": "string",
+                    "description": "Le nom de la troisième entreprise.",
+                },
+                "poste3": {
+                    "type": "string",
+                    "description": "Le nom du troisième poste.",
+                },
+                "duree3": {
+                    "type": "string",
+                    "description": "La durée de la troisième expérience.",
+                },
+                "realisations3": {
+                    "type": "string",
+                    "description": "Description des taches réalisées lors de la troisième expérience.",
                 },
             },
         },
@@ -222,23 +264,55 @@ globalSchema = {
             "descripion": "Informations sur les prestations financière facturées au client.",
             "properties": {
                 "prestations": {
-                    "type": "array",
-                    "items": {
-                        "nom": {
+                    "type": "object",
+                    "properties": {
+                        "prestation1": {
                             "type": "string",
-                            "description": "Nom de la prestation.",
+                            "description": "Nom de la première prestation.",
                         },
-                        "prix": {
+                        "prix1": {
                             "type": "integer",
-                            "description": "Prix unitaire de la prestation.",
+                            "description": "Prix unitaire de la première prestation.",
                         },
-                        "charge": {
+                        "charge1": {
                             "type": "integer",
-                            "description": "Charge estimée de a prestation en unités d'oeuvre.",
+                            "description": "Charge estimée de la première prestation en unités d'oeuvre.",
                         },
-                        "prixTotal": {
+                        "prixTotal1": {
                             "type": "integer",
-                            "description": "Coût total de la prestation.",
+                            "description": "Coût total de la première prestation.",
+                        },
+                        "prestation2": {
+                            "type": "string",
+                            "description": "Nom de la seconde prestation.",
+                        },
+                        "prix2": {
+                            "type": "integer",
+                            "description": "Prix unitaire de la seconde prestation.",
+                        },
+                        "charge2": {
+                            "type": "integer",
+                            "description": "Charge estimée de la seconde prestation en unités d'oeuvre.",
+                        },
+                        "prixTotal2": {
+                            "type": "integer",
+                            "description": "Coût total de la seconde prestation.",
+                        },
+                        "prestation3": {
+                            "type": "string",
+                            "description": "Nom de la troisième prestation.",
+                        },
+                        "prix3": {
+                            "type": "integer",
+                            "description": "Prix unitaire de la troisième prestation.",
+                        },
+                        "charge3": {
+                            "type": "integer",
+                            "description": "Charge estimée de la troisième prestation en unités d'oeuvre.",
+                        },
+                        "prixTotal3": {
+                            "type": "integer",
+                            "description": "Coût total de la troisième prestation.",
                         },
                     },
                 },
@@ -253,6 +327,7 @@ globalSchema = {
 
 enjeuxBesoinsSchema = {
     "type": "object",
+    "description": "Informations sur le contexte et les missions du projet.",
     "properties": {
         "contexte": {
             "type": "string",
@@ -273,7 +348,7 @@ enjeuxBesoinsSchema = {
 
 cvSchema = {
     "type": "object",
-    "description": "Le CV de l'intervenant Thalès Services Numériques.",
+    "description": "Informations sur le CV de l'intervenant Thalès Services Numériques.",
     "properties": {
         "poste": {
             "type": "string",
@@ -388,7 +463,7 @@ cvSchema = {
 
 prestationFinanciereSchema = {
     "type": "object",
-    "descripion": "Prestations financière facturées au client.",
+    "descripion": "Informations sur les prestations financière facturées au client.",
     "properties": {
         "prestations": {
             "type": "array",
@@ -415,6 +490,7 @@ prestationFinanciereSchema = {
     },
 }
 
+listSchema = [enjeuxBesoinsSchema, cvSchema, prestationFinanciereSchema]
 
 """
 @dataclass
