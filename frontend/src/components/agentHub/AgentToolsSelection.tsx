@@ -1,5 +1,6 @@
-import InfoIcon from "@mui/icons-material/Info";
-import { Card, Stack, Switch, Tooltip, Typography } from "@mui/material";
+import HttpIcon from "@mui/icons-material/Http";
+import TerminalRounded from "@mui/icons-material/TerminalRounded";
+import { Card, Chip, Stack, Switch, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import {
   McpServerConfiguration,
@@ -62,17 +63,63 @@ export interface AgentToolSelectionCardProps {
 
 export function AgentToolSelectionCard({ conf, selected, onSelectedChange }: AgentToolSelectionCardProps) {
   const { t } = useTranslation();
+  const transport = (conf.transport || "streamable_http").toLowerCase();
+  const isStdio = transport === "stdio";
+  const transportLabel = isStdio
+    ? t("agentHub.fields.mcp_server.transport_local", "Local process")
+    : t("agentHub.fields.mcp_server.transport_http", "HTTP endpoint");
+  const connectionDetail =
+    transport === "streamable_http"
+      ? conf.url || "—"
+      : [conf.command, ...(conf.args || [])].filter(Boolean).join(" ") || "—";
 
   return (
-    <Card sx={{ padding: 0.5 }}>
-      <Stack direction="row" spacing={1} alignItems="center">
-        <Switch checked={selected} onChange={(event) => onSelectedChange(event.target.checked)} />
-        <Typography>{t(conf.name)}</Typography>
-        {conf.description && (
-          <Tooltip title={t(conf.description)} enterTouchDelay={0}>
-            <InfoIcon color="disabled" />
-          </Tooltip>
-        )}
+    <Card
+      sx={{
+        padding: 1.25,
+        borderColor: selected ? "primary.main" : "divider",
+        boxShadow: selected ? 2 : 0,
+      }}
+      variant="outlined"
+    >
+      <Stack spacing={0.75}>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Switch checked={selected} onChange={(event) => onSelectedChange(event.target.checked)} />
+          <Stack spacing={0.25} flex={1}>
+            <Typography fontWeight={600}>{t(conf.name)}</Typography>
+            {conf.description && (
+              <Typography variant="body2" color="text.secondary">
+                {t(conf.description)}
+              </Typography>
+            )}
+          </Stack>
+          <Chip
+            label={transportLabel}
+            icon={isStdio ? <TerminalRounded fontSize="small" /> : <HttpIcon fontSize="small" />}
+            color={isStdio ? "secondary" : "primary"}
+            variant="outlined"
+            size="small"
+          />
+        </Stack>
+
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ marginLeft: "44px" }}>
+          <Typography variant="caption" color="text.secondary">
+            {isStdio ? t("agentHub.fields.mcp_server.command", "Command") : t("agentHub.fields.mcp_server.url")}
+          </Typography>
+          <Typography
+            variant="body2"
+            color="text.primary"
+            sx={{
+              fontFamily: "'JetBrains Mono', 'Fira Code', 'Menlo', 'Roboto Mono', monospace",
+              backgroundColor: "action.hover",
+              px: 1,
+              py: 0.5,
+              borderRadius: 1,
+            }}
+          >
+            {connectionDetail}
+          </Typography>
+        </Stack>
       </Stack>
     </Card>
   );

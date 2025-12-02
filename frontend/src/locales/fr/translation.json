@@ -275,6 +275,9 @@
         "name": "Nom",
         "url": "URL",
         "transport": "Transport",
+        "transport_http": "streamable_http",
+        "transport_local": "stdio",
+        "command": "Commande",
         "timeout": "Timeout"
       }
     },
@@ -776,6 +779,10 @@
       "neo4j": {
         "name": "Accès Neo4j",
         "description": "Permet à votre agent d'interagir avec les bases de données graphes Neo4j"
+      },
+      "local_stdio": {
+        "name": "MCP local (stdio)",
+        "description": "Exécute un serveur MCP local via stdio (outils basés sur un processus)"
       }
     }
   }
