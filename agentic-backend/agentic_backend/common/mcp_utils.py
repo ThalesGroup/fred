@@ -247,6 +247,7 @@ async def get_connected_mcp_client_for_agent(
 
     # Validate connections by attempting to load tools per server
     exceptions: list[Exception] = []
+    failure_messages: list[str] = []
     total_tools = 0
     for server in mcp_servers:
         conn_entry = connections.get(server.id) or {}
@@ -289,13 +290,23 @@ async def get_connected_mcp_client_for_agent(
                 str(e).split("\n")[0],
             )
             exceptions.extend(getattr(e, "exceptions", [e]))
+            failure_messages.append(
+                f"{server.id} ({transport}): {url_for_log}): {e.__class__.__name__}: {str(e).splitlines()[0]}\n"
+            )
 
     if exceptions:
         logger.error("MCP summary: %d server(s) failed to connect.", len(exceptions))
         for i, exc in enumerate(exceptions, 1):
             logger.error("  [%d] %s: %s", i, exc.__class__.__name__, str(exc))
+        reason = (
+            "Some MCP connections failed.\nDetails:\n"
+            + "; ".join(failure_messages)
+            + "Ensure the matching Knowledge Flow controllers are enabled "
+            "or disable the MCP server in Agentic configuration."
+        )
+        logger.error("[MCP][%s] connection summary: %s", agent_name, reason)
         # Nothing to cleanup on the client instance
-        raise MCPConnectionError("Some MCP connections failed", exceptions)
+        raise MCPConnectionError(reason, exceptions)
 
     logger.debug(
         "[MCP][%s] summary: all servers validated, total tools=%d",
