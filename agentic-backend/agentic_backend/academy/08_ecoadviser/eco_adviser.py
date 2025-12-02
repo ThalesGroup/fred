@@ -55,6 +55,7 @@ from agentic_backend.core.runtime_source import expose_runtime_source
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_MESSAGE_CHARS = int(os.getenv("ECO_MAX_TOOL_MESSAGE_CHARS", "4000"))
+RECENT_MESSAGES_WINDOW = int(os.getenv("ECO_RECENT_MESSAGES", "12"))
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +134,9 @@ ECO_TUNING = AgentTuning(
                 "### Présentation UI\n"
                 "- Structure ta réponse avec des sous-titres Markdown (`### Synthèse rapide`, `### Options détaillées`, `### Données & hypothèses`).\n"
                 "- Mets en évidence les données ou ordres de grandeur critiques avec du gras limité (`**CO₂ actuel**`, `**Trafic impactant**`).\n"
+                "- Reste concis: phrases courtes, pas de redites inutiles.\n"
                 "- Utilise des pastilles couleurs via emoji standards pour qualifier les options: `🟢` (option bas carbone), `🟠` (point de vigilance), `🔴` (action à éviter). Ne dépasse jamais trois pastilles par réponse.\n"
+                "- Ajoute au besoin des emojis transport (🚲, 🚗, 🚌, 🚶, etc ...) pour illustrer les options.\n"
                 "- Termine les recommandations chiffrées par un tableau Markdown (colonnes `Mode | CO₂ hebdo | Hypothèses`) et ajoute un bloc `Hypothèses` en liste courte.\n"
                 "- Fractionne les paragraphes en listes ou phrases courtes pour rester lisible dans l'UI.\n\n"
                 "### Rules\n"
@@ -421,7 +424,9 @@ class EcoAdvisor(AgentFlow):
         system_text = self.render(tpl)
 
         # 3) Construire l'historique de conversation minimal
-        recent_history = self.recent_messages(state["messages"], max_messages=5)
+        recent_history = self.recent_messages(
+            state["messages"], max_messages=max(RECENT_MESSAGES_WINDOW, 1)
+        )
         messages = self.with_system(system_text, recent_history)
         messages = self.with_chat_context_text(messages)
         messages = self._compact_messages_for_llm(messages)
