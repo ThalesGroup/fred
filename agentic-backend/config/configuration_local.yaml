@@ -102,22 +102,26 @@ ai:
 
 mcp:
   servers:
-    - name: "mcp-knowledge-flow-mcp-tabular"
+    - id: "mcp-knowledge-flow-mcp-tabular"
+      name: "mcp-knowledge-flow-mcp-tabular"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-tabular"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-knowledge-flow-opensearch-ops"
+    - id: "mcp-knowledge-flow-opensearch-ops"
+      name: "mcp-knowledge-flow-opensearch-ops"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-kubernetes-server"
+    - id: "mcp-kubernetes-server"
+      name: "mcp-kubernetes-server"
       transport: "streamable_http"
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-atlassian-jira-server"
+    - id: "mcp-atlassian-jira-server"
+      name: "mcp-atlassian-jira-server"
       transport: "streamable_http"
       url: "http://localhost:8885/mcp"
       sse_read_timeout: 2000

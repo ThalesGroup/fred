@@ -167,17 +167,20 @@ mcp:
       url: "http://localhost:8111/knowledge-flow/v1/mcp-neo4j"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-co2-service"
+    - id: "mcp-co2-service"
+      name: "mcp-co2-service"
       transport: "streamable_http"
       url: "http://localhost:9798/mcp"
       sse_read_timeout: 2000
       auth_mode: "no_token"
-    - name: "mcp-traffic-service"
+    - id: "mcp-traffic-service"
+      name: "mcp-traffic-service"
       transport: "streamable_http"
       url: "http://localhost:9799/mcp"
       sse_read_timeout: 2000
       auth_mode: "no_token"
-    - name: "mcp-tcl-service"
+    - id: "mcp-tcl-service"
+      name: "mcp-tcl-service"
       transport: "streamable_http"
       url: "http://localhost:9800/mcp"
       sse_read_timeout: 2000
