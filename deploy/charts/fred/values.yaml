@@ -244,17 +244,24 @@ applications:
             enabled: false
       mcp:
         servers:
-          - name: "mcp-knowledge-flow-mcp-tabular"
+          - id: "mcp-knowledge-flow-mcp-tabular"
+            name: "mcp.servers.tabular.name"
+            description: "mcp.servers.tabular.description"
             transport: "streamable_http"
             url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
             sse_read_timeout: 2000
             auth_mode: "user_token"
-          - name: "mcp-knowledge-flow-opensearch-ops"
+          - id: "mcp-knowledge-flow-opensearch-ops"
+            name: "mcp.servers.search_opensearch.name"
+            description: "mcp.servers.search_opensearch.description"
             transport: "streamable_http"
             url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops"
             sse_read_timeout: 2000
             auth_mode: "user_token"
-          - name: "mcp-kubernetes-server"
+          - id: "mcp-kubernetes-server"
+            name: "mcp.servers.kubernetes.name"
+            description: "mcp.servers.kubernetes.description"
+            enabled: false
             transport: "streamable_http"
             url: "http://mcp-kubernetes-server:8081/mcp"
             sse_read_timeout: 2000
