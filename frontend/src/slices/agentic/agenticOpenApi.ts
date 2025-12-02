@@ -348,7 +348,7 @@ export type FieldSpec = {
   ui?: UiHints;
 };
 export type McpServerRef = {
-  id: string;
+  name: string;
   require_tools?: string[];
 };
 export type AgentTuning = {
@@ -688,6 +688,10 @@ export type FrontendConfigDto = {
   user_auth: UserSecurity;
   is_rebac_enabled: boolean;
 };
+export type McpServerRef2 = {
+  id: string;
+  require_tools?: string[];
+};
 export type AgentTuning2 = {
   /** The agent's mandatory role for discovery. */
   role: string;
@@ -695,7 +699,7 @@ export type AgentTuning2 = {
   description: string;
   tags?: string[];
   fields?: FieldSpec[];
-  mcp_servers?: McpServerRef[];
+  mcp_servers?: McpServerRef2[];
 };
 export type Agent2 = {
   name: string;
