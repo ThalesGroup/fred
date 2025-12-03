@@ -279,6 +279,10 @@ applications:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/agent.duckdb"
 
+        mcp_servers_store:
+          type: "duckdb"
+          duckdb_path: "/home/fred-user/.fred/agentic/mcp_servers.duckdb"
+
         session_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/session.duckdb"

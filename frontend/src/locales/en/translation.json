@@ -73,6 +73,7 @@
     "chat": "Chat",
     "monitoring": "Monitoring",
     "knowledge": "Resources",
+    "mcp": "MCP Hub",
     "agent": "Agents",
     "workspaces": "Workspaces",
     "account": "Profile",
@@ -84,6 +85,7 @@
       "chat": "Chat with the AI assistant team",
       "monitoring": "Monitor the backend AI calls",
       "knowledge": "Consult the content of your libraries",
+      "mcp": "Manage MCP servers",
       "agent": "View agents",
       "workspaces": "View Workspace",
       "account": "View your account",
@@ -297,6 +299,62 @@
     },
     "toolsSelection": {
       "title": "Tools"
+    }
+  },
+  "mcpHub": {
+    "title": "MCP Hub",
+    "subtitle": "Register and edit MCP servers available to agents.",
+    "addButton": "Add MCP server",
+    "addTitle": "New MCP server",
+    "editTitle": "Edit MCP server",
+    "emptyTitle": "No MCP servers yet",
+    "emptyHint": "Create a server entry to let agents connect to it.",
+    "countLabel": "servers",
+    "search": "Search",
+    "filter": "Filter",
+    "confirmDeleteTitle": "Delete MCP server?",
+    "confirmDeleteMessage": "Delete MCP server {{id}}? This only removes the persisted entry.",
+    "fields": {
+      "id": "Identifier",
+      "name": "Display name (i18n key)",
+      "description": "Description (i18n key)",
+      "transport": "Transport",
+      "url": "Server URL",
+      "command": "Command",
+      "args": "Arguments",
+      "env": "Environment variables",
+      "enabled": "Enabled",
+      "timeout": "SSE timeout (s)",
+      "auth_mode": "Auth mode"
+    },
+    "helpers": {
+      "args": "Space or comma separated arguments",
+      "env": "One KEY=VALUE per line"
+    },
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "transport": {
+      "stdio": "stdio",
+      "streamable_http": "streamable_http",
+      "sse": "Server-sent events",
+      "websocket": "WebSocket"
+    },
+    "auth": {
+      "user_token": "User token",
+      "no_token": "No token",
+      "user_token_hint": "Forward the authenticated user's bearer token",
+      "present": "Auth configured",
+      "none": "No auth"
+    },
+    "toasts": {
+      "created": "MCP server created",
+      "updated": "MCP server updated",
+      "deleted": "MCP server deleted",
+      "enabled": "MCP server enabled",
+      "disabled": "MCP server disabled",
+      "error": "Operation failed"
     }
   },
   "chatbot": {

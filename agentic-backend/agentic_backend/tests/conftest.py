@@ -120,6 +120,7 @@ def minimal_generalist_config() -> Configuration:
                 username="admin",
             ),
             agent_store=duckdb_store,
+            mcp_servers_store=duckdb_store,
             session_store=duckdb_store,
             history_store=duckdb_store,
             feedback_store=duckdb_store,

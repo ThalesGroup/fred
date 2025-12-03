@@ -73,6 +73,7 @@
     "chat": "Discussion",
     "monitoring": "Supervision",
     "knowledge": "Ressources",
+    "mcp": "Hub MCP",
     "agent": "Hub Agent",
     "workspaces": "Espaces de travail",
     "account": "Profil",
@@ -84,6 +85,7 @@
       "chat": "Discuter avec l'assistant IA",
       "monitoring": "Superviser les appels IA backend",
       "knowledge": "Consulter vos bibliothèques de documents et de prompts",
+      "mcp": "Gérer les serveurs MCP",
       "agent": "Voir les agents",
       "workspaces": "Voir les espaces",
       "account": "Voir votre profil",
@@ -297,6 +299,62 @@
     },
     "toolsSelection": {
       "title": "Outils"
+    }
+  },
+  "mcpHub": {
+    "title": "Hub MCP",
+    "subtitle": "Déclarez et modifiez les serveurs MCP accessibles aux agents.",
+    "addButton": "Ajouter un serveur MCP",
+    "addTitle": "Nouveau serveur MCP",
+    "editTitle": "Modifier un serveur MCP",
+    "emptyTitle": "Aucun serveur MCP pour l'instant",
+    "emptyHint": "Créez une entrée pour permettre aux agents de s'y connecter.",
+    "countLabel": "serveurs",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "confirmDeleteTitle": "Supprimer le serveur MCP ?",
+    "confirmDeleteMessage": "Supprimer le serveur MCP {{id}} ? Seule l'entrée persistée sera supprimée.",
+    "fields": {
+      "id": "Identifiant",
+      "name": "Nom affiché (clé i18n)",
+      "description": "Description (clé i18n)",
+      "transport": "Transport",
+      "url": "URL du serveur",
+      "command": "Commande",
+      "args": "Arguments",
+      "env": "Variables d'environnement",
+      "enabled": "Activé",
+      "timeout": "Timeout SSE (s)",
+      "auth_mode": "Mode d'authentification"
+    },
+    "helpers": {
+      "args": "Arguments séparés par un espace ou une virgule",
+      "env": "Une ligne KEY=VALUE par variable"
+    },
+    "status": {
+      "enabled": "Activé",
+      "disabled": "Désactivé"
+    },
+    "transport": {
+      "stdio": "stdio",
+      "streamable_http": "streamable_http",
+      "sse": "Server-sent events",
+      "websocket": "WebSocket"
+    },
+    "auth": {
+      "user_token": "Jeton utilisateur",
+      "no_token": "Pas de jeton",
+      "user_token_hint": "Transmettre le bearer token de l'utilisateur authentifié",
+      "present": "Auth configurée",
+      "none": "Pas d'auth"
+    },
+    "toasts": {
+      "created": "Serveur MCP créé",
+      "updated": "Serveur MCP mis à jour",
+      "deleted": "Serveur MCP supprimé",
+      "enabled": "Serveur MCP activé",
+      "disabled": "Serveur MCP désactivé",
+      "error": "Échec de l'opération"
     }
   },
   "chatbot": {

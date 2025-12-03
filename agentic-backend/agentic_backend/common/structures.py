@@ -35,6 +35,10 @@ class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
     opensearch: OpenSearchStoreConfig
     agent_store: StoreConfig
+    mcp_servers_store: Optional[StoreConfig] = Field(
+        default=None,
+        description="Optional override for MCP servers store (defaults to agent_store backend).",
+    )
     session_store: StoreConfig
     history_store: StoreConfig
     feedback_store: StoreConfig

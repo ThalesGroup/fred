@@ -61,6 +61,34 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    listMcpServersAgenticV1McpServersGet: build.query<
+      ListMcpServersAgenticV1McpServersGetApiResponse,
+      ListMcpServersAgenticV1McpServersGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/mcp/servers` }),
+    }),
+    createMcpServerAgenticV1McpServersPost: build.mutation<
+      CreateMcpServerAgenticV1McpServersPostApiResponse,
+      CreateMcpServerAgenticV1McpServersPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/mcp/servers`, method: "POST", body: queryArg.saveMcpServerRequest }),
+    }),
+    updateMcpServerAgenticV1McpServersServerIdPut: build.mutation<
+      UpdateMcpServerAgenticV1McpServersServerIdPutApiResponse,
+      UpdateMcpServerAgenticV1McpServersServerIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/mcp/servers/${queryArg.serverId}`,
+        method: "PUT",
+        body: queryArg.saveMcpServerRequest,
+      }),
+    }),
+    deleteMcpServerAgenticV1McpServersServerIdDelete: build.mutation<
+      DeleteMcpServerAgenticV1McpServersServerIdDeleteApiResponse,
+      DeleteMcpServerAgenticV1McpServersServerIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/mcp/servers/${queryArg.serverId}`, method: "DELETE" }),
+    }),
     echoSchemaAgenticV1SchemasEchoPost: build.mutation<
       EchoSchemaAgenticV1SchemasEchoPostApiResponse,
       EchoSchemaAgenticV1SchemasEchoPostApiArg
@@ -214,6 +242,22 @@ export type RuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetApiResponse =
 export type RuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetApiArg = {
   module: string;
   qualname?: string | null;
+};
+export type ListMcpServersAgenticV1McpServersGetApiResponse =
+  /** status 200 Successful Response */ McpServerConfiguration[];
+export type ListMcpServersAgenticV1McpServersGetApiArg = void;
+export type CreateMcpServerAgenticV1McpServersPostApiResponse = /** status 200 Successful Response */ any;
+export type CreateMcpServerAgenticV1McpServersPostApiArg = {
+  saveMcpServerRequest: SaveMcpServerRequest;
+};
+export type UpdateMcpServerAgenticV1McpServersServerIdPutApiResponse = /** status 200 Successful Response */ any;
+export type UpdateMcpServerAgenticV1McpServersServerIdPutApiArg = {
+  serverId: string;
+  saveMcpServerRequest: SaveMcpServerRequest;
+};
+export type DeleteMcpServerAgenticV1McpServersServerIdDeleteApiResponse = /** status 200 Successful Response */ any;
+export type DeleteMcpServerAgenticV1McpServersServerIdDeleteApiArg = {
+  serverId: string;
 };
 export type EchoSchemaAgenticV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ null;
 export type EchoSchemaAgenticV1SchemasEchoPostApiArg = {
@@ -417,6 +461,9 @@ export type Leader = {
   type?: "leader";
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];
+};
+export type SaveMcpServerRequest = {
+  server: McpServerConfiguration;
 };
 export type Role = "user" | "assistant" | "tool" | "system";
 export type Channel =
@@ -824,6 +871,11 @@ export const {
   useLazyRuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetQuery,
   useRuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetQuery,
   useLazyRuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetQuery,
+  useListMcpServersAgenticV1McpServersGetQuery,
+  useLazyListMcpServersAgenticV1McpServersGetQuery,
+  useCreateMcpServerAgenticV1McpServersPostMutation,
+  useUpdateMcpServerAgenticV1McpServersServerIdPutMutation,
+  useDeleteMcpServerAgenticV1McpServersServerIdDeleteMutation,
   useEchoSchemaAgenticV1SchemasEchoPostMutation,
   useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
   useLazyGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,

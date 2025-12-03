@@ -16,7 +16,11 @@ export interface AgentToolsSelectionProps {
 export function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: AgentToolsSelectionProps) {
   const { t } = useTranslation();
   const { data: mcpServersData, isFetching: isFetchingMcpServers } =
-    useListMcpServersAgenticV1AgentsMcpServersGetQuery();
+    useListMcpServersAgenticV1AgentsMcpServersGetQuery(undefined, {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+    });
 
   if (isFetchingMcpServers) {
     return <div>Loading tools...</div>;
