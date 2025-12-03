@@ -64,6 +64,7 @@ export const AgentCard = ({
 }: AgentCardProps) => {
   const { t } = useTranslation();
   const theme = useTheme();
+  const isEnabled = agent.enabled !== false;
   const tags = agent.tuning.tags ?? [];
   const tagLabel = tags.join(", ");
   const tooltipBg = theme.palette.mode === "dark" ? "rgba(19, 23, 31, 0.94)" : theme.palette.background.paper;
@@ -94,7 +95,7 @@ export const AgentCard = ({
           display: "flex",
           flexDirection: "column", // Stack content vertically
           gap: 1,
-          opacity: agent.enabled ? 1 : 0.4,
+          opacity: isEnabled ? 1 : 0.4,
         }}
       >
         {/* ROW 1: Chip + Tags + Favorite Star */}
@@ -206,7 +207,7 @@ export const AgentCard = ({
               overflow: "hidden",
               minHeight: "3.6em", // ~3 lines @ 1.2 line-height
               flexGrow: 1,
-              opacity: agent.enabled ? 1 : 0.75,
+              opacity: isEnabled ? 1 : 0.75,
             }}
           >
             {agent.tuning.description}
@@ -265,12 +266,12 @@ export const AgentCard = ({
           )}
 
           {onToggleEnabled && (
-            <Tooltip title={agent.enabled ? t("agentCard.disable") : t("agentCard.enable", "Enable")}>
+            <Tooltip title={isEnabled ? t("agentCard.disable") : t("agentCard.enable", "Enable")}>
               <IconButton
                 size="small"
                 onClick={() => onToggleEnabled(agent)}
                 sx={{ color: "text.secondary" }} // Button color is neutral
-                aria-label={agent.enabled ? "disable agent" : "enable agent"}
+                aria-label={isEnabled ? "disable agent" : "enable agent"}
               >
                 <PowerSettingsNewIcon fontSize="small" />
               </IconButton>

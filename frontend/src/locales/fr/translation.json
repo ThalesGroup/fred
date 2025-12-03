@@ -8,7 +8,9 @@
     "beta": "Bêta",
     "retry": "Réessayer",
     "error": "Erreur",
-    "refresh": "Rafraîchir"
+    "refresh": "Rafraîchir",
+    "cancel": "Annuler",
+    "save": "Enregistrer"
   },
   "dataHub": {
     "title": "Hub des Données - Lignage des documents",
@@ -313,7 +315,7 @@
     "search": "Rechercher",
     "filter": "Filtrer",
     "confirmDeleteTitle": "Supprimer le serveur MCP ?",
-    "confirmDeleteMessage": "Supprimer le serveur MCP {{id}} ? Seule l'entrée persistée sera supprimée.",
+    "confirmDeleteMessage": "Supprimer le serveur MCP {{id}} ? Cette action est irréversible.",
     "fields": {
       "id": "Identifiant",
       "name": "Nom affiché (clé i18n)",

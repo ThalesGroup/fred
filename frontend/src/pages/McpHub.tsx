@@ -5,7 +5,7 @@ import FilterListIcon from "@mui/icons-material/FilterList";
 import SearchIcon from "@mui/icons-material/Search";
 import { Box, Button, Card, CardContent, Chip, Fade, Stack, Typography, useTheme } from "@mui/material";
 import Grid2 from "@mui/material/Grid2";
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TopBar } from "../common/TopBar";
 import { McpServerCard } from "../components/mcpHub/McpServerCard";
@@ -111,12 +111,17 @@ export const McpHub = () => {
       const raw = err?.data?.detail || err?.data || err?.message || err;
       return typeof raw === "string" ? raw : JSON.stringify(raw);
     };
+    const previousId = editing?.id;
+    const idChanged = Boolean(previousId && previousId !== server.id);
     try {
       if (editing) {
         await updateServer({
-          serverId: editing.id,
+          serverId: server.id,
           saveMcpServerRequest: { server },
         }).unwrap();
+        if (idChanged && previousId) {
+          await deleteServer({ serverId: previousId }).unwrap();
+        }
         showSuccess({ summary: t("mcpHub.toasts.updated") });
       } else {
         await createServer({ saveMcpServerRequest: { server } }).unwrap();
@@ -130,22 +135,27 @@ export const McpHub = () => {
     }
   };
 
-  const handleDelete = (server: McpServerConfiguration) => {
-    showConfirmationDialog({
-      title: t("mcpHub.confirmDeleteTitle"),
-      message: t("mcpHub.confirmDeleteMessage", { id: server.id }),
-      onConfirm: async () => {
-        try {
-          await deleteServer({ serverId: server.id }).unwrap();
-          showSuccess({ summary: t("mcpHub.toasts.deleted") });
-          refetch();
-        } catch (error: any) {
-          const detail = error?.data?.detail || error?.data || error?.message || "Unknown error";
-          showError({ summary: t("mcpHub.toasts.error"), detail });
-        }
-      },
-    });
-  };
+  const handleDelete = useCallback(
+    (server: McpServerConfiguration) => {
+      showConfirmationDialog({
+        title: t("mcpHub.confirmDeleteTitle") || "Delete MCP server?",
+        message:
+          t("mcpHub.confirmDeleteMessage", { id: server.id }) ||
+          `Are you sure you want to delete the MCP server “${server.id}”?`,
+        onConfirm: async () => {
+          try {
+            await deleteServer({ serverId: server.id }).unwrap();
+            showSuccess({ summary: t("mcpHub.toasts.deleted") });
+            refetch();
+          } catch (error: any) {
+            const detail = error?.data?.detail || error?.data || error?.message || "Unknown error";
+            showError({ summary: t("mcpHub.toasts.error"), detail });
+          }
+        },
+      });
+    },
+    [deleteServer, refetch, showConfirmationDialog, showError, showSuccess, t],
+  );
 
   const handleToggleEnabled = async (server: McpServerConfiguration) => {
     const safeDetail = (err: any) => {
