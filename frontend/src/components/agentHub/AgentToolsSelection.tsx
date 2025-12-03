@@ -43,12 +43,12 @@ export function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: Ag
             <AgentToolSelectionCard
               key={index}
               conf={conf}
-              selected={mcpServerRefs.some((ref) => ref.id === conf.id)}
+              selected={mcpServerRefs.some((ref) => ref.name === conf.id)}
               onSelectedChange={(selected) => {
                 if (selected) {
-                  onMcpServerRefsChange([...mcpServerRefs, { id: conf.id }]);
+                  onMcpServerRefsChange([...mcpServerRefs, { name: conf.id }]);
                 } else {
-                  onMcpServerRefsChange(mcpServerRefs.filter((ref) => ref.id !== conf.id));
+                  onMcpServerRefsChange(mcpServerRefs.filter((ref) => ref.name !== conf.id));
                 }
               }}
             />

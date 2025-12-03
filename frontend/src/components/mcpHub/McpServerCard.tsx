@@ -12,7 +12,6 @@ import {
   Chip,
   IconButton,
   Stack,
-  Tooltip,
   Typography,
   useTheme,
 } from "@mui/material";
