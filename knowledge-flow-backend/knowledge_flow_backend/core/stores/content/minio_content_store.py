@@ -175,6 +175,24 @@ class MinioStorageBackend(BaseContentStore):
             logger.error(f"[CONTENT] Failed to delete objects document_uid={document_uid}: {e}")
             raise ValueError(f"Failed to delete document content from MinIO: {e}")
 
+    def list_document_uids(self) -> List[str]:
+        """
+        Return the set of top-level prefixes (document_uids) stored in the document bucket.
+        """
+        try:
+            objects = self.client.list_objects(self.document_bucket, recursive=True)
+            doc_uids: set[str] = set()
+            for obj in objects:
+                if not obj.object_name:
+                    continue
+                prefix = obj.object_name.split("/", 1)[0]
+                if prefix:
+                    doc_uids.add(prefix)
+            return sorted(doc_uids)
+        except S3Error as e:
+            logger.warning(f"[CONTENT] Failed to list document prefixes in bucket '{self.document_bucket}': {e}")
+            return []
+
     def get_preview_bytes(self, doc_path: str) -> bytes:
         try:
             response = self.client.get_object(self.document_bucket, doc_path)

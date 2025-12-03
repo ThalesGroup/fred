@@ -27,6 +27,7 @@ from knowledge_flow_backend.common.document_structures import (
     ProcessingSummary,
 )
 from knowledge_flow_backend.common.utils import sanitize_sql_name
+from pydantic import BaseModel, Field
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import MetadataDeserializationError
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,34 @@ class InvalidMetadataRequest(Exception):
     pass
 
 
+class StoreAuditFinding(BaseModel):
+    document_uid: str
+    document_name: str | None = None
+    source_tag: str | None = None
+    present_in_metadata: bool
+    present_in_vector_store: bool
+    present_in_content_store: bool
+    vector_chunks: int | None = Field(default=None, description="Number of chunks in vector store (when available)")
+    issues: list[str] = Field(default_factory=list)
+
+
+class StoreAuditReport(BaseModel):
+    has_anomalies: bool
+    total_seen: int
+    metadata_count: int
+    vector_count: int
+    content_count: int
+    anomalies: list[StoreAuditFinding] = Field(default_factory=list)
+
+
+class StoreAuditFixResponse(BaseModel):
+    before: StoreAuditReport
+    after: StoreAuditReport
+    deleted_metadata: list[str] = Field(default_factory=list)
+    deleted_vectors: list[str] = Field(default_factory=list)
+    deleted_content: list[str] = Field(default_factory=list)
+
+
 class MetadataService:
     """
     Service for managing metadata operations.
@@ -58,6 +87,7 @@ class MetadataService:
         self.catalog_store = context.get_catalog_store()
         self.csv_input_store = None
         self.vector_store = None
+        self.content_store = context.get_content_store()
         self.rebac = context.get_rebac_engine()
 
     @authorize(Action.READ, Resource.DOCUMENTS)
@@ -600,3 +630,168 @@ class MetadataService:
 
     def _get_tag_as_parent_relation(self, tag_id: str, document_uid: str) -> Relation:
         return Relation(subject=RebacReference(Resource.TAGS, tag_id), relation=RelationType.PARENT, resource=RebacReference(Resource.DOCUMENTS, document_uid))
+
+    # ------------------------------------------------------------------
+    # Store consistency audit (metadata/content/vector)
+    # ------------------------------------------------------------------
+
+    def _ensure_vector_store(self):
+        if self.vector_store is None:
+            try:
+                self.vector_store = ApplicationContext.get_instance().get_vector_store()
+            except Exception as e:
+                logger.warning("[AUDIT] Could not initialize vector store: %s", e)
+                return None
+        return self.vector_store
+
+    def _list_vector_document_uids(self) -> set[str]:
+        store = self._ensure_vector_store()
+        if store is None:
+            return set()
+
+        try:
+            if hasattr(store, "list_document_uids"):
+                return set(store.list_document_uids())  # type: ignore[attr-defined]
+        except Exception as e:
+            logger.warning("[AUDIT] Failed to list vector document_uids: %s", e)
+        return set()
+
+    def _list_content_document_uids(self) -> set[str]:
+        if self.content_store is None:
+            return set()
+
+        try:
+            if hasattr(self.content_store, "list_document_uids"):
+                return set(self.content_store.list_document_uids())  # type: ignore[attr-defined]
+        except Exception as e:
+            logger.warning("[AUDIT] Failed to list content document_uids: %s", e)
+        return set()
+
+    def _get_vector_chunk_count(self, document_uid: str) -> int | None:
+        store = self._ensure_vector_store()
+        if store is None or not hasattr(store, "get_document_chunk_count"):
+            return None
+
+        try:
+            return int(store.get_document_chunk_count(document_uid=document_uid))  # type: ignore[attr-defined]
+        except Exception as e:
+            logger.warning("[AUDIT] Failed to count vectors for %s: %s", document_uid, e)
+            return None
+
+    @authorize(Action.UPDATE, Resource.DOCUMENTS)
+    async def audit_stores(self, user: KeycloakUser) -> StoreAuditReport:
+        """
+        Scan metadata, content, and vector stores to surface orphan or partial data.
+        """
+        try:
+            docs = self.metadata_store.get_all_metadata({})
+        except MetadataDeserializationError as e:
+            logger.error(f"[AUDIT] Deserialization error while building audit report: {e}")
+            raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
+        except Exception as e:
+            logger.error(f"[AUDIT] Failed to retrieve metadata for audit: {e}")
+            raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
+
+        metadata_map = {md.document_uid: md for md in docs}
+        metadata_ids = set(metadata_map.keys())
+        vector_ids = self._list_vector_document_uids()
+        content_ids = self._list_content_document_uids()
+        all_ids = sorted(metadata_ids | vector_ids | content_ids)
+
+        anomalies: list[StoreAuditFinding] = []
+        for doc_uid in all_ids:
+            md = metadata_map.get(doc_uid)
+            in_metadata = md is not None
+            in_vector = doc_uid in vector_ids
+            in_content = doc_uid in content_ids
+            issues: list[str] = []
+
+            if not in_metadata:
+                if in_vector:
+                    issues.append("orphan_vectors")
+                if in_content:
+                    issues.append("orphan_content")
+            else:
+                raw_ready = md.processing.stages.get(ProcessingStage.RAW_AVAILABLE) == ProcessingStatus.DONE
+                if raw_ready and not in_content:
+                    issues.append("missing_content")
+
+                vec_done = md.processing.stages.get(ProcessingStage.VECTORIZED) == ProcessingStatus.DONE
+                if vec_done and not in_vector:
+                    issues.append("missing_vectors")
+
+            vector_chunks = self._get_vector_chunk_count(doc_uid) if in_vector else None
+
+            if issues:
+                anomalies.append(
+                    StoreAuditFinding(
+                        document_uid=doc_uid,
+                        document_name=md.document_name if md else None,
+                        source_tag=md.source_tag if md else None,
+                        present_in_metadata=in_metadata,
+                        present_in_vector_store=in_vector,
+                        present_in_content_store=in_content,
+                        vector_chunks=vector_chunks,
+                        issues=issues,
+                    )
+                )
+
+        return StoreAuditReport(
+            has_anomalies=bool(anomalies),
+            total_seen=len(all_ids),
+            metadata_count=len(metadata_ids),
+            vector_count=len(vector_ids),
+            content_count=len(content_ids),
+            anomalies=anomalies,
+        )
+
+    @authorize(Action.UPDATE, Resource.DOCUMENTS)
+    async def fix_store_anomalies(self, user: KeycloakUser) -> StoreAuditFixResponse:
+        """
+        Run the audit and delete orphan/partial data from all stores.
+        """
+        before = await self.audit_stores(user)
+        deleted_metadata: list[str] = []
+        deleted_vectors: list[str] = []
+        deleted_content: list[str] = []
+
+        vector_store = self._ensure_vector_store()
+        content_store = self.content_store
+
+        for finding in before.anomalies:
+            issues = set(finding.issues)
+            doc_uid = finding.document_uid
+
+            remove_vectors = "orphan_vectors" in issues or "missing_content" in issues or "missing_vectors" in issues
+            remove_content = "orphan_content" in issues or "missing_content" in issues or "missing_vectors" in issues
+            remove_metadata = finding.present_in_metadata and ("missing_content" in issues or "missing_vectors" in issues)
+
+            if remove_vectors and vector_store is not None and finding.present_in_vector_store:
+                try:
+                    vector_store.delete_vectors_for_document(document_uid=doc_uid)
+                    deleted_vectors.append(doc_uid)
+                except Exception as e:
+                    logger.warning("[AUDIT] Failed to delete vectors for %s: %s", doc_uid, e)
+
+            if remove_content and content_store is not None and finding.present_in_content_store:
+                try:
+                    content_store.delete_content(doc_uid)
+                    deleted_content.append(doc_uid)
+                except Exception as e:
+                    logger.warning("[AUDIT] Failed to delete content for %s: %s", doc_uid, e)
+
+            if remove_metadata:
+                try:
+                    self.metadata_store.delete_metadata(doc_uid)
+                    deleted_metadata.append(doc_uid)
+                except Exception as e:
+                    logger.warning("[AUDIT] Failed to delete metadata for %s: %s", doc_uid, e)
+
+        after = await self.audit_stores(user)
+        return StoreAuditFixResponse(
+            before=before,
+            after=after,
+            deleted_metadata=deleted_metadata,
+            deleted_vectors=deleted_vectors,
+            deleted_content=deleted_content,
+        )
