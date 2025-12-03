@@ -217,7 +217,8 @@ export const AgentHub = () => {
   };
 
   const handleToggleEnabled = async (agent: AnyAgent) => {
-    await updateEnabled(agent, !agent.enabled);
+    const isEnabled = agent.enabled !== false;
+    await updateEnabled(agent, !isEnabled);
     fetchAgents();
   };
 
