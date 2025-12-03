@@ -44,8 +44,8 @@ class DuckDBMcpServerStore(BaseMcpServerStore):
     def _ensure_schema(self) -> None:
         with self.store._connect() as conn:
             conn.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS {self.TABLE} (
+                """
+                CREATE TABLE IF NOT EXISTS mcp_servers (
                     id TEXT PRIMARY KEY,
                     payload_json TEXT
                 )
@@ -58,14 +58,14 @@ class DuckDBMcpServerStore(BaseMcpServerStore):
         )
         with self.store._connect() as conn:
             conn.execute(
-                f"INSERT OR REPLACE INTO {self.TABLE} (id, payload_json) VALUES (?, ?)",
+                "INSERT OR REPLACE INTO mcp_servers (id, payload_json) VALUES (?, ?)",
                 (server.id, payload_json),
             )
         logger.debug("[STORE][DUCKDB][MCP] Saved server id=%s", server.id)
 
     def load_all(self) -> List[MCPServerConfiguration]:
         with self.store._connect() as conn:
-            rows = conn.execute(f"SELECT payload_json FROM {self.TABLE}").fetchall()
+            rows = conn.execute("SELECT payload_json FROM mcp_servers").fetchall()
 
         servers: List[MCPServerConfiguration] = []
         for (payload,) in rows:
@@ -81,7 +81,7 @@ class DuckDBMcpServerStore(BaseMcpServerStore):
     def get(self, server_id: str) -> Optional[MCPServerConfiguration]:
         with self.store._connect() as conn:
             row = conn.execute(
-                f"SELECT payload_json FROM {self.TABLE} WHERE id = ?",
+                "SELECT payload_json FROM mcp_servers WHERE id = ?",
                 (server_id,),
             ).fetchone()
 
@@ -98,5 +98,5 @@ class DuckDBMcpServerStore(BaseMcpServerStore):
 
     def delete(self, server_id: str) -> None:
         with self.store._connect() as conn:
-            conn.execute(f"DELETE FROM {self.TABLE} WHERE id = ?", (server_id,))
+            conn.execute("DELETE FROM mcp_servers WHERE id = ?", (server_id,))
         logger.info("[STORE][DUCKDB][MCP] Deleted server id=%s", server_id)
