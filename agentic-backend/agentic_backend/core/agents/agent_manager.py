@@ -15,7 +15,10 @@
 import logging
 from typing import Dict, List, Tuple, cast
 
-from agentic_backend.application_context import get_mcp_configuration
+from agentic_backend.application_context import (
+    get_mcp_configuration,
+    get_mcp_server_manager,
+)
 from agentic_backend.common.structures import AgentSettings, Configuration, Leader
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_loader import AgentLoader
@@ -83,7 +86,11 @@ class AgentManager:
         return list(self.agent_settings.values())
 
     def get_mcp_servers_configuration(self) -> List[MCPServerConfiguration]:
-        return get_mcp_configuration().servers
+        try:
+            return get_mcp_server_manager().list_servers()
+        except Exception:
+            # Fallback to static configuration if manager unavailable (e.g., early boot)
+            return [s for s in get_mcp_configuration().servers if s.enabled]
 
     def log_current_settings(self):
         for name, settings in self.agent_settings.items():

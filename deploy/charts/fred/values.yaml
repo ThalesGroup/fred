@@ -19,6 +19,7 @@ applications:
     applicationName: agentic-backend
     deployment:
       enabled: true
+    replicaCount: 1
     statefulset:
       enabled: false
     job:
@@ -285,6 +286,10 @@ applications:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/agent.duckdb"
 
+        mcp_servers_store:
+          type: "duckdb"
+          duckdb_path: "/home/fred-user/.fred/agentic/mcp_servers.duckdb"
+
         session_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/session.duckdb"
@@ -309,6 +314,7 @@ applications:
     applicationName: frontend
     deployment:
       enabled: true
+    replicaCount: 1
     statefulset:
       enabled: false
     job:
@@ -424,6 +430,7 @@ applications:
     applicationName: knowledge-flow-backend
     deployment:
       enabled: true
+    replicaCount: 1
     statefulset:
       enabled: false
     job:

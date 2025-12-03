@@ -203,6 +203,10 @@ storage:
     type: "opensearch"
     index: agent-index
 
+  mcp_servers_store:
+    type: "opensearch"
+    index: mcp-servers-index
+
   session_store:
     type: "opensearch"
     index: session-index

@@ -18,7 +18,6 @@ import CodeIcon from "@mui/icons-material/Code";
 import DeleteIcon from "@mui/icons-material/Delete";
 import GroupIcon from "@mui/icons-material/Group"; // for crew
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
-import PowerOffIcon from "@mui/icons-material/PowerOff"; // for disable
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import StarIcon from "@mui/icons-material/Star";
 
@@ -95,7 +94,7 @@ export const AgentCard = ({
           display: "flex",
           flexDirection: "column", // Stack content vertically
           gap: 1,
-          opacity: agent.enabled ? 1 : 0.5,
+          opacity: agent.enabled ? 1 : 0.4,
         }}
       >
         {/* ROW 1: Chip + Tags + Favorite Star */}
@@ -207,7 +206,7 @@ export const AgentCard = ({
               overflow: "hidden",
               minHeight: "3.6em", // ~3 lines @ 1.2 line-height
               flexGrow: 1,
-              opacity: agent.enabled ? 1 : 0.5,
+              opacity: agent.enabled ? 1 : 0.75,
             }}
           >
             {agent.tuning.description}
@@ -273,14 +272,7 @@ export const AgentCard = ({
                 sx={{ color: "text.secondary" }} // Button color is neutral
                 aria-label={agent.enabled ? "disable agent" : "enable agent"}
               >
-                {/* Conditional Icon to suggest the NEXT action */}
-                {agent.enabled ? (
-                  // If ENABLED, the next action is to DISABLE (turn OFF)
-                  <PowerOffIcon fontSize="small" />
-                ) : (
-                  // If DISABLED, the next action is to ENABLE (turn ON)
-                  <PowerSettingsNewIcon fontSize="small" />
-                )}
+                <PowerSettingsNewIcon fontSize="small" />
               </IconButton>
             </Tooltip>
           )}
