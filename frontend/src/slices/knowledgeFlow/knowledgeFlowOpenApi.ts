@@ -476,66 +476,6 @@ const injectedRtkApi = api.injectEndpoints({
     createDirectory: build.mutation<CreateDirectoryApiResponse, CreateDirectoryApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/mkdir/${queryArg.path}`, method: "POST" }),
     }),
-    listEntriesKnowledgeFlowV1FsListGet: build.query<
-      ListEntriesKnowledgeFlowV1FsListGetApiResponse,
-      ListEntriesKnowledgeFlowV1FsListGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/fs/list`,
-        params: {
-          prefix: queryArg.prefix,
-        },
-      }),
-    }),
-    statKnowledgeFlowV1FsStatPathGet: build.query<
-      StatKnowledgeFlowV1FsStatPathGetApiResponse,
-      StatKnowledgeFlowV1FsStatPathGetApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/stat/${queryArg.path}` }),
-    }),
-    catKnowledgeFlowV1FsCatPathGet: build.query<
-      CatKnowledgeFlowV1FsCatPathGetApiResponse,
-      CatKnowledgeFlowV1FsCatPathGetApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/cat/${queryArg.path}` }),
-    }),
-    writeKnowledgeFlowV1FsWritePathPost: build.mutation<
-      WriteKnowledgeFlowV1FsWritePathPostApiResponse,
-      WriteKnowledgeFlowV1FsWritePathPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/fs/write/${queryArg.path}`,
-        method: "POST",
-        body: queryArg.bodyWriteKnowledgeFlowV1FsWritePathPost,
-      }),
-    }),
-    deleteKnowledgeFlowV1FsDeletePathDelete: build.mutation<
-      DeleteKnowledgeFlowV1FsDeletePathDeleteApiResponse,
-      DeleteKnowledgeFlowV1FsDeletePathDeleteApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/delete/${queryArg.path}`, method: "DELETE" }),
-    }),
-    grepKnowledgeFlowV1FsGrepGet: build.query<
-      GrepKnowledgeFlowV1FsGrepGetApiResponse,
-      GrepKnowledgeFlowV1FsGrepGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/fs/grep`,
-        params: {
-          pattern: queryArg.pattern,
-          prefix: queryArg.prefix,
-        },
-      }),
-    }),
-    pwdKnowledgeFlowV1FsPwdGet: build.query<PwdKnowledgeFlowV1FsPwdGetApiResponse, PwdKnowledgeFlowV1FsPwdGetApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/fs/pwd` }),
-    }),
-    mkdirKnowledgeFlowV1FsMkdirPathPost: build.mutation<
-      MkdirKnowledgeFlowV1FsMkdirPathPostApiResponse,
-      MkdirKnowledgeFlowV1FsMkdirPathPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/mkdir/${queryArg.path}`, method: "POST" }),
-    }),
     queryLogsKnowledgeFlowV1LogsQueryPost: build.mutation<
       QueryLogsKnowledgeFlowV1LogsQueryPostApiResponse,
       QueryLogsKnowledgeFlowV1LogsQueryPostApiArg
@@ -1066,38 +1006,6 @@ export type PrintRootDirectoryApiResponse = /** status 200 Successful Response *
 export type PrintRootDirectoryApiArg = void;
 export type CreateDirectoryApiResponse = /** status 200 Successful Response */ any;
 export type CreateDirectoryApiArg = {
-  path: string;
-};
-export type ListEntriesKnowledgeFlowV1FsListGetApiResponse = /** status 200 Successful Response */ any;
-export type ListEntriesKnowledgeFlowV1FsListGetApiArg = {
-  prefix?: string;
-};
-export type StatKnowledgeFlowV1FsStatPathGetApiResponse = /** status 200 Successful Response */ any;
-export type StatKnowledgeFlowV1FsStatPathGetApiArg = {
-  path: string;
-};
-export type CatKnowledgeFlowV1FsCatPathGetApiResponse = /** status 200 Successful Response */ any;
-export type CatKnowledgeFlowV1FsCatPathGetApiArg = {
-  path: string;
-};
-export type WriteKnowledgeFlowV1FsWritePathPostApiResponse = /** status 200 Successful Response */ any;
-export type WriteKnowledgeFlowV1FsWritePathPostApiArg = {
-  path: string;
-  bodyWriteKnowledgeFlowV1FsWritePathPost: BodyWriteKnowledgeFlowV1FsWritePathPost;
-};
-export type DeleteKnowledgeFlowV1FsDeletePathDeleteApiResponse = /** status 200 Successful Response */ any;
-export type DeleteKnowledgeFlowV1FsDeletePathDeleteApiArg = {
-  path: string;
-};
-export type GrepKnowledgeFlowV1FsGrepGetApiResponse = /** status 200 Successful Response */ any;
-export type GrepKnowledgeFlowV1FsGrepGetApiArg = {
-  pattern: string;
-  prefix?: string;
-};
-export type PwdKnowledgeFlowV1FsPwdGetApiResponse = /** status 200 Successful Response */ any;
-export type PwdKnowledgeFlowV1FsPwdGetApiArg = void;
-export type MkdirKnowledgeFlowV1FsMkdirPathPostApiResponse = /** status 200 Successful Response */ any;
-export type MkdirKnowledgeFlowV1FsMkdirPathPostApiArg = {
   path: string;
 };
 export type QueryLogsKnowledgeFlowV1LogsQueryPostApiResponse = /** status 200 Successful Response */ LogQueryResult;
@@ -1720,9 +1628,6 @@ export type ResourceUpdate = {
 export type BodyWriteFile = {
   data: string;
 };
-export type BodyWriteKnowledgeFlowV1FsWritePathPost = {
-  data: string;
-};
 export type LogEventDto = {
   ts: number;
   level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";
@@ -2034,19 +1939,6 @@ export const {
   usePrintRootDirectoryQuery,
   useLazyPrintRootDirectoryQuery,
   useCreateDirectoryMutation,
-  useListEntriesKnowledgeFlowV1FsListGetQuery,
-  useLazyListEntriesKnowledgeFlowV1FsListGetQuery,
-  useStatKnowledgeFlowV1FsStatPathGetQuery,
-  useLazyStatKnowledgeFlowV1FsStatPathGetQuery,
-  useCatKnowledgeFlowV1FsCatPathGetQuery,
-  useLazyCatKnowledgeFlowV1FsCatPathGetQuery,
-  useWriteKnowledgeFlowV1FsWritePathPostMutation,
-  useDeleteKnowledgeFlowV1FsDeletePathDeleteMutation,
-  useGrepKnowledgeFlowV1FsGrepGetQuery,
-  useLazyGrepKnowledgeFlowV1FsGrepGetQuery,
-  usePwdKnowledgeFlowV1FsPwdGetQuery,
-  useLazyPwdKnowledgeFlowV1FsPwdGetQuery,
-  useMkdirKnowledgeFlowV1FsMkdirPathPostMutation,
   useQueryLogsKnowledgeFlowV1LogsQueryPostMutation,
   useListGroupsKnowledgeFlowV1GroupsGetQuery,
   useLazyListGroupsKnowledgeFlowV1GroupsGetQuery,

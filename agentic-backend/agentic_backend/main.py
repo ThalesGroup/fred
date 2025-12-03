@@ -43,6 +43,7 @@ from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.chatbot import chatbot_controller
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
 from agentic_backend.core.feedback import feedback_controller
+from agentic_backend.core.mcp import mcp_controller
 from agentic_backend.core.monitoring import monitoring_controller
 
 # -----------------------
@@ -106,6 +107,7 @@ def create_app() -> FastAPI:
 
         # Instantiate dependencies *within* the lifespan context
         app.state.configuration = configuration
+        mcp_manager = application_context.get_mcp_server_manager()
         agent_loader = AgentLoader(configuration, get_agent_store())
         agent_manager = AgentManager(configuration, agent_loader, get_agent_store())
         agent_factory = AgentFactory(
@@ -131,6 +133,7 @@ def create_app() -> FastAPI:
             # to prevent the server from starting in a broken state.
 
         # Store state on app.state for access via dependency injection
+        app.state.mcp_manager = mcp_manager
         app.state.agent_manager = agent_manager
         app.state.session_orchestrator = session_orchestrator
 
@@ -164,6 +167,7 @@ def create_app() -> FastAPI:
 
     router = APIRouter(prefix=base_url)
     router.include_router(agent_controller.router)
+    router.include_router(mcp_controller.router)
     router.include_router(chatbot_controller.router)
     router.include_router(monitoring_controller.router)
     router.include_router(feedback_controller.router)

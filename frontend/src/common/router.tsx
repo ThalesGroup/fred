@@ -28,6 +28,7 @@ import Unauthorized from "../pages/PageUnauthorized";
 import { Profile } from "../pages/Profile";
 import ProcessorBench from "../pages/ProcessorBench";
 import ProcessorRunDetail from "../pages/ProcessorRunDetail";
+import { McpHub } from "../pages/McpHub";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => <LayoutWithSidebar>{children}</LayoutWithSidebar>;
 
@@ -111,6 +112,10 @@ export const routes: RouteObject[] = [
       {
         path: "agentHub",
         element: <AgentHub />,
+      },
+      {
+        path: "mcpHub",
+        element: <McpHub />,
       },
     ].filter(Boolean),
   },

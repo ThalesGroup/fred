@@ -18,6 +18,7 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import GroupIcon from "@mui/icons-material/Group";
+import HubIcon from "@mui/icons-material/Hub";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
@@ -168,6 +169,14 @@ export default function SideBar({ darkMode, onThemeChange }) {
       url: `/knowledge`,
       canBeDisabled: false,
       tooltip: t("sidebar.tooltip.knowledge"),
+    },
+    {
+      key: "mcp",
+      label: t("sidebar.mcp"),
+      icon: <HubIcon />,
+      url: `/mcpHub`,
+      canBeDisabled: false,
+      tooltip: t("sidebar.tooltip.mcp"),
     },
     {
       key: "agent",
