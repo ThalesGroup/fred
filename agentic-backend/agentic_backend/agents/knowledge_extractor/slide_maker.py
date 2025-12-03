@@ -18,10 +18,9 @@ from jsonschema import Draft7Validator
 from langchain.agents import AgentState, create_agent
 from langchain.agents.structured_output import ProviderStrategy
 from langchain_core.messages import AIMessage, AnyMessage
+from langfuse.langchain import CallbackHandler
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
-from pptx import Presentation
-from pptx.util import Pt
 from typing_extensions import Annotated
 
 from agentic_backend.agents.knowledge_extractor.knowledge_extractor import globalSchema
@@ -75,11 +74,15 @@ TUNING = AgentTuning(
             ),
             required=True,
             default=(
-                """Tu es un agent RAG. À chaque requête, tu reformules le besoin, génères une ou plusieurs requêtes de recherche concise, sélectionnes les passages les plus pertinents, puis produis une réponse claire et synthétique en accord avec le format demandé. Si les données sont insuffisantes, indique-le explicitement.
-Utilise les descriptions des champs du JSON schema pour mieux comprendre ce que tu dois chercher.
-Procède étape par étape et sépare tes recherches en plusieurs appels d'outil.
-Respecte les limites de caractères indiquées "maxLength" dans le JSON schema. Synthétise si besoin.
-Utilises un "top_k" de 5 et une "search_policy" de "semantic". N'utilise pas "document_library_tags_ids"."""
+                "Tu es un agent ayant accès à un outil por effectuer des recherches sémantiques dans des fichiers (RAG).\n"
+                "À chaque requête, tu reformules le besoin, génères une ou plusieurs requêtes de recherche concise,"
+                "sélectionnes les passages les plus pertinents, puis produis une réponse claire et synthétique en accord avec le format demandé.\n"
+                "Si les données sont insuffisantes, indique-le explicitement.\n"
+                "Utilise les descriptions des champs du JSON schema pour mieux comprendre ce que tu dois chercher.\n"
+                "IMPORTANT: Procède étape par étape et sépare tes recherches en plusieurs appels d'outil.\n"
+                "Exemple: On te demande d'extraire le chiffre d'affaire d'une enteprise et le menu de son restaurant. Tu fais deux recherches distinctes.\n"
+                "Respecte les limites de caractères indiquées 'maxLength' dans le JSON schema. Synthétise si besoin.\n"
+                "Utilises un 'top_k' de 5 et une 'search_policy' de 'semantic'. N'utilise pas 'document_library_tags_ids'.\n"
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
@@ -143,19 +146,22 @@ class SlideMaker(AgentFlow):
         """Generates a concise text block from the LLM based on the user's request."""
         user_ask = self._last_user_message_text(state)
 
+        langfuse_handler = CallbackHandler()
+
         agent = create_agent(
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[*self.mcp.get_tools()],
             checkpointer=self.streaming_memory,
-            response_format=ProviderStrategy(globalSchema),
+            response_format=ProviderStrategy(globalSchema),  # type: ignore
         )
         resp = await agent.ainvoke(
             {
                 "messages": [
                     {"role": "user", "content": user_ask},
                 ]
-            }
+            },
+            config={"callbacks": [langfuse_handler]},
         )
         validator = Draft7Validator(globalSchema)
         errors = list(validator.iter_errors(resp["structured_response"]))
