@@ -291,7 +291,10 @@ class OpenSearchAgentStore(BaseAgentStore):
     def mark_static_seeded(self) -> None:
         try:
             self.client.index(
-                index=self.index_name, id=self._seed_marker_id, body={}, refresh=True
+                index=self.index_name,
+                id=self._seed_marker_id,
+                body={},
+                params={"refresh": "true"},
             )
         except Exception:
             logger.exception("[AGENTS][OS] Failed to mark static_seeded")

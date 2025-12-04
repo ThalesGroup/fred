@@ -139,7 +139,10 @@ class OpenSearchMcpServerStore(BaseMcpServerStore):
         try:
             # Body can be empty since dynamic mapping is strict; id lives in _id.
             self.client.index(
-                index=self.index_name, id=self._seed_marker_id, body={}, refresh=True
+                index=self.index_name,
+                id=self._seed_marker_id,
+                body={},
+                params={"refresh": "true"},
             )
         except Exception:
             logger.exception("[STORE][OPENSEARCH][MCP] Failed to mark static seeded")

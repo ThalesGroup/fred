@@ -328,6 +328,12 @@ class AgentManager:
         for agent_cfg in self.config.ai.agents:
             if not agent_cfg.enabled:
                 continue
+            if not agent_cfg.tuning:
+                logger.warning(
+                    "[AGENTS] Skipping static agent '%s' restore: missing tuning.",
+                    agent_cfg.name,
+                )
+                continue
             try:
                 self.store.save(
                     agent_cfg, agent_cfg.tuning, scope=SCOPE_GLOBAL, scope_id=None
