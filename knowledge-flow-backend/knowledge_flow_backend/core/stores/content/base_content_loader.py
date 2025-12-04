@@ -17,7 +17,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import BinaryIO, List
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from fred_core.processors import DocumentMetadata
 from knowledge_flow_backend.common.structures import DocumentSourceConfig
 from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
 

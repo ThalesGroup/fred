@@ -1,14 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from knowledge_flow_backend.common.document_structures import (
-    DocumentMetadata,
-    FileInfo,
-    FileType,
-    Identity,
-    SourceInfo,
-    SourceType,
-)
+from fred_core.processors import DocumentMetadata, FileInfo, FileType, Identity, SourceInfo, SourceType
 from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
 
 

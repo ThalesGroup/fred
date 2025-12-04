@@ -23,9 +23,8 @@ from langchain_core.documents import Document
 from pandas._libs.tslibs.nattype import NaTType
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage
+from fred_core.processors import DocumentMetadata, ProcessingStage, BaseOutputProcessor, TabularProcessingError
 from knowledge_flow_backend.common.utils import sanitize_sql_name
-from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor, TabularProcessingError
 from knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_utils import load_langchain_doc_from_metadata
 
 logger = logging.getLogger(__name__)

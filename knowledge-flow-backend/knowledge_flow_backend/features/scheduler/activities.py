@@ -19,7 +19,7 @@ import tempfile
 from fred_core import KeycloakUser
 from temporalio import activity, exceptions
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage
+from fred_core.processors import DocumentMetadata, ProcessingStage
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
 logger = logging.getLogger(__name__)
