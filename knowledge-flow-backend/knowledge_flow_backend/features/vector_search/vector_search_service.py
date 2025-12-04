@@ -42,6 +42,7 @@ class VectorSearchService:
         self.embedder = ctx.get_embedder()
         self.vector_store = ctx.get_create_vector_store(self.embedder)  # BaseVectorStore (+ LexicalSearchable in OS)
         self.tag_service = TagService()
+        self.crossencoder_model = ctx.get_crossencoder_model()
 
         # Inject the same vector store (capability-checked inside retrievers)
         self._hybrid_retriever = HybridRetriever(self.vector_store)
@@ -244,3 +245,26 @@ class VectorSearchService:
             k=top_k,
             library_tags_ids=document_library_tags_ids,
         )
+
+    def rerank_documents(self, question: str, documents: List[VectorSearchHit], top_r: int) -> List[VectorSearchHit]:
+        """
+        Re-rank a list of documents using a cross-encoder model based on the relevance to a given question.
+
+        Args:
+            question (str): The query string used to re-rank the documents.
+            documents (List[VectorSearchHit]): A list of VectorSearchHit objects representing the documents to be re-ranked.
+            top_r (int): The number of top relevant documents to return after re-ranking.
+
+        Returns:
+            List[VectorSearchHit]: A list of VectorSearchHit objects sorted by relevance to the question, limited to top_r documents.
+        """
+        # Score and sort documents by relevance
+        pairs = [(question, doc.content) for doc in documents]
+        scores = self.crossencoder_model.predict(pairs)
+        sorted_docs = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
+
+        # Keep top-R documents
+        reranked_documents = [doc for doc, _ in sorted_docs[:top_r]]
+        logger.info("[VECTOR][RERANK] Reranked %s documents, keeping top %s", len(documents), len(reranked_documents))
+
+        return reranked_documents

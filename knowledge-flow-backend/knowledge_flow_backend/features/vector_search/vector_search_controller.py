@@ -15,12 +15,12 @@
 import logging
 from typing import List, Literal, Union
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from fred_core import KeycloakUser, VectorSearchHit, get_current_user
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
-from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicy, SearchPolicyName, SearchRequest
+from knowledge_flow_backend.features.vector_search.vector_search_structures import RerankRequest, SearchPolicy, SearchPolicyName, SearchRequest
 
 logger = logging.getLogger(__name__)
 
@@ -92,3 +92,19 @@ class VectorSearchController:
             dummy_hit = VectorSearchHit(content="This is a test document chunk.", uid="test-doc-001", title="Dummy Test Document", score=0.99, rank=1, type="test")
 
             return [dummy_hit]
+
+        @router.post(
+            "/vector/rerank",
+            tags=["Vector Search"],
+            summary="Sort documents according to their relevance",
+            description="Returns a list of VectorSearchHit sorted by relevance",
+            response_model=List[VectorSearchHit],
+            operation_id="rerank_documents",
+            status_code=status.HTTP_200_OK,
+        )
+        async def rerank(
+            request: RerankRequest,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> List[VectorSearchHit]:
+            documents = self.service.rerank_documents(question=request.question, documents=request.documents, top_r=request.top_r)
+            return documents
