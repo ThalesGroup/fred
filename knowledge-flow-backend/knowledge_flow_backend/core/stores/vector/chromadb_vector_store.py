@@ -240,6 +240,23 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
             logger.exception("[SEARCH] Failed to count chunks for document_uid=%s", document_uid)
             return 0
 
+    def list_document_uids(self) -> List[str]:
+        """
+        Return distinct document_uids present in the Chroma collection (best effort).
+        """
+        try:
+            got = self._collection.get(where={}, include=["metadatas"], limit=None)
+            metadatas: List[Mapping[str, Any]] = got.get("metadatas") or []
+            doc_uids: set[str] = set()
+            for meta in metadatas:
+                uid = meta.get(DOC_UID_FIELD) or meta.get("document_uid")
+                if isinstance(uid, str) and uid:
+                    doc_uids.add(uid)
+            return sorted(doc_uids)
+        except Exception:
+            logger.warning("[SEARCH] Failed to list document_uids from Chroma collection '%s'", self.collection_name, exc_info=True)
+            return []
+
     def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:
         """
         Update the 'retrievable' flag for all chunks of a document without deleting vectors.

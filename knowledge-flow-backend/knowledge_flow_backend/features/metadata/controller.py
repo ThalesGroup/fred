@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingGraph, ProcessingSummary
 from knowledge_flow_backend.common.utils import log_exception
-from knowledge_flow_backend.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
+from knowledge_flow_backend.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError, StoreAuditFixResponse, StoreAuditReport
 from knowledge_flow_backend.features.pull.controller import PullDocumentsResponse
 from knowledge_flow_backend.features.pull.service import PullDocumentService
 
@@ -269,4 +269,32 @@ class MetadataController:
                 chunks = await self.service.get_document_chunks(user, document_uid)
                 return chunks
             except Exception as e:
+                raise handle_exception(e)
+
+        @router.get(
+            "/documents/audit",
+            tags=["Documents"],
+            summary="Audit metadata/content/vector stores for orphan or partial data",
+            response_model=StoreAuditReport,
+            description="Scans the metadata, content, and vector stores to surface inconsistencies (orphan vectors/content or partially deleted documents).",
+        )
+        async def audit_documents(user: KeycloakUser = Depends(get_current_user)):
+            try:
+                return await self.service.audit_stores(user)
+            except Exception as e:
+                log_exception(e)
+                raise handle_exception(e)
+
+        @router.post(
+            "/documents/audit/fix",
+            tags=["Documents"],
+            summary="Delete orphan or partial document data across stores",
+            response_model=StoreAuditFixResponse,
+            description="Runs the audit and deletes any orphan data to keep metadata, content, and vector stores in sync.",
+        )
+        async def fix_documents(user: KeycloakUser = Depends(get_current_user)):
+            try:
+                return await self.service.fix_store_anomalies(user)
+            except Exception as e:
+                log_exception(e)
                 raise handle_exception(e)
