@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List
+from typing import List, Dict, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
@@ -26,29 +26,6 @@ class TabularController:
         self._register_routes(router)
 
     def _register_routes(self, router: APIRouter):
-        # -----------------------------
-        # GET TABULAR CONTEXT
-        # -----------------------------
-
-        @router.get(
-            "/tabular/context",
-            response_model=List[Dict[str, Any]],
-            tags=["Tabular"],
-            summary="Return all databases with their tables",
-            operation_id="get_context",
-        )
-        async def list_tabular_context(user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.TABLES_DATABASES)
-            try:
-                return self.service.list_databases_with_tables(user)
-            except Exception as e:
-                logger.exception("Failed to list databases and tables")
-                raise HTTPException(status_code=500, detail=str(e))
-
-        # -----------------------------
-        # DATABASE MANAGEMENT
-        # -----------------------------
-
         @router.get(
             "/tabular/databases",
             response_model=List[str],
@@ -101,33 +78,44 @@ class TabularController:
                 raise HTTPException(status_code=500, detail=str(e))
 
         @router.get(
-            "/tabular/databases/{db_name}/tables/{table_name}/schema",
+            "/tabular/databases/{db_name}/tables/{table_name}/descibe_table",
             response_model=GetSchemaResponse,
             tags=["Tabular"],
             summary="Get schema of a specific table",
-            operation_id="get_schema",
+            operation_id="describe_table",
         )
-        async def get_table_schema(
+        async def describe_table(
             db_name: str = Path(..., description="Database name"),
             table_name: str = Path(..., description="Table name"),
             user: KeycloakUser = Depends(get_current_user),
         ):
             authorize_or_raise(user, Action.READ, Resource.TABLES)
             try:
-                return self.service.get_schema(user, db_name=db_name, table_name=table_name)
+                return self.service.describe_table(user, db_name=db_name, table_name=table_name)
             except Exception as e:
                 logger.exception(f"Failed to get schema for {table_name} in database {db_name}")
                 raise HTTPException(status_code=500, detail=str(e))
 
-        # -----------------------------
-        # SQL QUERIES
-        # -----------------------------
+        @router.get(
+            "/tabular/context",
+            response_model=Dict[str, List[Dict[str, Any]]],
+            tags=["Tabular"],
+            summary="Return all databases with their tables",
+            operation_id="get_context",
+        )
+        async def list_tabular_context(user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.TABLES_DATABASES)
+            try:
+                return self.service.get_context(user)
+            except Exception as e:
+                logger.exception("Failed to list databases and tables")
+                raise HTTPException(status_code=500, detail=str(e))
 
         @router.post(
             "/tabular/databases/{db_name}/sql/read",
             response_model=RawSQLResponse,
             tags=["Tabular"],
-            summary="Execute a read-only SQL query on a given database",
+            summary="Execute a read-only SQL query on a given database (one statement allowed, DDL operations and dangerous SQL patterns are blocked)",
             operation_id="read_query",
         )
         async def raw_sql_read(
@@ -146,8 +134,8 @@ class TabularController:
             "/tabular/databases/{db_name}/sql/write",
             response_model=RawSQLResponse,
             tags=["Tabular"],
-            summary="Execute a write SQL query on a given database",
-            operation_id="write_query",
+            summary="Execute a write SQL query on a given database (one statement allowed and dangerous SQL patterns are blocked)",
+            operation_id="execute_write_query",
         )
         async def raw_sql_write(
             db_name: str = Path(..., description="Database name"),
@@ -163,10 +151,6 @@ class TabularController:
             except Exception as e:
                 logger.exception(f"Write SQL query failed on database {db_name}")
                 raise HTTPException(status_code=500, detail=str(e))
-
-        # -----------------------------
-        # DELETE TABLE
-        # -----------------------------
 
         @router.delete(
             "/tabular/databases/{db_name}/tables/{table_name}",

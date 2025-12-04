@@ -56,19 +56,15 @@ TABULAR_TUNING = AgentTuning(
             ),
             required=True,
             default=(
-                "You are a data analyst agent tasked with answering user questions based on structured tabular data "
-                "such as CSV or Excel files. Use the available tools to **list, inspect, and query datasets**.\n\n"
+                "You are a top-tier data analysis expert working with tabular data (CSV, Excel)."
+                "Your goal is to answer user questions accurately and efficiently using the data, "
+                "applying best practices in data exploration, SQL-like querying, and result presentation..\n\n"
                 "### Instructions:\n"
-                "1. ALWAYS start by invoking the tool to **list available datasets and their schema**.\n"
-                "2. Decide which dataset(s) to use.\n"
-                "3. Formulate an SQL-like query using the relevant schema.\n"
-                "4. Invoke the query tool to get the answer.\n"
-                "5. Derive your final answer from the actual data.\n\n"
-                "### Rules:\n"
-                "- Use markdown tables to present tabular results.\n"
-                "- Do NOT invent columns or data that aren't present.\n"
-                "- Format math formulas using LaTeX: `$$...$$` for blocks or `$...$` inline.\n"
-                "- When filtering or comparing text values in SQL, always normalize both sides with LOWER().\n"
+                "- Assess datasets and choose the most relevant ones.\n"
+                "- Design queries and calculations intelligently; optimize for clarity and performance.\n"
+                "- Present results clearly in markdown tables.\n"
+                "- Ensure all answers are based on actual data; do not invent values. \n"
+                "- Normalize text when comparing or filtering in SQL (use LOWER()).\n\n"
                 "Current date: {today}."
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
@@ -82,9 +78,7 @@ TABULAR_TUNING = AgentTuning(
 
 class TabularState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
-    database_context: List[
-        Dict[str, Any]
-    ]  # [{"database": "db1", "tables": ["t1", "t2"]}]
+    database_context: Dict[str, List[Dict[str, Any]]]
 
 
 @expose_runtime_source("agent.Tessa")
@@ -133,22 +127,49 @@ class Tessa(AgentFlow):
                 return self._maybe_parse_json(msg.content)
         return None
 
-    def _format_context_for_prompt(self, database_context: List[Dict[str, Any]]) -> str:
-        """Format the DB context for injection into the system prompt in a clear hierarchical style."""
+    def _format_context_for_prompt(
+        self, database_context: Dict[str, List[Dict[str, Any]]]
+    ) -> str:
+        """
+        Format DB context where the dict structure is:
+        {
+            "<database_name>": [
+                { "table_name": ..., "columns": [...], "row_count": ... },
+                ...
+            ]
+        }
+        """
+
         if not database_context:
             return "No databases or tables currently loaded.\n"
 
-        lines = ["You have access to :"]
-        for entry in database_context:
-            entry = self._maybe_parse_json(entry)
-            db = entry.get("database", "unknown")
-            tables = entry.get("tables", [])
-            lines.append(f"- Database: {db} with tables: {tables}")
+        # If entry is JSON in string form → parse it
+        database_context = self._maybe_parse_json(database_context)
+
+        lines = ["You have access to:"]
+
+        # Each key is the name of a database
+        for db_name, tables in database_context.items():
+            lines.append(f"- Database: {db_name}")
+
+            for table in tables:
+                table_name = table.get("table_name", "unknown")
+                columns = table.get("columns", [])
+                row_count = table.get("row_count", "unknown")
+
+                lines.append(f"  • Table: {table_name}  (rows: {row_count})")
+                lines.append("      Columns:")
+
+                for col in columns:
+                    col_name = col.get("name", "unknown")
+                    col_type = col.get("dtype", "unknown")
+                    lines.append(f"        - {col_name}: {col_type}")
+
         return "\n".join(lines)
 
     async def _ensure_database_context(
         self, state: TabularState
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, List[Dict[str, Any]]]:
         if state.get("database_context"):
             return state["database_context"]
 
@@ -158,7 +179,7 @@ class Tessa(AgentFlow):
             tool = next((t for t in tools if t.name == "get_context"), None)
             if not tool:
                 logger.warning("Unable to find tool 'get_context' in MCP server.")
-                return []
+                return {}
 
             raw_context = await tool.ainvoke({})
 
@@ -173,7 +194,7 @@ class Tessa(AgentFlow):
 
         except Exception as e:
             logger.warning(f"Could not load database context: {e}")
-            return []
+            return {}
 
     # ---------------------------
     # Graph

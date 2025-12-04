@@ -12,44 +12,123 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 import re
-from typing import Optional
 
-logger = logging.getLogger(__name__)
+FORBIDDEN_KEYWORDS_READ = [
+    # Locking / concurrency
+    " for update",
+    " for share",
+    " lock in share mode",
+    " for no key update",
+    " for key share",
+    # Select… into (creates objects)
+    "into temp",
+    "into temporary",
+    "into outfile",
+    "into dumpfile",
+    # DML
+    " insert ",
+    " update ",
+    " delete ",
+    " merge ",
+    " replace ",  # Myquery
+    # DDL
+    " alter ",
+    " drop ",
+    " create ",
+    " truncate ",
+    " rename ",
+    # Procedures / execution
+    " call ",
+    " exec ",
+    " execute ",
+    " do ",  # Postgres, query Server
+    " pragma ",  # queryite
+    # System/session modification
+    " set ",
+    " use ",  # Myquery
+    " attach database",
+    " detach database",
+    # File/IO
+    " load_file",
+    " load data",
+    " copy ",  # Postgres
+    # System schemas
+    "pg_",
+    "queryite_",
+    "sys.",
+    "information_schema",
+    "myquery.",
+    # Transactions
+    " begin ",
+    " commit ",
+    " rollback ",
+    " savepoint ",
+    " release savepoint",
+    # Dangerous maintenance ops
+    " vacuum ",
+    " analyze ",
+    " reindex ",
+    " optimize ",
+]
+
+FORBIDDEN_KEYWORDS_WRITE = [
+    # DDL
+    "truncate",
+    # Procedures / execution
+    "call",
+    "exec",
+    "execute",
+    "do",
+    "pragma",
+    # System/session modification
+    "set",
+    "use",
+    "attach database",
+    "detach database",
+    # File/IO
+    "load_file",
+    "load data",
+    "copy",
+    # System schemas
+    "pg_",
+    "queryite_",
+    "sys.",
+    "information_schema",
+    "myquery.",
+    # Maintenance ops
+    "vacuum",
+    "analyze",
+    "reindex",
+    "optimize",
+]
 
 
-def extract_safe_sql_query(text: str) -> Optional[str]:
-    """
-    Extract a safe SQL query (SELECT/WITH only) from the given text.
-    Rejects attempts to modify the database.
-    """
+def check_read_query(query: str) -> str:
+    # 1. Must start with "select" or "with"
+    if not (query.startswith("select") or query.startswith("with")):
+        raise ValueError("Only SELECT or WITH statements are allowed in read-only mode")
 
-    # 1. Detect and reject forbidden (modifying) SQL statements
-    forbidden_keywords = ["INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "TRUNCATE"]
-    for keyword in forbidden_keywords:
-        if re.search(rf"(?i)\b{keyword}\b", text):
-            raise PermissionError("No, you dont have the rights to modify the database")
+    # 2. No multiple statements
+    if ";" in query.rstrip(";"):
+        raise ValueError("Multiple query statements are not allowed")
 
-    # 2. Try to extract a query inside a ```sql code block
-    sql_block = re.search(r"```sql\s*(.*?)```", text, re.DOTALL | re.IGNORECASE)
-    if sql_block:
-        query = sql_block.group(1).strip()
-        if query.upper().startswith(("SELECT", "WITH")):
-            return query
-        raise PermissionError("No, you dont have the rights to modify the database")
+    # 3. Block dangerous keywords
+    for keyword in FORBIDDEN_KEYWORDS_READ:
+        if re.search(rf"\b{keyword}\b", query, flags=re.IGNORECASE):
+            raise ValueError("Forbidden query pattern in read-only mode")
 
-    # 3. Fallback: scan for SELECT/WITH queries inline
-    read_keywords = ["SELECT", "WITH"]
-    for keyword in read_keywords:
-        match = re.search(rf"(?i)\b{keyword}\b.*", text, re.DOTALL)
-        if match:
-            return match.group(0).strip()
-
-    return None
+    return query
 
 
-def column_name_corrector(col: str) -> str:
-    if any(c in col for c in " ()"):
-        return f'"{col}"'
-    return col
+def check_write_query(query: str) -> str:
+    # 1. No multiple statements
+    if ";" in query.rstrip(";"):
+        raise ValueError("Multiple query statements are not allowed")
+
+    # 2. Block dangerous keywords
+    for keyword in FORBIDDEN_KEYWORDS_WRITE:
+        if re.search(rf"\b{keyword}\b", query, flags=re.IGNORECASE):
+            raise ValueError("Forbidden query pattern in write mode")
+
+    return query
