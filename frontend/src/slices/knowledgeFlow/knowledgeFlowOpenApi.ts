@@ -540,9 +540,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/dev/bench/runs/${queryArg.runId}`, method: "DELETE" }),
     }),
-    getContext: build.query<GetContextApiResponse, GetContextApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/tabular/context` }),
-    }),
     listDatabases: build.query<ListDatabasesApiResponse, ListDatabasesApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/tabular/databases` }),
     }),
@@ -552,10 +549,13 @@ const injectedRtkApi = api.injectEndpoints({
     getDatabaseSchemas: build.query<GetDatabaseSchemasApiResponse, GetDatabaseSchemasApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/schemas` }),
     }),
-    getSchema: build.query<GetSchemaApiResponse, GetSchemaApiArg>({
+    describeTable: build.query<DescribeTableApiResponse, DescribeTableApiArg>({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/tables/${queryArg.tableName}/schema`,
+        url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/tables/${queryArg.tableName}/descibe_table`,
       }),
+    }),
+    getContext: build.query<GetContextApiResponse, GetContextApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/tabular/context` }),
     }),
     readQuery: build.mutation<ReadQueryApiResponse, ReadQueryApiArg>({
       query: (queryArg) => ({
@@ -564,7 +564,7 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.rawSqlRequest,
       }),
     }),
-    writeQuery: build.mutation<WriteQueryApiResponse, WriteQueryApiArg>({
+    executeWriteQuery: build.mutation<ExecuteWriteQueryApiResponse, ExecuteWriteQueryApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/sql/write`,
         method: "POST",
@@ -1054,10 +1054,6 @@ export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiResponse = /** sta
 export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiArg = {
   runId: string;
 };
-export type GetContextApiResponse = /** status 200 Successful Response */ {
-  [key: string]: any;
-}[];
-export type GetContextApiArg = void;
 export type ListDatabasesApiResponse = /** status 200 Successful Response */ string[];
 export type ListDatabasesApiArg = void;
 export type ListTablesApiResponse = /** status 200 Successful Response */ ListTablesResponse;
@@ -1070,21 +1066,27 @@ export type GetDatabaseSchemasApiArg = {
   /** Database name */
   dbName: string;
 };
-export type GetSchemaApiResponse = /** status 200 Successful Response */ GetSchemaResponse;
-export type GetSchemaApiArg = {
+export type DescribeTableApiResponse = /** status 200 Successful Response */ GetSchemaResponse;
+export type DescribeTableApiArg = {
   /** Database name */
   dbName: string;
   /** Table name */
   tableName: string;
 };
+export type GetContextApiResponse = /** status 200 Successful Response */ {
+  [key: string]: {
+    [key: string]: any;
+  }[];
+};
+export type GetContextApiArg = void;
 export type ReadQueryApiResponse = /** status 200 Successful Response */ RawSqlResponse;
 export type ReadQueryApiArg = {
   /** Database name */
   dbName: string;
   rawSqlRequest: RawSqlRequest;
 };
-export type WriteQueryApiResponse = /** status 200 Successful Response */ RawSqlResponse;
-export type WriteQueryApiArg = {
+export type ExecuteWriteQueryApiResponse = /** status 200 Successful Response */ RawSqlResponse;
+export type ExecuteWriteQueryApiArg = {
   /** Database name */
   dbName: string;
   rawSqlRequest: RawSqlRequest;
@@ -2005,18 +2007,18 @@ export const {
   useGetRunKnowledgeFlowV1DevBenchRunsRunIdGetQuery,
   useLazyGetRunKnowledgeFlowV1DevBenchRunsRunIdGetQuery,
   useDeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteMutation,
-  useGetContextQuery,
-  useLazyGetContextQuery,
   useListDatabasesQuery,
   useLazyListDatabasesQuery,
   useListTablesQuery,
   useLazyListTablesQuery,
   useGetDatabaseSchemasQuery,
   useLazyGetDatabaseSchemasQuery,
-  useGetSchemaQuery,
-  useLazyGetSchemaQuery,
+  useDescribeTableQuery,
+  useLazyDescribeTableQuery,
+  useGetContextQuery,
+  useLazyGetContextQuery,
   useReadQueryMutation,
-  useWriteQueryMutation,
+  useExecuteWriteQueryMutation,
   useDeleteTableMutation,
   useListDatasetsQuery,
   useLazyListDatasetsQuery,
