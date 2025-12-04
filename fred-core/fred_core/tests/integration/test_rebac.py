@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
+import secrets
 import uuid
-from typing import Awaitable, Callable, cast
+from typing import Awaitable, Callable
 
-import grpc
 import pytest
 import pytest_asyncio
-from pydantic import AnyUrl, ValidationError
+from pydantic import AnyHttpUrl, ValidationError
 
 from fred_core import (
     DocumentPermission,
@@ -22,13 +21,9 @@ from fred_core import (
     Relation,
     RelationType,
     Resource,
-    SpiceDbRebacConfig,
-    SpiceDbRebacEngine,
     TagPermission,
 )
 from fred_core.security.structure import M2MSecurity
-
-SPICEDB_ENDPOINT = os.getenv("SPICEDB_TEST_ENDPOINT", "localhost:50051")
 
 MAX_STARTUP_ATTEMPTS = 40
 STARTUP_BACKOFF_SECONDS = 0.5
@@ -45,47 +40,6 @@ def _unique_id(prefix: str) -> str:
 def _make_reference(resource: Resource, *, prefix: str | None = None) -> RebacReference:
     identifier = prefix or resource.value
     return RebacReference(type=resource, id=_unique_id(identifier))
-
-
-async def _load_spicedb_engine() -> SpiceDbRebacEngine:
-    """Create a SpiceDB-backed engine, skipping if the server is unavailable."""
-
-    token = _integration_token()
-    print("Using SpiceDB token:", token)
-    probe_subject = RebacReference(type=Resource.USER, id=_unique_id("probe-user"))
-    last_error: grpc.RpcError | None = None
-
-    os.environ["M2M_CLIENT_SECRET"] = "test-secret"  # nosec: mock secret for tests
-
-    for attempt in range(1, MAX_STARTUP_ATTEMPTS + 1):
-        try:
-            engine = SpiceDbRebacEngine(
-                SpiceDbRebacConfig(
-                    endpoint=SPICEDB_ENDPOINT,
-                    insecure=True,
-                    sync_schema_on_init=True,
-                ),
-                M2MSecurity(
-                    enabled=True,
-                    realm_url=cast(AnyUrl, "http://app-keycloak:8080/realms/app"),
-                    client_id="test-client",
-                ),
-                token=token,
-            )
-            # Trigger a cheap RPC call to confirm the server is reachable.
-            await engine.lookup_resources(
-                subject=probe_subject,
-                permission=DocumentPermission.READ,
-                resource_type=Resource.TAGS,
-            )
-            return engine
-        except grpc.RpcError as exc:
-            last_error = exc
-            await asyncio.sleep(STARTUP_BACKOFF_SECONDS)
-        except Exception as exc:
-            pytest.skip(f"Failed to create SpiceDB engine: {exc}")
-
-    pytest.skip(f"SpiceDB test server not available after retries: {last_error}")
 
 
 async def _load_openfga_engine() -> RebacEngine:
@@ -110,14 +64,14 @@ async def _load_openfga_engine() -> RebacEngine:
         )
         mock_m2m = M2MSecurity(
             enabled=True,
-            realm_url=cast(AnyUrl, "http://app-keycloak:8080/realms/app"),
+            realm_url=AnyHttpUrl("http://app-keycloak:8080/realms/app"),
             client_id="test-client",
         )
     except ValidationError as exc:
         pytest.skip(f"Invalid OpenFGA configuration: {exc}")
 
-    os.environ[mock_m2m.secret_env_var] = "test-secret"  # nosec: test secret for tests
-    os.environ[config.token_env_var] = "test-token"  # nosec: mock secret for tests
+    os.environ.setdefault(mock_m2m.secret_env_var, secrets.token_urlsafe(16))
+    os.environ.setdefault(config.token_env_var, secrets.token_urlsafe(16))
 
     try:
         engine = OpenFgaRebacEngine(config, mock_m2m, token=store)
@@ -130,7 +84,6 @@ async def _load_openfga_engine() -> RebacEngine:
 EngineScenario = tuple[str, Callable[[], Awaitable[RebacEngine]], str | None]
 
 ENGINE_SCENARIOS: tuple[EngineScenario, ...] = (
-    ("spicedb", _load_spicedb_engine, None),
     ("openfga", _load_openfga_engine, None),
 )
 

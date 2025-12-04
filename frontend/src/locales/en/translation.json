@@ -8,7 +8,9 @@
     "beta": "Beta",
     "retry": "Retry",
     "error": "Error",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "cancel": "Cancel",
+    "save": "Save"
   },
   "dataHub": {
     "title": "Data Hub - Document Lineage",
@@ -73,6 +75,7 @@
     "chat": "Chat",
     "monitoring": "Monitoring",
     "knowledge": "Resources",
+    "mcp": "MCP Hub",
     "agent": "Agents",
     "workspaces": "Workspaces",
     "account": "Profile",
@@ -84,6 +87,7 @@
       "chat": "Chat with the AI assistant team",
       "monitoring": "Monitor the backend AI calls",
       "knowledge": "Consult the content of your libraries",
+      "mcp": "Manage MCP servers",
       "agent": "View agents",
       "workspaces": "View Workspace",
       "account": "View your account",
@@ -159,7 +163,10 @@
     "runSuccessDetail": "Processors executed successfully.",
     "summaryFor": "Summary for '{{name}}'",
     "processorsCount": "{{count}} processor(s)",
-    "view": { "sideBySide": "Side by side", "stacked": "Stacked" },
+    "view": {
+      "sideBySide": "Side by side",
+      "stacked": "Stacked"
+    },
     "metricsTitle": "Processor Metrics",
     "persistLabel": "Save run",
     "saved": {
@@ -191,7 +198,11 @@
     "pages": "{{n}} page(s)",
     "noMarkdown": "No markdown produced",
     "openLatest": "Open latest run",
-    "detail": { "title": "Run Detail", "expandAll": "Expand all", "collapseAll": "Collapse all" }
+    "detail": {
+      "title": "Run Detail",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all"
+    }
   },
   "assetManager": {
     "title": "Manage Assets for {{agentId}}",
@@ -243,8 +254,7 @@
     "search": "Search",
     "filter": "Filter",
     "create": "Create",
-    "createMcpAgent": "Create New MCP Agent",
-    "createMcpAgentNote": "Create a new MCP agent with default configuration.",
+    "createAgent": "Create new agent",
     "noAgents": "No agents found",
     "noFavorites": "You haven't added any agents to your favorites yet",
     "noTag": "No agents with tag \"{{tag}}\"",
@@ -269,6 +279,9 @@
         "name": "Name",
         "url": "URL",
         "transport": "Transport",
+        "transport_http": "streamable_http",
+        "transport_local": "stdio",
+        "command": "Command",
         "timeout": "Timeout"
       }
     },
@@ -285,6 +298,65 @@
     "success": {
       "summary": "Agent created",
       "detail": "The agent has been successfully created."
+    },
+    "toolsSelection": {
+      "title": "Tools"
+    }
+  },
+  "mcpHub": {
+    "title": "MCP Hub",
+    "subtitle": "Register and edit MCP servers available to agents.",
+    "addButton": "Add MCP server",
+    "addTitle": "New MCP server",
+    "editTitle": "Edit MCP server",
+    "emptyTitle": "No MCP servers yet",
+    "emptyHint": "Create a server entry to let agents connect to it.",
+    "countLabel": "servers",
+    "search": "Search",
+    "filter": "Filter",
+    "confirmDeleteTitle": "Delete MCP server?",
+    "confirmDeleteMessage": "Delete MCP server {{id}}? This only removes the persisted entry.",
+    "fields": {
+      "id": "Identifier",
+      "name": "Display name (i18n key)",
+      "description": "Description (i18n key)",
+      "transport": "Transport",
+      "url": "Server URL",
+      "command": "Command",
+      "args": "Arguments",
+      "env": "Environment variables",
+      "enabled": "Enabled",
+      "timeout": "SSE timeout (s)",
+      "auth_mode": "Auth mode"
+    },
+    "helpers": {
+      "args": "Space or comma separated arguments",
+      "env": "One KEY=VALUE per line"
+    },
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "transport": {
+      "stdio": "stdio",
+      "streamable_http": "streamable_http",
+      "sse": "Server-sent events",
+      "websocket": "WebSocket"
+    },
+    "auth": {
+      "user_token": "User token",
+      "no_token": "No token",
+      "user_token_hint": "Forward the authenticated user's bearer token",
+      "present": "Auth configured",
+      "none": "No auth"
+    },
+    "toasts": {
+      "created": "MCP server created",
+      "updated": "MCP server updated",
+      "deleted": "MCP server deleted",
+      "enabled": "MCP server enabled",
+      "disabled": "MCP server disabled",
+      "error": "Operation failed"
     }
   },
   "chatbot": {
@@ -299,7 +371,7 @@
       "betaNotice": "File attachments are in beta. Only CSV, docx and pdf files are supported. Please provide feedback to help us improve this feature.",
       "count": "{{count}} attached"
     },
-
+    "uploadingFile": "Uploading {{name}}...",
     "recordAudio": "Record audio",
     "sendMessage": "Send message",
     "stopResponse": "Stop response",
@@ -488,7 +560,44 @@
     "confirmDeleteFolderMessage": "Delete empty folder « {{name}} »?",
     "folderDeleted": "Folder deleted",
     "deleteFolder": "Delete folder",
-    "download": "Download"
+    "download": "Download",
+    "pipeline": {
+      "title": "Configure Processing Pipeline",
+      "description": "Choose the chain of processors to apply for each file type in this library.",
+      "library": "Library",
+      "inputLabel": "Input processor",
+      "extensionLabel": "File extension",
+      "stepsLabel": "Processors chain",
+      "addStep": "Add processor",
+      "removeStep": "Remove",
+      "cancel": "Cancel",
+      "save": "Save pipeline",
+      "loadErrorSummary": "Failed to load processors",
+      "noLibrarySummary": "No library selected",
+      "noLibraryDetail": "Please select a library first.",
+      "emptyPipelineSummary": "Pipeline is empty",
+      "emptyPipelineDetail": "Add at least one processor.",
+      "savedSummary": "Pipeline saved",
+      "savedDetail": "Processing pipeline has been configured for library \"{{name}}\".",
+      "saveErrorSummary": "Failed to save pipeline",
+      "current": "Pipeline",
+      "currentDefault": "Pipeline",
+      "defaultTag": "default",
+      "libraryProcessors": "Library processors",
+      "libraryProcessorsHelper": "These processors run once at the library level after documents have been processed.",
+      "helpButton": "How it works",
+      "helpTitle": "How pipelines work",
+      "helpIntro": "Pipelines let you decide which processors run on your documents and when.",
+      "helpInputTitle": "Input processors",
+      "helpInputBody": "Convert raw files into normalized previews (Markdown or tables) per file type.",
+      "helpOutputTitle": "Output processors",
+      "helpOutputBody": "Post-process each document (vectorize, load tables, summarize). They can run right after ingestion or later from the Operations tab.",
+      "helpLibraryTitle": "Library output processors",
+      "helpLibraryBody": "Run once per library to build shared assets (like a library TOC). They run later from the Operations tab, not during ingestion.",
+      "close": "Close",
+      "addLibraryProcessor": "Add library processor",
+      "noLibraryProcessorAvailable": "No library processors available."
+    }
   },
   "documentLibraryShareDialog": {
     "subtitle": "Add users or groups and manage access permissions for this library.",
@@ -700,5 +809,41 @@
   },
   "agentSelector": {
     "sendTo": "Send to"
+  },
+  "mcp": {
+    "servers": {
+      "search_documents": {
+        "name": "Search in documents",
+        "description": "Allow your agent to perform semantic search in documents uploaded to Fred (RAG)"
+      },
+      "tabular": {
+        "name": "Tabular data access",
+        "description": "Allow your agent to query tabular data sources (spreadsheets, csv...)"
+      },
+      "filesystem": {
+        "name": "Filesystem access",
+        "description": "Allow your agent to access a filesystem (local or Minio)"
+      },
+      "search_opensearch": {
+        "name": "Search in opensearch",
+        "description": "Allow your agent to search in opensearch indices"
+      },
+      "kubernetes": {
+        "name": "Kubernetes access",
+        "description": "Allow your agent to interact with Kubernetes clusters"
+      },
+      "jira": {
+        "name": "Jira access",
+        "description": "Allow your agent to interact with Jira"
+      },
+    "neo4j": {
+      "name": "Neo4j access",
+      "description": "Allow your agent to interact with Neo4j graph databases"
+    },
+    "local_stdio": {
+      "name": "Local stdio MCP",
+      "description": "Run a local MCP server over stdio (process-based tools)"
+    }
   }
+}
 }

@@ -4,8 +4,8 @@
 This guide explains how to configure Keycloak so every request processed by the Agentic backend — including calls into Knowledge Flow — carries the authenticated **user’s** identity. Agent actions are now audited as user actions. The Agentic service account remains available for administrative jobs such as enumerating known users, but it is not used for runtime calls between backends.
 
 > Enforcement today
-> - Signature / expiry / issuer: **enforced** in backends  
-> - Roles (RBAC): **enforced in Knowledge Flow** (`@authorize(...)` + `RBACProvider`)  
+> - Signature / expiry / issuer: **enforced** in backends
+> - Roles (RBAC): **enforced in Knowledge Flow** (`@authorize(...)` + `RBACProvider`)
 > - Audience (`aud`): supported; recommended strict in production
 
 ---
@@ -30,6 +30,10 @@ Create (or verify) the clients below:
 > - `agentic` → `KEYCLOAK_AGENTIC_CLIENT_SECRET`
 > - `knowledge-flow` → `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET` (only required when Knowledge Flow calls other services)
 
+When ReBAC is enabled: grant the `knowledge-flow` service account the ability to read users/groups so it can resolve relationships:
+- Client roles on `realm-management`: `query-users`, `query-groups`, `view-users`
+- Client role on `account`: `view-groups`
+
 ### 1.3 Roles for user RBAC
 Create **client roles on `app`** (not realm roles) so Knowledge Flow receives them in `realm_access.roles`:
 
@@ -43,10 +47,17 @@ Create **client roles on `app`** (not realm roles) so Knowledge Flow receives th
 
 ### 1.4 Groups (recommended)
 - Create groups `admins`, `editors`, `viewers` and map each group to the matching role.
-- Add users to groups so the UI tokens automatically include the correct client roles.
+- Add users to groups so the UI tokens automatically include the correct client roles and now emit group paths in the JWT.
 
 ### 1.5 Client scopes
 - `roles` scope must appear under **Default client scopes** for `app`, `agentic`, and any other confidential client that should receive role claims.
+
+When ReBAC is enabled:
+
+- Add a dedicated client scope (e.g., `groups-scope`) that maps the user’s group membership into the token:
+  - Protocol mapper: `oidc-group-membership-mapper`
+  - Config: `claim.name=groups`, `full.path=true`, `access.token.claim=true`, `userinfo.token.claim=true`, `id.token.claim=true`, `multivalued=true`
+- Attach `groups-scope` to **Default client scopes** for `app` so tokens include the `groups` claim.
 
 ### 1.6 Audience (strict mode)
 - When enforcing audience checks, add an **Audience** mapper so tokens destined for Knowledge Flow include `knowledge-flow` in `aud`.

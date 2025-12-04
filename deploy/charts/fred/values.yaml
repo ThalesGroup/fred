@@ -19,6 +19,7 @@ applications:
     applicationName: agentic-backend
     deployment:
       enabled: true
+    replicaCount: 1
     statefulset:
       enabled: false
     job:
@@ -28,7 +29,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/agentic-backend
-      tag: "v1.0.0"
+      tag: "v1.0.1"
       pullPolicy: IfNotPresent
     command:
       enabled: true
@@ -157,6 +158,19 @@ applications:
           realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
         authorized_origins:
           - "http://fred.dev.fred.thalesgroup.com:80"
+        rebac:
+          enabled: false                    # Set false to bypass ReBAC (warning: all private resources will become public)
+          type: openfga
+          api_url: "http://openfga:8080"    # OpenFGA HTTP endpoint
+          # store_name: "fred"                # OpenFGA store name. Reuse the same store across services
+          # create_store_if_needed: true      # Automates store bootstrap (disable if pre-provisioned)
+          # sync_schema_on_init: true         # Pushes the default Fred authorization model
+          # authorization_model_id: null      # Authorization model id to use in case `sync_schema_on_init: false`
+          # token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
+          # timeout_millisec: 2000            # Optional request timeout
+          # headers:
+          #   # Optional static headers sent to OpenFGA
+          #   X-Custom-Header: "value"
       frontend_settings:
         feature_flags:
           # If true activate the backend and frontend modules in charge of K8
@@ -171,6 +185,15 @@ applications:
         # that allow users to create/update agents at runtime and change
         # their configuration without redeploying the application.
         use_static_config_only: false
+        # Number of past exchanges to restore when initializing an agent session
+        # This setting is used to limit the amount of historical context
+        # that is loaded into the agent at the beginning of a session. It typically occur after a restart of the application
+        # or when an agent session is re-initialized for any reason.
+        agentic_restore_max_exchanges: 20
+
+        # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
+        max_concurrent_agents: 128
+
         # Base URL for the Knowledge Flow service
         knowledge_flow_url: "http://knowledge-flow-backend:8111/knowledge-flow/v1"
         # Timeout settings for the client
@@ -186,6 +209,16 @@ applications:
             temperature: 0.0
             max_retries: 2
             request_timeout: 30
+        default_language_model:
+          # Required in .env:
+          # - OPENAI_API_KEY
+          provider: "openai"
+          name: "gpt-4o"
+          settings:
+            temperature: 0.0
+            max_retries: 2
+            request_timeout: 30
+
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the chat model
         agents:
@@ -212,17 +245,24 @@ applications:
             enabled: false
       mcp:
         servers:
-          - name: "mcp-knowledge-flow-mcp-tabular"
+          - id: "mcp-knowledge-flow-mcp-tabular"
+            name: "mcp.servers.tabular.name"
+            description: "mcp.servers.tabular.description"
             transport: "streamable_http"
             url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
             sse_read_timeout: 2000
             auth_mode: "user_token"
-          - name: "mcp-knowledge-flow-opensearch-ops"
+          - id: "mcp-knowledge-flow-opensearch-ops"
+            name: "mcp.servers.search_opensearch.name"
+            description: "mcp.servers.search_opensearch.description"
             transport: "streamable_http"
             url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops"
             sse_read_timeout: 2000
             auth_mode: "user_token"
-          - name: "mcp-kubernetes-server"
+          - id: "mcp-kubernetes-server"
+            name: "mcp.servers.kubernetes.name"
+            description: "mcp.servers.kubernetes.description"
+            enabled: false
             transport: "streamable_http"
             url: "http://mcp-kubernetes-server:8081/mcp"
             sse_read_timeout: 2000
@@ -246,6 +286,10 @@ applications:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/agent.duckdb"
 
+        mcp_servers_store:
+          type: "duckdb"
+          duckdb_path: "/home/fred-user/.fred/agentic/mcp_servers.duckdb"
+
         session_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/session.duckdb"
@@ -263,12 +307,14 @@ applications:
       KEYCLOAK_AGENTIC_CLIENT_SECRET: ""
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
-
+      M2M_CLIENT_SECRET: ""
+  
   frontend:
     enabled: true
     applicationName: frontend
     deployment:
       enabled: true
+    replicaCount: 1
     statefulset:
       enabled: false
     job:
@@ -278,7 +324,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/frontend
-      tag: "v1.0.0"
+      tag: "v1.0.1"
       pullPolicy: IfNotPresent
     command:
       enabled: false
@@ -384,6 +430,7 @@ applications:
     applicationName: knowledge-flow-backend
     deployment:
       enabled: true
+    replicaCount: 1
     statefulset:
       enabled: false
     job:
@@ -393,7 +440,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
-      tag: "v1.0.0"
+      tag: "v1.0.1"
     command:
       enabled: true
       data:
@@ -509,12 +556,26 @@ applications:
           enabled: true
           client_id: "knowledge-flow"
           realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
+          secret_env_var: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET
         user:
           enabled: true
           client_id: "app"
           realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
         authorized_origins:
           - "http://fred.dev.fred.thalesgroup.com:80"
+        rebac:
+          enabled: false                    # Set false to bypass ReBAC (warning: all private resources will become public)
+          type: openfga
+          api_url: "http://openfga:8080"    # OpenFGA HTTP endpoint
+          # store_name: "fred"                # OpenFGA store name. Reuse the same store across services
+          # create_store_if_needed: true      # Automates store bootstrap (disable if pre-provisioned)
+          # sync_schema_on_init: true         # Pushes the default Fred authorization model
+          # authorization_model_id: null      # Authorization model id to use in case `sync_schema_on_init: false`
+          # token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
+          # timeout_millisec: 2000            # Optional request timeout
+          # headers:
+          #   # Optional static headers sent to OpenFGA
+          #   X-Custom-Header: "value"
       scheduler:
         enabled: true
         backend: "temporal"
@@ -561,7 +622,7 @@ applications:
       chat_model:
         provider: openai # openai | azure | ollama
         name: gpt-4o-mini # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
-        settings:
+        settings: {}
           # openai: nothing else required (keys in .env)
           # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
           # ollama: { base_url: "http://localhost:11434"
@@ -610,6 +671,25 @@ applications:
             database: "base_database"
             path: "/home/fred-user/.fred/knowledge-flow/db.duckdb"
             mode: "read_and_write"
+      mcp:
+        reports_enabled: true
+        kpi_enabled: true
+        tabular_enabled: true
+        statistic_enabled: true
+        text_enabled: true
+        templates_enabled: true
+        resources_enabled: true
+        filesystem_enabled: false
+        opensearch_ops_enabled: false
+        neo4j_enabled: false
+
+      filesystem:
+        type: local
+        # type: minio
+        # endpoint: http://localhost:9000
+        # access_key: admin
+        # bucket_name: filesystem
+        # secure: false
 
     dotenv:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""

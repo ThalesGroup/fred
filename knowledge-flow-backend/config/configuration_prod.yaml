@@ -29,7 +29,7 @@ security:
     enabled: true
     client_id: "knowledge-flow"
     realm_url: "http://app-keycloak:8080/realms/app"
-    secret_env_var: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET
+    secret_env_var: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET # pragma: allowlist secret
   user:
     enabled: true
     client_id: "app"
@@ -107,7 +107,7 @@ embedding_model:
   provider: openai
   name: text-embedding-3-large # or text-embedding-3-small
   settings: {}
-vision:
+vision_model:
   provider: openai
   name: gpt-4o-mini # or gpt-4o if you want higher fidelity
   settings:
@@ -209,7 +209,7 @@ storage:
 
   vector_store:
     type: opensearch
-    index: vector-index-3-large
+    index: vector-index
     # Default bulk size for vector insertions is 500. Increase if you have
     # enough memory and want faster ingestion. Or if run into ingestion errors
     # while ingesting large documents.
@@ -226,3 +226,22 @@ storage:
       database: "base_database"
       path: "~/.fred/knowledge-flow/db.duckdb"
       mode: "read_and_write"
+
+mcp:
+  reports_enabled: true
+  kpi_enabled: true
+  tabular_enabled: true
+  statistic_enabled: true
+  text_enabled: true
+  templates_enabled: true
+  resources_enabled: true
+  opensearch_ops_enabled: true
+  neo4j_enabled: false
+  filesystem_enabled: false
+
+filesystem:
+  type: minio
+  endpoint: http://localhost:9000
+  access_key: admin
+  bucket_name: filesystem
+  secure: false

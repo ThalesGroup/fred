@@ -11,6 +11,7 @@
   },
   "workspaceFolder": "/workspaces/fred",
   "runArgs": ["--init"],
+  "initializeCommand": "mkdir -p ${localEnv:HOME}/.fred",
   "mounts": [
     // Fred config directory from host
     "source=${localEnv:HOME}/.fred,target=/home/vscode/.fred,type=bind,consistency=cached",
@@ -85,8 +86,8 @@
         "editor.formatOnSave": true,
         "python.linting.enabled": true,
         "python.testing.pytestEnabled": true,
-        "python.defaultInterpreterPath": "${workspaceFolder}/agentic_backend/.venv/bin/python",
-        "terminal.integrated.defaultProfile.linux": "zsh"
+        "python.defaultInterpreterPath": "${workspaceFolder}/agentic-backend/.venv/bin/python",
+        "terminal.integrated.defaultProfile.linux": "bash"
       }
     }
   },

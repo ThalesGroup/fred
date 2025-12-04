@@ -18,6 +18,7 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import GroupIcon from "@mui/icons-material/Group";
+import HubIcon from "@mui/icons-material/Hub";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
@@ -170,6 +171,14 @@ export default function SideBar({ darkMode, onThemeChange }) {
       tooltip: t("sidebar.tooltip.knowledge"),
     },
     {
+      key: "mcp",
+      label: t("sidebar.mcp"),
+      icon: <HubIcon />,
+      url: `/mcpHub`,
+      canBeDisabled: false,
+      tooltip: t("sidebar.tooltip.mcp"),
+    },
+    {
       key: "agent",
       label: t("sidebar.agent"),
       icon: <GroupIcon />,
@@ -213,6 +222,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
   }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const logoName = getProperty("logoName") || "fred";
+  const logoNameDark = getProperty("logoNameDark") || "fred-dark";
 
   return (
     <Box
@@ -262,8 +272,9 @@ export default function SideBar({ darkMode, onThemeChange }) {
               height: 42,
               backgroundColor: "transparent",
             }}
+            variant="square"
           >
-            <ImageComponent name={logoName} width="36px" height="36px" />
+            <ImageComponent name={darkMode ? logoNameDark : logoName} width="36px" height="36px" />
           </Avatar>
         </Box>
       </Box>

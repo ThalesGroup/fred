@@ -62,12 +62,14 @@ class MCPRuntime:
         self.agent_instance = agent
         self.available_servers: List[MCPServerConfiguration] = []
         for s in self.tunings.mcp_servers:
-            server_configuration = get_mcp_configuration().get_server(s.name)
+            server_configuration = get_mcp_configuration().get_server(s.id)
             if not server_configuration:
-                raise ValueError(
-                    f"[MCP][{self.agent_instance.get_name()}] "
-                    f"Server '{s.name}' not found or disabled in global MCP configuration."
+                logger.warning(
+                    "[MCP][%s] Server '%s' not found or disabled in global MCP configuration. Skipping.",
+                    self.agent_instance.get_name(),
+                    s.id,
                 )
+                continue
             self.available_servers.append(server_configuration)
 
         self.mcp_client: Optional[MultiServerMCPClient] = None
@@ -80,9 +82,9 @@ class MCPRuntime:
         self._lifecycle_error: Optional[BaseException] = None
 
         logger.info(
-            "[MCP]agent=%s mcp_servers=%s ",
+            "[MCP]agent=%s mcp_servers=%s (enabled only)",
             self.agent_instance.get_name(),
-            self.available_servers,
+            [s.id for s in self.available_servers],
         )
 
     # ---------- lifecycle (Token-aware initialization) ----------

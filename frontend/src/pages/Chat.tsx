@@ -15,7 +15,7 @@ import ChatIcon from "@mui/icons-material/Chat";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 
 import { Box, CircularProgress, Grid2, IconButton, Paper, Typography } from "@mui/material";
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
@@ -29,6 +29,7 @@ import {
   useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
 } from "../slices/agentic/agenticOpenApi";
+import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
 const PANEL_W = { xs: 300, sm: 340, md: 360 };
 
@@ -39,11 +40,13 @@ export default function Chat() {
   const { t } = useTranslation();
 
   const {
-    data: agentsFromServer = [],
+    data: rawAgentsFromServer = [],
     isLoading: flowsLoading,
     isError: flowsError,
     error: flowsErrObj,
   } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
+
+  const agentsFromServer = useMemo<AnyAgent[]>(() => normalizeAgenticFlows(rawAgentsFromServer), [rawAgentsFromServer]);
 
   const {
     data: sessionsFromServer = [],

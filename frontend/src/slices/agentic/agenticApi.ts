@@ -6,6 +6,7 @@ export const agenticApi = createApi({
   baseQuery: createDynamicBaseQuery({ backend: "api" }),
   // todo: in future, use reverse proxy to avoid dynamic base query:
   // baseQuery: fetchBaseQuery({ baseUrl: "/" }),
+  tagTypes: ["McpServers"],
   endpoints: () => ({}),
   reducerPath: "agenticApi",
 });

@@ -106,7 +106,7 @@ ai:
       type: "agent"
       class_path: "agentic_backend.academy.06_simple_leader.mini_data_expert.MiniDataExpert"
       enabled: true
-    - name: "MiniLlmOrchestrator"
+    - name: "Appolo"
       type: "leader"
       class_path: "agentic_backend.academy.06_simple_leader.mini_llm_orchestrator.MiniLLMOrchestrator"
       enabled: true
@@ -117,6 +117,10 @@ ai:
     - name: "Sage"
       type: "agent"
       class_path: "agentic_backend.agents.statistics.statistics_expert.Sage"
+      enabled: true
+    - name: "EcoAdviser"
+      type: "agent"
+      class_path: "agentic_backend.academy.07_ecoadviser.eco_adviser.EcoAdvisor"
       enabled: true
 
 mcp:
@@ -146,7 +150,7 @@ mcp:
       url: "http://localhost:8111/knowledge-flow/v1/mcp-statistics"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-postal-service"
+    - name: "minimal-mcp-service"
       transport: "streamable_http"
       url: "http://localhost:9797/mcp"
       sse_read_timeout: 2000

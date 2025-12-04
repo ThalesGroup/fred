@@ -62,6 +62,18 @@ def _norm_str(value: object) -> str:
     return str(value or "").lower()
 
 
+def _is_true_value(value: object) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return value is True
+
+
+def _is_false_value(value: object) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() == "false"
+    return value is False
+
+
 class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
     """
     Fred — OpenSearch-backed Vector Store (LangChain for ANN + OS client for lexical/phrase).
@@ -96,7 +108,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         self._vs: OpenSearchVectorSearch | None = None
         self._expected_dim: int | None = None
 
-        logger.info("🔗 OpenSearchVectorStoreAdapter initialized index=%r host=%r bulk=%s", self._index, self._host, self._bulk_size)
+        logger.info("[VECTOR][OPENSEARCH] initialized index=%r host=%r bulk=%s", self._index, self._host, self._bulk_size)
 
     # ---------- lazy LangChain wrapper + raw client ----------
 
@@ -120,6 +132,22 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
     def _client(self):
         # low-level OpenSearch client for BM25/phrase
         return self._lc.client
+
+    def validate_index_or_fail(self) -> None:
+        """
+        Force initialization + mapping validation so callers can fail fast at startup.
+        """
+        logger.info("[VECTOR][OPENSEARCH] validating vector index=%s", self._index)
+        try:
+            if self._vs is None:
+                _ = self._lc  # triggers _validate_index_compatibility via lazy init
+                return
+
+            expected_dim = self._expected_dim or self._get_embedding_dimension()
+            self._validate_index_compatibility(expected_dim)
+        except ValueError as e:
+            logger.critical("[VECTOR][OPENSEARCH] index validation failed: %s", e)
+            raise SystemExit(1) from e
 
     # ---------- BaseVectorStore: identification ----------
 
@@ -157,11 +185,11 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
                 doc.metadata.setdefault("token_count", len((doc.page_content or "").split()))
                 doc.metadata.setdefault("ingested_at", now_iso)
 
-            logger.info("✅ Upserted %s chunk(s) into %s", len(assigned_ids), self._index)
+            logger.info("[VECTOR][OPENSEARCH] upserted %s chunk(s) into %s", len(assigned_ids), self._index)
             return assigned_ids
 
         except Exception as e:
-            logger.exception("❌ Failed to add documents to OpenSearch.")
+            logger.exception("[VECTOR][OPENSEARCH] failed to add documents to OpenSearch.")
             raise RuntimeError("Unexpected error during vector indexing.") from e
 
     def delete_vectors_for_document(self, *, document_uid: str) -> None:
@@ -169,9 +197,9 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             body = {"query": {"term": {"metadata.document_uid": {"value": document_uid}}}}
             resp = self._client.delete_by_query(index=self._index, body=body)
             deleted = int(resp.get("deleted", 0))
-            logger.info("✅ Deleted %s vector chunks for document_uid=%s.", deleted, document_uid)
+            logger.info("[VECTOR][OPENSEARCH] deleted %s vector chunks for document_uid=%s.", deleted, document_uid)
         except Exception:
-            logger.exception("❌ Failed to delete vectors for document_uid=%s.", document_uid)
+            logger.exception("[VECTOR][OPENSEARCH] failed to delete vectors for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to delete vectors from OpenSearch.")
 
     def get_document_chunk_count(self, *, document_uid: str) -> int:
@@ -184,7 +212,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             resp = self._client.count(index=self._index, body=body)
             count = int(resp.get("count", 0))
             logger.info(
-                "🔢 Counted %s OpenSearch vector chunks for document_uid=%s in index=%s",
+                "[VECTOR][OPENSEARCH] counted %s vector chunks for document_uid=%s in index=%s",
                 count,
                 document_uid,
                 self._index,
@@ -192,7 +220,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             return count
         except Exception:
             logger.exception(
-                "❌ Failed to count OpenSearch vector chunks for document_uid=%s in index=%s",
+                "[VECTOR][OPENSEARCH] failed to count vector chunks for document_uid=%s in index=%s",
                 document_uid,
                 self._index,
             )
@@ -220,13 +248,13 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             )
             updated = int(resp.get("updated", 0))
             logger.info(
-                "✅ Updated retrievable=%s on %s OpenSearch vector chunks for document_uid=%s.",
+                "[VECTOR][OPENSEARCH] updated retrievable=%s on %s vector chunks for document_uid=%s.",
                 value,
                 updated,
                 document_uid,
             )
         except Exception:
-            logger.exception("❌ Failed to update retrievable flag for document_uid=%s in OpenSearch.", document_uid)
+            logger.exception("[VECTOR][OPENSEARCH] failed to update retrievable flag for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to update retrievable flag in OpenSearch.")
 
     # ---------- BaseVectorStore: ANN (semantic) ----------
@@ -241,7 +269,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             major, minor, *_ = (int(x) for x in version.split("."))
             self._knn_filter_supported = (major, minor) >= (2, 19)
         except Exception:
-            logger.warning("⚠️ Could not determine OpenSearch version; assuming no knn.filter support.")
+            logger.warning("[VECTOR][OPENSEARCH] could not determine OpenSearch version; assuming no knn.filter support.")
             self._knn_filter_supported = False
 
         return self._knn_filter_supported
@@ -253,9 +281,9 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         Tries native knn.filter (2.19+) → falls back to bool+knn (2.18) → LangChain wrapper.
         """
 
-        logger.info("🔍 [OpenSearch ANN] query=%r k=%d search_filter=%s", query, k, search_filter)
+        logger.info("[VECTOR][OPENSEARCH][ANN] query=%r k=%d search_filter=%s", query, k, search_filter)
         filters = self._to_filter_clause(search_filter)
-        logger.info("🔍 [OpenSearch ANN] computed filters=%s", filters or [])
+        logger.info("[VECTOR][OPENSEARCH][ANN] computed filters=%s", filters or [])
         now_iso = datetime.now(timezone.utc).isoformat()
         model_name = self._embedding_model_name or "unknown"
 
@@ -270,7 +298,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
                 text = src.get("text", "")
                 cid = meta.get(CHUNK_ID_FIELD) or h.get("_id")
                 logger.info(
-                    "🔍 [OpenSearch ANN] hit rank=%d doc_uid=%s chunk_uid=%s retrievable=%s score=%.4f",
+                    "[VECTOR][OPENSEARCH][ANN] hit rank=%d doc_uid=%s chunk_uid=%s retrievable=%s score=%.4f",
                     rank,
                     meta.get("document_uid"),
                     cid,
@@ -305,29 +333,47 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             if not retr_vals:
                 return hits
 
-            want_true = any(bool(v) is True or str(v).lower() == "true" for v in retr_vals)
-            want_false = any(bool(v) is False or str(v).lower() == "false" for v in retr_vals)
+            want_true = any(_is_true_value(v) for v in retr_vals)
+            want_false = any(_is_false_value(v) for v in retr_vals)
+            logger.info(
+                "[VECTOR][OPENSEARCH][ANN][POST] retrievable filter requested: raw=%s want_true=%s want_false=%s",
+                retr_vals,
+                want_true,
+                want_false,
+            )
 
-            # Only handle simple cases; mixed True/False falls back to server behavior.
-            if want_true and not want_false:
-
-                def keep(md: Dict) -> bool:
-                    return bool(md.get("retrievable")) is True
-            elif want_false and not want_true:
-
-                def keep(md: Dict) -> bool:
-                    return bool(md.get("retrievable")) is False
-            else:
+            if not (want_true or want_false):
                 return hits
+
+            def keep(md: Dict) -> bool:
+                # Missing field stays retrievable for backward compatibility with old indices.
+                val = md.get("retrievable")
+                if val is None:
+                    return True
+                if want_true and _is_true_value(val):
+                    return True
+                if want_false and _is_false_value(val):
+                    return True
+                return False
 
             filtered: List[AnnHit] = []
             for h in hits:
                 md = h.document.metadata or {}
-                if keep(md):
+                chunk_id = md.get(CHUNK_ID_FIELD) or md.get("_id")
+                val = md.get("retrievable")
+                decision = "keep" if keep(md) else "drop"
+                logger.info(
+                    "[VECTOR][OPENSEARCH][ANN][POST] %s chunk=%s retrievable=%s md_keys=%s",
+                    decision,
+                    chunk_id,
+                    val,
+                    list(md.keys()),
+                )
+                if decision == "keep":
                     filtered.append(h)
 
             logger.info(
-                "🔍 [OpenSearch ANN] post-filter retrievable -> %d/%d hits kept",
+                "[VECTOR][OPENSEARCH][ANN] post-filter retrievable -> %d/%d hits kept",
                 len(filtered),
                 len(hits),
             )
@@ -338,10 +384,10 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             try:
                 res = self._client.search(index=self._index, body=body)
                 hits_data = res.get("hits", {}).get("hits", [])
-                logger.info("✅ ANN search (%s) returned %d hits", label, len(hits_data))
+                logger.info("[VECTOR][OPENSEARCH][ANN] search (%s) returned %d hits", label, len(hits_data))
                 return _build_ann_hits(hits_data)
             except Exception as e:
-                logger.debug("⚠️ %s query failed: %s", label, e)
+                logger.debug("[VECTOR][OPENSEARCH][ANN] %s query failed: %s", label, e)
                 return None
 
         # ---- step 1: embed query ---------------------------------------------
@@ -349,7 +395,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         try:
             vector = self._embedding_model.embed_query(query)
         except Exception as e:
-            logger.exception("❌ Failed to compute embedding.")
+            logger.exception("[VECTOR][OPENSEARCH] failed to compute embedding.")
             raise RuntimeError("Embedding model failed.") from e
 
         # ---- step 2: native knn.filter (2.19+, no additional filters) -------
@@ -358,7 +404,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         # When filters are present we fall back to the bool+knn pattern below to keep
         # semantics simple and consistent across OpenSearch versions.
         if self._supports_knn_filter() and not filters:
-            logger.info("🔍 [OpenSearch ANN] using native knn.filter (no metadata filters)")
+            logger.info("[VECTOR][OPENSEARCH][ANN] using native knn.filter (no metadata filters)")
             knn_body = {
                 "size": k,
                 "query": {"knn": {"vector_field": {"vector": vector, "k": k}}},
@@ -368,7 +414,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             if hits is not None:
                 return _apply_post_filter(hits)
         else:
-            logger.info("🔍 [OpenSearch ANN] using bool+knn path (filters present or knn.filter unsupported)")
+            logger.info("[VECTOR][OPENSEARCH][ANN] using bool+knn path (filters present or knn.filter unsupported)")
 
         # ---- step 3: bool + knn fallback (2.18 and below) --------------------
 
@@ -412,7 +458,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
                     # No argument worked
                     raise TypeError("No compatible filter argument found in LangChain OpenSearchVectorSearch.")
         except Exception:
-            logger.exception("❌ LangChain ANN search failed.")
+            logger.exception("[VECTOR][OPENSEARCH][ANN] LangChain search failed.")
             raise RuntimeError("All ANN search modes failed.")
 
         # normalize LC results
@@ -432,7 +478,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             )
             results.append(AnnHit(document=doc, score=float(score)))
 
-        logger.info("✅ ANN search (LangChain fallback) returned %d hits", len(results))
+        logger.info("[VECTOR][OPENSEARCH][ANN] LangChain fallback returned %d hits", len(results))
         return _apply_post_filter(results)
 
     # ---------- LexicalSearchable capability ----------
@@ -505,7 +551,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         try:
             mapping = self._client.indices.get_mapping(index=self._index)
         except Exception as e:
-            logger.warning("⚠️ Could not fetch mapping for %r: %s", self._index, e)
+            logger.warning("[VECTOR][OPENSEARCH] could not fetch mapping for %r: %s", self._index, e)
             return  # Don't block init; ANN calls will fail later with clearer errors.
 
         m = mapping.get(self._index, {}).get("mappings", {})
@@ -522,6 +568,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             spec = ExpectedIndexSpec(dim=expected_dim, engine="lucene", space_type="cosinesimil", method_name="hnsw")
 
         problems: list[str] = []
+        warnings: list[str] = []
 
         # 1) Dimension
         if actual_dim != spec.dim:
@@ -529,14 +576,19 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
 
         # 2) Engine (we standardize on lucene)
         if (method_engine or "") != spec.engine:
-            problems.append(f"- Engine mismatch: index uses '{method_engine}', expected '{spec.engine}'. Lucene is recommended; nmslib may degrade recall and complicate filters.")
+            if (method_engine or "").lower() == "nmslib":
+                warnings.append("- Engine mismatch: index uses 'nmslib', expected 'lucene'. Continuing for backward compatibility, but expect reduced recall and less reliable filtering.")
+            else:
+                problems.append(f"- Engine mismatch: index uses '{method_engine}', expected '{spec.engine}'. Lucene is recommended; nmslib may degrade recall and complicate filters.")
 
         # 3) Space type (cosine for OpenAI)
         if (method_space or "") != spec.space_type:
             msg = f"- Space mismatch: index uses '{method_space}', expected '{spec.space_type}' for OpenAI embeddings."
             if (method_space or "").lower() in {"l2", "euclidean"}:
-                msg += " If you must keep L2, you must L2-normalize vectors at ingest and query time (not recommended)."
-            problems.append(msg)
+                # Do not hard fail to stay compatible with old indices, but warn loudly.
+                warnings.append(f"{msg} L2 is deprecated; reindex with '{spec.space_type}'. Until then, L2-normalize vectors at ingest and query time.")
+            else:
+                problems.append(msg)
 
         # 4) Method name (HNSW)
         if (method_name or "") != spec.method_name:
@@ -551,17 +603,49 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         except Exception as e:
             logger.debug("Could not check index.knn setting: %s", e)
 
+        try:
+            metadata_props = _safe_get(m, ["properties", "metadata", "properties"], {}) or {}
+            tag_field = metadata_props.get("tag_ids")
+            if tag_field is None:
+                problems.append("- Missing field 'metadata.tag_ids'. Fred relies on this keyword field for library filters.")
+            else:
+                tag_type = str(tag_field.get("type", "")).lower()
+                subfields = tag_field.get("fields") or {}
+
+                # Legacy buggy pattern: text + keyword subfield
+                if tag_type == "text" and "keyword" in subfields:
+                    problems.append(
+                        "- 'metadata.tag_ids' is mapped as text+keyword. "
+                        "Fred expects a pure 'keyword' field to avoid silent zero-hit filters. "
+                        '💡 Fix: reindex with \'metadata.tag_ids\': {"type": "keyword"}.'
+                    )
+                elif tag_type != "keyword":
+                    problems.append(f"- 'metadata.tag_ids' has unsupported type '{tag_type}'. Fred expects 'keyword' so that UUID filters are exact and predictable.")
+        except Exception as e:
+            # If this introspection itself fails, treat it as a hard problem:
+            problems.append(f"- Could not inspect 'metadata.tag_ids' mapping (error: {e}). Fred requires this field as 'keyword' for tag/library filters.")
+
         if problems:
             raise ValueError(
-                "❌ OpenSearch index is not compatible with the configured embedding model.\n"
+                "OpenSearch index is not compatible with the configured embedding model.\n"
                 f"   Index: {self._index}\n"
                 f"   Model: {model_name}\n"
                 "   Problems:\n" + "\n".join(f"   {p}" for p in problems) + "\n\n✔ Expected vector_field.method:\n"
                 f"   engine={spec.engine}, space_type={spec.space_type}, name={spec.method_name}, dimension={spec.dim}\n"
-                "💡 Fix: recreate the index with lucene+cosinesimil (HNSW) and the correct dimension."
+                "Fix: recreate the index with the correct index mappin"
+            )
+        if warnings:
+            for w in warnings:
+                logger.warning("[VECTOR][OPENSEARCH] %s", w)
+            logger.warning(
+                "[VECTOR][OPENSEARCH] index mapping accepted with warnings: engine=%s space=%s method=%s dim=%s",
+                method_engine,
+                method_space,
+                method_name,
+                actual_dim,
             )
         else:
-            logger.info("✅ Index mapping is compatible: engine=%s space=%s method=%s dim=%s", method_engine, method_space, method_name, actual_dim)
+            logger.info("[VECTOR][OPENSEARCH] index mapping compatible: engine=%s space=%s method=%s dim=%s", method_engine, method_space, method_name, actual_dim)
 
     # --- helper: return a flat list of term filters (or None) ---
     def _to_filter_clause(self, f: Optional[SearchFilter]) -> Optional[List[Dict]]:
@@ -584,28 +668,60 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         if f.metadata_terms:
             for field, values in f.metadata_terms.items():
                 meta_field = f"metadata.{field}"
-                # Special handling for retrievable=True
                 try:
                     values_list = list(values) if values is not None else []
                 except TypeError:
                     values_list = [values]
 
-                if field == "retrievable" and any(bool(v) is True or str(v).lower() == "true" for v in values_list):
-                    # Build a should-clause: retrievable:true OR field missing
-                    filters.append(
-                        {
+                if field == "retrievable":
+                    want_true = any(_is_true_value(v) for v in values_list)
+                    want_false = any(_is_false_value(v) for v in values_list)
+                    if not (want_true or want_false):
+                        continue
+
+                    logger.info(
+                        "[VECTOR][OPENSEARCH][FILTER] building retrievable filter: field=%s values=%s want_true=%s want_false=%s",
+                        meta_field,
+                        values_list,
+                        want_true,
+                        want_false,
+                    )
+
+                    def _retrievable_clause(value: bool) -> Dict:
+                        # Accept missing field for backward compatibility with legacy indices.
+                        return {
                             "bool": {
                                 "should": [
-                                    {"terms": {meta_field: [True]}},
+                                    {"terms": {meta_field: [value]}},
                                     {"bool": {"must_not": {"exists": {"field": meta_field}}}},
                                 ],
                                 "minimum_should_match": 1,
                             }
                         }
-                    )
-                    # If caller also passed False, keep it explicit too (rare)
-                    if any(bool(v) is False or str(v).lower() == "false" for v in values_list):
-                        filters.append({"terms": {meta_field: [False]}})
+
+                    if want_true and want_false:
+                        filters.append(
+                            {
+                                "bool": {
+                                    "should": [
+                                        _retrievable_clause(True),
+                                        _retrievable_clause(False),
+                                    ],
+                                    "minimum_should_match": 1,
+                                }
+                            }
+                        )
+                    elif want_true:
+                        filters.append(_retrievable_clause(True))
+                    elif want_false:
+                        filters.append(_retrievable_clause(False))
                 else:
+                    logger.info(
+                        "[VECTOR][OPENSEARCH][FILTER] adding terms filter: field=%s values=%s",
+                        meta_field,
+                        values_list,
+                    )
                     filters.append({"terms": {meta_field: values_list}})
+        if filters:
+            logger.info("[VECTOR][OPENSEARCH][FILTER] final filter list=%s", filters)
         return filters or None

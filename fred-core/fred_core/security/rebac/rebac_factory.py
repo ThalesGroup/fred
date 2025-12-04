@@ -3,11 +3,9 @@ import logging
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
 from fred_core.security.rebac.rebac_engine import RebacEngine
-from fred_core.security.rebac.spicedb_engine import SpiceDbRebacEngine
 from fred_core.security.structure import (
     OpenFgaRebacConfig,
     SecurityConfiguration,
-    SpiceDbRebacConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -21,14 +19,7 @@ def rebac_factory(security_config: SecurityConfiguration) -> RebacEngine:
     if not oidc_enabled or rebac_config is None or not rebac_config.enabled:
         return NoopRebacEngine(security_config.m2m)
 
-    if isinstance(rebac_config, SpiceDbRebacConfig):
-        logger.info(
-            "Initializing SpiceDB ReBAC engine (endpoint=%s, insecure=%s)",
-            rebac_config.endpoint,
-            rebac_config.insecure,
-        )
-        return SpiceDbRebacEngine(rebac_config, security_config.m2m)
-    elif isinstance(rebac_config, OpenFgaRebacConfig):
+    if isinstance(rebac_config, OpenFgaRebacConfig):
         logger.info(
             "Initializing OpenFGA ReBAC engine (api_url=%s, store_name=%s)",
             rebac_config.api_url,

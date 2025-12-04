@@ -133,6 +133,8 @@ class TabularProcessor(BaseOutputProcessor):
     A pipeline for processing tabular data.
     """
 
+    description = "Loads tabular outputs, cleans column names, detects dates, and saves tables to the SQL store."
+
     def __init__(self):
         self.csv_input_store = ApplicationContext.get_instance().get_csv_input_store()
 

@@ -122,6 +122,82 @@ class MetadataService:
         return metadata
 
     @authorize(Action.READ, Resource.DOCUMENTS)
+    async def get_document_vectors(self, user: KeycloakUser, document_uid: str) -> list[dict]:
+        """
+        Retourne la liste des vecteurs associés aux chunks du document.
+
+        Chaque élément contient au minimum:
+          - chunk_uid: identifiant unique du chunk
+          - vector: la liste des floats représentant l'embedding
+        """
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+
+        # Permission spécifique sur le document
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
+
+        # S'assurer que le document existe (et lever 404 sinon)
+        _ = await self.get_document_metadata(user, document_uid)
+
+        # Initialiser le vector store à la demande
+        if self.vector_store is None:
+            self.vector_store = ApplicationContext.get_instance().get_vector_store()
+
+        store = self.vector_store
+        if store is None:
+            logger.warning("[MetadataService] Aucun vector store disponible pour récupérer les vecteurs")
+            return []
+
+        # Méthode facultative côté store Chroma
+        if hasattr(store, "get_vectors_for_document"):
+            try:
+                return store.get_vectors_for_document(document_uid)  # type: ignore[attr-defined]
+            except Exception as e:
+                logger.error(f"[MetadataService] Erreur lors de la récupération des vecteurs: {e}")
+                return []
+
+        logger.info("[MetadataService] Le vector store ne supporte pas la récupération des vecteurs par document")
+        return []
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def get_document_chunks(self, user: KeycloakUser, document_uid: str) -> list[dict]:
+        """
+        Return the list of chunks associated with the document.
+
+        Each item contains at minimum:
+          - chunk_uid: unique identifier of the chunk
+          - text: the text content of the chunk
+        """
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+
+        # Specific permission on the document
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
+
+        # Ensure the document exists (and raise 404 otherwise)
+        _ = await self.get_document_metadata(user, document_uid)
+
+        # Initialize the vector store on demand
+        if self.vector_store is None:
+            self.vector_store = ApplicationContext.get_instance().get_vector_store()
+
+        store = self.vector_store
+        if store is None:
+            logger.warning("[MetadataService] No vector store available to retrieve chunks")
+            return []
+
+        # Optional method on Chroma store side
+        if hasattr(store, "get_chunks_for_document"):
+            try:
+                return store.get_chunks_for_document(document_uid)  # type: ignore[attr-defined]
+            except Exception as e:
+                logger.error(f"[MetadataService] Error retrieving chunks: {e}")
+                return []
+
+        logger.info("[MetadataService] The vector store does not support retrieving chunks by document")
+        return []
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_processing_graph(self, user: KeycloakUser) -> ProcessingGraph:
         """
         Build a lightweight processing graph for all documents visible to the user.

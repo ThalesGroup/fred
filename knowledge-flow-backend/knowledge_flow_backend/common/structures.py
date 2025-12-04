@@ -60,10 +60,33 @@ class ProcessorConfig(BaseModel):
     Attributes:
         prefix (str): The file extension this processor handles (e.g., '.pdf').
         class_path (str): Dotted import path of the processor class.
+        description (str): Human readable explanation of what the processor does.
     """
 
     prefix: str = Field(..., description="The file extension this processor handles (e.g., '.pdf')")
     class_path: str = Field(..., description="Dotted import path of the processor class")
+    description: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        description="Human-readable description of the processor purpose shown in the UI.",
+    )
+
+
+class LibraryProcessorConfig(BaseModel):
+    """
+    Configuration structure for a library-level output processor.
+
+    Attributes:
+        class_path (str): Dotted import path of the processor class.
+        description (str): Human readable explanation of what the processor does.
+    """
+
+    class_path: str = Field(..., description="Dotted import path of the library output processor class")
+    description: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        description="Human-readable description of the library output processor purpose shown in the UI.",
+    )
 
 
 ###########################################################
@@ -142,6 +165,58 @@ class ProcessingConfig(BaseModel):
     use_gpu: bool = Field(default=True, description="Enable/disable GPU usage for processing (if supported by the processor)")
     process_images: bool = Field(default=True, description="Enable/disable image content extraction")
     generate_summary: bool = Field(default=True, description="Enable/disable human-centric abstract and keyword generation for documents.")
+
+
+class MCPConfig(BaseModel):
+    """
+    Feature toggles for MCP-only HTTP/MCP surfaces.
+
+    These do NOT affect core storage backends (e.g., using OpenSearch
+    as vector store or metadata store). They only control whether
+    optional monitoring/exploration controllers and their MCP servers
+    are exposed.
+    """
+
+    reports_enabled: bool = Field(
+        default=True,
+        description="Expose the Reports MCP server (Markdown-first report generation).",
+    )
+    kpi_enabled: bool = Field(
+        default=True,
+        description="Expose the KPI MCP server for querying application KPIs.",
+    )
+    tabular_enabled: bool = Field(
+        default=True,
+        description="Expose the Tabular MCP server for SQL/table exploration.",
+    )
+    statistic_enabled: bool = Field(
+        default=True,
+        description="Expose the Statistical MCP server for data analysis helpers.",
+    )
+    text_enabled: bool = Field(
+        default=True,
+        description="Expose the Text MCP server for semantic vector search.",
+    )
+    templates_enabled: bool = Field(
+        default=True,
+        description="Expose the Template MCP server for prompts/templates.",
+    )
+    resources_enabled: bool = Field(
+        default=True,
+        description="Expose the Resources MCP server for resource/tag management.",
+    )
+    opensearch_ops_enabled: bool = Field(
+        default=False,
+        description="Expose OpenSearch operational endpoints and the corresponding MCP server.",
+    )
+    neo4j_enabled: bool = Field(
+        default=False,
+        description="Expose Neo4j graph exploration endpoints and the corresponding MCP server.",
+    )
+    filesystem_enabled: bool = Field(
+        default=False,
+        description="Expose agent filesystem utils endpoints and the corresponding MCP server.",
+    )
 
 
 class TemporalSchedulerConfig(BaseModel):
@@ -300,6 +375,34 @@ class StorageConfig(BaseModel):
     log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")
 
 
+# ---------- Agent filesystem config, used for listing, reading, creating & deleting files.  ---------- #
+
+
+class LocalFilesystemConfig(BaseModel):
+    type: Literal["local"] = "local"
+    root: str = Field("~/.fred/knowledge-flow/filesystem/", description="Local filesystem root directory.")
+
+
+class MinioFilesystemConfig(BaseModel):
+    type: Literal["minio"] = "minio"
+    endpoint: str = Field(..., description="MinIO or S3 compatible endpoint.")
+    access_key: str = Field(..., description="MinIO access key.")
+    secret_key: str = Field(..., description="MinIO secret key.")
+    bucket_name: Optional[str] = Field("filesystem", description="MinIO bucket name.")
+    secure: Optional[bool] = Field(False, description="Use TLS for the MinIO client.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_secrets(cls, values: dict) -> dict:
+        values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
+        if not values.get("secret_key"):
+            raise ValueError("Missing MINIO_SECRET_KEY environment variable")
+        return values
+
+
+FilesystemConfig = Annotated[Union[LocalFilesystemConfig, MinioFilesystemConfig], Field(discriminator="type")]
+
+
 class Configuration(BaseModel):
     app: AppConfig
     chat_model: ModelConfiguration
@@ -308,8 +411,11 @@ class Configuration(BaseModel):
     security: SecurityConfiguration
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
+    library_output_processors: Optional[List[LibraryProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
     scheduler: SchedulerConfig
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
     storage: StorageConfig
+    mcp: MCPConfig = Field(default_factory=MCPConfig, description="Feature toggles for MCP-only endpoints and servers.")
+    filesystem: FilesystemConfig = Field(..., description="Filesystem backend configuration.")

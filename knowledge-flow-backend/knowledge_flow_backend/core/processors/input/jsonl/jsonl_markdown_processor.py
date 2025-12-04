@@ -60,6 +60,8 @@ class JsonlMarkdownProcessor(BaseMarkdownProcessor):
       - Expects a 'markdown' field (falls back to 'content'/'text' if needed)
     """
 
+    description = "Flattens JSONL records into Markdown sections with light provenance front matter."
+
     def check_file_validity(self, file_path: Path) -> bool:
         return file_path.exists() and file_path.is_file() and file_path.suffix.lower() == ".jsonl"
 

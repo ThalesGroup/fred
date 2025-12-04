@@ -215,3 +215,52 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
             hits.append(AnnHit(document=doc, score=float(score)))
 
         return hits
+
+    # ---- Introspection / Diagnostics ----
+    def get_vectors_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
+        """
+        Return all embeddings for the given document along with their chunk ids.
+
+        Return format: [{"chunk_uid": str, "vector": list[float]}, ...]
+        """
+        try:
+            out: List[Dict[str, Any]] = []
+            # InMemoryVectorStore keeps a dict with records containing "embedding" if computed
+            # and the original "metadata". We filter by metadata.document_uid.
+            for key, rec in self.vectorstore.store.items():
+                md = rec.get("metadata") or {}
+                if md.get("document_uid") != document_uid:
+                    continue
+                vec = rec.get("embedding")
+                if vec is None:
+                    # The InMemory implementation may not expose the vector depending on the version.
+                    # Skip entries without a vector to stay robust.
+                    continue
+                cid = md.get(CHUNK_ID_FIELD) or key
+                out.append({"chunk_uid": cid, "vector": vec})
+            logger.info("🔎 [InMemory] Retrieved %d vectors for document_uid=%s", len(out), document_uid)
+            return out
+        except Exception:
+            logger.exception("❌ [InMemory] Failed to fetch vectors for document_uid=%s", document_uid)
+            return []
+
+    def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
+        """
+        Return all chunks (text + metadata) for the given document.
+
+        Return format: [{"chunk_uid": str, "text": str, "metadata": dict}, ...]
+        """
+        try:
+            out: List[Dict[str, Any]] = []
+            for key, rec in self.vectorstore.store.items():
+                md = rec.get("metadata") or {}
+                if md.get("document_uid") != document_uid:
+                    continue
+                text = rec.get("text", "")
+                cid = md.get(CHUNK_ID_FIELD) or key
+                out.append({"chunk_uid": cid, "text": text, "metadata": md})
+            logger.info("📄 [InMemory] Retrieved %d chunks for document_uid=%s", len(out), document_uid)
+            return out
+        except Exception:
+            logger.exception("❌ [InMemory] Failed to fetch chunks for document_uid=%s", document_uid)
+            return []

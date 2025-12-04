@@ -43,6 +43,7 @@ from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.chatbot import chatbot_controller
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
 from agentic_backend.core.feedback import feedback_controller
+from agentic_backend.core.mcp import mcp_controller
 from agentic_backend.core.monitoring import monitoring_controller
 
 # -----------------------
@@ -64,15 +65,24 @@ def load_environment(dotenv_path: str = "./config/.env"):
         logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
 
 
+def load_configuration() -> Configuration:
+    load_environment()
+    default_config_file = "./config/configuration.yaml"
+    config_file = os.environ.get("CONFIG_FILE", default_config_file)
+    if not os.path.exists(config_file):
+        raise FileNotFoundError(f"Configuration file not found: {config_file}")
+    configuration: Configuration = parse_server_configuration(config_file)
+    logger.info(f"✅ Loaded configuration from: {config_file}")
+    return configuration
+
+
 # -----------------------
 # APP CREATION
 # -----------------------
 
 
 def create_app() -> FastAPI:
-    load_environment()
-    config_file = os.environ["CONFIG_FILE"]
-    configuration: Configuration = parse_server_configuration(config_file)
+    configuration: Configuration = load_configuration()
     base_url = configuration.app.base_url
 
     application_context = ApplicationContext(configuration)
@@ -82,6 +92,7 @@ def create_app() -> FastAPI:
         store=application_context.get_log_store(),
     )
     logger.info(f"🛠️ create_app() called with base_url={base_url}")
+    application_context._log_config_summary()
 
     # The correct and final code to use
     @asynccontextmanager
@@ -96,6 +107,7 @@ def create_app() -> FastAPI:
 
         # Instantiate dependencies *within* the lifespan context
         app.state.configuration = configuration
+        mcp_manager = application_context.get_mcp_server_manager()
         agent_loader = AgentLoader(configuration, get_agent_store())
         agent_manager = AgentManager(configuration, agent_loader, get_agent_store())
         agent_factory = AgentFactory(
@@ -121,6 +133,7 @@ def create_app() -> FastAPI:
             # to prevent the server from starting in a broken state.
 
         # Store state on app.state for access via dependency injection
+        app.state.mcp_manager = mcp_manager
         app.state.agent_manager = agent_manager
         app.state.session_orchestrator = session_orchestrator
 
@@ -154,6 +167,7 @@ def create_app() -> FastAPI:
 
     router = APIRouter(prefix=base_url)
     router.include_router(agent_controller.router)
+    router.include_router(mcp_controller.router)
     router.include_router(chatbot_controller.router)
     router.include_router(monitoring_controller.router)
     router.include_router(feedback_controller.router)

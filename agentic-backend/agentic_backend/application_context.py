@@ -43,12 +43,12 @@ from fred_core import (
     KpiLogStore,
     KPIWriter,
     LogStoreConfig,
+    OpenFgaRebacConfig,
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
     OpenSearchLogStore,
     RamLogStore,
     RebacEngine,
-    SpiceDbRebacConfig,
     SQLStorageConfig,
     get_model,
     rebac_factory,
@@ -64,6 +64,8 @@ from agentic_backend.common.structures import (
 )
 from agentic_backend.core.agents.store.base_agent_store import BaseAgentStore
 from agentic_backend.core.feedback.store.base_feedback_store import BaseFeedbackStore
+from agentic_backend.core.mcp.mcp_server_manager import McpServerManager
+from agentic_backend.core.mcp.store.base_mcp_server_store import BaseMcpServerStore
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 
@@ -147,6 +149,10 @@ def get_rebac_engine() -> RebacEngine:
 
 def get_agent_store() -> BaseAgentStore:
     return get_app_context().get_agent_store()
+
+
+def get_mcp_server_manager() -> "McpServerManager":
+    return get_app_context().get_mcp_server_manager()
 
 
 def get_feedback_store() -> BaseFeedbackStore:
@@ -255,6 +261,8 @@ class ApplicationContext:
     _service_instances: Dict[str, Any]
     _feedback_store_instance: Optional[BaseFeedbackStore] = None
     _agent_store_instance: Optional[BaseAgentStore] = None
+    _mcp_server_store_instance: Optional[BaseMcpServerStore] = None
+    _mcp_server_manager: Optional[McpServerManager] = None
     _session_store_instance: Optional[BaseSessionStore] = None
     _history_store_instance: Optional[BaseHistoryStore] = None
     _kpi_store_instance: Optional[BaseKPIStore] = None
@@ -541,8 +549,74 @@ class ApplicationContext:
         else:
             raise ValueError("Unsupported sessions storage backend")
 
+    def get_mcp_server_store(self) -> BaseMcpServerStore:
+        """
+        Factory for the MCP servers persistent store. Falls back to the agent store
+        backend if no explicit mcp_servers_store is provided.
+        """
+        if self._mcp_server_store_instance is not None:
+            return self._mcp_server_store_instance
+
+        store_config = (
+            get_configuration().storage.mcp_servers_store
+            or get_configuration().storage.agent_store
+        )
+
+        if isinstance(store_config, DuckdbStoreConfig):
+            from agentic_backend.core.mcp.store.duckdb_mcp_server_store import (
+                DuckDBMcpServerStore,
+            )
+
+            db_path = Path(store_config.duckdb_path).expanduser()
+            self._mcp_server_store_instance = DuckDBMcpServerStore(db_path)
+            logger.info("[MCP][STORE] Using DuckDB backend at %s", db_path)
+        elif isinstance(store_config, OpenSearchIndexConfig):
+            from agentic_backend.core.mcp.store.opensearch_mcp_server_store import (
+                OpenSearchMcpServerStore,
+            )
+
+            opensearch_config = get_configuration().storage.opensearch
+            password = opensearch_config.password
+            if not password:
+                raise ValueError(
+                    "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
+                )
+            self._mcp_server_store_instance = OpenSearchMcpServerStore(
+                host=opensearch_config.host,
+                username=opensearch_config.username,
+                password=password,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+                index=store_config.index,
+            )
+            logger.info(
+                "[MCP][STORE] Using OpenSearch backend host=%s index=%s secure=%s verify_certs=%s",
+                opensearch_config.host,
+                store_config.index,
+                opensearch_config.secure,
+                opensearch_config.verify_certs,
+            )
+        else:
+            raise ValueError("Unsupported MCP servers storage backend")
+
+        return self._mcp_server_store_instance
+
     def get_mcp_configuration(self) -> McpConfiguration:
         return self.configuration.mcp
+
+    def get_mcp_server_manager(self) -> McpServerManager:
+        """
+        Lazily create the MCP server manager using the configured store.
+        """
+        if self._mcp_server_manager is not None:
+            return self._mcp_server_manager
+
+        manager = McpServerManager(
+            config=self.configuration, store=self.get_mcp_server_store()
+        )
+        manager.bootstrap()
+        self._mcp_server_manager = manager
+        return manager
 
     def get_kpi_writer(self) -> KPIWriter:
         if self._kpi_writer is not None:
@@ -637,7 +711,6 @@ class ApplicationContext:
         Does NOT print secrets; only presence/masked hints.
         """
         cfg = self.configuration
-
         logger.info("🔧 Agentic configuration summary")
         logger.info("────────────────────────────────────────────────────────────────")
 
@@ -720,6 +793,7 @@ class ApplicationContext:
                     logger.info("     • %-14s %s", label, type(store_cfg).__name__)
 
             _describe("agent_store", st.agent_store)
+            _describe("mcp_servers_store", st.mcp_servers_store)
             _describe("session_store", st.session_store)
             _describe("history_store", st.history_store)
             _describe("feedback_store", st.feedback_store)
@@ -785,24 +859,21 @@ class ApplicationContext:
             )
 
         rebac_cfg = cfg.security.rebac
-        if isinstance(rebac_cfg, SpiceDbRebacConfig):
-            logger.info("  🕸️ ReBAC engine: %s", rebac_cfg.type)
-            logger.info("     • endpoint: %s", rebac_cfg.endpoint)
-            logger.info("     • insecure: %s", rebac_cfg.insecure)
-            logger.info("     • sync_schema_on_init: %s", rebac_cfg.sync_schema_on_init)
-            token_value = os.getenv(rebac_cfg.token_env_var, "")
-            if token_value:
+        if rebac_cfg and rebac_cfg.enabled:
+            # Print rebac type
+            logger.info("  🕸️ Rebac Enabled:")
+            logger.info("     • Type: %s", rebac_cfg.type)
+            if isinstance(rebac_cfg, OpenFgaRebacConfig):
+                logger.info("     • API URL: %s", rebac_cfg.api_url)
+                logger.info("     • Store Name: %s", rebac_cfg.store_name)
                 logger.info(
-                    "     • %s: present (%s)",
-                    rebac_cfg.token_env_var,
-                    _mask(token_value),
+                    "     • Sync Schema on Init: %s", rebac_cfg.sync_schema_on_init
                 )
-            else:
-                logger.warning(
-                    "     ⚠️ %s is not set — ReBAC authorization calls will fail.",
-                    rebac_cfg.token_env_var,
+                logger.info(
+                    "     • Create Store if Needed: %s",
+                    rebac_cfg.create_store_if_needed,
                 )
         else:
-            logger.info("  🕸️ ReBAC engine: disabled")
+            logger.info("  🕸️ Rebac Disabled")
 
         logger.info("────────────────────────────────────────────────────────────────")

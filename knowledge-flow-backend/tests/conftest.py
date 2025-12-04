@@ -22,7 +22,6 @@ from fred_core import (
     OpenSearchStoreConfig,
     PostgresStoreConfig,
     SecurityConfiguration,
-    SpiceDbRebacConfig,
     UserSecurity,
 )
 from langchain_community.embeddings import FakeEmbeddings
@@ -62,17 +61,13 @@ def app_context(monkeypatch, fake_embedder):
     """Fixture to initialize ApplicationContext with full duckdb/local config."""
     ApplicationContext._instance = None
     monkeypatch.setenv("OPENAI_API_KEY", "test")
-    monkeypatch.setenv("SPICEDB_TOKEN", "test")
 
     duckdb = DuckdbStoreConfig(type="duckdb", duckdb_path="/tmp/testdb.duckdb")
     fake_security_config = SecurityConfiguration(
         m2m=M2MSecurity(enabled=False, realm_url=AnyUrl("http://localhost:8080/realms/fake-m2m-realm"), client_id="fake-m2m-client", audience="fake-audience"),
         user=UserSecurity(enabled=False, realm_url=AnyUrl("http://localhost:8080/realms/fake-user-realm"), client_id="fake-user-client"),
         authorized_origins=[AnyHttpUrl("http://localhost:5173")],
-        rebac=SpiceDbRebacConfig(
-            endpoint="localhost:50051",
-            insecure=True,
-        ),
+        rebac=None,
     )
     config = Configuration(
         app=AppConfig(
@@ -142,20 +137,24 @@ def app_context(monkeypatch, fake_embedder):
             ProcessorConfig(
                 prefix=".md",
                 class_path=f"{TestMarkdownProcessor.__module__}.{TestMarkdownProcessor.__qualname__}",
+                description="Test markdown input processor for unit tests",
             ),
             ProcessorConfig(
                 prefix=".docx",
                 class_path=f"{TestDocxProcessor.__module__}.{TestDocxProcessor.__qualname__}",
+                description="Test docx input processor for unit tests",
             ),
         ],
         output_processors=[
             ProcessorConfig(
                 prefix=".pdf",
                 class_path=f"{TestOutputProcessor.__module__}.{TestOutputProcessor.__qualname__}",
+                description="Test output processor for pdf files",
             ),
             ProcessorConfig(
                 prefix=".docx",
                 class_path=f"{TestOutputProcessor.__module__}.{TestOutputProcessor.__qualname__}",
+                description="Test output processor for docx files",
             ),
         ],
     )

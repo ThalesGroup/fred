@@ -52,25 +52,6 @@ class RebacBaseConfig(BaseModel):
     )
 
 
-class SpiceDbRebacConfig(RebacBaseConfig):
-    """Configuration for a SpiceDB-backed relationship engine."""
-
-    type: Literal["spicedb"] = "spicedb"
-    endpoint: str = Field(
-        ..., description="gRPC endpoint for the SpiceDB implementation (host:port)"
-    )
-    insecure: bool = Field(
-        default=False, description="Use insecure connection instead of TLS"
-    )
-    sync_schema_on_init: bool = Field(
-        default=True, description="Synchronize schema when building the engine"
-    )
-    token_env_var: str = Field(
-        default="SPICEDB_TOKEN",
-        description="Environment variable that stores the SpiceDB preshared key",
-    )
-
-
 class OpenFgaRebacConfig(RebacBaseConfig):
     """Configuration for an OpenFGA-backed relationship engine."""
 
@@ -108,9 +89,7 @@ class OpenFgaRebacConfig(RebacBaseConfig):
     )
 
 
-RebacConfiguration = Annotated[
-    Union[SpiceDbRebacConfig, OpenFgaRebacConfig], Field(discriminator="type")
-]
+RebacConfiguration = Annotated[Union[OpenFgaRebacConfig], Field(discriminator="type")]
 
 
 class SecurityConfiguration(BaseModel):

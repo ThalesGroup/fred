@@ -19,9 +19,9 @@ security:
   authorized_origins:
     - "http://localhost:5173"
   rebac:
-    type: spicedb
-    endpoint: "http://localhost:50051"
-    insecure: true
+    enabled: false
+    type: openfga
+    api_url: "http://localhost:9080"
 
 scheduler:
   enabled: true

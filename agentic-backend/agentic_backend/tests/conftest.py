@@ -1,7 +1,6 @@
 # agentic_backend/tests/conftest.py
 
 import asyncio
-import os
 
 import pytest
 from fastapi import APIRouter, FastAPI
@@ -13,7 +12,6 @@ from fred_core import (
     OpenSearchStoreConfig,
     PostgresStoreConfig,
     SecurityConfiguration,
-    SpiceDbRebacConfig,
     UserSecurity,
     get_current_user,
 )
@@ -44,7 +42,6 @@ from agentic_backend.core.chatbot import chatbot_controller
 @pytest.fixture(scope="session")
 def minimal_generalist_config() -> Configuration:
     duckdb_store = DuckdbStoreConfig(type="duckdb", duckdb_path="/tmp/test-duckdb.db")
-    os.environ.setdefault("SPICEDB_TOKEN", "test")
     fake_security_config = SecurityConfiguration(
         m2m=M2MSecurity(
             enabled=False,
@@ -58,10 +55,7 @@ def minimal_generalist_config() -> Configuration:
             client_id="fake-user-client",
         ),
         authorized_origins=[AnyHttpUrl("http://localhost:5173")],
-        rebac=SpiceDbRebacConfig(
-            endpoint="localhost:50051",
-            insecure=True,
-        ),
+        rebac=None,
     )
 
     return Configuration(
@@ -77,7 +71,9 @@ def minimal_generalist_config() -> Configuration:
             feature_flags=FrontendFlags(
                 enableK8Features=False, enableElecWarfare=False
             ),
-            properties=Properties(logoName="fred"),
+            properties=Properties(
+                logoName="fred", logoNameDark="fred-dark", siteDisplayName="Fred"
+            ),
         ),
         security=fake_security_config,
         ai=AIConfig(
@@ -124,6 +120,7 @@ def minimal_generalist_config() -> Configuration:
                 username="admin",
             ),
             agent_store=duckdb_store,
+            mcp_servers_store=duckdb_store,
             session_store=duckdb_store,
             history_store=duckdb_store,
             feedback_store=duckdb_store,

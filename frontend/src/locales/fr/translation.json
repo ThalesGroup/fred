@@ -8,7 +8,9 @@
     "beta": "Bêta",
     "retry": "Réessayer",
     "error": "Erreur",
-    "refresh": "Rafraîchir"
+    "refresh": "Rafraîchir",
+    "cancel": "Annuler",
+    "save": "Enregistrer"
   },
   "dataHub": {
     "title": "Hub des Données - Lignage des documents",
@@ -73,6 +75,7 @@
     "chat": "Discussion",
     "monitoring": "Supervision",
     "knowledge": "Ressources",
+    "mcp": "Hub MCP",
     "agent": "Hub Agent",
     "workspaces": "Espaces de travail",
     "account": "Profil",
@@ -84,6 +87,7 @@
       "chat": "Discuter avec l'assistant IA",
       "monitoring": "Superviser les appels IA backend",
       "knowledge": "Consulter vos bibliothèques de documents et de prompts",
+      "mcp": "Gérer les serveurs MCP",
       "agent": "Voir les agents",
       "workspaces": "Voir les espaces",
       "account": "Voir votre profil",
@@ -159,7 +163,10 @@
     "runSuccessDetail": "Processeurs exécutés avec succès.",
     "summaryFor": "Résumé pour '{{name}}'",
     "processorsCount": "{{count}} processeur(s)",
-    "view": { "sideBySide": "Côte à côte", "stacked": "Empilé" },
+    "view": {
+      "sideBySide": "Côte à côte",
+      "stacked": "Empilé"
+    },
     "metricsTitle": "Métriques des processeurs",
     "persistLabel": "Enregistrer l'exécution",
     "saved": {
@@ -191,7 +198,11 @@
     "pages": "{{n}} page(s)",
     "noMarkdown": "Aucun markdown produit",
     "openLatest": "Ouvrir la dernière exécution",
-    "detail": { "title": "Détail de l'exécution", "expandAll": "Tout déplier", "collapseAll": "Tout replier" }
+    "detail": {
+      "title": "Détail de l'exécution",
+      "expandAll": "Tout déplier",
+      "collapseAll": "Tout replier"
+    }
   },
   "assetManager": {
     "title": "Gérer les ressources pour {{agentId}}",
@@ -243,8 +254,7 @@
     "search": "Rechercher",
     "filter": "Filtrer",
     "create": "Créer",
-    "createMcpAgent": "Créer un Nouvel Agent MCP",
-    "createMcpAgentNote": "Créer un nouvel agent MCP avec la configuration par défaut.",
+    "createAgent": "Créer un nouvel agent",
     "noAgents": "Aucun agent trouvé",
     "noFavorites": "Vous n'avez pas encore ajouté d'agents à vos favoris",
     "noTag": "Aucun agent avec le tag \"{{tag}}\"",
@@ -269,6 +279,9 @@
         "name": "Nom",
         "url": "URL",
         "transport": "Transport",
+        "transport_http": "streamable_http",
+        "transport_local": "stdio",
+        "command": "Commande",
         "timeout": "Timeout"
       }
     },
@@ -285,6 +298,65 @@
     "success": {
       "summary": "Agent créé",
       "detail": "L'agent a été créé avec succès."
+    },
+    "toolsSelection": {
+      "title": "Outils"
+    }
+  },
+  "mcpHub": {
+    "title": "Hub MCP",
+    "subtitle": "Déclarez et modifiez les serveurs MCP accessibles aux agents.",
+    "addButton": "Ajouter un serveur MCP",
+    "addTitle": "Nouveau serveur MCP",
+    "editTitle": "Modifier un serveur MCP",
+    "emptyTitle": "Aucun serveur MCP pour l'instant",
+    "emptyHint": "Créez une entrée pour permettre aux agents de s'y connecter.",
+    "countLabel": "serveurs",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "confirmDeleteTitle": "Supprimer le serveur MCP ?",
+    "confirmDeleteMessage": "Supprimer le serveur MCP {{id}} ? Cette action est irréversible.",
+    "fields": {
+      "id": "Identifiant",
+      "name": "Nom affiché (clé i18n)",
+      "description": "Description (clé i18n)",
+      "transport": "Transport",
+      "url": "URL du serveur",
+      "command": "Commande",
+      "args": "Arguments",
+      "env": "Variables d'environnement",
+      "enabled": "Activé",
+      "timeout": "Timeout SSE (s)",
+      "auth_mode": "Mode d'authentification"
+    },
+    "helpers": {
+      "args": "Arguments séparés par un espace ou une virgule",
+      "env": "Une ligne KEY=VALUE par variable"
+    },
+    "status": {
+      "enabled": "Activé",
+      "disabled": "Désactivé"
+    },
+    "transport": {
+      "stdio": "stdio",
+      "streamable_http": "streamable_http",
+      "sse": "Server-sent events",
+      "websocket": "WebSocket"
+    },
+    "auth": {
+      "user_token": "Jeton utilisateur",
+      "no_token": "Pas de jeton",
+      "user_token_hint": "Transmettre le bearer token de l'utilisateur authentifié",
+      "present": "Auth configurée",
+      "none": "Pas d'auth"
+    },
+    "toasts": {
+      "created": "Serveur MCP créé",
+      "updated": "Serveur MCP mis à jour",
+      "deleted": "Serveur MCP supprimé",
+      "enabled": "Serveur MCP activé",
+      "disabled": "Serveur MCP désactivé",
+      "error": "Échec de l'opération"
     }
   },
   "chatbot": {
@@ -299,6 +371,7 @@
       "betaNotice": "Les pièces jointes sont en version bêta. Seuls les fichiers CSV, docx et pdf sont pris en charge. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
       "count": "{{count}} pièces jointes"
     },
+    "uploadingFile": "Téléversement de {{name}}...",
     "recordAudio": "Enregistrer de l'audio",
     "sendMessage": "Envoyer le message",
     "stopResponse": "Arrêter la réponse",
@@ -487,7 +560,44 @@
     "confirmDeleteFolderMessage": "Supprimer le dossier vide « {{name}} » ?",
     "folderDeleted": "Dossier supprimé",
     "deleteFolder": "Supprimer le dossier",
-    "download": "Télécharger"
+    "download": "Télécharger",
+    "pipeline": {
+      "title": "Configurer le pipeline de traitement",
+      "description": "Définissez la chaîne de processeurs à appliquer pour chaque type de fichier de cette bibliothèque.",
+      "library": "Bibliothèque",
+      "inputLabel": "Processeur d'entrée",
+      "extensionLabel": "Extension de fichier",
+      "stepsLabel": "Chaîne de processeurs",
+      "addStep": "Ajouter un processeur",
+      "removeStep": "Supprimer",
+      "cancel": "Annuler",
+      "save": "Enregistrer le pipeline",
+      "loadErrorSummary": "Échec du chargement des processeurs",
+      "noLibrarySummary": "Aucune bibliothèque sélectionnée",
+      "noLibraryDetail": "Veuillez d'abord sélectionner une bibliothèque.",
+      "emptyPipelineSummary": "Pipeline vide",
+      "emptyPipelineDetail": "Ajoutez au moins un processeur.",
+      "savedSummary": "Pipeline enregistré",
+      "savedDetail": "Le pipeline de traitement a été configuré pour la bibliothèque « {{name}} ».",
+      "saveErrorSummary": "Échec de l'enregistrement du pipeline",
+      "current": "Pipeline",
+      "currentDefault": "Pipeline",
+      "defaultTag": "par défaut",
+      "libraryProcessors": "Processeurs de bibliothèque",
+      "libraryProcessorsHelper": "Ces processeurs s'exécutent une fois au niveau de la bibliothèque après le traitement des documents.",
+      "helpButton": "Comment ça marche",
+      "helpTitle": "Comment fonctionnent les pipelines",
+      "helpIntro": "Les pipelines vous permettent de choisir quels processeurs s'exécutent et à quel moment.",
+      "helpInputTitle": "Processeurs d'entrée",
+      "helpInputBody": "Convertissent les fichiers bruts en aperçus normalisés (Markdown ou tableaux) selon l'extension.",
+      "helpOutputTitle": "Processeurs de sortie",
+      "helpOutputBody": "Post-traitent chaque document (vectorisation, chargement tabulaire, résumé). Ils peuvent s'exécuter juste après l'ingestion ou plus tard depuis l'onglet Opérations.",
+      "helpLibraryTitle": "Processeurs de bibliothèque",
+      "helpLibraryBody": "S'exécutent une fois par bibliothèque pour produire des artefacts partagés (ex. sommaire de bibliothèque). Ils s'exécutent plus tard depuis l'onglet Opérations, pas pendant l'ingestion.",
+      "close": "Fermer",
+      "addLibraryProcessor": "Ajouter un processeur de bibliothèque",
+      "noLibraryProcessorAvailable": "Aucun processeur de bibliothèque disponible."
+    }
   },
   "documentLibraryShareDialog": {
     "subtitle": "Ajoutez des utilisateurs ou des groupes et gérez les permissions d'accès pour cette bibliothèque.",
@@ -699,5 +809,41 @@
   },
   "agentSelector": {
     "sendTo": "Envoyer à"
+  },
+  "mcp": {
+    "servers": {
+      "search_documents": {
+        "name": "Rechercher dans les documents",
+        "description": "Permet à votre agent d'effectuer des recherches sémantiques dans les documents téléversés dans Fred (RAG)"
+      },
+      "tabular": {
+        "name": "Accès aux données tabulaires",
+        "description": "Permet à votre agent d'interroger des sources de données tabulaires (feuilles de calcul, csv...)"
+      },
+      "filesystem": {
+        "name": "Accès au système de fichiers",
+        "description": "Permet à votre agent d'accéder à un filesystem (système de fichiers) (local ou Minio)"
+      },
+      "search_opensearch": {
+        "name": "Rechercher dans opensearch",
+        "description": "Permet à votre agent de rechercher dans les indices opensearch"
+      },
+      "kubernetes": {
+        "name": "Accès Kubernetes",
+        "description": "Permet à votre agent d'interagir avec les clusters Kubernetes"
+      },
+      "jira": {
+        "name": "Accès Jira",
+        "description": "Permet à votre agent d'interagir avec Jira"
+      },
+      "neo4j": {
+        "name": "Accès Neo4j",
+        "description": "Permet à votre agent d'interagir avec les bases de données graphes Neo4j"
+      },
+      "local_stdio": {
+        "name": "MCP local (stdio)",
+        "description": "Exécute un serveur MCP local via stdio (outils basés sur un processus)"
+      }
+    }
   }
 }
