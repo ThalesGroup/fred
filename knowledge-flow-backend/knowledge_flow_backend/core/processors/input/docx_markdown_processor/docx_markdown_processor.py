@@ -14,10 +14,10 @@
 
 import logging
 import subprocess
-from shutil import which
 import zipfile
 from datetime import datetime
 from pathlib import Path
+from shutil import which
 
 from docx import Document
 
