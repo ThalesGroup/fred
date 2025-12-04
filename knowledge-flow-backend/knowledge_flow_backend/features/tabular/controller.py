@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
