@@ -75,6 +75,18 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/document/${queryArg.documentUid}/chunks` }),
     }),
+    auditDocumentsKnowledgeFlowV1DocumentsAuditGet: build.query<
+      AuditDocumentsKnowledgeFlowV1DocumentsAuditGetApiResponse,
+      AuditDocumentsKnowledgeFlowV1DocumentsAuditGetApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/documents/audit` }),
+    }),
+    fixDocumentsKnowledgeFlowV1DocumentsAuditFixPost: build.mutation<
+      FixDocumentsKnowledgeFlowV1DocumentsAuditFixPostApiResponse,
+      FixDocumentsKnowledgeFlowV1DocumentsAuditFixPostApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/documents/audit/fix`, method: "POST" }),
+    }),
     listCatalogFilesKnowledgeFlowV1PullCatalogFilesGet: build.query<
       ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiResponse,
       ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiArg
@@ -747,6 +759,12 @@ export type DocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetApiResponse
 export type DocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetApiArg = {
   documentUid: string;
 };
+export type AuditDocumentsKnowledgeFlowV1DocumentsAuditGetApiResponse =
+  /** status 200 Successful Response */ StoreAuditReport;
+export type AuditDocumentsKnowledgeFlowV1DocumentsAuditGetApiArg = void;
+export type FixDocumentsKnowledgeFlowV1DocumentsAuditFixPostApiResponse =
+  /** status 200 Successful Response */ StoreAuditFixResponse;
+export type FixDocumentsKnowledgeFlowV1DocumentsAuditFixPostApiArg = void;
 export type ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiResponse =
   /** status 200 Successful Response */ PullFileEntry[];
 export type ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiArg = {
@@ -1157,10 +1175,14 @@ export type ProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostA
   processDocumentsProgressRequest: ProcessDocumentsProgressRequest;
 };
 export type Identity = {
-  /** Original file name incl. extension */
+  /** Original file name incl. extension (display name) */
   document_name: string;
   /** Stable unique id across the system */
   document_uid: string;
+  /** Base file name without transient version suffix (e.g., 'report.docx' for 'report.docx (1)') */
+  canonical_name?: string | null;
+  /** Version number within a folder/tag. 0 means canonical/original name, 1 -> 'name (1)', etc. */
+  version?: number;
   /** Human-friendly title for UI */
   title?: string | null;
   author?: string | null;
@@ -1262,6 +1284,8 @@ export type ProcessingGraphNode = {
   row_count?: number | null;
   file_type?: FileType | null;
   source_tag?: string | null;
+  /** Document version (0=base, 1=draft). Set only for document nodes. */
+  version?: number | null;
 };
 export type ProcessingGraphEdge = {
   source: string;
@@ -1303,6 +1327,32 @@ export type VectorChunk = {
   chunk_uid: string;
   /** Embedding du chunk */
   vector: number[];
+};
+export type StoreAuditFinding = {
+  document_uid: string;
+  document_name?: string | null;
+  source_tag?: string | null;
+  present_in_metadata: boolean;
+  present_in_vector_store: boolean;
+  present_in_content_store: boolean;
+  /** Number of chunks in vector store (when available) */
+  vector_chunks?: number | null;
+  issues?: string[];
+};
+export type StoreAuditReport = {
+  has_anomalies: boolean;
+  total_seen: number;
+  metadata_count: number;
+  vector_count: number;
+  content_count: number;
+  anomalies?: StoreAuditFinding[];
+};
+export type StoreAuditFixResponse = {
+  before: StoreAuditReport;
+  after: StoreAuditReport;
+  deleted_metadata?: string[];
+  deleted_vectors?: string[];
+  deleted_content?: string[];
 };
 export type PullFileEntry = {
   path: string;
@@ -1864,6 +1914,9 @@ export const {
   useLazyDocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetQuery,
   useDocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetQuery,
   useLazyDocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetQuery,
+  useAuditDocumentsKnowledgeFlowV1DocumentsAuditGetQuery,
+  useLazyAuditDocumentsKnowledgeFlowV1DocumentsAuditGetQuery,
+  useFixDocumentsKnowledgeFlowV1DocumentsAuditFixPostMutation,
   useListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
   useLazyListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
   useRescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostMutation,

@@ -13,8 +13,10 @@
 # limitations under the License.
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, authorize
+from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import (
@@ -27,7 +29,6 @@ from knowledge_flow_backend.common.document_structures import (
     ProcessingSummary,
 )
 from knowledge_flow_backend.common.utils import sanitize_sql_name
-from pydantic import BaseModel, Field
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import MetadataDeserializationError
 
 logger = logging.getLogger(__name__)
@@ -294,6 +295,7 @@ class MetadataService:
                     document_uid=doc_uid,
                     file_type=metadata.file.file_type,
                     source_tag=metadata.source.source_tag,
+                    version=getattr(metadata.identity, "version", 0),
                 )
             )
 
@@ -490,6 +492,25 @@ class MetadataService:
                     except Exception as e:
                         logger.warning(f"Could not delete SQL table '{table_name}': {e}")
 
+                # Promote an alternate version (version=1) to base if present
+                if getattr(metadata.identity, "version", 0) == 0:
+                    try:
+                        promoted = self._promote_alternate_version(
+                            canonical_name=metadata.identity.canonical_name or metadata.document_name,
+                            source_tag=metadata.source.source_tag,
+                            removed_tag_id=tag_id_to_remove,
+                            actor=user.uid,
+                        )
+                        if promoted:
+                            logger.info(
+                                "[METADATA] Promoted draft version '%s' to base for canonical '%s' after removing '%s'.",
+                                promoted.identity.document_uid,
+                                promoted.identity.canonical_name,
+                                tag_id_to_remove,
+                            )
+                    except Exception as e:
+                        logger.warning("Failed to promote alternate version for '%s': %s", metadata.document_name, e)
+
                 self.metadata_store.delete_metadata(metadata.document_uid)
                 # TODO: remove all rebac relations for this document
 
@@ -627,6 +648,28 @@ class MetadataService:
         Remove a relation in the ReBAC engine between a tag and a document.
         """
         await self.rebac.delete_relation(self._get_tag_as_parent_relation(tag_id, document_uid))
+
+    def _promote_alternate_version(self, canonical_name: str, source_tag: str | None, removed_tag_id: str, actor: str) -> DocumentMetadata | None:
+        """
+        Find a version=1 sibling with the same canonical_name and tag, promote it to version=0, and save.
+        """
+        filters: dict[str, Any] = {"canonical_name": canonical_name}
+        if removed_tag_id:
+            filters.setdefault("tags", {})["tag_ids"] = [removed_tag_id]
+        if source_tag:
+            filters.setdefault("source", {})["source_tag"] = source_tag
+
+        siblings = self.metadata_store.get_all_metadata(filters)
+        candidate = next((d for d in siblings if getattr(d.identity, "version", 0) == 1), None)
+        if not candidate:
+            return None
+
+        candidate.identity.version = 0
+        candidate.identity.document_name = candidate.identity.canonical_name or candidate.identity.document_name
+        candidate.identity.modified = datetime.now(timezone.utc)
+        candidate.identity.last_modified_by = actor
+        self.metadata_store.save_metadata(candidate)
+        return candidate
 
     def _get_tag_as_parent_relation(self, tag_id: str, document_uid: str) -> Relation:
         return Relation(subject=RebacReference(Resource.TAGS, tag_id), relation=RelationType.PARENT, resource=RebacReference(Resource.DOCUMENTS, document_uid))
