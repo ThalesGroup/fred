@@ -16,11 +16,11 @@
 import logging
 from typing import Any, Dict, List, Literal, Optional, cast
 
+import requests
 from fred_core import VectorSearchHit
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, StateGraph
-import requests
 
 from agentic_backend.agents.rags.prompt import (
     generate_answer_prompt,

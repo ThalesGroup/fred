@@ -49,6 +49,7 @@ from fred_core import (
 from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
+from sentence_transformers import CrossEncoder
 
 # from fred_core.filesystem.local_filesystem import LocalFilesystem
 # from fred_core.filesystem.minio_filesystem import MinioFilesystem
@@ -95,8 +96,6 @@ from knowledge_flow_backend.core.stores.vector.base_text_splitter import BaseTex
 from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
 from knowledge_flow_backend.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
-
-from sentence_transformers import CrossEncoder
 
 # Union of supported processor base classes
 BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
