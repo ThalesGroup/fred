@@ -31,6 +31,9 @@ echo "→ ADEME_BASECARBONE_URL=$ADEME_BASECARBONE_URL"
 echo "→ ADEME_BASECARBONE_ENABLED=$ADEME_BASECARBONE_ENABLED"
 echo "→ GRANDLYON_WFS_URL=${GRANDLYON_WFS_URL:-https://data.grandlyon.com/geoserver/metropole-de-lyon/ows}"
 echo "→ GRANDLYON_WFS_TYPENAME=${GRANDLYON_WFS_TYPENAME:-metropole-de-lyon:pvo_patrimoine_voirie.pvotrafic}"
+echo "→ ECO_GEO_NOMINATIM_URL=${ECO_GEO_NOMINATIM_URL:-https://nominatim.openstreetmap.org/search}"
+echo "→ ECO_GEO_OSRM_URL=${ECO_GEO_OSRM_URL:-https://router.project-osrm.org}"
+echo "→ ECO_GEO_DEFAULT_CITY_SUFFIX=${ECO_GEO_DEFAULT_CITY_SUFFIX:-Lyon, France}"
 if [[ -z "${GRANDLYON_WFS_API_KEY:-}" && ( -z "${GRANDLYON_WFS_USERNAME:-}" || -z "${GRANDLYON_WFS_PASSWORD:-}" ) ]]; then
   echo "⚠️  No GrandLyon WFS credentials found (GRANDLYON_WFS_API_KEY or USERNAME/PASSWORD). Traffic MCP may be rejected."
 fi
@@ -63,6 +66,10 @@ prefix_logs() {
 # TCL real-time MCP server
 (cd agentic-backend && uv run uvicorn agentic_backend.academy.08_ecoadviser.tcl_service.server_mcp:app \
     --host 127.0.0.1 --port 9800 2>&1 | prefix_logs "TCL") &
+
+# Geo distance MCP server (Nominatim + OSRM)
+(cd agentic-backend && uv run uvicorn agentic_backend.academy.08_ecoadviser.geo_distance_service.server_mcp:app \
+    --host 127.0.0.1 --port 9801 2>&1 | prefix_logs "GEO") &
 
 # wait for all background jobs
 wait

@@ -28,10 +28,11 @@ Fred rationale:
   quitte à séparer plus tard un noeud compute_co2 dédié.
 """
 
+import hashlib
 import json
 import logging
 import os
-from typing import Annotated, Any, Dict, List, TypedDict
+from typing import Annotated, Any, Dict, List, Optional, Tuple, TypedDict
 
 from langchain_core.messages import AnyMessage, HumanMessage, ToolMessage
 from langgraph.constants import START
@@ -56,6 +57,7 @@ logger = logging.getLogger(__name__)
 
 MAX_TOOL_MESSAGE_CHARS = int(os.getenv("ECO_MAX_TOOL_MESSAGE_CHARS", "4000"))
 RECENT_MESSAGES_WINDOW = int(os.getenv("ECO_RECENT_MESSAGES", "12"))
+MAX_TRIP_MEMORY = int(os.getenv("ECO_MAX_TRIP_MEMORY", "6"))
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +105,10 @@ ECO_TUNING = AgentTuning(
                 "- `get_emission_factor` returns a single factor with `source` and `last_update` so you can cite the reference explicitly.\n"
                 "- `compare_trip_modes` should be used when you know the distance and frequency: it returns a comparison payload (weekly emissions per mode) ready to transform into a Markdown table.\n"
                 "- When the service is unavailable, fall back to the baseline assumptions (car 0.192 kg/km, TCL 0.01 kg/km, bike/walk 0 kg/km) and clearly state that you relied on the backup factors.\n\n"
+                "### Géocodage & distances exactes\n"
+                "- Utilise d’abord le tool `estimate_trip_between_addresses` (MCP `mcp-geo-service`) en lui passant les deux adresses textuelles fournies par l’utilisateur. Il renvoie directement la distance OSRM (km), la durée estimée et les coordonnées retenues.\n"
+                "- Si tu as besoin d’affiner, `geocode_location` fournit plusieurs correspondances pour une adresse donnée (limite par défaut sur la France) et `compute_trip_distance` calcule ensuite la distance entre deux couples lat/lon.\n"
+                "- Réutilise la distance retournée (km) pour tous les calculs CO₂ et cite-la explicitement dans le résumé/tableau. Si `source=\"haversine\"`, précise qu’il s’agit d’une approximation faute de route routable.\n"
                 "### Trafic routier en temps réel\n"
                 "- When car usage is mentioned (current or alternative) or when congestion could change the recommendation, call the traffic MCP (`mcp-traffic-service`).\n"
                 "- Use the `get_live_traffic_segments` tool with approximate coordinates (lat,lng) for the origin/destination (city centres are fine) to retrieve the latest WFS data from Grand Lyon.\n"
@@ -119,15 +125,16 @@ ECO_TUNING = AgentTuning(
                 "   - main current mode of transport (car, bike, TCL, etc.)\n"
                 "   - approximate one-way distance or time if available\n"
                 "   - frequency (e.g., 5 days/week)\n"
-                "2. Use tools to **list datasets and their schema**.\n"
-                "3. Identify which tables are relevant (e.g., bike_infra_demo, tcl_stops_demo).\n"
-                "4. Run SQL-like queries to:\n"
+                "2. Dès que des adresses complètes sont fournies, lance `estimate_trip_between_addresses` (ou, à défaut, `geocode_location` + `compute_trip_distance`) pour obtenir une distance fiable avant toute estimation d'émissions.\n"
+                "3. Use tools to **list datasets and their schema**.\n"
+                "4. Identify which tables are relevant (e.g., bike_infra_demo, tcl_stops_demo).\n"
+                "5. Run SQL-like queries to:\n"
                 "   - find long bike lanes near the origin/destination city\n"
                 "   - find TCL stops in the same city or within a geographic area\n"
-                "5. When relevant, fetch live traffic information to validate car commute feasibility (mention congestion in your answer).\n"
-                "6. Based on distance and mode, estimate weekly CO₂ emissions using the factors above.\n"
-                "7. Compare current mode vs alternatives (TCL, bike, walking if realistic).\n"
-                "8. Produce a clear, concise **markdown summary** with:\n"
+                "6. When relevant, fetch live traffic information to validate car commute feasibility (mention congestion in your answer).\n"
+                "7. Based on distance and mode, estimate weekly CO₂ emissions using the factors above.\n"
+                "8. Compare current mode vs alternatives (TCL, bike, walking if realistic).\n"
+                "9. Produce a clear, concise **markdown summary** with:\n"
                 "   - a short explanation in natural language\n"
                 "   - a markdown table comparing modes and weekly CO₂\n"
                 "   - explicit assumptions you made (distance, days/week, factors)\n\n"
@@ -148,6 +155,7 @@ ECO_TUNING = AgentTuning(
                 "- Fractionne les paragraphes en listes ou phrases courtes pour rester lisible dans l'UI.\n\n"
                 "### Rules\n"
                 "- ALWAYS base your conclusions on actual tool results when referring to datasets.\n"
+                "- When addresses are given, ALWAYS call the geo tools before running CO₂ comparisons; do not invent distances.\n"
                 "- NEVER invent columns or tables that do not exist in the schema.\n"
                 "- Cite the CO₂ references by including the `source` and `last_update` returned by the emission tools.\n"
                 "- Use markdown tables to present numeric comparisons.\n"
@@ -184,11 +192,25 @@ ECO_TUNING = AgentTuning(
         MCPServerRef(name="mcp-co2-service", optional=True),
         MCPServerRef(name="mcp-traffic-service", optional=True),
         MCPServerRef(name="mcp-tcl-service", optional=True),
+        MCPServerRef(name="mcp-geo-service", optional=True),
     ],
 )
 
+class TripMemoryEntry(TypedDict, total=False):
+    key: str
+    origin_label: str
+    destination_label: str
+    origin_query: Optional[str]
+    destination_query: Optional[str]
+    distance_km: float
+    duration_min: Optional[float]
+    profile: str
+    source: Optional[str]
+    computed_at: Optional[str]
+    message_id: Optional[str]
 
-class EcoState(TypedDict):
+
+class EcoState(TypedDict, total=False):
     """
     State LangGraph pour EcoAdvisor.
 
@@ -201,6 +223,8 @@ class EcoState(TypedDict):
 
     messages: Annotated[list[AnyMessage], add_messages]
     database_context: List[Dict[str, Any]]
+    trip_memory: List[TripMemoryEntry]
+    trip_memory_ids: List[str]
 
 
 @expose_runtime_source("agent.EcoAdvisor")
@@ -262,6 +286,163 @@ class EcoAdvisor(AgentFlow):
             except Exception:
                 return payload
         return payload
+
+    def _tool_message_identity(self, message: ToolMessage) -> str:
+        candidate = getattr(message, "id", None) or getattr(message, "tool_call_id", None)
+        if candidate:
+            return str(candidate)
+
+        content = message.content
+        if isinstance(content, str):
+            raw = content
+        else:
+            try:
+                raw = json.dumps(content, sort_keys=True)
+            except Exception:
+                raw = repr(content)
+
+        digest_input = f"{message.name}:{raw}".encode("utf-8", errors="ignore")
+        return hashlib.sha1(digest_input).hexdigest()
+
+    @staticmethod
+    def _safe_float(value: Any) -> Optional[float]:
+        try:
+            if value is None:
+                return None
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _normalize_location_label(*values: Optional[str]) -> str:
+        for value in values:
+            if isinstance(value, str):
+                trimmed = value.strip()
+                if trimmed:
+                    return trimmed
+        return "Adresse non précisée"
+
+    def _trip_entry_key(
+        self,
+        origin_label: str,
+        destination_label: str,
+        profile: Optional[str],
+    ) -> str:
+        normalized_profile = (profile or "").strip().lower()
+        return "|".join(
+            [
+                origin_label.strip().lower(),
+                destination_label.strip().lower(),
+                normalized_profile,
+            ]
+        )
+
+    def _trip_entry_from_tool_message(self, message: ToolMessage) -> Optional[TripMemoryEntry]:
+        if getattr(message, "name", "") != "estimate_trip_between_addresses":
+            return None
+
+        payload = self._maybe_parse_json(message.content)
+        if not isinstance(payload, dict):
+            return None
+
+        distance_km = self._safe_float(payload.get("distance_km"))
+        if distance_km is None:
+            return None
+
+        duration_min = self._safe_float(payload.get("duration_min"))
+        origin = payload.get("origin") or {}
+        destination = payload.get("destination") or {}
+        profile = (payload.get("profile") or "").strip() or "driving"
+
+        entry: TripMemoryEntry = {
+            "origin_label": self._normalize_location_label(
+                origin.get("label"), origin.get("query")
+            ),
+            "destination_label": self._normalize_location_label(
+                destination.get("label"), destination.get("query")
+            ),
+            "origin_query": origin.get("query"),
+            "destination_query": destination.get("query"),
+            "distance_km": distance_km,
+            "duration_min": duration_min,
+            "profile": profile,
+            "source": (payload.get("source") or "").strip() or None,
+            "computed_at": payload.get("computed_at"),
+        }
+        entry["key"] = self._trip_entry_key(
+            entry["origin_label"], entry["destination_label"], entry["profile"]
+        )
+        return entry
+
+    def _update_trip_memory(self, state: EcoState) -> Tuple[List[TripMemoryEntry], List[str]]:
+        memory: List[TripMemoryEntry] = list(state.get("trip_memory") or [])
+        processed_ids = list(state.get("trip_memory_ids") or [])
+        processed_set = set(processed_ids)
+        new_entries: List[TripMemoryEntry] = []
+
+        for message in state.get("messages", []):
+            if not isinstance(message, ToolMessage):
+                continue
+            entry = self._trip_entry_from_tool_message(message)
+            if not entry:
+                continue
+            identity = self._tool_message_identity(message)
+            if identity in processed_set:
+                continue
+            entry["message_id"] = identity
+            new_entries.append(entry)
+            processed_set.add(identity)
+
+        if not new_entries:
+            return memory, processed_ids
+
+        updated_memory = list(memory)
+        for entry in new_entries:
+            key = entry.get("key")
+            if key:
+                updated_memory = [m for m in updated_memory if m.get("key") != key]
+            updated_memory.append(entry)
+
+        if MAX_TRIP_MEMORY > 0 and len(updated_memory) > MAX_TRIP_MEMORY:
+            updated_memory = updated_memory[-MAX_TRIP_MEMORY:]
+
+        processed_ids = [
+            item.get("message_id") for item in updated_memory if item.get("message_id")
+        ]
+
+        state["trip_memory"] = updated_memory
+        state["trip_memory_ids"] = processed_ids
+        return updated_memory, processed_ids
+
+    def _format_trip_memory(self, entries: List[TripMemoryEntry]) -> str:
+        if not entries:
+            return ""
+
+        lines = [
+            "### Mémoire des trajets\n",
+            "Trajets déjà confirmés pendant cette conversation (réutilise-les si l'utilisateur y fait référence) :",
+        ]
+        for entry in entries:
+            distance = entry.get("distance_km")
+            distance_text = (
+                f"{distance:.1f} km"
+                if isinstance(distance, (int, float))
+                else "distance inconnue"
+            )
+            duration = entry.get("duration_min")
+            duration_text = ""
+            if isinstance(duration, (int, float)):
+                duration_text = f", ~{duration:.0f} min"
+            source = entry.get("source")
+            source_text = f" — source {source}" if source else ""
+            origin_label = entry.get("origin_label", "Origine inconnue")
+            destination_label = entry.get("destination_label", "Destination inconnue")
+            profile = entry.get("profile") or "profil inconnu"
+            lines.append(
+                f"- {origin_label} → {destination_label} ({profile}, {distance_text}{duration_text}{source_text})"
+            )
+
+        return "\n".join(lines) + "\n\n"
 
     def _latest_tool_output(self, state: EcoState, tool_name: str) -> Any:
         """
@@ -430,6 +611,11 @@ class EcoAdvisor(AgentFlow):
         tpl += self._format_context_for_prompt(database_context)
         system_text = self.render(tpl)
 
+        trip_memory, trip_memory_ids = self._update_trip_memory(state)
+        trip_memory_text = self._format_trip_memory(trip_memory)
+        if trip_memory_text:
+            system_text = f"{system_text}\n\n{trip_memory_text}"
+
         # 3) Construire l'historique de conversation minimal
         recent_history = self.recent_messages(
             state["messages"], max_messages=max(RECENT_MESSAGES_WINDOW, 1)
@@ -462,6 +648,8 @@ class EcoAdvisor(AgentFlow):
             return {
                 "messages": [response],
                 "database_context": database_context,
+                "trip_memory": trip_memory,
+                "trip_memory_ids": trip_memory_ids,
             }
 
         except Exception:
@@ -479,4 +667,6 @@ class EcoAdvisor(AgentFlow):
             return {
                 "messages": [fallback],
                 "database_context": [],
+                "trip_memory": trip_memory,
+                "trip_memory_ids": trip_memory_ids,
             }
