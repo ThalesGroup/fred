@@ -21,7 +21,7 @@ from fred_core import VectorSearchHit
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, StateGraph
-from sentence_transformers import CrossEncoder
+import requests
 
 from agentic_backend.agents.rags.prompt import (
     generate_answer_prompt,
@@ -35,7 +35,10 @@ from agentic_backend.agents.rags.structures import (
     RagGraphState,
     RephraseQueryOutput,
 )
-from agentic_backend.application_context import get_default_chat_model
+from agentic_backend.application_context import (
+    get_default_chat_model,
+    get_knowledge_flow_base_url,
+)
 from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
 from agentic_backend.common.rags_utils import attach_sources_to_llm_response
 from agentic_backend.common.structures import AgentChatOptions, AgentSettings
@@ -210,34 +213,6 @@ class AdvancedRico(AgentFlow):
         self.search_client = VectorSearchClient(agent=self)
         self.base_prompt = self._generate_prompt()
         self._graph = self._build_graph()
-        self.reranker = self.get_reranker()
-
-    def get_reranker(self) -> CrossEncoder:
-        """
-        Initializes and returns a CrossEncoder model for reranking retrieved documents.
-
-        Returns:
-            CrossEncoder: An initialized CrossEncoder model for reranking.
-        """
-        cache = os.environ.get("SENTENCE_TRANSFORMERS_HOME", None)
-        model = os.environ.get(
-            "RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-12-v2"
-        )
-
-        if cache:
-            logging.info(f"Cache folder exists: {cache}")
-            logging.info(
-                f"Cache folder content: {os.listdir(cache) if os.path.exists(cache) else 'NOT FOUND'}"
-            )
-            return CrossEncoder(
-                model_name_or_path=model,
-                cache_folder=cache,
-                local_files_only=True,
-            )
-        return CrossEncoder(
-            model_name_or_path=model,
-            cache_folder=cache,
-        )
 
     def _generate_prompt(self) -> str:
         return (
@@ -413,13 +388,20 @@ class AdvancedRico(AgentFlow):
         documents = cast(List[VectorSearchHit], state["documents"])
         top_r = self.get_tuned_int("rerankink.top_r", default=6)
 
-        # Score and sort documents by relevance
-        pairs = [(question, doc.content) for doc in documents]
-        scores = self.reranker.predict(pairs)
-        sorted_docs = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
-
-        # Keep top-R documents
-        reranked_documents = [doc for doc, _ in sorted_docs[:top_r]]
+        response = requests.post(
+            f"{get_knowledge_flow_base_url()}/vector/rerank",
+            timeout=30,
+            json={
+                "question": question,
+                "top_r": top_r,
+                "documents": [document.model_dump() for document in documents],
+            },
+        )
+        response.raise_for_status()
+        response_data = response.json()
+        reranked_documents: List[VectorSearchHit] = [
+            VectorSearchHit(**document) for document in response_data
+        ]
 
         # Build response
         summary = f"Reranked {len(documents)} documents, keeping top {len(reranked_documents)}."
