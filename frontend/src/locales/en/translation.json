@@ -8,7 +8,9 @@
     "beta": "Beta",
     "retry": "Retry",
     "error": "Error",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "cancel": "Cancel",
+    "save": "Save"
   },
   "dataHub": {
     "title": "Data Hub - Document Lineage",

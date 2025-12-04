@@ -64,7 +64,13 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved }: Props) {
         description: agent.tuning.description,
         tags: agent.tuning.tags ?? [],
       });
-      setMcpServerRefs(agent.tuning.mcp_servers ?? []);
+      const normalizedRefs =
+        (agent.tuning.mcp_servers ?? []).map((ref) => ({
+          // Backend serializes as {id: "..."}; OpenAPI type uses {name: "..."}.
+          name: (ref as any).name ?? (ref as any).id,
+          require_tools: (ref as any).require_tools ?? [],
+        })) ?? [];
+      setMcpServerRefs(normalizedRefs);
     } else {
       // Reset state if agent is null or has no tuning
       setFields([]);

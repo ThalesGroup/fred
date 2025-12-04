@@ -1,21 +1,6 @@
 // Copyright Thales 2025
 
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControl,
-  FormControlLabel,
-  InputLabel,
-  MenuItem,
-  Select,
-  Stack,
-  Switch,
-  TextField,
-} from "@mui/material";
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, InputLabel, MenuItem, Select, Stack, TextField } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ClientAuthMode, McpServerConfiguration } from "../../slices/agentic/agenticOpenApi";
@@ -35,10 +20,10 @@ const DEFAULT_SERVER: Draft = {
   transport: "streamable_http",
   enabled: true,
   auth_mode: "user_token",
-  sse_read_timeout: 300,
+  sse_read_timeout: 3000,
 };
 
-const transportOptions = ["streamable_http", "sse", "websocket", "stdio"];
+const transportOptions = ["streamable_http", "stdio"];
 const authOptions: ClientAuthMode[] = ["user_token", "no_token"];
 
 function argsToText(args?: string[] | null): string {
@@ -224,18 +209,6 @@ export function McpServerForm({ open, initial, onCancel, onSubmit }: McpServerFo
             onChange={(e) => setEnvText(e.target.value)}
             helperText={t("mcpHub.helpers.env")}
           />
-
-          <Box>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={draft.enabled !== false}
-                  onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })}
-                />
-              }
-              label={t("mcpHub.fields.enabled")}
-            />
-          </Box>
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>

@@ -71,7 +71,8 @@ class McpServerManager:
     ) -> List[MCPServerConfiguration]:
         if include_disabled:
             return list(self.servers.values())
-        return [s for s in self.servers.values() if s.enabled]
+        # Treat servers as enabled unless they are explicitly disabled.
+        return [s for s in self.servers.values() if s.enabled is not False]
 
     def get(self, server_id: str) -> Optional[MCPServerConfiguration]:
         return self.servers.get(server_id)

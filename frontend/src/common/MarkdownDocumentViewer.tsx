@@ -116,6 +116,7 @@ export const MarkdownDocumentViewer: React.FC<MarkdownDocumentViewerProps> = ({
               highlightedParts={[...highlightedParts, ...highlightedPartsFromExtracts]}
               content={docContent}
               size="medium"
+              documentUidForMedia={doc?.document_uid}
               enableEmojiSubstitution
             />
           </MarkdownContainer>
