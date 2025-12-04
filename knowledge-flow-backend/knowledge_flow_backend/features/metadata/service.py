@@ -58,6 +58,7 @@ class MetadataService:
         self.catalog_store = context.get_catalog_store()
         self.csv_input_store = None
         self.vector_store = None
+        self.content_store = context.get_content_store()
         self.rebac = context.get_rebac_engine()
 
     @authorize(Action.READ, Resource.DOCUMENTS)
@@ -459,6 +460,13 @@ class MetadataService:
                         logger.info(f"[TABULAR] Deleted SQL table '{table_name}' linked to '{metadata.document_name}'")
                     except Exception as e:
                         logger.warning(f"Could not delete SQL table '{table_name}': {e}")
+
+                if self.content_store is not None:
+                    try:
+                        self.content_store.delete_content(metadata.document_uid)
+                        logger.info(f"[CONTENT] Deleted content for document '{metadata.document_name}'")
+                    except Exception as e:
+                        logger.warning(f"[CONTENT] Could not delete content for '{metadata.document_name}': {e}")
 
                 self.metadata_store.delete_metadata(metadata.document_uid)
                 # TODO: remove all rebac relations for this document

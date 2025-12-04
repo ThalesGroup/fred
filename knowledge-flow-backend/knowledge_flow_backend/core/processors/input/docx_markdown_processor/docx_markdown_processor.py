@@ -17,6 +17,7 @@ import subprocess
 import zipfile
 from datetime import datetime
 from pathlib import Path
+from shutil import which
 
 from docx import Document
 
@@ -90,7 +91,14 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
         # Convert EMF to SVG
         for img_path in (images_dir / "media").glob("*.emf"):
             svg_path = img_path.with_suffix(".svg")
-            subprocess.run(["inkscape", str(img_path), "--export-filename=" + str(svg_path)])
+            if which("inkscape") is None:
+                logger.error("[DOCX] Inkscape not found; cannot convert %s to SVG. Leaving EMF in place.", img_path)
+                continue
+            try:
+                subprocess.run(["inkscape", str(img_path), "--export-filename=" + str(svg_path)], check=True)
+            except subprocess.CalledProcessError as e:
+                logger.error("[DOCX] Inkscape failed converting %s: %s", img_path, e)
+                continue
 
             # Remove the original EMF file
             img_path.unlink()
