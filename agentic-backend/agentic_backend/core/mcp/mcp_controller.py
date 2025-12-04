@@ -117,6 +117,23 @@ async def delete_mcp_server(
         raise _handle_exception(e)
 
 
+@router.post(
+    "/mcp/servers/restore",
+    summary="Restore MCP servers from static configuration",
+    response_model=None,
+)
+async def restore_mcp_servers_from_config(
+    user: KeycloakUser = Depends(get_current_user),
+    manager: McpServerManager = Depends(get_mcp_manager),
+):
+    service = McpServerService(manager)
+    try:
+        await service.restore_static_servers(user)
+    except Exception as e:
+        log_exception(e)
+        raise _handle_exception(e)
+
+
 def _handle_exception(e: Exception) -> HTTPException:
     if isinstance(e, McpServerNotFound):
         return HTTPException(status_code=404, detail=str(e))

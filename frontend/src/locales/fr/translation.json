@@ -253,6 +253,7 @@
     "agents": "Agents",
     "search": "Rechercher",
     "filter": "Filtrer",
+    "restoreButton": "Restaurer depuis la configuration",
     "create": "Créer",
     "createAgent": "Créer un nouvel agent",
     "noAgents": "Aucun agent trouvé",
@@ -299,6 +300,10 @@
       "summary": "Agent créé",
       "detail": "L'agent a été créé avec succès."
     },
+    "toasts": {
+      "restored": "Agents statiques restaurés depuis la configuration",
+      "error": "Échec de l'opération"
+    },
     "toolsSelection": {
       "title": "Outils"
     }
@@ -307,6 +312,7 @@
     "title": "Hub MCP",
     "subtitle": "Déclarez et modifiez les serveurs MCP accessibles aux agents.",
     "addButton": "Ajouter un serveur MCP",
+    "restoreButton": "Restaurer depuis la configuration",
     "addTitle": "Nouveau serveur MCP",
     "editTitle": "Modifier un serveur MCP",
     "emptyTitle": "Aucun serveur MCP pour l'instant",
@@ -356,6 +362,7 @@
       "deleted": "Serveur MCP supprimé",
       "enabled": "Serveur MCP activé",
       "disabled": "Serveur MCP désactivé",
+      "restored": "Serveurs MCP MCP statiques statiques restaurés depuis la configuration",
       "error": "Échec de l'opération"
     }
   },

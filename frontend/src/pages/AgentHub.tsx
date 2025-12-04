@@ -5,6 +5,7 @@ import Editor from "@monaco-editor/react";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import FilterListIcon from "@mui/icons-material/FilterList";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import StarIcon from "@mui/icons-material/Star";
 
@@ -42,6 +43,7 @@ import {
   Leader,
   useDeleteAgentAgenticV1AgentsNameDeleteMutation,
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
+  useRestoreAgentsAgenticV1AgentsRestorePostMutation,
 } from "../slices/agentic/agenticOpenApi";
 
 // UI union facade
@@ -92,7 +94,7 @@ const ActionButton = ({
 export const AgentHub = () => {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { showError } = useToast();
+  const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const [agents, setAgents] = useState<AnyAgent[]>([]);
   const [tabValue, setTabValue] = useState(0);
@@ -114,6 +116,7 @@ export const AgentHub = () => {
   const [agentForAssetManagement, setAgentForAssetManagement] = useState<AnyAgent | null>(null);
 
   const [triggerGetFlows, { isFetching }] = useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
+  const [restoreAgents, { isLoading: isRestoring }] = useRestoreAgentsAgenticV1AgentsRestorePostMutation();
 
   const { updateEnabled } = useAgentUpdater();
   const [triggerGetSource] = useLazyGetRuntimeSourceTextQuery();
@@ -190,6 +193,17 @@ export const AgentHub = () => {
   }, []);
 
   const handleTabChange = (_event: SyntheticEvent, newValue: number) => setTabValue(newValue);
+
+  const handleRestore = async () => {
+    try {
+      await restoreAgents().unwrap();
+      showSuccess({ summary: t("agentHub.toasts.restored") });
+      fetchAgents();
+    } catch (error: any) {
+      const detail = error?.data?.detail || error?.data || error?.message || "Unknown error";
+      showError({ summary: t("agentHub.toasts.error"), detail });
+    }
+  };
 
   const filteredAgents = useMemo(() => {
     if (tabValue === 0) return agents;
@@ -385,13 +399,20 @@ export const AgentHub = () => {
                     </Box>
 
                     <Box sx={{ display: "flex", gap: 1 }}>
-                      <ActionButton icon={<SearchIcon />}>{t("agentHub.search")}</ActionButton>
-                      <ActionButton icon={<FilterListIcon />}>{t("agentHub.filter")}</ActionButton>
-                      <ActionButton
-                        icon={<AddIcon />}
-                        onClick={canCreateAgents ? handleOpenCreateAgent : undefined}
-                        disabled={!canCreateAgents}
-                      >
+                  <ActionButton icon={<SearchIcon />}>{t("agentHub.search")}</ActionButton>
+                  <ActionButton icon={<FilterListIcon />}>{t("agentHub.filter")}</ActionButton>
+                  <ActionButton
+                    icon={<RefreshIcon />}
+                    onClick={canEditAgents ? handleRestore : undefined}
+                    disabled={!canEditAgents || isRestoring}
+                  >
+                    {t("agentHub.restoreButton")}
+                  </ActionButton>
+                  <ActionButton
+                    icon={<AddIcon />}
+                    onClick={canCreateAgents ? handleOpenCreateAgent : undefined}
+                    disabled={!canCreateAgents}
+                  >
                         {t("agentHub.create")}
                       </ActionButton>
                     </Box>
