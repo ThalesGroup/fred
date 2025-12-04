@@ -83,12 +83,12 @@ globalSchema = {
             "properties": {
                 "contexte": {
                     "type": "string",
-                    "description": "Contexte du projet.",
+                    "description": "Court résumé du contexte du projet. Longueur maximale: 300 caractères (une à deux phrases).",
                     "maxLength": 300,
                 },
                 "missions": {
                     "type": "string",
-                    "description": "Ensemble des missions et objectifs.",
+                    "description": "Court résumé de l'ensemble des missions et objectifs. Longueur maximale: 300 caractères (une à deux phrases).",
                     "maxLength": 300,
                 },
                 "refCahierCharges": {
@@ -105,7 +105,7 @@ globalSchema = {
                     "type": "string",
                     "description": "L'intitulé du poste rempli par l'intervenant.",
                 },
-                "date1": {
+                "dateFormation1": {
                     "type": "string",
                     "description": "La date du premier diplôme ou formation.",
                 },
@@ -113,7 +113,7 @@ globalSchema = {
                     "type": "string",
                     "description": "Le nom du premier diplôme ou formation.",
                 },
-                "date2": {
+                "dateFormation2": {
                     "type": "string",
                     "description": "La date du second diplôme ou formation.",
                 },
@@ -121,7 +121,7 @@ globalSchema = {
                     "type": "string",
                     "description": "Le nom du second diplôme ou formation.",
                 },
-                "date3": {
+                "dateFormation3": {
                     "type": "string",
                     "description": "La date du troisième diplôme ou formation.",
                 },
@@ -166,8 +166,8 @@ globalSchema = {
                     "description": "Le nom de la première compétence informatique.",
                 },
                 "maitriseInformatique1": {
-                    "type": "integer",
-                    "description": "La maitrise de la première compétence informatique.",
+                    "type": "string",
+                    "description": "Le lien vers l'image associée à la première compétence informatique.",
                 },
                 "competenceInformatique2": {
                     "type": "string",
@@ -263,58 +263,53 @@ globalSchema = {
             "type": "object",
             "descripion": "Informations sur les prestations financière facturées au client.",
             "properties": {
-                "prestations": {
-                    "type": "object",
-                    "properties": {
-                        "prestation1": {
-                            "type": "string",
-                            "description": "Nom de la première prestation.",
-                        },
-                        "prix1": {
-                            "type": "integer",
-                            "description": "Prix unitaire de la première prestation.",
-                        },
-                        "charge1": {
-                            "type": "integer",
-                            "description": "Charge estimée de la première prestation en unités d'oeuvre.",
-                        },
-                        "prixTotal1": {
-                            "type": "integer",
-                            "description": "Coût total de la première prestation.",
-                        },
-                        "prestation2": {
-                            "type": "string",
-                            "description": "Nom de la seconde prestation.",
-                        },
-                        "prix2": {
-                            "type": "integer",
-                            "description": "Prix unitaire de la seconde prestation.",
-                        },
-                        "charge2": {
-                            "type": "integer",
-                            "description": "Charge estimée de la seconde prestation en unités d'oeuvre.",
-                        },
-                        "prixTotal2": {
-                            "type": "integer",
-                            "description": "Coût total de la seconde prestation.",
-                        },
-                        "prestation3": {
-                            "type": "string",
-                            "description": "Nom de la troisième prestation.",
-                        },
-                        "prix3": {
-                            "type": "integer",
-                            "description": "Prix unitaire de la troisième prestation.",
-                        },
-                        "charge3": {
-                            "type": "integer",
-                            "description": "Charge estimée de la troisième prestation en unités d'oeuvre.",
-                        },
-                        "prixTotal3": {
-                            "type": "integer",
-                            "description": "Coût total de la troisième prestation.",
-                        },
-                    },
+                "prestation1": {
+                    "type": "string",
+                    "description": "Nom de la première prestation.",
+                },
+                "prix1": {
+                    "type": "integer",
+                    "description": "Prix unitaire de la première prestation.",
+                },
+                "charge1": {
+                    "type": "integer",
+                    "description": "Charge estimée de la première prestation en unités d'oeuvre.",
+                },
+                "prixTotal1": {
+                    "type": "integer",
+                    "description": "Coût total de la première prestation.",
+                },
+                "prestation2": {
+                    "type": "string",
+                    "description": "Nom de la seconde prestation.",
+                },
+                "prix2": {
+                    "type": "integer",
+                    "description": "Prix unitaire de la seconde prestation.",
+                },
+                "charge2": {
+                    "type": "integer",
+                    "description": "Charge estimée de la seconde prestation en unités d'oeuvre.",
+                },
+                "prixTotal2": {
+                    "type": "integer",
+                    "description": "Coût total de la seconde prestation.",
+                },
+                "prestation3": {
+                    "type": "string",
+                    "description": "Nom de la troisième prestation.",
+                },
+                "prix3": {
+                    "type": "integer",
+                    "description": "Prix unitaire de la troisième prestation.",
+                },
+                "charge3": {
+                    "type": "integer",
+                    "description": "Charge estimée de la troisième prestation en unités d'oeuvre.",
+                },
+                "prixTotal3": {
+                    "type": "integer",
+                    "description": "Coût total de la troisième prestation.",
                 },
                 "prixTotal": {
                     "type": "integer",
