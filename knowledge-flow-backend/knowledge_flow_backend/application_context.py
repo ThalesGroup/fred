@@ -16,7 +16,7 @@ import importlib
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Optional, Type, Union
+from typing import Any, Dict, Optional, Type, Union
 
 from fred_core import (
     BaseFilesystem,
@@ -95,6 +95,8 @@ from knowledge_flow_backend.core.stores.vector.base_text_splitter import BaseTex
 from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
 from knowledge_flow_backend.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
+
+from sentence_transformers import CrossEncoder
 
 # Union of supported processor base classes
 BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
@@ -507,6 +509,50 @@ class ApplicationContext:
         if not self.configuration.vision_model:
             raise ValueError("Vision model configuration is missing.")
         return get_model(self.configuration.vision_model)
+
+    def get_crossencoder_model(self) -> CrossEncoder:
+        """
+        Retrieve the cross-encoder model based on the application configuration.
+        If no cross-encoder model is configured, a default model is used.
+        If the model is configured for offline use, it will be loaded from a local path.
+        Otherwise, it will be loaded from the Hugging Face model hub.
+
+        Returns:
+            CrossEncoder: An instance of the cross-encoder model.
+        Raises:
+            ValueError: If the model name is required but not provided in offline mode,
+                        or if the model configuration is missing.
+        """
+        # A default model is loaded if none is specified in the configuration.
+        if not self.configuration.crossencoder_model:
+            self.configuration.crossencoder_model = ModelConfiguration(provider=None, name="cross-encoder/ms-marco-MiniLM-L-12-v2")
+            return CrossEncoder(model_name_or_path="cross-encoder/ms-marco-MiniLM-L-12-v2", cache_folder=None)
+
+        model_config = self.configuration.crossencoder_model
+        settings: Dict[str, Any] = model_config.settings or {}
+
+        # Offline mode
+        if not settings.get("online", True):
+            if not model_config.name:
+                raise ValueError("The name of the cross-encoder model is required for offline mode.")
+            if not settings.get("local_path"):
+                raise ValueError("A path to the local cross-encoder model is required for offline mode.")
+
+            local_path: str = settings.get("local_path", "")
+
+            logging.info(f"[CROSSENCODER][OFFLINE] Cache folder exists: {settings.get('local_path')}")
+            logging.info(f"[CROSSENCODER][OFFLINE] Cache folder content: {os.listdir(local_path) if os.path.exists(local_path) else 'NOT FOUND'}")
+
+            return CrossEncoder(
+                model_name_or_path=model_config.name,
+                cache_folder=settings.get("local_path"),
+                local_files_only=True,
+            )
+
+        if not model_config.name:
+            raise ValueError("The name of the cross-encoder model is required.")
+
+        return CrossEncoder(model_name_or_path=model_config.name, cache_folder=None)
 
     def get_vector_store(self) -> BaseVectorStore:
         """
