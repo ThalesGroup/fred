@@ -54,6 +54,7 @@ class Resource(str, Enum):
     AGENTS = "agents"
     SESSIONS = "sessions"
     MESSAGE_ATTACHMENTS = "message_attachments"
+    MCP_SERVERS = "mcp_servers"
 
     # Authorization subject
     USER = "user"

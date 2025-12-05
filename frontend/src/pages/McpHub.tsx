@@ -1,6 +1,7 @@
 // Copyright Thales 2025
 
 import AddIcon from "@mui/icons-material/Add";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import SearchIcon from "@mui/icons-material/Search";
 import { Box, Button, Card, CardContent, Chip, Fade, Stack, Typography, useTheme } from "@mui/material";
@@ -18,6 +19,7 @@ import {
   useCreateMcpServerAgenticV1McpServersPostMutation,
   useDeleteMcpServerAgenticV1McpServersServerIdDeleteMutation,
   useListMcpServersAgenticV1McpServersGetQuery,
+  useRestoreMcpServersFromConfigAgenticV1McpServersRestorePostMutation,
   useUpdateMcpServerAgenticV1McpServersServerIdPutMutation,
 } from "../slices/agentic/agenticOpenApi";
 import { LoadingSpinner } from "../utils/loadingSpinner";
@@ -70,6 +72,8 @@ export const McpHub = () => {
   const [createServer] = useCreateMcpServerAgenticV1McpServersPostMutation();
   const [updateServer] = useUpdateMcpServerAgenticV1McpServersServerIdPutMutation();
   const [deleteServer] = useDeleteMcpServerAgenticV1McpServersServerIdDeleteMutation();
+  const [restoreServers, { isLoading: isRestoring }] =
+    useRestoreMcpServersFromConfigAgenticV1McpServersRestorePostMutation();
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<McpServerConfiguration | null>(null);
@@ -179,6 +183,17 @@ export const McpHub = () => {
     }
   };
 
+  const handleRestore = async () => {
+    try {
+      await restoreServers().unwrap();
+      showSuccess({ summary: t("mcpHub.toasts.restored") });
+      refetch();
+    } catch (error: any) {
+      const raw = error?.data?.detail || error?.data || error?.message || "Unknown error";
+      showError({ summary: t("mcpHub.toasts.error"), detail: raw });
+    }
+  };
+
   return (
     <Box>
       <TopBar title={t("mcpHub.title")} description={t("mcpHub.subtitle")} />
@@ -225,6 +240,13 @@ export const McpHub = () => {
                 <Box display="flex" gap={1}>
                   <ActionButton icon={<SearchIcon />}>{t("mcpHub.search")}</ActionButton>
                   <ActionButton icon={<FilterListIcon />}>{t("mcpHub.filter")}</ActionButton>
+                  <ActionButton
+                    icon={<RefreshIcon />}
+                    onClick={canEdit ? handleRestore : undefined}
+                    disabled={!canEdit || isRestoring}
+                  >
+                    {t("mcpHub.restoreButton")}
+                  </ActionButton>
                   <ActionButton icon={<AddIcon />} onClick={canEdit ? handleCreate : undefined} disabled={!canEdit}>
                     {t("mcpHub.addButton")}
                   </ActionButton>

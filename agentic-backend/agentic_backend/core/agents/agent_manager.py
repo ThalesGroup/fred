@@ -230,6 +230,18 @@ class AgentManager:
                 settings.class_path,
             )
 
+        # Seed statics into the store on first boot only (so deletes persist)
+        if not self.use_static_config_only and not self.store.static_seeded():
+            for name, (settings, tunings) in static_catalogue.items():
+                try:
+                    self.store.save(
+                        settings, tunings, scope=SCOPE_GLOBAL, scope_id=None
+                    )
+                    logger.info("[AGENTS] Seeded static agent '%s' into store", name)
+                except Exception:
+                    logger.exception("[AGENTS] Failed to seed static agent '%s'", name)
+            self.store.mark_static_seeded()
+
         for instance in persisted_instances:
             name = instance.get_name()
             settings = instance.get_agent_settings()
@@ -302,3 +314,40 @@ class AgentManager:
                 settings.tuning.dump() if settings.tuning else "N/A",
             )
             self.agent_settings[name] = settings
+
+    async def restore_static_agents(self) -> None:
+        """
+        Re-seed static agents from configuration into the store and reload the catalog.
+        """
+        if self.use_static_config_only:
+            logger.info(
+                "[AGENTS] Static-config-only mode active; nothing to restore into store."
+            )
+            return
+
+        for agent_cfg in self.config.ai.agents:
+            if not agent_cfg.enabled:
+                continue
+            if not agent_cfg.tuning:
+                logger.warning(
+                    "[AGENTS] Skipping static agent '%s' restore: missing tuning.",
+                    agent_cfg.name,
+                )
+                continue
+            try:
+                self.store.save(
+                    agent_cfg, agent_cfg.tuning, scope=SCOPE_GLOBAL, scope_id=None
+                )
+                logger.info(
+                    "[AGENTS] Restored static agent '%s' into store", agent_cfg.name
+                )
+            except Exception:
+                logger.exception(
+                    "[AGENTS] Failed to restore static agent '%s'", agent_cfg.name
+                )
+
+        self.store.mark_static_seeded()
+        # Re-bootstrap to refresh in-memory catalog with restored entries
+        self.agent_settings = {}
+        self.agent_instances = {}
+        await self.bootstrap()
