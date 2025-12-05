@@ -23,6 +23,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger("http")
 
+# Only log slow requests and errors at INFO/above. Routine probes stay at DEBUG.
+SLOW_THRESHOLD_MS = 500  # tweak if you want more/less verbosity
+
 
 def _jwt_preview(auth_header: Optional[str]) -> Dict[str, Any]:
     """Non-validating peek at JWT claims (never logs the token)."""
@@ -44,12 +47,49 @@ def _jwt_preview(auth_header: Optional[str]) -> Dict[str, Any]:
 class RequestResponseLogger(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         t0 = time.perf_counter()
+        path = request.url.path
         hdrs = {k.lower(): v for k, v in request.headers.items()}
         auth_info = _jwt_preview(hdrs.get("authorization"))
-        logger.info(f">>> {request.method} {request.url.path} qs='{request.url.query}' client={request.client.host if request.client else None} auth={auth_info}")
+
+        # Downgrade noisy probes to DEBUG
+        is_probe = path.endswith("/healthz") or path.endswith("/ready")
+        if not is_probe:
+            logger.debug(
+                ">>> %s %s qs='%s' client=%s auth=%s",
+                request.method,
+                path,
+                request.url.query,
+                request.client.host if request.client else None,
+                auth_info,
+            )
+
         response: Response = await call_next(request)
-        dt = (time.perf_counter() - t0) * 1000
+
+        dt_ms = (time.perf_counter() - t0) * 1000
         is_redirect = response.status_code in (301, 302, 303, 307, 308)
         location = response.headers.get("location")
-        logger.info(f"<<< {request.method} {request.url.path} status={response.status_code} ms={dt:.1f} redirect={is_redirect} location={location}")
+
+        # Only surface slow or failing requests above DEBUG
+        if response.status_code >= 500:
+            level = logging.ERROR
+        elif response.status_code >= 400:
+            level = logging.WARNING
+        elif dt_ms >= SLOW_THRESHOLD_MS:
+            level = logging.INFO
+        elif is_probe:
+            level = logging.DEBUG
+        else:
+            # Routine 2xx/3xx under the threshold stay at DEBUG to avoid noise
+            level = logging.DEBUG
+
+        logger.log(
+            level,
+            "<<< %s %s status=%s ms=%.1f redirect=%s location=%s",
+            request.method,
+            path,
+            response.status_code,
+            dt_ms,
+            is_redirect,
+            location,
+        )
         return response
