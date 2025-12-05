@@ -15,6 +15,7 @@
 import hashlib
 import logging
 import mimetypes
+import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -47,9 +48,12 @@ class BaseInputProcessor(ABC):
     # ---------- internal helpers ----------
 
     def _generate_file_unique_id(self, document_name: str, tags: list[str]) -> str:
-        """Stable uid from file name and tags (you can swap impl later if needed)."""
-        unique_string = document_name + "".join(tags)
-        return hashlib.sha256(unique_string.encode("utf-8")).hexdigest()
+        """
+        Generate a unique id per ingestion.
+        Previously deterministic (name+tags) which caused later ingests to overwrite earlier versions;
+        now use a random UUID to keep each ingestion distinct.
+        """
+        return uuid.uuid4().hex
 
     @staticmethod
     def _ext_to_filetype(name: str) -> FileType:

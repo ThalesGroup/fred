@@ -88,6 +88,12 @@ class BaseVectorStore(ABC):
         """Semantic (ANN) search; should honor SearchFilter where supported."""
         raise NotImplementedError
 
+    def list_document_uids(self) -> list[str]:  # pragma: no cover - optional capability
+        """
+        Optional helper: return distinct document_uids tracked by the vector store.
+        """
+        return []
+
 
 @runtime_checkable
 class LexicalSearchable(Protocol):

@@ -1,3 +1,4 @@
+**/ignore_*
 /metrics/target
 .idea/
 .vscode/*

@@ -556,6 +556,7 @@
     "confirmBulkRemoveMessage": "Supprimer {{count}} document(s) de leurs bibliothèques ?",
     "bulkRemoveFromLibrary": "Supprimer de la bibliothèque",
     "removedOneDocument": "Document supprimé de la bibliothèque.",
+    "removedManyDocuments": "Documents supprimés de la bibliothèque.",
     "confirmDeleteFolderTitle": "Supprimer le dossier ?",
     "confirmDeleteFolderMessage": "Supprimer le dossier vide « {{name}} » ?",
     "folderDeleted": "Dossier supprimé",
