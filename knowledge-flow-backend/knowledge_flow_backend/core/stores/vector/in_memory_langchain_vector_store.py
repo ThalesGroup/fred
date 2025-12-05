@@ -283,3 +283,43 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
         except Exception:
             logger.exception("❌ [InMemory] Failed to fetch chunks for document_uid=%s", document_uid)
             return []
+
+    def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
+        """
+        Return a single chunk (text + metadata) identified by chunk_uid within a document.
+
+        Structure: { "chunk_uid": str, "text": str, "metadata": dict }
+        """
+        try:
+            for key, rec in self.vectorstore.store.items():
+                md = rec.get("metadata") or {}
+                if md.get("document_uid") != document_uid:
+                    continue
+                cid = md.get(CHUNK_ID_FIELD) or key
+                if cid == chunk_uid:
+                    return {"chunk_uid": cid, "text": rec.get("text", ""), "metadata": md}
+            logger.warning("🔎 [InMemory] Chunk not found: chunk_uid=%s document_uid=%s", chunk_uid, document_uid)
+            return {"chunk_uid": chunk_uid}
+        except Exception:
+            logger.exception("❌ [InMemory] Failed to fetch chunk chunk_uid=%s for document_uid=%s", chunk_uid, document_uid)
+            return {"chunk_uid": chunk_uid}
+
+    def delete_chunk(self, document_uid: str, chunk_uid: str) -> None:
+        """Delete a single chunk from the in-memory store."""
+        try:
+            to_delete_key = None
+            for key, rec in self.vectorstore.store.items():
+                md = rec.get("metadata") or {}
+                if md.get("document_uid") != document_uid:
+                    continue
+                cid = md.get(CHUNK_ID_FIELD) or key
+                if cid == chunk_uid:
+                    to_delete_key = key
+                    break
+            if to_delete_key is not None:
+                del self.vectorstore.store[to_delete_key]
+                logger.info("🗑️  [InMemory] Deleted chunk chunk_uid=%s document_uid=%s", chunk_uid, document_uid)
+            else:
+                logger.warning("🗑️  [InMemory] Chunk to delete not found: chunk_uid=%s document_uid=%s", chunk_uid, document_uid)
+        except Exception:
+            logger.exception("❌ [InMemory] Failed to delete chunk chunk_uid=%s for document_uid=%s", chunk_uid, document_uid)
