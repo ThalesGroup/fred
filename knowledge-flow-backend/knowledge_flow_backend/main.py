@@ -59,6 +59,7 @@ from knowledge_flow_backend.features.kpi.opensearch_controller import (
     OpenSearchOpsController,
 )
 from knowledge_flow_backend.features.metadata.controller import MetadataController
+from knowledge_flow_backend.features.model.controller import ModelController
 from knowledge_flow_backend.features.neo4j.neo4j_controller import Neo4jController
 from knowledge_flow_backend.features.pull.controller import PullDocumentController
 from knowledge_flow_backend.features.pull.service import PullDocumentService
@@ -183,6 +184,7 @@ def create_app() -> FastAPI:
     pull_document_service = PullDocumentService()
     # Register base controllers. These are the one always needed.
     MetadataController(router, pull_document_service)
+    ModelController(router)
     CatalogController(router)
     PullDocumentController(router, pull_document_service)
     ContentController(router)

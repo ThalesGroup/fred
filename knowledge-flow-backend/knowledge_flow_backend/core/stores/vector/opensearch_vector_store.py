@@ -15,7 +15,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from typing import Any, Dict, List, Optional, Type, TypeVar, Sequence
 
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_core.documents import Document
@@ -332,9 +332,11 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             logger.exception("[VECTOR][OPENSEARCH] failed to update retrievable flag for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to update retrievable flag in OpenSearch.")
 
-    def _build_hits(self, hits_data: List, hit_type: Type[T]) -> List[T]:
-        """
-        Build a list of hit objects from OpenSearch hits data.
+    # ---------- BaseVectorStore: ANN (semantic) ----------
+    def _supports_knn_filter(self) -> bool:
+        """Detect if OpenSearch supports knn.filter (>=2.19). Cached after first check."""
+        if hasattr(self, "_knn_filter_supported"):
+            return self._knn_filter_supported
 
         Args:
             hits_data (List): Raw hit data from OpenSearch search results.

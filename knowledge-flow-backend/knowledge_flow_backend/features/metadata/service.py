@@ -198,6 +198,7 @@ class MetadataService:
         Each item contains at minimum:
           - chunk_uid: unique identifier of the chunk
           - text: the text content of the chunk
+          - metadata: the metadata of the chunk
         """
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
@@ -227,6 +228,80 @@ class MetadataService:
 
         logger.info("[MetadataService] The vector store does not support retrieving chunks by document")
         return []
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def get_chunk(self, user: KeycloakUser, document_uid: str, chunk_uid: str) -> dict:
+        """
+        Return chunk.
+
+        item contains at minimum:
+          - chunk_uid: unique identifier of the chunk
+          - text: the text content of the chunk
+          - metadata: the metadata of the chunk
+        """
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+
+        if not chunk_uid:
+            raise InvalidMetadataRequest("Chunk UID cannot be empty")
+
+        # Specific permission on the document
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
+
+        # Initialize the vector store on demand
+        if self.vector_store is None:
+            self.vector_store = ApplicationContext.get_instance().get_vector_store()
+
+        store = self.vector_store
+        if store is None:
+            logger.warning("[MetadataService] No vector store available to retrieve chunk")
+            return {"chunk_uid": chunk_uid}
+
+        # Optional method on Chroma store side
+        if hasattr(store, "get_chunk"):
+            try:
+                return store.get_chunk(document_uid=document_uid, chunk_uid=chunk_uid)  # type: ignore[attr-defined]
+            except Exception as e:
+                logger.error(f"[MetadataService] Error retrieving chunk: {e}")
+                return {"chunk_uid": chunk_uid}
+
+        logger.info("[MetadataService] The vector store does not support retrieving chunk")
+        return {"chunk_uid": chunk_uid}
+
+    @authorize(Action.DELETE, Resource.DOCUMENTS)
+    async def delete_chunk(self, user: KeycloakUser, document_uid: str, chunk_uid: str) -> None:
+        """
+            Delete chunk.
+        """
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+
+        if not chunk_uid:
+            raise InvalidMetadataRequest("Chunk UID cannot be empty")
+
+        # Specific permission on the document
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.DELETE, document_uid)
+
+        # Initialize the vector store on demand
+        if self.vector_store is None:
+            self.vector_store = ApplicationContext.get_instance().get_vector_store()
+
+        store = self.vector_store
+        if store is None:
+            logger.warning("[MetadataService] No vector store available to delete chunk")
+            return None
+
+        # Optional method on Chroma store side
+        if hasattr(store, "delete_chunk"):
+            try:
+                return store.delete_chunk(document_uid=document_uid, chunk_uid=chunk_uid)  # type: ignore[attr-defined]
+            except Exception as e:
+                logger.error(f"[MetadataService] Error deleting chunk: {e}")
+                return None
+
+        logger.info("[MetadataService] The vector store does not support retrieving chunk")
+
+
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_processing_graph(self, user: KeycloakUser) -> ProcessingGraph:
