@@ -16,7 +16,7 @@ from typing import List
 from fred_core import validate_index_mapping
 from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection
 
-from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
+from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry, BaseCatalogStore
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ CATALOG_INDEX_MAPPING = {
 }
 
 
-class OpenSearchCatalogStore:
+class OpenSearchCatalogStore(BaseCatalogStore):
     def __init__(
         self,
         host: str,

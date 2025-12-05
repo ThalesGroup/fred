@@ -19,7 +19,7 @@ from typing import List
 from fred_core.store.sql_store import SQLTableStore
 from sqlalchemy import BigInteger, Column, Float, MetaData, String, Table, delete, insert, select, update
 
-from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
+from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry, BaseCatalogStore
 
 _VALID_TABLE_RE = re.compile(r"^[A-Za-z0-9_]+$")
 
@@ -30,7 +30,7 @@ def _safe_table_name(name: str) -> str:
     return name
 
 
-class SQLCatalogStore:
+class SQLCatalogStore(BaseCatalogStore):
     def __init__(self, driver: str, db_path: Path):
         self.table_name = _safe_table_name("catalog_pull_file")
         self.store = SQLTableStore(driver=driver, path=db_path)
