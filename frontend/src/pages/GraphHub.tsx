@@ -36,7 +36,7 @@ const PANEL_W = { xs: 300, sm: 340, md: 360 };
 type PanelContentType = "actions" | null;
 
 export default function GraphHub() {
-  const { darkMode, _ } = useContext(ApplicationContext);
+  const { darkMode } = useContext(ApplicationContext);
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
 

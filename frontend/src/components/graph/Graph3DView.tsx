@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph3D, { ForceGraphMethods } from "react-force-graph-3d";
 import {
   GraphPoint,
@@ -22,7 +22,6 @@ import { buildOverlapMap, getNodeId, isAdditiveEvent, makePosKey } from "./selec
 type Props = {
   points: GraphPoint[];
   darkMode: boolean;
-  onThemeChange: () => void;
   onSelectionChange?: (selectedIds: string[]) => void;
   // When this counter changes, the graph will perform a zoomToFit.
   // Useful to fit only on new projections, but not on local deletions.
@@ -108,7 +107,7 @@ export default function Graph3DView({ points, darkMode, onSelectionChange, fitVe
       const api = fgRef.current;
       if (api && nodes.length) {
         try {
-          api.zoomToFit(400, 0, (n: any) => ({ x: n.x, y: n.y, z: n.z }));
+          api.zoomToFit(400, 0);
         } catch { /* ignore */ }
       }
     };
@@ -129,7 +128,7 @@ export default function Graph3DView({ points, darkMode, onSelectionChange, fitVe
         const api = fgRef.current;
         if (api && nodes.length) {
           try {
-            api.zoomToFit(400, 0, (n: any) => ({ x: n.x, y: n.y, z: n.z }));
+            api.zoomToFit(400, 0);
           } catch { /* ignore */ }
         }
       });

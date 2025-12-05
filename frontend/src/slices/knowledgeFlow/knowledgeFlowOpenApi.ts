@@ -1404,9 +1404,9 @@ export type BrowseDocumentsRequest = {
   sort_by?: SortOption[] | null;
 };
 export type VectorChunk = {
-  /** Identifiant unique du chunk */
+  /** Unique identifier of the chunk */
   chunk_uid: string;
-  /** Embedding du chunk */
+  /** Chunk embedding */
   vector: number[];
 };
 export type StoreAuditFinding = {
