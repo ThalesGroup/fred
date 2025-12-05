@@ -69,7 +69,7 @@ def load_keras_model(file_store: Any, namespace: str, storage_key: str) -> tf.ke
     """
     model_bytes = file_store.get(namespace, storage_key)
     if not model_bytes:
-        raise FileNotFoundError(f"Aucun modèle trouvé dans le store pour : {storage_key}")
+        raise FileNotFoundError(f"No model found in the store for: {storage_key}")
 
     with tempfile.NamedTemporaryFile(suffix=".keras", delete=False) as tmp_file:
         tmp_path = tmp_file.name
@@ -77,7 +77,7 @@ def load_keras_model(file_store: Any, namespace: str, storage_key: str) -> tf.ke
 
     try:
         model = tf.keras.models.load_model(tmp_path, compile=False)
-        logger.info("Modèle Keras chargé depuis %s/%s", namespace, storage_key)
+        logger.info("Keras model loaded from %s/%s", namespace, storage_key)
         return model
     finally:
         if os.path.exists(tmp_path):

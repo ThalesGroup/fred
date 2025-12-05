@@ -31,7 +31,7 @@ class ModelController:
             "/models/umap/{tag_id}/train",
             tags=["Models"],
             response_model=TrainResponse,
-            summary="Entraîner un modèle UMAP paramétrique (ou fallback) en 3D pour un tag",
+            summary="Train a parametric (or fallback) UMAP model in 3D for a tag",
         )
         async def train_umap(tag_id: str, user: KeycloakUser = Depends(get_current_user)) -> TrainResponse:
             try:
@@ -43,13 +43,13 @@ class ModelController:
                 raise HTTPException(status_code=500, detail=str(e))
             except Exception as e:
                 logger.exception("Unexpected error while training UMAP: %s", e)
-                raise HTTPException(status_code=500, detail="Erreur interne lors de l'entraînement du modèle")
+                raise HTTPException(status_code=500, detail="Internal error while training the model")
 
         @router.get(
             "/models/umap/{tag_id}",
             tags=["Models"],
             response_model=StatusResponse,
-            summary="Obtenir le statut d'un modèle UMAP pour un tag",
+            summary="Get the status of a UMAP model for a tag",
         )
         def model_status(tag_id: str, user: KeycloakUser = Depends(get_current_user)) -> StatusResponse:
             # user kept for parity and future permission checks
@@ -58,13 +58,13 @@ class ModelController:
                 return StatusResponse(**meta)
             except Exception as e:
                 logger.exception("Failed to get UMAP model status: %s", e)
-                raise HTTPException(status_code=500, detail="Erreur lors de la récupération du statut du modèle")
+                raise HTTPException(status_code=500, detail="Error while retrieving the model status")
 
         @router.post(
             "/models/umap/{tag_id}/project",
             tags=["Models"],
             response_model=ProjectResponse,
-            summary="Projeter des documents ou vecteurs en 3D avec le modèle UMAP du tag",
+            summary="Project documents or vectors into 3D using the tag's UMAP model",
         )
         async def project(
                 tag_id: str,
@@ -85,16 +85,16 @@ class ModelController:
                 raise HTTPException(status_code=400, detail=str(e))
             except Exception as e:
                 logger.exception("Failed to project with UMAP model: %s", e)
-                raise HTTPException(status_code=500, detail="Erreur lors de la projection")
+                raise HTTPException(status_code=500, detail="Error during projection")
 
         @router.delete(
             "/models/umap/{tag_id}",
             tags=["Models"],
-            summary="Supprimer le modèle UMAP et ses artefacts pour un tag",
+            summary="Delete the UMAP model and its artifacts for a tag",
         )
         def delete_model(tag_id: str, user: KeycloakUser = Depends(get_current_user)) -> dict:
             try:
                 return self.service.delete_model(tag_id)
             except Exception as e:
                 logger.exception("Failed to delete UMAP model: %s", e)
-                raise HTTPException(status_code=500, detail="Erreur lors de la suppression du modèle")
+                raise HTTPException(status_code=500, detail="Error while deleting the model")

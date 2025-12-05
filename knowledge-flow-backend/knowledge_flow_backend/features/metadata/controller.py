@@ -99,10 +99,10 @@ class MetadataController:
         self.content_store = ApplicationContext.get_instance().get_content_store()
         self.pull_document_service = pull_document_service
 
-        # ---- Schemas locaux pour les réponses ----
+        # ---- Local schemas for responses ----
         class VectorChunk(BaseModel):
-            chunk_uid: str = Field(..., description="Identifiant unique du chunk")
-            vector: List[float] = Field(..., description="Embedding du chunk")
+            chunk_uid: str = Field(..., description="Unique identifier of the chunk")
+            vector: List[float] = Field(..., description="Chunk embedding")
 
         @router.post(
             "/documents/metadata/search",

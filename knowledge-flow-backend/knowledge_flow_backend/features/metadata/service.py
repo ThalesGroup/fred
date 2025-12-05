@@ -155,39 +155,39 @@ class MetadataService:
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_document_vectors(self, user: KeycloakUser, document_uid: str) -> list[dict]:
         """
-        Retourne la liste des vecteurs associés aux chunks du document.
+        Return the list of vectors associated with the document's chunks.
 
-        Chaque élément contient au minimum:
-          - chunk_uid: identifiant unique du chunk
-          - vector: la liste des floats représentant l'embedding
+        Each item contains at minimum:
+          - chunk_uid: unique identifier of the chunk
+          - vector: the list of floats representing the embedding
         """
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
 
-        # Permission spécifique sur le document
+        # Specific permission on the document
         await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
 
-        # S'assurer que le document existe (et lever 404 sinon)
+        # Ensure the document exists (and raise 404 otherwise)
         _ = await self.get_document_metadata(user, document_uid)
 
-        # Initialiser le vector store à la demande
+        # Initialize the vector store on demand
         if self.vector_store is None:
             self.vector_store = ApplicationContext.get_instance().get_vector_store()
 
         store = self.vector_store
         if store is None:
-            logger.warning("[MetadataService] Aucun vector store disponible pour récupérer les vecteurs")
+            logger.warning("[MetadataService] No vector store available to retrieve vectors")
             return []
 
-        # Méthode facultative côté store Chroma
+        # Optional method on Chroma store side
         if hasattr(store, "get_vectors_for_document"):
             try:
                 return store.get_vectors_for_document(document_uid)  # type: ignore[attr-defined]
             except Exception as e:
-                logger.error(f"[MetadataService] Erreur lors de la récupération des vecteurs: {e}")
+                logger.error(f"[MetadataService] Error retrieving vectors: {e}")
                 return []
 
-        logger.info("[MetadataService] Le vector store ne supporte pas la récupération des vecteurs par document")
+        logger.info("[MetadataService] The vector store does not support retrieving vectors by document")
         return []
 
     @authorize(Action.READ, Resource.DOCUMENTS)
