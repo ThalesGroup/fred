@@ -42,27 +42,19 @@
     "showSection": "Afficher"
   },
   "graphHub": {
-    "title": "Graph Hub - Graphe de connaissances",
     "panelTitle": "Actions",
+    "selectTag": "Sélectionner une librairie",
     "tag": "Librairie",
-    "refresh": "Rafraîchir",
-    "error": "Échec du chargement des graphe de connaissances",
-    "empty": "Aucun graphe de connaissances pour le moment. Ingest et traitez des documents pour créer des graphes de connaissances consultables.",
-    "searchHelp": "Filtrer les graphe de connaissances par nom ou description",
-    "searchPlaceholder": "Rechercher des graphe de connaissances...",
-    "sortLabel": "Trier par",
-    "sortName": "Nom (A–Z)",
-    "sortVectorsDesc": "Vecteurs (du plus grand au plus petit)",
-    "sortVectorsAsc": "Vecteurs (du plus petit au plus grand)",
-    "sortRowsDesc": "Lignes (du plus grand au plus petit)",
-    "sortRowsAsc": "Lignes (du plus petit au plus grand)",
-    "limitLabel": "Afficher",
-    "limitAll": "Tout",
-    "graphColumn": "Graphe",
-    "entitiesColumn": "Entités",
-    "relationsColumn": "Relations",
-    "graphTableTitle": "Graphe de connaissances",
-    "noGraphsFound": "Aucun graphe de connaissances trouvé."
+    "umapError": "Erreur de projection",
+    "colorByCluster": "Colorer les groupes",
+    "showLinks": "Afficher les liens",
+    "training": "Entraînement…",
+    "trainModel": "Entraîner le modèle",
+    "refreshGraph": "Afficher le graphe",
+    "selection": {
+      "title": "Sélection"
+    },
+    "deleteSelection": "Supprimer la sélection"
   },
   "resource": {
     "kind": {

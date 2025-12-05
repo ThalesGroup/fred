@@ -42,27 +42,19 @@
     "showSection": "Show"
   },
   "graphHub": {
-    "title": "Graph Hub - Knowledge Graph",
     "panelTitle": "Actions",
+    "selectTag": "Select library",
     "tag": "Library",
-    "refresh": "Refresh",
-    "error": "Failed to load knowledge graph",
-    "empty": "No knowledge graphs available yet. Process documents to generate knowledge graph.",
-    "searchHelp": "Filter graph by name or source",
-    "searchPlaceholder": "Search knowledge graph...",
-    "sortLabel": "Sort by",
-    "sortName": "Name (A–Z)",
-    "sortEntitiesDesc": "Entities (high to low)",
-    "sortEntitiesAsc": "Entities (low to high)",
-    "sortRelationsDesc": "Relations (high to low)",
-    "sortRelationsAsc": "Relations (low to high)",
-    "limitLabel": "Show",
-    "limitAll": "All",
-    "graphColumn": "Knowledge Graph",
-    "entitiesColumn": "Entities",
-    "relationsColumn": "Relations",
-    "graphTableTitle": "Knowledge Graph",
-    "noGraphsFound": "No knowledge graph found."
+    "umapError": "Error with projection",
+    "colorByCluster": "Color groups",
+    "showLinks": "Show links",
+    "training": "Training…",
+    "trainModel": "Train model",
+    "refreshGraph": "Show graph",
+    "selection": {
+      "title": "Selection"
+    },
+    "deleteSelection": "Delete selection"
   },
   "resource": {
     "kind": {
