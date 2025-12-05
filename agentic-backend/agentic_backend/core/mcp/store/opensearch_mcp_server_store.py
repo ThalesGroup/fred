@@ -59,6 +59,7 @@ class OpenSearchMcpServerStore(BaseMcpServerStore):
         verify_certs: bool = False,
     ):
         self.index_name = index
+        self._seed_marker_id = "__static_seeded__"
         self.client = OpenSearch(
             host,
             http_auth=(username, password),
@@ -88,6 +89,8 @@ class OpenSearchMcpServerStore(BaseMcpServerStore):
         )
         out: List[MCPServerConfiguration] = []
         for hit in results.get("hits", {}).get("hits", []):
+            if hit.get("_id") == self._seed_marker_id:
+                continue
             source = hit.get("_source", {})
             try:
                 out.append(McpServerAdapter.validate_python(source))
@@ -99,6 +102,8 @@ class OpenSearchMcpServerStore(BaseMcpServerStore):
         return out
 
     def get(self, server_id: str) -> Optional[MCPServerConfiguration]:
+        if server_id == self._seed_marker_id:
+            return None
         try:
             resp = self.client.get(index=self.index_name, id=server_id)
             return McpServerAdapter.validate_python(resp.get("_source", {}))
@@ -120,3 +125,24 @@ class OpenSearchMcpServerStore(BaseMcpServerStore):
             logger.exception(
                 "[STORE][OPENSEARCH][MCP] Failed to delete server id=%s", server_id
             )
+
+    def static_seeded(self) -> bool:
+        try:
+            return bool(
+                self.client.exists(index=self.index_name, id=self._seed_marker_id)
+            )
+        except Exception:
+            logger.exception("[STORE][OPENSEARCH][MCP] Failed to check seed marker")
+            return False
+
+    def mark_static_seeded(self) -> None:
+        try:
+            # Body can be empty since dynamic mapping is strict; id lives in _id.
+            self.client.index(
+                index=self.index_name,
+                id=self._seed_marker_id,
+                body={},
+                params={"refresh": "true"},
+            )
+        except Exception:
+            logger.exception("[STORE][OPENSEARCH][MCP] Failed to mark static seeded")

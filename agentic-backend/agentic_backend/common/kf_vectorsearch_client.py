@@ -85,3 +85,35 @@ class VectorSearchClient(KfBaseClient):
             logger.warning("Unexpected vector search payload type: %s", type(raw))
             return []
         return _HITS.validate_python(raw)
+
+    def rerank_documents(
+        self,
+        *,
+        question: str,
+        documents: Sequence[VectorSearchHit],
+        top_r: int,
+    ) -> List[VectorSearchHit]:
+        """
+        Re-rank documents with the cross-encoder. Requires user access token.
+        """
+        payload: Dict[str, Any] = {
+            "question": question,
+            "top_r": top_r,
+            "documents": [
+                doc.model_dump() if hasattr(doc, "model_dump") else doc
+                for doc in documents
+            ],
+        }
+
+        r = self._request_with_token_refresh(
+            method="POST",
+            path="/vector/rerank",
+            json=payload,
+        )
+        r.raise_for_status()
+
+        raw = r.json()
+        if not isinstance(raw, list):
+            logger.warning("Unexpected vector rerank payload type: %s", type(raw))
+            return []
+        return _HITS.validate_python(raw)

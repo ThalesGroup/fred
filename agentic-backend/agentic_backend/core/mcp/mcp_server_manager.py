@@ -54,8 +54,18 @@ class McpServerManager:
             merged = dict(self.static_servers)
         else:
             persisted = {srv.id: srv for srv in self.store.load_all()}
-            merged = dict(self.static_servers)
-            merged.update(persisted)
+            if not self.store.static_seeded():
+                # First run: seed all static servers (allows later delete/restore to be persisted)
+                for srv_id, srv in self.static_servers.items():
+                    self.store.save(srv)
+                    persisted[srv_id] = srv
+                    logger.info(
+                        "[MCP] Seeded static server id=%s into storage (first run)",
+                        srv_id,
+                    )
+                self.store.mark_static_seeded()
+
+            merged = dict(persisted)
 
         self.servers = merged
         self._sync_config()
@@ -90,18 +100,27 @@ class McpServerManager:
             raise McpUpdatesDisabled()
         self.store.delete(server_id)
         self.servers.pop(server_id, None)
-
-        # Restore static definition if it exists
-        if server_id in self.static_servers:
-            self.servers[server_id] = self.static_servers[server_id]
-            logger.info(
-                "[MCP] Removed persisted override for static server id=%s", server_id
-            )
-        else:
-            logger.info("[MCP] Deleted persisted server id=%s", server_id)
+        logger.info("[MCP] Deleted server id=%s", server_id)
 
         self._sync_config()
 
     def _sync_config(self) -> None:
         # Keep application-wide configuration in sync for downstream consumers.
         self.config.mcp.servers = list(self.servers.values())
+
+    def restore_static_servers(self) -> None:
+        """
+        Re-apply static configuration to the store, re-enabling any static servers that
+        were disabled or removed by a persisted override. Dynamic servers are left as-is.
+        """
+        if self.use_static_config_only:
+            # In static-only mode we never persisted overrides, so nothing to restore.
+            return
+
+        for srv_id, srv in self.static_servers.items():
+            self.store.save(srv)
+            self.servers[srv_id] = srv
+            logger.info("[MCP] Restored static server id=%s from configuration", srv_id)
+
+        self.store.mark_static_seeded()
+        self._sync_config()

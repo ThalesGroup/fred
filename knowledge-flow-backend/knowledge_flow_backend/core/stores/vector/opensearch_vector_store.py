@@ -226,6 +226,22 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
             )
             return 0
 
+    def list_document_uids(self, *, max_buckets: int = 10000) -> List[str]:
+        """
+        Return distinct document_uids known to this vector index (best effort).
+        """
+        try:
+            body = {
+                "size": 0,
+                "aggs": {"by_doc": {"terms": {"field": "metadata.document_uid", "size": max_buckets}}},
+            }
+            resp = self._client.search(index=self._index, body=body)
+            buckets = resp.get("aggregations", {}).get("by_doc", {}).get("buckets", [])  # type: ignore[dict-item]
+            return [str(b.get("key")) for b in buckets if b.get("key")]
+        except Exception:
+            logger.warning("[VECTOR][OPENSEARCH] Could not list document_uids from index=%s", self._index, exc_info=True)
+            return []
+
     def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:
         """
         Update the 'retrievable' flag for all chunks of a document without deleting vectors.

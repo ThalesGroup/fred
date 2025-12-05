@@ -29,13 +29,13 @@ class McpServerService:
     def __init__(self, manager: McpServerManager):
         self.manager = manager
 
-    @authorize(action=Action.CREATE, resource=Resource.AGENTS)
+    @authorize(action=Action.CREATE, resource=Resource.MCP_SERVERS)
     async def create_server(
         self, user: KeycloakUser, server: MCPServerConfiguration
     ) -> None:
         await self.save_server(user, server, allow_upsert=False)
 
-    @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
+    @authorize(action=Action.UPDATE, resource=Resource.MCP_SERVERS)
     async def save_server(
         self,
         user: KeycloakUser,
@@ -50,8 +50,12 @@ class McpServerService:
             pass
         self.manager.upsert(server)
 
-    @authorize(action=Action.DELETE, resource=Resource.AGENTS)
+    @authorize(action=Action.DELETE, resource=Resource.MCP_SERVERS)
     async def delete_server(self, user: KeycloakUser, server_id: str) -> None:
         if not self.manager.get(server_id):
             raise McpServerNotFound(f"MCP server '{server_id}' not found.")
         self.manager.delete(server_id)
+
+    @authorize(action=Action.UPDATE, resource=Resource.MCP_SERVERS)
+    async def restore_static_servers(self, user: KeycloakUser) -> None:
+        self.manager.restore_static_servers()

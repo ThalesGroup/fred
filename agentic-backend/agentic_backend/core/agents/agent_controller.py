@@ -153,6 +153,23 @@ async def delete_agent(
         raise handle_exception(e)
 
 
+@router.post(
+    "/agents/restore",
+    summary="Restore static agents from configuration",
+    response_model=None,
+)
+async def restore_agents(
+    user: KeycloakUser = Depends(get_current_user),
+    agent_manager: AgentManager = Depends(get_agent_manager),
+):
+    try:
+        service = AgentService(agent_manager=agent_manager)
+        await service.restore_static_agents(user=user)
+    except Exception as e:
+        log_exception(e)
+        raise handle_exception(e)
+
+
 @router.get(
     "/agents/mcp-servers",
     summary="List MCP servers known to all agents",

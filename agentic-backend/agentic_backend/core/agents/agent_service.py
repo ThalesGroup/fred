@@ -88,3 +88,7 @@ class AgentService:
         self.store.delete(agent_name)
 
         return {"message": f"✅ Agent '{agent_name}' deleted successfully."}
+
+    @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
+    async def restore_static_agents(self, user: KeycloakUser) -> None:
+        await self.agent_manager.restore_static_agents()

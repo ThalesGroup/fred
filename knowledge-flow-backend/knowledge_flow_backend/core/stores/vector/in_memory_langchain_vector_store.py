@@ -157,6 +157,25 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
         except Exception:
             logger.exception("❌ Failed to delete vectors for document_uid=%s", document_uid)
 
+    def get_document_chunk_count(self, *, document_uid: str) -> int:
+        try:
+            return sum(1 for rec in self.vectorstore.store.values() if (rec.get("metadata") or {}).get("document_uid") == document_uid)
+        except Exception:
+            logger.exception("❌ Failed to count chunks for document_uid=%s in memory store", document_uid)
+            return 0
+
+    def list_document_uids(self) -> List[str]:
+        try:
+            doc_uids: set[str] = set()
+            for rec in self.vectorstore.store.values():
+                uid = (rec.get("metadata") or {}).get("document_uid")
+                if isinstance(uid, str) and uid:
+                    doc_uids.add(uid)
+            return sorted(doc_uids)
+        except Exception:
+            logger.warning("❌ Failed to list document_uids from in-memory store", exc_info=True)
+            return []
+
     def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:
         """
         Dev-only: toggle retrievable flag on existing in-memory chunks without deleting them.

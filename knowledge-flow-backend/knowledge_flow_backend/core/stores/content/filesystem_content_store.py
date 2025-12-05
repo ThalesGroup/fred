@@ -366,3 +366,16 @@ class FileSystemContentStore(BaseContentStore):
         if not path.exists():
             raise FileNotFoundError(f"Object not found: {key}")
         path.unlink()
+
+    def list_document_uids(self) -> List[str]:
+        """
+        Return the list of document UIDs represented as directories in the document root.
+        """
+        if not self.document_root.exists():
+            return []
+
+        try:
+            return sorted([p.name for p in self.document_root.iterdir() if p.is_dir()])
+        except Exception as e:
+            logger.warning("Failed to list document directories in %s: %s", self.document_root, e)
+            return []

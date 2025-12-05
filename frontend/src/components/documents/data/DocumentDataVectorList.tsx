@@ -21,6 +21,7 @@ import { useTheme } from "@mui/material/styles";
 import { useMemo, useState } from "react";
 import { DocumentDataRowsProps, LimitOption, VectorSortMode } from "./DocumentDataCommon.tsx";
 import { useVectorDocumentViewer } from "./DocumentDataDrawer.tsx";
+import { DocumentVersionChip, extractDocumentVersion } from "../common/DocumentVersionChip.tsx";
 
 
 
@@ -176,6 +177,7 @@ export const DocumentDataVectorList = (
                   <Typography variant="body2" noWrap>
                     {doc.label}
                   </Typography>
+                  <DocumentVersionChip version={extractDocumentVersion(doc)} />
                 </Box>
                 <Box
                   sx={{
