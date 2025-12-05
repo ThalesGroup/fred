@@ -29,6 +29,7 @@ import { Profile } from "../pages/Profile";
 import ProcessorBench from "../pages/ProcessorBench";
 import ProcessorRunDetail from "../pages/ProcessorRunDetail";
 import { McpHub } from "../pages/McpHub";
+import GraphHub from "../pages/GraphHub.tsx";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => <LayoutWithSidebar>{children}</LayoutWithSidebar>;
 
@@ -66,6 +67,14 @@ export const routes: RouteObject[] = [
         element: (
           <ProtectedRoute resource="kpi" action="create">
             <DataHub />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "monitoring/graph",
+        element: (
+          <ProtectedRoute resource="kpi" action="create">
+            <GraphHub />
           </ProtectedRoute>
         ),
       },
