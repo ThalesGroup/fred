@@ -15,22 +15,18 @@
 import React, { useEffect, useMemo, useRef, useLayoutEffect, useState } from "react";
 import {
   ProcessingGraphNode,
-  useDocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetQuery,
-  useDocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetQuery
+  useDocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetQuery,
+  useDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { useDrawer } from "../../DrawerProvider.tsx";
 import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
   Box,
   CircularProgress,
   Divider,
   Stack,
   Typography,
 } from "@mui/material";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import { interpolateTurbo } from "d3-scale-chromatic";
+import ChunksAccordion from "./ChunksAccordion.tsx";
 
 /**
  * Hook pour ouvrir/fermer un Drawer affichant le contenu d'un document vecteur.
@@ -54,13 +50,6 @@ export const useVectorDocumentViewer = () => {
     openVectorDocument,
     closeVectorDocument,
   };
-};
-
-type VectorItem = number[] | Record<string, any> | string | number | null;
-
-type ChunkItem = {
-  text?: string;
-  [key: string]: any;
 };
 
 // Composant qui ajuste automatiquement la taille de police pour tenir sur une seule ligne
@@ -149,7 +138,7 @@ const DocumentDataDrawerContent: React.FC<{ doc: ProcessingGraphNode }> = ({ doc
     data: vectorsData,
     isLoading: vectorsLoading,
     error: vectorsError,
-  } = useDocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetQuery(
+  } = useDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery(
     { documentUid: backendDocId },
     { skip: !backendDocId },
   );
@@ -157,7 +146,7 @@ const DocumentDataDrawerContent: React.FC<{ doc: ProcessingGraphNode }> = ({ doc
     data: chunksData,
     isLoading: chunksLoading,
     error: chunksError,
-  } = useDocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetQuery(
+  } = useDocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetQuery(
     { documentUid: backendDocId },
     { skip: !backendDocId },
   );
@@ -189,15 +178,6 @@ const DocumentDataDrawerContent: React.FC<{ doc: ProcessingGraphNode }> = ({ doc
   const error = vectorsError ? formatError(vectorsError) : chunksError ? formatError(chunksError) : null;
   const loading = vectorsLoading || chunksLoading;
 
-  const pairs = useMemo(() => {
-    const len = Math.max(vectors.length, chunks.length);
-    return new Array(len).fill(0).map((_, i) => ({
-      index: i,
-      vector: vectors[i],
-      chunk: chunks[i],
-    }));
-  }, [vectors, chunks]);
-
   return (
     <Box sx={{ width: 520, maxWidth: '100vw' }}>
       <Box sx={{ px: 2, py: 1.5 }}>
@@ -224,184 +204,15 @@ const DocumentDataDrawerContent: React.FC<{ doc: ProcessingGraphNode }> = ({ doc
             {error}
           </Typography>
         )}
-        {!loading && !error && pairs.length === 0 && (
+        {!loading && !error && vectors.length === 0 && chunks.length === 0 && (
           <Typography variant="body2" color="text.secondary">
             Aucune donnée disponible pour ce document.
           </Typography>
         )}
-
-        {!loading && !error && pairs.map(({ index, vector, chunk }) => (
-          <Box key={index} sx={{ mb: 1.5 }}>
-            <Accordion disableGutters>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="subtitle2">Vecteur #{index + 1}</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <VectorHeatmap vector={vector} />
-              </AccordionDetails>
-            </Accordion>
-
-            <Accordion disableGutters>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', gap: 1, minWidth: 0 }}>
-                  <Typography variant="subtitle2" noWrap>
-                    Chunk #{index + 1}
-                  </Typography>
-                  <Box sx={{ flexGrow: 1 }} />
-                  {chunk?.chunk_uid != null && (
-                    <Typography variant="caption" color="text.secondary" noWrap title={String(chunk.chunk_uid)}>
-                      {String(chunk.chunk_uid)}
-                    </Typography>
-                  )}
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Box
-                  component="pre"
-                  sx={{
-                    m: 0,
-                    maxHeight: 240,
-                    overflowX: "auto",
-                    overflowY: "auto",
-                    whiteSpace: "pre", // respecte les retours à la ligne sans wrapping
-                    fontFamily:
-                      'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                    fontSize: 13,
-                    lineHeight: 1.5,
-                    wordBreak: "normal",
-                    overflowWrap: "normal",
-                  }}
-               >
-                  {chunk?.text ?? fallbackChunkText(chunk)}
-                </Box>
-              </AccordionDetails>
-            </Accordion>
-          </Box>
-        ))}
+        {!loading && !error && (
+          <ChunksAccordion vectors={vectors} chunks={chunks} />
+        )}
       </Box>
-    </Box>
-  );
-};
-
-function formatVector(v: VectorItem): string {
-  try {
-    if (v == null) return "(vide)";
-    if (Array.isArray(v)) return JSON.stringify(v, null, 2);
-    if (typeof v === "object") return JSON.stringify(v, null, 2);
-    return String(v);
-  } catch {
-    return "[formatting error]";
-  }
-}
-
-function fallbackChunkText(c: ChunkItem | undefined): string {
-  if (!c) return "(vide)";
-  const keys = Object.keys(c);
-  if (!keys.length) return "(vide)";
-  // Tente de trouver un champ text-like
-  const k = keys.find((k) => /content|text|chunk/i.test(k));
-  return k ? String((c as any)[k]) : JSON.stringify(c, null, 2);
-}
-
-function toNumberArray(v: VectorItem): number[] | null {
-  if (Array.isArray(v)) {
-    const nums = v.map((x) => (typeof x === "number" ? x : Number(x))).filter((n) => Number.isFinite(n));
-    return nums.length ? nums : null;
-  }
-  if (v && typeof v === "object") {
-    const arr = (v as any).vector;
-    if (Array.isArray(arr)) {
-      const nums = arr.map((x) => (typeof x === "number" ? x : Number(x))).filter((n) => Number.isFinite(n));
-      return nums.length ? nums : null;
-    }
-  }
-  return null;
-}
-
-const VectorHeatmap: React.FC<{
-  vector: VectorItem;
-  columns?: number; // nombre de blocs par ligne (défaut 32)
-  cellSize?: number; // taille d'un bloc (px)
-  gap?: number; // espace entre blocs (px)
-}> = ({ vector, columns = 64, cellSize = 6, gap = 1 }) => {
-  const nums = useMemo(() => toNumberArray(vector), [vector]);
-
-  if (!nums || nums.length === 0) {
-    return (
-      <Box
-        component="pre"
-        sx={{
-          m: 0,
-          maxHeight: 200,
-          overflow: "auto",
-          fontFamily:
-            'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-          fontSize: 12,
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-        }}
-      >
-        {formatVector(vector)}
-      </Box>
-    );
-  }
-
-  const n = nums.length;
-  const rows = Math.ceil(n / columns);
-  const width = columns * cellSize + (columns - 1) * gap;
-  const height = rows * cellSize + (rows - 1) * gap;
-  const gain = 10
-
-  // Amplification et échelle fixe symétrique autour de 0
-  const mapToPalette = (v: number) => {
-    return Math.abs(Math.max(-1, Math.min(1, v * gain)));
-  };
-  const color = (v: number) => interpolateTurbo(mapToPalette(v));
-
-  return (
-    <Box
-      sx={{
-        maxHeight: 220,
-        overflowY: "auto",
-        overflowX: "hidden",
-        pr: 1,
-        width: "100%",
-        maxWidth: width,
-      }}
-    >
-      <svg
-        role="img"
-        aria-label="Vector heatmap"
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="xMidYMin meet"
-        style={{ width: "100%", height: "auto", display: "block" }}
-      >
-        {nums.map((v, i) => {
-          const r = Math.floor(i / columns);
-          const c = i % columns;
-          const x = c * (cellSize + gap);
-          const y = r * (cellSize + gap);
-          const cx = x + cellSize / 2;
-          const cy = y + cellSize / 2;
-          const dotR = Math.max(1, Math.floor(cellSize * 0.18));
-          return (
-            <g key={i}>
-              <rect
-                x={x}
-                y={y}
-                width={cellSize}
-                height={cellSize}
-                fill={color(v)}
-                rx={1}
-                ry={1}
-              />
-              {v < 0 && (
-                <circle cx={cx} cy={cy} r={dotR} fill="#000" />
-              )}
-            </g>
-          );
-        })}
-      </svg>
     </Box>
   );
 };

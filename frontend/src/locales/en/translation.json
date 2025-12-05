@@ -41,6 +41,29 @@
     "hideSection": "Hide",
     "showSection": "Show"
   },
+  "graphHub": {
+    "title": "Graph Hub - Knowledge Graph",
+    "panelTitle": "Actions",
+    "tag": "Library",
+    "refresh": "Refresh",
+    "error": "Failed to load knowledge graph",
+    "empty": "No knowledge graphs available yet. Process documents to generate knowledge graph.",
+    "searchHelp": "Filter graph by name or source",
+    "searchPlaceholder": "Search knowledge graph...",
+    "sortLabel": "Sort by",
+    "sortName": "Name (A–Z)",
+    "sortEntitiesDesc": "Entities (high to low)",
+    "sortEntitiesAsc": "Entities (low to high)",
+    "sortRelationsDesc": "Relations (high to low)",
+    "sortRelationsAsc": "Relations (low to high)",
+    "limitLabel": "Show",
+    "limitAll": "All",
+    "graphColumn": "Knowledge Graph",
+    "entitiesColumn": "Entities",
+    "relationsColumn": "Relations",
+    "graphTableTitle": "Knowledge Graph",
+    "noGraphsFound": "No knowledge graph found."
+  },
   "resource": {
     "kind": {
       "prompt": {
@@ -98,7 +121,8 @@
       "monitoring_logs": "Log Console",
       "monitoring_runtime": "Runtime summary",
       "monitoring_processors": "Processor bench",
-      "monitoring_data": "Data monitoring"
+      "monitoring_data": "Data monitoring",
+      "monitoring_graph": "Knowledge Graph monitoring"
     },
     "theme": {
       "light": "light",
@@ -112,7 +136,8 @@
     "monitoring_logs": "Logs",
     "monitoring_runtime": "Runtime",
     "monitoring_processors": "Processors",
-    "monitoring_data": "Data"
+    "monitoring_data": "Data",
+    "monitoring_graph": "Graph"
   },
   "runtime": {
     "title": "Runtime Summary",

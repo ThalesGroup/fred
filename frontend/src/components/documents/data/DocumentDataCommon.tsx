@@ -27,6 +27,13 @@ export type DocumentFlowRowSlice = {
   value: number;
 }
 
+export type VectorItem = number[] | Record<string, any> | string | number | null;
+
+export type ChunkItem = {
+  text?: string;
+  [key: string]: any;
+};
+
 export type VectorSortMode = "name" | "vectorsDesc" | "vectorsAsc";
 export type RowSortMode = "name" | "rowsDesc" | "rowsAsc";
 export type LimitOption = 10 | 20 | 50 | "all";
