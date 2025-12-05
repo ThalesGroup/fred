@@ -352,12 +352,12 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         Return a single chunk (text + metadata) if it belongs to the given document.
         """
         try:
-            res = self._client.get(index=self._index, id=chunk_uid, ignore=[404])
+            res = self._client.get(index=self._index, id=chunk_uid)
             if not res or res.get("found") is not True:
                 logger.warning("[VECTOR][OPENSEARCH] chunk not found: %s", chunk_uid)
                 return {"chunk_uid": chunk_uid}
             src = res.get("_source", {}) or {}
-            md = (src.get("metadata", {}) or {})
+            md = src.get("metadata", {}) or {}
             if md.get("document_uid") != document_uid:
                 logger.warning(
                     "[VECTOR][OPENSEARCH] chunk %s does not belong to document_uid=%s",
@@ -378,12 +378,12 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
         """Delete a single chunk by id; if it doesn't belong to the given document, do nothing."""
         try:
             # Ensure ownership by checking metadata.document_uid
-            res = self._client.get(index=self._index, id=chunk_uid, ignore=[404])
+            res = self._client.get(index=self._index, id=chunk_uid)
             if not res or res.get("found") is not True:
                 logger.warning("[VECTOR][OPENSEARCH] cannot delete; chunk not found: %s", chunk_uid)
                 return
             src = res.get("_source", {}) or {}
-            md = (src.get("metadata", {}) or {})
+            md = src.get("metadata", {}) or {}
             if md.get("document_uid") != document_uid:
                 logger.warning(
                     "[VECTOR][OPENSEARCH] not deleting chunk %s: mismatched document_uid=%s",
@@ -391,7 +391,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
                     document_uid,
                 )
                 return
-            self._client.delete(index=self._index, id=chunk_uid, ignore=[404])
+            self._client.delete(index=self._index, id=chunk_uid)
             logger.info("[VECTOR][OPENSEARCH] deleted chunk %s for document_uid=%s", chunk_uid, document_uid)
         except Exception:
             logger.exception("[VECTOR][OPENSEARCH] failed to delete chunk %s for document_uid=%s", chunk_uid, document_uid)

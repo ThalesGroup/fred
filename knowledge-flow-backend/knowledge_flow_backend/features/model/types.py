@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -23,23 +23,16 @@ class StatusResponse(BaseModel):
 
 
 class ProjectRequest(BaseModel):
-    document_uids: Optional[List[str]] = Field(
-        default=None,
-        description='Documents UIDs list to project. If None, all chunks will be projected.'
-    )
-    with_clustering: Optional[bool] = Field(
-        default=True,
-        description='Whether to include clustering information in the projection.'
-    )
-    with_documents: Optional[bool] = Field(
-        default=False,
-        description='Whether to include documents text in the projection.'
-    )
+    document_uids: Optional[List[str]] = Field(default=None, description="Documents UIDs list to project. If None, all chunks will be projected.")
+    with_clustering: Optional[bool] = Field(default=True, description="Whether to include clustering information in the projection.")
+    with_documents: Optional[bool] = Field(default=False, description="Whether to include documents text in the projection.")
+
 
 class Point2D(BaseModel):
     x: float
     y: float
     cluster: Optional[int] = None
+
 
 class Point3D(BaseModel):
     x: float
@@ -47,11 +40,13 @@ class Point3D(BaseModel):
     z: float
     cluster: Optional[int] = None
 
+
 class PointMetadata(BaseModel):
     chunk_order: Optional[int] = None
     chunk_uid: Optional[str] = None
     document_uid: Optional[str] = None
     text: Optional[str] = None
+
 
 class GraphPoint(BaseModel):
     point_3d: Point3D

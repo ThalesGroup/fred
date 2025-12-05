@@ -15,10 +15,10 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-
 from fred_core import KeycloakUser, get_current_user
+
 from .service import ModelService
-from .types import TrainResponse, StatusResponse, ProjectResponse, ProjectRequest
+from .types import ProjectRequest, ProjectResponse, StatusResponse, TrainResponse
 
 logger = logging.getLogger(__name__)
 
@@ -66,18 +66,10 @@ class ModelController:
             response_model=ProjectResponse,
             summary="Project documents or vectors into 3D using the tag's UMAP model",
         )
-        async def project(
-                tag_id: str,
-                req: ProjectRequest,
-                user: KeycloakUser = Depends(get_current_user)
-        ) -> ProjectResponse:
+        async def project(tag_id: str, req: ProjectRequest, user: KeycloakUser = Depends(get_current_user)) -> ProjectResponse:
             try:
-                graph_points = await self.service.project(
-                    user,
-                    tag_id,
-                    document_uids=req.document_uids,
-                    with_clustering=req.with_clustering
-                )
+                with_clustering = req.with_clustering or False
+                graph_points = await self.service.project(user, tag_id, document_uids=req.document_uids, with_clustering=with_clustering)
                 return ProjectResponse(graph_points=graph_points)
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))

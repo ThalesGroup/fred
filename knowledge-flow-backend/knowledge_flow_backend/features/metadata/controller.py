@@ -317,13 +317,7 @@ class MetadataController:
             except Exception as e:
                 raise handle_exception(e)
 
-        @router.delete(
-            "/documents/{document_uid}/chunks/{chunk_id}",
-            tags=["Documents"],
-            summary="Delete chunk",
-            description="Delete the chunk",
-            status_code=200
-        )
+        @router.delete("/documents/{document_uid}/chunks/{chunk_id}", tags=["Documents"], summary="Delete chunk", description="Delete the chunk", status_code=200)
         async def delete_chunk(
             document_uid: str,
             chunk_id: str,
