@@ -1,3 +1,5 @@
+*.keras
+*.model
 **/ignore_*
 /metrics/target
 .idea/
