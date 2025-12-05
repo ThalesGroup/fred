@@ -15,20 +15,25 @@
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, Optional
 
 import numpy as np
 from umap.parametric_umap import ParametricUMAP
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.metadata.service import MetadataService
+
 from .types import GraphPoint
 from .utils import (
     build_points,
     load_keras_model,
-    meta_key as util_meta_key,
-    model_key as util_model_key,
     save_keras_model,
+)
+from .utils import (
+    meta_key as util_meta_key,
+)
+from .utils import (
+    model_key as util_model_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -101,12 +106,12 @@ class ModelService:
         meta_vectors = []
         for doc_id, chunks_vector in documents_vector.items():
             for i, chunk_vector in enumerate(chunks_vector):
-                vectors.append(chunk_vector['vector'])
+                vectors.append(chunk_vector["vector"])
                 metadata = {
                     "chunk_order": i,
-                    "chunk_uid": chunk_vector['chunk_uid'],
+                    "chunk_uid": chunk_vector["chunk_uid"],
                     "document_uid": doc_id,
-                    "text": chunk_vector.get('text', None),
+                    "text": chunk_vector.get("text", None),
                 }
                 meta_vectors.append(metadata)
 
@@ -122,15 +127,18 @@ class ModelService:
 
     def _cluster_3d(self, points: list[GraphPoint]) -> list[GraphPoint]:
         # Extract 3D coordinates
-        coords = np.array([
+        coords = np.array(
             [
-                p.point_3d.x,
-                p.point_3d.y,
-                p.point_3d.z,
-            ]
-            for p in points
-            if p.point_3d is not None
-        ], dtype=np.float32)
+                [
+                    p.point_3d.x,
+                    p.point_3d.y,
+                    p.point_3d.z,
+                ]
+                for p in points
+                if p.point_3d is not None
+            ],
+            dtype=np.float32,
+        )
 
         n = coords.shape[0]
         if n < 3:
@@ -147,16 +155,12 @@ class ModelService:
 
         # Determine optimal k using silhouette score
         max_k = max(2, min(10, n - 1))
-        best_k = None
+        # best_k = None
         best_score = -1.0
         best_labels = None
 
         for k in range(2, max_k + 1):
-            try:
-                km = KMeans(n_clusters=k, n_init="auto", random_state=42)
-            except TypeError:
-                # Older sklearn without n_init="auto"
-                km = KMeans(n_clusters=k, n_init=10, random_state=42)
+            km = KMeans(n_clusters=k, n_init="auto", random_state=42)
             labels = km.fit_predict(coords)
             # If all points fell into a single cluster by some issue, skip
             if len(set(labels)) < 2:
@@ -164,11 +168,11 @@ class ModelService:
             try:
                 score = silhouette_score(coords, labels, metric="euclidean")
             except Exception:
-                # Silhouette can fail in edge cases; skip this k
-                continue
+                logger.warning("Failed to compute silhouette score for k=%d", k)
+                score = -1.0
             if score > best_score:
                 best_score = score
-                best_k = k
+                # best_k = k
                 best_labels = labels
 
         # If we found a good k, assign clusters
@@ -178,7 +182,7 @@ class ModelService:
 
         return points
 
-    def _predict_2d(self, user, tag_id: str, *, document_uids: list[str] = None):
+    def _predict_2d(self, user, tag_id: str, *, document_uids: list[str]):
         raise NotImplementedError("2D projection is not implemented in this service.")
 
     # ---------- Public API ----------
@@ -208,12 +212,12 @@ class ModelService:
         # Configure model: 3D projection
         # ParametricUMAP typical args; keep defaults reasonable
         model = ParametricUMAP(
-            n_components=3,      # 3D target space
-            n_neighbors=15,      # Local influence (smaller = tighter clusters)
-            min_dist=0.1,        # Minimum distance between points
-            metric='cosine',     # 'cosine' often performs better than 'euclidean' for text embeddings
+            n_components=3,  # 3D target space
+            n_neighbors=15,  # Local influence (smaller = tighter clusters)
+            min_dist=0.1,  # Minimum distance between points
+            metric="cosine",  # 'cosine' often performs better than 'euclidean' for text embeddings
             verbose=True,
-            random_state=42
+            random_state=42,
         )
         model.fit(X)
 
@@ -264,13 +268,13 @@ class ModelService:
     # removed in favor of utils: _save_model, _load_model
 
     async def project(
-            self,
-            user,
-            tag_id: str,
-            *,
-            document_uids: Optional[list[str]] = None,
-            with_clustering: bool = True,
-            with_documents: bool = True,
+        self,
+        user,
+        tag_id: str,
+        *,
+        document_uids: Optional[list[str]] = None,
+        with_clustering: bool = True,
+        with_documents: bool = True,
     ) -> list[GraphPoint]:
         """
         Project provided documents (by uid) or raw vectors to 3D using the saved model for the given tag.
@@ -286,10 +290,7 @@ class ModelService:
         points: list[GraphPoint] = []
         docs_vector = {}
         for doc_id in doc_ids:
-            docs_vector[doc_id] = self.vector_store.get_vectors_for_document(
-                document_uid=doc_id,
-                with_document=with_documents
-            )
+            docs_vector[doc_id] = self.vector_store.get_vectors_for_document(document_uid=doc_id, with_document=with_documents)
 
         points = self._predict_3d(user, tag_id, documents_vector=docs_vector)
 
@@ -309,5 +310,5 @@ class ModelService:
                 _ = self.file_store.get(self.NAMESPACE, key)  # check existence
                 removed.append(key)
             except Exception:
-                pass
+                logger.error("Failed to remove model artifact for tag %s", tag_id)
         return {"tag_id": tag_id, "removed": removed}

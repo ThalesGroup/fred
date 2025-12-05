@@ -271,7 +271,7 @@ class MetadataService:
     @authorize(Action.DELETE, Resource.DOCUMENTS)
     async def delete_chunk(self, user: KeycloakUser, document_uid: str, chunk_uid: str) -> None:
         """
-            Delete chunk.
+        Delete chunk.
         """
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
@@ -300,8 +300,6 @@ class MetadataService:
                 return None
 
         logger.info("[MetadataService] The vector store does not support retrieving chunk")
-
-
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_processing_graph(self, user: KeycloakUser) -> ProcessingGraph:

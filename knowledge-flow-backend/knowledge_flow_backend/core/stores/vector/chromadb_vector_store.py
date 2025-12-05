@@ -400,7 +400,7 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
                         {DOC_UID_FIELD: {"$eq": document_uid}},
                     ]
                 },
-                include=["documents", "metadatas"]
+                include=["documents", "metadatas"],
             )  # type: ignore[list-item]
             logger.info("[SEARCH] Fetched chunk %s from document_uid=%s from collection '%s'", chunk_uid, document_uid, self.collection_name)
 

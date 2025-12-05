@@ -19,7 +19,7 @@ from typing import List
 from fred_core.store.sql_store import SQLTableStore
 from sqlalchemy import BigInteger, Column, Float, MetaData, String, Table, delete, insert, select, update
 
-from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry, BaseCatalogStore
+from knowledge_flow_backend.core.stores.catalog.base_catalog_store import BaseCatalogStore, PullFileEntry
 
 _VALID_TABLE_RE = re.compile(r"^[A-Za-z0-9_]+$")
 

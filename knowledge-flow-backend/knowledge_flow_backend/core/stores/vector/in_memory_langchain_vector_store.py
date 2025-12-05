@@ -236,7 +236,7 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
         return hits
 
     # ---- Introspection / Diagnostics ----
-    def get_vectors_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
+    def get_vectors_for_document(self, document_uid: str, with_document: bool = True) -> List[Dict[str, Any]]:
         """
         Return all embeddings for the given document along with their chunk ids.
 
@@ -256,7 +256,10 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
                     # Skip entries without a vector to stay robust.
                     continue
                 cid = md.get(CHUNK_ID_FIELD) or key
-                out.append({"chunk_uid": cid, "vector": vec})
+                entry = {"chunk_uid": cid, "vector": vec}
+                if with_document:
+                    entry["text"] = rec.get("text", "")
+                out.append(entry)
             logger.info("🔎 [InMemory] Retrieved %d vectors for document_uid=%s", len(out), document_uid)
             return out
         except Exception:

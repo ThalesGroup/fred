@@ -16,7 +16,7 @@ from typing import List
 from fred_core import validate_index_mapping
 from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection
 
-from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry, BaseCatalogStore
+from knowledge_flow_backend.core.stores.catalog.base_catalog_store import BaseCatalogStore, PullFileEntry
 
 logger = logging.getLogger(__name__)
 

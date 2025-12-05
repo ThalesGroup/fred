@@ -18,9 +18,9 @@ import tempfile
 from typing import Any, Iterable, List, Sequence
 
 import numpy as np
-import tensorflow as tf
+from tensorflow import keras  # type: ignore
 
-from knowledge_flow_backend.features.model.types import GraphPoint, PointMetadata, Point3D
+from knowledge_flow_backend.features.model.types import GraphPoint, Point3D, PointMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def meta_key(tag_id: str) -> str:
 
 
 # ---- Model persistence helpers ----
-def save_keras_model(file_store: Any, namespace: str, storage_key: str, keras_model: tf.keras.Model) -> None:
+def save_keras_model(file_store: Any, namespace: str, storage_key: str, keras_model: keras.Model) -> None:
     """Persist a Keras model into the configured file store under the given key.
 
     The model is first serialized to a temporary `.keras` file, then uploaded as bytes.
@@ -62,7 +62,7 @@ def save_keras_model(file_store: Any, namespace: str, storage_key: str, keras_mo
             os.remove(tmp_path)
 
 
-def load_keras_model(file_store: Any, namespace: str, storage_key: str) -> tf.keras.Model:
+def load_keras_model(file_store: Any, namespace: str, storage_key: str) -> keras.Model:
     """Load a Keras model from the file store.
 
     Raises FileNotFoundError if no bytes are found, or forwards underlying load errors.
@@ -76,7 +76,7 @@ def load_keras_model(file_store: Any, namespace: str, storage_key: str) -> tf.ke
         tmp_file.write(model_bytes)
 
     try:
-        model = tf.keras.models.load_model(tmp_path, compile=False)
+        model = keras.models.load_model(tmp_path, compile=False)
         logger.info("Keras model loaded from %s/%s", namespace, storage_key)
         return model
     finally:
@@ -101,9 +101,7 @@ def build_points(projected: np.ndarray | Sequence[Sequence[float]], meta_vectors
             z=float(p[2]),
             cluster=None,
         )
-        point_metadata = PointMetadata(
-            **(meta_list[i] if i < len(meta_list) else None)
-        )
+        point_metadata = PointMetadata(**meta_list[i])
         graph_point = GraphPoint(
             point_3d=point_3d,
             metadata=point_metadata,
