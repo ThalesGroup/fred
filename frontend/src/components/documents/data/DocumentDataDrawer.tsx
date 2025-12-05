@@ -29,8 +29,8 @@ import {
 import ChunksAccordion from "./ChunksAccordion.tsx";
 
 /**
- * Hook pour ouvrir/fermer un Drawer affichant le contenu d'un document vecteur.
- * Doit être utilisé à l'intérieur d'un composant React.
+ * Hook to open/close a Drawer displaying the content of a vector document.
+ * Must be used inside a React component.
  */
 export const useVectorDocumentViewer = () => {
   const { openDrawer, closeDrawer } = useDrawer();
@@ -52,11 +52,11 @@ export const useVectorDocumentViewer = () => {
   };
 };
 
-// Composant qui ajuste automatiquement la taille de police pour tenir sur une seule ligne
+// Component that automatically adjusts font size to fit on a single line
 const AutoFitOneLine: React.FC<{
   text: string;
-  maxFontSize?: number; // en px
-  minFontSize?: number; // en px
+  maxFontSize?: number; // in px
+  minFontSize?: number; // in px
   colorVariant?: "primary" | "secondary";
 }> = ({ text, maxFontSize = 14, minFontSize = 10, colorVariant = "secondary" }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -70,13 +70,13 @@ const AutoFitOneLine: React.FC<{
     const cw = container.clientWidth;
     if (cw <= 0) return;
 
-    // Commence depuis max à chaque recalcul
+    // Start from max at each recalculation
     let size = maxFontSize;
     el.style.fontSize = `${size}px`;
     el.style.whiteSpace = "nowrap";
     el.style.display = "block";
 
-    // Ajuste progressivement, borné à 10 itérations
+    // Adjust gradually, limited to 10 iterations
     let guard = 0;
     while (guard < 10 && el.scrollWidth > cw && size > minFontSize) {
       const scale = cw / Math.max(1, el.scrollWidth);
@@ -87,13 +87,13 @@ const AutoFitOneLine: React.FC<{
     setFontSize(size);
   };
 
-  // Recalcule quand le texte change
+  // Recalculate when text changes
   useLayoutEffect(() => {
     fitOnce();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, maxFontSize, minFontSize]);
 
-  // Recalcule sur redimensionnement du conteneur
+  // Recalculate on container resize
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -126,7 +126,7 @@ const DocumentDataDrawerContent: React.FC<{ doc: ProcessingGraphNode }> = ({ doc
   const docId = doc.id;
   const title = doc.label || doc.document_uid || docId;
 
-  // Normalise l'ID attendu par le backend: préférer document_uid sinon enlever le préfixe "doc:"
+  // Normalize the ID expected by the backend: prefer document_uid otherwise remove the "doc:" prefix
   const backendDocId = useMemo(() => {
     const preferred = doc.document_uid?.trim();
     if (preferred) return preferred;
@@ -169,10 +169,10 @@ const DocumentDataDrawerContent: React.FC<{ doc: ProcessingGraphNode }> = ({ doc
       const detail = anyErr?.data?.detail ?? anyErr?.data;
       const detailStr =
         detail == null ? "" : typeof detail === "string" ? detail : JSON.stringify(detail);
-      return `Erreur ${anyErr.status}${detailStr ? `: ${detailStr}` : ""}`;
+      return `Error ${anyErr.status}${detailStr ? `: ${detailStr}` : ""}`;
     }
     if (err instanceof Error) return err.message;
-    return "Erreur inconnue";
+    return "Unknown error";
   };
 
   const error = vectorsError ? formatError(vectorsError) : chunksError ? formatError(chunksError) : null;
@@ -195,7 +195,7 @@ const DocumentDataDrawerContent: React.FC<{ doc: ProcessingGraphNode }> = ({ doc
           <Stack alignItems="center" justifyContent="center" sx={{ py: 6 }}>
             <CircularProgress size={24} />
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Chargement des données…
+              Loading data…
             </Typography>
           </Stack>
         )}
@@ -206,7 +206,7 @@ const DocumentDataDrawerContent: React.FC<{ doc: ProcessingGraphNode }> = ({ doc
         )}
         {!loading && !error && vectors.length === 0 && chunks.length === 0 && (
           <Typography variant="body2" color="text.secondary">
-            Aucune donnée disponible pour ce document.
+            No data available for this document.
           </Typography>
         )}
         {!loading && !error && (

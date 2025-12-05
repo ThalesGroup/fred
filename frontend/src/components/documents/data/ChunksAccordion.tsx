@@ -19,10 +19,10 @@ import { ChunkItem, VectorItem } from "./DocumentDataCommon.tsx";
 import { VectorHeatmap } from "./VectorHeatmap.tsx";
 
 function fallbackChunkText(c: ChunkItem | undefined): string {
-  if (!c) return "(vide)";
+  if (!c) return "(empty)";
   const keys = Object.keys(c);
-  if (!keys.length) return "(vide)";
-  // Tente de trouver un champ text-like
+  if (!keys.length) return "(empty)";
+  // Try to find a text-like field
   const k = keys.find((k) => /content|text|chunk/i.test(k));
   return k ? String((c as any)[k]) : JSON.stringify(c, null, 2);
 }
@@ -52,7 +52,7 @@ export const ChunksAccordion: React.FC<Props> = ({ vectors, chunks }) => {
             { vector && (
               <Accordion disableGutters>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography variant="subtitle2">Vecteur #{index + 1}</Typography>
+                  <Typography variant="subtitle2">Vector #{index + 1}</Typography>
                 </AccordionSummary>
                 <AccordionDetails>
                   <VectorHeatmap vector={vector} />
@@ -82,7 +82,7 @@ export const ChunksAccordion: React.FC<Props> = ({ vectors, chunks }) => {
                     maxHeight: 240,
                     overflowX: "auto",
                     overflowY: "auto",
-                    whiteSpace: "pre", // respecte les retours à la ligne sans wrapping
+                    whiteSpace: "pre", // keep original line breaks without wrapping
                     fontFamily:
                       'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
                     fontSize: 13,
