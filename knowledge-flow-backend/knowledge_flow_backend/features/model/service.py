@@ -191,7 +191,7 @@ class ModelService:
         """
         doc_ids = await self._list_document_ids_in_tag(user, tag_id)
         if not doc_ids:
-            raise ValueError("Aucun document trouvé pour ce tag")
+            raise ValueError("No documents found for this tag")
 
         vectors = []
         if doc_ids:
@@ -201,17 +201,17 @@ class ModelService:
                     vectors.append(r["vector"])
 
         if len(vectors) < 2:
-            raise ValueError("Nombre insuffisant de documents avec vecteurs pour entraîner UMAP")
+            raise ValueError("Insufficient number of documents with vectors to train UMAP")
 
         X = np.array(vectors, dtype=np.float32)
 
         # Configure model: 3D projection
         # ParametricUMAP typical args; keep defaults reasonable
         model = ParametricUMAP(
-            n_components=3,      # Destination 3D
-            n_neighbors=15,      # Influence locale (plus petit = clusters plus serrés)
-            min_dist=0.1,        # Distance minimum entre les points
-            metric='cosine',     # 'cosine' est souvent meilleur que 'euclidean' pour les embeddings de texte
+            n_components=3,      # 3D target space
+            n_neighbors=15,      # Local influence (smaller = tighter clusters)
+            min_dist=0.1,        # Minimum distance between points
+            metric='cosine',     # 'cosine' often performs better than 'euclidean' for text embeddings
             verbose=True,
             random_state=42
         )
@@ -222,7 +222,7 @@ class ModelService:
             encoder_model = model.encoder
         except Exception as e:
             logger.exception("UMAP model does not expose an encoder: %s", e)
-            raise RuntimeError("Modèle UMAP invalide: pas d'encoder") from None
+            raise RuntimeError("Invalid UMAP model: no encoder exposed") from None
 
         save_keras_model(
             self.file_store,
