@@ -17,10 +17,10 @@ from typing import List
 
 from fred_core.store.duckdb_store import DuckDBTableStore
 
-from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
+from knowledge_flow_backend.core.stores.catalog.base_catalog_store import BaseCatalogStore, PullFileEntry
 
 
-class DuckdbCatalogStore:
+class DuckdbCatalogStore(BaseCatalogStore):
     """
     Catalog store for pull-mode documents backed by DuckDB.
     Stores and retrieves PullFileEntry items from a catalog-prefixed table.

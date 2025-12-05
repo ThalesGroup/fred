@@ -298,7 +298,7 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
             raise
 
     # -------- Introspection / Diagnostics --------
-    def get_vectors_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
+    def get_vectors_for_document(self, document_uid: str, with_document: bool = True) -> List[Dict[str, Any]]:
         """
         Return all vectors (embeddings) for the given document along with their chunk ids.
 
@@ -310,17 +310,20 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         - Chroma always returns ids; embeddings must be explicitly included.
         """
         try:
+            include = ["embeddings"]
+            if with_document:
+                include.append("documents")
             logger.info("[SEARCH] Fetching vectors for document_uid=%s from collection '%s'", document_uid, self.collection_name)
-            got = self._collection.get(where={DOC_UID_FIELD: document_uid}, include=["embeddings"])  # type: ignore[list-item]
+            got = self._collection.get(where={DOC_UID_FIELD: document_uid}, include=include)  # type: ignore[list-item]
             logger.info("[SEARCH] Fetched vectors for document_uid=%s from collection '%s'", document_uid, self.collection_name)
 
             raw_ids = got.get("ids", [])
             raw_vectors = got.get("embeddings", [])
+            raw_texts = got.get("documents", [])
 
             ids: List[str] = raw_ids  # type: ignore[assignment]
-            logger.debug(ids)
             vectors: List[List[float]] = raw_vectors  # type: ignore[assignment]
-            logger.debug(vectors)
+            texts: List[str] = raw_texts  # type: ignore[assignment]
 
             if not ids:
                 logger.warning("[SEARCH] No vectors found for document_uid=%s from collection '%s'", document_uid, self.collection_name)
@@ -339,6 +342,9 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
             out: List[Dict[str, Any]] = []
             for cid, vec in zip(ids, vectors):
                 out.append({"chunk_uid": cid, "vector": vec})
+            if with_document:
+                for entry, text in zip(out, texts):
+                    entry["text"] = text
             return out
         except Exception:
             logger.exception("[SEARCH] Failed to fetch vectors for document_uid=%s", document_uid)
@@ -377,6 +383,61 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         except Exception:
             logger.exception("[SEARCH] Failed to fetch chunks for document_uid=%s", document_uid)
             return []
+
+    def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
+        """
+        Return chunk (texts + metadata).
+
+        Structure of the result:
+        { "chunk_uid": str, "text": str, "metadata": dict }
+        """
+        try:
+            logger.info("[SEARCH] Fetching chunk %s from document_uid=%s from collection '%s'", chunk_uid, document_uid, self.collection_name)
+            got = self._collection.get(
+                where={
+                    "$and": [
+                        {CHUNK_ID_FIELD: {"$eq": chunk_uid}},
+                        {DOC_UID_FIELD: {"$eq": document_uid}},
+                    ]
+                },
+                include=["documents", "metadatas"],
+            )  # type: ignore[list-item]
+            logger.info("[SEARCH] Fetched chunk %s from document_uid=%s from collection '%s'", chunk_uid, document_uid, self.collection_name)
+
+            raw_texts = got.get("documents", [])
+            raw_metadatas = got.get("metadatas", [])
+
+            if not raw_metadatas or not raw_texts:
+                logger.warning("[SEARCH] No chunk for chunk_id=%s from collection '%s'", chunk_uid, self.collection_name)
+                return {"chunk_uid": chunk_uid}
+
+            text: str = raw_texts[0]  # type: ignore[assignment]
+            metadata: Mapping[str, Any] = raw_metadatas[0]  # type: ignore[assignment]
+
+            logger.info("[SEARCH] Retrieved chunk with chunk_uid=%s from collection '%s'", chunk_uid, chunk_uid)
+            restored_meta = restore_metadata(metadata or {})
+            out = {"chunk_uid": chunk_uid, "text": text, "metadata": restored_meta}
+            return out
+        except Exception:
+            logger.exception("[SEARCH] Failed to fetch chunk for chunk_uid=%s", chunk_uid)
+            return {"chunk_uid": chunk_uid}
+
+    def delete_chunk(self, document_uid: str, chunk_uid: str) -> None:
+        """
+        Delete chunk.
+        """
+        try:
+            logger.info("[SEARCH] Deleting chunk %s from document_uid=%s", chunk_uid, document_uid)
+            self._collection.delete(
+                where={
+                    "$and": [
+                        {CHUNK_ID_FIELD: {"$eq": chunk_uid}},
+                        {DOC_UID_FIELD: {"$eq": document_uid}},
+                    ]
+                }
+            )
+        except Exception:
+            logger.exception("[SEARCH] Failed to delete chunk %s for document_uid=%s", chunk_uid, document_uid)
 
     # -------- Search --------
     def ann_search(
