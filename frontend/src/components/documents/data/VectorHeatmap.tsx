@@ -6,7 +6,7 @@ import { VectorItem } from "./DocumentDataCommon.tsx";
 
 function formatVector(v: VectorItem): string {
   try {
-    if (v == null) return "(vide)";
+    if (v == null) return "(empty)";
     if (Array.isArray(v)) return JSON.stringify(v, null, 2);
     if (typeof v === "object") return JSON.stringify(v, null, 2);
     return String(v);
@@ -32,9 +32,9 @@ function toNumberArray(v: VectorItem): number[] | null {
 
 export const VectorHeatmap: React.FC<{
   vector: VectorItem;
-  columns?: number; // nombre de blocs par ligne (défaut 32)
-  cellSize?: number; // taille d'un bloc (px)
-  gap?: number; // espace entre blocs (px)
+  columns?: number; // number of cells per row (default 64)
+  cellSize?: number; // cell size (px)
+  gap?: number; // gap between cells (px)
 }> = ({ vector, columns = 64, cellSize = 6, gap = 1 }) => {
   const nums = useMemo(() => toNumberArray(vector), [vector]);
 
@@ -64,7 +64,7 @@ export const VectorHeatmap: React.FC<{
   const height = rows * cellSize + (rows - 1) * gap;
   const gain = 10  // Amplifying factor for better color distribution
 
-  // Mappe numeric value to [-1,1] => [gain*-1,gain*1] => [0,1] for color interpolation (symmetrically around 0)
+  // Map numeric value to [-1,1] => [gain*-1,gain*1] => [0,1] for color interpolation (symmetrically around 0)
   const mapToPalette = (v: number) => {
     return Math.abs(Math.max(-1, Math.min(1, v * gain)));
   };

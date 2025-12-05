@@ -40,9 +40,9 @@ export const SelectionPanel: React.FC<{
 
   return (
     <Stack spacing={1.5}>
-      {/* Section Sélection */}
+      {/* Selection section */}
       <Stack direction="row" alignItems="center" justifyContent="space-between">
-        <Typography variant="subtitle2">{t("graphHub.selection.title", "Sélection")}</Typography>
+        <Typography variant="subtitle2">{t("graphHub.selection.title", "Selection")}</Typography>
         <IconButton
           color="error"
           size="small"
