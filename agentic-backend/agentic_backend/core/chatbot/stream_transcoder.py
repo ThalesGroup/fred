@@ -119,7 +119,7 @@ class StreamTranscoder:
         input_messages: List[AnyMessage],
         session_id: str,
         exchange_id: str,
-        agent_name: str,
+        agent_id: str,
         base_rank: int,
         start_seq: int,
         callback: CallbackType,
@@ -189,7 +189,7 @@ class StreamTranscoder:
                             metadata=ChatMetadata(
                                 model=model_name,
                                 token_usage=token_usage,
-                                agent_name=agent_name,
+                                agent_id=agent_id,
                                 finish_reason=finish_reason,
                                 extras=raw_md.get("extras", {}),
                                 sources=sources_payload,  # Use synthesized sources if any],
@@ -229,7 +229,7 @@ class StreamTranscoder:
                             )
                         ],
                         metadata=ChatMetadata(
-                            agent_name=agent_name,
+                            agent_id=agent_id,
                             extras=raw_md.get("extras") or {},
                             sources=sources_payload,
                         ),
@@ -280,7 +280,7 @@ class StreamTranscoder:
                             channel=Channel.thought,
                             parts=[TextPart(text=str(thought_txt))],
                             metadata=ChatMetadata(
-                                agent_name=agent_name,
+                                agent_id=agent_id,
                                 extras=raw_md.get("extras") or {},
                             ),
                         )
@@ -324,7 +324,6 @@ class StreamTranscoder:
                     metadata=ChatMetadata(
                         model=model_name,
                         token_usage=token_usage,
-                        agent_name=agent_name,
                         finish_reason=finish_reason,
                         extras=raw_md.get("extras") or {},
                         sources=sources_payload,

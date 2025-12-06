@@ -38,7 +38,7 @@ FEEDBACK_INDEX_MAPPING = {
             "id": {"type": "keyword"},
             "session_id": {"type": "keyword"},
             "message_id": {"type": "keyword"},
-            "agent_name": {"type": "keyword"},
+            "agent_id": {"type": "keyword"},
             "rating": {"type": "integer"},
             "comment": {"type": "text"},
             "created_at": {"type": "date"},

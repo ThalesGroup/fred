@@ -133,7 +133,7 @@ class SessionOrchestrator:
         callback: CallbackType,
         session_id: str | None,
         message: str,
-        agent_name: str,
+        agent_id: str,
         runtime_context: RuntimeContext,
         client_exchange_id: Optional[str] = None,
     ) -> Tuple[SessionSchema, List[ChatMessage]]:
@@ -154,7 +154,7 @@ class SessionOrchestrator:
             "chat_ask_websocket user_id=%s session_id=%s agent=%s",
             user.uid,
             session_id,
-            agent_name,
+            agent_id,
         )
 
         # KPI: count incoming question early (before any work)
@@ -164,7 +164,7 @@ class SessionOrchestrator:
             "chat.user_message_total",
             1,
             dims={
-                "agent_id": agent_name,
+                "agent_id": agent_id,
                 "scope_type": "session",
                 "scope_id": session_id,
                 "exchange_id": exchange_id,
@@ -177,7 +177,7 @@ class SessionOrchestrator:
         )
         # 2) Check if an agent instance can be created/initialized/reused
         agent, is_cached = await self.agent_factory.create_and_init(
-            agent_name=agent_name,
+            agent_id=agent_id,
             runtime_context=runtime_context,
             session_id=session.id,
         )
@@ -197,7 +197,7 @@ class SessionOrchestrator:
                 user=user,
                 session=session,
             )
-            label = f"agent={agent_name} session={session.id}"
+            label = f"agent={agent_id} session={session.id}"
             log_agent_message_summary(lc_history, label=label)
 
         # Rank base = current stored history length
@@ -228,7 +228,7 @@ class SessionOrchestrator:
             with self.kpi.timer(
                 "chat.exchange_latency_ms",
                 dims={
-                    "agent_id": agent_name,
+                    "agent_id": agent_id,
                     "user_id": user.uid,
                     "session_id": session.id,
                     "exchange_id": exchange_id,
@@ -243,7 +243,7 @@ class SessionOrchestrator:
                     input_messages=input_messages,
                     session_id=session.id,
                     exchange_id=exchange_id,
-                    agent_name=agent_name,
+                    agent_id=agent_id,
                     base_rank=base_rank,
                     start_seq=1,  # user message already consumed rank=base_rank
                     callback=callback,
@@ -265,7 +265,7 @@ class SessionOrchestrator:
                 "chat.exchange_total",
                 1,
                 dims={
-                    "agent_id": agent_name,
+                    "agent_id": agent_id,
                     "user_id": user.uid,
                     "session_id": session.id,
                     "exchange_id": exchange_id,

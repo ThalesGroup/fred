@@ -33,7 +33,7 @@ class BaseAgentFactory:
     @abstractmethod
     async def create_and_init(
         self,
-        agent_name: str,
+        agent_id: str,
         runtime_context: RuntimeContext,
         session_id: str,
     ) -> Tuple[AgentFlow, bool]:
@@ -45,7 +45,7 @@ class BaseAgentFactory:
 
     # Lightweight observability hook
     def list_active_keys(self) -> list[tuple[str, str]]:
-        """List cached (session_id, agent_name) keys if implemented; empty by default."""
+        """List cached (session_id, agent_id) keys if implemented; empty by default."""
         return []
 
 
@@ -83,7 +83,7 @@ class AgentFactory(BaseAgentFactory):
     # ---------- Public entry point ----------
     async def create_and_init(
         self,
-        agent_name: str,
+        agent_id: str,
         runtime_context: RuntimeContext,
         session_id: str,
     ) -> Tuple[AgentFlow, bool]:
@@ -93,7 +93,7 @@ class AgentFactory(BaseAgentFactory):
           2) set runtime context,
           3) run async init (with crew when Leader).
         """
-        cache_key = (session_id, agent_name)
+        cache_key = (session_id, agent_id)
         cached = self._agent_cache.get(cache_key)
         if cached is not None:
             # Why: tokens/context may change between requests; always refresh on reuse.
@@ -103,13 +103,13 @@ class AgentFactory(BaseAgentFactory):
                 setattr(cached, "runtime_context", runtime_context)
             logger.info(
                 "[AGENTS] Reusing cached agent '%s' for session '%s'",
-                agent_name,
+                agent_id,
                 session_id,
             )
             return cached, True
 
         # Build fresh
-        settings, agent = self._instantiate_from_settings(agent_name)
+        settings, agent = self._instantiate_from_settings(agent_id)
 
         # Always apply merged settings and context before init
         agent.apply_settings(settings)
@@ -123,7 +123,7 @@ class AgentFactory(BaseAgentFactory):
         self._agent_cache.set(cache_key, agent)
         logger.info(
             "[AGENTS] Created and cached agent '%s' for session '%s'",
-            agent_name,
+            agent_id,
             session_id,
         )
         return agent, False
@@ -131,17 +131,17 @@ class AgentFactory(BaseAgentFactory):
     # ---------- Helpers (why-focused, no duplication) ----------
 
     def _instantiate_from_settings(
-        self, agent_name: str
+        self, agent_id: str
     ) -> Tuple[AgentSettings, AgentFlow]:
         """
         Why: the Manager is the single source of truth for settings/class_path.
         Keeps class loading + validation in one place.
         """
-        settings = self.manager.get_agent_settings(agent_name)
+        settings = self.manager.get_agent_settings(agent_id)
         if not settings:
-            raise ValueError(f"Agent '{agent_name}' not found in catalog.")
+            raise ValueError(f"Agent '{agent_id}' not found in catalog.")
         if not settings.class_path:
-            raise ValueError(f"Agent '{agent_name}' has no class_path defined.")
+            raise ValueError(f"Agent '{agent_id}' has no class_path defined.")
         agent_cls = self.loader._import_agent_class(settings.class_path)
         agent = cast(AgentFlow, agent_cls(agent_settings=settings))
         return settings, agent
@@ -163,7 +163,7 @@ class AgentFactory(BaseAgentFactory):
             )
             logger.info(
                 "[AGENTS] leader='%s' async_init invoked (crew size=%d).",
-                agent.get_name(),
+                agent.get_id(),
                 len(crew),
             )
             await agent.async_init(runtime_context, crew)
@@ -171,7 +171,7 @@ class AgentFactory(BaseAgentFactory):
 
         # Simple agent
         if hasattr(agent, "async_init"):
-            logger.info("[AGENTS] agent='%s' async_init invoked.", agent.get_name())
+            logger.info("[AGENTS] agent='%s' async_init invoked.", agent.get_id())
             await agent.async_init(runtime_context=runtime_context)
 
     async def _build_leader_crew(
@@ -184,16 +184,14 @@ class AgentFactory(BaseAgentFactory):
         instantiate → apply settings → set context → async_init — then hand to the Leader.
         """
         crew: Dict[str, AgentFlow] = {}
-        for expert_name in leader_settings.crew:
-            expert_settings, expert = self._instantiate_from_settings(expert_name)
+        for expert_id in leader_settings.crew:
+            expert_settings, expert = self._instantiate_from_settings(expert_id)
             expert.apply_settings(expert_settings)
             expert.set_runtime_context(runtime_context)
             if hasattr(expert, "async_init"):
-                logger.info(
-                    "[AGENTS] expert='%s' async_init invoked.", expert.get_name()
-                )
+                logger.info("[AGENTS] expert='%s' async_init invoked.", expert.get_id())
                 await expert.async_init(runtime_context=runtime_context)
-            crew[expert_name] = expert
+            crew[expert_id] = expert
         return crew
 
     async def teardown_session_agents(self, session_id: str) -> None:
@@ -216,15 +214,15 @@ class AgentFactory(BaseAgentFactory):
 
     async def _execute_aclose(self, agent: AgentFlow, key: Tuple[str, str]) -> None:
         """Helper to safely execute aclose and log the result."""
-        session_id, agent_name = key
+        session_id, agent_id = key
         try:
             # Calls Tessa.aclose() -> MCPRuntime.aclose() -> AsyncExitStack.aclose()
             await agent.aclose()
-            logger.debug(f"[AGENTS] Agent '{agent_name}' closed successfully.")
+            logger.debug(f"[AGENTS] Agent '{agent_id}' closed successfully.")
         except Exception:
             # Log the failure but ensure the task completes
             logger.error(
-                f"[AGENTS] Failed to close agent '{agent_name}' for session '{session_id}'.",
+                f"[AGENTS] Failed to close agent '{agent_id}' for session '{session_id}'.",
                 exc_info=True,
             )
 

@@ -273,7 +273,7 @@ async def websocket_chatbot_question(
                     callback=ws_callback,
                     session_id=ask.session_id,
                     message=ask.message,
-                    agent_name=ask.agent_name,
+                    agent_id=ask.agent_id,
                     runtime_context=ask.runtime_context,
                     client_exchange_id=ask.client_exchange_id,
                 )

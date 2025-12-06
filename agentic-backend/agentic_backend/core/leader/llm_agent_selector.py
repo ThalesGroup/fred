@@ -16,18 +16,18 @@ from agentic_backend.core.leader.base_agent_selector import (
     RoutingDecision,
 )
 
-logger = logging.getLogger(__name__)  # <-- ADDED
+logger = logging.getLogger(__name__)
 
 
 # -------------------------------
 # Helper for prompt UX (Assumed from previous context)
 # -------------------------------
-def experts_markdown(names: Sequence[str], experts: Dict[str, AgentFlow]) -> str:
+def experts_markdown(ids: Sequence[str], experts: Dict[str, AgentFlow]) -> str:
     """Creates a markdown list of expert names and descriptions."""
     return "\n".join(
-        f"- **{n}**: {experts[n].tuning.description or 'No description provided.'}"
-        for n in names
-        if n in experts
+        f"- **{experts[agent_id].get_agent_settings().name}** (id: {agent_id}): {experts[agent_id].tuning.description or 'No description provided.'}"
+        for agent_id in ids
+        if agent_id in experts
     )
 
 
@@ -55,12 +55,12 @@ class LLMAgentSelector(BaseAgentSelector):
         """
         logger.info("Starting expert selection process (choose_and_rephrase).")
 
-        expert_names = list(experts.keys())
-        if not expert_names:
+        expert_ids = list(experts.keys())
+        if not expert_ids:
             logger.error("Expert list is empty. Cannot perform selection.")
             raise ValueError("No experts available for selection.")
 
-        logger.info(f"Available experts: {', '.join(expert_names)}")
+        logger.info(f"Available experts: {', '.join(expert_ids)}")
 
         # 1. Input Normalization: Convert complex 'objective' type to a clean string
         if isinstance(objective, str):
@@ -78,7 +78,7 @@ class LLMAgentSelector(BaseAgentSelector):
                     f"Failed to JSON serialize objective. Using generic str() representation. Error: {e}"
                 )
 
-        available_experts_markdown = experts_markdown(expert_names, experts)
+        available_experts_markdown = experts_markdown(expert_ids, experts)
 
         system_prompt = (
             "You are a master router and task rephraser. Your output must strictly adhere "
@@ -89,7 +89,7 @@ class LLMAgentSelector(BaseAgentSelector):
 
         human_prompt = (
             f"**User Objective (Overall Goal):** {objective_str}\n"
-            f"**Available Expert Options (Choose ONE expert_name):** {', '.join(expert_names)}\n\n"
+            f"**Available Expert Options (Choose ONE expert_id):** {', '.join(expert_ids)}\n\n"
             f"**Expert Details:**\n{available_experts_markdown}\n\n"
             "Based on the objective, make your selection."
         )
@@ -105,23 +105,23 @@ class LLMAgentSelector(BaseAgentSelector):
         decision: RoutingDecision = cast(RoutingDecision, raw_result)
 
         logger.info(
-            f"Structured model returned raw decision. Expert: {decision.expert_name}"
+            f"Structured model returned raw decision. Expert: {decision.expert_id}"
         )
 
         # 2. Validation (in case the LLM hallucinates an expert name)
-        if decision.expert_name not in expert_names:
-            old_name = decision.expert_name
-            decision.expert_name = expert_names[0]
+        if decision.expert_id not in expert_ids:
+            old_name = decision.expert_id
+            decision.expert_id = expert_ids[0]
             # Updated the warning/print statement to use the logger
             logger.warning(
-                f"LLM chose invalid expert '{old_name}'. Falling back to first available expert: '{decision.expert_name}'. Validation required fallback."
+                f"LLM chose invalid expert '{old_name}'. Falling back to first available expert: '{decision.expert_id}'. Validation required fallback."
             )
         else:
             logger.info(
-                f"Validation successful. Chosen expert: '{decision.expert_name}' is valid."
+                f"Validation successful. Chosen expert: '{decision.expert_id}' is valid."
             )
 
         logger.info(
-            f"Final Routing Decision: Expert='{decision.expert_name}', Task='{decision.task[:50]}...'"
+            f"Final Routing Decision: Expert='{decision.expert_id}', Task='{decision.task[:50]}...'"
         )
         return decision

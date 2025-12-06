@@ -80,7 +80,7 @@ class OrchestratorState(TypedDict):
 
     messages: Sequence[BaseMessage]
     objective: str | None  # The user's original query
-    decision: RoutingDecision | None  # Output from the selector (expert name + task)
+    decision: RoutingDecision | None  # Output from the selector (expert id + task)
     expert_result: AIMessage | None  # The final result from the chosen expert
 
 
@@ -141,8 +141,8 @@ class MiniLLMOrchestrator(LeaderFlow):
         # The 'route' node sets decision to None if the crew is empty.
         decision = state.get("decision")
 
-        # If decision is present AND the expert_name is non-empty, proceed to execute
-        if decision and decision.expert_name:
+        # If decision is present AND the expert_id is non-empty, proceed to execute
+        if decision and decision.expert_id:
             return "execute"
 
         # Otherwise, skip execution and jump to respond (which handles the error message)
@@ -183,7 +183,7 @@ class MiniLLMOrchestrator(LeaderFlow):
 
         # --- A. Check for available experts (NEW LOGIC) ---
         if not self.experts:
-            error_message = f"Agent **{self.get_name()}** cannot route because its crew is empty. Please add experts to its crew configuration."
+            error_message = f"Agent **{self.get_id()}** cannot route because its crew is empty. Please add experts to its crew configuration."
             logger.error(
                 f"NODE: route - Crew is empty. Aborting execution: {error_message}"
             )
@@ -230,13 +230,13 @@ class MiniLLMOrchestrator(LeaderFlow):
         decision: RoutingDecision = await self.selector.choose_and_rephrase(
             objective=objective, experts=self.experts
         )
-        logger.info(f"NODE: route - Selector returned expert: {decision.expert_name}")
+        logger.info(f"NODE: route - Selector returned expert: {decision.expert_id}")
 
         # Log the decision for tracing/UI using an AIMessage thought
         thought = AIMessage(
             content="",
             response_metadata={
-                "thought": f"Selected **{decision.expert_name}** (Rationale: {decision.rationale}). Task: '{decision.task}'",
+                "thought": f"Selected **{decision.expert_id}** (Rationale: {decision.rationale}). Task: '{decision.task}'",
                 "extras": {"node": "route", "task": "route_and_rephrase"},
             },
         )
@@ -263,21 +263,21 @@ class MiniLLMOrchestrator(LeaderFlow):
             logger.error("NODE: execute - Critical error: Routing decision is missing.")
             raise ValueError("Routing decision is missing in state.")
 
-        expert_name = decision.expert_name
+        expert_id = decision.expert_id
         expert_task = decision.task
 
         logger.info(
-            f"NODE: execute - Delegating task to expert: {expert_name} with task: '{expert_task[:50]}...'"
+            f"NODE: execute - Delegating task to expert: {expert_id} with task: '{expert_task[:50]}...'"
         )
 
-        expert_instance = self.experts.get(expert_name)
-        compiled = self.compiled_expert_graphs.get(expert_name)
+        expert_instance = self.experts.get(expert_id)
+        compiled = self.compiled_expert_graphs.get(expert_id)
 
         if not expert_instance or not compiled:
             logger.error(
-                f"NODE: execute - Expert '{expert_name}' or its compiled graph is missing."
+                f"NODE: execute - Expert '{expert_id}' or its compiled graph is missing."
             )
-            raise ValueError(f"Expert '{expert_name}' not properly registered.")
+            raise ValueError(f"Expert '{expert_id}' not properly registered.")
 
         # The expert only receives the clean, rephrased task as a HumanMessage
         expert_messages = [HumanMessage(content=expert_task)]
@@ -292,9 +292,7 @@ class MiniLLMOrchestrator(LeaderFlow):
         # Get the expert's final response message
         expert_messages_list = response_state.get("messages", [])
         if not expert_messages_list:
-            logger.warning(
-                f"NODE: execute - Expert {expert_name} returned no messages."
-            )
+            logger.warning(f"NODE: execute - Expert {expert_id} returned no messages.")
             expert_result = AIMessage(
                 content="Expert returned an empty response.", response_metadata={}
             )
@@ -310,7 +308,7 @@ class MiniLLMOrchestrator(LeaderFlow):
             **(md.get("extras") or {}),
             "node": "execute",
             "task": expert_task,
-            "agentic_flow": expert_name,
+            "agentic_flow": expert_id,
         }
         expert_result.response_metadata = md
 

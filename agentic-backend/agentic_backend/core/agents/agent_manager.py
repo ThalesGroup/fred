@@ -76,8 +76,8 @@ class AgentManager:
             self.use_static_config_only,
         )
 
-    def get_agent_settings(self, name: str) -> AgentSettings | None:
-        return self.agent_settings.get(name)
+    def get_agent_settings(self, id: str) -> AgentSettings | None:
+        return self.agent_settings.get(id)
 
     def get_agentic_flows(self) -> List[AgentSettings]:
         return list(self.agent_settings.values())
@@ -86,11 +86,11 @@ class AgentManager:
         return get_mcp_configuration().servers
 
     def log_current_settings(self):
-        for name, settings in self.agent_settings.items():
+        for id, settings in self.agent_settings.items():
             tuning = settings.tuning
             logger.debug(
                 "[AGENTS] agent=%s current_tuning=%s",
-                name,
+                id,
                 tuning.dump() if tuning else "N/A",
             )
 
@@ -104,18 +104,16 @@ class AgentManager:
         if self.use_static_config_only:
             raise AgentUpdatesDisabled()
 
-        existing = self.store.get(agent_settings.name)
+        existing = self.store.get(agent_settings.id)
         if existing:
             raise AgentAlreadyExistsException(
-                f"Agent '{agent_settings.name}' already exists."
+                f"Agent '{agent_settings.id}' already exists."
             )
 
         self.store.save(agent_settings, agent_tuning)
 
-        self.agent_settings[agent_settings.name] = agent_settings
-        logger.info(
-            "[AGENTS] agent=%s registered as dynamic agent.", agent_settings.name
-        )
+        self.agent_settings[agent_settings.id] = agent_settings
+        logger.info("[AGENTS] agent=%s registered as dynamic agent.", agent_settings.id)
 
     async def update_agent(self, new_settings: AgentSettings, is_global: bool) -> bool:
         """
@@ -129,26 +127,24 @@ class AgentManager:
 
         if new_settings.type == "leader":
             new_leader_settings = cast(Leader, new_settings)
-            old_leader_settings = cast(
-                Leader, self.agent_settings.get(new_settings.name)
-            )
+            old_leader_settings = cast(Leader, self.agent_settings.get(new_settings.id))
             if old_leader_settings:
                 old_crew = set(old_leader_settings.crew or [])
                 new_crew = set(new_leader_settings.crew or [])
                 if old_crew != new_crew:
                     logger.info(
                         "[AGENTS] leader=%s crew changed from %s to %s",
-                        new_settings.name,
+                        new_settings.id,
                         old_crew,
                         new_crew,
                     )
                     # If the crew has changed, we need to rewire the agent's connections
 
-        name = new_settings.name
+        agent_id = new_settings.id
         tunings = new_settings.tuning
         if not tunings:
             return False
-        logger.info("[AGENTS] agent=%s new_tuning=%s", name, tunings.dump())
+        logger.info("[AGENTS] agent=%s new_tuning=%s", agent_id, tunings.dump())
         # 1) Persist source of truth (DB)
         try:
             self.store.save(
@@ -156,30 +152,34 @@ class AgentManager:
             )
         except Exception:
             logger.exception(
-                "Failed to persist agent '%s'; continuing with runtime update.", name
+                "Failed to persist agent '%s'; continuing with runtime update.",
+                agent_id,
             )
             return False
 
-        self.agent_settings[name] = new_settings
+        self.agent_settings[agent_id] = new_settings
         return True
 
-    async def delete_agent(self, name: str) -> bool:
+    async def delete_agent(self, agent_id: str) -> bool:
         """
         Deletes an agent from the persistent store and unregisters it from runtime.
         """
         if self.use_static_config_only:
             raise AgentUpdatesDisabled()
 
-        settings = self.agent_settings.pop(name, None)
+        settings = self.agent_settings.pop(agent_id, None)
         if not settings:
-            logger.warning("[AGENTS] agent=%s deleted but not found in memory.", name)
+            logger.warning(
+                "[AGENTS] agent=%s deleted but not found in memory.", agent_id
+            )
             return False
 
         try:
-            self.store.delete(name)
+            self.store.delete(agent_id)
         except Exception:
             logger.exception(
-                "[AGENTS] agent=%s could not be deleted from persistent store.", name
+                "[AGENTS] agent=%s could not be deleted from persistent store.",
+                agent_id,
             )
             # We don't return False here because it's still removed from runtime
             # and in-memory catalogs, which is the primary goal.
@@ -213,24 +213,24 @@ class AgentManager:
         agents_to_load: Dict[str, AgentSettings] = {}
         for instance in static_instances:
             # Assuming instance structure is accessible like a dictionary or simple object
-            name = instance.get_name()
+            agent_id = instance.get_id()
             settings = instance.get_agent_settings()
             tunings = instance.get_agent_tunings()
-            static_catalogue[name] = (settings, tunings)
+            static_catalogue[agent_id] = (settings, tunings)
             logger.info(
                 "[AGENTS] agent=%s loaded from YAML. Class: %s",
-                name,
+                agent_id,
                 settings.class_path,
             )
 
         for instance in persisted_instances:
-            name = instance.get_name()
+            agent_id = instance.get_id()
             settings = instance.get_agent_settings()
             tunings = instance.get_agent_tunings()
-            persisted_state[name] = (settings, tunings)
+            persisted_state[agent_id] = (settings, tunings)
             logger.info(
                 "[AGENTS] agent=%s loaded from persistent store. Class: %s",
-                name,
+                agent_id,
                 settings.class_path,
             )
 
@@ -238,60 +238,60 @@ class AgentManager:
         # 2. Reconcile and Log Decisions
         # ----------------------------------------------------------------------
 
-        all_names = set(static_catalogue.keys()) | set(persisted_state.keys())
-        for name in sorted(list(all_names)):
-            is_static = name in static_catalogue
-            is_persisted = name in persisted_state
+        all_ids = set(static_catalogue.keys()) | set(persisted_state.keys())
+        for agent_id in sorted(list(all_ids)):
+            is_static = agent_id in static_catalogue
+            is_persisted = agent_id in persisted_state
 
             if is_static and is_persisted:
                 # CONFLICT: Static agent exists AND user has saved a persisted state (usually tuning)
-                static_settings, _ = static_catalogue[name]
-                _, persisted_tunings = persisted_state[name]
+                static_settings, _ = static_catalogue[agent_id]
+                _, persisted_tunings = persisted_state[agent_id]
 
                 logger.info(
                     "[AGENTS] agent=%s found in YAML and persistent store with global scope tunings. Using persisted tunings.",
-                    name,
+                    agent_id,
                 )
                 final_settings = static_settings.model_copy(
                     update={"tuning": persisted_tunings}
                 )
-                agents_to_load[name] = final_settings
+                agents_to_load[agent_id] = final_settings
 
             elif is_static and not is_persisted:
                 # STATIC-ONLY: Agent is defined in code but has no user changes
-                static_settings, static_tunings = static_catalogue[name]
+                static_settings, static_tunings = static_catalogue[agent_id]
 
                 logger.info(
                     "[AGENTS] agent=%s is only defined in YAML configuration. Using it as is.",
-                    name,
+                    agent_id,
                 )
                 final_settings = static_settings.model_copy(
                     update={"tuning": static_tunings}
                 )
-                agents_to_load[name] = final_settings
+                agents_to_load[agent_id] = final_settings
 
             elif is_persisted and not is_static:
                 # PERSISTED-ONLY: Agent was created dynamically (e.g., via UI) and stored in DB
-                persisted_settings, persisted_tunings = persisted_state[name]
+                persisted_settings, persisted_tunings = persisted_state[agent_id]
 
                 logger.info(
                     "[AGENTS] agent=%s loaded from persistent store. Delete it from the database to remove it from runtime.",
-                    name,
+                    agent_id,
                 )
-                agents_to_load[name] = persisted_settings
+                agents_to_load[agent_id] = persisted_settings
                 final_settings = persisted_settings.model_copy(
                     update={"tuning": persisted_tunings}
                 )
-                agents_to_load[name] = final_settings
+                agents_to_load[agent_id] = final_settings
 
-        for name, settings in agents_to_load.items():
+        for agent_id, settings in agents_to_load.items():
             logger.info(
                 "[AGENTS] agent=%s registered with global scope tunings into runtime catalog",
-                name,
+                agent_id,
             )
             logger.info(
                 "[AGENTS] agent=%s tuning=%s",
-                name,
+                agent_id,
                 settings.tuning.dump() if settings.tuning else "N/A",
             )
-            self.agent_settings[name] = settings
+            self.agent_settings[agent_id] = settings

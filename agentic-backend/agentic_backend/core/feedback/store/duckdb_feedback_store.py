@@ -44,7 +44,7 @@ class DuckdbFeedbackStore(BaseFeedbackStore):
                     id TEXT PRIMARY KEY,
                     session_id TEXT,
                     message_id TEXT,
-                    agent_name TEXT,
+                    agent_id TEXT,
                     rating INTEGER,
                     comment TEXT,
                     created_at TIMESTAMP,
@@ -72,7 +72,7 @@ class DuckdbFeedbackStore(BaseFeedbackStore):
             conn.execute(
                 f"""
                 INSERT OR REPLACE INTO {self.store._prefixed(self.table_name)} (
-                    id, session_id, message_id, agent_name, rating,
+                    id, session_id, message_id, agent_id, rating,
                     comment, created_at, user_id
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -80,7 +80,7 @@ class DuckdbFeedbackStore(BaseFeedbackStore):
                     feedback.id,
                     feedback.session_id,
                     feedback.message_id,
-                    feedback.agent_name,
+                    feedback.agent_id,
                     feedback.rating,
                     feedback.comment,
                     feedback.created_at.isoformat(),
@@ -103,7 +103,7 @@ class DuckdbFeedbackStore(BaseFeedbackStore):
             id=row[0],
             session_id=row[1],
             message_id=row[2],
-            agent_name=row[3],
+            agent_id=row[3],
             rating=row[4],
             comment=row[5],
             created_at=row[6],

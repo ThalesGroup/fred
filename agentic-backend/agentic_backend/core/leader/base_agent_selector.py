@@ -12,8 +12,8 @@ from agentic_backend.core.agents.agent_flow import AgentFlow
 class RoutingDecision(BaseModel):
     """The complete decision structure returned by the LLM, combining expert selection and task rephrasing."""
 
-    expert_name: str = Field(
-        description="The name of the single, best-suited expert to execute the task. Must be one of the available expert names."
+    expert_id: str = Field(
+        description="The id of the single, best-suited expert to execute the task. Must be one of the available expert ids."
     )
     task: str = Field(
         description="A clear, concise, rephrased instruction/question tailored specifically for the selected expert. This is the exact content the expert will receive (e.g., 'what is an odd number')."

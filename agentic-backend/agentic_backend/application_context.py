@@ -153,14 +153,14 @@ def get_feedback_store() -> BaseFeedbackStore:
     return get_app_context().get_feedback_store()
 
 
-def get_enabled_agent_names() -> List[str]:
+def get_enabled_agent_ids() -> List[str]:
     """
-    Retrieves a list of enabled agent names from the application context.
+    Retrieves a list of enabled agent IDs from the application context.
 
     Returns:
-        List[str]: List of enabled agent names.
+        List[str]: List of enabled agent IDs.
     """
-    return get_app_context().get_enabled_agent_names()
+    return get_app_context().get_enabled_agent_ids()
 
 
 def get_app_context() -> "ApplicationContext":
@@ -181,9 +181,6 @@ def get_app_context() -> "ApplicationContext":
 def get_default_model() -> BaseLanguageModel:
     """
     Retrieves the default AI model instance.
-
-    Args:
-        agent_name (str): The name of the agent.
 
     Returns:
         BaseLanguageModel: The AI model configured for the agent.
@@ -245,7 +242,6 @@ class ApplicationContext:
     Attributes:
         configuration (Configuration): Loaded application configuration.
         status (RuntimeStatus): Runtime status (e.g., offline mode).
-        agent_classes (Dict[str, Type[AgentFlow]]): Mapping of agent names to their Python classes.
     """
 
     _instance = None
@@ -342,14 +338,14 @@ class ApplicationContext:
 
     # --- Agent classes ---
 
-    def get_enabled_agent_names(self) -> List[str]:
+    def get_enabled_agent_ids(self) -> List[str]:
         """
-        Retrieves a list of enabled agent names from the configuration.
+        Retrieves a list of enabled agent IDs from the configuration.
 
         Returns:
-            List[str]: List of enabled agent names.
+            List[str]: List of enabled agent IDs.
         """
-        return [agent.name for agent in self.configuration.ai.agents if agent.enabled]
+        return [agent.id for agent in self.configuration.ai.agents if agent.enabled]
 
     def get_session_store(self) -> BaseSessionStore:
         """
@@ -673,7 +669,7 @@ class ApplicationContext:
         logger.info("  ⏱️  Timeouts: connect=%ss, read=%ss", tcfg.connect, tcfg.read)
 
         # Agents
-        enabled_agents = [a.name for a in cfg.ai.agents if a.enabled]
+        enabled_agents = [a.id for a in cfg.ai.agents if a.enabled]
         logger.info(
             "  🤖 Agents enabled: %d%s",
             len(enabled_agents),

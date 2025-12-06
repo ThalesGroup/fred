@@ -32,16 +32,10 @@ class DeterministicAgentSelector(BaseAgentSelector):
     def _identity(self, agent: AgentFlow) -> Tuple[str, Tuple[str, ...], str, str]:
         """Extracts settings for scoring using AgentFlow's public methods."""
 
-        # Using public methods instead of accessing agent_settings directly
-        name = agent.get_name()
-        # Note: get_tags() returns List[str], which is easily converted to a tuple.
+        name = agent.get_settings().name
         tags = tuple(agent.get_tags())
         role = agent.get_role()
         desc = agent.get_description()
-
-        # Note: If any method returns an empty string or None, your original logic
-        # handled that implicitly, but using the getters ensures you get the
-        # most accurate, current value.
 
         return name, tags, role, desc
 
@@ -54,13 +48,13 @@ class DeterministicAgentSelector(BaseAgentSelector):
     ) -> List[str]:
         """
         Internal function based on the old `shortlist` method.
-        Returns expert names sorted by calculated score.
+        Returns expert ids sorted by calculated score.
         """
         text = (objective + " " + step).lower()
         need = {t.lower() for t in require_tags}
 
         scored: List[Tuple[int, str]] = []
-        for name, agent in experts.items():
+        for agent_id, agent in experts.items():
             a_name, a_tags, a_role, a_desc = self._identity(agent)
 
             if need and not need.issubset({t.lower() for t in a_tags}):
@@ -83,12 +77,12 @@ class DeterministicAgentSelector(BaseAgentSelector):
                 score += self.role_weight
 
             if score > 0:
-                scored.append((score, name))
+                scored.append((score, agent_id))
 
         if not scored:
             return sorted(experts.keys())
 
-        # Sort by score (descending) then name (ascending)
+        # Sort by score (descending) then ids (ascending)
         return [n for _, n in sorted(scored, key=lambda x: (-x[0], x[1]))]
 
     async def choose_and_rephrase(
@@ -102,25 +96,25 @@ class DeterministicAgentSelector(BaseAgentSelector):
         into the RoutingDecision structure.
         """
         # 1. Run the scoring logic to get the preferred order
-        sorted_names = self._score_and_sort(objective, "", experts)
+        sorted_ids = self._score_and_sort(objective, "", experts)
 
-        if not sorted_names:
+        if not sorted_ids:
             raise ValueError(
                 "DeterministicRouterPicker: No experts available or scored."
             )
 
         # 2. Select the top expert
-        chosen_expert_name = sorted_names[0]
+        chosen_expert_id = sorted_ids[0]
 
         # 3. Formulate the response object
         # Rationale is static since the choice is based on fixed logic.
         rationale = (
             f"Deterministic selection based on highest keyword/tag score relative to the objective."
-            f" Expert: {chosen_expert_name}."
+            f" Expert: {chosen_expert_id}."
         )
 
         return RoutingDecision(
-            expert_name=chosen_expert_name,
+            expert_id=chosen_expert_id,
             # The task is just the objective, as there's no LLM to rephrase.
             task=objective,
             rationale=rationale,

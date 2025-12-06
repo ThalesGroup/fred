@@ -82,7 +82,7 @@ class DuckDBAgentStore(BaseAgentStore):
         scope: str = SCOPE_GLOBAL,
         scope_id: Optional[str] = None,
     ) -> None:
-        doc_id = self._doc_id(settings.name, scope, scope_id)
+        doc_id = self._doc_id(settings.id, scope, scope_id)
 
         # Serialize AgentSettings to dict → ensure tuning is included (if provided separately)
         payload = AgentSettingsAdapter.dump_python(
@@ -94,7 +94,7 @@ class DuckDBAgentStore(BaseAgentStore):
             except Exception:
                 logger.warning(
                     "[STORE][DUCKDB][AGENTS] Could not embed tuning into AgentSettings for '%s'",
-                    settings.name,
+                    settings.id,
                 )
                 pass
 
@@ -112,19 +112,19 @@ class DuckDBAgentStore(BaseAgentStore):
                     INSERT INTO {self.TABLE} (doc_id, name, scope, scope_id, payload_json)
                     VALUES (?, ?, ?, ?, ?)
                     """,
-                    (doc_id, settings.name, scope, scope_id, payload_json),
+                    (doc_id, settings.id, scope, scope_id, payload_json),
                 )
                 conn.execute("COMMIT")
                 logger.debug(
                     "[STORE][DUCKDB][AGENTS] Saved agent '%s' (ID: %s)",
-                    settings.name,
+                    settings.id,
                     doc_id,
                 )
             except Exception as e:
                 conn.execute("ROLLBACK")
                 logger.error(
                     "[STORE][DUCKDB][AGENTS] Failed to save '%s' (ID: %s): %s",
-                    settings.name,
+                    settings.id,
                     doc_id,
                     e,
                 )

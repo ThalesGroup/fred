@@ -126,7 +126,7 @@ class OpenSearchAgentStore(BaseAgentStore):
         scope: str = SCOPE_GLOBAL,
         scope_id: Optional[str] = None,
     ) -> None:
-        doc_id = self._create_doc_id(settings.name, scope, scope_id)
+        doc_id = self._create_doc_id(settings.id, scope, scope_id)
 
         # OpenSearch stores the entire document, so we embed scope/scope_id in the saved payload
         # This is a key difference from DuckDB where they are separate columns.
@@ -142,10 +142,10 @@ class OpenSearchAgentStore(BaseAgentStore):
 
         try:
             self.client.index(index=self.index_name, id=doc_id, body=body)
-            logger.info(f"[AGENTS] Agent '{settings.name}' saved (ID: {doc_id})")
+            logger.info(f"[AGENTS] Agent '{settings.id}' saved (ID: {doc_id})")
         except Exception as e:
             logger.error(
-                f"[AGENTS] Failed to save agent '{settings.name}' (ID: {doc_id}): {e}"
+                f"[AGENTS] Failed to save agent '{settings.id}' (ID: {doc_id}): {e}"
             )
             raise
 
@@ -165,7 +165,7 @@ class OpenSearchAgentStore(BaseAgentStore):
         actions = []
         # Iterate over the correct tuple type
         for settings, _ in settings_tuning_list:
-            doc_id = self._create_doc_id(settings.name, scope, scope_id)
+            doc_id = self._create_doc_id(settings.id, scope, scope_id)
 
             # 1. Prepare base document body
             body: dict = AgentSettingsAdapter.dump_python(

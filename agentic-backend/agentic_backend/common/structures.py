@@ -106,6 +106,7 @@ class BaseAgent(BaseModel):
     - Agents created from UI can omit `class_path`.
     """
 
+    id: str
     name: str
     enabled: bool = True
     class_path: Optional[str] = None  # None → dynamic/UI agent
@@ -155,7 +156,7 @@ class Leader(BaseAgent):
     type: Literal["leader"] = "leader"
     crew: List[str] = Field(
         default_factory=list,
-        description="Names of agents in this leader's crew (if any).",
+        description="Ids of agents in this leader's crew (if any).",
     )
 
 

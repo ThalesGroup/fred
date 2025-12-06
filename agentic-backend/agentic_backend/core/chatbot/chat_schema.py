@@ -196,7 +196,7 @@ class ChatMetadata(BaseModel):
     # Keep your VectorSearchHit untouched
     sources: List[VectorSearchHit] = Field(default_factory=list)
 
-    agent_name: Optional[str] = None
+    agent_id: Optional[str] = None
     latency_ms: Optional[int] = None
     finish_reason: Optional[FinishReason] = None
     runtime_context: Optional[RuntimeContext] = None
@@ -211,7 +211,7 @@ class ChatMetadata(BaseModel):
 class ChatAskInput(BaseModel):
     session_id: Optional[str] = None
     message: str
-    agent_name: str
+    agent_id: str
     runtime_context: Optional[RuntimeContext] = None
     client_exchange_id: str | None = None
     access_token: Optional[str] = None

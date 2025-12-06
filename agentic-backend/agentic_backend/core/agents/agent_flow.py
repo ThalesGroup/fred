@@ -300,7 +300,7 @@ class AgentFlow:
         Each line shows:
             [index] role/type | content preview | tool_call_id(s)
         """
-        label = f"Messages history for agent '{self.get_name()}'"
+        label = f"Messages history for agent '{self.get_id()}'"
         log_agent_message_summary(messages, label=label)
 
     @staticmethod
@@ -429,13 +429,13 @@ class AgentFlow:
         """Return the current effective AgentTuning for this instance."""
         return self._tuning
 
-    def get_name(self) -> str:
+    def get_id(self) -> str:
         """
-        Return the agent's name.
+        Return the agent id.
         This is the primary identifier for the agent. In particular, it is used
         to identify the agent in a leader's crew.
         """
-        return self.agent_settings.name
+        return self.agent_settings.id
 
     def get_description(self) -> str:
         """
@@ -513,7 +513,7 @@ class AgentFlow:
             raise AssetRetrievalError(error_msg)
 
     async def fetch_asset_text(self, asset_key: str) -> str:
-        agent_name = self.get_name()
+        agent_name = self.get_id()
         try:
             access_token = getattr(self.runtime_context, "access_token", None)
             if not access_token:
@@ -536,7 +536,7 @@ class AgentFlow:
         """
         Retrieves the content of a user-uploaded asset securely and cleanly.
         """
-        agent_name = self.get_name()
+        agent_name = self.get_id()
         try:
             # Ensure token is valid (refresh if necessary)
             access_token = getattr(self.runtime_context, "access_token", None)
@@ -631,7 +631,7 @@ class AgentFlow:
             return f"{BASE_URL}/user-assets/{asset_key}"
         elif scope == "agent":
             # The Agent Asset endpoint format: /agent-assets/{agent_name}/{key}
-            agent_name = self.get_name()
+            agent_name = self.get_id()
             return f"{BASE_URL}/agent-assets/{agent_name}/{asset_key}"
 
         raise ValueError(f"Unknown asset scope: {scope}")
@@ -761,7 +761,7 @@ class AgentFlow:
 
     def __str__(self) -> str:
         """String representation of the agent."""
-        return f"{self.agent_settings.name}"
+        return f"{self.agent_settings.id}"
 
     # -----------------------------
     # Tuning field readers (typed)

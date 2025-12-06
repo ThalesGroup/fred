@@ -97,23 +97,25 @@ def mapping_langchain_deepeval(langchain_model):
         )
 
 
-async def setup_agent(agent_name: str = "Rico", doc_lib_ids: list[str] | None = None):
+async def setup_agent(
+    agent_id: str = "rag-expert", doc_lib_ids: list[str] | None = None
+):
     """
-    Initialize and configure an agent by name, optionally setting document libraries.
+    Initialize and configure an agent by ID, optionally setting document libraries.
 
     Args:
-        agent_name (str): The name of the agent to initialize. Defaults to "Rico Senior".
+        agent_id (str): The ID of the agent to initialize. Defaults to Rico (rag-expert).
         doc_lib_ids (list): Optional list of document library IDs to set in runtime context.
 
     Returns:
         The compiled graph of the initialized agent.
     """
     agents = get_configuration().ai.agents
-    settings = next((a for a in agents if a.name == agent_name), None)
+    settings = next((a for a in agents if a.id == agent_id), None)
 
     if not settings:
-        available = [a.name for a in agents]
-        raise ValueError(f"Agent '{agent_name}' not found. Available: {available}")
+        available = [a.id for a in agents]
+        raise ValueError(f"Agent '{agent_id}' not found. Available: {available}")
 
     agent = Rico(settings)
 
@@ -181,7 +183,7 @@ async def run_evaluation(
     test_file: Path,
     chat_model: str,
     embedding_model: str,
-    agent_name: str = "Rico",
+    agent_id: str = "rag-expert",
     doc_lib_ids: list[str] | None = None,
 ):
     """
@@ -213,8 +215,8 @@ async def run_evaluation(
         test_data = json.load(f)
     logger.info(f"📝 {len(test_data)} questions loaded from {test_file.name}")
 
-    agent = await setup_agent(agent_name, doc_lib_ids)
-    logger.info(f"🤖 Agent '{agent_name}' ready")
+    agent = await setup_agent(agent_id, doc_lib_ids)
+    logger.info(f"🤖 Agent '{agent_id}' ready")
 
     faithfulness_metric = FaithfulnessMetric(
         model=deepeval_llm, verbose_mode=True, threshold=0.0
