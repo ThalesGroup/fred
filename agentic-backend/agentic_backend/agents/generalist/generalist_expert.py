@@ -56,6 +56,15 @@ TUNING = AgentTuning(
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
+        FieldSpec(
+            key="prompts.response_language",
+            type="text",
+            title="Response Language",
+            description="Language to use for all answers (e.g., 'français', 'English').",
+            required=False,
+            default="English",
+            ui=UIHints(group="Prompts"),
+        ),
     ],
 )
 
@@ -120,6 +129,7 @@ class Georges(SimpleAgentFlow):
 
             fallback_text = guardrail_fallback_message(
                 info,
+                language=self.get_tuned_text("prompts.response_language"),
                 default_message="Sorry, I could not complete that request safely.",
             )
             return AIMessage(content=fallback_text)

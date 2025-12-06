@@ -210,7 +210,7 @@ function Area({
               key={`sources-final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
               sources={finalSources}
               enableSources
-              expandSources
+              expandSources={false}
               highlightUid={highlightUid ?? undefined}
             />,
           );

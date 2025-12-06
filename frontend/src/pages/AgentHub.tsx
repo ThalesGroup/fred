@@ -194,15 +194,23 @@ export const AgentHub = () => {
 
   const handleTabChange = (_event: SyntheticEvent, newValue: number) => setTabValue(newValue);
 
-  const handleRestore = async () => {
-    try {
-      await restoreAgents().unwrap();
-      showSuccess({ summary: t("agentHub.toasts.restored") });
-      fetchAgents();
-    } catch (error: any) {
-      const detail = error?.data?.detail || error?.data || error?.message || "Unknown error";
-      showError({ summary: t("agentHub.toasts.error"), detail });
-    }
+  const handleRestore = () => {
+    showConfirmationDialog({
+      title: t("agentHub.confirmRestoreTitle") || "Restore agents from configuration?",
+      message:
+        t("agentHub.confirmRestoreMessage") ||
+        "This will overwrite any tuned settings you saved in the UI with the YAML configuration. This action cannot be undone.",
+      onConfirm: async () => {
+        try {
+          await restoreAgents({}).unwrap();
+          showSuccess({ summary: t("agentHub.toasts.restored") });
+          fetchAgents();
+        } catch (error: any) {
+          const detail = error?.data?.detail || error?.data || error?.message || "Unknown error";
+          showError({ summary: t("agentHub.toasts.error"), detail });
+        }
+      },
+    });
   };
 
   const filteredAgents = useMemo(() => {

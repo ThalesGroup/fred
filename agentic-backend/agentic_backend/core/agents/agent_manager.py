@@ -315,7 +315,7 @@ class AgentManager:
             )
             self.agent_settings[name] = settings
 
-    async def restore_static_agents(self) -> None:
+    async def restore_static_agents(self, *, force_overwrite: bool = True) -> None:
         """
         Re-seed static agents from configuration into the store and reload the catalog.
         """
@@ -328,15 +328,47 @@ class AgentManager:
         for agent_cfg in self.config.ai.agents:
             if not agent_cfg.enabled:
                 continue
-            if not agent_cfg.tuning:
+            tuning = agent_cfg.tuning
+            if not tuning:
+                try:
+                    if agent_cfg.class_path:
+                        cls = self.loader._import_agent_class(agent_cfg.class_path)
+                        tuning = getattr(cls, "tuning", None)
+                        if tuning:
+                            logger.info(
+                                "[AGENTS] Restore: using class default tuning for '%s'",
+                                agent_cfg.name,
+                            )
+                except Exception:
+                    logger.exception(
+                        "[AGENTS] Restore: failed to load class for '%s' to get default tuning",
+                        agent_cfg.name,
+                    )
+            if not tuning:
                 logger.warning(
                     "[AGENTS] Skipping static agent '%s' restore: missing tuning.",
                     agent_cfg.name,
                 )
                 continue
+
+            settings_with_tuning = agent_cfg.model_copy(update={"tuning": tuning})
+
+            if force_overwrite:
+                try:
+                    self.store.delete(agent_cfg.name, scope=SCOPE_GLOBAL, scope_id=None)
+                    logger.info(
+                        "[AGENTS] Overwrite restore: deleted persisted agent '%s' (GLOBAL)",
+                        agent_cfg.name,
+                    )
+                except Exception:
+                    logger.exception(
+                        "[AGENTS] Overwrite restore: failed to delete persisted agent '%s'",
+                        agent_cfg.name,
+                    )
+
             try:
                 self.store.save(
-                    agent_cfg, agent_cfg.tuning, scope=SCOPE_GLOBAL, scope_id=None
+                    settings_with_tuning, tuning, scope=SCOPE_GLOBAL, scope_id=None
                 )
                 logger.info(
                     "[AGENTS] Restored static agent '%s' into store", agent_cfg.name

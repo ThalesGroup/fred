@@ -97,6 +97,12 @@ class AgentChatOptions(BaseModel):
             "Allow attaching local files (e.g., PDFs, images, text) to the message and show existing attachments."
         ),
     )
+    skip_rag_search: bool = Field(
+        default=False,
+        description=(
+            "Expose a toggle to skip retrieval and answer without querying document corpora for this message."
+        ),
+    )
 
 
 # ---------------- Base: shared identity + UX + tuning ----------------
