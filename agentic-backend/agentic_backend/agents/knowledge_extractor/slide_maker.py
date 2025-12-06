@@ -12,16 +12,14 @@ from __future__ import annotations
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any, List, Optional, TypedDict
+from typing import Optional
 
 from jsonschema import Draft7Validator
 from langchain.agents import AgentState, create_agent
 from langchain.agents.structured_output import ProviderStrategy
-from langchain_core.messages import AIMessage, AnyMessage
+from langchain_core.messages import AIMessage
 from langfuse.langchain import CallbackHandler
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import add_messages
-from typing_extensions import Annotated
 
 from agentic_backend.agents.knowledge_extractor.knowledge_extractor import globalSchema
 from agentic_backend.agents.knowledge_extractor.powerpoint_template_util import (
