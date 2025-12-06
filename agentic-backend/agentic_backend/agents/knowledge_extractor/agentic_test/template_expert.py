@@ -3,14 +3,10 @@ from __future__ import annotations
 import logging
 import tempfile
 from pathlib import Path
-from typing import Optional
 
-from jsonschema import Draft7Validator
-from langchain.agents import AgentState, create_agent
-from langchain.agents.structured_output import ProviderStrategy
+from langchain.agents import create_agent
+from langchain.agents.middleware import TodoListMiddleware
 from langchain.tools import tool
-from langchain_core.messages import AIMessage
-from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from agentic_backend.agents.knowledge_extractor.knowledge_extractor import globalSchema
@@ -18,7 +14,6 @@ from agentic_backend.agents.knowledge_extractor.powerpoint_template_util import 
     fill_slide_from_structured_response,
 )
 from agentic_backend.application_context import get_default_chat_model
-from agentic_backend.common.kf_agent_asset_client import AssetRetrievalError
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import (
@@ -31,10 +26,7 @@ from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.chatbot.chat_schema import (
     LinkKind,
     LinkPart,
-    MessagePart,
-    TextPart,
 )
-from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 TUNING = AgentTuning(
@@ -70,6 +62,7 @@ TUNING = AgentTuning(
                 "- Extraction fidèle : Récupère les informations depuis les documents retournés\n"
                 "- Validation des contraintes : Vérifie et ajuste les longueurs/valeurs selon le schéma\n"
                 "- Remplissage du JSON : Peuple chaque champ avec les données extraites\n"
+                "- Remplis le maximum de champs possibles avant de soumettre le JSON à l'outil de templetisation et de répondre à l'utilisateur\n"
                 "## Règles d'Extraction:\n"
                 "Chaque champ a une `description` qui définit exactement ce qu'il faut extraire\n"
                 "Base tes requêtes RAG sur ces descriptions\n"
@@ -93,6 +86,11 @@ TUNING = AgentTuning(
                 "- Regroupe les champs similaires si pertinent\n"
                 '- Évite les requêtes trop larges ("tout sur le document")\n'
                 "- Privilégie la précision sur l'exhaustivité\n"
+                "## Resituation Finale\n"
+                "Ne montre pas le JSON que tu a soumis a l'outil (la plus part des tes utilisateurs ne sont pas techniques et ne conaissent pas le JSON).\n"
+                "En premier, et à chaque modification, donne le nouveau lien de téléchargement du powerpoint généré sous forme d'un lien markdown.\n"
+                "Ensuite tu [eux résumer en 1 à 2 phrases] ce que tu as fait (mais pas plus, pour le détailles, l'utilisateur ira voir le fichier."
+                "Tu peux aussi en profiter pour noter les informations que tu n'as pas trouver et poser des questions."
                 "## Ton Attitude\n"
                 "- Méthodique : traite chaque champ systématiquement. Si tu ne trouve pas une information fais une recherche spécialisée\n"
                 "- Précis : base-toi sur les descriptions fournies\n"
@@ -130,6 +128,7 @@ class TemplateExpert(AgentFlow):
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[template_tool, *self.mcp.get_tools()],
             checkpointer=self.streaming_memory,
+            middleware=[TodoListMiddleware()],
         )
 
     def get_template_tool(self):
@@ -147,6 +146,7 @@ class TemplateExpert(AgentFlow):
             Outil permettant de templétiser le fichier envoyé par l'utilisateur.
             La nature du fichier importe peu tant que le format des données est respecté. Tu n'as pas besoin de préciser quel fichier,
             l'outil possede déjà cette information.
+            L'outil retourneras un lien de téléchargement une fois le fichier templatisé.
             """
             # 1. Fetch template from secure asset storage
             template_key = (
