@@ -202,7 +202,8 @@ export const AgentHub = () => {
         "This will overwrite any tuned settings you saved in the UI with the YAML configuration. This action cannot be undone.",
       onConfirm: async () => {
         try {
-          await restoreAgents({}).unwrap();
+          // Explicitly request overwrite to avoid sending undefined (FastAPI rejects "undefined" for booleans)
+          await restoreAgents({ forceOverwrite: true }).unwrap();
           showSuccess({ summary: t("agentHub.toasts.restored") });
           fetchAgents();
         } catch (error: any) {
