@@ -159,12 +159,13 @@ async def delete_agent(
     response_model=None,
 )
 async def restore_agents(
+    force_overwrite: bool = True,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
 ):
     try:
         service = AgentService(agent_manager=agent_manager)
-        await service.restore_static_agents(user=user)
+        await service.restore_static_agents(user=user, force_overwrite=force_overwrite)
     except Exception as e:
         log_exception(e)
         raise handle_exception(e)

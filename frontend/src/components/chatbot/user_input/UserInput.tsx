@@ -13,7 +13,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import AudioController from "../AudioController.tsx";
 import AudioRecorder from "../AudioRecorder.tsx";
 
-import { Box, Grid2, IconButton, InputBase, Stack, Tooltip, useTheme } from "@mui/material";
+import { Box, Grid2, IconButton, InputBase, Stack, Switch, Tooltip, useTheme } from "@mui/material";
 
 import { useTranslation } from "react-i18next";
 import {
@@ -43,6 +43,7 @@ export interface UserInputContent {
   templateResourceIds?: string[];
   profileResourceIds?: string[];
   searchPolicy?: SearchPolicyName;
+  skipRagSearch?: boolean;
 }
 
 type PersistedCtx = {
@@ -51,6 +52,7 @@ type PersistedCtx = {
   templateResourceIds?: string[];
   profileResourceIds?: string[];
   searchPolicy?: SearchPolicyName;
+  skipRagSearch?: boolean;
 };
 
 function makeStorageKey(sessionId?: string) {
@@ -130,6 +132,10 @@ export default function UserInput({
   const [isRecording, setIsRecording] = useState<boolean>(false);
   // Deprecated for uploads: files are uploaded immediately; keep no per-message files
   const [filesBlob, setFilesBlob] = useState<File[] | null>(null);
+  const supportsSkipRagSearch = agentChatOptions?.skip_rag_search !== undefined;
+  const [skipRagSearch, setSkipRagSearch] = useState<boolean>(
+    agentChatOptions?.skip_rag_search ?? false,
+  ); // true means: skip retrieval; false means: use retrieval
 
   // --- Fred rationale ---
   // These three selections are *session-scoped context* (used by agents for retrieval/templates).
@@ -140,7 +146,7 @@ export default function UserInput({
   const [selectedSearchPolicyName, setSelectedSearchPolicyName] = useState<SearchPolicyName>("semantic");
   const canSend = !!userInput.trim() || !!audioBlob; // files upload immediately now
 
-  const canAttach = Object.values(agentChatOptions)
+  const canAttach = Object.values(agentChatOptions || {})
     .filter((value) => typeof value === "boolean")
     .some((v) => v);
 
@@ -155,6 +161,7 @@ export default function UserInput({
         promptResourceIds: selectedPromptResourceIds,
         templateResourceIds: selectedTemplateResourceIds,
         searchPolicy: selectedSearchPolicyName,
+        skipRagSearch: skipRagSearch,
       };
     }
   }, [
@@ -163,7 +170,18 @@ export default function UserInput({
     selectedPromptResourceIds,
     selectedTemplateResourceIds,
     selectedSearchPolicyName,
+    skipRagSearch,
   ]);
+
+  // When switching agents (no active session), align default skip state with the agent option
+  useEffect(() => {
+    if (sessionId) return; // do not override an active session choice
+    if (supportsSkipRagSearch) {
+      setSkipRagSearch(agentChatOptions?.skip_rag_search ?? false);
+    } else {
+      setSkipRagSearch(false);
+    }
+  }, [agentChatOptions?.skip_rag_search, supportsSkipRagSearch, sessionId]);
 
   // Hydration guard: run at most once per session id.
   const hydratedForSession = useRef<string | undefined>(undefined);
@@ -203,10 +221,12 @@ export default function UserInput({
       : pre.searchPolicy
         ? pre.searchPolicy
         : initialSearchPolicy;
+    const skipRag = persisted.skipRagSearch ?? pre.skipRagSearch ?? false;
     setSelectedSearchPolicyName(searchPolicy);
     setSelectedDocumentLibrariesIds(libs);
     setSelectedPromptResourceIds(prompts);
     setSelectedTemplateResourceIds(templates);
+    setSkipRagSearch(skipRag);
 
     // Save immediately so storage stays the source of truth for this session.
     saveSessionCtx(sessionId, {
@@ -214,6 +234,7 @@ export default function UserInput({
       promptResourceIds: prompts,
       templateResourceIds: templates,
       searchPolicy: searchPolicy,
+      skipRagSearch: skipRag,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
@@ -228,6 +249,7 @@ export default function UserInput({
           promptResourceIds: selectedPromptResourceIds,
           templateResourceIds: selectedTemplateResourceIds,
           searchPolicy: selectedSearchPolicyName,
+          skipRagSearch,
         });
       return value;
     });
@@ -241,6 +263,7 @@ export default function UserInput({
           promptResourceIds: value,
           templateResourceIds: selectedTemplateResourceIds,
           searchPolicy: selectedSearchPolicyName,
+          skipRagSearch,
         });
       return value;
     });
@@ -254,6 +277,7 @@ export default function UserInput({
           promptResourceIds: selectedPromptResourceIds,
           templateResourceIds: value,
           searchPolicy: selectedSearchPolicyName,
+          skipRagSearch,
         });
       return value;
     });
@@ -267,9 +291,21 @@ export default function UserInput({
           promptResourceIds: selectedPromptResourceIds,
           templateResourceIds: selectedTemplateResourceIds,
           searchPolicy: value,
+          skipRagSearch,
         });
       return value;
     });
+  };
+  const setSkipRag = (next: boolean) => {
+    setSkipRagSearch(next);
+    if (sessionId)
+      saveSessionCtx(sessionId, {
+        documentLibraryIds: selectedDocumentLibrariesIds,
+        promptResourceIds: selectedPromptResourceIds,
+        templateResourceIds: selectedTemplateResourceIds,
+        searchPolicy: selectedSearchPolicyName,
+        skipRagSearch: next,
+      });
   };
 
   const searchPolicyLabels: Record<SearchPolicyName, string> = {
@@ -337,6 +373,7 @@ export default function UserInput({
       promptResourceIds: selectedPromptResourceIds.length ? selectedPromptResourceIds : undefined,
       templateResourceIds: selectedTemplateResourceIds.length ? selectedTemplateResourceIds : undefined,
       searchPolicy: selectedSearchPolicyName,
+      skipRagSearch,
     });
   }, [
     filesBlob,
@@ -345,6 +382,7 @@ export default function UserInput({
     selectedPromptResourceIds,
     selectedTemplateResourceIds,
     selectedSearchPolicyName,
+    skipRagSearch,
     onContextChange,
   ]);
 
@@ -374,6 +412,7 @@ export default function UserInput({
       promptResourceIds: selectedPromptResourceIds,
       templateResourceIds: selectedTemplateResourceIds,
       searchPolicy: selectedSearchPolicyName,
+      skipRagSearch,
     });
     setUserInput("");
     setAudioBlob(null);
@@ -443,7 +482,27 @@ export default function UserInput({
         {/* Single rounded input with the "+" inside (bottom-left) */}
         <Box sx={{ position: "relative", width: "100%" }}>
           {/* + anchored inside the input, bottom-left */}
-          <Box sx={{ position: "absolute", right: 8, bottom: 6, zIndex: 1, display: "flex", gap: 0.75 }}>
+          <Box
+            sx={{
+              position: "absolute",
+              right: 8,
+              bottom: 6,
+              zIndex: 1,
+              display: "flex",
+              gap: 0.75,
+              alignItems: "center",
+            }}
+          >
+            {supportsSkipRagSearch && (
+              <Tooltip title={t("chatbot.searchToggle", "Recherche documentaire (RAG)")}>
+                <Switch
+                  size="small"
+                  checked={!skipRagSearch}
+                  onChange={(e) => setSkipRag(!e.target.checked)}
+                  inputProps={{ "aria-label": "skip-rag-search" }}
+                />
+              </Tooltip>
+            )}
             {canAttach && (
               <Tooltip title={t("chatbot.menu.addToSetup")}>
                 <span>

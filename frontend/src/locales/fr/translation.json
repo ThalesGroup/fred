@@ -306,7 +306,9 @@
     },
     "toolsSelection": {
       "title": "Outils"
-    }
+    },
+    "confirmRestoreTitle": "Écraser les agents avec la configuration ?",
+    "confirmRestoreMessage": "Cette action remplacera tous les réglages personnalisés saisis dans l'UI par ceux du YAML. Vous perdrez vos modifications. Cette opération est irréversible."
   },
   "mcpHub": {
     "title": "Hub MCP",
@@ -364,7 +366,9 @@
       "disabled": "Serveur MCP désactivé",
       "restored": "Serveurs MCP MCP statiques statiques restaurés depuis la configuration",
       "error": "Échec de l'opération"
-    }
+    },
+    "confirmRestoreTitle": "Écraser les serveurs MCP avec la configuration ?",
+    "confirmRestoreMessage": "Cette action remplacera toutes les modifications de serveurs MCP saisies dans l'UI par celles du YAML. Vous perdrez ces changements. Cette opération est irréversible."
   },
   "chatbot": {
     "menu": {
@@ -379,6 +383,7 @@
       "count": "{{count}} pièces jointes"
     },
     "uploadingFile": "Téléversement de {{name}}...",
+    "searchToggle": "Recherche : activé = RAG (sources), désactivé = sans recherche",
     "recordAudio": "Enregistrer de l'audio",
     "sendMessage": "Envoyer le message",
     "stopResponse": "Arrêter la réponse",

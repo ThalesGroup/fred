@@ -166,13 +166,22 @@ def log_setup(
     root.addHandler(store_h)
 
     # Fred: prevent client libraries from bouncing through our StoreEmitHandler.
-    for noisy in (
+    noisy_libs = (
         "opensearch",
         "urllib3",
         "elastic_transport",
         "elasticsearch",
         "aiohttp",
-    ):
+        "httpx",
+        "httpcore",
+        "azure",
+        "azure.core",
+        "azure.identity",
+        "msal",
+        "websockets",
+        "httptools",
+    )
+    for noisy in noisy_libs:
         lg = logging.getLogger(noisy)
         lg.handlers.clear()  # their own handlers (if any) → gone
         lg.setLevel(logging.WARNING)
@@ -183,6 +192,11 @@ def log_setup(
         for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
             lg = logging.getLogger(name)
             lg.handlers.clear()  # remove uvicorn’s own console handlers
+            # Access logs are particularly chatty; keep only warnings+
+            if name == "uvicorn.access":
+                lg.setLevel(logging.WARNING)
+            else:
+                lg.setLevel(log_level.upper())
             lg.propagate = True  # forward to our root handlers
 
     setattr(root, marker, True)
