@@ -219,6 +219,10 @@ class Properties(BaseModel):
     logoName: str = "fred"
     logoNameDark: str = "fred-dark"
     siteDisplayName: str = "Fred"
+    releaseBrand: Optional[str] = Field(
+        default="fred",
+        description="Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'.",
+    )
 
 
 class FrontendSettings(BaseModel):

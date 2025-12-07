@@ -748,6 +748,8 @@ export type Properties = {
   logoName?: string;
   logoNameDark?: string;
   siteDisplayName?: string;
+  /** Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'. */
+  releaseBrand?: string | null;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;

@@ -77,6 +77,7 @@
     "knowledge": "Resources",
     "mcp": "MCP Servers",
     "agent": "Agents",
+    "release_notes": "Release Notes",
     "workspaces": "Workspaces",
     "account": "Profile",
     "tooltip": {
@@ -89,6 +90,7 @@
       "knowledge": "Consult the content of your libraries",
       "mcp": "Manage MCP servers",
       "agent": "View agents",
+      "release_notes": "View the latest release notes",
       "workspaces": "View Workspace",
       "account": "View your account",
       "selectCluster": "Please select a cluster first",

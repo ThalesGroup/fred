@@ -77,6 +77,7 @@
     "knowledge": "Ressources",
     "mcp": "Hub MCP",
     "agent": "Hub Agent",
+    "release_notes": "Notes de version",
     "workspaces": "Espaces de travail",
     "account": "Profil",
     "tooltip": {
@@ -89,6 +90,7 @@
       "knowledge": "Consulter vos bibliothèques de documents et de prompts",
       "mcp": "Gérer les serveurs MCP",
       "agent": "Voir les agents",
+      "release_notes": "Consulter les dernières notes de version",
       "workspaces": "Voir les espaces",
       "account": "Voir votre profil",
       "selectCluster": "Veuillez d'abord sélectionner un cluster",
