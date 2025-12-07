@@ -183,15 +183,23 @@ export const McpHub = () => {
     }
   };
 
-  const handleRestore = async () => {
-    try {
-      await restoreServers().unwrap();
-      showSuccess({ summary: t("mcpHub.toasts.restored") });
-      refetch();
-    } catch (error: any) {
-      const raw = error?.data?.detail || error?.data || error?.message || "Unknown error";
-      showError({ summary: t("mcpHub.toasts.error"), detail: raw });
-    }
+  const handleRestore = () => {
+    showConfirmationDialog({
+      title: t("mcpHub.confirmRestoreTitle") || "Restore MCP servers from configuration?",
+      message:
+        t("mcpHub.confirmRestoreMessage") ||
+        "This will overwrite any MCP server changes saved in the UI with the YAML configuration. You will lose those changes. This cannot be undone.",
+      onConfirm: async () => {
+        try {
+          await restoreServers().unwrap();
+          showSuccess({ summary: t("mcpHub.toasts.restored") });
+          refetch();
+        } catch (error: any) {
+          const raw = error?.data?.detail || error?.data || error?.message || "Unknown error";
+          showError({ summary: t("mcpHub.toasts.error"), detail: raw });
+        }
+      },
+    });
   };
 
   return (

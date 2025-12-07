@@ -30,7 +30,13 @@ const injectedRtkApi = api.injectEndpoints({
       RestoreAgentsAgenticV1AgentsRestorePostApiResponse,
       RestoreAgentsAgenticV1AgentsRestorePostApiArg
     >({
-      query: () => ({ url: `/agentic/v1/agents/restore`, method: "POST" }),
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/restore`,
+        method: "POST",
+        params: {
+          force_overwrite: queryArg.forceOverwrite,
+        },
+      }),
     }),
     listMcpServersAgenticV1AgentsMcpServersGet: build.query<
       ListMcpServersAgenticV1AgentsMcpServersGetApiResponse,
@@ -240,7 +246,9 @@ export type DeleteAgentAgenticV1AgentsNameDeleteApiArg = {
   name: string;
 };
 export type RestoreAgentsAgenticV1AgentsRestorePostApiResponse = /** status 200 Successful Response */ any;
-export type RestoreAgentsAgenticV1AgentsRestorePostApiArg = void;
+export type RestoreAgentsAgenticV1AgentsRestorePostApiArg = {
+  forceOverwrite?: boolean;
+};
 export type ListMcpServersAgenticV1AgentsMcpServersGetApiResponse =
   /** status 200 Successful Response */ McpServerConfiguration[];
 export type ListMcpServersAgenticV1AgentsMcpServersGetApiArg = void;
@@ -430,6 +438,8 @@ export type AgentChatOptions = {
   record_audio_files?: boolean;
   /** Allow attaching local files (e.g., PDFs, images, text) to the message and show existing attachments. */
   attach_files?: boolean;
+  /** Expose a toggle to skip retrieval and answer without querying document corpora for this message. */
+  skip_rag_search?: boolean;
 };
 export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
@@ -595,6 +605,7 @@ export type RuntimeContext = {
   refresh_token?: string | null;
   access_token_expires_at?: number | null;
   attachments_markdown?: string | null;
+  skip_rag_search?: boolean | null;
 };
 export type ChatMetadata = {
   model?: string | null;
@@ -737,6 +748,8 @@ export type Properties = {
   logoName?: string;
   logoNameDark?: string;
   siteDisplayName?: string;
+  /** Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'. */
+  releaseBrand?: string | null;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;
