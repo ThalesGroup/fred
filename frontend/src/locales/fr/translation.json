@@ -10,7 +10,8 @@
     "error": "Erreur",
     "refresh": "Rafraîchir",
     "cancel": "Annuler",
-    "save": "Enregistrer"
+    "save": "Enregistrer",
+    "create": "Créer"
   },
   "dataHub": {
     "title": "Hub des Données - Lignage des documents",
@@ -72,7 +73,7 @@
     "facts": "Faits",
     "audit": "Audit",
     "optimize": "Optimiser",
-    "chat": "Discussion",
+    "chat": "Conversations",
     "monitoring": "Supervision",
     "knowledge": "Ressources",
     "mcp": "Outils",

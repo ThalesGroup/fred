@@ -187,7 +187,7 @@ const lightPalette = {
 const darkPalette = {
   mode: "dark" as PaletteMode,
   common: { white: "#fff", black: "#000" },
-  primary: { contrastText: "#fff", main: "#6482AD", light: "#879ed9", dark: "#404040" },
+  primary: { contrastText: "#fff", main: "#90CAF9", light: "#879ed9", dark: "#404040" },
   secondary: { main: "#f48fb1", light: "#f8bbd0", dark: "#c2185b", contrastText: "#000" },
   info: { main: "#81d4fa", light: "#b3e5fc", dark: "#0288d1", contrastText: "#fff" },
   warning: { main: "#ffcc80", light: "#ffe0b2", dark: "#f57c00", contrastText: "#fff" },
@@ -221,7 +221,7 @@ const darkPalette = {
     alterningBgColor1: "#ffffff1a",
     alterningBgColor2: "#c8c8c84d",
   },
-  text: { primary: "#fff", secondary: "#bbb", disabled: "#888888" },
+  text: { primary: "#ffffffff", secondary: "#ffffffb3", disabled: "#888888" },
   sidebar: { background: "#121214f2", activeItem: "#42424db3", hoverColor: "#ffffff0d" },
   borderChip: { border: "#ffffff26" },
   heroBackgroundGrad: { gradientFrom: darkHeroFrom, gradientTo: darkHeroTo },

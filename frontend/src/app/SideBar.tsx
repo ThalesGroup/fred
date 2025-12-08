@@ -1,3 +1,4 @@
+import AddIcon from "@mui/icons-material/Add";
 import ChatIcon from "@mui/icons-material/Chat";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
@@ -10,6 +11,7 @@ import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 import SettingsIcon from "@mui/icons-material/Settings";
 import {
   Box,
+  Button,
   Collapse,
   CSSObject,
   IconButton,
@@ -21,6 +23,8 @@ import {
   Paper,
   styled,
   Theme,
+  Typography,
+  useTheme,
 } from "@mui/material";
 import MuiDrawer from "@mui/material/Drawer";
 import { useEffect, useState } from "react";
@@ -31,7 +35,7 @@ import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { KeyCloakService } from "../security/KeycloakService";
 import { usePermissions } from "../security/usePermissions";
 
-const drawerWidth = 240;
+const drawerWidth = 280;
 
 const openedMixin = (theme: Theme): CSSObject => ({
   width: drawerWidth,
@@ -222,18 +226,36 @@ export default function SideBar() {
       </Paper>
 
       {/* Conversations */}
-      <Box>
-        {/* Conversation header */}
-        <Paper elevation={1}></Paper>
-        {/* Conversation list */}
-        <Paper elevation={0}></Paper>
-      </Box>
+      <Box sx={{ height: "100%" }}>{open && <ConversationsSection />}</Box>
 
       {/* Profile */}
       <Paper elevation={1}>
         <SidebarProfileItem isSidebarOpen={open} />
       </Paper>
     </Drawer>
+  );
+}
+function ConversationsSection() {
+  const { t } = useTranslation();
+  const theme = useTheme();
+
+  return (
+    <>
+      {/* Conversation header */}
+      <Paper elevation={1}>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 2, py: 1 }}>
+          <Typography variant="subtitle2" sx={{ color: theme.palette.text.secondary }}>
+            {t("sidebar.chat")}
+          </Typography>
+          <Button variant="outlined" size="small" startIcon={<AddIcon />}>
+            {t("common.create")}
+          </Button>
+        </Box>
+        <Box></Box>
+      </Paper>
+      {/* Conversation list */}
+      <Paper elevation={0}></Paper>
+    </>
   );
 }
 

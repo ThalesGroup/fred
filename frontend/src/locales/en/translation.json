@@ -10,7 +10,8 @@
     "error": "Error",
     "refresh": "Refresh",
     "cancel": "Cancel",
-    "save": "Save"
+    "save": "Save",
+    "create": "Create"
   },
   "dataHub": {
     "title": "Data Hub - Document Lineage",
@@ -72,7 +73,7 @@
     "facts": "Facts",
     "audit": "Audit",
     "optimize": "Optimize",
-    "chat": "Chat",
+    "chat": "Chats",
     "monitoring": "Monitoring",
     "knowledge": "Resources",
     "mcp": "Tools",
