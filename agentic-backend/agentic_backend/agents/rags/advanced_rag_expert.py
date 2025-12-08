@@ -184,7 +184,7 @@ class AdvancedRico(AgentFlow):
                 title="TOP_K documents",
                 description="Number of top chunks to retrieve during vector search",
                 required=False,
-                default=25,
+                default=50,
                 ui=UIHints(group="Retrieval"),
             ),
             FieldSpec(
@@ -288,7 +288,7 @@ class AdvancedRico(AgentFlow):
             question = messages[-1].content
 
         retry_count = int(state.get("retry_count", 0) or 0)
-        top_k = self.get_tuned_int("search.top_k", default=25)
+        top_k = self.get_tuned_int("search.top_k", default=50)
 
         # Prepare search context
         runtime_context = self.get_runtime_context()
@@ -402,8 +402,17 @@ class AdvancedRico(AgentFlow):
             VectorSearchHit(**document) for document in response_data
         ]
 
+
+        seen = set()
+        keep_documents = []
+        for d in reranked_documents + documents[:top_r]:
+            key = d.content
+            if key not in seen:
+                seen.add(key)
+                keep_documents.append(d)
+        
         # Build response
-        summary = f"Reranked {len(documents)} documents, keeping top {len(reranked_documents)}."
+        summary = f"Reranked {len(documents)} documents, keeping top reranked and vector-search results : {len(keep_documents)}"
 
         state["messages"] = [
             mk_thought(
@@ -413,8 +422,8 @@ class AdvancedRico(AgentFlow):
                 content=summary,
             )
         ]
-        state["documents"] = reranked_documents
-        state["sources"] = reranked_documents
+        state["documents"] = keep_documents
+        state["sources"] = keep_documents
         return state
 
     async def _grade_documents(self, state: RagGraphState) -> RagGraphState:
