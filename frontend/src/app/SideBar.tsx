@@ -78,9 +78,7 @@ const DrawerHeader = styled("div")(({ theme }) => ({
   display: "flex",
   alignItems: "center",
   justifyContent: "flex-end",
-  padding: theme.spacing(0, 1),
-  // necessary for content to be below app bar
-  ...theme.mixins.toolbar,
+  padding: theme.spacing(1, 1),
 }));
 
 type MenuItemCfg = {
@@ -218,7 +216,7 @@ export default function SideBar() {
     <Drawer variant="permanent" open={open}>
       {/* Header */}
       <DrawerHeader>
-        <IconButton onClick={() => setOpen((open) => !open)}>
+        <IconButton onClick={() => setOpen((open) => !open)} sx={{ mr: open ? 0 : 1 }}>
           {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
         </IconButton>
       </DrawerHeader>

@@ -235,7 +235,6 @@ const darkPalette = {
 // ---------- Typography ----------
 const baseTypography = {
   fontFamily: "Inter, sans-serif",
-  fontSize: 12,
   sidebar: {
     fontSize: "14px",
     fontWeight: 300,
@@ -417,7 +416,7 @@ const darkTheme = createTheme({
         tooltip: ({ theme }) => ({
           background: theme.palette.surfaces.raised,
           color: theme.palette.text.primary,
-          fontSize: theme.typography.body1.fontSize, // ⬅ use body2 baseline (~0.875rem)
+          fontSize: theme.typography.body1.fontSize,
           fontWeight: 400, // a touch heavier for readability
           padding: "8px 12px",
           borderRadius: 8,
