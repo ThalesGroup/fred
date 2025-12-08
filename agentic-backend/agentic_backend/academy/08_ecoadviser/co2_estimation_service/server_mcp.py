@@ -137,15 +137,31 @@ def _load_json_payload(path: str) -> List[Dict[str, Any]]:
     return []
 
 
+def _extract_list_from_payload(payload: Any) -> Optional[List[Dict[str, Any]]]:
+    """
+    Accept both raw lists and the typical dict wrappers returned by French open-data
+    APIs (e.g. data-fair) where rows live under 'results' or 'records'.
+    """
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        for key in ("results", "records", "data", "items", "lines"):
+            rows = payload.get(key)
+            if isinstance(rows, list):
+                return rows
+    return None
+
+
 def _fetch_remote_payload(url: str) -> List[Dict[str, Any]]:
     try:
         with httpx.Client(timeout=5.0) as client:
             response = client.get(url)
             response.raise_for_status()
             payload = response.json()
-            if isinstance(payload, list):
-                logger.info("Loaded %d emission factors from %s", len(payload), url)
-                return payload
+            rows = _extract_list_from_payload(payload)
+            if rows is not None:
+                logger.info("Loaded %d emission factors from %s", len(rows), url)
+                return rows
             logger.warning("Remote CO₂ dataset at %s is not a list.", url)
     except Exception:
         logger.exception("Unable to fetch CO₂ dataset from %s", url)
@@ -164,6 +180,15 @@ def _load_dynamic_dataset() -> List[Dict[str, Any]]:
 
 
 class EmissionFactorStore:
+    REQUIRED_FIELDS = {
+        "mode",
+        "label",
+        "category",
+        "factor_kg_per_km",
+        "source",
+        "last_update",
+    }
+
     def __init__(
         self,
         initial_dataset: Sequence[Dict[str, Any]],
@@ -187,11 +212,23 @@ class EmissionFactorStore:
             )
         normalized: Dict[str, EmissionFactor] = {}
         aliases: Dict[str, str] = {}
+        skipped = 0
         for entry in dataset:
+            missing_fields = self.REQUIRED_FIELDS.difference(entry.keys())
+            if missing_fields:
+                skipped += 1
+                logger.debug(
+                    "Skipping emission factor entry missing required fields %s: %s",
+                    sorted(missing_fields),
+                    entry,
+                )
+                continue
             try:
                 record = EmissionFactor(**entry)
-            except ValidationError:
-                logger.exception("Invalid emission factor payload: %s", entry)
+            except ValidationError as exc:
+                logger.debug(
+                    "Invalid emission factor payload skipped: %s", entry, exc_info=exc
+                )
                 continue
             key = record.mode.lower()
             normalized[key] = record
@@ -199,6 +236,11 @@ class EmissionFactorStore:
                 aliases[alias.lower()] = key
         self._records = normalized
         self._alias_index = aliases
+        if skipped:
+            logger.info(
+                "EmissionFactorStore: skipped %d dynamic entries missing required fields.",
+                skipped,
+            )
         logger.info("CO₂ reference now tracks %d canonical modes.", len(self._records))
 
     def _resolve_mode(self, mode: str) -> str:

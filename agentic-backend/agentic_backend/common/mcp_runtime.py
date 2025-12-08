@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Set
 
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -61,13 +61,17 @@ class MCPRuntime:
         self.tunings: AgentTuning = agent.get_agent_tunings()
         self.agent_instance = agent
         self.available_servers: List[MCPServerConfiguration] = []
-        for s in self.tunings.mcp_servers:
-            server_configuration = get_mcp_configuration().get_server(s.id)
+        self.optional_server_ids: Set[str] = {
+            server.id for server in self.tunings.mcp_servers if getattr(server, "optional", False)
+        }
+        for server_ref in self.tunings.mcp_servers:
+            server_configuration = get_mcp_configuration().get_server(server_ref.id)
             if not server_configuration:
-                logger.warning(
+                log_fn = logger.info if server_ref.id in self.optional_server_ids else logger.warning
+                log_fn(
                     "[MCP][%s] Server '%s' not found or disabled in global MCP configuration. Skipping.",
                     self.agent_instance.get_name(),
-                    s.id,
+                    server_ref.id,
                 )
                 continue
             self.available_servers.append(server_configuration)
@@ -131,27 +135,26 @@ class MCPRuntime:
         from the same task on stop signal to avoid AnyIO cancel-scope mismatches.
         """
         try:
-            new_client = await get_connected_mcp_client_for_agent(
+            new_client, prefetched_tools = await get_connected_mcp_client_for_agent(
                 agent_name=self.agent_instance.get_name(),
                 mcp_servers=self.available_servers,
                 runtime_context=runtime_context,
+                optional_server_ids=self.optional_server_ids,
             )
             self.mcp_client = new_client
             self.toolkit = McpToolkit(client=new_client, agent=self.agent_instance)
-            try:
-                # Pre-fetch tools once (async) and cache in toolkit for sync callers
-                tools = await new_client.get_tools()
-                self.toolkit.tools = tools
+            if prefetched_tools:
+                # Pre-fetched tools for required servers (optional failures already skipped).
+                self.toolkit.tools = prefetched_tools
                 logger.info(
                     "[MCP] agent=%s init: Prefetched and cached %d tools.",
                     self.agent_instance.get_name(),
-                    len(tools),
+                    len(prefetched_tools),
                 )
-            except Exception:
+            else:
                 logger.warning(
-                    "[MCP] agent=%s init: Failed to prefetch tools; toolkit will attempt best-effort discovery later.",
+                    "[MCP] agent=%s init: No MCP tools were prefetched; toolkit will attempt discovery on demand.",
                     self.agent_instance.get_name(),
-                    exc_info=True,
                 )
             logger.info(
                 "[MCP] agent=%s init: Successfully built and connected client.",

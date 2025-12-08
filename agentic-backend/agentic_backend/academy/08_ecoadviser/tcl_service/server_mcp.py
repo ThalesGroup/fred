@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import logging
 import os
+import re
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
@@ -59,7 +60,8 @@ def _load_stop_index() -> Dict[str, str]:
         logger.warning("Unable to load TCL stop index from %s: %s", csv_path, exc)
     return index
 
-DEFAULT_TCL_DATASET = "tcl_sytral.tclpassagearret"
+DEFAULT_TCL_DATASET = "tcl_sytral.tclpassagesarret_2_0_0"
+LEGACY_TCL_DATASET = "tcl_sytral.tclpassagearret"
 DEFAULT_TCL_BASE_URL = "https://data.grandlyon.com/fr/datapusher/ws/rdata"
 
 
@@ -104,17 +106,11 @@ class TCLRealtimeResponse(BaseModel):
 class TCLDataClient:
     def __init__(self):
         self.base_url = os.getenv("TCL_RDATA_URL", DEFAULT_TCL_BASE_URL).rstrip("/")
-        dataset = os.getenv("TCL_RDATA_DATASET", DEFAULT_TCL_DATASET).strip("/")
+        dataset = (os.getenv("TCL_RDATA_DATASET") or DEFAULT_TCL_DATASET).strip("/")
         endpoint_override = os.getenv("TCL_RDATA_ENDPOINT")
-        if endpoint_override:
-            filtered, bulk = self._derive_endpoints(endpoint_override)
-            self.filtered_endpoint = filtered
-            self.bulk_endpoint = bulk
-            self.dataset_label = endpoint_override
-        else:
-            self.filtered_endpoint = f"{self.base_url}/{dataset}.json"
-            self.bulk_endpoint = f"{self.base_url}/{dataset}/all.json"
-            self.dataset_label = dataset
+        self.endpoint_override = endpoint_override.strip() if endpoint_override else None
+        self.current_dataset_slug: Optional[str] = None
+        self._configure_endpoints(dataset, self.endpoint_override)
         self.username = os.getenv("TCL_RDATA_USERNAME") or os.getenv("GRANDLYON_WFS_USERNAME")
         self.password = os.getenv("TCL_RDATA_PASSWORD") or os.getenv("GRANDLYON_WFS_PASSWORD")
         self.timeout = float(os.getenv("TCL_RDATA_TIMEOUT", "10.0"))
@@ -126,8 +122,33 @@ class TCLDataClient:
             )
         self.stop_index = _load_stop_index()
 
+    def _configure_endpoints(self, dataset_slug: str, endpoint_override: Optional[str]) -> None:
+        slug = dataset_slug or DEFAULT_TCL_DATASET
+        self.current_dataset_slug = slug
+        if endpoint_override:
+            adjusted = self._ensure_endpoint_matches_slug(endpoint_override, slug)
+            self.endpoint_override = adjusted
+            filtered, bulk = self._derive_endpoints(adjusted)
+            self.filtered_endpoint = filtered
+            self.bulk_endpoint = bulk
+            self.dataset_label = adjusted
+            logger.info("TCL endpoint override in use: %s", adjusted)
+        else:
+            self.filtered_endpoint = f"{self.base_url}/{slug}.json"
+            self.bulk_endpoint = f"{self.base_url}/{slug}/all.json"
+            self.dataset_label = slug
+            logger.info("TCL dataset configured: %s", slug)
+
     def resolve_stop_name(self, stop_code: str) -> Optional[str]:
         return self.stop_index.get(stop_code.strip()) if self.stop_index else None
+
+    @staticmethod
+    def _ensure_endpoint_matches_slug(endpoint: str, slug: str) -> str:
+        trimmed = endpoint.strip()
+        pattern = r"tcl_sytral\.tclpassagesarret(?:_2_0_0)?"
+        if re.search(pattern, trimmed):
+            return re.sub(pattern, slug, trimmed)
+        return trimmed
 
     @staticmethod
     def _derive_endpoints(endpoint_override: str) -> tuple[str, str]:
@@ -215,10 +236,19 @@ class TCLDataClient:
                 filtered_records, filtered_payload = self._fetch_filtered(client, request)
                 if filtered_records:
                     return filtered_records, filtered_payload
+            except HTTPException as exc:
+                if self._maybe_switch_dataset_from_error(exc.detail):
+                    return self.query(request)
+                logger.debug("Filtered TCL endpoint failed, falling back to bulk scan.", exc_info=True)
             except Exception:  # pylint: disable=broad-except
                 logger.debug("Filtered TCL endpoint failed, falling back to bulk scan.", exc_info=True)
 
-            return self._fetch_bulk(client, request)
+            try:
+                return self._fetch_bulk(client, request)
+            except HTTPException as exc:
+                if self._maybe_switch_dataset_from_error(exc.detail):
+                    return self.query(request)
+                raise
 
     def _fetch_filtered(
         self, client: httpx.Client, request: TCLRealtimeRequest
@@ -233,8 +263,15 @@ class TCLDataClient:
             "order": "asc",
             "compact": "false",
         }
-        response = client.get(self.filtered_endpoint, params=params)
-        response.raise_for_status()
+        try:
+            response = client.get(self.filtered_endpoint, params=params)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            logger.exception("GrandLyon TCL filtered error: %s", exc)
+            raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+        except httpx.HTTPError as exc:
+            logger.exception("GrandLyon TCL filtered connection error: %s", exc)
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
         payload = response.json()
         if not isinstance(payload, dict):
             raise HTTPException(status_code=502, detail="Invalid TCL response (not JSON).")
@@ -251,6 +288,7 @@ class TCLDataClient:
         if not self.bulk_endpoint:
             raise HTTPException(status_code=502, detail="TCL bulk endpoint not configured.")
 
+        failure_detail: Optional[Any] = None
         for page in range(self.max_pages):
             params = {
                 "where": self._build_where_clause(request),
@@ -260,12 +298,18 @@ class TCLDataClient:
                 "order": "asc",
                 "compact": "false",
             }
-            response = client.get(self.bulk_endpoint, params=params)
             try:
+                response = client.get(self.bulk_endpoint, params=params)
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
                 logger.exception("GrandLyon TCL bulk error: %s", exc)
+                failure_detail = exc.response.text
+                if self._maybe_switch_dataset_from_error(exc.response.text):
+                    return self._fetch_bulk(client, request)
                 raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+            except httpx.HTTPError as exc:
+                logger.exception("GrandLyon TCL bulk connection error: %s", exc)
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
             payload = response.json()
             if not isinstance(payload, dict):
                 raise HTTPException(status_code=502, detail="Invalid TCL bulk response.")
@@ -279,7 +323,30 @@ class TCLDataClient:
                 break
             start += page_size
 
+        if not collected and failure_detail and self._maybe_switch_dataset_from_error(failure_detail):
+            return self._fetch_bulk(client, request)
         return collected, payload_meta
+
+    def _maybe_switch_dataset_from_error(self, detail: Any) -> bool:
+        detail_str = str(detail or "")
+        message = detail_str.lower()
+        if not message or not self.current_dataset_slug:
+            return False
+        if self.current_dataset_slug == LEGACY_TCL_DATASET:
+            return False
+        missing_hint = ("n'est pas trouvée" in message) or ("table" in message and "not found" in message)
+        slug_lower = self.current_dataset_slug.lower()
+        slug_token = slug_lower.split(".")[-1]
+        if not missing_hint or (slug_lower not in message and slug_token not in message):
+            return False
+        logger.warning(
+            "TCL dataset '%s' unavailable (detail=%s). Falling back to legacy dataset '%s'.",
+            self.current_dataset_slug,
+            detail_str,
+            LEGACY_TCL_DATASET,
+        )
+        self._configure_endpoints(LEGACY_TCL_DATASET, self.endpoint_override)
+        return True
 
 
 def _coerce_bool(value: Any) -> Optional[bool]:
@@ -398,7 +465,10 @@ async def get_tcl_realtime_passages(request: TCLRealtimeRequest) -> TCLRealtimeR
         )
         raise HTTPException(
             status_code=404,
-            detail="Aucun passage temps réel trouvé pour cet arrêt/lignes (pensez à vérifier l'identifiant d'arrêt).",
+            detail=(
+                "Aucun passage temps réel trouvé pour cet arrêt/lignes "
+                f"(dataset={client.current_dataset_slug or 'unknown'} ; vérifiez l'identifiant ou la disponibilité temps réel)."
+            ),
         )
     try:
         results = _parse_passages(filtered_records)

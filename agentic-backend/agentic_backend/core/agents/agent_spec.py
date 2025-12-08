@@ -127,6 +127,12 @@ class MCPServerRef(BaseModel):
         ..., alias="name", serialization_alias="id"
     )  # Accept "name" when deserializing for backward compatibility but always serialize as "id"
     require_tools: list[str] = []  # optional: "os.*", "kpi.*" capabilities
+    optional: bool = Field(
+        False,
+        description=(
+            "If true, agent initialization continues even when the MCP server is unavailable."
+        ),
+    )
 
 
 class AgentTuning(BaseModel):

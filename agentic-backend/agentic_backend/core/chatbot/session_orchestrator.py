@@ -73,6 +73,7 @@ from agentic_backend.core.chatbot.stream_transcoder import StreamTranscoder
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.session.attachement_processing import AttachementProcessing
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
+from starlette.websockets import WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
 
@@ -223,6 +224,7 @@ class SessionOrchestrator:
         # 4) Stream agent responses via the transcoder
         saw_final_assistant = False
         agent_msgs: List[ChatMessage] = []
+        client_disconnect_exc: WebSocketDisconnect | None = None
         try:
             # Timer covers the entire exchange; status defaults to "error" if exception bubbles.
             with self.kpi.timer(
@@ -256,6 +258,11 @@ class SessionOrchestrator:
                     (m.role == Role.assistant and m.channel == Channel.final)
                     for m in agent_msgs
                 )
+        except WebSocketDisconnect as exc:
+            client_disconnect_exc = exc
+            logger.info(
+                "Client disconnected during agent streaming; aborting downstream sends."
+            )
         except Exception:
             logger.exception("Agent execution failed")
             # KPI timer already recorded status="error" on exception
@@ -285,6 +292,9 @@ class SessionOrchestrator:
         self.session_store.save(session)
         assert session.user_id == user.uid, "Session/user mismatch"
         self.history_store.save(session.id, prior + all_msgs, user.uid)
+
+        if client_disconnect_exc:
+            raise client_disconnect_exc
 
         return session, all_msgs
 

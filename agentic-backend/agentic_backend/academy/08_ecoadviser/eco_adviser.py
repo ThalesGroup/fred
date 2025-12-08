@@ -31,7 +31,7 @@ Fred rationale:
 import json
 import logging
 import os
-from typing import Annotated, Any, Dict, List, TypedDict
+from typing import Annotated, Any, Dict, List, TypedDict, Union
 
 from langchain_core.messages import AnyMessage, HumanMessage, ToolMessage
 from langgraph.constants import START
@@ -56,6 +56,8 @@ logger = logging.getLogger(__name__)
 
 MAX_TOOL_MESSAGE_CHARS = int(os.getenv("ECO_MAX_TOOL_MESSAGE_CHARS", "4000"))
 RECENT_MESSAGES_WINDOW = int(os.getenv("ECO_RECENT_MESSAGES", "12"))
+
+DatabaseContextPayload = Union[List[Dict[str, Any]], Dict[str, Any], str, None]
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +186,7 @@ ECO_TUNING = AgentTuning(
         MCPServerRef(name="mcp-co2-service", optional=True),
         MCPServerRef(name="mcp-traffic-service", optional=True),
         MCPServerRef(name="mcp-tcl-service", optional=True),
+        MCPServerRef(name="mcp-geo-service", optional=True),
     ],
 )
 
@@ -200,7 +203,7 @@ class EcoState(TypedDict):
     """
 
     messages: Annotated[list[AnyMessage], add_messages]
-    database_context: List[Dict[str, Any]]
+    database_context: DatabaseContextPayload
 
 
 @expose_runtime_source("agent.EcoAdvisor")
@@ -276,7 +279,7 @@ class EcoAdvisor(AgentFlow):
                 return self._maybe_parse_json(msg.content)
         return None
 
-    def _format_context_for_prompt(self, database_context: List[Dict[str, Any]]) -> str:
+    def _format_context_for_prompt(self, database_context: DatabaseContextPayload) -> str:
         """
         Formatte la liste des bases / tables accessibles pour injection dans le prompt.
 
@@ -284,18 +287,105 @@ class EcoAdvisor(AgentFlow):
         - On donne au LLM une vue synthétique des datasets disponibles
           → il n'a pas à "deviner" les noms de tables.
         """
-        if not database_context:
+        context_payload = self._maybe_parse_json(database_context)
+        normalized_entries: List[Dict[str, Any]] = []
+
+        if isinstance(context_payload, dict):
+            normalized_entries = [
+                {"database": db_name, "tables": tables}
+                for db_name, tables in context_payload.items()
+            ]
+        elif isinstance(context_payload, list):
+            for entry in context_payload:
+                parsed_entry = self._maybe_parse_json(entry)
+                if isinstance(parsed_entry, dict):
+                    if "database" not in parsed_entry and "db_name" in parsed_entry:
+                        parsed_entry["database"] = parsed_entry.get("db_name")
+                    normalized_entries.append(parsed_entry)
+                else:
+                    normalized_entries.append(
+                        {"database": "unknown_database", "tables": parsed_entry}
+                    )
+        elif context_payload:
+            normalized_entries = [
+                {"database": "unknown_database", "tables": context_payload}
+            ]
+
+        if not normalized_entries:
             return "No databases or tables currently loaded.\n"
 
         lines = ["You currently have access to the following structured datasets:\n"]
-        for entry in database_context:
-            entry = self._maybe_parse_json(entry)
-            db = entry.get("database", "unknown_database")
-            tables = entry.get("tables", [])
-            lines.append(f"- Database: `{db}` with tables: {tables}")
+        for entry in normalized_entries:
+            if not isinstance(entry, dict):
+                lines.append(f"- {entry}")
+                continue
+            db = (
+                entry.get("database")
+                or entry.get("db_name")
+                or "unknown_database"
+            )
+            tables_summary = self._summarize_tables(entry.get("tables"))
+            lines.append(f"- Database: `{db}` with tables: {tables_summary}")
         return "\n".join(lines) + "\n\n"
 
-    async def _ensure_database_context(self, state: EcoState) -> List[Dict[str, Any]]:
+    def _summarize_tables(self, tables: Any) -> str:
+        """
+        Retourne une représentation courte des tables accessibles dans une base.
+        """
+        if isinstance(tables, dict):
+            summaries = []
+            for table_name, columns in tables.items():
+                detail = ""
+                if isinstance(columns, list):
+                    detail = f"{len(columns)} columns"
+                summaries.append(
+                    f"{table_name}{f' ({detail})' if detail else ''}"
+                )
+            return "[" + ", ".join(summaries) + "]" if summaries else "[]"
+
+        if isinstance(tables, list):
+            display_parts = []
+            for table in tables:
+                parsed = self._maybe_parse_json(table)
+                if isinstance(parsed, dict):
+                    table_name = (
+                        parsed.get("table_name")
+                        or parsed.get("name")
+                        or parsed.get("table")
+                        or "unknown_table"
+                    )
+                    row_count = parsed.get("row_count")
+                    columns = parsed.get("columns")
+                    column_summary = ""
+                    if isinstance(columns, list):
+                        column_names = [
+                            col.get("name", "?")
+                            for col in columns[:4]
+                            if isinstance(col, dict)
+                        ]
+                        if column_names:
+                            suffix = "…" if len(columns) > len(column_names) else ""
+                            column_summary = f"cols: {', '.join(column_names)}{suffix}"
+                    details = []
+                    if isinstance(row_count, int):
+                        details.append(f"{row_count} rows")
+                    if column_summary:
+                        details.append(column_summary)
+                    if details:
+                        display_parts.append(
+                            f"{table_name} ({'; '.join(details)})"
+                        )
+                    else:
+                        display_parts.append(table_name)
+                else:
+                    display_parts.append(str(parsed))
+            return "[" + "; ".join(display_parts) + "]" if display_parts else "[]"
+
+        if tables in (None, "", []):
+            return "[]"
+        return str(tables)
+
+    async def _ensure_database_context(self, state: EcoState) -> DatabaseContextPayload:
         """
         Charge la liste des bases/tables disponibles via un tool MCP (ex: get_context).
 

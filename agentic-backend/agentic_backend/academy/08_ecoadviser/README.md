@@ -143,7 +143,7 @@ Pour afficher la fréquence réelle des bus/tram/métro TCL, un troisième servi
    TCL_RDATA_PASSWORD="monMotDePasseComplexe"
    TCL_RDATA_URL="https://data.grandlyon.com/fr/datapusher/ws/rdata"
    TCL_RDATA_DATASET="tcl_sytral.tclpassagesarret_2_0_0"  # adaptez avec le slug indiqué dans la fiche dataset
-   # ou définissez directement TCL_RDATA_ENDPOINT="https://data.grandlyon.com/.../all.json"
+   # ou définissez directement TCL_RDATA_ENDPOINT="https://data.grandlyon.com/.../tcl_sytral.tclpassagesarret_2_0_0/all.json"
    # → EcoAdvisor dérive automatiquement les variantes .json / all.json nécessaires
    TCL_RDATA_TIMEOUT="10"
    ```
@@ -152,6 +152,33 @@ Pour afficher la fréquence réelle des bus/tram/métro TCL, un troisième servi
 4. L’agent appelle `get_tcl_realtime_passages` avec `stop_code` (identifiant d’arrêt) et, éventuellement, la ligne. Les identifiants sont disponibles dans les tables importées (`tcl_stops_demo.csv`…).
 
 Les réponses contiennent la ligne, la destination, l’heure de passage, l’indication temps réel (si disponible) et toutes les métadonnées brutes fournies par le flux RDATA.
+Si la version `tclpassagesarret_2_0_0` n’est pas encore publiée sur votre compte Grand Lyon, le service MCP bascule automatiquement sur le dataset historique `tclpassagearret`.
+
+## 📏 Distances géocodées & routées (MCP `mcp-geo-service`)
+
+Lorsque l’utilisateur ne fournit qu’une adresse (“Rue Garibaldi à Villeurbanne → Place Bellecour”), EcoAdvisor s’appuie désormais sur un quatrième service MCP qui combine **Nominatim** (géocodage) et **OSRM** (distance/temps de trajet).
+
+- Lancer le serveur MCP :
+  ```bash
+  uvicorn agentic_backend.academy.08_ecoadviser.geo_distance_service.server_mcp:app \
+      --host 127.0.0.1 --port 9801
+  ```
+- Tools exposés :
+  - `geocode_location` : renvoie plusieurs correspondances (lat/lon, place_id…) pour une requête texte.
+  - `compute_trip_distance` : calcule la distance/temps entre deux coordonnées (OSRM ou fallback haversine).
+  - `estimate_trip_between_addresses` : chaîne complète `query → géocode → distance`, prête à l’emploi depuis EcoAdvisor.
+- Variables d’environnement principales :
+
+| Variable | Défaut | Description |
+| --- | --- | --- |
+| `ECO_GEO_NOMINATIM_URL` | `https://nominatim.openstreetmap.org/search` | Endpoint Nominatim (remplaçable par une instance privée). |
+| `ECO_GEO_OSRM_URL` | `https://router.project-osrm.org` | Endpoint OSRM public (vous pouvez pointer vers un OSRM on-prem). |
+| `ECO_GEO_USER_AGENT` | `FredEcoAdvisorGeo/1.0 ...` | User-Agent envoyé aux deux API (important pour Nominatim). |
+| `ECO_GEO_DEFAULT_COUNTRIES` | `fr` | Codes pays appliqués par défaut si l’utilisateur ne précise rien. |
+| `ECO_GEO_DEFAULT_CITY_SUFFIX` | `Lyon, France` | Suffixe ajouté automatiquement lorsque la requête ne contient pas déjà un mot-clé de ville. |
+| `ECO_GEO_GEOCODING_ENABLED` / `ECO_GEO_ROUTING_ENABLED` | `true` | Permettent de désactiver temporairement Nominatim ou OSRM (fallback haversine activé si OSRM indisponible). |
+
+Nominatim impose des limites strictes : utilisez un User-Agent explicite et, si possible, basculez sur une instance dédiée pour une démo publique. OSRM fournit les distances routières pour les profils `driving`, `cycling`, `walking` (alias acceptés : `car`, `vélo`, `marche`…). En cas d’erreur ou de time-out OSRM, le service renvoie au moins une distance géodésique avec une note “fallback”.
 
 ---
 
@@ -208,7 +235,7 @@ Sortie :
    - décide quand appeler un tool MCP (listage des datasets, requêtes DuckDB, comparaison CO₂, trafic, TCL).
 
 2. **Node 2 — `tools` (MCPRuntime)**  
-   - exécute réellement les tools exposés par les serveurs MCP (`mcp-knowledge-flow-mcp-tabular`, `mcp-co2-service`, `mcp-traffic-service`, `mcp-tcl-service`) et renvoie les `ToolMessage` au LLM.
+   - exécute réellement les tools exposés par les serveurs MCP (`mcp-knowledge-flow-mcp-tabular`, `mcp-co2-service`, `mcp-traffic-service`, `mcp-tcl-service`, `mcp-geo-service`) et renvoie les `ToolMessage` au LLM.
 
 3. **Boucle contrôlée par `tools_condition`**  
    - tant que le LLM a besoin d’un outil supplémentaire, on reboucle `reasoner → tools → reasoner`;  

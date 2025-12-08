@@ -32,10 +32,12 @@ Contract
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 import time
 from datetime import timedelta
-from typing import Dict, List
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.sessions import Connection, StreamableHttpConnection
@@ -96,6 +98,49 @@ CONNECT_TIMEOUT_SECS = 5.0
 SSE_READ_TIMEOUT_SECS = 30.0
 CONNECT_TIMEOUT_TD = timedelta(seconds=CONNECT_TIMEOUT_SECS)
 SSE_READ_TIMEOUT_TD = timedelta(seconds=SSE_READ_TIMEOUT_SECS)
+DEFAULT_MAX_ATTEMPTS = 5
+DEFAULT_BASE_DELAY_SECS = 2.0
+DEFAULT_MAX_DELAY_SECS = 10.0
+
+
+def _safe_int_env(name: str, default: int) -> int:
+    """Read an env var as int while guarding against invalid values."""
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(1, value)
+
+
+def _safe_float_env(name: str, default: float, minimum: float = 0.0) -> float:
+    """Read an env var as float while guarding against invalid values."""
+    try:
+        value = float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, value)
+
+
+CONNECT_MAX_ATTEMPTS = _safe_int_env(
+    "MCP_CONNECT_MAX_ATTEMPTS", DEFAULT_MAX_ATTEMPTS
+)
+CONNECT_RETRY_BASE_DELAY_SECS = _safe_float_env(
+    "MCP_CONNECT_RETRY_BASE_SECONDS", DEFAULT_BASE_DELAY_SECS
+)
+CONNECT_RETRY_MAX_DELAY_SECS = max(
+    CONNECT_RETRY_BASE_DELAY_SECS,
+    _safe_float_env(
+        "MCP_CONNECT_MAX_DELAY_SECONDS", DEFAULT_MAX_DELAY_SECS, DEFAULT_BASE_DELAY_SECS
+    ),
+)
+
+
+def _retry_delay(attempt_number: int) -> float:
+    """Compute exponential backoff delay for the given attempt number (1-based)."""
+    if CONNECT_RETRY_BASE_DELAY_SECS <= 0:
+        return 0.0
+    delay = CONNECT_RETRY_BASE_DELAY_SECS * (2 ** max(0, attempt_number - 1))
+    return min(delay, CONNECT_RETRY_MAX_DELAY_SECS)
 
 
 def _build_streamable_http_kwargs(
@@ -168,8 +213,9 @@ async def get_connected_mcp_client_for_agent(
     agent_name: str,
     mcp_servers: List[MCPServerConfiguration],
     runtime_context: RuntimeContext,
+    optional_server_ids: Optional[Set[str]] = None,
     # -----------------------------------------------
-) -> MultiServerMCPClient:
+) -> Tuple[MultiServerMCPClient, List[Any]]:
     """
     Creates and connects the MultiServerMCPClient using the token provided by
     `access_token_provider`. Supports `streamable_http` and `stdio` transports.
@@ -248,7 +294,10 @@ async def get_connected_mcp_client_for_agent(
     # Validate connections by attempting to load tools per server
     exceptions: list[Exception] = []
     failure_messages: list[str] = []
+    optional_failures: list[str] = []
+    prefetched_tools: List[Any] = []
     total_tools = 0
+    optional_server_ids = optional_server_ids or set()
     for server in mcp_servers:
         conn_entry = connections.get(server.id) or {}
         transport = conn_entry.get("transport", "unknown")
@@ -256,43 +305,78 @@ async def get_connected_mcp_client_for_agent(
         auth_label = _mask_auth_value(
             (conn_entry.get("headers") or {}).get("Authorization")
         )
-        start = time.perf_counter()
-        try:
-            logger.debug(
-                "[MCP][%s] validate name=%s transport=%s endpoint=%s auth=%s",
-                agent_name,
-                server.id,
-                transport,
-                url_for_log,
-                auth_label,
+        is_optional = server.id in optional_server_ids
+        last_error: Optional[BaseException] = None
+        for attempt in range(1, CONNECT_MAX_ATTEMPTS + 1):
+            start = time.perf_counter()
+            try:
+                logger.debug(
+                    "[MCP][%s] validate name=%s transport=%s endpoint=%s auth=%s attempt=%d/%d",
+                    agent_name,
+                    server.id,
+                    transport,
+                    url_for_log,
+                    auth_label,
+                    attempt,
+                    CONNECT_MAX_ATTEMPTS,
+                )
+                tools = await client.get_tools(server_name=server.id)
+                dur_ms = (time.perf_counter() - start) * 1000
+                logger.info(
+                    "[MCP][%s] connected name=%s transport=%s endpoint=%s tools=%d dur_ms=%.0f attempt=%d/%d",
+                    agent_name,
+                    server.id,
+                    transport,
+                    url_for_log,
+                    len(tools),
+                    dur_ms,
+                    attempt,
+                    CONNECT_MAX_ATTEMPTS,
+                )
+                total_tools += len(tools)
+                if tools:
+                    prefetched_tools.extend(tools)
+                last_error = None
+                break
+            except BaseException as e:
+                last_error = e
+                dur_ms = (time.perf_counter() - start) * 1000
+                logger.warning(
+                    "[MCP][%s] connect fail name=%s url=%s err=%s dur_ms=%.0f attempt=%d/%d: %s",
+                    agent_name,
+                    server.id,
+                    url_for_log,
+                    e.__class__.__name__,
+                    dur_ms,
+                    attempt,
+                    CONNECT_MAX_ATTEMPTS,
+                    str(e).split("\n")[0],
+                )
+                if attempt < CONNECT_MAX_ATTEMPTS:
+                    delay = _retry_delay(attempt)
+                    if delay > 0:
+                        logger.info(
+                            "[MCP][%s] retrying name=%s after %.1fs (attempt %d/%d).",
+                            agent_name,
+                            server.id,
+                            delay,
+                            attempt + 1,
+                            CONNECT_MAX_ATTEMPTS,
+                        )
+                        await asyncio.sleep(delay)
+                else:
+                    break
+
+        if last_error:
+            failure_entry = (
+                f"{server.id} ({transport}): {url_for_log}): "
+                f"{last_error.__class__.__name__}: {str(last_error).splitlines()[0]}\n"
             )
-            tools = await client.get_tools(server_name=server.id)
-            dur_ms = (time.perf_counter() - start) * 1000
-            logger.info(
-                "[MCP][%s] connected name=%s transport=%s endpoint=%s tools=%d dur_ms=%.0f",
-                agent_name,
-                server.id,
-                transport,
-                url_for_log,
-                len(tools),
-                dur_ms,
-            )
-            total_tools += len(tools)
-        except BaseException as e:
-            dur_ms = (time.perf_counter() - start) * 1000
-            logger.warning(
-                "[MCP][%s] connect fail name=%s url=%s err=%s dur_ms=%.0f: %s",
-                agent_name,
-                server.id,
-                url_for_log,
-                e.__class__.__name__,
-                dur_ms,
-                str(e).split("\n")[0],
-            )
-            exceptions.extend(getattr(e, "exceptions", [e]))
-            failure_messages.append(
-                f"{server.id} ({transport}): {url_for_log}): {e.__class__.__name__}: {str(e).splitlines()[0]}\n"
-            )
+            if is_optional:
+                optional_failures.append(failure_entry)
+                continue
+            exceptions.extend(getattr(last_error, "exceptions", [last_error]))
+            failure_messages.append(failure_entry)
 
     if exceptions:
         logger.error("MCP summary: %d server(s) failed to connect.", len(exceptions))
@@ -308,9 +392,16 @@ async def get_connected_mcp_client_for_agent(
         # Nothing to cleanup on the client instance
         raise MCPConnectionError(reason, exceptions)
 
+    if optional_failures:
+        logger.warning(
+            "[MCP][%s] optional servers unavailable: %s",
+            agent_name,
+            "; ".join(optional_failures),
+        )
+
     logger.debug(
         "[MCP][%s] summary: all servers validated, total tools=%d",
         agent_name,
         total_tools,
     )
-    return client
+    return client, prefetched_tools

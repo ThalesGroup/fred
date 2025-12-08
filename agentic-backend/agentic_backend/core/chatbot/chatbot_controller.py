@@ -224,6 +224,26 @@ async def websocket_chatbot_question(
     active_user = user
     active_refresh_token: str | None = None
 
+    async def safe_send_text(payload: str) -> None:
+        """
+        Wrap websocket.send_text to normalize disconnect-related exceptions so upstream
+        layers can abort gracefully without double-sending.
+        """
+        try:
+            await websocket.send_text(payload)
+        except WebSocketDisconnect:
+            raise
+        except RuntimeError as exc:
+            # Starlette raises RuntimeError when a close frame was already sent.
+            message = str(exc)
+            if 'Cannot call "send"' in message and "close message" in message:
+                raise WebSocketDisconnect(code=1006) from exc
+            raise
+        except Exception as exc:
+            if exc.__class__.__name__ == "ClientDisconnected":
+                raise WebSocketDisconnect(code=1006) from exc
+            raise
+
     try:
         while True:
             client_request = None
@@ -263,7 +283,7 @@ async def websocket_chatbot_question(
 
                 async def ws_callback(msg_dict: dict):
                     event = StreamEvent(type="stream", message=ChatMessage(**msg_dict))
-                    await websocket.send_text(event.model_dump_json())
+                    await safe_send_text(event.model_dump_json())
 
                 (
                     session,
@@ -278,7 +298,7 @@ async def websocket_chatbot_question(
                     client_exchange_id=ask.client_exchange_id,
                 )
 
-                await websocket.send_text(
+                await safe_send_text(
                     FinalEvent(
                         type="final", messages=final_messages, session=session
                     ).model_dump_json()
@@ -297,7 +317,7 @@ async def websocket_chatbot_question(
                     else "unknown-session"
                 )
                 if websocket.client_state == WebSocketState.CONNECTED:
-                    await websocket.send_text(
+                    await safe_send_text(
                         ErrorEvent(
                             type="error", content=summary, session_id=session_id
                         ).model_dump_json()
@@ -308,7 +328,7 @@ async def websocket_chatbot_question(
     except Exception as e:
         summary = log_exception(e, "EXTERNAL Error processing chatbot client query")
         if websocket.client_state == WebSocketState.CONNECTED:
-            await websocket.send_text(
+            await safe_send_text(
                 ErrorEvent(
                     type="error", content=summary, session_id="unknown-session"
                 ).model_dump_json()
