@@ -867,5 +867,11 @@
         "description": "Run a local MCP server over stdio (process-based tools)"
       }
     }
+  },
+  "app": {
+    "loading": {
+      "router": "Fred is starting...",
+      "ui": "Fred is getting the UI ready..."
+    }
   }
 }

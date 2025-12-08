@@ -867,5 +867,11 @@
         "description": "Exécute un serveur MCP local via stdio (outils basés sur un processus)"
       }
     }
+  },
+  "app": {
+    "loading": {
+      "router": "Fred démarre...",
+      "ui": "Fred prépare l'interface..."
+    }
   }
 }
