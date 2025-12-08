@@ -106,39 +106,6 @@ Le service MCP interroge désormais `https://data.ademe.fr/data-fair/api/v1/data
 
 ⚠️ Si l’environnement n’autorise pas les appels réseau, `BaseCarboneClient` se désactive automatiquement et les facteurs statiques continuent d’être servis.
 
-## 📏 Géocodage & distances exactes (MCP `mcp-geo-service`)
-
-- Lancer le serveur MCP `geo_distance_service` :
-  ```bash
-  uvicorn agentic_backend.academy.08_ecoadviser.geo_distance_service.server_mcp:app \
-      --host 127.0.0.1 --port 9801
-  ```
-- Trois tools sont exposés :
-  - `estimate_trip_between_addresses` : prend les deux adresses textuelles, résout les coordonnées via Nominatim (avec suffixe Lyon/France par défaut) puis calcule immédiatement la distance/durée via OSRM. → c’est le chemin critique conseillé pour EcoAdvisor.
-  - `geocode_location` : retourne jusqu’à 5 correspondances pour une adresse (utile si l’agent veut vérifier ou choisir manuellement).
-  - `compute_trip_distance` : calcule la distance entre deux couples lat/lon déjà connus.
-- Les requêtes sont normalisées avant l’appel Nominatim (suppression du numéro, variantes sur les noms propres composés, “accent folding”, etc.) pour couvrir les adresses lyonnaises multi-parties et réduire les “404” injustifiés.
-- Si OSRM est inaccessible, le service répond quand même avec une distance **great-circle (haversine)** et indique `source="haversine"` → l’agent doit prévenir l’utilisateur qu’il s’agit d’une approximation.
-
-### Variables d’environnement utiles
-
-| Variable | Défaut | Description |
-| --- | --- | --- |
-| `ECO_GEO_NOMINATIM_URL` | `https://nominatim.openstreetmap.org/search` | Endpoint Nominatim (hébergé ou self-host). |
-| `ECO_GEO_OSRM_URL` | `https://router.project-osrm.org` | Endpoint OSRM à utiliser pour les routages. |
-| `ECO_GEO_USER_AGENT` | `FredEcoAdvisorGeo/1.0 (...)` | User-Agent HTTP envoyé aux deux API (obligatoire côté Nominatim). |
-| `ECO_GEO_DEFAULT_COUNTRIES` | `fr` | Codes pays appliqués par défaut si l’agent n’en fournit pas. |
-| `ECO_GEO_LANGUAGE` | `fr` | Langue préférée pour les libellés retournés par Nominatim. |
-| `ECO_GEO_TIMEOUT` | `10.0` | Timeout en secondes pour les géocodages. |
-| `ECO_GEO_OSRM_TIMEOUT` | `10.0` | Timeout en secondes pour le routage. |
-| `ECO_GEO_GEOCODING_ENABLED` | `true` | Permet de désactiver totalement les appels Nominatim. |
-| `ECO_GEO_ROUTING_ENABLED` | `true` | Permet de désactiver totalement les appels OSRM. |
-| `ECO_GEO_DEFAULT_CITY_SUFFIX` | `Lyon, France` | Suffixe automatiquement ajouté aux requêtes dépourvues de ville pour favoriser les adresses CNR. |
-| `ECO_GEO_CITY_KEYWORDS` | `lyon,villeurbanne,...` | Liste de mots-clés (minuscule) considérés comme “ville déjà mentionnée” — éviter les doubles suffixes. |
-| `ECO_GEO_STREET_TYPES` | `rue,avenue,bd,...` | Types de voies utilisés pour générer automatiquement des variantes de requêtes quand un nom propre composé est détecté. |
-
-Redémarrez `./start.sh` après modification de ces variables pour propager la configuration.
-
 
 ## 🚦 Trafic routier live (MCP `mcp-traffic-service`)
 

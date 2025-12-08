@@ -27,20 +27,18 @@ Utilisateur ↔ LLM GPT-4o (raisonneur principal)
 | --- | --- | --- | --- |
 | MCP Tabular (`mcp-knowledge-flow-mcp-tabular`) | Serveur DuckDB piloté par Knowledge Flow (pas d’URL publique) exposant notamment `bike_infra_demo` et `tcl_stops_demo`. | `get_context`, `list_tables`, `query` avec des filtres géographiques simples. | Carte mentale des aménagements cyclables, arrêts TCL pertinents, citations de colonnes réelles. |
 | MCP CO₂ Service (`mcp-co2-service`, `http://127.0.0.1:9798/mcp`) | FastAPI locale qui interroge l’API ADEME Base Carbone `https://data.ademe.fr/data-fair/api/v1/datasets/base-carboner/lines`. | `list_emission_modes`, `get_emission_factor`, `compare_trip_modes`, `reload_emission_cache`. | Tableau CO₂ hebdo par mode + mention explicite de la source ADEME (nom, date, URL). |
-| MCP Geo Service (`mcp-geo-service`, `http://127.0.0.1:9801/mcp`) | FastAPI locale qui combine **Nominatim** (géocodage) et **OSRM** (distances routières). | `estimate_trip_between_addresses` (geocode + distance en un seul appel), `geocode_location`, `compute_trip_distance`. | L’agent cite la distance exacte entre deux adresses, y compris la durée et la source (OSRM / haversine). |
 | MCP Traffic Service (`mcp-traffic-service`) | Client WFS Grand Lyon sur `https://data.grandlyon.com/geoserver/metropole-de-lyon/ows` (typename `metropole-de-lyon:pvo_patrimoine_voirie.pvotrafic`). | `get_live_traffic_segments(origin_lat, origin_lng, dest_lat, dest_lng)` avec une bbox automatique. | Contexte “Grand Lyon WFS signale trafic dense/fluide” ajouté à la synthèse voiture. |
 | MCP TCL Service (`mcp-tcl-service`) | Client RDATA Grand Lyon (`https://data.grandlyon.com/fr/datapusher/ws/rdata`, dataset `tcl_sytral.tclpassagesarret_2_0_0`). | `get_tcl_realtime_passages(stop_code, line)` après identification de l’arrêt via la table tabulaire. | Liste/tables des prochains passages avec heure locale, ligne et direction. |
 
 ## 5. Parcours type d’une question
 1. **Clarifier la situation** : EcoAdvisor demande origine, destination, mode actuel, distance et fréquence.
-2. **Géocoder et mesurer** : si l’utilisateur fournit des adresses précises, l’agent appelle `estimate_trip_between_addresses` (ou, à défaut, `geocode_location` + `compute_trip_distance`) pour disposer d’une distance fiable.
-3. **Lister les données disponibles** : appel `get_context` pour s’assurer que `bike_infra_demo` / `tcl_stops_demo` sont chargées.
-4. **Explorer les datasets** : requêtes DuckDB (via MCP tabular) pour trouver des pistes cyclables ou arrêts TCL proches des lieux cités par l’utilisateur.
-5. **Calculer les émissions** : appel `list_emission_modes` puis `compare_trip_modes` (ou `get_emission_factor`) pour obtenir les kg CO₂/semaine de chaque option.
-6. **Valider les conditions réelles** :
+2. **Lister les données disponibles** : appel `get_context` pour s’assurer que `bike_infra_demo` / `tcl_stops_demo` sont chargées.
+3. **Explorer les datasets** : requêtes DuckDB (via MCP tabular) pour trouver des pistes cyclables ou arrêts TCL proches des lieux cités par l’utilisateur.
+4. **Calculer les émissions** : appel `list_emission_modes` puis `compare_trip_modes` (ou `get_emission_factor`) pour obtenir les kg CO₂/semaine de chaque option.
+5. **Valider les conditions réelles** :
    - Si la voiture est évoquée : `get_live_traffic_segments` fournit l’état de trafic de la zone Grand Lyon correspondante.
    - Si les TCL sont envisagés : `get_tcl_realtime_passages` donne les prochains départs à partir du `stop_id` extrait du dataset.
-7. **Synthèse** : réponse structurée avec sous-titres (`### Synthèse rapide`, etc.), tableau CO₂, hypothèses, équivalences (heures d’aspirateur / jours de chauffage) et recommandations avec emojis.
+6. **Synthèse** : réponse structurée avec sous-titres (`### Synthèse rapide`, etc.), tableau CO₂, hypothèses, équivalences (heures d’aspirateur / jours de chauffage) et recommandations avec emojis.
 
 ## 6. Données embarquées / prérequis
 - `data/bike_infra_demo.csv` : tronçons cyclables de la métropole de Lyon.

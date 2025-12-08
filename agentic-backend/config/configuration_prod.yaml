@@ -199,12 +199,6 @@ mcp:
       url: "http://localhost:9800/mcp"
       sse_read_timeout: 2000
       auth_mode: "no_token"
-    - id: "mcp-geo-service"
-      name: "mcp-geo-service"
-      transport: "streamable_http"
-      url: "http://localhost:9801/mcp"
-      sse_read_timeout: 2000
-      auth_mode: "no_token"
 
 storage:
   postgres:
