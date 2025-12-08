@@ -42,7 +42,7 @@ import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getProperty } from "../common/config.tsx";
-import { usePermissions } from "../security/usePermissions";
+import { usePermissions } from "../security/usePermissions.ts";
 import { ImageComponent } from "../utils/image.tsx";
 import { ApplicationContext } from "./ApplicationContextProvider.tsx";
 
@@ -56,7 +56,7 @@ type MenuItemCfg = {
   children?: MenuItemCfg[];
 };
 
-export default function SideBar({ darkMode, onThemeChange }) {
+export default function SideBarOld({ darkMode, onThemeChange }) {
   const { t } = useTranslation();
   const theme = useTheme();
   const navigate = useNavigate();

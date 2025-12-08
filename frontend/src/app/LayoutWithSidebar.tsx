@@ -16,7 +16,7 @@ import { Box, CssBaseline } from "@mui/material";
 import { useContext } from "react";
 import { Outlet } from "react-router-dom";
 import { ApplicationContext } from "./ApplicationContextProvider";
-import SideBar from "./SideBar";
+import SideBarOld from "./SideBarOld";
 
 export const LayoutWithSidebar = ({ children }: React.PropsWithChildren<{}>) => {
   const { darkMode, toggleDarkMode } = useContext(ApplicationContext);
@@ -32,7 +32,7 @@ export const LayoutWithSidebar = ({ children }: React.PropsWithChildren<{}>) => 
           overflow: "hidden", // body never scrolls; only inner panes do
         }}
       >
-        <SideBar darkMode={darkMode} onThemeChange={toggleDarkMode} />
+        <SideBarOld darkMode={darkMode} onThemeChange={toggleDarkMode} />
 
         {/* 👉 Right pane is a flex column that hosts the routed pages */}
         <Box
