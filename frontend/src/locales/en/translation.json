@@ -92,7 +92,6 @@
       "agent": "View agents",
       "release_notes": "View the latest release notes",
       "workspaces": "View Workspace",
-      "account": "View your account",
       "selectCluster": "Please select a cluster first",
       "monitoring_kpi": "Kpi Dashboard",
       "monitoring_logs": "Log Console",
@@ -496,7 +495,7 @@
     }
   },
   "profile": {
-    "title": "User profile",
+    "title": "Settings",
     "description": "Manage your profile settings",
     "menu": {
       "account": "Account",

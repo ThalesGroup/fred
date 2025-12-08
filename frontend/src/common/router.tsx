@@ -99,7 +99,7 @@ export const routes: RouteObject[] = [
         ),
       },
       {
-        path: "account",
+        path: "settings",
         element: <Profile />,
       },
       {

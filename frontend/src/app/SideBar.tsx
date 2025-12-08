@@ -1,4 +1,3 @@
-import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import ChatIcon from "@mui/icons-material/Chat";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
@@ -8,12 +7,14 @@ import ExpandMore from "@mui/icons-material/ExpandMore";
 import GroupIcon from "@mui/icons-material/Group";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
+import SettingsIcon from "@mui/icons-material/Settings";
 import {
   Box,
   Collapse,
   CSSObject,
   IconButton,
   List,
+  ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
@@ -25,7 +26,9 @@ import MuiDrawer from "@mui/material/Drawer";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import { UserAvatar } from "../components/profile/UserAvatar";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
+import { KeyCloakService } from "../security/KeycloakService";
 import { usePermissions } from "../security/usePermissions";
 
 const drawerWidth = 240;
@@ -134,14 +137,6 @@ export default function SideBar() {
       tooltip: t("sidebar.tooltip.knowledge"),
     },
 
-    {
-      key: "account",
-      label: t("sidebar.account"),
-      icon: <AccountCircleIcon />,
-      url: `/account`,
-      tooltip: t("sidebar.tooltip.account"),
-    },
-
     // Only show monitoring if user has permission
     ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime
       ? [
@@ -214,7 +209,7 @@ export default function SideBar() {
 
   return (
     <Drawer variant="permanent" open={open}>
-      {/* Header */}
+      {/* Header (icon + open/close button*/}
       <DrawerHeader>
         <IconButton onClick={() => setOpen((open) => !open)} sx={{ mr: open ? 0 : 1 }}>
           {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
@@ -235,8 +230,33 @@ export default function SideBar() {
       </Box>
 
       {/* Profile */}
-      <Paper elevation={1}>a</Paper>
+      <Paper elevation={1}>
+        <SidebarProfileItem isSidebarOpen={open} />
+      </Paper>
     </Drawer>
+  );
+}
+
+interface SidebarProfileItemProps {
+  isSidebarOpen: boolean;
+}
+
+function SidebarProfileItem({ isSidebarOpen }: SidebarProfileItemProps) {
+  const roles = KeyCloakService.GetUserRoles();
+
+  return (
+    <ListItem
+      dense
+      sx={{ py: 1 }}
+      secondaryAction={
+        <IconButton component={Link} to="/settings">
+          <SettingsIcon />
+        </IconButton>
+      }
+    >
+      <ListItemIcon>{isSidebarOpen && <UserAvatar />}</ListItemIcon>
+      <ListItemText primary={KeyCloakService.GetUserFullName()} secondary={roles.length > 0 ? roles[0] : undefined} />
+    </ListItem>
   );
 }
 

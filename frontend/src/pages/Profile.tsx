@@ -12,29 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect } from "react";
+import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import KeyIcon from "@mui/icons-material/VpnKey";
 import {
   Box,
-  Typography,
-  Theme,
   Button,
-  useTheme,
+  Card,
+  CardContent,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Card,
-  CardContent,
+  Theme,
+  Typography,
+  useTheme,
 } from "@mui/material";
-import AccountCircleIcon from "@mui/icons-material/AccountCircle";
-import KeyIcon from "@mui/icons-material/VpnKey";
-import { KeyCloakService } from "../security/KeycloakService";
+import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
+import { TopBar } from "../common/TopBar";
+import InvisibleLink from "../components/InvisibleLink";
 import { ProfileCard } from "../components/profile/ProfileCard";
 import { ProfileToken } from "../components/profile/ProfileToken";
-import { TopBar } from "../common/TopBar";
-import { useSearchParams } from "react-router-dom";
-import InvisibleLink from "../components/InvisibleLink";
-import { useTranslation } from "react-i18next";
+import { KeyCloakService } from "../security/KeycloakService";
 
 function getFallbackTab(): number {
   const savedTab = localStorage.getItem("last_profile_active_tab");

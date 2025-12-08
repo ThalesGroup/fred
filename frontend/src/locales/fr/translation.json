@@ -92,7 +92,6 @@
       "agent": "Voir les agents",
       "release_notes": "Consulter les dernières notes de version",
       "workspaces": "Voir les espaces",
-      "account": "Voir votre profil",
       "selectCluster": "Veuillez d'abord sélectionner un cluster",
       "monitoring_kpi": "Vue d'ensemble des Kpis",
       "monitoring_logs": "Console de logs",
@@ -496,7 +495,7 @@
     }
   },
   "profile": {
-    "title": "Profil utilisateur",
+    "title": "Paramètres",
     "description": "Gérez vos préférences utilisateur et vos profils de chat",
     "menu": {
       "account": "Compte",
