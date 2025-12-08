@@ -402,7 +402,6 @@ class AdvancedRico(AgentFlow):
             VectorSearchHit(**document) for document in response_data
         ]
 
-
         seen = set()
         keep_documents = []
         for d in reranked_documents + documents[:top_r]:
@@ -410,7 +409,7 @@ class AdvancedRico(AgentFlow):
             if key not in seen:
                 seen.add(key)
                 keep_documents.append(d)
-        
+
         # Build response
         summary = f"Reranked {len(documents)} documents, keeping top reranked and vector-search results : {len(keep_documents)}"
 
