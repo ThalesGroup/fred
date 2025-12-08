@@ -6,8 +6,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Stack, Divider, Tooltip, Button } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import FilterAltIcon from "@mui/icons-material/FilterAlt";
-import FilterAltOffIcon from "@mui/icons-material/FilterAltOff";
 import {
   LogEventDto,
   LogQuery,
@@ -23,8 +21,6 @@ import { useTranslation } from "react-i18next";
 type Level = LogEventDto["level"];
 const MAX_EVENTS = 1000;
 const BOTTOM_STICKY_THRESHOLD_PX = 60;
-const ACCESS_LOGGER_NAMES = new Set(["http", "uvicorn.access", "uvicorn", "uvicorn.error", "uvicorn.protocols.http.httptools_impl"]);
-const ACCESS_LOG_FILES = new Set(["http_logging.py", "httptools_impl.py"]);
 
 const MemoizedLogRow = memo(LogRow);
 
@@ -61,11 +57,10 @@ export function LogConsoleTile({
 }) {
   const { t } = useTranslation();
   // ---- UI filter state ----
-  const [minLevel, setMinLevel] = useState<Level>("WARNING");
+  const [minLevel, setMinLevel] = useState<Level>("INFO");
   const [service, setService] = useState<ServiceId>(defaultService as ServiceId);
   const [loggerLike, setLoggerLike] = useState("");
   const [textLike, setTextLike] = useState("");
-  const [hideAccess, setHideAccess] = useState(true);
   const dLoggerLike = useDebounced(loggerLike, 350);
   const dTextLike = useDebounced(textLike, 350);
 
@@ -125,18 +120,11 @@ export function LogConsoleTile({
     return asc.length > MAX_EVENTS ? asc.slice(asc.length - MAX_EVENTS) : asc;
   }, [queryState.data]);
 
-  const filteredEvents: LogEventDto[] = useMemo(() => {
-    if (!hideAccess) return events;
-    return events.filter(
-      (e) => !ACCESS_LOGGER_NAMES.has(e.logger) && !ACCESS_LOG_FILES.has(e.file),
-    );
-  }, [events, hideAccess]);
-
   const copyAll = useCallback(() => {
-    if (filteredEvents.length === 0) return;
+    if (events.length === 0) return;
 
     // Format events into a readable text block
-    const logText = filteredEvents
+    const logText = events
       .map((e) => {
         // Simple log line format: [Timestamp] [LEVEL] [Origin] Message
         const ts = new Date(e.ts * 1000).toISOString();
@@ -158,7 +146,7 @@ export function LogConsoleTile({
     const el = scrollRef.current;
     if (!el) return;
     if (userAnchoredBottom) el.scrollTop = el.scrollHeight;
-  }, [filteredEvents, userAnchoredBottom]);
+  }, [events, userAnchoredBottom]);
 
   return (
     <Stack
@@ -190,28 +178,17 @@ export function LogConsoleTile({
           setTextLike={setTextLike}
           onRefresh={fetchQuery} // manual refresh remains available
         />
-        <Tooltip title={hideAccess ? "Access/health logs hidden" : "Access/health logs visible"}>
-          <Button
-            variant={hideAccess ? "outlined" : "text"}
-            size="small"
-            onClick={() => setHideAccess((v) => !v)}
-            startIcon={hideAccess ? <FilterAltOffIcon /> : <FilterAltIcon />}
-            sx={{ height: 32 }}
-          >
-            {hideAccess ? "Hide access logs" : "Show access logs"}
-          </Button>
-        </Tooltip>
         <Tooltip title="Copy all visible logs to clipboard">
           <Button
             variant="outlined"
             size="small"
             onClick={copyAll}
-            disabled={filteredEvents.length === 0}
+            disabled={events.length === 0}
             startIcon={<ContentCopyIcon />}
             // Ensure button height matches CONTROL_HEIGHT (32px)
             sx={{ height: 32 }}
           >
-            {t("logs.copyAll", { count: filteredEvents.length })}
+            {t("logs.copyAll", { count: events.length })}
           </Button>
         </Tooltip>
       </Stack>
@@ -231,13 +208,13 @@ export function LogConsoleTile({
           scrollbarGutter: "stable",
         }}
       >
-        {filteredEvents.length === 0 ? (
+        {events.length === 0 ? (
           <Box sx={{ p: 1, fontSize: (t) => t.typography.caption.fontSize, color: "text.secondary" }}>
-            No logs in this window (or all hidden by filters).
+            No logs in this window.
           </Box>
         ) : (
           <Stack divider={<Divider />} sx={{ py: 0.25 }}>
-            {filteredEvents.map((e, i) => (
+            {events.map((e, i) => (
               <MemoizedLogRow key={`${e.ts}-${e.file}-${e.line}-${i}`} e={e} />
             ))}
           </Stack>

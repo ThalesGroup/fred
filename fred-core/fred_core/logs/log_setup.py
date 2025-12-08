@@ -187,19 +187,9 @@ def log_setup(
         lg.setLevel(logging.WARNING)
         lg.propagate = False  # <-- key: do NOT bubble up to root
 
-    # Quiet high-volume access logs; keep only warnings/errors.
-    http_logger = logging.getLogger("http")
-    http_logger.setLevel(logging.INFO)  # DEBUG health/ready stay hidden; slow/4xx/5xx still surface
-    http_logger.propagate = True
-
-    uvicorn_access = logging.getLogger("uvicorn.access")
-    uvicorn_access.handlers.clear()
-    uvicorn_access.setLevel(logging.WARNING)
-    uvicorn_access.propagate = False  # do not duplicate into root
-
     # 4) Make uvicorn loggers flow into our handlers (no duplicates)
     if include_uvicorn:
-        for name in ("uvicorn", "uvicorn.error"):
+        for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
             lg = logging.getLogger(name)
             lg.handlers.clear()  # remove uvicorn’s own console handlers
             # Access logs are particularly chatty; keep only warnings+
@@ -208,7 +198,5 @@ def log_setup(
             else:
                 lg.setLevel(log_level.upper())
             lg.propagate = True  # forward to our root handlers
-
-        # Keep uvicorn.access quiet (handled above)
 
     setattr(root, marker, True)
