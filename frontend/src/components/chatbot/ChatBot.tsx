@@ -418,6 +418,7 @@ const ChatBot = ({
         documentLibraryIds: userInputContext.documentLibraryIds ?? [],
         promptResourceIds: userInputContext.promptResourceIds ?? [],
         templateResourceIds: userInputContext.templateResourceIds ?? [],
+        skipRagSearch: userInputContext.skipRagSearch ?? false,
       };
       localStorage.setItem(storageKey, JSON.stringify(payload));
     } catch (e) {
@@ -427,6 +428,7 @@ const ChatBot = ({
     userInputContext?.documentLibraryIds,
     userInputContext?.promptResourceIds,
     userInputContext?.templateResourceIds,
+    userInputContext?.skipRagSearch,
     storageKey,
     currentChatBotSession?.id, // guard: only save when undefined
   ]);
@@ -443,6 +445,9 @@ const ChatBot = ({
 
     // Policy
     runtimeContext.search_policy = content.searchPolicy || "semantic";
+    if (content.skipRagSearch) {
+      runtimeContext.skip_rag_search = true;
+    }
 
     // Files are now uploaded immediately upon selection (not here)
 

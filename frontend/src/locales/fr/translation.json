@@ -77,6 +77,7 @@
     "knowledge": "Ressources",
     "mcp": "Hub MCP",
     "agent": "Hub Agent",
+    "release_notes": "Notes de version",
     "workspaces": "Espaces de travail",
     "account": "Profil",
     "tooltip": {
@@ -89,6 +90,7 @@
       "knowledge": "Consulter vos bibliothèques de documents et de prompts",
       "mcp": "Gérer les serveurs MCP",
       "agent": "Voir les agents",
+      "release_notes": "Consulter les dernières notes de version",
       "workspaces": "Voir les espaces",
       "account": "Voir votre profil",
       "selectCluster": "Veuillez d'abord sélectionner un cluster",
@@ -253,6 +255,7 @@
     "agents": "Agents",
     "search": "Rechercher",
     "filter": "Filtrer",
+    "restoreButton": "Restaurer depuis la configuration",
     "create": "Créer",
     "createAgent": "Créer un nouvel agent",
     "noAgents": "Aucun agent trouvé",
@@ -299,14 +302,21 @@
       "summary": "Agent créé",
       "detail": "L'agent a été créé avec succès."
     },
+    "toasts": {
+      "restored": "Agents statiques restaurés depuis la configuration",
+      "error": "Échec de l'opération"
+    },
     "toolsSelection": {
       "title": "Outils"
-    }
+    },
+    "confirmRestoreTitle": "Écraser les agents avec la configuration ?",
+    "confirmRestoreMessage": "Cette action remplacera tous les réglages personnalisés saisis dans l'UI par ceux du YAML. Vous perdrez vos modifications. Cette opération est irréversible."
   },
   "mcpHub": {
     "title": "Hub MCP",
     "subtitle": "Déclarez et modifiez les serveurs MCP accessibles aux agents.",
     "addButton": "Ajouter un serveur MCP",
+    "restoreButton": "Restaurer depuis la configuration",
     "addTitle": "Nouveau serveur MCP",
     "editTitle": "Modifier un serveur MCP",
     "emptyTitle": "Aucun serveur MCP pour l'instant",
@@ -356,8 +366,11 @@
       "deleted": "Serveur MCP supprimé",
       "enabled": "Serveur MCP activé",
       "disabled": "Serveur MCP désactivé",
+      "restored": "Serveurs MCP MCP statiques statiques restaurés depuis la configuration",
       "error": "Échec de l'opération"
-    }
+    },
+    "confirmRestoreTitle": "Écraser les serveurs MCP avec la configuration ?",
+    "confirmRestoreMessage": "Cette action remplacera toutes les modifications de serveurs MCP saisies dans l'UI par celles du YAML. Vous perdrez ces changements. Cette opération est irréversible."
   },
   "chatbot": {
     "menu": {
@@ -372,6 +385,7 @@
       "count": "{{count}} pièces jointes"
     },
     "uploadingFile": "Téléversement de {{name}}...",
+    "searchToggle": "Recherche : activé = RAG (sources), désactivé = sans recherche",
     "recordAudio": "Enregistrer de l'audio",
     "sendMessage": "Envoyer le message",
     "stopResponse": "Arrêter la réponse",
@@ -556,6 +570,7 @@
     "confirmBulkRemoveMessage": "Supprimer {{count}} document(s) de leurs bibliothèques ?",
     "bulkRemoveFromLibrary": "Supprimer de la bibliothèque",
     "removedOneDocument": "Document supprimé de la bibliothèque.",
+    "removedManyDocuments": "Documents supprimés de la bibliothèque.",
     "confirmDeleteFolderTitle": "Supprimer le dossier ?",
     "confirmDeleteFolderMessage": "Supprimer le dossier vide « {{name}} » ?",
     "folderDeleted": "Dossier supprimé",

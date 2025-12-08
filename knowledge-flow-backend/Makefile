@@ -13,14 +13,28 @@ include ../scripts/makefiles/help.mk
 
 ##@ Run
 
+.PHONY: tools-check
+tools-check:
+	@if ! command -v pandoc >/dev/null 2>&1; then \
+		echo "================================================================================"; \
+		echo "WARNING: pandoc not found on PATH. Doc ingestion (markdown/PDF conversions) will fail locally."; \
+		echo "Install pandoc or use the provided Docker image."; \
+		echo "================================================================================"; \
+	fi
+	@if ! command -v idnkscape >/dev/null 2>&1; then \
+		echo "================================================================================"; \
+		echo "WARNING: inkscape not found on PATH. EMF/SVG conversions will be skipped or fail locally."; \
+		echo "Install inkscape or use the provided Docker image."; \
+		echo "================================================================================"; \
+	fi
+
 .PHONY: run-worker
-run-worker: dev ## Run an ingestion worker (requires Temporal daemon)
+run-worker: dev tools-check ## Run an ingestion worker (requires Temporal daemon)
 	@echo "🚀 Running the worker..."
 	PYTHONPATH=. \
 	LOG_LEVEL=$(LOG_LEVEL) \
 	ENV_FILE=$(ENV_FILE) \
 	$(PYTHON) $(PY_PACKAGE)/main_worker.py --config-path ./config/configuration_worker.yaml
-
 
 .PHONY: docker-run
 docker-run: ## Run the app in Docker

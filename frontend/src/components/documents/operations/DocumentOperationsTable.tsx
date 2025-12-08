@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import { DocumentMetadata, TagType, TagWithItemsId, useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 import { getDocumentIcon } from "../common/DocumentIcon";
+import { DocumentVersionChip, extractDocumentVersion } from "../common/DocumentVersionChip";
 import { useDocumentActions } from "../common/useDocumentActions";
 import { DocumentProcessingStatus } from "./DocumentProcessingStatus";
 import { DocumentOperationsStatus } from "./DocumentOperationsStatus";
@@ -302,21 +303,22 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                     />
                   </TableCell>
                   {columns.fileName && (
-                    <TableCell>
-                      <Box
-                        display="flex"
-                        alignItems="center"
-                        gap={1}
-                        onClick={() => nameClickAction?.(file)}
-                        sx={{ cursor: nameClickAction ? "pointer" : "default" }}
-                      >
-                        {getDocumentIcon(file.identity.document_name)}
-                        <Typography variant="body2" noWrap sx={{ fontSize: "0.8rem" }}>
-                          {file.identity.document_name}
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                  )}
+                  <TableCell>
+                    <Box
+                      display="flex"
+                      alignItems="center"
+                      gap={1}
+                      onClick={() => nameClickAction?.(file)}
+                      sx={{ cursor: nameClickAction ? "pointer" : "default" }}
+                    >
+                      {getDocumentIcon(file.identity.document_name)}
+                      <Typography variant="body2" noWrap sx={{ fontSize: "0.8rem" }}>
+                        {file.identity.document_name}
+                      </Typography>
+                      <DocumentVersionChip version={extractDocumentVersion(file)} />
+                    </Box>
+                  </TableCell>
+                )}
                   {columns.dateAdded && (
                     <TableCell>
                       <Tooltip title={file.source.date_added_to_kb}>

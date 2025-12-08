@@ -22,6 +22,11 @@ from langchain_core.messages import (
 )
 
 from agentic_backend.application_context import get_default_chat_model
+from agentic_backend.common.llm_errors import (
+    error_log_context,
+    guardrail_fallback_message,
+    normalize_llm_exception,
+)
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.simple_agent_flow import SimpleAgentFlow
 from agentic_backend.core.runtime_source import expose_runtime_source
@@ -50,6 +55,15 @@ TUNING = AgentTuning(
                 "In case of graphical representation, render mermaid diagrams code."
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
+        ),
+        FieldSpec(
+            key="prompts.response_language",
+            type="text",
+            title="Response Language",
+            description="Language to use for all answers (e.g., 'français', 'English').",
+            required=False,
+            default="English",
+            ui=UIHints(group="Prompts"),
         ),
     ],
 )
@@ -107,10 +121,17 @@ class Georges(SimpleAgentFlow):
             response = await self.model.ainvoke(llm_messages)
             logger.info("Georges: LLM call successful (await complete).")
         except Exception as e:
-            logger.error(
-                f"Georges: LLM invocation failed with exception: {e}", exc_info=True
+            info = normalize_llm_exception(e)
+            log_ctx = error_log_context(info, extra={"agent": "Georges"})
+            logger.exception(
+                "Georges: LLM invocation failed.", extra={"err_ctx": log_ctx}
             )
-            # Raise or return a clear error message if LLM fails
-            raise
+
+            fallback_text = guardrail_fallback_message(
+                info,
+                language=self.get_tuned_text("prompts.response_language"),
+                default_message="Sorry, I could not complete that request safely.",
+            )
+            return AIMessage(content=fallback_text)
 
         return self.ensure_aimessage(response)

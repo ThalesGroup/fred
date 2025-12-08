@@ -14,12 +14,13 @@
 
 import { Box, Chip, FormControl, InputLabel, MenuItem, Select, Stack, Typography } from "@mui/material";
 import TableChartIcon from "@mui/icons-material/TableChart";
-import { getDocumentIcon } from "../common/DocumentIcon.tsx";
 import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@mui/material/styles";
 import { useMemo, useState } from "react";
 import { DocumentDataRowsProps, LimitOption, RowSortMode } from "./DocumentDataCommon.tsx";
+import { getDocumentIcon } from "../common/DocumentIcon.tsx";
+import { DocumentVersionChip, extractDocumentVersion } from "../common/DocumentVersionChip.tsx";
 
 export const DocumentDataTableList = (
   { rows, search }: DocumentDataRowsProps,
@@ -164,6 +165,7 @@ export const DocumentDataTableList = (
                   <Typography variant="body2" noWrap>
                     {doc.label}
                   </Typography>
+                  <DocumentVersionChip version={extractDocumentVersion(doc)} />
                 </Box>
                 <Box
                   sx={{

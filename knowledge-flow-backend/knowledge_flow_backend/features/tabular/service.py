@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from fred_core import Action, KeycloakUser, Resource, authorize
 from fred_core.store.structures import StoreInfo
@@ -25,6 +25,7 @@ from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
     TabularColumnSchema,
 )
+from knowledge_flow_backend.features.tabular.utils import check_read_query, check_write_query
 
 logger = logging.getLogger(__name__)
 
@@ -64,43 +65,15 @@ class TabularService:
         return "unknown"
 
     # -------------------------------------------------------------------------
-    # Fonctions métiers
+    # Main functions
     # -------------------------------------------------------------------------
-
-    @authorize(action=Action.DELETE, resource=Resource.TABLES)
-    def delete_table(self, user: KeycloakUser, db_name: str, table_name: str) -> None:
-        self._check_write_allowed(db_name)
-        try:
-            store = self.stores_info[db_name].store
-            store.delete_table(table_name)
-            logger.info(f"Table '{table_name}' deleted from database '{db_name}'")
-        except Exception as e:
-            logger.error(f"Failed to delete table '{table_name}' from '{db_name}': {e}")
-            raise
 
     @authorize(action=Action.READ, resource=Resource.TABLES_DATABASES)
     def list_databases(self, user: KeycloakUser) -> List[str]:
         return list(self.stores_info.keys())
 
-    @authorize(action=Action.READ, resource=Resource.TABLES_DATABASES)
-    def list_databases_with_tables(self, user: KeycloakUser) -> List[Dict[str, List[str]]]:
-        """
-        Retourne la liste de toutes les bases et leurs tables.
-        Format : [{"database": db_name, "tables": [...]}, ...]
-        """
-        results = []
-        for db_name, store_info in self.stores_info.items():
-            try:
-                store = store_info.store
-                tables = store.list_tables()
-                results.append({"database": db_name, "tables": tables})
-            except Exception as e:
-                logger.warning(f"Failed to list tables for database '{db_name}': {e}")
-                results.append({"database": db_name, "tables": []})
-        return results
-
     @authorize(action=Action.READ, resource=Resource.TABLES)
-    def get_schema(self, user: KeycloakUser, db_name: str, table_name: str) -> GetSchemaResponse:
+    def describe_table(self, user: KeycloakUser, db_name: str, table_name: str) -> GetSchemaResponse:
         store = self.stores_info[db_name].store
         table_name = self._sanitize_table_name(table_name)
         schema = store.get_table_schema(table_name)
@@ -139,14 +112,46 @@ class TabularService:
                 continue
         return responses
 
+    def get_context(self, user: KeycloakUser) -> Dict[str, Any]:
+        """
+        Returns the context of all databases and tables with schema info.
+        This can be used by LLM agents to understand the available datasets.
+        """
+        context = {}
+        try:
+            databases = self.list_databases(user)
+            for db_name in databases:
+                n_tables = len(self.list_tables(user, db_name).tables)
+                tables_info = self.list_tables_with_schema(user, db_name)
+                context[db_name] = []
+                for table in tables_info:
+                    table_info = {
+                        "table_name": table.table_name,
+                        "columns": [{"name": col.name, "dtype": col.dtype} for col in table.columns] if n_tables < 5 else len(table.columns),
+                        "row_count": table.row_count,
+                    }
+                    context[db_name].append(table_info)
+        except Exception as e:
+            logger.warning(f"Failed to get context: {e}")
+        return context
+
     @authorize(action=Action.READ, resource=Resource.TABLES)
     def query_read(self, user: KeycloakUser, db_name: str, query: str) -> RawSQLResponse:
-        sql = query.strip()
-        if not sql.lower().startswith("select"):
-            raise ValueError("Only SELECT statements are allowed on the read endpoint")
+        sql = query.strip().lower()
+        sql = check_read_query(sql)
         store = self.stores_info[db_name].store
-        df = store.execute_sql_query(sql)
-        return RawSQLResponse(db_name=db_name, sql_query=sql, rows=df.to_dict(orient="records"), error=None)
+        df = store.execute_sql_query(query)
+
+        return RawSQLResponse(
+            db_name=db_name,
+            sql_query=query,
+            rows=df.to_dict(orient="records"),
+            error=None,
+        )
+
+    # -------------------------------------------------------------------------
+    # "read_and_write" functions
+    # -------------------------------------------------------------------------
 
     @authorize(action=Action.UPDATE, resource=Resource.TABLES)
     @authorize(action=Action.CREATE, resource=Resource.TABLES)
@@ -157,5 +162,17 @@ class TabularService:
             raise ValueError("Empty SQL string provided")
         store = self.stores_info[db_name].store
         self._check_write_allowed(db_name)
+        sql = check_write_query(sql)
         store.execute_update_query(sql)
         return RawSQLResponse(db_name=db_name, sql_query=sql, rows=[], error=None)
+
+    @authorize(action=Action.DELETE, resource=Resource.TABLES)
+    def delete_table(self, user: KeycloakUser, db_name: str, table_name: str) -> None:
+        self._check_write_allowed(db_name)
+        try:
+            store = self.stores_info[db_name].store
+            store.delete_table(table_name)
+            logger.info(f"Table '{table_name}' deleted from database '{db_name}'")
+        except Exception as e:
+            logger.error(f"Failed to delete table '{table_name}' from '{db_name}': {e}")
+            raise
