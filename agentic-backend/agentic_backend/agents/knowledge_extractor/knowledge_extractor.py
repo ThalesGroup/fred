@@ -103,31 +103,32 @@ globalSchema = {
             "properties": {
                 "poste": {
                     "type": "string",
-                    "description": "L'intitulé du poste rempli par l'intervenant.",
+                    "description": "L'intitulé du poste pour lequel les services de l'intervenant sont proposés.",
+                    "maxLength": 100,
                 },
                 "dateFormation1": {
                     "type": "string",
-                    "description": "La date du premier diplôme ou formation.",
+                    "description": "La date du du premier diplôme ou formation pertinent pour le projet.",
                 },
                 "formation1": {
                     "type": "string",
-                    "description": "Le nom du premier diplôme ou formation.",
+                    "description": "Le nom du premier diplôme ou formation pertinent pour le projet.",
                 },
                 "dateFormation2": {
                     "type": "string",
-                    "description": "La date du second diplôme ou formation.",
+                    "description": "La date du second diplôme ou formation pertinent pour le projet.",
                 },
                 "formation2": {
                     "type": "string",
-                    "description": "Le nom du second diplôme ou formation.",
+                    "description": "Le nom du second diplôme ou formation pertinent pour le projet.",
                 },
                 "dateFormation3": {
                     "type": "string",
-                    "description": "La date du troisième diplôme ou formation.",
+                    "description": "La date du troisième diplôme ou formation pertinent pour le projet.",
                 },
                 "formation3": {
                     "type": "string",
-                    "description": "Le nom du troisième diplôme ou formation.",
+                    "description": "Le nom du troisième diplôme ou formation pertinent pour le projet.",
                 },
                 "langue1": {
                     "type": "string",
@@ -140,6 +141,7 @@ globalSchema = {
                 "competenceManagement1": {
                     "type": "string",
                     "description": "Le nom de la première compétence en management.",
+                    "maxLength": 50,
                 },
                 "maitriseManagement1": {
                     "type": "integer",
@@ -148,6 +150,7 @@ globalSchema = {
                 "competenceManagement2": {
                     "type": "string",
                     "description": "Le nom de la seconde compétence en management.",
+                    "maxLength": 50,
                 },
                 "maitriseManagement2": {
                     "type": "integer",
@@ -156,6 +159,7 @@ globalSchema = {
                 "competenceManagement3": {
                     "type": "string",
                     "description": "Le nom de la troisième compétence en management.",
+                    "maxLength": 50,
                 },
                 "maitriseManagement3": {
                     "type": "integer",
@@ -164,6 +168,7 @@ globalSchema = {
                 "competenceInformatique1": {
                     "type": "string",
                     "description": "Le nom de la première compétence informatique.",
+                    "maxLength": 50,
                 },
                 "maitriseInformatique1": {
                     "type": "string",
@@ -172,6 +177,7 @@ globalSchema = {
                 "competenceInformatique2": {
                     "type": "string",
                     "description": "Le nom de la seconde compétence informatique.",
+                    "maxLength": 50,
                 },
                 "maitriseInformatique2": {
                     "type": "integer",
@@ -180,6 +186,7 @@ globalSchema = {
                 "competenceInformatique3": {
                     "type": "string",
                     "description": "Le nom de la troisième compétence informatique.",
+                    "maxLength": 50,
                 },
                 "maitriseInformatique3": {
                     "type": "integer",
@@ -188,6 +195,7 @@ globalSchema = {
                 "competenceGestionProjet1": {
                     "type": "string",
                     "description": "Le nom de la première compétence en gestion de projet.",
+                    "maxLength": 50,
                 },
                 "maitriseGestionProjet1": {
                     "type": "integer",
@@ -196,6 +204,7 @@ globalSchema = {
                 "competenceGestionProjet2": {
                     "type": "string",
                     "description": "Le nom de la seconde compétence en gestion de projet.",
+                    "maxLength": 50,
                 },
                 "maitriseGestionProjet2": {
                     "type": "integer",
@@ -204,6 +213,7 @@ globalSchema = {
                 "competenceGestionProjet3": {
                     "type": "string",
                     "description": "Le nom de la troisième compétence en gestion de projet.",
+                    "maxLength": 50,
                 },
                 "maitriseGestionProjet3": {
                     "type": "integer",
