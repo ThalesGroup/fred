@@ -75,8 +75,8 @@
     "chat": "Discussion",
     "monitoring": "Supervision",
     "knowledge": "Ressources",
-    "mcp": "Hub MCP",
-    "agent": "Hub Agent",
+    "mcp": "Outils",
+    "agent": "Agents",
     "release_notes": "Notes de version",
     "workspaces": "Espaces de travail",
     "account": "Profil",
@@ -246,7 +246,7 @@
     "noMcpServers": "Aucun serveur MCP disponible pour le moment."
   },
   "agentHub": {
-    "title": "Centre des Agents",
+    "title": "Vos agents",
     "confirmDeleteTitle": "Confirmer la suppression",
     "confirmDeleteMessage": "Supprimer cet agent ? Cette action est irréversible.",
     "description": "Explorez et gérez les agents IA disponibles",
@@ -313,7 +313,7 @@
     "confirmRestoreMessage": "Cette action remplacera tous les réglages personnalisés saisis dans l'UI par ceux du YAML. Vous perdrez vos modifications. Cette opération est irréversible."
   },
   "mcpHub": {
-    "title": "Hub MCP",
+    "title": "Outils",
     "subtitle": "Déclarez et modifiez les serveurs MCP accessibles aux agents.",
     "addButton": "Ajouter un serveur MCP",
     "restoreButton": "Restaurer depuis la configuration",

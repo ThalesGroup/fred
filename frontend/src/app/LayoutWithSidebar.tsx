@@ -13,14 +13,10 @@
 // limitations under the License.
 
 import { Box, CssBaseline } from "@mui/material";
-import { useContext } from "react";
 import { Outlet } from "react-router-dom";
-import { ApplicationContext } from "./ApplicationContextProvider";
-import SideBarOld from "./SideBarOld";
+import SideBar from "./SideBar";
 
 export const LayoutWithSidebar = ({ children }: React.PropsWithChildren<{}>) => {
-  const { darkMode, toggleDarkMode } = useContext(ApplicationContext);
-
   return (
     <>
       <CssBaseline enableColorScheme />
@@ -32,7 +28,7 @@ export const LayoutWithSidebar = ({ children }: React.PropsWithChildren<{}>) => 
           overflow: "hidden", // body never scrolls; only inner panes do
         }}
       >
-        <SideBarOld darkMode={darkMode} onThemeChange={toggleDarkMode} />
+        <SideBar />
 
         {/* 👉 Right pane is a flex column that hosts the routed pages */}
         <Box

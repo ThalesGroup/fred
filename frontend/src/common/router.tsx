@@ -18,18 +18,18 @@ import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { AgentHub } from "../pages/AgentHub";
 import Chat from "../pages/Chat";
-import ReleaseNotes from "../pages/ReleaseNotes";
+import DataHub from "../pages/DataHub";
 import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { Kpis } from "../pages/Kpis";
 import Logs from "../pages/Logs";
-import Runtime from "../pages/Runtime";
-import DataHub from "../pages/DataHub";
+import { McpHub } from "../pages/McpHub";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
-import { Profile } from "../pages/Profile";
 import ProcessorBench from "../pages/ProcessorBench";
 import ProcessorRunDetail from "../pages/ProcessorRunDetail";
-import { McpHub } from "../pages/McpHub";
+import { Profile } from "../pages/Profile";
+import ReleaseNotes from "../pages/ReleaseNotes";
+import Runtime from "../pages/Runtime";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => <LayoutWithSidebar>{children}</LayoutWithSidebar>;
 
@@ -111,11 +111,11 @@ export const routes: RouteObject[] = [
         element: <RendererPlayground />,
       },
       {
-        path: "agentHub",
+        path: "agents",
         element: <AgentHub />,
       },
       {
-        path: "mcpHub",
+        path: "tools",
         element: <McpHub />,
       },
       {

@@ -186,10 +186,6 @@ const lightPalette = {
 // ---------- Dark Palette ----------
 const darkPalette = {
   mode: "dark" as PaletteMode,
-  background: {
-    default: "#1b1b1b",
-    paper: "#333333",
-  },
   common: { white: "#fff", black: "#000" },
   primary: { contrastText: "#fff", main: "#6482AD", light: "#879ed9", dark: "#404040" },
   secondary: { main: "#f48fb1", light: "#f8bbd0", dark: "#c2185b", contrastText: "#000" },
@@ -361,15 +357,6 @@ const lightTheme = createTheme({
       },
     },
 
-    // Apply the subtle hero-tinted surfaces globally
-    MuiPaper: {
-      styleOverrides: {
-        root: ({ theme }) => ({
-          background: theme.palette.surfaces.soft,
-          border: `1px solid ${theme.palette.divider}`,
-        }),
-      },
-    },
     MuiCard: {
       styleOverrides: {
         root: ({ theme }) => ({
@@ -475,15 +462,6 @@ const darkTheme = createTheme({
       },
     },
 
-    // Apply the subtle hero-tinted surfaces globally
-    MuiPaper: {
-      styleOverrides: {
-        root: ({ theme }) => ({
-          background: theme.palette.surfaces.soft,
-          border: `1px solid ${theme.palette.divider}`,
-        }),
-      },
-    },
     MuiCard: {
       styleOverrides: {
         root: ({ theme }) => ({
@@ -493,14 +471,7 @@ const darkTheme = createTheme({
         }),
       },
     },
-    MuiDrawer: {
-      styleOverrides: {
-        paper: ({ theme }) => ({
-          background: theme.palette.surfaces.soft,
-          borderRight: `1px solid ${theme.palette.divider}`,
-        }),
-      },
-    },
+
     MuiAppBar: {
       styleOverrides: {
         root: ({ theme }) => ({

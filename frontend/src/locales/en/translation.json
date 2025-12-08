@@ -75,7 +75,7 @@
     "chat": "Chat",
     "monitoring": "Monitoring",
     "knowledge": "Resources",
-    "mcp": "MCP Servers",
+    "mcp": "Tools",
     "agent": "Agents",
     "release_notes": "Release Notes",
     "workspaces": "Workspaces",
@@ -246,7 +246,7 @@
     "noMcpServers": "No MCP servers are currently available."
   },
   "agentHub": {
-    "title": "Agent Hub",
+    "title": "Your agents",
     "confirmDeleteTitle": "Confirm deletion",
     "confirmDeleteMessage": "Delete this agent ? This action cannot be undone.",
     "description": "Explore and manage available AI agents",
@@ -313,7 +313,7 @@
     "confirmRestoreMessage": "This will replace all tuned settings saved in the UI with the YAML configuration. You will lose any custom changes. This cannot be undone."
   },
   "mcpHub": {
-    "title": "MCP Servers",
+    "title": "Tools",
     "subtitle": "Register and edit MCP servers available to agents.",
     "restoreButton": "Restore from configuration",
     "addButton": "Add MCP server",
