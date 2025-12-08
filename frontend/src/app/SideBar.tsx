@@ -19,6 +19,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import GroupIcon from "@mui/icons-material/Group";
 import HubIcon from "@mui/icons-material/Hub";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
@@ -470,29 +471,48 @@ export default function SideBar({ darkMode, onThemeChange }) {
         </Box>
 
         {!isSidebarSmall && (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              py: 1,
-              px: 2,
-              mt: 1,
-              width: "90%",
-              borderRadius: 1,
-            }}
-          >
-            <Typography variant="caption" color="text.secondary">
-              Website
-            </Typography>
-            <IconButton
-              color="inherit"
-              size="small"
-              onClick={() => window.open("https://fredk8.dev", "_blank", "noopener,noreferrer")}
-              sx={{ p: 0.3 }}
+          <Box sx={{ width: "90%", display: "flex", flexDirection: "column", gap: 0.5, mt: 1 }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                py: 1,
+                px: 2,
+                borderRadius: 1,
+                cursor: "pointer",
+                "&:hover": { backgroundColor: hoverColor },
+              }}
+              onClick={() => navigate("/release-notes")}
             >
-              <OpenInNewIcon sx={{ fontSize: "0.8rem", color: "text.secondary" }} />
-            </IconButton>
+              <Typography variant="caption" color="text.secondary">
+                {t("sidebar.release_notes", "Release notes")}
+              </Typography>
+              <IconButton color="inherit" size="small" sx={{ p: 0.3 }}>
+                <InfoOutlinedIcon sx={{ fontSize: "0.95rem", color: "text.secondary" }} />
+              </IconButton>
+            </Box>
+
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                py: 1,
+                px: 2,
+                borderRadius: 1,
+                cursor: "pointer",
+                "&:hover": { backgroundColor: hoverColor },
+              }}
+              onClick={() => window.open("https://fredk8.dev", "_blank", "noopener,noreferrer")}
+            >
+              <Typography variant="caption" color="text.secondary">
+                Website
+              </Typography>
+              <IconButton color="inherit" size="small" sx={{ p: 0.3 }}>
+                <OpenInNewIcon sx={{ fontSize: "0.8rem", color: "text.secondary" }} />
+              </IconButton>
+            </Box>
           </Box>
         )}
       </Box>

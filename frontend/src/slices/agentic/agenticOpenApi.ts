@@ -26,6 +26,18 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/agents/${queryArg.name}`, method: "DELETE" }),
     }),
+    restoreAgentsAgenticV1AgentsRestorePost: build.mutation<
+      RestoreAgentsAgenticV1AgentsRestorePostApiResponse,
+      RestoreAgentsAgenticV1AgentsRestorePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/restore`,
+        method: "POST",
+        params: {
+          force_overwrite: queryArg.forceOverwrite,
+        },
+      }),
+    }),
     listMcpServersAgenticV1AgentsMcpServersGet: build.query<
       ListMcpServersAgenticV1AgentsMcpServersGetApiResponse,
       ListMcpServersAgenticV1AgentsMcpServersGetApiArg
@@ -88,6 +100,12 @@ const injectedRtkApi = api.injectEndpoints({
       DeleteMcpServerAgenticV1McpServersServerIdDeleteApiArg
     >({
       query: (queryArg) => ({ url: `/agentic/v1/mcp/servers/${queryArg.serverId}`, method: "DELETE" }),
+    }),
+    restoreMcpServersFromConfigAgenticV1McpServersRestorePost: build.mutation<
+      RestoreMcpServersFromConfigAgenticV1McpServersRestorePostApiResponse,
+      RestoreMcpServersFromConfigAgenticV1McpServersRestorePostApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/mcp/servers/restore`, method: "POST" }),
     }),
     echoSchemaAgenticV1SchemasEchoPost: build.mutation<
       EchoSchemaAgenticV1SchemasEchoPostApiResponse,
@@ -227,6 +245,10 @@ export type DeleteAgentAgenticV1AgentsNameDeleteApiResponse = /** status 200 Suc
 export type DeleteAgentAgenticV1AgentsNameDeleteApiArg = {
   name: string;
 };
+export type RestoreAgentsAgenticV1AgentsRestorePostApiResponse = /** status 200 Successful Response */ any;
+export type RestoreAgentsAgenticV1AgentsRestorePostApiArg = {
+  forceOverwrite?: boolean;
+};
 export type ListMcpServersAgenticV1AgentsMcpServersGetApiResponse =
   /** status 200 Successful Response */ McpServerConfiguration[];
 export type ListMcpServersAgenticV1AgentsMcpServersGetApiArg = void;
@@ -259,6 +281,9 @@ export type DeleteMcpServerAgenticV1McpServersServerIdDeleteApiResponse = /** st
 export type DeleteMcpServerAgenticV1McpServersServerIdDeleteApiArg = {
   serverId: string;
 };
+export type RestoreMcpServersFromConfigAgenticV1McpServersRestorePostApiResponse =
+  /** status 200 Successful Response */ any;
+export type RestoreMcpServersFromConfigAgenticV1McpServersRestorePostApiArg = void;
 export type EchoSchemaAgenticV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ null;
 export type EchoSchemaAgenticV1SchemasEchoPostApiArg = {
   echoEnvelope: EchoEnvelope;
@@ -413,6 +438,8 @@ export type AgentChatOptions = {
   record_audio_files?: boolean;
   /** Allow attaching local files (e.g., PDFs, images, text) to the message and show existing attachments. */
   attach_files?: boolean;
+  /** Expose a toggle to skip retrieval and answer without querying document corpora for this message. */
+  skip_rag_search?: boolean;
 };
 export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
@@ -578,6 +605,7 @@ export type RuntimeContext = {
   refresh_token?: string | null;
   access_token_expires_at?: number | null;
   attachments_markdown?: string | null;
+  skip_rag_search?: boolean | null;
 };
 export type ChatMetadata = {
   model?: string | null;
@@ -720,6 +748,8 @@ export type Properties = {
   logoName?: string;
   logoNameDark?: string;
   siteDisplayName?: string;
+  /** Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'. */
+  releaseBrand?: string | null;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;
@@ -863,6 +893,7 @@ export const {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
   useDeleteAgentAgenticV1AgentsNameDeleteMutation,
+  useRestoreAgentsAgenticV1AgentsRestorePostMutation,
   useListMcpServersAgenticV1AgentsMcpServersGetQuery,
   useLazyListMcpServersAgenticV1AgentsMcpServersGetQuery,
   useListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetQuery,
@@ -876,6 +907,7 @@ export const {
   useCreateMcpServerAgenticV1McpServersPostMutation,
   useUpdateMcpServerAgenticV1McpServersServerIdPutMutation,
   useDeleteMcpServerAgenticV1McpServersServerIdDeleteMutation,
+  useRestoreMcpServersFromConfigAgenticV1McpServersRestorePostMutation,
   useEchoSchemaAgenticV1SchemasEchoPostMutation,
   useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
   useLazyGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,

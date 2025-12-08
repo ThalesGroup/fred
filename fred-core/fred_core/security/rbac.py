@@ -58,6 +58,7 @@ class RBACProvider(AuthorizationProvider):
                 Resource.METRICS: {Action.READ},
                 Resource.AGENTS: READ_ONLY,  # Can't create/update/delete agents
                 Resource.SESSIONS: CRUD,
+                Resource.MCP_SERVERS: CRU,
                 Resource.MESSAGE_ATTACHMENTS: {Action.CREATE},
                 Resource.USER: READ_ONLY,
                 Resource.GROUP: READ_ONLY,

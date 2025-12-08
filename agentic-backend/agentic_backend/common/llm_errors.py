@@ -25,6 +25,28 @@ from typing import Any, Dict, Optional
 
 # Best-effort detection of OpenAI guardrail errors without a hard dependency on openai symbols.
 _UNPROCESSABLE_NAMES = {"UnprocessableEntityError"}
+# Azure/OpenAI content-filter specifics we want to treat as guardrail/refusal:
+# - HTTP 400 with error.code == "content_filter"
+# - innererror.code == "ResponsibleAIPolicyViolation"
+
+
+def _is_guardrail(status: Optional[int], exc: Exception, body: Any) -> bool:
+    if status == 422 or type(exc).__name__ in _UNPROCESSABLE_NAMES:
+        return True
+    if status == 400 and isinstance(body, dict):
+        err = body.get("error") or {}
+        code = err.get("code") or err.get("type")
+        inner_code = (err.get("innererror") or {}).get("code")
+        if code == "content_filter" or inner_code == "ResponsibleAIPolicyViolation":
+            return True
+    # Fallback pattern match on the exception text in case body/status are not populated
+    exc_text = str(exc).lower()
+    if "content_filter" in exc_text or "responsibleaipolicyviolation" in exc_text:
+        return True
+    if "content management policy" in exc_text:
+        return True
+    return False
+
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +100,7 @@ def normalize_llm_exception(exc: Exception) -> LlmErrorInfo:
     if isinstance(body, dict):
         detail = body.get("error", {}).get("message") or body.get("message")
 
-    is_guardrail = status == 422 or type(exc).__name__ in _UNPROCESSABLE_NAMES
+    is_guardrail = _is_guardrail(status, exc, body)
 
     return LlmErrorInfo(
         type_name=type(exc).__name__,
@@ -94,16 +116,24 @@ def normalize_llm_exception(exc: Exception) -> LlmErrorInfo:
 def guardrail_fallback_message(
     info: LlmErrorInfo,
     *,
+    language: Optional[str] = None,
     default_message: str = "An unexpected error occurred while searching documents. Please try again.",
 ) -> str:
     """
     Returns a user-facing fallback string that highlights guardrail/refusal cases when detected.
     """
     if info.is_guardrail:
-        base = (
-            "The model refused to answer because the provider's guardrails flagged the content "
-            "(DataProtection). Please remove or mask sensitive data and try again."
-        )
+        lang = (language or "").lower()
+        if lang.startswith("fr"):
+            base = (
+                "Le modèle a refusé de répondre car les filtres de sécurité du fournisseur ont bloqué la requête ou son contenu. "
+                "Merci de reformuler, retirer toute donnée sensible, ou simplifier la demande puis réessayer."
+            )
+        else:
+            base = (
+                "The model refused to answer because the provider's safety filters blocked the prompt or content. "
+                "Please rephrase, remove sensitive data, or simplify the request and try again."
+            )
         if info.detail:
             return f"{base} Details: {info.detail}"
         return base

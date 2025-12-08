@@ -530,6 +530,7 @@ class IngestionController:
 
                 async def event_stream():
                     success = 0
+                    last_error: str | None = None
                     for filename, input_temp_file in preloaded_files:
                         try:
                             output_temp_dir = input_temp_file.parent.parent
@@ -559,10 +560,15 @@ class IngestionController:
 
                         except Exception as e:
                             error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
+                            last_error = error_message
+                            logger.exception("Ingestion error during '%s' for file '%s'", current_step, filename, exc_info=True)
                             yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n"
                     d["status"] = "ok" if success == total else "error"
                     overall_status = Status.SUCCESS if success == total else Status.ERROR
-                    yield json.dumps({"step": "done", "status": overall_status}) + "\n"
+                    done_payload: dict = {"step": "done", "status": overall_status}
+                    if last_error:
+                        done_payload["error"] = last_error
+                    yield json.dumps(done_payload) + "\n"
 
                 return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 

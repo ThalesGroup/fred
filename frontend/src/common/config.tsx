@@ -49,6 +49,8 @@ const normalizeProps = (p?: Properties): Record<string, string> => {
   const out: Record<string, string> = {};
   if (p?.logoName !== undefined) out.logoName = String(p.logoName);
   if (p?.logoNameDark !== undefined) out.logoNameDark = String((p as any).logoNameDark);
+  if (p?.siteDisplayName !== undefined) out.siteDisplayName = String((p as any).siteDisplayName);
+  if ((p as any)?.releaseBrand !== undefined) out.releaseBrand = String((p as any).releaseBrand);
   return out;
 };
 
