@@ -212,7 +212,3 @@ knowledge-flow-backend/openapi.json
 /developer_tools/evaluation_results/
 
 **/.deepeval
-
-
-# Eco Advisor
-agentic-backend/agentic_backend/academy/08_ecoadviser/data
