@@ -18,7 +18,7 @@ from typing import List
 
 import pandas as pd
 import sqlparse
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlparse.sql import Identifier, IdentifierList
 from sqlparse.tokens import Keyword, Punctuation, Whitespace
@@ -34,9 +34,54 @@ class SQLTableStore:
             self.dsn = f"{self.driver}:////{self.path}"
         else:
             self.dsn = f"{self.driver}://{self.path}"
-        self.engine = create_engine(self.dsn)
+
+        connect_args = {}
+        if self.driver == "duckdb":
+            # Needed to download/load extensions such as spatial
+            connect_args["config"] = {"enable_external_access": True}
+        self.engine = create_engine(self.dsn, connect_args=connect_args)
+
+        if self.driver == "duckdb":
+            self._attach_duckdb_spatial_loader()
 
         self._test_connection()
+
+    def _attach_duckdb_spatial_loader(self):
+        """
+        Auto-install/load DuckDB spatial extension on every new connection so that
+        ST_* functions (e.g., ST_DistanceSphere) work out of the box.
+        """
+
+        @event.listens_for(self.engine, "connect")
+        def _load_spatial(dbapi_conn, _conn_record):
+            try:
+                dbapi_conn.execute("SET enable_external_access = true;")
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("DuckDB external access flag could not be set: %s", exc)
+
+            try:
+                dbapi_conn.execute("INSTALL spatial;")
+            except Exception as exc:  # noqa: BLE001
+                # INSTALL only needs to succeed once; ignore if already installed or blocked
+                logger.debug("DuckDB spatial install skipped: %s", exc)
+
+            try:
+                dbapi_conn.execute("LOAD spatial;")
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "DuckDB spatial extension failed to load. Geospatial SQL (ST_*) will not work.",
+                    exc_info=exc,
+                )
+                raise
+
+            try:
+                # Alias PostGIS-style naming so existing queries keep working
+                dbapi_conn.execute(
+                    "CREATE OR REPLACE MACRO ST_DistanceSphere(a, b) AS ST_Distance_Sphere(a, b);"
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Could not create ST_DistanceSphere alias: %s", exc)
+
 
     def _test_connection(self):
         try:

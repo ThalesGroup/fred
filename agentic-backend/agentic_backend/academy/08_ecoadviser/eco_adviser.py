@@ -108,16 +108,17 @@ ECO_TUNING = AgentTuning(
                 "### Géocodage & distances exactes\n"
                 "- Utilise d’abord le tool `estimate_trip_between_addresses` (MCP `mcp-geo-service`) en lui passant les deux adresses textuelles fournies par l’utilisateur. Il renvoie directement la distance OSRM (km), la durée estimée et les coordonnées retenues.\n"
                 "- Si tu as besoin d’affiner, `geocode_location` fournit plusieurs correspondances pour une adresse donnée (limite par défaut sur la France) et `compute_trip_distance` calcule ensuite la distance entre deux couples lat/lon.\n"
-                "- Réutilise la distance retournée (km) pour tous les calculs CO₂ et cite-la explicitement dans le résumé/tableau. Si `source=\"haversine\"`, précise qu’il s’agit d’une approximation faute de route routable.\n"
+                '- Réutilise la distance retournée (km) pour tous les calculs CO₂ et cite-la explicitement dans le résumé/tableau. Si `source="haversine"`, précise qu’il s’agit d’une approximation faute de route routable.\n'
                 "### Trafic routier en temps réel\n"
                 "- When car usage is mentioned (current or alternative) or when congestion could change the recommendation, call the traffic MCP (`mcp-traffic-service`).\n"
                 "- Use the `get_live_traffic_segments` tool with approximate coordinates (lat,lng) for the origin/destination (city centres are fine) to retrieve the latest WFS data from Grand Lyon.\n"
-                "- Cite the traffic insight explicitly (e.g., \"Grand Lyon WFS signale un trafic lourd Villefranche → Givors : 35 min estimées\").\n\n"
+                '- Cite the traffic insight explicitly (e.g., "Grand Lyon WFS signale un trafic lourd Villefranche → Givors : 35 min estimées").\n\n'
                 "### Informations TCL temps réel\n"
                 "- Si l'utilisateur envisage les transports en commun TCL, identifie l'arrêt concerné dans les datasets tabulaires (colonnes `stop_id` et `stop_name`). `stop_id` correspond à l'identifiant TCL (`identifiantarret`) à transmettre ensuite au service temps réel.\n"
                 "- Appelle ensuite le MCP `mcp-tcl-service` via `get_tcl_realtime_passages` pour récupérer les passages à venir (ligne, destination, heure prévue). Utilise la valeur `stop_id` trouvée dans la table comme `stop_code`.\n"
+                "- Lorsque tu lis `tcl_stops_demo`, récupère aussi `stop_lat` / `stop_lon` afin de pouvoir afficher l'arrêt sur la carte (GeoJSON).\n"
                 "- Présente les résultats sous forme de liste ou petit tableau : `Ligne | Direction | Passage prévu | Dans X min` (heure locale HH:MM) afin que l'utilisateur visualise immédiatement la fréquence.\n"
-                "- Ajoute une phrase de contexte (ex: \"Prochains départs à République-Villeurbanne\" ou \"Données TCL actualisées à 12:34\").\n"
+                '- Ajoute une phrase de contexte (ex: "Prochains départs à République-Villeurbanne" ou "Données TCL actualisées à 12:34").\n'
                 "- Lorsque plusieurs lignes existent, regroupe-les par ligne avant de donner les horaires pour limiter la verbosity.\n\n"
                 "### Workflow\n"
                 "1. Clarify the user's context:\n"
@@ -189,12 +190,13 @@ ECO_TUNING = AgentTuning(
     # - un serveur MCP dédié aux facteurs CO₂ (mcp-co2-service)
     mcp_servers=[
         MCPServerRef(name="mcp-knowledge-flow-mcp-tabular"),
-        MCPServerRef(name="mcp-co2-service", optional=True),
-        MCPServerRef(name="mcp-traffic-service", optional=True),
-        MCPServerRef(name="mcp-tcl-service", optional=True),
-        MCPServerRef(name="mcp-geo-service", optional=True),
+        MCPServerRef(name="mcp-co2-service"),
+        MCPServerRef(name="mcp-traffic-service"),
+        MCPServerRef(name="mcp-tcl-service"),
+        MCPServerRef(name="mcp-geo-service"),
     ],
 )
+
 
 class TripMemoryEntry(TypedDict, total=False):
     key: str
@@ -288,7 +290,9 @@ class EcoAdvisor(AgentFlow):
         return payload
 
     def _tool_message_identity(self, message: ToolMessage) -> str:
-        candidate = getattr(message, "id", None) or getattr(message, "tool_call_id", None)
+        candidate = getattr(message, "id", None) or getattr(
+            message, "tool_call_id", None
+        )
         if candidate:
             return str(candidate)
 
@@ -337,7 +341,9 @@ class EcoAdvisor(AgentFlow):
             ]
         )
 
-    def _trip_entry_from_tool_message(self, message: ToolMessage) -> Optional[TripMemoryEntry]:
+    def _trip_entry_from_tool_message(
+        self, message: ToolMessage
+    ) -> Optional[TripMemoryEntry]:
         if getattr(message, "name", "") != "estimate_trip_between_addresses":
             return None
 
@@ -374,7 +380,9 @@ class EcoAdvisor(AgentFlow):
         )
         return entry
 
-    def _update_trip_memory(self, state: EcoState) -> Tuple[List[TripMemoryEntry], List[str]]:
+    def _update_trip_memory(
+        self, state: EcoState
+    ) -> Tuple[List[TripMemoryEntry], List[str]]:
         memory: List[TripMemoryEntry] = list(state.get("trip_memory") or [])
         processed_ids = list(state.get("trip_memory_ids") or [])
         processed_set = set(processed_ids)
@@ -468,12 +476,30 @@ class EcoAdvisor(AgentFlow):
         if not database_context:
             return "No databases or tables currently loaded.\n"
 
+        parsed_context = self._maybe_parse_json(database_context)
+        if isinstance(parsed_context, dict):
+            parsed_context = [parsed_context]
+
+        if not isinstance(parsed_context, list):
+            logger.warning(
+                "EcoAdvisor: unexpected database_context type: %s",
+                type(parsed_context),
+            )
+            return "No databases or tables currently loaded.\n"
+
         lines = ["You currently have access to the following structured datasets:\n"]
-        for entry in database_context:
+        for entry in parsed_context:
             entry = self._maybe_parse_json(entry)
+            if not isinstance(entry, dict):
+                logger.warning(
+                    "EcoAdvisor: skipping malformed database context entry: %r", entry
+                )
+                continue
             db = entry.get("database", "unknown_database")
             tables = entry.get("tables", [])
             lines.append(f"- Database: `{db}` with tables: {tables}")
+        if len(lines) == 1:
+            return "No databases or tables currently loaded.\n"
         return "\n".join(lines) + "\n\n"
 
     async def _ensure_database_context(self, state: EcoState) -> List[Dict[str, Any]]:
@@ -583,6 +609,93 @@ class EcoAdvisor(AgentFlow):
             for msg in messages
         ]
 
+    def _extract_stop_features(
+        self, payload: Any, max_points: int = 20
+    ) -> List[Dict[str, Any]]:
+        """
+        Build GeoJSON point features from tabular/tool payloads that contain TCL stops.
+        """
+        parsed = self._maybe_parse_json(payload)
+
+        rows: List[Any] = []
+        if isinstance(parsed, dict):
+            for key in ("rows", "results", "data"):
+                candidate = parsed.get(key)
+                if isinstance(candidate, list):
+                    rows = candidate
+                    break
+        elif isinstance(parsed, list):
+            rows = parsed
+
+        features: List[Dict[str, Any]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+
+            lat = self._safe_float(
+                row.get("stop_lat")
+                or row.get("lat")
+                or row.get("latitude")
+                or row.get("y")
+            )
+            lon = self._safe_float(
+                row.get("stop_lon")
+                or row.get("lon")
+                or row.get("lng")
+                or row.get("longitude")
+                or row.get("x")
+            )
+            has_stop_label = any(
+                key in row for key in ("stop_name", "stop_id", "stop_code", "nomarret", "arret")
+            )
+            if lat is None or lon is None or not has_stop_label:
+                continue
+
+            name = (
+                row.get("stop_name")
+                or row.get("nomarret")
+                or row.get("arret")
+                or row.get("name")
+                or "Arrêt TCL"
+            )
+
+            props: Dict[str, Any] = {"name": str(name)}
+            for key in ("stop_id", "stop_code", "ligne", "line", "destination", "platform"):
+                if key in row and row[key] is not None:
+                    props[key] = row[key]
+
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                    "properties": props,
+                }
+            )
+            if len(features) >= max_points:
+                break
+
+        return features
+
+    def _build_geo_part_from_recent_tools(self, state: EcoState) -> Optional[Dict[str, Any]]:
+        """
+        Convert recent tabular/TCL tool outputs into a GeoPart payload for the UI map.
+        """
+        for msg in reversed(state["messages"]):
+            if not isinstance(msg, ToolMessage):
+                continue
+            tool_name = getattr(msg, "name", "") or ""
+            if tool_name not in {"query", "read_query", "get_tcl_realtime_passages"}:
+                continue
+            features = self._extract_stop_features(msg.content)
+            if features:
+                return {
+                    "type": "geo",
+                    "geojson": {"type": "FeatureCollection", "features": features},
+                    "popup_property": "name",
+                    "fit_bounds": True,
+                }
+        return None
+
     # -----------------------------------------------------------------------
     # 3) Noeud LLM principal
     # -----------------------------------------------------------------------
@@ -644,6 +757,14 @@ class EcoAdvisor(AgentFlow):
             tools_md.update(tool_payloads)
             md["tools"] = tools_md
             response.response_metadata = md
+
+            geo_part = self._build_geo_part_from_recent_tools(state)
+            if geo_part:
+                add_kwargs = getattr(response, "additional_kwargs", {}) or {}
+                fred_parts = add_kwargs.get("fred_parts") or []
+                fred_parts.append(geo_part)
+                add_kwargs["fred_parts"] = fred_parts
+                response.additional_kwargs = add_kwargs
 
             return {
                 "messages": [response],
