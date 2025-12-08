@@ -23,9 +23,9 @@ import {
   Theme,
 } from "@mui/material";
 import MuiDrawer from "@mui/material/Drawer";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { UserAvatar } from "../components/profile/UserAvatar";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { KeyCloakService } from "../security/KeycloakService";
@@ -267,7 +267,28 @@ interface SideBarMenuListProps {
 }
 
 function SideBarMenuList({ menuItems, isSidebarOpen, indentation = 0 }: SideBarMenuListProps) {
+  const location = useLocation();
   const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
+
+  const isActive = (path: string) => {
+    const menuPathBase = path.split("?")[0];
+    const currentPathBase = location.pathname;
+    return currentPathBase === menuPathBase || currentPathBase.startsWith(menuPathBase + "/");
+  };
+
+  const isAnyChildActive = (children?: MenuItemCfg[]) => !!children?.some((c) => c.url && isActive(c.url));
+
+  useEffect(() => {
+    setOpenKeys((prev) => {
+      const next = { ...prev };
+      for (const it of menuItems) {
+        if (it.children && isAnyChildActive(it.children)) {
+          next[it.key] = true;
+        }
+      }
+      return next;
+    });
+  }, [location.pathname]);
 
   return (
     <List>
@@ -275,10 +296,12 @@ function SideBarMenuList({ menuItems, isSidebarOpen, indentation = 0 }: SideBarM
         const hasChildren = !!(item.children && item.children.length > 0);
         const hasLink = !!item.url;
         const isOpen = openKeys[item.key] || false;
+        const active = item.url ? isActive(item.url) : isAnyChildActive(item.children);
 
         return (
           <>
             <ListItemButton
+              selected={active}
               dense={indentation > 0}
               key={item.key}
               component={hasLink ? Link : "div"}
