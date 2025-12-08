@@ -400,6 +400,8 @@
     "searchDocumentLibraries": "Rechercher dans les bibliothèques de documents...",
     "searchPromptLibraries": "Rechercher dans les bibliothèques de prompts...",
     "searchChatContextLibraries": "Rechercher dans les bibliothèques de contextes de conversations...",
+    "welcomeUser": "Bonjour {{username}}",
+    "welcomeFallback": "Bonjour",
     "startNew": "Commencer une nouvelle conversation avec {{name}}",
     "tooltip": {
       "tokenUsage": "Cette conversation a utilisé {{input}} jetons de prompt et {{output}} jetons de réponse",

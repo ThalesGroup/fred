@@ -400,6 +400,8 @@
     "searchDocumentLibraries": "Search document libraries...",
     "searchPromptLibraries": "Search prompt libraries...",
     "searchChatContextLibraries": "Search chat context libraries...",
+    "welcomeUser": "Hello {{username}}",
+    "welcomeFallback": "Hello there",
     "startNew": "Start a new conversation with {{name}}",
     "tooltip": {
       "tokenUsage": "This conversation has used {{input}} prompt tokens and {{output}} response tokens",
