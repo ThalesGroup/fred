@@ -76,7 +76,6 @@ class VectorSearchController:
 
         @router.post(
             "/vector/test",
-            tags=["Vector Search"],
             summary="Test endpoint that always returns a successful dummy response.",
             description="A simple test endpoint for POST requests. Returns a fixed list of VectorSearchHit.",
             response_model=list[VectorSearchHit],
