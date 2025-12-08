@@ -18,6 +18,7 @@ import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { AgentHub } from "../pages/AgentHub";
 import Chat from "../pages/Chat";
+import ReleaseNotes from "../pages/ReleaseNotes";
 import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { Kpis } from "../pages/Kpis";
 import Logs from "../pages/Logs";
@@ -116,6 +117,10 @@ export const routes: RouteObject[] = [
       {
         path: "mcpHub",
         element: <McpHub />,
+      },
+      {
+        path: "release-notes",
+        element: <ReleaseNotes />,
       },
     ].filter(Boolean),
   },

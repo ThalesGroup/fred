@@ -14,7 +14,7 @@
 
 
 import logging
-from typing import List
+from typing import List, Tuple
 
 from fred_core import VectorSearchHit
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -52,8 +52,13 @@ logger = logging.getLogger(__name__)
 # - These are *UI schema fields* (spec). Live values come from AgentSettings.tuning
 #   and are applied by AgentFlow at runtime.
 RAG_TUNING = AgentTuning(
-    role="Document retrieval and QA expert",
-    description="An expert in retrieving and processing documents using retrieval-augmented generation techniques. Rico can help with tasks that involve understanding and utilizing large document collections.",
+    # High-level role as seen by UI / other tools
+    role="Evidence-based document question-answering assistant",
+    description=(
+        "A general-purpose RAG agent that answers questions using retrieved document snippets. "
+        "It grounds all claims in the provided sources, cites them inline, and explicitly acknowledges "
+        "when the evidence is weak, conflicting, or missing."
+    ),
     tags=["document"],
     fields=[
         FieldSpec(
@@ -61,13 +66,33 @@ RAG_TUNING = AgentTuning(
             type="prompt",
             title="RAG System Prompt",
             description=(
-                "Sets the assistant policy for evidence-based answers and citation style."
+                "Defines the assistant’s behavior for evidence-based answers, source usage, and citation style."
             ),
             required=True,
             default=(
-                "You answer strictly based on the retrieved document chunks.\n"
-                "Always cite claims using bracketed numeric markers like [1], [2], matching the provided sources list.\n"
-                "Be concise and factual. If evidence is weak or missing, say so."
+                "You are a general-purpose document retrieval and question-answering assistant.\n"
+                "\n"
+                "Your job is to answer user questions using the document excerpts (sources) that are provided to you.\n"
+                "\n"
+                "Core rules:\n"
+                "- Treat the provided sources as your primary ground truth for factual claims.\n"
+                "- When you make a factual claim supported by a source, add bracketed numeric citations like [1], [2]\n"
+                "  that correspond to the numbered sources you were given.\n"
+                "- If multiple sources support the same statement, you may list several citations (e.g. [1][3]).\n"
+                "- You may summarize, rephrase, and organize the content from the sources, but do not invent new facts\n"
+                "  that are not supported by them.\n"
+                "- If the sources are incomplete, ambiguous, or do not directly answer the question, say this explicitly\n"
+                "  and avoid speculation.\n"
+                "- If the user asks for background information that clearly goes beyond the sources, briefly explain\n"
+                "  that this is outside the provided documents instead of guessing.\n"
+                "\n"
+                "Style guidelines:\n"
+                "- Be clear, concise, and neutral in tone.\n"
+                "- Prefer short paragraphs and, when helpful, bullet lists.\n"
+                "- Make the reasoning easy to follow, but do not expose chain-of-thought step by step.\n"
+                "- Always respond in {response_language}.\n"
+                "\n"
+                "Today is {today}."
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
@@ -75,10 +100,72 @@ RAG_TUNING = AgentTuning(
             key="prompts.response_language",
             type="text",
             title="Response Language",
-            description="Language to use for all answers (e.g., 'français', 'English').",
+            description="Language to use for all answers (e.g., 'English', 'Spanish').",
             required=False,
-            default="français",
+            default="English",
             ui=UIHints(group="Prompts"),
+        ),
+        FieldSpec(
+            key="prompts.with_sources",
+            type="prompt",
+            title="Answer With Sources",
+            description=(
+                "User-facing instructions when sources are available. "
+                "Include placeholders for {question} and {sources}."
+            ),
+            required=True,
+            default=(
+                "Base your answer on the following documents. Prioritize these sources and cite the document title.\n"
+                "If the information is missing, cautiously supplement with your general knowledge and state that it does not come from the documents.\n"
+                "If the sources conflict or are insufficient, mention it briefly.\n\n"
+                "Question:\n{question}\n\n"
+                "Documents:\n{sources}\n"
+            ),
+            ui=UIHints(group="Prompts", multiline=True, markdown=True),
+        ),
+        FieldSpec(
+            key="prompts.no_sources",
+            type="prompt",
+            title="Answer Without Sources",
+            description=(
+                "Instructions when no usable sources remain after filtering. Include a {question} placeholder."
+            ),
+            required=True,
+            default=(
+                "No relevant documents were found to answer this question. Respond using your general knowledge and explicitly state that your answer does not come from the provided documents.\n\n"
+                "Question:\n{question}"
+            ),
+            ui=UIHints(group="Prompts", multiline=True, markdown=True),
+        ),
+        FieldSpec(
+            key="prompts.no_results",
+            type="prompt",
+            title="No Results Message",
+            description=(
+                "Message sent to the model when the search returns no documents at all. Include a {question} placeholder if needed."
+            ),
+            required=True,
+            default=(
+                "I couldn't find any relevant documents. Try rephrasing or expanding your query?"
+            ),
+            ui=UIHints(group="Prompts", multiline=True, markdown=True),
+        ),
+        FieldSpec(
+            key="prompts.keyword_expansion",
+            type="prompt",
+            title="Keyword Expansion Prompt",
+            description=(
+                "Prompt used to extract keywords before retrieval. Include the {question} placeholder."
+            ),
+            required=True,
+            default=(
+                "Here is a user question:\n"
+                "{question}\n\n"
+                "List at most 6 important keywords or keyphrases for a focused document search.\n"
+                "- Reply only with a comma-separated list.\n"
+                "- No sentences, no numbering."
+            ),
+            ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
         FieldSpec(
             key="rag.top_k",
@@ -86,17 +173,40 @@ RAG_TUNING = AgentTuning(
             title="Top-K Documents",
             description="How many chunks to retrieve per question.",
             required=False,
-            default=3,
+            default=8,
             ui=UIHints(group="Retrieval"),
         ),
         FieldSpec(
-            key="prompts.include_chat_context",
+            key="rag.keyword_expansion",
             type="boolean",
-            title="Append Chat Context to System Prompt",
-            description="If true, append the runtime chat context text after the system prompt.",
+            title="Enable Keyword Expansion",
+            description=(
+                "If enabled, the model first extracts keywords and augments the query before vector search to widen recall."
+            ),
             required=False,
-            default=False,
+            default=True,
+            ui=UIHints(group="Retrieval"),
+        ),
+        FieldSpec(
+            key="rag.history_max_messages",
+            type="integer",
+            title="Conversation Memory",
+            description="How many recent messages to include before the current question.",
+            required=False,
+            default=10,
             ui=UIHints(group="Prompts"),
+        ),
+        FieldSpec(
+            key="rag.min_score",
+            type="number",
+            title="Minimum Score (filter)",
+            description=(
+                "Filter out retrieved chunks with a score below this value. "
+                "Use 0 to disable score-based filtering."
+            ),
+            required=False,
+            default=0.6,
+            ui=UIHints(group="Retrieval"),
         ),
     ],
 )
@@ -135,20 +245,51 @@ class Rico(AgentFlow):
     # -----------------------------
     # Small helpers (local policy)
     # -----------------------------
+    def _render_tuned_prompt(self, key: str, **tokens) -> str:
+        prompt = self.get_tuned_text(key)
+        if not prompt:
+            logger.warning("Rico: no tuned prompt found for %s", key)
+            raise RuntimeError(f"Rico: no tuned prompt found for '{key}'.")
+        return self.render(prompt, **tokens)
+
     def _system_prompt(self) -> str:
         """
         Resolve the RAG system prompt from tuning; optionally append chat context text if enabled.
         """
-        sys_tpl = self.get_tuned_text("prompts.system")
-        if not sys_tpl:
-            logger.warning("Rico: no tuned system prompt found, using fallback.")
-            raise RuntimeError("Rico: no tuned system prompt found.")
-        sys_text = self.render(sys_tpl)  # token-safe rendering (e.g. {today})
-        response_language = self.get_tuned_text("prompts.response_language")
-        if response_language:
-            sys_text = f"{sys_text}\n\nRéponds en {response_language}."
+        response_language = (
+            self.get_tuned_text("prompts.response_language") or "English"
+        )
+        sys_text = self._render_tuned_prompt(
+            "prompts.system", response_language=response_language
+        )  # token-safe rendering (e.g. {today})
 
+        logger.debug(
+            "Rico: resolved system prompt (len=%d, language=%s)",
+            len(sys_text),
+            response_language or "default",
+        )
         return sys_text
+
+    async def _expand_with_keywords(self, question: str) -> Tuple[str, List[str]]:
+        """
+        Ask the model for a short list of keywords and append them to the query for retrieval.
+        """
+        prompt = self._render_tuned_prompt(
+            "prompts.keyword_expansion", question=question
+        )
+        try:
+            resp = await self.model.ainvoke([HumanMessage(content=prompt)])
+            raw = resp.content if isinstance(resp.content, str) else ""
+            keywords = [kw.strip() for kw in raw.split(",") if kw.strip()]
+            if not keywords:
+                return question, []
+            augmented = f"{question} {' '.join(keywords)}"
+            return augmented, keywords
+        except Exception as e:
+            logger.warning(
+                "Rico: keyword expansion failed, using raw question. err=%s", e
+            )
+            return question, []
 
     # -----------------------------
     # Node: reasoner
@@ -168,12 +309,31 @@ class Rico(AgentFlow):
         question = last.content
 
         try:
+            # 0) Optional keyword expansion to widen recall
+            augmented_question = question
+            keywords: List[str] = []
+            if bool(self.get_tuned_any("rag.keyword_expansion")):
+                augmented_question, keywords = await self._expand_with_keywords(
+                    question
+                )
+                logger.debug(
+                    "[AGENT] keyword expansion enabled; raw_question=%r keywords=%s augmented=%r",
+                    question,
+                    keywords,
+                    augmented_question,
+                )
+            else:
+                logger.debug(
+                    "[AGENT] keyword expansion disabled; using raw_question=%r",
+                    question,
+                )
+
             # 1) Build retrieval scope from runtime context
             doc_tag_ids = get_document_library_tags_ids(self.get_runtime_context())
             search_policy = get_search_policy(self.get_runtime_context())
-            top_k = self.get_tuned_int("search.top_k", default=3)
-            logger.info(
-                "Rico: reasoning start question=%r doc_tag_ids=%s search_policy=%s top_k=%s",
+            top_k = self.get_tuned_int("rag.top_k", default=10)
+            logger.debug(
+                "[AGENT] reasoning start question=%r doc_tag_ids=%s search_policy=%s top_k=%s",
                 question,
                 doc_tag_ids,
                 search_policy,
@@ -182,21 +342,75 @@ class Rico(AgentFlow):
 
             # 2) Vector search
             hits: List[VectorSearchHit] = self.search_client.search(
-                question=question,
+                question=augmented_question,
                 top_k=top_k,
                 document_library_tags_ids=doc_tag_ids,
                 search_policy=search_policy,
             )
-            logger.info(["[AGENT] vector search returned %d hit(s)", len(hits)])
+            logger.debug("[AGENT] vector search returned %d hit(s)", len(hits))
+            if hits:
+                hit_summaries = []
+                for h in hits[:10]:
+                    score = (
+                        f"{h.score:.3f}" if isinstance(h.score, (int, float)) else "NA"
+                    )
+                    label = h.title or h.file_name or h.uid
+                    section = f" section={h.section}" if h.section else ""
+                    page = f" page={h.page}" if h.page is not None else ""
+                    hit_summaries.append(
+                        f"[{h.rank}] score={score} title={label}{section}{page}"
+                    )
+                logger.debug("[AGENT] top hits: %s", "; ".join(hit_summaries))
             if not hits:
-                warn = "I couldn't find any relevant documents. Try rephrasing or expanding your query?"
-                messages = self.with_chat_context_text([HumanMessage(content=warn)])
+                warn = self._render_tuned_prompt(
+                    "prompts.no_results", question=question
+                )
+                messages = [HumanMessage(content=warn)]
+                messages = self.with_chat_context_text(messages)
 
                 return {"messages": [await self.model.ainvoke(messages)]}
 
             # 3) Deterministic ordering + fill ranks
             hits = sort_hits(hits)
             ensure_ranks(hits)
+
+            # 3b) Optional score filter
+            min_score = self.get_tuned_number("rag.min_score", default=0.6)
+            if min_score and min_score > 0:
+                before = len(hits)
+                hits = [
+                    h
+                    for h in hits
+                    if isinstance(h.score, (int, float)) and h.score >= min_score
+                ]
+                logger.debug(
+                    "Rico: score filter applied min_score=%.3f kept=%d/%d",
+                    min_score,
+                    len(hits),
+                    before,
+                )
+
+            if not hits:
+                sys_msg = SystemMessage(content=self._system_prompt())
+                history_max = self.get_tuned_int(
+                    "rag.history_max_messages", default=6, min_value=0
+                )
+                history = self.get_recent_history(
+                    state["messages"],
+                    max_messages=history_max,
+                    include_system=False,
+                    include_tool=False,
+                    drop_last=True,
+                )
+                human_msg = HumanMessage(
+                    content=self._render_tuned_prompt(
+                        "prompts.no_sources", question=question
+                    )
+                )
+                messages = [sys_msg, *history, human_msg]
+                messages = self.with_chat_context_text(messages)
+                answer = await self.model.ainvoke(messages)
+                return {"messages": [answer]}
 
             # 4) Build messages explicitly (no magic)
             #    - One SystemMessage with policy/tone (from tuning)
@@ -208,17 +422,32 @@ class Rico(AgentFlow):
                 len(hits),
                 len(sources_block),
             )
+            history_max = self.get_tuned_int(
+                "rag.history_max_messages", default=6, min_value=0
+            )
+            history = self.get_recent_history(
+                state["messages"],
+                max_messages=history_max,
+                include_system=False,
+                include_tool=False,
+                drop_last=True,
+            )
             human_msg = HumanMessage(
-                content=(
-                    "Use ONLY the sources below. When you state a fact, add citations like [1] or [1][2]. "
-                    "If sources disagree or are insufficient, say so briefly.\n\n"
-                    f"Question:\n{question}\n\n"
-                    f"Sources:\n{sources_block}\n"
+                content=self._render_tuned_prompt(
+                    "prompts.with_sources",
+                    question=question,
+                    sources=sources_block,
                 )
+            )
+            logger.debug(
+                "[AGENT] prompt lengths sys=%d human=%d sources_chars=%d",
+                len(sys_msg.content),
+                len(human_msg.content),
+                len(sources_block),
             )
 
             # 5) Ask the model
-            messages = [sys_msg, human_msg]
+            messages = [sys_msg, *history, human_msg]
             messages = self.with_chat_context_text(messages)
 
             logger.debug(
@@ -251,12 +480,11 @@ class Rico(AgentFlow):
                     "hits_count": hits_count,
                 },
             )
-            logger.exception(
-                "[AGENT] error in reasoning step.", extra={"err_ctx": log_ctx}
-            )
+            logger.error("[AGENT] error in reasoning step.", extra={"err_ctx": log_ctx})
 
             fallback_text = guardrail_fallback_message(
                 info,
+                language=self.get_tuned_text("prompts.response_language"),
                 default_message="An unexpected error occurred while searching documents. Please try again.",
             )
             fallback = await self.model.ainvoke([HumanMessage(content=fallback_text)])

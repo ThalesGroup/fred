@@ -33,6 +33,7 @@ class RuntimeContext(BaseModel):
     attachments_markdown: Optional[str] = (
         None  # if the session has some attachement files, this will hold their markdown representation
     )
+    skip_rag_search: Optional[bool] = None
 
 
 # Type alias for context provider functions
@@ -78,3 +79,10 @@ def get_refresh_token(context: RuntimeContext | None) -> Optional[str]:
     if not context:
         return None
     return context.refresh_token
+
+
+def should_skip_rag_search(context: RuntimeContext | None) -> bool:
+    """Helper to check whether retrieval should be bypassed for this message."""
+    if not context:
+        return False
+    return bool(context.skip_rag_search)

@@ -50,3 +50,18 @@ class BaseMcpServerStore(ABC):
         Delete an MCP server configuration.
         """
         pass
+
+    @abstractmethod
+    def static_seeded(self) -> bool:
+        """
+        Return True if static servers have already been seeded into the store.
+        Used to avoid re-adding statics after they were intentionally deleted.
+        """
+        pass
+
+    @abstractmethod
+    def mark_static_seeded(self) -> None:
+        """
+        Mark the store as having seeded static servers.
+        """
+        pass

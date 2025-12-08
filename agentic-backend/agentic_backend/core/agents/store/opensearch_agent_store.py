@@ -65,6 +65,7 @@ class OpenSearchAgentStore(BaseAgentStore):
         secure: bool = False,
         verify_certs: bool = False,
     ):
+        self._seed_marker_id = "__static_seeded__"
         self.client = OpenSearch(
             host,
             http_auth=(username, password),
@@ -115,6 +116,8 @@ class OpenSearchAgentStore(BaseAgentStore):
         # FIX: The original was slightly inconsistent. This is the correct, cleaner version:
         scope_id_part = scope_id if scope_id is not None else "NULL"
         return f"{name}:{scope}:{scope_id_part}"
+        #
+        # NOTE: __static_seeded__ is reserved for seed marker
 
     # ---------------- CRUD with Scoping ----------------
 
@@ -211,7 +214,11 @@ class OpenSearchAgentStore(BaseAgentStore):
                 body=query,
                 params={"size": 1000},
             )
-            docs = [hit["_source"] for hit in result["hits"]["hits"]]
+            docs = []
+            for hit in result["hits"]["hits"]:
+                if hit.get("_id") == self._seed_marker_id:
+                    continue
+                docs.append(hit["_source"])
 
             # Remove transient scope fields before pydantic validation,
             # as they are not part of AgentSettings structure
@@ -235,6 +242,8 @@ class OpenSearchAgentStore(BaseAgentStore):
         scope_id: Optional[str] = None,
     ) -> Optional[AgentSettings]:
         doc_id = self._create_doc_id(name, scope, scope_id)
+        if doc_id == self._seed_marker_id:
+            return None
         try:
             result = self.client.get(index=self.index_name, id=doc_id)
             source = result["_source"]
@@ -254,6 +263,8 @@ class OpenSearchAgentStore(BaseAgentStore):
         scope_id: Optional[str] = None,
     ) -> None:
         doc_id = self._create_doc_id(name, scope, scope_id)
+        if doc_id == self._seed_marker_id:
+            return
         try:
             self.client.delete(index=self.index_name, id=doc_id)
             logger.info(f"[AGENTS] Deleted agent '{name}' (ID: {doc_id})")
@@ -266,3 +277,24 @@ class OpenSearchAgentStore(BaseAgentStore):
                 f"[AGENTS] Failed to delete agent '{name}' (ID: {doc_id}): {e}"
             )
             raise
+
+    # ----------------------- seed marker helpers ------------------------
+    def static_seeded(self) -> bool:
+        try:
+            return bool(
+                self.client.exists(index=self.index_name, id=self._seed_marker_id)
+            )
+        except Exception:
+            logger.exception("[AGENTS][OS] Failed to check static_seeded marker")
+            return False
+
+    def mark_static_seeded(self) -> None:
+        try:
+            self.client.index(
+                index=self.index_name,
+                id=self._seed_marker_id,
+                body={},
+                params={"refresh": "true"},
+            )
+        except Exception:
+            logger.exception("[AGENTS][OS] Failed to mark static_seeded")
