@@ -434,14 +434,17 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore, LexicalSearchable):
 
         # ---- step 3: bool + knn fallback (2.18 and below) --------------------
 
+        knn_query = {
+            "vector": vector,
+            "k": k,
+        }
+
+        if filters:
+            knn_query["filter"] = {"bool": {"filter": filters}}
+
         bool_knn_body = {
             "size": k,
-            "query": {
-                "bool": {
-                    "filter": filters or [],
-                    "must": [{"knn": {"vector_field": {"vector": vector, "k": k}}}],
-                }
-            },
+            "query": {"knn": {"vector_field": knn_query}},
             "_source": True,
         }
 
