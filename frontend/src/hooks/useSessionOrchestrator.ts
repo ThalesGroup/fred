@@ -12,15 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useMemo, useState, useCallback } from "react";
-import type { SessionSchema } from "../slices/agentic/agenticOpenApi";
-import { useSessionAgent } from "./usePrefs";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnyAgent } from "../common/agent";
+import type { SessionSchema } from "../slices/agentic/agenticOpenApi";
 
 /**
- * Thin, predictable orchestrator over:
- * - server data (sessions, flows)
- * - local persistence (session->agent mapping via useSessionAgent)
+ * Thin, predictable orchestrator over server data (sessions, flows).
+ * Session selection is now managed via URL routing.
  *
  * It does NOT fetch anything; you pass sessions/flows in from your RTK hooks.
  */
@@ -41,28 +39,13 @@ export function useSessionOrchestrator(params: {
     setSessions(sessionsFromServer ?? []);
   }, [sessionsFromServer]);
 
-  // Choose initial session id:
-  // - Prefer the most recently updated session if any
-  // - Else use "draft"
-  const defaultSessionId = useMemo(() => {
-    if (!sessionsFromServer?.length) return "draft";
-    const sorted = [...sessionsFromServer].sort(
-      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
-    );
-    return sorted[0].id ?? "draft";
-  }, [sessionsFromServer]);
+  // Track current session (managed by parent via selectSession)
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(defaultSessionId);
+  // Track current agent for the session
+  const [currentAgentId, setCurrentAgentId] = useState<string | null>(null);
 
-  // Keep default in sync if server list changes (e.g., first load)
-  useEffect(() => {
-    if (!currentSessionId) setCurrentSessionId(defaultSessionId);
-  }, [defaultSessionId, currentSessionId]);
-
-  // Persistence: session -> agent mapping (+ last used agent)
-  const { agentId, setAgentForSession, migrateSessionId } = useSessionAgent(currentSessionId);
-
-  // Derived “current” objects
+  // Derived "current" objects
   const currentSession = useMemo(
     () => sessions.find((s) => s.id === currentSessionId) ?? null,
     [sessions, currentSessionId],
@@ -70,12 +53,12 @@ export function useSessionOrchestrator(params: {
 
   const currentAgent = useMemo(() => {
     if (!agentsFromServer?.length) return null;
-    // If we have a stored agent for this session, prefer that flow
-    const byStored = agentId ? (agentsFromServer.find((f) => f.name === agentId) ?? null) : null;
-    if (byStored) return byStored;
-    // Otherwise pick the first flow as a safe default
+    // If we have a selected agent for this session, use that
+    const bySelected = currentAgentId ? (agentsFromServer.find((f) => f.name === currentAgentId) ?? null) : null;
+    if (bySelected) return bySelected;
+    // Otherwise pick the first agent as default
     return agentsFromServer[0] ?? null;
-  }, [agentsFromServer, agentId]);
+  }, [agentsFromServer, currentAgentId]);
 
   const isCreatingNewConversation = !currentSession || currentSessionId === "draft";
 
@@ -87,14 +70,13 @@ export function useSessionOrchestrator(params: {
 
   const selectAgentForCurrentSession = useCallback(
     (agent: AnyAgent) => {
-      setAgentForSession(agent.name);
+      setCurrentAgentId(agent.name);
     },
-    [setAgentForSession],
+    [],
   );
 
   const startNewConversation = useCallback(() => {
     setCurrentSessionId("draft");
-    // no need to pre-set agent: useSessionAgent will reuse lastAgent until user picks another one
   }, []);
 
   const updateOrAddSession = useCallback((session: SessionSchema) => {
@@ -128,11 +110,10 @@ export function useSessionOrchestrator(params: {
 
   const bindDraftAgentToSessionId = useCallback(
     (newId: string) => {
-      // “Draft” session got a real id from backend: migrate the mapping and select it
-      migrateSessionId("draft", newId);
+      // "Draft" session got a real id from backend: select it
       setCurrentSessionId(newId);
     },
-    [migrateSessionId],
+    [],
   );
 
   return {

@@ -11,34 +11,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import ChatIcon from "@mui/icons-material/Chat";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-
-import { Box, CircularProgress, Grid2, IconButton, Paper, Typography } from "@mui/material";
-import { useMemo, useRef, useEffect } from "react";
-import { useTranslation } from "react-i18next";
-import { useParams, useNavigate } from "react-router-dom";
+import { Box, CircularProgress, Grid2, Typography } from "@mui/material";
+import { useEffect, useMemo } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
-import { ChatContextPickerPanel } from "../components/chatbot/settings/ChatContextPickerPanel";
-import { ConversationList } from "../components/chatbot/settings/ConversationList";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { useSessionOrchestrator } from "../hooks/useSessionOrchestrator";
 import {
-  SessionSchema,
-  useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
   useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
 } from "../slices/agentic/agenticOpenApi";
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
-const PANEL_W = { xs: 300, sm: 340, md: 360 };
-
-type PanelContentType = "conversations" | null;
-
 export default function OldChat() {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const { t } = useTranslation();
   const { sessionId } = useParams<{ sessionId?: string }>();
   const navigate = useNavigate();
 
@@ -56,14 +42,11 @@ export default function OldChat() {
     isLoading: sessionsLoading,
     isError: sessionsError,
     error: sessionsErrObj,
-    refetch: refetchSessions,
   } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
     refetchOnMountOrArgChange: true,
     refetchOnFocus: true,
     refetchOnReconnect: true,
   });
-
-  const [deleteSessionMutation] = useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation();
 
   const {
     sessions,
@@ -83,81 +66,35 @@ export default function OldChat() {
 
   // Sync URL parameter with session selection
   useEffect(() => {
-    if (flowsLoading || sessionsLoading) return;
+    if (flowsLoading || sessionsLoading) {
+      return;
+    }
 
     if (sessionId) {
       // URL has a session ID - ensure it's selected
-      const session = sessions.find(s => s.id === sessionId);
-      if (session && session.id !== currentSession?.id) {
+      const session = sessions.find((s) => s.id === sessionId);
+      if (session) {
         selectSession(session);
-      } else if (!session) {
-        // Invalid session ID - redirect to new chat
-        navigate('/chat', { replace: true });
+      } else if (!session && sessions.length > 0) {
+        // Invalid session ID - redirect to new chat (only if sessions have loaded)
+        navigate("/chat", { replace: true });
+      } else {
       }
-    } else if (!sessionId && currentSession?.id !== 'draft') {
-      // URL is /chat but we have a selected session - start new conversation
+    } else if (!sessionId) {
+      // URL is /chat without session ID - start new conversation
       startNewConversation();
+    } else {
     }
-  }, [sessionId, sessions, currentSession?.id, flowsLoading, sessionsLoading, selectSession, startNewConversation, navigate]);
+  }, [sessionId, sessions, flowsLoading, sessionsLoading, selectSession, startNewConversation, navigate]);
 
+  // todo: move to the new conversation page
   const [selectedChatContextIds, setSelectedChatContextIds] = useLocalStorageState<string[]>(
     "chat.selectedChatContextIds",
     [],
   );
 
-  const [panelContentType, setPanelContentType] = useLocalStorageState<PanelContentType>(
-    "chat.panelContentType",
-    "conversations",
-  );
-  const isPanelOpen = panelContentType !== null;
-
-  const openPanel = (type: PanelContentType) => {
-    setPanelContentType(panelContentType === type ? null : type);
-  };
-  const closePanel = () => setPanelContentType(null);
-
-  const openConversationsPanel = () => openPanel("conversations");
-
   const handleSelectAgent = (agent: AnyAgent) => {
     selectAgentForCurrentSession(agent);
-  };
-
-  const handleSelectSession = (s: SessionSchema) => {
-    selectSession(s);
-    if (panelContentType !== "conversations") {
-      closePanel();
-    }
-  };
-
-  const handleDeleteSession = async (s: SessionSchema) => {
-    try {
-      await deleteSessionMutation({ sessionId: s.id }).unwrap();
-
-      // If deleting current session, navigate to new chat
-      if (s.id === currentSession?.id) {
-        navigate('/chat', { replace: true });
-      }
-    } catch (e) {
-      console.error("Failed to delete session", e);
-    } finally {
-      setTimeout(() => refetchSessions(), 1000);
-    }
-  };
-
-  const handleDeleteAllSessions = async () => {
-    if (!sessions.length) return;
-    const deletePromises = sessions.map((session) =>
-      deleteSessionMutation({ sessionId: session.id })
-        .unwrap()
-        .catch((e) => {
-          console.error(`Failed to delete session ${session.id}`, e);
-        }),
-    );
-    try {
-      await Promise.all(deletePromises);
-    } finally {
-      setTimeout(() => refetchSessions(), 1000);
-    }
   };
 
   if (flowsLoading || sessionsLoading) {
@@ -207,151 +144,22 @@ export default function OldChat() {
     );
   }
 
-  // Helper function to render the correct panel content
-  const renderPanelContent = () => {
-    switch (panelContentType) {
-      case "conversations":
-        return (
-          <Box sx={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, gap: 1 }}>
-            <ChatContextPickerPanel
-              selectedChatContextIds={selectedChatContextIds}
-              onChangeSelectedChatContextIds={setSelectedChatContextIds}
-              sx={{
-                flex: "0 0 auto",
-                maxHeight: "40%",
-                overflowY: "auto",
-                borderBottom: (t) => `1px solid ${t.palette.divider}`,
-                pb: 1,
-              }}
-            />
-            <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-              <ConversationList
-                sessions={sessions}
-                currentSession={currentSession}
-                onSelectSession={handleSelectSession}
-                onCreateNewConversation={startNewConversation}
-                onDeleteAllSessions={handleDeleteAllSessions}
-                onDeleteSession={handleDeleteSession}
-                isCreatingNewConversation={isCreatingNewConversation}
-                sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}
-              />
-            </Box>
-          </Box>
-        );
-      default:
-        return null;
-    }
-  };
-
-  const buttonContainerSx = {
-    position: "absolute",
-    top: 12,
-    zIndex: 10,
-    display: "flex",
-    alignItems: "center",
-    gap: 1,
-    transition: (t) => t.transitions.create("left"), // Add transition for smooth movement
-
-    // Conditional left position to move the buttons when the panel is open
-    left: isPanelOpen
-      ? {
-          xs: `calc(${PANEL_W.xs}px + 12px)`,
-          sm: `calc(${PANEL_W.sm}px + 12px)`,
-          md: `calc(${PANEL_W.md}px + 12px)`,
-        }
-      : 12, // Original position when closed
-  };
-
   return (
-    <Box ref={containerRef} sx={{ height: "100vh", position: "relative", overflow: "hidden" }}>
-      {/* Panel toggle buttons */}
-      <Box sx={buttonContainerSx}>
-        <IconButton
-          color={panelContentType === "conversations" ? "primary" : "default"}
-          onClick={openConversationsPanel}
-          title={t("settings.conversations")}
-        >
-          <ChatIcon />
-        </IconButton>
-      </Box>
-
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: isPanelOpen
-            ? { xs: `${PANEL_W.xs}px 1fr`, sm: `${PANEL_W.sm}px 1fr`, md: `${PANEL_W.md}px 1fr` }
-            : "0px 1fr",
-          transition: (t) =>
-            t.transitions.create("grid-template-columns", {
-              duration: t.transitions.duration.standard,
-              easing: t.transitions.easing.sharp,
-            }),
-          height: "100%",
-        }}
-      >
-        {/* Side Panel */}
-        <Paper
-          square
-          elevation={isPanelOpen ? 6 : 0}
-          sx={{
-            overflow: "hidden",
-            borderRight: (t) => `1px solid ${t.palette.divider}`,
-            bgcolor: (t) => t.palette.sidebar?.background ?? t.palette.background.paper,
-            display: "flex",
-            flexDirection: "column",
-            pointerEvents: isPanelOpen ? "auto" : "none",
+    <Box sx={{ height: "100vh", position: "relative", overflow: "hidden" }}>
+      <Grid2>
+        <ChatBot
+          currentChatBotSession={currentSession}
+          currentAgent={currentAgent!}
+          agents={enabledAgents}
+          onSelectNewAgent={handleSelectAgent}
+          onUpdateOrAddSession={updateOrAddSession}
+          isCreatingNewConversation={isCreatingNewConversation}
+          runtimeContext={{
+            selected_chat_context_ids: selectedChatContextIds.length ? selectedChatContextIds : undefined,
           }}
-        >
-          {/* Panel Header (Static top part) */}
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              px: 1,
-              py: 1,
-              borderBottom: (t) => `1px solid ${t.palette.divider}`,
-              flex: "0 0 auto",
-            }}
-          >
-            {/* Back Button */}
-            <IconButton size="small" onClick={closePanel} sx={{ visibility: isPanelOpen ? "visible" : "hidden" }}>
-              <ChevronLeftIcon fontSize="small" />
-            </IconButton>
-
-            {/* Title */}
-          </Box>
-
-          {/* Content Body (Takes the rest of the space) */}
-          <Box
-            sx={{
-              flex: 1,
-              minHeight: 0,
-              overflowY: "auto",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            {renderPanelContent()}
-          </Box>
-        </Paper>
-
-        {/* ChatBot panel */}
-        <Grid2>
-          <ChatBot
-            currentChatBotSession={currentSession}
-            currentAgent={currentAgent!}
-            agents={enabledAgents}
-            onSelectNewAgent={handleSelectAgent}
-            onUpdateOrAddSession={updateOrAddSession}
-            isCreatingNewConversation={isCreatingNewConversation}
-            runtimeContext={{
-              selected_chat_context_ids: selectedChatContextIds.length ? selectedChatContextIds : undefined,
-            }}
-            onBindDraftAgentToSessionId={bindDraftAgentToSessionId}
-          />
-        </Grid2>
-      </Box>
+          onBindDraftAgentToSessionId={bindDraftAgentToSessionId}
+        />
+      </Grid2>
     </Box>
   );
 }
