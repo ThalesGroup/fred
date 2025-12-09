@@ -229,7 +229,7 @@ export default function SideBar() {
         </Paper>
 
         {/* Conversations */}
-        {open && <ConversationsSection />}
+        <ConversationsSection isSidebarOpen={open} />
 
         {/* Profile */}
         <Paper elevation={1}>
@@ -239,7 +239,11 @@ export default function SideBar() {
     </Drawer>
   );
 }
-function ConversationsSection() {
+interface ConversationsSectionProps {
+  isSidebarOpen: boolean;
+}
+
+function ConversationsSection({ isSidebarOpen }: ConversationsSectionProps) {
   const { t } = useTranslation();
   const theme = useTheme();
 
@@ -273,36 +277,38 @@ function ConversationsSection() {
   return (
     <>
       {/* Conversation header */}
-      <Paper elevation={1}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 2, py: 1 }}>
-          <Typography variant="subtitle2" sx={{ color: theme.palette.text.secondary }}>
-            {t("sidebar.chat")}
-          </Typography>
-          <Button component={Link} to="/chat" variant="outlined" size="small" startIcon={<AddIcon />}>
-            {t("common.create")}
-          </Button>
-        </Box>
-        <Box sx={{ px: 2, py: 1 }}>
-          <Select
-            size="small"
-            value={selectedAgent}
-            onChange={(event: SelectChangeEvent) => setSelectedAgent(event.target.value as string)}
-            sx={{ width: "100%" }}
-          >
-            <MenuItem value={allAgentOptionValue}>{t("sidebar.allAgents")}</MenuItem>
-            {enabledAgents.map((agent) => (
-              <MenuItem value={agent.name}>{agent.name}</MenuItem>
-            ))}
-          </Select>
-        </Box>
-      </Paper>
+      {isSidebarOpen && (
+        <Paper elevation={1}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 2, py: 1 }}>
+            <Typography variant="subtitle2" sx={{ color: theme.palette.text.secondary }}>
+              {t("sidebar.chat")}
+            </Typography>
+            <Button component={Link} to="/chat" variant="outlined" size="small" startIcon={<AddIcon />}>
+              {t("common.create")}
+            </Button>
+          </Box>
+          <Box sx={{ px: 2, py: 1 }}>
+            <Select
+              size="small"
+              value={selectedAgent}
+              onChange={(event: SelectChangeEvent) => setSelectedAgent(event.target.value as string)}
+              sx={{ width: "100%" }}
+            >
+              <MenuItem value={allAgentOptionValue}>{t("sidebar.allAgents")}</MenuItem>
+              {enabledAgents.map((agent) => (
+                <MenuItem value={agent.name}>{agent.name}</MenuItem>
+              ))}
+            </Select>
+          </Box>
+        </Paper>
+      )}
 
       {/* Conversation list */}
       <Paper
         elevation={0}
         sx={{ flexGrow: 1, overflowY: "auto", overflowX: "hidden", scrollbarWidth: "none", py: 1, px: 1 }}
       >
-        {sessionsFromServer?.map((session) => <SideBarConversationListElement session={session} />)}
+        {isSidebarOpen && sessionsFromServer?.map((session) => <SideBarConversationListElement session={session} />)}
       </Paper>
     </>
   );
