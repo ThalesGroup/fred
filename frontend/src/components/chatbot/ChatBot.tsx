@@ -668,7 +668,7 @@ const ChatBot = ({
 
       <Box
         width="80%"
-        maxWidth="768px"
+        maxWidth={{ xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" }}
         display="flex"
         height="100vh"
         flexDirection="column"
