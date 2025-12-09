@@ -101,10 +101,15 @@ globalSchema = {
             "type": "object",
             "description": "Informations sur le CV de l'intervenant Thalès Services Numériques.",
             "properties": {
+                "trigramme": {
+                    "type": "string",
+                    "description": "Trigramme servant à anonymiser le nom de l'intervenant.",
+                    "maxLength": 3,
+                },
                 "poste": {
                     "type": "string",
                     "description": "L'intitulé du poste pour lequel les services de l'intervenant sont proposés.",
-                    "maxLength": 100,
+                    "maxLength": 40,
                 },
                 "dateFormation1": {
                     "type": "string",
@@ -141,7 +146,7 @@ globalSchema = {
                 "competenceManagement1": {
                     "type": "string",
                     "description": "Le nom de la première compétence en management.",
-                    "maxLength": 50,
+                    "maxLength": 30,
                 },
                 "maitriseManagement1": {
                     "type": "integer",
@@ -150,7 +155,7 @@ globalSchema = {
                 "competenceManagement2": {
                     "type": "string",
                     "description": "Le nom de la seconde compétence en management.",
-                    "maxLength": 50,
+                    "maxLength": 30,
                 },
                 "maitriseManagement2": {
                     "type": "integer",
@@ -159,7 +164,7 @@ globalSchema = {
                 "competenceManagement3": {
                     "type": "string",
                     "description": "Le nom de la troisième compétence en management.",
-                    "maxLength": 50,
+                    "maxLength": 30,
                 },
                 "maitriseManagement3": {
                     "type": "integer",
@@ -168,7 +173,7 @@ globalSchema = {
                 "competenceInformatique1": {
                     "type": "string",
                     "description": "Le nom de la première compétence informatique.",
-                    "maxLength": 50,
+                    "maxLength": 30,
                 },
                 "maitriseInformatique1": {
                     "type": "string",
@@ -177,7 +182,7 @@ globalSchema = {
                 "competenceInformatique2": {
                     "type": "string",
                     "description": "Le nom de la seconde compétence informatique.",
-                    "maxLength": 50,
+                    "maxLength": 30,
                 },
                 "maitriseInformatique2": {
                     "type": "integer",
@@ -186,7 +191,7 @@ globalSchema = {
                 "competenceInformatique3": {
                     "type": "string",
                     "description": "Le nom de la troisième compétence informatique.",
-                    "maxLength": 50,
+                    "maxLength": 30,
                 },
                 "maitriseInformatique3": {
                     "type": "integer",
@@ -195,7 +200,7 @@ globalSchema = {
                 "competenceGestionProjet1": {
                     "type": "string",
                     "description": "Le nom de la première compétence en gestion de projet.",
-                    "maxLength": 50,
+                    "maxLength": 30,
                 },
                 "maitriseGestionProjet1": {
                     "type": "integer",
@@ -204,7 +209,7 @@ globalSchema = {
                 "competenceGestionProjet2": {
                     "type": "string",
                     "description": "Le nom de la seconde compétence en gestion de projet.",
-                    "maxLength": 50,
+                    "maxLength": 30,
                 },
                 "maitriseGestionProjet2": {
                     "type": "integer",
@@ -213,7 +218,7 @@ globalSchema = {
                 "competenceGestionProjet3": {
                     "type": "string",
                     "description": "Le nom de la troisième compétence en gestion de projet.",
-                    "maxLength": 50,
+                    "maxLength": 30,
                 },
                 "maitriseGestionProjet3": {
                     "type": "integer",
@@ -233,7 +238,7 @@ globalSchema = {
                 },
                 "realisations1": {
                     "type": "string",
-                    "description": "Description des taches réalisées lors de la première expérience.",
+                    "description": "Description des taches réalisées lors de la première expérience en 2-3 phrases.",
                 },
                 "entreprise2": {
                     "type": "string",
@@ -249,7 +254,7 @@ globalSchema = {
                 },
                 "realisations2": {
                     "type": "string",
-                    "description": "Description des taches réalisées lors de la seconde expérience.",
+                    "description": "Description des taches réalisées lors de la seconde expérience en 2-3 phrases.",
                 },
                 "entreprise3": {
                     "type": "string",
@@ -265,7 +270,7 @@ globalSchema = {
                 },
                 "realisations3": {
                     "type": "string",
-                    "description": "Description des taches réalisées lors de la troisième expérience.",
+                    "description": "Description des taches réalisées lors de la troisième expérience en 2-3 phrases.",
                 },
             },
         },
