@@ -14,7 +14,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnyAgent } from "../common/agent";
-import type { SessionSchema } from "../slices/agentic/agenticOpenApi";
+import type { SessionSchema, SessionWithFiles } from "../slices/agentic/agenticOpenApi";
+import { useLocalStorageState } from "./useLocalStorageState";
 
 /**
  * Thin, predictable orchestrator over server data (sessions, flows).
@@ -23,14 +24,14 @@ import type { SessionSchema } from "../slices/agentic/agenticOpenApi";
  * It does NOT fetch anything; you pass sessions/flows in from your RTK hooks.
  */
 export function useSessionOrchestrator(params: {
-  sessionsFromServer: SessionSchema[];
+  sessionsFromServer: SessionWithFiles[];
   agentsFromServer: AnyAgent[];
   loading: boolean;
 }) {
   const { sessionsFromServer, agentsFromServer, loading } = params;
 
   // Local mirror so we can upsert/delete without fighting server pagination/timing.
-  const [sessions, setSessions] = useState<SessionSchema[]>([]);
+  const [sessions, setSessions] = useState<SessionWithFiles[]>([]);
   useEffect(() => {
     console.log(
       "Orchestrator: useEffect triggered by sessionsFromServer change. New count:",
@@ -42,8 +43,14 @@ export function useSessionOrchestrator(params: {
   // Track current session (managed by parent via selectSession)
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
-  // Track current agent for the session
-  const [currentAgentId, setCurrentAgentId] = useState<string | null>(null);
+  // Track manually selected agent (overrides default logic)
+  const [manuallySelectedAgentId, setManuallySelectedAgentId] = useState<string | null>(null);
+
+  // Store last agent used for new conversations in localStorage
+  const [lastNewConversationAgent, setLastNewConversationAgent] = useLocalStorageState<string | null>(
+    "chat.lastNewConversationAgent",
+    null,
+  );
 
   // Derived "current" objects
   const currentSession = useMemo(
@@ -51,48 +58,89 @@ export function useSessionOrchestrator(params: {
     [sessions, currentSessionId],
   );
 
+  // Reset manual selection when session changes
+  useEffect(() => {
+    setManuallySelectedAgentId(null);
+  }, [currentSessionId]);
+
   const currentAgent = useMemo(() => {
     if (!agentsFromServer?.length) return null;
-    // If we have a selected agent for this session, use that
-    const bySelected = currentAgentId ? (agentsFromServer.find((f) => f.name === currentAgentId) ?? null) : null;
-    if (bySelected) return bySelected;
-    // Otherwise pick the first agent as default
+
+    // If user manually selected an agent, use that
+    if (manuallySelectedAgentId) {
+      const manualAgent = agentsFromServer.find((a) => a.name === manuallySelectedAgentId);
+      if (manualAgent) return manualAgent;
+    }
+
+    // For existing sessions: use the first agent from the session's agents array
+    if (currentSession?.agents?.length) {
+      const sessionAgentName = currentSession.agents[0];
+      const sessionAgent = agentsFromServer.find((a) => a.name === sessionAgentName);
+      if (sessionAgent) return sessionAgent;
+    }
+
+    // For new conversations (draft): use last agent from localStorage
+    if (!currentSession || currentSessionId === "draft") {
+      if (lastNewConversationAgent) {
+        const lastAgent = agentsFromServer.find((a) => a.name === lastNewConversationAgent);
+        if (lastAgent) return lastAgent;
+      }
+    }
+
+    // Fallback to first agent in the list
     return agentsFromServer[0] ?? null;
-  }, [agentsFromServer, currentAgentId]);
+  }, [agentsFromServer, currentSession, currentSessionId, lastNewConversationAgent, manuallySelectedAgentId]);
 
   const isCreatingNewConversation = !currentSession || currentSessionId === "draft";
 
   // Intentful API (page calls these)
 
-  const selectSession = useCallback((session: SessionSchema) => {
+  const selectSession = useCallback((session: SessionWithFiles) => {
     setCurrentSessionId(session.id);
   }, []);
 
   const selectAgentForCurrentSession = useCallback(
     (agent: AnyAgent) => {
-      setCurrentAgentId(agent.name);
+      // Set as manually selected agent (overrides default logic)
+      setManuallySelectedAgentId(agent.name);
+
+      // Also save to localStorage if we're in a new conversation
+      if (!currentSession || currentSessionId === "draft") {
+        setLastNewConversationAgent(agent.name);
+      }
     },
-    [],
+    [currentSession, currentSessionId, setLastNewConversationAgent],
   );
 
   const startNewConversation = useCallback(() => {
     setCurrentSessionId("draft");
   }, []);
 
-  const updateOrAddSession = useCallback((session: SessionSchema) => {
-    setSessions((prev) => {
-      const idx = prev.findIndex((s) => s.id === session.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = session;
-        return next;
-      }
-      return [session, ...prev];
-    });
-  }, []);
+  const updateOrAddSession = useCallback(
+    (session: SessionWithFiles | SessionSchema | Partial<SessionWithFiles>) => {
+      setSessions((prev) => {
+        const idx = prev.findIndex((s) => s.id === session.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          // Merge with existing session to preserve fields like 'agents' that might not be in the update
+          next[idx] = { ...next[idx], ...session };
+          return next;
+        }
+        // When adding a new session, ensure it has default values for optional fields
+        const newSession: SessionWithFiles = {
+          ...(session as SessionWithFiles),
+          agents: (session as SessionWithFiles).agents ?? [],
+          file_names: (session as SessionWithFiles).file_names ?? [],
+          attachments: (session as SessionWithFiles).attachments ?? [],
+        };
+        return [newSession, ...prev];
+      });
+    },
+    [],
+  );
 
   const deleteSession = useCallback(
-    (session: SessionSchema) => {
+    (session: SessionWithFiles) => {
       console.log("Orchestrator: deleteSession called for session:", session.id);
       setSessions((prev) => {
         console.log("Orchestrator: Previous local state count:", prev.length);

@@ -26,6 +26,7 @@ import {
   FinalEvent,
   RuntimeContext,
   SessionSchema,
+  SessionWithFiles,
   StreamEvent,
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
@@ -51,11 +52,11 @@ export interface ChatBotError {
 // }
 
 export interface ChatBotProps {
-  currentChatBotSession: SessionSchema | null;
+  currentChatBotSession: SessionWithFiles | null;
   currentAgent: AnyAgent;
   agents: AnyAgent[];
   onSelectNewAgent: (flow: AnyAgent) => void;
-  onUpdateOrAddSession: (session: SessionSchema) => void;
+  onUpdateOrAddSession: (session: SessionWithFiles | SessionSchema | Partial<SessionWithFiles>) => void;
   isCreatingNewConversation: boolean;
   runtimeContext?: RuntimeContext;
   onBindDraftAgentToSessionId?: (sessionId: string) => void;
