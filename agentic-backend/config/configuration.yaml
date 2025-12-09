@@ -44,7 +44,7 @@ ai:
   # that allow users to create/update agents at runtime and change
   # their configuration without redeploying the application.
   # Developers: you may prefer to set this to true to trust only your static configuration
-  use_static_config_only: false
+  use_static_config_only: true
 
   # Number of past exchanges to restore when initializing an agent session
   # This setting is used to limit the amount of historical context
@@ -65,7 +65,7 @@ ai:
     # Required in .env:
     # - OPENAI_API_KEY
     provider: "openai"
-    name: "mistral-large-latest" #2411
+    name: "mistral-large-latest"
     settings:
       base_url: https://api.mistral.ai/v1
       temperature: 0.0

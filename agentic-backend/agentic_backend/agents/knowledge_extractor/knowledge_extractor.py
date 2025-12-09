@@ -137,7 +137,7 @@ globalSchema = {
                 },
                 "langue1": {
                     "type": "string",
-                    "description": "La première langue parlée.",
+                    "description": "La première langue parlée (généralement anglais).",
                 },
                 "maitriseLangue1": {
                     "type": "integer",
@@ -150,7 +150,7 @@ globalSchema = {
                 },
                 "maitriseManagement1": {
                     "type": "integer",
-                    "description": "La maitrise de la première compétence en management.",
+                    "description": "La maitrise de la première compétence en management. Réfère toi au texte alternatif de l'image correspondante.",
                 },
                 "competenceManagement2": {
                     "type": "string",
@@ -159,7 +159,7 @@ globalSchema = {
                 },
                 "maitriseManagement2": {
                     "type": "integer",
-                    "description": "La maitrise de la seconde compétence en management.",
+                    "description": "La maitrise de la seconde compétence en management. Réfère toi au texte alternatif de l'image correspondante.",
                 },
                 "competenceManagement3": {
                     "type": "string",
@@ -168,7 +168,7 @@ globalSchema = {
                 },
                 "maitriseManagement3": {
                     "type": "integer",
-                    "description": "La maitrise de la troisième compétence en management.",
+                    "description": "La maitrise de la troisième compétence en management. Réfère toi au texte alternatif de l'image correspondante.",
                 },
                 "competenceInformatique1": {
                     "type": "string",
@@ -177,7 +177,7 @@ globalSchema = {
                 },
                 "maitriseInformatique1": {
                     "type": "string",
-                    "description": "Le lien vers l'image associée à la première compétence informatique.",
+                    "description": "Le lien vers l'image associée à la première compétence informatique. Réfère toi au texte alternatif de l'image correspondante.",
                 },
                 "competenceInformatique2": {
                     "type": "string",
@@ -186,7 +186,7 @@ globalSchema = {
                 },
                 "maitriseInformatique2": {
                     "type": "integer",
-                    "description": "La maitrise de la seconde compétence informatique.",
+                    "description": "La maitrise de la seconde compétence informatique. Réfère toi au texte alternatif de l'image correspondante.",
                 },
                 "competenceInformatique3": {
                     "type": "string",
@@ -195,7 +195,7 @@ globalSchema = {
                 },
                 "maitriseInformatique3": {
                     "type": "integer",
-                    "description": "La maitrise de la troisième compétence informatique.",
+                    "description": "La maitrise de la troisième compétence informatique. Réfère toi au texte alternatif de l'image correspondante.",
                 },
                 "competenceGestionProjet1": {
                     "type": "string",
@@ -204,7 +204,7 @@ globalSchema = {
                 },
                 "maitriseGestionProjet1": {
                     "type": "integer",
-                    "description": "La maitrise de la première compétence en gestion de projet.",
+                    "description": "La maitrise de la première compétence en gestion de projet. Réfère toi au texte alternatif de l'image correspondante.",
                 },
                 "competenceGestionProjet2": {
                     "type": "string",
@@ -213,7 +213,7 @@ globalSchema = {
                 },
                 "maitriseGestionProjet2": {
                     "type": "integer",
-                    "description": "La maitrise de la seconde compétence en gestion de projet.",
+                    "description": "La maitrise de la seconde compétence en gestion de projet. Réfère toi au texte alternatif de l'image correspondante.",
                 },
                 "competenceGestionProjet3": {
                     "type": "string",
@@ -222,7 +222,7 @@ globalSchema = {
                 },
                 "maitriseGestionProjet3": {
                     "type": "integer",
-                    "description": "La maitrise de la troisième compétence en gestion de projet.",
+                    "description": "La maitrise de la troisième compétence en gestion de projet. Réfère toi au texte alternatif de l'image correspondante.",
                 },
                 "entreprise1": {
                     "type": "string",
