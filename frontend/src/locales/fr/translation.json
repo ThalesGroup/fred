@@ -113,7 +113,8 @@
     "monitoring_runtime": "Runtime",
     "monitoring_processors": "Processeurs",
     "monitoring_data": "Données",
-    "allAgents": "Tous les agents"
+    "allAgents": "Tous les agents",
+    "deleteSessionFailed": "La supression de la conversation a échoué"
   },
   "runtime": {
     "title": "Résumé d'exécution",

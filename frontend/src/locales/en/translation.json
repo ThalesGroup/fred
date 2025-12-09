@@ -113,7 +113,8 @@
     "monitoring_runtime": "Runtime",
     "monitoring_processors": "Processors",
     "monitoring_data": "Data",
-    "allAgents": "All agents"
+    "allAgents": "All agents",
+    "deleteSessionFailed": "Failed to delete conversation"
   },
   "runtime": {
     "title": "Runtime Summary",

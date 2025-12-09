@@ -33,13 +33,15 @@ import Select, { SelectChangeEvent } from "@mui/material/Select";
 import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useToast } from "../components/ToastProvider";
 import { UserAvatar } from "../components/profile/UserAvatar";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { KeyCloakService } from "../security/KeycloakService";
 import { usePermissions } from "../security/usePermissions";
 import {
   SessionWithFiles,
+  useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
   useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
 } from "../slices/agentic/agenticOpenApi";
@@ -308,19 +310,46 @@ function ConversationsSection({ isSidebarOpen }: ConversationsSectionProps) {
         elevation={0}
         sx={{ flexGrow: 1, overflowY: "auto", overflowX: "hidden", scrollbarWidth: "none", py: 1, px: 1 }}
       >
-        {isSidebarOpen && sessionsFromServer?.map((session) => <SideBarConversationListElement session={session} />)}
+        {isSidebarOpen &&
+          sessionsFromServer?.map((session) => (
+            <SideBarConversationListElement key={session.id} session={session} refetchSessions={refetchSessions} />
+          ))}
       </Paper>
     </>
   );
 }
 interface SideBarConversationListElementProps {
   session: SessionWithFiles;
+  refetchSessions: () => void;
 }
 
-function SideBarConversationListElement({ session }: SideBarConversationListElementProps) {
+function SideBarConversationListElement({ session, refetchSessions }: SideBarConversationListElementProps) {
+  const { t } = useTranslation();
   const theme = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
+
   const isSelected = location.pathname === `/chat/${session.id}`;
+
+  const { showError } = useToast();
+  const [deleteSessionMutation] = useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation();
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      await deleteSessionMutation({ sessionId: session.id }).unwrap();
+      refetchSessions();
+
+      if (isSelected) {
+        navigate("/chat");
+      }
+    } catch (error) {
+      console.error("Failed to delete conversation: ", error);
+      showError(t("sidebar.deleteSessionFailed"));
+    }
+  };
 
   return (
     <Box
@@ -378,11 +407,7 @@ function SideBarConversationListElement({ session }: SideBarConversationListElem
         <IconButton
           className="delete-button"
           size="small"
-          onClick={(e) => {
-            e.preventDefault(); // Prevent Link navigation
-            e.stopPropagation();
-            // TODO: Implement delete functionality
-          }}
+          onClick={handleDelete}
           sx={{
             color: theme.palette.error.main,
             display: "none",
