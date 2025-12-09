@@ -112,7 +112,8 @@
     "monitoring_logs": "Logs",
     "monitoring_runtime": "Runtime",
     "monitoring_processors": "Processors",
-    "monitoring_data": "Data"
+    "monitoring_data": "Data",
+    "allAgents": "All agents"
   },
   "runtime": {
     "title": "Runtime Summary",

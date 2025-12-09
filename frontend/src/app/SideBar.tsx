@@ -20,6 +20,7 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  MenuItem,
   Paper,
   styled,
   Theme,
@@ -27,6 +28,7 @@ import {
   useTheme,
 } from "@mui/material";
 import MuiDrawer from "@mui/material/Drawer";
+import Select, { SelectChangeEvent } from "@mui/material/Select";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
@@ -34,6 +36,7 @@ import { UserAvatar } from "../components/profile/UserAvatar";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { KeyCloakService } from "../security/KeycloakService";
 import { usePermissions } from "../security/usePermissions";
+import { useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery } from "../slices/agentic/agenticOpenApi";
 
 const drawerWidth = 280;
 
@@ -239,6 +242,33 @@ function ConversationsSection() {
   const { t } = useTranslation();
   const theme = useTheme();
 
+  const {
+    data: agentsFromServer = [],
+    isLoading: flowsLoading,
+    isError: flowsError,
+    error: flowsErrObj,
+  } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
+
+  // const {
+  //   data: sessionsFromServer = [],
+  //   isLoading: sessionsLoading,
+  //   isError: sessionsError,
+  //   error: sessionsErrObj,
+  //   refetch: refetchSessions,
+  // } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
+  //   refetchOnMountOrArgChange: true,
+  //   refetchOnFocus: true,
+  //   refetchOnReconnect: true,
+  // });
+
+  const allAgentOptionValue = "all-agents";
+  const [selectedAgent, setSelectedAgent] = useLocalStorageState<string>(
+    "ConversationsSection.selectedAgent",
+    allAgentOptionValue,
+  );
+
+  const enabledAgents = (agentsFromServer ?? []).filter((a) => a.enabled === true);
+
   return (
     <>
       {/* Conversation header */}
@@ -251,7 +281,19 @@ function ConversationsSection() {
             {t("common.create")}
           </Button>
         </Box>
-        <Box></Box>
+        <Box sx={{ px: 2, py: 1 }}>
+          <Select
+            size="small"
+            value={selectedAgent}
+            onChange={(event: SelectChangeEvent) => setSelectedAgent(event.target.value as string)}
+            sx={{ width: "100%" }}
+          >
+            <MenuItem value={allAgentOptionValue}>{t("sidebar.allAgents")}</MenuItem>
+            {enabledAgents.map((agent) => (
+              <MenuItem value={agent.name}>{agent.name}</MenuItem>
+            ))}
+          </Select>
+        </Box>
       </Paper>
       {/* Conversation list */}
       <Paper elevation={0}></Paper>
