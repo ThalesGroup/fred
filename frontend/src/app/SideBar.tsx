@@ -3,6 +3,7 @@ import ChatIcon from "@mui/icons-material/Chat";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ConstructionIcon from "@mui/icons-material/Construction";
+import DeleteIcon from "@mui/icons-material/Delete";
 import ExpandLess from "@mui/icons-material/ExpandLess";
 import ExpandMore from "@mui/icons-material/ExpandMore";
 import GroupIcon from "@mui/icons-material/Group";
@@ -324,30 +325,60 @@ function SideBarConversationListElement({ session }: SideBarConversationListElem
   return (
     <Box
       sx={{
-        display: "flex",
-        flexDirection: "column",
         px: 1.5,
         py: 1,
         borderRadius: 1,
         userSelect: "none",
         "&:hover": { background: theme.palette.action.hover },
+        "&:hover .delete-button": { display: "flex" },
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
       }}
     >
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-        <PersonIcon sx={{ fontSize: "1rem", color: theme.palette.primary.main }} />
-        <Typography variant="caption" sx={{ color: theme.palette.primary.main }}>
-          Agent 1
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          minWidth: 0,
+          flex: 1,
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+          <PersonIcon sx={{ fontSize: "1rem", color: theme.palette.primary.main }} />
+          <Typography variant="caption" sx={{ color: theme.palette.primary.main }}>
+            Agent 1
+          </Typography>
+        </Box>
+        <Typography
+          variant="body2"
+          sx={{
+            color: theme.palette.text.primary,
+            textOverflow: "ellipsis",
+            overflow: "hidden",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {session.title}
+        </Typography>
+        <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+          {dayjs(session.updated_at).format("L")}
         </Typography>
       </Box>
-      <Typography
-        variant="body2"
-        sx={{ color: theme.palette.text.primary, textOverflow: "ellipsis", width: "100%", overflow: "hidden" }}
+      <IconButton
+        className="delete-button"
+        size="small"
+        onClick={(e) => {
+          e.stopPropagation();
+          // TODO: Implement delete functionality
+        }}
+        sx={{
+          color: theme.palette.error.main,
+          display: "none",
+        }}
       >
-        {session.title}
-      </Typography>
-      <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
-        {dayjs(session.updated_at).format("L")}
-      </Typography>
+        <DeleteIcon fontSize="small" />
+      </IconButton>
     </Box>
   );
 }
