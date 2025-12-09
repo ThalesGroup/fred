@@ -25,7 +25,7 @@ def fill_slide_from_structured_response(ppt_path, structured_response, output_pa
                 for run in paragraph.runs:
                     text = run.text
                     matches = pattern.findall(text)
-
+                    pass
                     for key in matches:
                         if key in response.keys():
                             text = text.replace(f"{{{key}}}", str(response[key]))

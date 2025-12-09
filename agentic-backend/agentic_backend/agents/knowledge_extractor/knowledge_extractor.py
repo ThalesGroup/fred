@@ -139,7 +139,7 @@ globalSchema = {
                     "type": "string",
                     "description": "La première langue parlée.",
                 },
-                "maitrise1": {
+                "maitriseLangue1": {
                     "type": "integer",
                     "description": "La maitrise de la première langue parlée.",
                 },

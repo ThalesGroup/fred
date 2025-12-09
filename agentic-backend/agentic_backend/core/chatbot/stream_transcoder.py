@@ -145,10 +145,7 @@ class StreamTranscoder:
         final_sent = False
         msgs_any: list[AnyMessage] = [cast(AnyMessage, m) for m in input_messages]
         state: MessagesState = {"messages": msgs_any}
-        async for event in agent.astream_updates(
-            state=state,
-            config=config,
-        ):
+        async for event in agent.astream_updates(state=state, config=config):
             # `event` looks like: {'node_name': {'messages': [...]}} or {'end': None}
             key = next(iter(event))
             payload = event[key]

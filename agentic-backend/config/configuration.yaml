@@ -65,20 +65,22 @@ ai:
     # Required in .env:
     # - OPENAI_API_KEY
     provider: "openai"
-    name: "gpt-5.1"
+    name: "mistral-large-latest" #2411
     settings:
+      base_url: https://api.mistral.ai/v1
       temperature: 0.0
       max_retries: 2
-      request_timeout: 30
+      request_timeout: 90
   default_language_model:
     # Required in .env:
     # - OPENAI_API_KEY
     provider: "openai"
-    name: "gpt-5.1"
+    name: "mistral-large-latest"
     settings:
+      base_url: https://api.mistral.ai/v1
       temperature: 0.0
       max_retries: 2
-      request_timeout: 30
+      request_timeout: 90
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:
