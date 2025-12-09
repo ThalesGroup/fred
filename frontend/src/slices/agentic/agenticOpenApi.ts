@@ -689,6 +689,7 @@ export type SessionWithFiles = {
   user_id: string;
   title: string;
   updated_at: string;
+  agents: string[];
   file_names?: string[];
   attachments?: AttachmentRef[];
 };

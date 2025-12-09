@@ -386,7 +386,7 @@ function SideBarConversationListElement({ session, refetchSessions }: SideBarCon
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <PersonIcon sx={{ fontSize: "1rem", color: theme.palette.primary.main }} />
             <Typography variant="caption" sx={{ color: theme.palette.primary.main }}>
-              Agent 1
+              {session.agents.length > 0 ? session.agents[0] : "..."}
             </Typography>
           </Box>
           <Typography
