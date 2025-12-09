@@ -35,7 +35,7 @@ const PANEL_W = { xs: 300, sm: 340, md: 360 };
 
 type PanelContentType = "conversations" | null;
 
-export default function Chat() {
+export default function OldChat() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const { t } = useTranslation();
 
