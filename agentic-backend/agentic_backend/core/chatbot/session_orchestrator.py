@@ -394,11 +394,18 @@ class SessionOrchestrator:
         if not file.filename:
             raise HTTPException(
                 status_code=400,
-                detail={"code": "missing_filename", "message": "Uploaded file must have a filename."},
+                detail={
+                    "code": "missing_filename",
+                    "message": "Uploaded file must have a filename.",
+                },
             )
         suffix = Path(file.filename).suffix.lower()
         if suffix not in supported_suffixes:
-            logger.warning("Unsupported upload extension rejected: %s (user=%s)", file.filename, user.uid)
+            logger.warning(
+                "Unsupported upload extension rejected: %s (user=%s)",
+                file.filename,
+                user.uid,
+            )
             raise HTTPException(
                 status_code=415,
                 detail={
@@ -436,7 +443,11 @@ class SessionOrchestrator:
             )
         except HTTPError as exc:  # Upstream format or processing failure
             status = exc.response.status_code if exc.response is not None else 502
-            upstream_detail = exc.response.text if getattr(exc, "response", None) is not None else str(exc)
+            upstream_detail = (
+                exc.response.text
+                if getattr(exc, "response", None) is not None
+                else str(exc)
+            )
             logger.error(
                 "Knowledge Flow rejected attachment %s (user=%s, status=%s, detail=%s)",
                 file.filename,
