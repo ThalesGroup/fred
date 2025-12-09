@@ -9,6 +9,7 @@ The new implementation uses the proper query: { knn: … } structure and applies
 #### Features
 
 - Can select multiple chat contexts(#890)
+- Provide Feedback to downloads (#892)
 
 #### Bug fixes
 
