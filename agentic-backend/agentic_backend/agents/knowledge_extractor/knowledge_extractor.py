@@ -103,7 +103,7 @@ globalSchema = {
             "properties": {
                 "trigramme": {
                     "type": "string",
-                    "description": "Trigramme servant à anonymiser le nom de l'intervenant.",
+                    "description": "Trigramme servant à anonymiser le nom de l'intervenant (présent dans le CV).",
                     "maxLength": 3,
                 },
                 "poste": {
@@ -140,8 +140,9 @@ globalSchema = {
                     "description": "La première langue parlée (généralement anglais).",
                 },
                 "maitriseLangue1": {
-                    "type": "integer",
-                    "description": "La maitrise de la première langue parlée.",
+                    "type": "string",
+                    "description": "La maitrise de la première langue parlée. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
                 },
                 "competenceManagement1": {
                     "type": "string",
@@ -149,8 +150,9 @@ globalSchema = {
                     "maxLength": 30,
                 },
                 "maitriseManagement1": {
-                    "type": "integer",
-                    "description": "La maitrise de la première compétence en management. Réfère toi au texte alternatif de l'image correspondante.",
+                    "type": "string",
+                    "description": "La maitrise de la première compétence en management. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
                 },
                 "competenceManagement2": {
                     "type": "string",
@@ -158,8 +160,9 @@ globalSchema = {
                     "maxLength": 30,
                 },
                 "maitriseManagement2": {
-                    "type": "integer",
-                    "description": "La maitrise de la seconde compétence en management. Réfère toi au texte alternatif de l'image correspondante.",
+                    "type": "string",
+                    "description": "La maitrise de la seconde compétence en management. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
                 },
                 "competenceManagement3": {
                     "type": "string",
@@ -167,8 +170,9 @@ globalSchema = {
                     "maxLength": 30,
                 },
                 "maitriseManagement3": {
-                    "type": "integer",
-                    "description": "La maitrise de la troisième compétence en management. Réfère toi au texte alternatif de l'image correspondante.",
+                    "type": "string",
+                    "description": "La maitrise de la troisième compétence en management. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
                 },
                 "competenceInformatique1": {
                     "type": "string",
@@ -177,7 +181,8 @@ globalSchema = {
                 },
                 "maitriseInformatique1": {
                     "type": "string",
-                    "description": "Le lien vers l'image associée à la première compétence informatique. Réfère toi au texte alternatif de l'image correspondante.",
+                    "description": "La maitrise de la première compétence informatique. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
                 },
                 "competenceInformatique2": {
                     "type": "string",
@@ -185,8 +190,9 @@ globalSchema = {
                     "maxLength": 30,
                 },
                 "maitriseInformatique2": {
-                    "type": "integer",
-                    "description": "La maitrise de la seconde compétence informatique. Réfère toi au texte alternatif de l'image correspondante.",
+                    "type": "string",
+                    "description": "La maitrise de la seconde compétence informatique. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
                 },
                 "competenceInformatique3": {
                     "type": "string",
@@ -194,8 +200,9 @@ globalSchema = {
                     "maxLength": 30,
                 },
                 "maitriseInformatique3": {
-                    "type": "integer",
-                    "description": "La maitrise de la troisième compétence informatique. Réfère toi au texte alternatif de l'image correspondante.",
+                    "type": "string",
+                    "description": "La maitrise de la troisième compétence informatique. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
                 },
                 "competenceGestionProjet1": {
                     "type": "string",
@@ -203,8 +210,9 @@ globalSchema = {
                     "maxLength": 30,
                 },
                 "maitriseGestionProjet1": {
-                    "type": "integer",
-                    "description": "La maitrise de la première compétence en gestion de projet. Réfère toi au texte alternatif de l'image correspondante.",
+                    "type": "string",
+                    "description": "La maitrise de la première compétence en gestion de projet. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
                 },
                 "competenceGestionProjet2": {
                     "type": "string",
@@ -212,8 +220,9 @@ globalSchema = {
                     "maxLength": 30,
                 },
                 "maitriseGestionProjet2": {
-                    "type": "integer",
-                    "description": "La maitrise de la seconde compétence en gestion de projet. Réfère toi au texte alternatif de l'image correspondante.",
+                    "type": "string",
+                    "description": "La maitrise de la seconde compétence en gestion de projet. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
                 },
                 "competenceGestionProjet3": {
                     "type": "string",
@@ -221,8 +230,9 @@ globalSchema = {
                     "maxLength": 30,
                 },
                 "maitriseGestionProjet3": {
-                    "type": "integer",
-                    "description": "La maitrise de la troisième compétence en gestion de projet. Réfère toi au texte alternatif de l'image correspondante.",
+                    "type": "string",
+                    "description": "La maitrise de la troisième compétence en gestion de projet. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
                 },
                 "entreprise1": {
                     "type": "string",

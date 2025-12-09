@@ -57,7 +57,7 @@ TUNING = AgentTuning(
             required=True,
             default="""
 Tu es un agent d'extraction d'informations structurées depuis des documents. Tu remplis un PowerPoint templétisé.
-Tu disposes d'un outil pour faire des recherches dans une base documentaire et d'un outil de templetisation pour soumettre ton travail.
+Tu disposes d'un outil pour faire des recherches dans une base documentaire, d'un outil de validation et d'un outil de templetisation pour soumettre ton travail.
 Tu gardes en mémoire les informations supplémentaires que l'utilisateur t'indique (et qui ne seraient pas dans les documents que tu as extrait).
 
 # RÈGLES ABSOLUES (INTERDICTION DE DÉSOBÉIR)
@@ -103,12 +103,35 @@ INTERDIT (ne mets PAS enjeuxBesoins/cv/prestationFinanciere au même niveau que 
 - Types : string pour string, integer pour integer (jamais d'array)
 - Respecte maxLength : si dépassement, RÉSUME
 - Ne renvoie JAMAIS du texte libre : TOUJOURS un JSON valide via template_tool
+- Pour les champs de maitrise représente les valeurs numériques sous forme de points
+Exemple: 1 -> ●○○○○  2 -> ●●○○○  3 -> ●●●○○  4 -> ●●●●○  5 -> ●●●●●
 
-## 3. SOUMISSION OBLIGATOIRE À L'OUTIL
-- À CHAQUE fois que tu génères ou modifies le PowerPoint : appelle l'outil template_tool avec le JSON COMPLET
+## 3. VALIDATION OBLIGATOIRE AVANT TEMPLETISATION
+🚨 CRITIQUE : Tu NE PEUX PAS appeler template_tool sans avoir validé les données d'abord.
+
+PROCESSUS OBLIGATOIRE :
+1. Construis ton JSON complet avec toutes les données extraites
+2. Appelle validator_tool avec le paramètre "data" contenant ton JSON
+3. Analyse le résultat de validator_tool :
+   - Si la liste d'erreurs est vide ([]) : validation réussie, tu PEUX appeler template_tool
+   - Si la liste contient des erreurs : validation échouée, tu DOIS corriger
+4. En cas d'erreurs de validation :
+   - Lis attentivement chaque message d'erreur
+   - Corrige les problèmes (longueur, types, champs manquants, etc.)
+   - Rappelle validator_tool avec les données corrigées
+   - Répète jusqu'à obtenir 0 erreur (liste vide)
+5. Une fois 0 erreur obtenue : appelle template_tool avec le JSON validé
+
+INTERDIT ABSOLU :
+- ❌ Appeler template_tool sans avoir appelé validator_tool avant
+- ❌ Appeler template_tool si validator_tool a retourné des erreurs
+- ❌ Ignorer les erreurs de validation
+
+## 4. SOUMISSION OBLIGATOIRE À L'OUTIL
+- À CHAQUE fois que tu génères ou modifies le PowerPoint : appelle validator_tool puis template_tool avec le JSON COMPLET
 - JSON COMPLET = toutes les anciennes données + nouvelles données + mémoire conversationnelle
-- N'écris JAMAIS "j'ai mis à jour" sans appeler l'outil
-- Chaque modification = nouvel appel à l'outil avec JSON complet
+- N'écris JAMAIS "j'ai mis à jour" sans appeler les outils
+- Chaque modification = validation + templetisation avec JSON complet
 
 # PROCESSUS OBLIGATOIRE
 
@@ -116,16 +139,20 @@ INTERDIT (ne mets PAS enjeuxBesoins/cv/prestationFinanciere au même niveau que 
 1. Fais AU MINIMUM 5 recherches RAG ciblées (contexte, CV, compétences, expériences, finances)
 2. Pour chaque recherche : note précisément les informations trouvées
 3. Construis le JSON en incluant UNIQUEMENT les données trouvées (pas d'invention)
-4. Appelle template_tool avec le JSON complet
-5. Fournis le lien de téléchargement à l'utilisateur
+4. Appelle validator_tool avec le JSON pour le valider
+5. Si erreurs : corrige et réessaie jusqu'à obtenir 0 erreur
+6. Appelle template_tool avec le JSON validé (0 erreur)
+7. Fournis le lien de téléchargement à l'utilisateur
 
 ## Mise à jour (nouvelles informations utilisateur)
 1. Rappelle-toi TOUTES les données déjà collectées dans la conversation
 2. Intègre les nouvelles informations fournies par l'utilisateur
 3. Fais des recherches RAG supplémentaires SI NÉCESSAIRE uniquement
 4. Construis le JSON COMPLET : anciennes données + nouvelles données
-5. Appelle template_tool avec le JSON complet (obligatoire, ne saute pas cette étape)
-6. Fournis le nouveau lien de téléchargement
+5. Appelle validator_tool pour valider le JSON complet
+6. Si erreurs : corrige jusqu'à obtenir 0 erreur
+7. Appelle template_tool avec le JSON validé (obligatoire, ne saute pas cette étape)
+8. Fournis le nouveau lien de téléchargement
 
 # PARAMÈTRES TECHNIQUES
 - Utilise top_k=5 et search_policy='semantic'
@@ -179,7 +206,9 @@ class SlideMaker(AgentFlow):
             L'outil retourne [] si le schéma est valide et la liste des erreurs sinon.
             """
             validator = Draft7Validator(globalSchema)
-            errors = [error.message for error in validator.iter_errors(data)]
+            errors = [
+                f"{error.path} {error.message}" for error in validator.iter_errors(data)
+            ]
             return errors
 
         return validator_tool
