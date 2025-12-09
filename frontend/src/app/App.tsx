@@ -13,9 +13,9 @@
 // limitations under the License.
 
 // FredUi.tsx
-import { Box, CircularProgress, Typography } from "@mui/material";
-import { ThemeProvider } from "@mui/material/styles";
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import { Box, Typography } from "@mui/material";
+import { ThemeProvider, keyframes } from "@mui/material/styles";
+import React, { useContext, useEffect, useState } from "react";
 import { RouterProvider } from "react-router-dom";
 import { ConfirmationDialogProvider } from "../components/ConfirmationDialogProvider";
 import { DrawerProvider } from "../components/DrawerProvider";
@@ -26,14 +26,30 @@ import { AuthProvider } from "../security/AuthContext";
 import { useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { useTranslation } from "react-i18next";
 
-const LoadingScreen = ({ label, dark }: { label: string; dark: boolean }) => {
-  const bg = dark
-    ? "radial-gradient(circle at 20% 20%, rgba(0,108,255,0.08), transparent 35%), radial-gradient(circle at 80% 30%, rgba(0,220,200,0.10), transparent 30%), linear-gradient(135deg, #0b1f3a, #0e274a 35%, #0b1f3a)"
-    : "radial-gradient(circle at 20% 20%, rgba(0,90,255,0.06), transparent 35%), radial-gradient(circle at 80% 30%, rgba(0,180,200,0.12), transparent 30%), linear-gradient(135deg, #f5f8ff, #e8f0ff 35%, #f5f8ff)";
+const pulse = keyframes`
+  0% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.9; }
+`;
 
-  const accent = dark ? "#7dd8ff" : "#1e5eff";
-  const panelBg = dark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.85)";
-  const textColor = dark ? "#e6edff" : "#0d2145";
+const LoadingScreen = ({
+  label,
+  dark,
+  logoName,
+  logoNameDark,
+  alt,
+}: {
+  label: string;
+  dark: boolean;
+  logoName: string;
+  logoNameDark: string;
+  alt: string;
+}) => {
+  const palette = dark ? darkTheme.palette : lightTheme.palette;
+  const bg = dark ? palette.background.default : palette.surfaces.soft;
+  const accent = palette.primary.light || palette.primary.main;
+  const panelBg = palette.background.paper;
+  const textColor = palette.text.primary;
 
   return (
     <Box
@@ -60,18 +76,44 @@ const LoadingScreen = ({ label, dark }: { label: string; dark: boolean }) => {
         sx={{
           display: "flex",
           alignItems: "center",
-          gap: 2,
-          px: 3,
+          px: 2.5,
           py: 2,
-          borderRadius: 2,
-          backdropFilter: "blur(8px)",
-          backgroundColor: panelBg,
-          boxShadow: "0 12px 40px rgba(0,0,0,0.18)",
+          borderRadius: 3,
+          backdropFilter: "none",
+          backgroundColor: "transparent",
+          boxShadow: "none",
           zIndex: 1,
+          width: 170,
+          justifyContent: "center",
         }}
       >
-        <CircularProgress size={42} thickness={4} sx={{ color: accent }} />
-        <Typography variant="subtitle1" sx={{ letterSpacing: 0.5, fontWeight: 600 }}>
+        <Box
+          component="img"
+          src={`/images/${dark ? logoNameDark : logoName}.svg`}
+          alt={alt}
+          sx={{
+            width: 68,
+            height: 68,
+            animation: `${pulse} 1.8s ease-in-out infinite`,
+            filter: dark
+              ? "drop-shadow(0 6px 16px rgba(0,0,0,0.35))"
+              : "drop-shadow(0 6px 16px rgba(0,0,0,0.12))",
+          }}
+        />
+        <Typography
+          component="span"
+          sx={{
+            position: "absolute",
+            width: 1,
+            height: 1,
+            padding: 0,
+            margin: -1,
+            overflow: "hidden",
+            clip: "rect(0,0,0,0)",
+            whiteSpace: "nowrap",
+            border: 0,
+          }}
+        >
           {label}
         </Typography>
       </Box>
@@ -119,10 +161,29 @@ function FredUi() {
     });
   }, []);
 
-  if (!router) return <LoadingScreen label={t("app.loading.router", "Fred démarre...")} dark={prefersDark} />;
+  if (!router)
+    return (
+      <LoadingScreen
+        label={t("app.loading.router", "Fred démarre...")}
+        dark={prefersDark}
+        logoName={logoName}
+        logoNameDark={logoNameDark}
+        alt={siteDisplayName}
+      />
+    );
 
   return (
-    <React.Suspense fallback={<LoadingScreen label={t("app.loading.ui", "L'interface Fred se prépare...")} dark={prefersDark} />}>
+    <React.Suspense
+      fallback={
+        <LoadingScreen
+          label={t("app.loading.ui", "L'interface Fred se prépare...")}
+          dark={prefersDark}
+          logoName={logoName}
+          logoNameDark={logoNameDark}
+          alt={siteDisplayName}
+        />
+      }
+    >
       <AuthProvider>
         <ApplicationContextProvider>
           <AppWithTheme router={router} />
