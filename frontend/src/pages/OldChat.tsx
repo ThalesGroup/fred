@@ -47,6 +47,7 @@ export default function OldChat() {
     refetchOnFocus: true,
     refetchOnReconnect: true,
   });
+  const enabledAgents = (agentsFromServer ?? []).filter((a) => a.enabled === true);
 
   const {
     sessions,
@@ -60,7 +61,7 @@ export default function OldChat() {
     bindDraftAgentToSessionId,
   } = useSessionOrchestrator({
     sessionsFromServer,
-    agentsFromServer,
+    agents: enabledAgents,
     loading: sessionsLoading || flowsLoading,
   });
 
@@ -130,8 +131,6 @@ export default function OldChat() {
       </Box>
     );
   }
-
-  const enabledAgents = (agentsFromServer ?? []).filter((a) => a.enabled === true);
 
   if (enabledAgents.length === 0) {
     return (

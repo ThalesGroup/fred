@@ -25,10 +25,10 @@ import { useLocalStorageState } from "./useLocalStorageState";
  */
 export function useSessionOrchestrator(params: {
   sessionsFromServer: SessionWithFiles[];
-  agentsFromServer: AnyAgent[];
+  agents: AnyAgent[];
   loading: boolean;
 }) {
-  const { sessionsFromServer, agentsFromServer, loading } = params;
+  const { sessionsFromServer, agents, loading } = params;
 
   // Local mirror so we can upsert/delete without fighting server pagination/timing.
   const [sessions, setSessions] = useState<SessionWithFiles[]>([]);
@@ -64,32 +64,32 @@ export function useSessionOrchestrator(params: {
   }, [currentSessionId]);
 
   const currentAgent = useMemo(() => {
-    if (!agentsFromServer?.length) return null;
+    if (!agents?.length) return null;
 
     // If user manually selected an agent, use that
     if (manuallySelectedAgentId) {
-      const manualAgent = agentsFromServer.find((a) => a.name === manuallySelectedAgentId);
+      const manualAgent = agents.find((a) => a.name === manuallySelectedAgentId);
       if (manualAgent) return manualAgent;
     }
 
     // For existing sessions: use the first agent from the session's agents array
     if (currentSession?.agents?.length) {
       const sessionAgentName = currentSession.agents[0];
-      const sessionAgent = agentsFromServer.find((a) => a.name === sessionAgentName);
+      const sessionAgent = agents.find((a) => a.name === sessionAgentName);
       if (sessionAgent) return sessionAgent;
     }
 
     // For new conversations (draft): use last agent from localStorage
     if (!currentSession || currentSessionId === "draft") {
       if (lastNewConversationAgent) {
-        const lastAgent = agentsFromServer.find((a) => a.name === lastNewConversationAgent);
+        const lastAgent = agents.find((a) => a.name === lastNewConversationAgent);
         if (lastAgent) return lastAgent;
       }
     }
 
     // Fallback to first agent in the list
-    return agentsFromServer[0] ?? null;
-  }, [agentsFromServer, currentSession, currentSessionId, lastNewConversationAgent, manuallySelectedAgentId]);
+    return agents[0] ?? null;
+  }, [agents, currentSession, currentSessionId, lastNewConversationAgent, manuallySelectedAgentId]);
 
   const isCreatingNewConversation = !currentSession || currentSessionId === "draft";
 
@@ -116,28 +116,25 @@ export function useSessionOrchestrator(params: {
     setCurrentSessionId("draft");
   }, []);
 
-  const updateOrAddSession = useCallback(
-    (session: SessionWithFiles | SessionSchema | Partial<SessionWithFiles>) => {
-      setSessions((prev) => {
-        const idx = prev.findIndex((s) => s.id === session.id);
-        if (idx >= 0) {
-          const next = [...prev];
-          // Merge with existing session to preserve fields like 'agents' that might not be in the update
-          next[idx] = { ...next[idx], ...session };
-          return next;
-        }
-        // When adding a new session, ensure it has default values for optional fields
-        const newSession: SessionWithFiles = {
-          ...(session as SessionWithFiles),
-          agents: (session as SessionWithFiles).agents ?? [],
-          file_names: (session as SessionWithFiles).file_names ?? [],
-          attachments: (session as SessionWithFiles).attachments ?? [],
-        };
-        return [newSession, ...prev];
-      });
-    },
-    [],
-  );
+  const updateOrAddSession = useCallback((session: SessionWithFiles | SessionSchema | Partial<SessionWithFiles>) => {
+    setSessions((prev) => {
+      const idx = prev.findIndex((s) => s.id === session.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        // Merge with existing session to preserve fields like 'agents' that might not be in the update
+        next[idx] = { ...next[idx], ...session };
+        return next;
+      }
+      // When adding a new session, ensure it has default values for optional fields
+      const newSession: SessionWithFiles = {
+        ...(session as SessionWithFiles),
+        agents: (session as SessionWithFiles).agents ?? [],
+        file_names: (session as SessionWithFiles).file_names ?? [],
+        attachments: (session as SessionWithFiles).attachments ?? [],
+      };
+      return [newSession, ...prev];
+    });
+  }, []);
 
   const deleteSession = useCallback(
     (session: SessionWithFiles) => {
@@ -156,18 +153,14 @@ export function useSessionOrchestrator(params: {
     [currentSessionId],
   );
 
-  const bindDraftAgentToSessionId = useCallback(
-    (newId: string) => {
-      // "Draft" session got a real id from backend: select it
-      setCurrentSessionId(newId);
-    },
-    [],
-  );
+  const bindDraftAgentToSessionId = useCallback((newId: string) => {
+    // "Draft" session got a real id from backend: select it
+    setCurrentSessionId(newId);
+  }, []);
 
   return {
     // data
     loading,
-    agenticFlows: agentsFromServer,
     sessions,
     currentSession,
     currentAgent,
