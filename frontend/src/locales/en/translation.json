@@ -386,8 +386,8 @@
     },
     "attachFiles": "Attach files",
     "attachments": {
-      "betaNotice": "File attachments are in beta. Supported formats: PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL. Please provide feedback to help us improve this feature.",
-      "supportedFormats": "Supported files: PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL",
+      "betaNotice": "File attachments are in beta. Supported formats: PDF, DOCX, CSV. Please provide feedback to help us improve this feature.",
+      "supportedFormats": "Supported files: PDF, DOCX, CSV",
       "count": "{{count}} attached"
     },
     "uploadingFile": "Uploading {{name}}...",
