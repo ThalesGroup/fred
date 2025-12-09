@@ -51,7 +51,7 @@ export interface ChatBotError {
 // }
 
 export interface ChatBotProps {
-  currentChatBotSession: SessionSchema;
+  currentChatBotSession: SessionSchema | null;
   currentAgent: AnyAgent;
   agents: AnyAgent[];
   onSelectNewAgent: (flow: AnyAgent) => void;

@@ -15,8 +15,9 @@ import ChatIcon from "@mui/icons-material/Chat";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 
 import { Box, CircularProgress, Grid2, IconButton, Paper, Typography } from "@mui/material";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { useParams, useNavigate } from "react-router-dom";
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
 import { ChatContextPickerPanel } from "../components/chatbot/settings/ChatContextPickerPanel";
@@ -38,6 +39,8 @@ type PanelContentType = "conversations" | null;
 export default function OldChat() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const { t } = useTranslation();
+  const { sessionId } = useParams<{ sessionId?: string }>();
+  const navigate = useNavigate();
 
   const {
     data: rawAgentsFromServer = [],
@@ -78,6 +81,25 @@ export default function OldChat() {
     loading: sessionsLoading || flowsLoading,
   });
 
+  // Sync URL parameter with session selection
+  useEffect(() => {
+    if (flowsLoading || sessionsLoading) return;
+
+    if (sessionId) {
+      // URL has a session ID - ensure it's selected
+      const session = sessions.find(s => s.id === sessionId);
+      if (session && session.id !== currentSession?.id) {
+        selectSession(session);
+      } else if (!session) {
+        // Invalid session ID - redirect to new chat
+        navigate('/chat', { replace: true });
+      }
+    } else if (!sessionId && currentSession?.id !== 'draft') {
+      // URL is /chat but we have a selected session - start new conversation
+      startNewConversation();
+    }
+  }, [sessionId, sessions, currentSession?.id, flowsLoading, sessionsLoading, selectSession, startNewConversation, navigate]);
+
   const [selectedChatContextIds, setSelectedChatContextIds] = useLocalStorageState<string[]>(
     "chat.selectedChatContextIds",
     [],
@@ -110,6 +132,11 @@ export default function OldChat() {
   const handleDeleteSession = async (s: SessionSchema) => {
     try {
       await deleteSessionMutation({ sessionId: s.id }).unwrap();
+
+      // If deleting current session, navigate to new chat
+      if (s.id === currentSession?.id) {
+        navigate('/chat', { replace: true });
+      }
     } catch (e) {
       console.error("Failed to delete session", e);
     } finally {
