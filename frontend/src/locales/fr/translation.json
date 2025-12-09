@@ -386,7 +386,8 @@
     },
     "attachFiles": "Joindre des fichiers",
     "attachments": {
-      "betaNotice": "Les pièces jointes sont en version bêta. Seuls les fichiers CSV, docx et pdf sont pris en charge. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
+      "betaNotice": "Les pièces jointes sont en version bêta. Formats pris en charge : CSV, DOCX et PDF. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
+      "supportedFormats": "Formats pris en charge : CSV, DOCX, PDF",
       "count": "{{count}} pièces jointes"
     },
     "uploadingFile": "Téléversement de {{name}}...",

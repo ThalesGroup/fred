@@ -386,7 +386,8 @@
     },
     "attachFiles": "Attach files",
     "attachments": {
-      "betaNotice": "File attachments are in beta. Only CSV, docx and pdf files are supported. Please provide feedback to help us improve this feature.",
+      "betaNotice": "File attachments are in beta. Supported formats: CSV, DOCX and PDF. Please provide feedback to help us improve this feature.",
+      "supportedFormats": "Supported files: CSV, DOCX, PDF",
       "count": "{{count}} attached"
     },
     "uploadingFile": "Uploading {{name}}...",
