@@ -13,12 +13,10 @@
 # limitations under the License.
 
 import logging
-import os
-import tempfile
+import pickle
 from typing import Any, Iterable, List, Sequence
 
 import numpy as np
-from tensorflow import keras  # type: ignore
 
 from knowledge_flow_backend.features.model.types import GraphPoint, Point3D, PointMetadata
 
@@ -27,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # ---- Keys helpers ----
 def model_key(tag_id: str) -> str:
-    return f"{tag_id}/model.keras"
+    return f"{tag_id}/model.umap"
 
 
 def meta_key(tag_id: str) -> str:
@@ -35,35 +33,24 @@ def meta_key(tag_id: str) -> str:
 
 
 # ---- Model persistence helpers ----
-def save_keras_model(file_store: Any, namespace: str, storage_key: str, keras_model: keras.Model) -> None:
-    """Persist a Keras model into the configured file store under the given key.
-
-    The model is first serialized to a temporary `.keras` file, then uploaded as bytes.
-    """
-    with tempfile.NamedTemporaryFile(suffix=".keras", delete=False) as tmp_file:
-        tmp_path = tmp_file.name
-
+def save_umap_model(file_store: Any, namespace: str, storage_key: str, model: Any) -> None:
+    """Persist a (U)MAP model into the configured file store under the given key."""
     try:
-        keras_model.save(tmp_path)
-        with open(tmp_path, "rb") as f:
-            model_bytes = f.read()
-
+        model_bytes = pickle.dumps(model)
         file_store.put(
             namespace,
             storage_key,
             model_bytes,
             content_type="application/octet-stream",
         )
+        logger.info("UMAP model saved to %s/%s", namespace, storage_key)
     except Exception:
-        logger.exception("Failed to save Keras model to %s/%s", namespace, storage_key)
+        logger.exception("Failed to save UMAP model to %s/%s", namespace, storage_key)
         raise
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
 
 
-def load_keras_model(file_store: Any, namespace: str, storage_key: str) -> keras.Model:
-    """Load a Keras model from the file store.
+def load_umap_model(file_store: Any, namespace: str, storage_key: str) -> Any:
+    """Load a (U)MAP model from the file store.
 
     Raises FileNotFoundError if no bytes are found, or forwards underlying load errors.
     """
@@ -71,17 +58,13 @@ def load_keras_model(file_store: Any, namespace: str, storage_key: str) -> keras
     if not model_bytes:
         raise FileNotFoundError(f"No model found in the store for: {storage_key}")
 
-    with tempfile.NamedTemporaryFile(suffix=".keras", delete=False) as tmp_file:
-        tmp_path = tmp_file.name
-        tmp_file.write(model_bytes)
-
     try:
-        model = keras.models.load_model(tmp_path, compile=False)
-        logger.info("Keras model loaded from %s/%s", namespace, storage_key)
+        model = pickle.loads(model_bytes)
+        logger.info("UMAP model loaded from %s/%s", namespace, storage_key)
         return model
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+    except Exception:
+        logger.exception("Failed to load UMAP model from %s/%s", namespace, storage_key)
+        raise
 
 
 # ---- Projection payload helper ----

@@ -18,16 +18,14 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import numpy as np
-from umap.parametric_umap import ParametricUMAP
+from umap import UMAP
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.metadata.service import MetadataService
 
 from .types import GraphPoint
 from .utils import (
-    build_points,
-    load_keras_model,
-    save_keras_model,
+    build_points, load_umap_model, save_umap_model,
 )
 from .utils import (
     meta_key as util_meta_key,
@@ -100,7 +98,7 @@ class ModelService:
             return None
 
     def _predict_3d(self, user, tag_id: str, *, documents_vector: Dict[str, Any]) -> list[GraphPoint]:
-        model = load_keras_model(self.file_store, self.NAMESPACE, self._model_key(tag_id))
+        model = load_umap_model(self.file_store, self.NAMESPACE, self._model_key(tag_id))
 
         vectors = []
         meta_vectors = []
@@ -117,7 +115,8 @@ class ModelService:
 
         X = np.array(vectors, dtype=np.float32)
         try:
-            Y = model.predict(X)
+            # UMAP classique -> transform()
+            Y = model.transform(X)
             points = build_points(Y, meta_vectors)
         except Exception as e:
             logger.error("Failed to transform X for tag %s", tag_id)
@@ -188,9 +187,9 @@ class ModelService:
     # ---------- Public API ----------
     async def train_umap_for_tag(self, user, tag_id: str) -> dict:
         """
-        Train a (Parametric) UMAP model to 3D using all documents of a tag.
-        Uses the mean of chunk embeddings per document as input points.
-        Saves: model.keras and meta.json under namespace models/umap/{tag_id}
+        Train a UMAP model to 3D using all documents of a tag.
+        Uses all chunk embeddings as input points.
+        Saves: model.umap (pickled UMAP) and meta.json under namespace models/umap/{tag_id}
         Returns training metadata.
         """
         doc_ids = await self._list_document_ids_in_tag(user, tag_id)
@@ -209,30 +208,22 @@ class ModelService:
 
         X = np.array(vectors, dtype=np.float32)
 
-        # Configure model: 3D projection
-        # ParametricUMAP typical args; keep defaults reasonable
-        model = ParametricUMAP(
-            n_components=3,  # 3D target space
-            n_neighbors=15,  # Local influence (smaller = tighter clusters)
-            min_dist=0.1,  # Minimum distance between points
-            metric="cosine",  # 'cosine' often performs better than 'euclidean' for text embeddings
-            verbose=True,
+        # Configure UMAP: 3D projection
+        model = UMAP(
+            n_components=3,    # 3D target space
+            n_neighbors=15,    # Local influence
+            min_dist=0.1,      # Minimum distance between points
+            metric="cosine",   # works well for text embeddings
             random_state=42,
         )
         model.fit(X)
 
-        # Save encoder sub-model
-        try:
-            encoder_model = model.encoder
-        except Exception as e:
-            logger.exception("UMAP model does not expose an encoder: %s", e)
-            raise RuntimeError("Invalid UMAP model: no encoder exposed") from None
-
-        save_keras_model(
+        # Save model
+        save_umap_model(
             self.file_store,
             self.NAMESPACE,
             self._model_key(tag_id),
-            encoder_model,
+            model,
         )
 
         # Save metadata
@@ -242,10 +233,15 @@ class ModelService:
             "trained_at": trained_at,
             "n_chunks": len(vectors),
             "n_documents": len(doc_ids),
-            "model_kind": "parametric_umap",
+            "model_kind": "umap",
             "embedding_model": getattr(self.context.configuration.embedding_model, "name", None),
         }
-        self.file_store.put(self.NAMESPACE, self._meta_key(tag_id), json.dumps(meta).encode("utf-8"), content_type="application/json")
+        self.file_store.put(
+            self.NAMESPACE,
+            self._meta_key(tag_id),
+            json.dumps(meta).encode("utf-8"),
+            content_type="application/json",
+        )
 
         logger.info("UMAP model trained for tag=%s with %d documents", tag_id, len(vectors))
         return meta
@@ -253,8 +249,8 @@ class ModelService:
     def get_model_status(self, tag_id: str) -> dict:
         """Return model existence and metadata if available."""
         items = self.file_store.list(self.NAMESPACE, prefix=f"{tag_id}/")
-        # We persist the encoder as a Keras model file
-        exists = any(k.endswith("model.keras") for k in items)
+        # Check for model presence
+        exists = any(k.endswith("model.umap") for k in items)
         meta: dict = {"tag_id": tag_id, "exists": exists}
         if any(k.endswith("meta.json") for k in items):
             try:

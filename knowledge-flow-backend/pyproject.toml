@@ -60,7 +60,6 @@ dependencies = [
   "torch==2.7.1; platform_machine == 'aarch64' or platform_machine == 'arm64'",
   "torchvision==0.22.1; platform_machine == 'aarch64' or platform_machine == 'arm64'",
   "umap-learn>=0.5.9.post2",
-  "tensorflow>=2.20.0",
 ]
 
 [project.optional-dependencies]
