@@ -1,34 +1,18 @@
-# agentic_backend/core/agents/slide_maker.py
-# -----------------------------------------------------------------------------
-# 💡 ACADEMY AGENT: SLIDE MAKER 💡
-# This agent demonstrates two key patterns for asset generation:
-# 1. Using the LLM to generate content (Node: plan_node).
-# 2. Rendering that content into a binary file (.pptx) and uploading it to secure storage (Node: render_node).
-# 3. Returning a **structured message** (LinkPart) for client-side download rendering.
-# -----------------------------------------------------------------------------
-
 from __future__ import annotations
 
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any, List, Optional, TypedDict
 
-from jsonschema import Draft7Validator
-from langchain.agents import AgentState, create_agent
-from langchain.agents.structured_output import ProviderStrategy
-from langchain_core.messages import AIMessage, AnyMessage
-from langfuse.langchain import CallbackHandler
-from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import add_messages
-from typing_extensions import Annotated
+from langchain.agents import create_agent
+from langchain.tools import tool
+from langgraph.graph.state import CompiledStateGraph
 
 from agentic_backend.agents.knowledge_extractor.knowledge_extractor import globalSchema
 from agentic_backend.agents.knowledge_extractor.powerpoint_template_util import (
     fill_slide_from_structured_response,
 )
 from agentic_backend.application_context import get_default_chat_model
-from agentic_backend.common.kf_agent_asset_client import AssetRetrievalError
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import (
@@ -41,10 +25,7 @@ from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.chatbot.chat_schema import (
     LinkKind,
     LinkPart,
-    MessagePart,
-    TextPart,
 )
-from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 
@@ -73,62 +54,145 @@ TUNING = AgentTuning(
                 "State the mission, how to use the available tools, and constraints."
             ),
             required=True,
-            default=(
-                "Tu es un agent spécialisé dans l'extraction d'informations structurées depuis des documents via RAG.\n"
-                "Tu utilises le response_format avec un JSON Schema où chaque champ contient une `description` précisant l'information attendue.\n"
-                "## Ton Processus:\n"
-                "- Analyse du schéma : Lis attentivement la `description` de chaque champ ET sa contrainte `maxLength` pour comprendre exactement"
-                "ce qui est attendu\n"
-                "- Requêtes RAG ciblées : Formule une requête précise basée sur les descriptions des champs à chaque fois que c'est nécessaire\n"
-                "- Extraction fidèle : Récupère les informations depuis les documents retournés\n"
-                "- Validation des contraintes : Vérifie et ajuste les longueurs/valeurs selon le schéma\n"
-                "- Remplissage du JSON : Peuple chaque champ avec les données extraites\n"
-                "## Règles d'Extraction:\n"
-                "Chaque champ a une `description` qui définit exactement ce qu'il faut extraire\n"
-                "Base tes requêtes RAG sur ces descriptions\n"
-                "Exemple de schéma:\n"
-                "{{\n"
-                '  "client_name": {{\n'
-                '    "type": "string",\n'
-                '    "description": "Nom complet du client tel que mentionné dans le contrat",\n'
-                '    "maxLength": 100\n'
-                "  }}\n"
-                "}}\n"
-                '→ Requête RAG :"Quel est le nom complet du client dans le contrat ?"\n'
-                "### Fidélité Absolue\n"
-                "- ✅ Extrais UNIQUEMENT depuis les documents RAG\n"
-                "- ❌ N'invente JAMAIS de données\n"
-                "- ❌ N'utilise pas ta connaissance générale\n"
-                "### 🚨 RESPECT STRICT DES LONGUEURS - CRITIQUE\n"
-                "**SI `maxLength` est renseigné** et que le texte extrait dépasse `maxLength` : **RESUME INTELLIGEMMENT**\n"
-                "### Optimisation des requêtes RAG\n"
-                "- Multiplie les recherches si nécessaire\n"
-                "- Regroupe les champs similaires si pertinent\n"
-                '- Évite les requêtes trop larges ("tout sur le document")\n'
-                "- Privilégie la précision sur l'exhaustivité\n"
-                "## Ton Attitude\n"
-                "- Méthodique : traite chaque champ systématiquement. Si tu ne trouve pas une information fais une recherche spécialisée\n"
-                "- Précis : base-toi sur les descriptions fournies\n"
-                "- Rigoureux : les contraintes de longueur sont NON NÉGOCIABLES\n"
-                "- Honnête : si l'information n'existe pas, ne mets rien\n"
-                "- Efficace : formule de **MULTIPLES** requêtes RAG ciblées et pertinentes\n"
-                "# IMPORTANT: Utilises un 'top_k' de 5 et une 'search_policy' de 'semantic'. N'utilise pas 'document_library_tags_ids'.\n"
-            ),
+            default="""
+Tu es un agent spécialisé dans l'extraction d'informations structurées depuis des documents via RAG afin de remplir un PowerPoint templétisé.
+Tu disposes d'outils pour faire des recherches dans une base documentaire et d'un outil de templetisation pour soumettre ton travail.
+Tu gardes en mémoire les informations supplémentaires que l'utilisateur t'indique (et qui ne seraient pas dans les documents que tu as extrait).
+
+# 🚨 RÈGLES CRITIQUES - À RESPECTER ABSOLUMENT
+
+## RÈGLE 1 : TOUJOURS SOUMETTRE UN JSON COMPLET
+À CHAQUE génération ou mise à jour du PowerPoint, tu DOIS soumettre un JSON COMPLET :
+- ✅ OBLIGATOIRE : Le JSON doit contenir TOUTES les données disponibles (anciennes + nouvelles)
+- ✅ OBLIGATOIRE : Utiliser les données déjà extraites et en mémoire de la conversation
+- ✅ OBLIGATOIRE : Ajouter les nouvelles informations fournies par l'utilisateur
+- ✅ OBLIGATOIRE : Soumettre ce JSON COMPLET à l'outil de templetisation
+- ❌ INTERDIT : Soumettre uniquement les nouveaux champs ou un JSON partiel
+- ❌ INTERDIT : Soumettre un JSON vide avec tous les champs à ""
+- ❌ INTERDIT : Dire "j'ai mis à jour le PowerPoint" sans vraiment soumettre les données complètes à l'outil
+
+🚨 IMPORTANT : Même si tu as déjà généré un PowerPoint, tu DOIS régénérer un NOUVEAU PowerPoint en soumettant TOUTES les données (anciennes + nouvelles) à chaque demande de modification.
+
+## RÈGLE 2 : NOMBRE MINIMUM DE RECHERCHES (pour création initiale)
+Lors de la PREMIÈRE création du PowerPoint :
+- Tu DOIS faire AU MINIMUM 5 recherches RAG distinctes
+- NE fais JAMAIS qu'une seule recherche large
+- Décompose TOUJOURS en plusieurs recherches ciblées par thématique
+
+## Ton Processus OBLIGATOIRE:
+
+### SCÉNARIO A : Création initiale du PowerPoint
+
+**ÉTAPE 1 - ANALYSE DU SCHÉMA**
+- Identifie les sections principales du schéma (ex: contexte projet, CV, finances, etc.)
+- Pour chaque section, note les types d'informations à extraire
+
+**ÉTAPE 2 - PLANIFICATION DES RECHERCHES**
+- Liste les recherches RAG que tu vas effectuer (minimum 5)
+- Chaque section principale nécessite ses propres recherches ciblées
+
+Exemple de décomposition correcte:
+❌ INCORRECT: "Trouve toutes les informations sur le projet" (1 recherche = trop large)
+✅ CORRECT:
+  1. "Quel est le contexte et les enjeux du projet ?"
+  2. "Quelles sont les formations et diplômes de l'intervenant ?"
+  3. "Quelles sont les compétences techniques de l'intervenant ?"
+  4. "Quelles sont les expériences professionnelles de l'intervenant ?"
+  5. "Quels sont les coûts et prestations financières ?"
+
+**ÉTAPE 3 - EXÉCUTION DES RECHERCHES**
+Exécute tes recherches une par une. Pour chaque recherche:
+- Formule une requête précise basée sur les descriptions de champs
+- Analyse les résultats retournés
+- Note les informations trouvées
+- Si incomplet, fais une recherche supplémentaire plus ciblée
+
+**ÉTAPE 4 - CONSTRUCTION DU JSON**
+- Construis le JSON avec toutes les informations collectées
+- Remplis tous les champs pour lesquels tu as trouvé des données
+- Laisse vides les champs pour lesquels aucune information n'existe réellement
+
+**ÉTAPE 5 - SOUMISSION À L'OUTIL**
+🚨 CRITIQUE : Soumets le JSON COMPLET à l'outil de templetisation
+- Ne te contente PAS de construire le JSON mentalement
+- Tu DOIS explicitement appeler l'outil avec le JSON
+
+### SCÉNARIO B : Mise à jour du PowerPoint (l'utilisateur donne de nouvelles informations)
+
+**ÉTAPE 1 - RÉCUPÉRATION DES DONNÉES EN MÉMOIRE**
+🚨 CRITIQUE : Rappelle-toi TOUTES les informations déjà extraites lors des interactions précédentes :
+- Toutes les données issues des recherches RAG précédentes
+- Toutes les informations que l'utilisateur t'a données précédemment
+- Ces données sont dans ta mémoire conversationnelle, ne les oublie JAMAIS !
+
+**ÉTAPE 2 - INTÉGRATION DES NOUVELLES INFORMATIONS**
+- Identifie quels champs du schéma sont concernés par les nouvelles informations utilisateur
+- Mets à jour ou complète ces champs avec les nouvelles valeurs
+- Effectue des recherches RAG supplémentaires UNIQUEMENT si nécessaire (ex: nouveaux champs manquants, besoin de clarification)
+
+**ÉTAPE 3 - CONSTRUCTION DU JSON COMPLET**
+🚨 CRITIQUE : Tu DOIS construire un JSON COMPLET qui contient :
+- TOUTES les anciennes données (déjà collectées lors des échanges précédents)
+- Les nouvelles informations fournies par l'utilisateur
+- Toute information additionnelle de recherches RAG si tu en as faites
+
+❌ Ne construis JAMAIS un JSON avec seulement les nouveaux champs !
+❌ N'oublie JAMAIS les données précédentes !
+
+**ÉTAPE 4 - SOUMISSION OBLIGATOIRE À L'OUTIL**
+🚨 CRITIQUE : Tu DOIS soumettre le JSON COMPLET à l'outil de templetisation
+- L'outil va régénérer un NOUVEAU PowerPoint avec toutes les données
+- Ne te contente JAMAIS de dire "j'ai mis à jour" ou "c'est fait" sans vraiment soumettre le JSON à l'outil
+- Même si tu as l'impression d'avoir déjà généré un PowerPoint, tu DOIS en créer un nouveau à chaque modification
+
+**ÉTAPE 5 - VÉRIFICATION**
+Après soumission, vérifie que l'outil t'a bien retourné un nouveau lien de téléchargement.
+Si ce n'est pas le cas, c'est que tu n'as pas correctement soumis les données.
+
+## Règles d'Extraction:
+
+### Fidélité et Mémoire
+- ✅ Extrais depuis les documents RAG + informations utilisateur + mémoire conversationnelle
+- ✅ Garde en mémoire TOUTES les informations des conversations précédentes
+- ✅ Combine toutes les sources d'informations à chaque soumission
+- ❌ N'invente JAMAIS de données
+- ❌ N'oublie JAMAIS les données déjà collectées
+- ❌ Ne soumets JAMAIS un JSON vide ou incomplet sans raison valable
+
+### 🚨 RESPECT STRICT DES LONGUEURS
+**SI `maxLength` est renseigné** et que le texte extrait dépasse `maxLength` : **RÉSUME INTELLIGEMMENT**
+- Conserve les informations les plus importantes
+- Reste factuel et précis dans le résumé
+- Ne dépasse JAMAIS la limite imposée
+
+### Optimisation des requêtes RAG (création initiale)
+- Multiplie les recherches et appels d'outils lors de la création initiale
+- Regroupe les champs similaires si pertinent
+- Évite les requêtes trop larges ("tout sur le document")
+- Privilégie la précision sur l'exhaustivité
+
+## Restitution à l'utilisateur:
+- Ne montre JAMAIS à l'utilisateur le JSON que tu as soumis à l'outil (la plupart ne sont pas techniques)
+- Donne systématiquement le nouveau lien de téléchargement du PowerPoint sous forme d'un lien markdown
+- Résume en 2 à 3 phrases ce que tu as fait (quels champs remplis, quelles modifications apportées)
+- Indique les informations manquantes et pose des questions de clarification si besoin
+
+## Ton Attitude
+- Méthodique : traite chaque champ systématiquement
+- Précis : base-toi sur les descriptions fournies pour formuler tes requêtes
+- Rigoureux : les contraintes de longueur sont NON NÉGOCIABLES
+- Honnête : si l'information n'existe vraiment pas après plusieurs recherches, laisse le champ vide
+- Persévérant : si une recherche ne donne pas de résultats, reformule et réessaye
+- Responsable : SOUMETS TOUJOURS le JSON complet à l'outil, ne te contente JAMAIS de dire que tu l'as fait
+
+# PARAMÈTRES TECHNIQUES: Utilise un 'top_k' de 5 et une 'search_policy' de 'semantic'. N'utilise pas 'document_library_tags_ids'.
+""",
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
     ],
 )
 
 
-# --- Agent State ---
-# -------------------
-class SlideMakerState(AgentState):
-    """Minimal state: conversation messages and LLM output content."""
-
-
-# --- Core Agent ---
-# ------------------
-@expose_runtime_source("agent.SlideMaker")
 class SlideMaker(AgentFlow):
     """
     Simplified agent to generate a PowerPoint slide with LLM content
@@ -136,106 +200,43 @@ class SlideMaker(AgentFlow):
     """
 
     tuning = TUNING
-    _graph: Optional[StateGraph] = None
-    # TARGET_PLACEHOLDER_INDEX = 1  # Hardcoded index for content insertion
 
     async def async_init(self, runtime_context: RuntimeContext):
         await super().async_init(runtime_context)
-        self.model = get_default_chat_model()
-        self._graph = self._build_graph()
-        self.mcp = MCPRuntime(
-            agent=self,
-        )
+        self.mcp = MCPRuntime(agent=self)
         await self.mcp.init()
 
     async def aclose(self):
         await self.mcp.aclose()
 
-    def _build_graph(self) -> StateGraph:
-        """Sets up the two-node linear flow: plan -> render -> END."""
-        g = StateGraph(SlideMakerState)
-        g.add_node("plan_node", self.plan_node)
-        g.add_node("render_node", self.render_node)
-        g.add_edge(START, "plan_node")
-        g.add_edge("plan_node", "render_node")
-        g.add_edge("render_node", END)
-        return g
+    def get_compiled_graph(self) -> CompiledStateGraph:
+        template_tool = self.get_template_tool()
 
-    def _last_user_message_text(self, state: SlideMakerState) -> str:
-        """Fetches the content of the most recent user message."""
-        for msg in reversed(state.get("messages", [])):
-            if getattr(msg, "type", "") in ("human", "user"):
-                return str(getattr(msg, "content", "")).strip()
-        return ""
-
-    # --------------------------------------------------------------------------
-    # Node 1: Plan Node (LLM Content Generation)
-    # --------------------------------------------------------------------------
-
-    async def plan_node(self, state: SlideMakerState) -> dict:
-        """Generates a concise text block from the LLM based on the user's request."""
-        user_ask = self._last_user_message_text(state)
-
-        langfuse_handler = CallbackHandler()
-
-        agent = create_agent(
+        return create_agent(
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
-            tools=[*self.mcp.get_tools()],
+            tools=[template_tool, *self.mcp.get_tools()],
             checkpointer=self.streaming_memory,
-            response_format=ProviderStrategy(globalSchema),  # type: ignore
+            middleware=[],
         )
-        resp = await agent.ainvoke(
-            {
-                "messages": [
-                    {"role": "user", "content": user_ask},
-                ]
+
+    def get_template_tool(self):
+        tool_schema = {
+            "type": "object",
+            "properties": {
+                "data": globalSchema,  # todo: get it by parsing a tuning field
             },
-            config={"callbacks": [langfuse_handler]},
-        )
-        validator = Draft7Validator(globalSchema)
-        errors = list(validator.iter_errors(resp["structured_response"]))
-        validation_errors = 0
-        while errors and validation_errors < 0:
-            validation_errors += 1
-            resp = await agent.ainvoke(
-                {
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": (
-                                "Your response did not fit the json schema validation."
-                                "If it is too long, summarize it."
-                                f"Here is the error message: {[err.message for err in errors]}."
-                            ),
-                        },
-                    ]
-                }
-            )
-            validator = Draft7Validator(globalSchema)
-            errors = list(validator.iter_errors(resp["structured_response"]))
-        logger.info(f"{validation_errors} retries to validate the JSON schema.")
-        return {"structured_response": resp["structured_response"]}
+            "required": ["data"],
+        }
 
-    # --------------------------------------------------------------------------
-    # Node 2: Render Node (Asset Generation, Upload, and Structured Response)
-    # --------------------------------------------------------------------------
-    async def render_node(self, state: SlideMakerState) -> dict:
-        """
-        Fetches template, inserts LLM text, saves deck, uploads to storage,
-        and returns a structured message with the download link.
-        """
-        template_path: Path | str = ""
-        output_path: Optional[Path] = None
-
-        def _append_error(msg_content: str) -> dict:
-            logger.error("Error encountered: %s", msg_content)
-            return {"messages": [AIMessage(content=msg_content)]}
-
-        if not state.get("structured_response"):
-            return _append_error("❌ Generation failed: LLM did not provide content.")
-
-        try:
+        @tool(args_schema=tool_schema)
+        async def template_tool(data: dict):
+            """
+            Outil permettant de templétiser le fichier envoyé par l'utilisateur.
+            La nature du fichier importe peu tant que le format des données est respecté. Tu n'as pas besoin de préciser quel fichier,
+            l'outil possède déjà cette information.
+            L'outil retournera un lien de téléchargement une fois le fichier templatisé.
+            """
             # 1. Fetch template from secure asset storage
             template_key = (
                 self.get_tuned_text("ppt.template_key") or "simple_template.pptx"
@@ -249,9 +250,7 @@ class SlideMaker(AgentFlow):
                 delete=False, suffix=".pptx", prefix="result_"
             ) as out:
                 output_path = Path(out.name)
-                fill_slide_from_structured_response(
-                    template_path, state.get("structured_response"), output_path
-                )
+                fill_slide_from_structured_response(template_path, data, output_path)
 
             # 3. Upload the generated asset to user storage
             user_id_to_store_asset = self.get_end_user_id()
@@ -271,47 +270,11 @@ class SlideMaker(AgentFlow):
                 asset_key=upload_result.key, scope="user"
             )
 
-            final_parts: list[MessagePart] = [
-                TextPart(
-                    text=f"✅ **Success:** PowerPoint deck generated and securely saved to your assets.\n**Display Filename:** `{upload_result.file_name}`"
-                ),
-                LinkPart(
-                    href=final_download_url,
-                    title=f"Download {upload_result.file_name}",
-                    kind=LinkKind.download,
-                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                ),
-                TextPart(
-                    text=(
-                        f"\n---\n"
-                        f"**💡 Academy Note (Structured Output Pattern)**\n"
-                        f"The download button above is a **`LinkPart`** object (`kind='download'`).\n"
-                        f"This pattern cleanly separates binary assets from text/Markdown in the UI.\n"
-                        f"**Secure Header Required by UI:** `X-Asset-User-ID: {user_id_to_store_asset}`"
-                    )
-                ),
-            ]
-
-            # FINAL RETURN: Use structured parts in the AIMessage
-            return {
-                "messages": [AIMessage(content="", parts=final_parts)],
-                "content_slot": state.get("content_slot", ""),
-            }
-
-        except AssetRetrievalError as e:
-            return _append_error(
-                f"❌ **Asset Error:** Cannot find template '{template_key}'. Check asset availability. (Details: {e})"
-            )
-        except Exception as e:
-            # Catch all other exceptions during rendering/upload
-            logger.exception("An unexpected error occurred during rendering/upload.")
-            return _append_error(
-                f"❌ **Processing Error:** Failed to generate/upload the slide. (Details: {e})"
+            return LinkPart(
+                href=final_download_url,
+                title=f"Download {upload_result.file_name}",
+                kind=LinkKind.download,
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
             )
 
-        finally:
-            # 6. CRITICAL: Cleanup temporary files (template and output deck)
-            if template_path:
-                Path(template_path).unlink(missing_ok=True)
-            if output_path and output_path.exists():
-                output_path.unlink(missing_ok=True)
+        return template_tool

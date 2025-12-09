@@ -23,6 +23,7 @@ from typing import Awaitable, Callable, List, Optional, cast
 from fred_core import KeycloakUser
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
+from langfuse.langchain import CallbackHandler
 from langgraph.graph import MessagesState
 
 from agentic_backend.core.agents.agent_flow import AgentFlow
@@ -126,6 +127,8 @@ class StreamTranscoder:
         user_context: KeycloakUser,
         runtime_context: RuntimeContext,
     ) -> List[ChatMessage]:
+        langfuse_handler = CallbackHandler()
+
         config: RunnableConfig = {
             "configurable": {
                 "thread_id": session_id,
@@ -133,7 +136,8 @@ class StreamTranscoder:
                 "access_token": runtime_context.access_token,
                 "refresh_token": runtime_context.refresh_token,
             },
-            "recursion_limit": 40,
+            "recursion_limit": 100,
+            "callbacks": [langfuse_handler],
         }
 
         out: List[ChatMessage] = []
