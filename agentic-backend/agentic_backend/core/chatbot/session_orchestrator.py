@@ -41,6 +41,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from requests import HTTPError
 
 from agentic_backend.application_context import (
     get_default_model,
@@ -74,7 +75,6 @@ from agentic_backend.core.chatbot.stream_transcoder import StreamTranscoder
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.session.attachement_processing import AttachementProcessing
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
-from requests import HTTPError
 
 logger = logging.getLogger(__name__)
 
