@@ -1,3 +1,27 @@
+### v1.0.9
+
+_Release date: 2025-12-09_
+
+We corrected the k-NN query used by the OpenSearch vector store.
+The previous implementation wrapped the knn block inside a bool.must, which is not the recommended syntax and could lead to sub-optimal or inconsistent results depending on the OpenSearch version.
+The new implementation uses the proper query: { knn: … } structure and applies filters directly inside the k-NN block.
+
+#### Features
+
+- Can select multiple chat contexts(#890)
+
+#### Bug fixes
+
+- fixed the opensearch vector search query (#888)
+
+Impact: improved result relevance, better performance with filtered searches, and full compatibility with OpenSearch 2.19+.
+
+### v1.0.8
+
+_Release date: 2025-12-08_
+
+Added the new feature to select corups only, general knowledge only or hybrid search for rag agents. 
+
 ### v1.0.7
 
 _Release date: 2025-12-06_
