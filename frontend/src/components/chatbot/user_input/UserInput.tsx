@@ -338,11 +338,6 @@ export default function UserInput({
     semantic: t("search.semantic", "Semantic"),
     strict: t("search.strict", "Strict"),
   };
-  const ragScopeLabels: Record<SearchRagScope, string> = {
-    corpus_only: t("chatbot.ragScope.corpusOnly", "Corpus"),
-    hybrid: t("chatbot.ragScope.hybrid", "Corpus + knowledge"),
-    general_only: t("chatbot.ragScope.generalOnly", "General"),
-  };
 
   // “+” menu popover
   const [plusAnchor, setPlusAnchor] = useState<HTMLElement | null>(null);
