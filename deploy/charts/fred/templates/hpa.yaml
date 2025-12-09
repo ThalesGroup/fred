@@ -1,0 +1,41 @@
+{{- define "common-library.hpa" -}}
+
+{{- if and .app.autoscaling.enabled .app.deployment.enabled }}
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .app.applicationName }}
+  labels:
+    app: {{ .app.applicationName }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .app.applicationName }}
+  minReplicas: {{ .app.autoscaling.minReplicas | default 1 }}
+  maxReplicas: {{ .app.autoscaling.maxReplicas | default 3 }}
+  metrics:
+    {{- if .app.autoscaling.metrics }}
+{{ toYaml .app.autoscaling.metrics | nindent 4 }}
+    {{- else }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .app.autoscaling.targetCPUUtilizationPercentage | default 80 }}
+    {{- if .app.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .app.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+    {{- end }}
+
+{{- end }}
+
+{{ end -}}
