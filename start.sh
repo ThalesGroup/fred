@@ -33,6 +33,7 @@ echo "→ GRANDLYON_WFS_URL=${GRANDLYON_WFS_URL:-https://data.grandlyon.com/geos
 echo "→ GRANDLYON_WFS_TYPENAME=${GRANDLYON_WFS_TYPENAME:-metropole-de-lyon:pvo_patrimoine_voirie.pvotrafic}"
 echo "→ GEO_NOMINATIM_URL=${ECO_GEO_NOMINATIM_URL:-https://nominatim.openstreetmap.org/search}"
 echo "→ GEO_OSRM_URL=${ECO_GEO_OSRM_URL:-https://router.project-osrm.org}"
+ECO_AGENT_DIR="$ROOT_DIR/agentic-backend/agentic_backend/academy/08_ecoadviser"
 if [[ -z "${GRANDLYON_WFS_API_KEY:-}" && ( -z "${GRANDLYON_WFS_USERNAME:-}" || -z "${GRANDLYON_WFS_PASSWORD:-}" ) ]]; then
   echo "⚠️  No GrandLyon WFS credentials found (GRANDLYON_WFS_API_KEY or USERNAME/PASSWORD). Traffic MCP may be rejected."
 fi
@@ -54,21 +55,8 @@ prefix_logs() {
 # frontend
 (cd frontend && make run 2>&1 | prefix_logs "FRONTEND") &
 
-# CO₂ emission reference MCP server (local FastAPI+MCP)
-(cd agentic-backend && uv run uvicorn agentic_backend.academy.08_ecoadviser.co2_estimation_service.server_mcp:app \
-    --host 127.0.0.1 --port 9798 2>&1 | prefix_logs "CO2") &
-
-# Traffic reference MCP server
-(cd agentic-backend && uv run uvicorn agentic_backend.academy.08_ecoadviser.traffic_service.server_mcp:app \
-    --host 127.0.0.1 --port 9799 2>&1 | prefix_logs "TRAFFIC") &
-
-# TCL real-time MCP server
-(cd agentic-backend && uv run uvicorn agentic_backend.academy.08_ecoadviser.tcl_service.server_mcp:app \
-    --host 127.0.0.1 --port 9800 2>&1 | prefix_logs "TCL") &
-
-# GEO distance MCP server (Nominatim + OSRM)
-(cd agentic-backend && uv run uvicorn agentic_backend.academy.08_ecoadviser.geo_distance_service.server_mcp:app \
-    --host 127.0.0.1 --port 9801 2>&1 | prefix_logs "GEO") &
+# EcoAdvisor MCP services bundle
+(cd "$ECO_AGENT_DIR" && make run 2>&1 | prefix_logs "ECO") &
 
 # wait for all background jobs
 wait

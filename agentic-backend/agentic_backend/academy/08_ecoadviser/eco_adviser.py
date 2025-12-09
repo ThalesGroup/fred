@@ -266,19 +266,6 @@ class EcoAdvisor(AgentFlow):
                 return payload
         return payload
 
-    def _latest_tool_output(self, state: EcoState, tool_name: str) -> Any:
-        """
-        Récupère le dernier ToolMessage d'un tool donné.
-
-        Fred rationale:
-        - Permettrait de factoriser l'accès aux résultats (list datasets, query, etc.).
-        - Non utilisé dans la v1, mais utile pour de futures post-analyses côté agent.
-        """
-        for msg in reversed(state["messages"]):
-            if isinstance(msg, ToolMessage) and getattr(msg, "name", "") == tool_name:
-                return self._maybe_parse_json(msg.content)
-        return None
-
     def _format_context_for_prompt(self, database_context: DatabaseContextPayload) -> str:
         """
         Formatte la liste des bases / tables accessibles pour injection dans le prompt.
