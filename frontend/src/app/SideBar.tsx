@@ -42,7 +42,6 @@ import { usePermissions } from "../security/usePermissions";
 import {
   SessionWithFiles,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
-  useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
 } from "../slices/agentic/agenticOpenApi";
 
@@ -250,14 +249,7 @@ function ConversationsSection({ isSidebarOpen }: ConversationsSectionProps) {
   const theme = useTheme();
 
   const {
-    data: agentsFromServer = [],
-    isLoading: flowsLoading,
-    isError: flowsError,
-    error: flowsErrObj,
-  } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
-
-  const {
-    data: sessionsFromServer,
+    data: sessions,
     isLoading: sessionsLoading,
     isError: sessionsError,
     error: sessionsErrObj,
@@ -274,7 +266,12 @@ function ConversationsSection({ isSidebarOpen }: ConversationsSectionProps) {
     allAgentOptionValue,
   );
 
-  const enabledAgents = (agentsFromServer ?? []).filter((a) => a.enabled === true);
+  const uniqueAgents = Array.from(new Set(sessions?.flatMap((s) => s.agents) ?? [])).sort();
+
+  const filteredSessions =
+    (selectedAgent === allAgentOptionValue
+      ? sessions
+      : sessions?.filter((session) => session.agents.includes(selectedAgent))) ?? [];
 
   return (
     <>
@@ -297,8 +294,10 @@ function ConversationsSection({ isSidebarOpen }: ConversationsSectionProps) {
               sx={{ width: "100%" }}
             >
               <MenuItem value={allAgentOptionValue}>{t("sidebar.allAgents")}</MenuItem>
-              {enabledAgents.map((agent) => (
-                <MenuItem value={agent.name}>{agent.name}</MenuItem>
+              {uniqueAgents.map((agent) => (
+                <MenuItem key={agent} value={agent}>
+                  {agent}
+                </MenuItem>
               ))}
             </Select>
           </Box>
@@ -311,7 +310,7 @@ function ConversationsSection({ isSidebarOpen }: ConversationsSectionProps) {
         sx={{ flexGrow: 1, overflowY: "auto", overflowX: "hidden", scrollbarWidth: "none", py: 1, px: 1 }}
       >
         {isSidebarOpen &&
-          sessionsFromServer?.map((session) => (
+          filteredSessions.map((session) => (
             <SideBarConversationListElement key={session.id} session={session} refetchSessions={refetchSessions} />
           ))}
       </Paper>
