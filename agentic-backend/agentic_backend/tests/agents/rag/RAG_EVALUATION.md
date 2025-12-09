@@ -16,16 +16,31 @@ This script evaluates Retrieval-Augmented Generation (RAG) agents using the [Dee
 ## Requirements
 
 - Launching the knowledge flow and uploading documents 
-- The script uses the application's configuration file (`config/configuration.yaml`) to set up models and agents. Ensure this file is properly configured with your model settings.
+- The script uses the application's configuration file to set up models and agents. Ensure this file is properly configured with your model settings.
+
+## Architecture
+
+### BaseEvaluator Class
+
+Abstract base class providing the core evaluation infrastructure:
+
+- Configuration management (YAML)
+- LLM model loading (Ollama, OpenAI)
+- JSON dataset handling
+- Colored logging
+- Automatic metric averaging
+
+### RAGEvaluator Class
+
+Specific implementation for RAG agent evaluation
 
 ## Usage
 
 ```bash
-python rag_evaluation.py \
+python rag_advanced_evaluation.py \
   --chat_model "gpt-4" \
   --embedding_model "text-embedding-3-small" \
-  --dataset_path "tests/agents/rag/test_questions.json" \
-  --doc_libs "lib1,lib2"
+  --dataset_path "tests/agents/rag/test_questions.json"
 ```
 
 ### Arguments
@@ -36,6 +51,7 @@ python rag_evaluation.py \
 | `--embedding_model` | Yes | Name of the embedding model to use |
 | `--dataset_path` | Yes | Path to the JSON test file |
 | `--doc_libs` | No | Comma-separated list of document library IDs |
+| `--configuration_file` | No | Name of the configuration file (default: configuration.yaml) |
 
 ### Test Dataset Format
 
@@ -84,4 +100,15 @@ Faithfulness
 OVERALL AVERAGE
 ======================================================================
   Overall average:   0.5648 (56.48%)
+```
+
+## Extension
+
+To create a new evaluator, inherit from BaseEvaluator:
+
+```
+class CustomEvaluator(BaseEvaluator):
+    async def run_evaluation(self, agent_name: str, doc_lib_ids: list[str] | None = None):
+        # Your implementation
+        pass
 ```
