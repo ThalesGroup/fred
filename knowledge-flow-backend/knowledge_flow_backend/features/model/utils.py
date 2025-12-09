@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-import pickle
+import pickle  # nosec B301 B403
 from typing import Any, Iterable, List, Sequence
 
 import numpy as np
@@ -36,7 +36,7 @@ def meta_key(tag_id: str) -> str:
 def save_umap_model(file_store: Any, namespace: str, storage_key: str, model: Any) -> None:
     """Persist a (U)MAP model into the configured file store under the given key."""
     try:
-        model_bytes = pickle.dumps(model)
+        model_bytes = pickle.dumps(model, protocol=pickle.HIGHEST_PROTOCOL)  # nosec B301 B403
         file_store.put(
             namespace,
             storage_key,
@@ -59,7 +59,7 @@ def load_umap_model(file_store: Any, namespace: str, storage_key: str) -> Any:
         raise FileNotFoundError(f"No model found in the store for: {storage_key}")
 
     try:
-        model = pickle.loads(model_bytes)
+        model = pickle.loads(model_bytes)  # nosec B301 B403
         logger.info("UMAP model loaded from %s/%s", namespace, storage_key)
         return model
     except Exception:

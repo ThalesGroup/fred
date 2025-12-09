@@ -25,7 +25,9 @@ from knowledge_flow_backend.features.metadata.service import MetadataService
 
 from .types import GraphPoint
 from .utils import (
-    build_points, load_umap_model, save_umap_model,
+    build_points,
+    load_umap_model,
+    save_umap_model,
 )
 from .utils import (
     meta_key as util_meta_key,
@@ -210,10 +212,10 @@ class ModelService:
 
         # Configure UMAP: 3D projection
         model = UMAP(
-            n_components=3,    # 3D target space
-            n_neighbors=15,    # Local influence
-            min_dist=0.1,      # Minimum distance between points
-            metric="cosine",   # works well for text embeddings
+            n_components=3,  # 3D target space
+            n_neighbors=15,  # Local influence
+            min_dist=0.1,  # Minimum distance between points
+            metric="cosine",  # works well for text embeddings
             random_state=42,
         )
         model.fit(X)
