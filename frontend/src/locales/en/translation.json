@@ -373,6 +373,11 @@
     "confirmRestoreMessage": "This will replace all MCP server changes saved in the UI with the YAML configuration. You will lose those changes. This cannot be undone."
   },
   "chatbot": {
+    "ragScope": {
+      "tooltipCorpus": "Use only the selected document libraries to answer",
+      "tooltipHybrid": "Use both the selected document libraries and the model general knowledge to answer",
+      "tooltipGeneral": "Use only the model general knowledge to answer"
+    },
     "menu": {
       "addToSetup": "Add to conversation setup"
     },
