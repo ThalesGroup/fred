@@ -373,6 +373,11 @@
     "confirmRestoreMessage": "Cette action remplacera toutes les modifications de serveurs MCP saisies dans l'UI par celles du YAML. Vous perdrez ces changements. Cette opération est irréversible."
   },
   "chatbot": {
+    "ragScope": {
+      "tooltipCorpus": "Utiliser seulement le corpus documentaire pour répondre",
+      "tooltipHybrid": "Utiliser le corpus documentaire et les connaissances générales du modèle pour répondre",
+      "tooltipGeneral": "Utiliser seulement les connaissances générales du modèle pour répondre"
+    },
     "menu": {
       "addToSetup": "Ajouter à la configuration de la conversation"
     },

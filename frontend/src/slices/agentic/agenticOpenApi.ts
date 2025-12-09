@@ -438,8 +438,8 @@ export type AgentChatOptions = {
   record_audio_files?: boolean;
   /** Allow attaching local files (e.g., PDFs, images, text) to the message and show existing attachments. */
   attach_files?: boolean;
-  /** Expose a toggle to skip retrieval and answer without querying document corpora for this message. */
-  skip_rag_search?: boolean;
+  /** Expose a selector to decide how the agent should use the corpus: documents only, hybrid, or general knowledge only. */
+  search_rag_scoping?: boolean;
 };
 export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
@@ -605,7 +605,7 @@ export type RuntimeContext = {
   refresh_token?: string | null;
   access_token_expires_at?: number | null;
   attachments_markdown?: string | null;
-  skip_rag_search?: boolean | null;
+  search_rag_scope?: ("corpus_only" | "hybrid" | "general_only") | null;
 };
 export type ChatMetadata = {
   model?: string | null;

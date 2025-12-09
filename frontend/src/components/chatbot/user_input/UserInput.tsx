@@ -1,9 +1,16 @@
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// ...
-
-// User input component for the chatbot
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 import AddIcon from "@mui/icons-material/Add";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
@@ -13,7 +20,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import AudioController from "../AudioController.tsx";
 import AudioRecorder from "../AudioRecorder.tsx";
 
-import { Box, Grid2, IconButton, InputBase, Stack, Switch, Tooltip, useTheme } from "@mui/material";
+import { Box, Grid2, IconButton, InputBase, Stack, Tooltip, useTheme } from "@mui/material";
 
 import { useTranslation } from "react-i18next";
 import {
@@ -33,6 +40,8 @@ import {
 import { AgentSelector } from "./AgentSelector.tsx";
 import { UserInputAttachments } from "./UserInputAttachments.tsx";
 import { UserInputPopover } from "./UserInputPopover.tsx";
+import { UserInputRagScope } from "./UserInputRagScope.tsx";
+import { SearchRagScope } from "./types.ts";
 
 export interface UserInputContent {
   text?: string;
@@ -43,7 +52,7 @@ export interface UserInputContent {
   templateResourceIds?: string[];
   profileResourceIds?: string[];
   searchPolicy?: SearchPolicyName;
-  skipRagSearch?: boolean;
+  searchRagScope?: SearchRagScope;
 }
 
 type PersistedCtx = {
@@ -52,7 +61,9 @@ type PersistedCtx = {
   templateResourceIds?: string[];
   profileResourceIds?: string[];
   searchPolicy?: SearchPolicyName;
-  skipRagSearch?: boolean;
+  searchRagScope?: SearchRagScope;
+  ragKnowledgeScope?: SearchRagScope; // legacy persisted field
+  skipRagSearch?: boolean; // legacy persisted flag
 };
 
 function makeStorageKey(sessionId?: string) {
@@ -78,6 +89,10 @@ function saveSessionCtx(sessionId: string | undefined, ctx: PersistedCtx) {
   } catch {
     // storage may be unavailable (private mode/quotas) — fail quietly
   }
+}
+
+function parseRagScope(value: any): SearchRagScope | undefined {
+  return value === "corpus_only" || value === "hybrid" || value === "general_only" ? value : undefined;
 }
 
 export default function UserInput({
@@ -132,11 +147,13 @@ export default function UserInput({
   const [isRecording, setIsRecording] = useState<boolean>(false);
   // Deprecated for uploads: files are uploaded immediately; keep no per-message files
   const [filesBlob, setFilesBlob] = useState<File[] | null>(null);
-  const supportsSkipRagSearch = agentChatOptions?.skip_rag_search !== undefined;
-  const [skipRagSearch, setSkipRagSearch] = useState<boolean>(
-    agentChatOptions?.skip_rag_search ?? false,
-  ); // true means: skip retrieval; false means: use retrieval
+  // Only show the selector when the agent explicitly opts in via config (new flag, fallback to old).
+  const supportsRagScopeSelection = agentChatOptions?.search_rag_scoping === true;
+  const computeDefaultRagScope = (): SearchRagScope => "hybrid";
+  const [searchRagScope, setSearchRagScope] = useState<SearchRagScope>(computeDefaultRagScope);
 
+  console.log("UserInput render", { searchRagScope, supportsRagScopeSelection });
+  console.log("Agent chat options", agentChatOptions);
   // --- Fred rationale ---
   // These three selections are *session-scoped context* (used by agents for retrieval/templates).
   // Rule: hydrate exactly once per session. Persist to localStorage to restore when returning.
@@ -161,7 +178,7 @@ export default function UserInput({
         promptResourceIds: selectedPromptResourceIds,
         templateResourceIds: selectedTemplateResourceIds,
         searchPolicy: selectedSearchPolicyName,
-        skipRagSearch: skipRagSearch,
+        searchRagScope: searchRagScope,
       };
     }
   }, [
@@ -170,18 +187,18 @@ export default function UserInput({
     selectedPromptResourceIds,
     selectedTemplateResourceIds,
     selectedSearchPolicyName,
-    skipRagSearch,
+    searchRagScope,
   ]);
 
   // When switching agents (no active session), align default skip state with the agent option
   useEffect(() => {
     if (sessionId) return; // do not override an active session choice
-    if (supportsSkipRagSearch) {
-      setSkipRagSearch(agentChatOptions?.skip_rag_search ?? false);
+    if (supportsRagScopeSelection) {
+      setSearchRagScope("hybrid");
     } else {
-      setSkipRagSearch(false);
+      setSearchRagScope("hybrid");
     }
-  }, [agentChatOptions?.skip_rag_search, supportsSkipRagSearch, sessionId]);
+  }, [agentChatOptions?.search_rag_scoping, supportsRagScopeSelection, sessionId]);
 
   // Hydration guard: run at most once per session id.
   const hydratedForSession = useRef<string | undefined>(undefined);
@@ -221,12 +238,20 @@ export default function UserInput({
       : pre.searchPolicy
         ? pre.searchPolicy
         : initialSearchPolicy;
-    const skipRag = persisted.skipRagSearch ?? pre.skipRagSearch ?? false;
+    const persistedScope =
+      parseRagScope(persisted.searchRagScope) ??
+      parseRagScope(persisted.ragKnowledgeScope) ??
+      (persisted.skipRagSearch ? "general_only" : undefined);
+    const preScope =
+      parseRagScope(pre.searchRagScope) ??
+      parseRagScope(pre.ragKnowledgeScope) ??
+      (pre.skipRagSearch ? "general_only" : undefined);
+    const ragScope = persistedScope ?? preScope ?? computeDefaultRagScope();
     setSelectedSearchPolicyName(searchPolicy);
     setSelectedDocumentLibrariesIds(libs);
     setSelectedPromptResourceIds(prompts);
     setSelectedTemplateResourceIds(templates);
-    setSkipRagSearch(skipRag);
+    setSearchRagScope(ragScope);
 
     // Save immediately so storage stays the source of truth for this session.
     saveSessionCtx(sessionId, {
@@ -234,7 +259,7 @@ export default function UserInput({
       promptResourceIds: prompts,
       templateResourceIds: templates,
       searchPolicy: searchPolicy,
-      skipRagSearch: skipRag,
+      searchRagScope: ragScope,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
@@ -249,7 +274,7 @@ export default function UserInput({
           promptResourceIds: selectedPromptResourceIds,
           templateResourceIds: selectedTemplateResourceIds,
           searchPolicy: selectedSearchPolicyName,
-          skipRagSearch,
+          searchRagScope,
         });
       return value;
     });
@@ -263,7 +288,7 @@ export default function UserInput({
           promptResourceIds: value,
           templateResourceIds: selectedTemplateResourceIds,
           searchPolicy: selectedSearchPolicyName,
-          skipRagSearch,
+          searchRagScope,
         });
       return value;
     });
@@ -277,7 +302,7 @@ export default function UserInput({
           promptResourceIds: selectedPromptResourceIds,
           templateResourceIds: value,
           searchPolicy: selectedSearchPolicyName,
-          skipRagSearch,
+          searchRagScope,
         });
       return value;
     });
@@ -291,20 +316,20 @@ export default function UserInput({
           promptResourceIds: selectedPromptResourceIds,
           templateResourceIds: selectedTemplateResourceIds,
           searchPolicy: value,
-          skipRagSearch,
+          searchRagScope,
         });
       return value;
     });
   };
-  const setSkipRag = (next: boolean) => {
-    setSkipRagSearch(next);
+  const setRagScope = (next: SearchRagScope) => {
+    setSearchRagScope(next);
     if (sessionId)
       saveSessionCtx(sessionId, {
         documentLibraryIds: selectedDocumentLibrariesIds,
         promptResourceIds: selectedPromptResourceIds,
         templateResourceIds: selectedTemplateResourceIds,
         searchPolicy: selectedSearchPolicyName,
-        skipRagSearch: next,
+        searchRagScope: next,
       });
   };
 
@@ -312,6 +337,11 @@ export default function UserInput({
     hybrid: t("search.hybrid", "Hybrid"),
     semantic: t("search.semantic", "Semantic"),
     strict: t("search.strict", "Strict"),
+  };
+  const ragScopeLabels: Record<SearchRagScope, string> = {
+    corpus_only: t("chatbot.ragScope.corpusOnly", "Corpus"),
+    hybrid: t("chatbot.ragScope.hybrid", "Corpus + knowledge"),
+    general_only: t("chatbot.ragScope.generalOnly", "General"),
   };
 
   // “+” menu popover
@@ -373,7 +403,7 @@ export default function UserInput({
       promptResourceIds: selectedPromptResourceIds.length ? selectedPromptResourceIds : undefined,
       templateResourceIds: selectedTemplateResourceIds.length ? selectedTemplateResourceIds : undefined,
       searchPolicy: selectedSearchPolicyName,
-      skipRagSearch,
+      searchRagScope: supportsRagScopeSelection ? searchRagScope : undefined,
     });
   }, [
     filesBlob,
@@ -382,7 +412,8 @@ export default function UserInput({
     selectedPromptResourceIds,
     selectedTemplateResourceIds,
     selectedSearchPolicyName,
-    skipRagSearch,
+    searchRagScope,
+    supportsRagScopeSelection,
     onContextChange,
   ]);
 
@@ -412,7 +443,7 @@ export default function UserInput({
       promptResourceIds: selectedPromptResourceIds,
       templateResourceIds: selectedTemplateResourceIds,
       searchPolicy: selectedSearchPolicyName,
-      skipRagSearch,
+      searchRagScope: supportsRagScopeSelection ? searchRagScope : undefined,
     });
     setUserInput("");
     setAudioBlob(null);
@@ -493,15 +524,8 @@ export default function UserInput({
               alignItems: "center",
             }}
           >
-            {supportsSkipRagSearch && (
-              <Tooltip title={t("chatbot.searchToggle", "Recherche documentaire (RAG)")}>
-                <Switch
-                  size="small"
-                  checked={!skipRagSearch}
-                  onChange={(e) => setSkipRag(!e.target.checked)}
-                  inputProps={{ "aria-label": "skip-rag-search" }}
-                />
-              </Tooltip>
+            {supportsRagScopeSelection && (
+              <UserInputRagScope value={searchRagScope} onChange={setRagScope} disabled={isWaiting} />
             )}
             {canAttach && (
               <Tooltip title={t("chatbot.menu.addToSetup")}>
