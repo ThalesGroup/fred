@@ -8,6 +8,7 @@ import ExpandMore from "@mui/icons-material/ExpandMore";
 import GroupIcon from "@mui/icons-material/Group";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
+import PersonIcon from "@mui/icons-material/Person";
 import SettingsIcon from "@mui/icons-material/Settings";
 import {
   Box,
@@ -29,6 +30,7 @@ import {
 } from "@mui/material";
 import MuiDrawer from "@mui/material/Drawer";
 import Select, { SelectChangeEvent } from "@mui/material/Select";
+import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
@@ -36,7 +38,11 @@ import { UserAvatar } from "../components/profile/UserAvatar";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { KeyCloakService } from "../security/KeycloakService";
 import { usePermissions } from "../security/usePermissions";
-import { useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery } from "../slices/agentic/agenticOpenApi";
+import {
+  SessionWithFiles,
+  useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
+  useGetSessionsAgenticV1ChatbotSessionsGetQuery,
+} from "../slices/agentic/agenticOpenApi";
 
 const drawerWidth = 280;
 
@@ -216,25 +222,27 @@ export default function SideBar() {
 
   return (
     <Drawer variant="permanent" open={open}>
-      {/* Header (icon + open/close button*/}
-      <DrawerHeader>
-        <IconButton onClick={() => setOpen((open) => !open)} sx={{ mr: open ? 0 : 1 }}>
-          {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
-        </IconButton>
-      </DrawerHeader>
+      <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+        {/* Header (icon + open/close button*/}
+        <DrawerHeader>
+          <IconButton onClick={() => setOpen((open) => !open)} sx={{ mr: open ? 0 : 1 }}>
+            {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+          </IconButton>
+        </DrawerHeader>
 
-      {/* Nav */}
-      <Paper elevation={0}>
-        <SideBarMenuList menuItems={menuItems} isSidebarOpen={open} />
-      </Paper>
+        {/* Nav */}
+        <Paper elevation={0}>
+          <SideBarMenuList menuItems={menuItems} isSidebarOpen={open} />
+        </Paper>
 
-      {/* Conversations */}
-      <Box sx={{ height: "100%" }}>{open && <ConversationsSection />}</Box>
+        {/* Conversations */}
+        {open && <ConversationsSection />}
 
-      {/* Profile */}
-      <Paper elevation={1}>
-        <SidebarProfileItem isSidebarOpen={open} />
-      </Paper>
+        {/* Profile */}
+        <Paper elevation={1}>
+          <SidebarProfileItem isSidebarOpen={open} />
+        </Paper>
+      </Box>
     </Drawer>
   );
 }
@@ -249,17 +257,17 @@ function ConversationsSection() {
     error: flowsErrObj,
   } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
 
-  // const {
-  //   data: sessionsFromServer = [],
-  //   isLoading: sessionsLoading,
-  //   isError: sessionsError,
-  //   error: sessionsErrObj,
-  //   refetch: refetchSessions,
-  // } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
-  //   refetchOnMountOrArgChange: true,
-  //   refetchOnFocus: true,
-  //   refetchOnReconnect: true,
-  // });
+  const {
+    data: sessionsFromServer,
+    isLoading: sessionsLoading,
+    isError: sessionsError,
+    error: sessionsErrObj,
+    refetch: refetchSessions,
+  } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+  });
 
   const allAgentOptionValue = "all-agents";
   const [selectedAgent, setSelectedAgent] = useLocalStorageState<string>(
@@ -295,9 +303,52 @@ function ConversationsSection() {
           </Select>
         </Box>
       </Paper>
+
       {/* Conversation list */}
-      <Paper elevation={0}></Paper>
+      <Paper
+        elevation={0}
+        sx={{ flexGrow: 1, overflowY: "auto", overflowX: "hidden", scrollbarWidth: "none", py: 1, px: 1 }}
+      >
+        {sessionsFromServer?.map((session) => <SideBarConversationListElement session={session} />)}
+      </Paper>
     </>
+  );
+}
+interface SideBarConversationListElementProps {
+  session: SessionWithFiles;
+}
+
+function SideBarConversationListElement({ session }: SideBarConversationListElementProps) {
+  const theme = useTheme();
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        px: 1.5,
+        py: 1,
+        borderRadius: 1,
+        userSelect: "none",
+        "&:hover": { background: theme.palette.action.hover },
+      }}
+    >
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+        <PersonIcon sx={{ fontSize: "1rem", color: theme.palette.primary.main }} />
+        <Typography variant="caption" sx={{ color: theme.palette.primary.main }}>
+          Agent 1
+        </Typography>
+      </Box>
+      <Typography
+        variant="body2"
+        sx={{ color: theme.palette.text.primary, textOverflow: "ellipsis", width: "100%", overflow: "hidden" }}
+      >
+        {session.title}
+      </Typography>
+      <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+        {dayjs(session.updated_at).format("L")}
+      </Typography>
+    </Box>
   );
 }
 
