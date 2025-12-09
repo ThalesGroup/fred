@@ -586,6 +586,7 @@
     "folderDeleted": "Folder deleted",
     "deleteFolder": "Delete folder",
     "download": "Download",
+    "downloadStarting": "Getting ready to start downloading...",
     "pipeline": {
       "title": "Configure Processing Pipeline",
       "description": "Choose the chain of processors to apply for each file type in this library.",
