@@ -544,7 +544,13 @@ const ChatBot = ({
         // Refresh attachments view in the popover
         setAttachmentsRefreshTick((x) => x + 1);
       } catch (err: any) {
-        const errMsg = err?.data?.detail || err?.error || (err as Error)?.message || "Unknown error";
+        const detail = err?.data?.detail ?? err?.data ?? err?.error;
+        const errMsg =
+          typeof detail === "string"
+            ? detail
+            : typeof detail === "object" && detail
+              ? detail.message || detail.upstream || detail.code || JSON.stringify(detail)
+              : (err as Error)?.message || "Unknown error";
         console.error("❌ File upload failed:", err);
         showError({ summary: "File Upload Error", detail: `Failed to upload ${file.name}: ${errMsg}` });
       } finally {

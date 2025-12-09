@@ -152,7 +152,7 @@
   },
   "procbench": {
     "title": "Banc de test des processeurs",
-    "description": "Ajoutez un PDF ou DOCX et comparez la qualité et la vitesse d'extraction entre processeurs.",
+    "description": "Ajoutez un document (PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL) et comparez la qualité et la vitesse d'extraction entre processeurs.",
     "uploadTitle": "Ajouter un document",
     "uploadSubtitle": "Pris en charge : PDF, DOCX, PPTX, Markdown, Texte",
     "browse": "Parcourir",
@@ -386,7 +386,8 @@
     },
     "attachFiles": "Joindre des fichiers",
     "attachments": {
-      "betaNotice": "Les pièces jointes sont en version bêta. Seuls les fichiers CSV, docx et pdf sont pris en charge. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
+      "betaNotice": "Les pièces jointes sont en version bêta. Formats pris en charge : PDF, DOCX, CSV. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
+      "supportedFormats": "Formats pris en charge : PDF, DOCX, CSV",
       "count": "{{count}} pièces jointes"
     },
     "uploadingFile": "Téléversement de {{name}}...",
@@ -549,6 +550,8 @@
     "uploadDrawerTitle": "Ajouter un document",
     "dropFiles": "Déposez vos fichiers ici",
     "maxSize": "ou cliquez pour sélectionner (max 200Mo par fichier)",
+    "supportedFormats": "Formats pris en charge : PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL",
+    "uploadDrawerTooltip": "Glissez-déposez ou sélectionnez vos fichiers (max 200Mo par fichier). Formats pris en charge : PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL.",
     "searchPlaceholder": "Rechercher un document",
     "clearSearch": "Effacer la recherche",
     "documents": "{{count}} document(s)",

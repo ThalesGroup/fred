@@ -152,7 +152,7 @@
   },
   "procbench": {
     "title": "Document Processor Bench",
-    "description": "Upload a document (pdf, pptx, docx, xlsx) and compare extraction quality and speed across processors.",
+    "description": "Upload a document (pdf, docx, pptx, csv, txt, md, xlsm, jsonl) and compare extraction quality and speed across processors.",
     "uploadTitle": "Upload a document",
     "uploadSubtitle": "Supported: PDF, DOCX, PPTX, Markdown, Text",
     "browse": "Browse",
@@ -386,7 +386,8 @@
     },
     "attachFiles": "Attach files",
     "attachments": {
-      "betaNotice": "File attachments are in beta. Only CSV, docx and pdf files are supported. Please provide feedback to help us improve this feature.",
+      "betaNotice": "File attachments are in beta. Supported formats: PDF, DOCX, CSV. Please provide feedback to help us improve this feature.",
+      "supportedFormats": "Supported files: PDF, DOCX, CSV",
       "count": "{{count}} attached"
     },
     "uploadingFile": "Uploading {{name}}...",
@@ -549,6 +550,8 @@
     "uploadDrawerTitle": "Upload a document",
     "dropFiles": "Drop your files here",
     "maxSize": "or click to select (max 200Mb per file)",
+    "supportedFormats": "Supported files: PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL",
+    "uploadDrawerTooltip": "Drag & drop or select files (max 200Mb per file). Supported: PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL.",
     "searchPlaceholder": "Search a document",
     "clearSearch": "Clear search",
     "documents": "{{count}} document(s)",
