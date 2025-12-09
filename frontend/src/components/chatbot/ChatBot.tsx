@@ -90,7 +90,8 @@ const ChatBot = ({
 }: ChatBotProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
-  const username = KeyCloakService.GetUserName?.() || KeyCloakService.GetUserFullName?.() || "";
+  const username =
+    KeyCloakService.GetUserGivenName?.() || KeyCloakService.GetUserFullName?.() || KeyCloakService.GetUserName?.() || "";
   const greetingText = username ? t("chatbot.welcomeUser", { username }) : t("chatbot.welcomeFallback");
   const [typedGreeting, setTypedGreeting] = useState<string>("");
   const typingTimerRef = useRef<number | null>(null);
