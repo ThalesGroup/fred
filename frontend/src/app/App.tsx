@@ -47,8 +47,6 @@ const LoadingScreen = ({
 }) => {
   const palette = dark ? darkTheme.palette : lightTheme.palette;
   const bg = dark ? palette.background.default : palette.surfaces.soft;
-  const accent = palette.primary.light || palette.primary.main;
-  const panelBg = palette.background.paper;
   const textColor = palette.text.primary;
 
   return (
