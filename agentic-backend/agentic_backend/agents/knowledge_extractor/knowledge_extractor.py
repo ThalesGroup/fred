@@ -84,12 +84,12 @@ globalSchema = {
                 "contexte": {
                     "type": "string",
                     "description": "Court résumé du contexte du projet. Longueur maximale: 300 caractères (une à deux phrases).",
-                    "maxLength": 300,
+                    "maxLength": 270,
                 },
                 "missions": {
                     "type": "string",
                     "description": "Court résumé de l'ensemble des missions et objectifs. Longueur maximale: 300 caractères (une à deux phrases).",
-                    "maxLength": 300,
+                    "maxLength": 270,
                 },
                 "refCahierCharges": {
                     "type": "string",

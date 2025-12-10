@@ -69,15 +69,9 @@ Tu gardes en mémoire les informations supplémentaires que l'utilisateur t'indi
 - En cas de doute sur une information : fais une recherche supplémentaire
 - Si après plusieurs recherches l'info n'existe pas : champ VIDE
 
-## 1.5. CONTRAINTES DE LONGUEUR STRICTES (NON NÉGOCIABLES)
-🚨 CRITIQUE : Les limites maxLength sont ABSOLUES. Tu DOIS les respecter.
-
-PROCESSUS DE VÉRIFICATION OBLIGATOIRE :
-1. Après extraction, compte les caractères de chaque champ
-2. Si dépassement : RÉSUME intelligemment en gardant l'essentiel
-3. Vérifie à nouveau la longueur
-4. Si toujours trop long : RÉSUME encore plus court
-5. Ne soumets JAMAIS un champ qui dépasse maxLength
+## 1.5. CONTRAINTES DE LONGUEUR
+Les limites maxLength sont ABSOLUES. Si tu anticipes un dépassement, RÉSUME intelligemment en gardant l'essentiel.
+L'outil validator_tool vérifiera automatiquement et te forcera à corriger tout dépassement avant la templetisation.
 
 ## 2. OBLIGATION DE FORMAT JSON STRICT
 L'outil template_tool attend un paramètre "data" qui contient TOUT le JSON.
@@ -107,25 +101,55 @@ INTERDIT (ne mets PAS enjeuxBesoins/cv/prestationFinanciere au même niveau que 
 Exemple: 1 -> ●○○○○  2 -> ●●○○○  3 -> ●●●○○  4 -> ●●●●○  5 -> ●●●●●
 
 ## 3. VALIDATION OBLIGATOIRE AVANT TEMPLETISATION
-🚨 CRITIQUE : Tu NE PEUX PAS appeler template_tool sans avoir validé les données d'abord.
+🚨 CRITIQUE : L'appel à template_tool est STRICTEMENT INTERDIT sans validation réussie préalable.
 
-PROCESSUS OBLIGATOIRE :
-1. Construis ton JSON complet avec toutes les données extraites
-2. Appelle validator_tool avec le paramètre "data" contenant ton JSON
-3. Analyse le résultat de validator_tool :
-   - Si la liste d'erreurs est vide ([]) : validation réussie, tu PEUX appeler template_tool
-   - Si la liste contient des erreurs : validation échouée, tu DOIS corriger
-4. En cas d'erreurs de validation :
-   - Lis attentivement chaque message d'erreur
-   - Corrige les problèmes (longueur, types, champs manquants, etc.)
-   - Rappelle validator_tool avec les données corrigées
-   - Répète jusqu'à obtenir 0 erreur (liste vide)
-5. Une fois 0 erreur obtenue : appelle template_tool avec le JSON validé
+PROCESSUS DE VALIDATION OBLIGATOIRE (NON NÉGOCIABLE) :
 
-INTERDIT ABSOLU :
-- ❌ Appeler template_tool sans avoir appelé validator_tool avant
-- ❌ Appeler template_tool si validator_tool a retourné des erreurs
-- ❌ Ignorer les erreurs de validation
+### Étape 1 : Appel OBLIGATOIRE à validator_tool
+- Construis ton JSON complet avec TOUTES les données extraites
+- Appelle validator_tool avec cette structure EXACTE :
+```json
+{{
+  "data": {{
+    "enjeuxBesoins": {{ ... }},
+    "cv": {{ ... }},
+    "prestationFinanciere": {{ ... }}
+  }}
+}}
+```
+- L'outil retourne une liste d'erreurs :
+  * Liste vide ([]) = validation réussie ✅
+  * Liste non-vide = validation échouée ❌
+
+### Étape 2 : Analyse du résultat de validation
+- Si [] (liste vide) : TU PEUX MAINTENANT appeler template_tool
+- Si erreurs présentes : TU DOIS corriger AVANT tout appel à template_tool
+
+### Étape 3 : Correction des erreurs (si nécessaire)
+En cas d'erreurs de validation :
+1. Lis ATTENTIVEMENT chaque message d'erreur retourné
+2. Identifie le problème exact :
+   - Longueur dépassée (maxLength) → RÉSUME le contenu
+   - Type incorrect (string vs integer) → CONVERTIS au bon type
+   - Champ manquant (required) → AJOUTE le champ (vide "" si pas d'info)
+   - Format invalide → CORRIGE le format
+3. Corrige TOUTES les erreurs identifiées dans ton JSON
+4. RAPPELLE validator_tool avec le JSON corrigé (même structure avec "data")
+5. RÉPÈTE les étapes 2-3 jusqu'à obtenir [] (0 erreur)
+
+### Étape 4 : Templetisation (uniquement après validation réussie)
+- Une fois que validator_tool retourne [] (liste vide)
+- ET SEULEMENT à ce moment-là
+- Appelle template_tool avec la MÊME structure (avec "data") que tu as validée
+
+INTERDITS ABSOLUS (VIOLATIONS GRAVES) :
+- ❌ JAMAIS appeler template_tool sans avoir appelé validator_tool avant
+- ❌ JAMAIS appeler template_tool si validator_tool a retourné des erreurs (liste non-vide)
+- ❌ JAMAIS ignorer ou "sauter" les erreurs de validation
+- ❌ JAMAIS considérer la validation comme "optionnelle"
+
+SÉQUENCE CORRECTE OBLIGATOIRE :
+1. Appelle validator_tool avec {{"data": {{...}}}} → 2. Corrige si erreurs → 3. Répète 1-2 jusqu'à [] → 4. Appelle template_tool avec {{"data": {{...}}}}
 
 ## 4. SOUMISSION OBLIGATOIRE À L'OUTIL
 - À CHAQUE fois que tu génères ou modifies le PowerPoint : appelle validator_tool puis template_tool avec le JSON COMPLET
@@ -154,9 +178,11 @@ INTERDIT ABSOLU :
 7. Appelle template_tool avec le JSON validé (obligatoire, ne saute pas cette étape)
 8. Fournis le nouveau lien de téléchargement
 
-# PARAMÈTRES TECHNIQUES
-- Utilise top_k=5 et search_policy='semantic'
-- N'utilise pas document_library_tags_ids
+# PARAMÈTRES TECHNIQUES RAG
+- Utilise top_k entre 5 et 10 selon la complexité (plus pour les CVs détaillés, moins pour le contexte)
+- Privilégie search_policy='semantic' pour les informations conceptuelles (missions, compétences)
+- N'utilise pas document_library_tags_ids (non pertinent pour cette tâche)
+- Si aucun résultat pertinent : reformule ta requête et réessaie avec des termes différents
 
 # RESTITUTION UTILISATEUR
 - Ne montre JAMAIS le JSON généré
@@ -199,7 +225,15 @@ class SlideMaker(AgentFlow):
         )
 
     def get_validator_tool(self):
-        @tool
+        validator_schema = {
+            "type": "object",
+            "properties": {
+                "data": globalSchema,
+            },
+            "required": ["data"],
+        }
+
+        @tool(args_schema=validator_schema)
         async def validator_tool(data: dict):
             """
             Outil permettant de valider le format des données avant de les passer à l'outil de templetisation.
