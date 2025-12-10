@@ -21,6 +21,17 @@ from .data import DEFAULT_EMISSION_FACTORS
 
 logger = logging.getLogger(__name__)
 
+# Default CO₂ reference configuration previously read from config/.env.
+# Keeping the values alongside the EcoAdvisor code avoids leaking them in env files.
+os.environ.setdefault(
+    "CO2_REFERENCE_URL",
+    "https://data.ademe.fr/data-fair/api/v1/datasets/base-carboner/lines?size=500",
+)
+os.environ.setdefault("CO2_REFERENCE_PAGE_SIZE", "1000")
+os.environ.setdefault("CO2_REFERENCE_MAX_PAGES", "20")
+os.environ.setdefault("CO2_REFERENCE_MODE_SEARCH_SIZE", "200")
+os.environ.setdefault("CO2_REFERENCE_TIMEOUT_SEC", "15")
+
 
 class EmissionFactor(BaseModel):
     mode: str = Field(..., description="Canonical identifier of the transport mode.")

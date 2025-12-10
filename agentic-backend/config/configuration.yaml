@@ -173,18 +173,6 @@ mcp:
       url: "http://localhost:9798/mcp"
       sse_read_timeout: 2000
       auth_mode: "no_token"
-    - id: "mcp-traffic-service"
-      name: "mcp-traffic-service"
-      transport: "streamable_http"
-      url: "http://localhost:9799/mcp"
-      sse_read_timeout: 2000
-      auth_mode: "no_token"
-    - id: "mcp-tcl-service"
-      name: "mcp-tcl-service"
-      transport: "streamable_http"
-      url: "http://localhost:9800/mcp"
-      sse_read_timeout: 2000
-      auth_mode: "no_token"
     - id: "mcp-geo-service"
       name: "mcp-geo-service"
       transport: "streamable_http"
