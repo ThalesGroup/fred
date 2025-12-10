@@ -1520,19 +1520,11 @@ export type TagShareRequest = {
   target_type: ShareTargetResource;
   relation: UserTagRelation;
 };
-export type SearchPolicy = {
-  k_final?: number;
-  fetch_k?: number;
-  vector_min_cosine?: number;
-  bm25_min_score?: number;
-  require_phrase_hit?: boolean;
-  use_mmr?: boolean;
-};
 export type SearchPolicyName = "hybrid" | "strict" | "semantic";
 export type EchoEnvelope = {
-  kind: "SearchPolicy" | "SearchPolicyName";
+  kind: "SearchPolicyName";
   /** Schema payload being echoed */
-  payload: SearchPolicy | SearchPolicyName;
+  payload: SearchPolicyName;
 };
 export type VectorSearchHit = {
   content: string;
