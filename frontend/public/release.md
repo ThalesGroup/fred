@@ -1,108 +1,102 @@
-### v1.0.7
+- **v1.0.9** — 2025-12-09
+  - **Summary**
+    - Corrected the OpenSearch k-NN query to use the proper `{ knn: … }` structure with filters inside the k-NN block, avoiding sub-optimal or inconsistent results.
+  - **Features**
+    - Select multiple chat contexts (#890)
+    - Provide feedback on downloads (#892)
+  - **Bug fixes**
+    - Fixed the OpenSearch vector search query (#888)
+  - **Impact**
+    - Improved relevance, faster filtered searches, and full compatibility with OpenSearch 2.19+.
 
-_Release date: 2025-12-06_
+---
 
-This release brings in major improvments to go production with rag agents. Rag agents such as Rico
-expose a new switch for the user to easily choose to search in the corpus or not. Keyword selection has
-been added as an option.
+- **v1.0.8** — 2025-12-08
+  - **Summary**
+    - Added a selector for corpus-only, general-knowledge-only, or hybrid search for RAG agents.
 
-#### Features
+---
 
-- major improvments including the rag expert (#874)
-- make mcp & agent deletion persistent accross redeployments (#872)
-- make all files starting with ignore\_ ignored by git
+- **v1.0.7** — 2025-12-06
+  - **Summary**
+    - Production-hardening for RAG agents (e.g., Rico) with corpus toggles and keyword selection.
+  - **Features**
+    - Major improvements including the RAG expert (#874)
+    - Persist MCP & agent deletion across redeployments (#872)
+    - Ignore all files starting with `ignore_` in git
 
-### v1.0.6
+---
 
-_Release date: 2025-12-04_
+- **v1.0.6** — 2025-12-04
+  - **Summary**
+    - Preview image versioning and cleaner deletion flows.
+  - **Features**
+    - Improve robustness of UI and audit with many documents (#873)
+    - Update tabular controller for security and performance issues (#868)
+  - **Bug fixes**
+    - Delete documents cleanly in all backend storage (#870)
 
-image in preview doc versionning and clean delete
+---
 
-#### Features
+- **v1.0.5** — 2025-12-03
+  - **Summary**
+    - MCP hub improvements.
+  - **Features**
+    - Add MCP servers store and stdio support (#863)
+  - **Bug fixes**
+    - Fix selected MCP servers (#865)
+    - Fix chart values `mcp.servers` with id and name (#861)
 
-- improve robustness of UI and audit with many documents (#873)
-- Update tabular controller for security and performance issues (#868)
+---
 
-#### Bug fixes
+- **v1.0.4** — 2025-12-01
+  - **Summary**
+    - Internal release.
 
-- delete documents cleanly in all backend storeage (#870)
+---
 
-### v1.0.5
+- **v1.0.3** — 2025-12-01
+  - **Summary**
+    - OpenSearch mapping tolerance updates.
+  - **Features**
+    - Improve error handling with respect to guardrails (#860)
+    - Display MCP servers as cards with switches (#848)
+    - Add vectors and chunks visualizations in Datahub (#852)
+    - Give agents a mini filesystem (dev local, prod MinIO) with list/read/write/delete (#835)
+  - **Bug fixes**
+    - Fix agentfs (#849)
+    - Non-recursive doc count in DocumentTreeLibrary (#858)
+    - Fix the new chunk vector UI when security is enabled (#856)
+    - Add back role in agent selector chip and improve layout (#854)
 
-_Release date: 2025-12-03_
+---
 
-mcp hub
+- **v1.0.2** — 2025-11-27
+  - **Summary**
+    - Official OpenSearch support with documentation.
+  - **Features**
+    - Add documents count for collection (#838)
+    - Improve logo rendering (#837)
+    - Improve pipeline drawer and add descriptions to processors (#833)
+    - Add a Neo4j MCP connector to support graph-based RAG strategies (#812)
+    - Change MCP agent to be a more generic agent (#829)
+    - Fred academy changes after the 2011 hackathon (#828)
+    - Adapt configuration of values.yaml for openfga (#822)
+    - Add an academy streetmap agent (#823)
+  - **Bug fixes**
+    - Fix config file env variable regression (#843)
+    - Fix missing async functions for ingestion (#832)
 
-#### Features
+---
 
-- Add mcp servers store and stdio support (#863)
+- **v1.0.1** — 2025-11-19
+  - **Summary**
+    - Internal release: v1.0.1.
 
-#### Bug fixes
+---
 
-- Fix selected mcp servers (#865)
-- fix chart values mcp.servers with id and name (#861)
-
-### v1.0.4
-
-_Release date: 2025-12-01_
-
-Internal release
-
-### v1.0.3
-
-_Release date: 2025-12-01_
-
-opensearch mapping tolerance
-
-#### Features
-
-- improve error handling with respect to guardrails (#860)
-- display mcp servers as cards with switches (#848)
-- Add vectors and chunks visualizations in Datahub (#852)
-- give agents a mini filesystem dev local prod minio with basic list read write delete capabilities (#835)
-
-#### Bug fixes
-
-- Fix agentfs (#849)
-- Non recursive doc count in DocumentTreeLibrary (#858)
-- fixe the nw chunk vector UI when security is enabled (#856)
-- Add back role in agent selector chip and improve layout (#854)
-
-### v1.0.2
-
-_Release date: 2025-11-27_
-
-official opensearch support with documentation
-
-#### Features
-
-- Add documents count for collection (#838)
-- Improve logo rendering (#837)
-- improve pipline drawer and add descriptions to processors (#833)
-- add a neo4j mcp connecteur to help support graph based rag strategies (#812)
-- change mcp agent to be a more generic agent (#829)
-- fred academy changes after the 2011 hackathon (#828)
-- adapt configuration of values.yaml for openfga (#822)
-- add an academy streetmap agent (#823)
-
-#### Bug fixes
-
-- fixe config file env variable regression (#843)
-- fix missing async functions for ingestion (#832)
-
-### v1.0.1
-
-_Release date: 2025-11-19_
-
-Internal release : v1.0.1
-
-### v1.0.0
-
-_Release date: 2025-11-03_
-
-Major release aligning the codebase with the latest LangChain versions.
-This version supersedes v0.0.9 and enables access to the newest LLM ecosystem capabilities.
-
-#### Features
-
-- 734 use the latest stable langchain langraph version (#737)
+- **v1.0.0** — 2025-11-03
+  - **Summary**
+    - Major release aligning the codebase with the latest LangChain versions; supersedes v0.0.9 and unlocks the newest LLM capabilities.
+  - **Features**
+    - Use the latest stable LangChain/LangGraph version (#737)

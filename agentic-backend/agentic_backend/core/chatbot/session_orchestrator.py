@@ -20,10 +20,11 @@ import logging
 import secrets
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Awaitable, Callable, List, Optional, Tuple
 from uuid import uuid4
 
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 from fred_core import (
     Action,
     AuthorizationError,
@@ -40,6 +41,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from requests import HTTPError
 
 from agentic_backend.application_context import (
     get_default_model,
@@ -384,8 +386,33 @@ class SessionOrchestrator:
         - We store ONLY the compact Markdown summary in RAM (SessionInMemoryAttachments).
         - This powers 'retrieval implicite' in subsequent turns, exactly as designed.
         """
+        supported_suffixes = {
+            ".pdf",
+            ".docx",
+            ".csv",
+        }
         if not file.filename:
-            raise ValueError("Uploaded file must have a filename.")
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "missing_filename",
+                    "message": "Uploaded file must have a filename.",
+                },
+            )
+        suffix = Path(file.filename).suffix.lower()
+        if suffix not in supported_suffixes:
+            logger.warning(
+                "Unsupported upload extension rejected: %s (user=%s)",
+                file.filename,
+                user.uid,
+            )
+            raise HTTPException(
+                status_code=415,
+                detail={
+                    "code": "unsupported_file_type",
+                    "message": f"Unsupported file type '{suffix or file.filename}'. Allowed: {', '.join(sorted(supported_suffixes))}.",
+                },
+            )
         content = await file.read()  # stays in memory
 
         # If no session_id was provided (first interaction), create one now.
@@ -405,14 +432,37 @@ class SessionOrchestrator:
         )
 
         # 2) Ask KF to produce a compact Markdown (text-only) for conversational use
-        summary_md = client.extract_markdown_from_bytes(
-            filename=file.filename,
-            content=content,
-            mime=file.content_type,
-            max_chars=max_chars,
-            include_tables=include_tables,
-            add_page_headings=add_page_headings,
-        )
+        try:
+            summary_md = client.extract_markdown_from_bytes(
+                filename=file.filename,
+                content=content,
+                mime=file.content_type,
+                max_chars=max_chars,
+                include_tables=include_tables,
+                add_page_headings=add_page_headings,
+            )
+        except HTTPError as exc:  # Upstream format or processing failure
+            status = exc.response.status_code if exc.response is not None else 502
+            upstream_detail = (
+                exc.response.text
+                if getattr(exc, "response", None) is not None
+                else str(exc)
+            )
+            logger.error(
+                "Knowledge Flow rejected attachment %s (user=%s, status=%s, detail=%s)",
+                file.filename,
+                user.uid,
+                status,
+                upstream_detail,
+            )
+            raise HTTPException(
+                status_code=status,
+                detail={
+                    "code": "upload_processing_failed",
+                    "message": f"Failed to process {file.filename}.",
+                    "upstream": upstream_detail,
+                },
+            ) from exc
 
         # 3) Create a stable attachment_id (UUID v4 is fine here)
         attachment_id = str(uuid.uuid4())

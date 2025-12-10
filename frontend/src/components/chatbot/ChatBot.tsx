@@ -13,7 +13,8 @@
 // limitations under the License.
 
 import { Box, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { keyframes } from "@mui/material/styles";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
@@ -50,6 +51,22 @@ export interface ChatBotError {
 //   text?: string;
 // }
 
+const gradientShift = keyframes`
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+`;
+
+const fadeInUp = keyframes`
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
+const blinkCaret = keyframes`
+  from, to { opacity: 0; }
+  50% { opacity: 1; }
+`;
+
 export interface ChatBotProps {
   currentChatBotSession: SessionSchema;
   currentAgent: AnyAgent;
@@ -73,6 +90,37 @@ const ChatBot = ({
 }: ChatBotProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
+  const username =
+    KeyCloakService.GetUserGivenName?.() || KeyCloakService.GetUserFullName?.() || KeyCloakService.GetUserName?.() || "";
+  const greetingText = username ? t("chatbot.welcomeUser", { username }) : t("chatbot.welcomeFallback");
+  const [typedGreeting, setTypedGreeting] = useState<string>("");
+  const typingTimerRef = useRef<number | null>(null);
+
+  const startTypingGreeting = useCallback(() => {
+    if (typingTimerRef.current) {
+      window.clearInterval(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+
+    setTypedGreeting("");
+    const chars = greetingText.split("");
+    let idx = 0;
+    const tick = () => {
+      setTypedGreeting((prev) => {
+        if (idx >= chars.length) return prev;
+        const next = prev + chars[idx];
+        idx += 1;
+        if (idx === chars.length && typingTimerRef.current) {
+          window.clearInterval(typingTimerRef.current);
+          typingTimerRef.current = null;
+        }
+        return next;
+      });
+    };
+
+    typingTimerRef.current = window.setInterval(tick, 65);
+  }, [greetingText]);
+
 
   const [contextOpen, setContextOpen] = useState<boolean>(() => {
     try {
@@ -418,7 +466,7 @@ const ChatBot = ({
         documentLibraryIds: userInputContext.documentLibraryIds ?? [],
         promptResourceIds: userInputContext.promptResourceIds ?? [],
         templateResourceIds: userInputContext.templateResourceIds ?? [],
-        skipRagSearch: userInputContext.skipRagSearch ?? false,
+        searchRagScope: userInputContext.searchRagScope,
       };
       localStorage.setItem(storageKey, JSON.stringify(payload));
     } catch (e) {
@@ -428,7 +476,7 @@ const ChatBot = ({
     userInputContext?.documentLibraryIds,
     userInputContext?.promptResourceIds,
     userInputContext?.templateResourceIds,
-    userInputContext?.skipRagSearch,
+    userInputContext?.searchRagScope,
     storageKey,
     currentChatBotSession?.id, // guard: only save when undefined
   ]);
@@ -445,8 +493,8 @@ const ChatBot = ({
 
     // Policy
     runtimeContext.search_policy = content.searchPolicy || "semantic";
-    if (content.skipRagSearch) {
-      runtimeContext.skip_rag_search = true;
+    if (content.searchRagScope) {
+      runtimeContext.search_rag_scope = content.searchRagScope;
     }
 
     // Files are now uploaded immediately upon selection (not here)
@@ -496,7 +544,13 @@ const ChatBot = ({
         // Refresh attachments view in the popover
         setAttachmentsRefreshTick((x) => x + 1);
       } catch (err: any) {
-        const errMsg = err?.data?.detail || err?.error || (err as Error)?.message || "Unknown error";
+        const detail = err?.data?.detail ?? err?.data ?? err?.error;
+        const errMsg =
+          typeof detail === "string"
+            ? detail
+            : typeof detail === "object" && detail
+              ? detail.message || detail.upstream || detail.code || JSON.stringify(detail)
+              : (err as Error)?.message || "Unknown error";
         console.error("❌ File upload failed:", err);
         showError({ summary: "File Upload Error", detail: `Failed to upload ${file.name}: ${errMsg}` });
       } finally {
@@ -578,6 +632,38 @@ const ChatBot = ({
       (userInputContext?.promptResourceIds?.length ?? 0) > 0 ||
       (userInputContext?.templateResourceIds?.length ?? 0) > 0);
 
+  useEffect(() => {
+    if (!showWelcome) return;
+
+    startTypingGreeting();
+
+    return () => {
+      if (typingTimerRef.current) {
+        window.clearInterval(typingTimerRef.current);
+        typingTimerRef.current = null;
+      }
+    };
+  }, [greetingText, showWelcome, startTypingGreeting]);
+
+  useEffect(() => {
+    if (!showWelcome) return;
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        if (typingTimerRef.current) {
+          window.clearInterval(typingTimerRef.current);
+          typingTimerRef.current = null;
+        }
+        setTypedGreeting("");
+      } else if (document.visibilityState === "visible") {
+        startTypingGreeting();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [showWelcome, startTypingGreeting]);
+
   return (
     <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center" sx={{ minHeight: 0 }}>
       {/* ===== Conversation header status =====
@@ -588,7 +674,7 @@ const ChatBot = ({
 
       <Box
         width="80%"
-        maxWidth="768px"
+        maxWidth={{ xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" }}
         display="flex"
         height="100vh"
         flexDirection="column"
@@ -606,12 +692,59 @@ const ChatBot = ({
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              justifyContent: "center",
-              gap: 2.5,
+              justifyContent: { xs: "flex-start", md: "center" },
+              pt: { xs: 6, md: 8 },
+              gap: 3,
             }}
           >
+            <Box
+              sx={{
+                width: "100%",
+                textAlign: "center",
+                animation: `${fadeInUp} 0.6s ease`,
+              }}
+            >
+              <Typography
+                variant="h3"
+                sx={{
+                  fontWeight: 700,
+                  display: "inline-block",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  position: "relative",
+                  background:
+                    theme.palette.mode === "dark"
+                      ? "linear-gradient(120deg, #9bb7ff, #6fe7ff, #cfa2ff)"
+                      : "linear-gradient(120deg, #004fc4, #00bcd4, #7c4dff)",
+                  backgroundSize: "200% 200%",
+                  backgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  animation: `${gradientShift} 8s ease infinite`,
+                  letterSpacing: 0.5,
+                }}
+              >
+                {typedGreeting}
+                <Box
+                  component="span"
+                  sx={{
+                    display: "inline-block",
+                    width: "2px",
+                    height: "1.1em",
+                    marginLeft: "4px",
+                    backgroundColor: theme.palette.mode === "dark" ? "#dbe8ff" : "#0d2a5c",
+                    animation: `${blinkCaret} 1s steps(1) infinite`,
+                    verticalAlign: "-0.08em",
+                    opacity: typedGreeting ? 1 : 0,
+                  }}
+                />
+              </Typography>
+            </Box>
             {/* Welcome hint */}
-            <Typography variant="h5" color="text.primary" sx={{ textAlign: "center" }}>
+            <Typography
+              variant="h5"
+              color="text.primary"
+              sx={{ textAlign: "center", animation: `${fadeInUp} 0.75s ease` }}
+            >
               {t("chatbot.startNew", { name: currentAgent?.name ?? "assistant" })}
             </Typography>
             {/* Input area */}

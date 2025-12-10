@@ -11,8 +11,9 @@ from deepeval.metrics import (
     FaithfulnessMetric,
 )
 from deepeval.test_case import LLMTestCase
+from langchain_core.messages import HumanMessage
 
-from agentic_backend.agents.rags.advanced_rag_expert import AdvancedRico
+from agentic_backend.agents.rags.rag_expert import Rico
 from agentic_backend.tests.agents.base_deepeval_test import BaseEvaluator
 
 
@@ -34,7 +35,7 @@ class RAGEvaluator(BaseEvaluator):
             dict: A dictionary containing the results of the evaluation.
         """
         agent = await self.setup_agent(
-            agent_type=AdvancedRico, agent_name=agent_name, doc_lib_ids=doc_lib_ids
+            agent_type=Rico, agent_name=agent_name, doc_lib_ids=doc_lib_ids
         )
         self.logger.info(f"🤖 Agent '{agent_name}' ready")
 
@@ -63,16 +64,19 @@ class RAGEvaluator(BaseEvaluator):
         self.logger.info("🔄 Evaluation in progress...")
         for i, item in enumerate(self.dataset, 1):
             result = await agent.ainvoke(
-                {"question": item["question"], "retry_count": 0},
+                {"messages": [HumanMessage(content=item["question"])]},
                 config={"configurable": {"thread_id": f"eval_{i}"}},
             )
 
             messages = result.get("messages", [])
-            documents = result.get("documents", [])
 
             actual_output = messages[-1].content if messages else ""
-            retrieval_context = [doc.content for doc in documents]
+            retrieval_context_list = (
+                messages[-1].additional_kwargs.get("sources", []) if messages else []
+            )
+            retrieval_context = [doc["content"] for doc in retrieval_context_list]
 
+            # Create DeepEval test case
             test_case = LLMTestCase(
                 input=item["question"],
                 actual_output=actual_output,
@@ -102,7 +106,7 @@ class RAGEvaluator(BaseEvaluator):
 
 def main():
     evaluator = RAGEvaluator()
-    exit_code = asyncio.run(evaluator.main(agent_name="Rico Senior"))
+    exit_code = asyncio.run(evaluator.main(agent_name="Rico"))
     sys.exit(exit_code)
 
 

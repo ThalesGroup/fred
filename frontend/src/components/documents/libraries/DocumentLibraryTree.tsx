@@ -76,6 +76,7 @@ interface DocumentLibraryTreeProps {
   onPreview: (doc: DocumentMetadata) => void;
   onPdfPreview: (doc: DocumentMetadata) => void;
   onDownload: (doc: DocumentMetadata) => void;
+  downloadingDocUid?: string | null;
   onToggleRetrievable: (doc: DocumentMetadata) => void;
   onRemoveFromLibrary: (doc: DocumentMetadata, tag: TagWithItemsId) => void;
   onDeleteFolder?: (tag: TagWithItemsId) => void;
@@ -97,6 +98,7 @@ export function DocumentLibraryTree({
   onPreview,
   onPdfPreview,
   onDownload,
+  downloadingDocUid,
   onToggleRetrievable,
   onRemoveFromLibrary,
   onDeleteFolder,
@@ -301,6 +303,7 @@ export function DocumentLibraryTree({
                       onPreview={onPreview}
                       onPdfPreview={onPdfPreview}
                       onDownload={onDownload}
+                      isDownloading={downloadingDocUid === doc.identity.document_uid}
                       onRemoveFromLibrary={(d) => {
                         if (!canDeleteDocument || !tag) return;
                         onRemoveFromLibrary(d, tag);
