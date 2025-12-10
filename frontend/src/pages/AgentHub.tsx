@@ -5,6 +5,7 @@ import Editor from "@monaco-editor/react";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import FilterListIcon from "@mui/icons-material/FilterList";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import StarIcon from "@mui/icons-material/Star";
 
@@ -40,10 +41,9 @@ import { CrewEditor } from "../components/agentHub/CrewEditor";
 // OpenAPI
 import {
   Leader,
-  McpServerConfiguration,
   useDeleteAgentAgenticV1AgentsNameDeleteMutation,
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
-  useListMcpServersAgenticV1AgentsMcpServersGetQuery,
+  useRestoreAgentsAgenticV1AgentsRestorePostMutation,
 } from "../slices/agentic/agenticOpenApi";
 
 // UI union facade
@@ -94,7 +94,7 @@ const ActionButton = ({
 export const AgentHub = () => {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { showError } = useToast();
+  const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const [agents, setAgents] = useState<AnyAgent[]>([]);
   const [tabValue, setTabValue] = useState(0);
@@ -116,8 +116,8 @@ export const AgentHub = () => {
   const [agentForAssetManagement, setAgentForAssetManagement] = useState<AnyAgent | null>(null);
 
   const [triggerGetFlows, { isFetching }] = useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
-  const { data: mcpServersData, isFetching: isFetchingMcpServers } =
-    useListMcpServersAgenticV1AgentsMcpServersGetQuery();
+  const [restoreAgents, { isLoading: isRestoring }] = useRestoreAgentsAgenticV1AgentsRestorePostMutation();
+
   const { updateEnabled } = useAgentUpdater();
   const [triggerGetSource] = useLazyGetRuntimeSourceTextQuery();
 
@@ -194,26 +194,25 @@ export const AgentHub = () => {
 
   const handleTabChange = (_event: SyntheticEvent, newValue: number) => setTabValue(newValue);
 
-  const knownMcpServers = useMemo<McpServerConfiguration[]>(() => {
-    if (!mcpServersData) return [];
-
-    const ensureArray = Array.isArray(mcpServersData)
-      ? mcpServersData
-      : Array.isArray((mcpServersData as { items?: unknown }).items)
-        ? ((mcpServersData as { items?: unknown }).items as unknown[])
-        : [];
-
-    return ensureArray
-      .filter((server): server is McpServerConfiguration => {
-        if (!server || typeof server !== "object") return false;
-        const name = (server as { name?: unknown }).name;
-        return typeof name === "string" && name.trim().length > 0;
-      })
-      .map((server) => ({
-        ...(server as McpServerConfiguration),
-        name: ((server as { name: string }).name || "").trim(),
-      }));
-  }, [mcpServersData]);
+  const handleRestore = () => {
+    showConfirmationDialog({
+      title: t("agentHub.confirmRestoreTitle") || "Restore agents from configuration?",
+      message:
+        t("agentHub.confirmRestoreMessage") ||
+        "This will overwrite any tuned settings you saved in the UI with the YAML configuration. This action cannot be undone.",
+      onConfirm: async () => {
+        try {
+          // Explicitly request overwrite to avoid sending undefined (FastAPI rejects "undefined" for booleans)
+          await restoreAgents({ forceOverwrite: true }).unwrap();
+          showSuccess({ summary: t("agentHub.toasts.restored") });
+          fetchAgents();
+        } catch (error: any) {
+          const detail = error?.data?.detail || error?.data || error?.message || "Unknown error";
+          showError({ summary: t("agentHub.toasts.error"), detail });
+        }
+      },
+    });
+  };
 
   const filteredAgents = useMemo(() => {
     if (tabValue === 0) return agents;
@@ -241,7 +240,8 @@ export const AgentHub = () => {
   };
 
   const handleToggleEnabled = async (agent: AnyAgent) => {
-    await updateEnabled(agent, !agent.enabled);
+    const isEnabled = agent.enabled !== false;
+    await updateEnabled(agent, !isEnabled);
     fetchAgents();
   };
 
@@ -408,13 +408,20 @@ export const AgentHub = () => {
                     </Box>
 
                     <Box sx={{ display: "flex", gap: 1 }}>
-                      <ActionButton icon={<SearchIcon />}>{t("agentHub.search")}</ActionButton>
-                      <ActionButton icon={<FilterListIcon />}>{t("agentHub.filter")}</ActionButton>
-                      <ActionButton
-                        icon={<AddIcon />}
-                        onClick={canCreateAgents ? handleOpenCreateAgent : undefined}
-                        disabled={!canCreateAgents}
-                      >
+                  <ActionButton icon={<SearchIcon />}>{t("agentHub.search")}</ActionButton>
+                  <ActionButton icon={<FilterListIcon />}>{t("agentHub.filter")}</ActionButton>
+                  <ActionButton
+                    icon={<RefreshIcon />}
+                    onClick={canEditAgents ? handleRestore : undefined}
+                    disabled={!canEditAgents || isRestoring}
+                  >
+                    {t("agentHub.restoreButton")}
+                  </ActionButton>
+                  <ActionButton
+                    icon={<AddIcon />}
+                    onClick={canCreateAgents ? handleOpenCreateAgent : undefined}
+                    disabled={!canCreateAgents}
+                  >
                         {t("agentHub.create")}
                       </ActionButton>
                     </Box>
@@ -489,14 +496,7 @@ export const AgentHub = () => {
           </Card>
         </Fade>
         {/* Drawers / Modals */}
-        <AgentEditDrawer
-          open={editOpen}
-          agent={selected}
-          onClose={() => setEditOpen(false)}
-          onSaved={fetchAgents}
-          knownMcpServers={knownMcpServers}
-          isLoadingKnownMcpServers={isFetchingMcpServers}
-        />
+        <AgentEditDrawer open={editOpen} agent={selected} onClose={() => setEditOpen(false)} onSaved={fetchAgents} />
         <CrewEditor
           open={crewOpen}
           leader={selected && isLeader(selected) ? (selected as Leader & { type: "leader" }) : null}

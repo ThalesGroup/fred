@@ -1,77 +1,121 @@
-// Copyright Thales 2025
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-import AccountCircleIcon from "@mui/icons-material/AccountCircle";
-import ChatIcon from "@mui/icons-material/Chat";
+import AddIcon from "@mui/icons-material/Add";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import DarkModeIcon from "@mui/icons-material/DarkMode";
+import ConstructionIcon from "@mui/icons-material/Construction";
+import DeleteIcon from "@mui/icons-material/Delete";
+import ExpandLess from "@mui/icons-material/ExpandLess";
+import ExpandMore from "@mui/icons-material/ExpandMore";
 import GroupIcon from "@mui/icons-material/Group";
-import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import PersonIcon from "@mui/icons-material/Person";
+import SettingsIcon from "@mui/icons-material/Settings";
 import {
-  Avatar,
   Box,
+  Button,
   Collapse,
+  CSSObject,
   IconButton,
   List,
   ListItem,
+  ListItemButton,
   ListItemIcon,
   ListItemText,
-  Tooltip,
+  MenuItem,
+  Paper,
+  styled,
+  Theme,
   Typography,
-  useMediaQuery,
   useTheme,
 } from "@mui/material";
-import { useContext, useEffect, useState } from "react";
+import MuiDrawer from "@mui/material/Drawer";
+import Select, { SelectChangeEvent } from "@mui/material/Select";
+import dayjs from "dayjs";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation, useNavigate } from "react-router-dom";
-import { getProperty } from "../common/config.tsx";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useToast } from "../components/ToastProvider";
+import { UserAvatar } from "../components/profile/UserAvatar";
+import { useLocalStorageState } from "../hooks/useLocalStorageState";
+import { KeyCloakService } from "../security/KeycloakService";
 import { usePermissions } from "../security/usePermissions";
-import { ImageComponent } from "../utils/image.tsx";
-import { ApplicationContext } from "./ApplicationContextProvider.tsx";
+import {
+  SessionWithFiles,
+  useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
+  useGetSessionsAgenticV1ChatbotSessionsGetQuery,
+} from "../slices/agentic/agenticOpenApi";
+
+const drawerWidth = 280;
+
+const openedMixin = (theme: Theme): CSSObject => ({
+  width: drawerWidth,
+  transition: theme.transitions.create("width", {
+    easing: theme.transitions.easing.sharp,
+    duration: theme.transitions.duration.enteringScreen,
+  }),
+  overflowX: "hidden",
+});
+
+const closedMixin = (theme: Theme): CSSObject => ({
+  transition: theme.transitions.create("width", {
+    easing: theme.transitions.easing.sharp,
+    duration: theme.transitions.duration.leavingScreen,
+  }),
+  overflowX: "hidden",
+  width: `calc(${theme.spacing(7)} + 1px)`,
+  [theme.breakpoints.up("sm")]: {
+    width: `calc(${theme.spacing(8)} + 1px)`,
+  },
+});
+
+const Drawer = styled(MuiDrawer, { shouldForwardProp: (prop) => prop !== "open" })(({ theme }) => ({
+  width: drawerWidth,
+  flexShrink: 0,
+  whiteSpace: "nowrap",
+  boxSizing: "border-box",
+  variants: [
+    {
+      props: ({ open }) => open,
+      style: {
+        ...openedMixin(theme),
+        "& .MuiDrawer-paper": openedMixin(theme),
+      },
+    },
+    {
+      props: ({ open }) => !open,
+      style: {
+        ...closedMixin(theme),
+        "& .MuiDrawer-paper": closedMixin(theme),
+      },
+    },
+  ],
+}));
+
+const DrawerHeader = styled("div")(({ theme }) => ({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  padding: theme.spacing(1, 1),
+}));
 
 type MenuItemCfg = {
   key: string;
   label: string;
   icon: React.ReactNode;
   url?: string;
-  canBeDisabled: boolean;
   tooltip: string;
   children?: MenuItemCfg[];
 };
 
-export default function SideBar({ darkMode, onThemeChange }) {
+export default function SideBar() {
   const { t } = useTranslation();
-  const theme = useTheme();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const applicationContext = useContext(ApplicationContext);
-  const smallScreen = useMediaQuery(theme.breakpoints.down("md"));
 
-  const { can } = usePermissions();
-
-  const sideBarBgColor = theme.palette.sidebar.background;
-  const activeItemBgColor = theme.palette.sidebar.activeItem;
-  const activeItemTextColor = theme.palette.primary.main;
-  const hoverColor = theme.palette.sidebar.hoverColor;
+  const [open, setOpen] = useLocalStorageState("SideBar.open", true);
 
   // Here we set the "can" action to "create" since we want the viewer role not to see kpis and logs.
   // We also can remove the read_only allowed action to the viewer; to: kpi, opensearch & logs in rbac.py in fred_core/security
   // but for now we can leave it like that.
+  const { can } = usePermissions();
   const canReadKpis = can("kpi", "create");
   const canReadOpenSearch = can("opensearch", "create");
   const canReadLogs = can("logs", "create");
@@ -79,12 +123,25 @@ export default function SideBar({ darkMode, onThemeChange }) {
 
   const menuItems: MenuItemCfg[] = [
     {
-      key: "chat",
-      label: t("sidebar.chat"),
-      icon: <ChatIcon />,
-      url: `/chat`,
-      canBeDisabled: false,
-      tooltip: t("sidebar.tooltip.chat"),
+      key: "agent",
+      label: t("sidebar.agent"),
+      icon: <GroupIcon />,
+      url: `/agents`,
+      tooltip: t("sidebar.tooltip.agent"),
+    },
+    {
+      key: "mcp",
+      label: t("sidebar.mcp"),
+      icon: <ConstructionIcon />,
+      url: `/tools`,
+      tooltip: t("sidebar.tooltip.mcp"),
+    },
+    {
+      key: "knowledge",
+      label: t("sidebar.knowledge"),
+      icon: <MenuBookIcon />,
+      url: `/knowledge`,
+      tooltip: t("sidebar.tooltip.knowledge"),
     },
 
     // Only show monitoring if user has permission
@@ -94,7 +151,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
             key: "monitoring",
             label: t("sidebar.monitoring"),
             icon: <MonitorHeartIcon />,
-            canBeDisabled: false,
             tooltip: t("sidebar.tooltip.monitoring"),
             children: [
               ...(canReadKpis
@@ -104,7 +160,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
                       label: t("sidebar.monitoring_kpi") || "KPI",
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/kpis`,
-                      canBeDisabled: false,
                       tooltip: t("sidebar.tooltip.monitoring_kpi") || "KPI Overview",
                     },
                   ]
@@ -116,7 +171,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
                       label: t("sidebar.monitoring_runtime", "Runtime"),
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/runtime`,
-                      canBeDisabled: false,
                       tooltip: t("sidebar.tooltip.monitoring_runtime", "Runtime summary"),
                     },
                   ]
@@ -128,7 +182,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
                       label: t("sidebar.monitoring_data", "Data Hub"),
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/data`,
-                      canBeDisabled: false,
                       tooltip: t("sidebar.tooltip.monitoring_data", "Data lineage view"),
                     },
                   ]
@@ -140,7 +193,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
                       label: t("sidebar.monitoring_processors", "Processors"),
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/processors`,
-                      canBeDisabled: false,
                       tooltip: t("sidebar.tooltip.monitoring_processors", "Processor bench"),
                     },
                   ]
@@ -152,7 +204,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
                       label: t("sidebar.monitoring_logs") || "Logs",
                       icon: <MenuBookIcon />,
                       url: `/monitoring/logs`,
-                      canBeDisabled: false,
                       tooltip: t("sidebar.tooltip.monitoring_logs") || "Log Console",
                     },
                   ]
@@ -161,44 +212,253 @@ export default function SideBar({ darkMode, onThemeChange }) {
           },
         ]
       : []),
-    {
-      key: "knowledge",
-      label: t("sidebar.knowledge"),
-      icon: <MenuBookIcon />,
-      url: `/knowledge`,
-      canBeDisabled: false,
-      tooltip: t("sidebar.tooltip.knowledge"),
-    },
-    {
-      key: "agent",
-      label: t("sidebar.agent"),
-      icon: <GroupIcon />,
-      url: `/agentHub`,
-      canBeDisabled: false,
-      tooltip: t("sidebar.tooltip.agent"),
-    },
-    {
-      key: "account",
-      label: t("sidebar.account"),
-      icon: <AccountCircleIcon />,
-      url: `/account`,
-      canBeDisabled: false,
-      tooltip: t("sidebar.tooltip.account"),
-    },
   ];
 
-  const { isSidebarCollapsed, toggleSidebar } = applicationContext;
-  const isSidebarSmall = smallScreen || isSidebarCollapsed;
-  const sidebarWidth = isSidebarCollapsed ? theme.layout.sidebarCollapsedWidth : theme.layout.sidebarWidth;
+  return (
+    <Drawer variant="permanent" open={open}>
+      <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+        {/* Header (icon + open/close button*/}
+        <DrawerHeader>
+          <IconButton onClick={() => setOpen((open) => !open)} sx={{ mr: open ? 0 : 1 }}>
+            {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+          </IconButton>
+        </DrawerHeader>
+
+        {/* Nav */}
+        <Paper elevation={0}>
+          <SideBarMenuList menuItems={menuItems} isSidebarOpen={open} />
+        </Paper>
+
+        {/* Conversations */}
+        <ConversationsSection isSidebarOpen={open} />
+
+        {/* Profile */}
+        <Paper elevation={1}>
+          <SidebarProfileItem isSidebarOpen={open} />
+        </Paper>
+      </Box>
+    </Drawer>
+  );
+}
+interface ConversationsSectionProps {
+  isSidebarOpen: boolean;
+}
+
+function ConversationsSection({ isSidebarOpen }: ConversationsSectionProps) {
+  const { t } = useTranslation();
+  const theme = useTheme();
+
+  const {
+    data: sessions,
+    isLoading: sessionsLoading,
+    isError: sessionsError,
+    error: sessionsErrObj,
+    refetch: refetchSessions,
+  } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+  });
+
+  const allAgentOptionValue = "all-agents";
+  const [selectedAgent, setSelectedAgent] = useLocalStorageState<string>(
+    "ConversationsSection.selectedAgent",
+    allAgentOptionValue,
+  );
+
+  const uniqueAgents = Array.from(new Set(sessions?.flatMap((s) => s.agents) ?? [])).sort();
+
+  const filteredSessions =
+    (selectedAgent === allAgentOptionValue
+      ? sessions
+      : sessions?.filter((session) => session.agents.includes(selectedAgent))) ?? [];
+
+  return (
+    <>
+      {/* Conversation header */}
+      {isSidebarOpen && (
+        <Paper elevation={1}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 2, py: 1 }}>
+            <Typography variant="subtitle2" sx={{ color: theme.palette.text.secondary }}>
+              {t("sidebar.chat")}
+            </Typography>
+            <Button component={Link} to="/chat" variant="outlined" size="small" startIcon={<AddIcon />}>
+              {t("common.create")}
+            </Button>
+          </Box>
+          <Box sx={{ px: 2, py: 1 }}>
+            <Select
+              size="small"
+              value={selectedAgent}
+              onChange={(event: SelectChangeEvent) => setSelectedAgent(event.target.value as string)}
+              sx={{ width: "100%" }}
+            >
+              <MenuItem value={allAgentOptionValue}>{t("sidebar.allAgents")}</MenuItem>
+              {uniqueAgents.map((agent) => (
+                <MenuItem key={agent} value={agent}>
+                  {agent}
+                </MenuItem>
+              ))}
+            </Select>
+          </Box>
+        </Paper>
+      )}
+
+      {/* Conversation list */}
+      <Paper
+        elevation={0}
+        sx={{ flexGrow: 1, overflowY: "auto", overflowX: "hidden", scrollbarWidth: "none", py: 1, px: 1 }}
+      >
+        {isSidebarOpen &&
+          filteredSessions.map((session) => (
+            <SideBarConversationListElement key={session.id} session={session} refetchSessions={refetchSessions} />
+          ))}
+      </Paper>
+    </>
+  );
+}
+interface SideBarConversationListElementProps {
+  session: SessionWithFiles;
+  refetchSessions: () => void;
+}
+
+function SideBarConversationListElement({ session, refetchSessions }: SideBarConversationListElementProps) {
+  const { t } = useTranslation();
+  const theme = useTheme();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const isSelected = location.pathname === `/chat/${session.id}`;
+
+  const { showError } = useToast();
+  const [deleteSessionMutation] = useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation();
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      await deleteSessionMutation({ sessionId: session.id }).unwrap();
+      refetchSessions();
+
+      if (isSelected) {
+        navigate("/chat");
+      }
+    } catch (error) {
+      console.error("Failed to delete conversation: ", error);
+      showError(t("sidebar.deleteSessionFailed"));
+    }
+  };
+
+  return (
+    <Box
+      component={Link}
+      to={`/chat/${session.id}`}
+      sx={{
+        textDecoration: "none",
+        color: "inherit",
+        display: "block",
+      }}
+    >
+      <Box
+        sx={{
+          px: 1.5,
+          py: 1,
+          borderRadius: 1,
+          userSelect: "none",
+          background: isSelected ? theme.palette.action.selected : "transparent",
+          ...(isSelected ? {} : { "&:hover": { background: theme.palette.action.hover } }),
+          "&:hover .delete-button": { display: "flex" },
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+        }}
+      >
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            minWidth: 0,
+            flex: 1,
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <PersonIcon sx={{ fontSize: "1rem", color: theme.palette.primary.main }} />
+            <Typography variant="caption" sx={{ color: theme.palette.primary.main }}>
+              {session.agents.length > 0 ? session.agents[0] : "..."}
+            </Typography>
+          </Box>
+          <Typography
+            variant="body2"
+            sx={{
+              color: theme.palette.text.primary,
+              textOverflow: "ellipsis",
+              overflow: "hidden",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {session.title}
+          </Typography>
+          <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+            {dayjs(session.updated_at).format("L")}
+          </Typography>
+        </Box>
+        <IconButton
+          className="delete-button"
+          size="small"
+          onClick={handleDelete}
+          sx={{
+            color: theme.palette.error.main,
+            display: "none",
+          }}
+        >
+          <DeleteIcon fontSize="small" />
+        </IconButton>
+      </Box>
+    </Box>
+  );
+}
+
+interface SidebarProfileItemProps {
+  isSidebarOpen: boolean;
+}
+
+function SidebarProfileItem({ isSidebarOpen }: SidebarProfileItemProps) {
+  const roles = KeyCloakService.GetUserRoles();
+
+  return (
+    <ListItem
+      dense
+      sx={{ py: 1 }}
+      secondaryAction={
+        <IconButton component={Link} to="/settings">
+          <SettingsIcon />
+        </IconButton>
+      }
+    >
+      <ListItemIcon>{isSidebarOpen && <UserAvatar />}</ListItemIcon>
+      <ListItemText primary={KeyCloakService.GetUserFullName()} secondary={roles.length > 0 ? roles[0] : undefined} />
+    </ListItem>
+  );
+}
+
+interface SideBarMenuListProps {
+  menuItems: MenuItemCfg[];
+  isSidebarOpen: boolean;
+  indentation?: number;
+}
+
+function SideBarMenuList({ menuItems, isSidebarOpen, indentation = 0 }: SideBarMenuListProps) {
+  const location = useLocation();
+  const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
 
   const isActive = (path: string) => {
     const menuPathBase = path.split("?")[0];
     const currentPathBase = location.pathname;
     return currentPathBase === menuPathBase || currentPathBase.startsWith(menuPathBase + "/");
   };
-  const isAnyChildActive = (children?: MenuItemCfg[]) => !!children?.some((c) => c.url && isActive(c.url));
 
-  const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
+  const isAnyChildActive = (children?: MenuItemCfg[]) => !!children?.some((c) => c.url && isActive(c.url));
 
   useEffect(() => {
     setOpenKeys((prev) => {
@@ -210,283 +470,46 @@ export default function SideBar({ darkMode, onThemeChange }) {
       }
       return next;
     });
-  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const logoName = getProperty("logoName") || "fred";
-  const logoNameDark = getProperty("logoNameDark") || "fred-dark";
+  }, [location.pathname]);
 
   return (
-    <Box
-      height="100vh"
-      width={sidebarWidth}
-      sx={{
-        flex: `0 0 ${sidebarWidth}px`,
-        minWidth: sidebarWidth,
-        bgcolor: sideBarBgColor,
-        color: "text.primary",
-        borderRight: `1px solid ${theme.palette.divider}`,
-        transition: theme.transitions.create(["width", "margin"], {
-          easing: theme.transitions.easing.sharp,
-          duration: theme.transitions.duration.standard,
-        }),
-        boxShadow: "none",
-        display: "flex",
-        flexDirection: "column",
-        zIndex: theme.zIndex.drawer,
-        "& > *": { backgroundColor: sideBarBgColor },
-        "& > * > *": { backgroundColor: sideBarBgColor },
-      }}
-    >
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: 62,
-          py: 0.0,
-          px: isSidebarSmall ? 1 : 2,
-          borderBottom: `1px solid ${theme.palette.divider}`,
-        }}
-      >
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            cursor: "pointer",
-            justifyContent: "center",
-          }}
-          onClick={() => navigate("/")}
-        >
-          <Avatar
-            sx={{
-              width: 42,
-              height: 42,
-              backgroundColor: "transparent",
-            }}
-            variant="square"
-          >
-            <ImageComponent name={darkMode ? logoNameDark : logoName} width="36px" height="36px" />
-          </Avatar>
-        </Box>
-      </Box>
+    <List>
+      {menuItems.map((item) => {
+        const hasChildren = !!(item.children && item.children.length > 0);
+        const hasLink = !!item.url;
+        const isOpen = openKeys[item.key] || false;
+        const active = item.url ? isActive(item.url) : isAnyChildActive(item.children);
 
-      <Box sx={{ display: "flex", justifyContent: "center", pt: 2 }}>
-        <IconButton
-          size="small"
-          onClick={toggleSidebar}
-          sx={{
-            borderRadius: "8px",
-            border: `1px solid ${theme.palette.divider}`,
-            width: 28,
-            height: 28,
-            "&:hover": { backgroundColor: hoverColor },
-          }}
-        >
-          {isSidebarCollapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
-        </IconButton>
-      </Box>
-
-      <List
-        sx={{
-          pt: 3,
-          px: isSidebarSmall ? 1 : 2,
-          flexGrow: 1, // Crucial: makes the list fill remaining height
-          overflowX: "hidden",
-          overflowY: "auto", // Crucial: enables internal list scrolling
-        }}
-      >
-        {menuItems.map((item) => {
-          const hasChildren = !!item.children?.length;
-          const active = item.url ? isActive(item.url) : isAnyChildActive(item.children);
-          const opened = !!openKeys[item.key];
-
-          if (isSidebarSmall) {
-            return (
-              <Tooltip key={item.key} title={item.tooltip} placement="right" arrow>
-                <ListItem
-                  component="div"
-                  onClick={() => (item.url ? navigate(item.url) : setOpenKeys((s) => ({ ...s, [item.key]: !opened })))}
-                  sx={{
-                    borderRadius: "8px",
-                    mb: 0.8,
-                    height: 44,
-                    justifyContent: "center",
-                    backgroundColor: active ? activeItemBgColor : "transparent",
-                    color: active ? activeItemTextColor : "text.secondary",
-                    "&:hover": {
-                      backgroundColor: active ? activeItemBgColor : hoverColor,
-                      color: active ? activeItemTextColor : "text.primary",
-                    },
-                    transition: "all 0.2s",
-                    px: 1,
-                    cursor: "pointer",
-                  }}
-                >
-                  <ListItemIcon sx={{ color: "inherit", minWidth: "auto", fontSize: "1.2rem" }}>
-                    {item.icon}
-                  </ListItemIcon>
-                </ListItem>
-              </Tooltip>
-            );
-          }
-
-          return (
-            <Box key={item.key}>
-              <Tooltip title={item.tooltip} placement="right" arrow>
-                <ListItem
-                  component="div"
-                  onClick={() => {
-                    if (hasChildren) {
-                      setOpenKeys((s) => ({ ...s, [item.key]: !opened }));
-                    } else if (item.url) {
-                      navigate(item.url);
-                    }
-                  }}
-                  sx={{
-                    borderRadius: "8px",
-                    mb: 0.8,
-                    height: 44,
-                    justifyContent: "flex-start",
-                    backgroundColor: active ? activeItemBgColor : "transparent",
-                    color: active ? activeItemTextColor : "text.secondary",
-                    "&:hover": {
-                      backgroundColor: active ? activeItemBgColor : hoverColor,
-                      color: active ? activeItemTextColor : "text.primary",
-                    },
-                    transition: "all 0.2s",
-                    px: 2,
-                    position: "relative",
-                    cursor: "pointer",
-                  }}
-                >
-                  <ListItemIcon sx={{ color: "inherit", minWidth: 40, fontSize: "1.2rem" }}>{item.icon}</ListItemIcon>
-                  <ListItemText
-                    primary={
-                      <Typography variant="sidebar" fontWeight={active ? 500 : 300}>
-                        {item.label}
-                      </Typography>
-                    }
-                  />
-                  {active && (
-                    <Box
-                      sx={{
-                        width: 3,
-                        height: 16,
-                        bgcolor: theme.palette.primary.main,
-                        borderRadius: 4,
-                        position: "absolute",
-                        right: 12,
-                        top: "50%",
-                        transform: "translateY(-50%)",
-                      }}
-                    />
-                  )}
-                </ListItem>
-              </Tooltip>
-
-              {hasChildren && (
-                <Collapse in={opened} timeout="auto" unmountOnExit>
-                  <List component="div" disablePadding sx={{ pl: 5, pr: 1 }}>
-                    {item.children!.map((child) => {
-                      const childActive = !!child.url && isActive(child.url);
-                      return (
-                        <Tooltip key={child.key} title={child.tooltip} placement="right" arrow>
-                          <ListItem
-                            component="div"
-                            onClick={() => child.url && navigate(child.url)}
-                            sx={{
-                              borderRadius: "8px",
-                              mb: 0.0,
-                              height: 32,
-                              backgroundColor: childActive ? activeItemBgColor : "transparent",
-                              color: childActive ? activeItemTextColor : "text.secondary",
-                              "&:hover": {
-                                backgroundColor: childActive ? activeItemBgColor : hoverColor,
-                                color: childActive ? activeItemTextColor : "text.primary",
-                              },
-                              transition: "all 0.2s",
-                              px: 1,
-                              cursor: "pointer",
-                            }}
-                          >
-                            <ListItemText
-                              primary={
-                                <Typography variant="sidebar" fontWeight={childActive ? 600 : 400}>
-                                  {child.label}
-                                </Typography>
-                              }
-                            />
-                          </ListItem>
-                        </Tooltip>
-                      );
-                    })}
-                  </List>
-                </Collapse>
-              )}
-            </Box>
-          );
-        })}
-      </List>
-
-      <Box
-        sx={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          py: 2,
-          mt: "auto",
-          borderTop: `1px solid ${theme.palette.divider}`,
-        }}
-      >
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            mb: isSidebarSmall ? 0 : 1,
-          }}
-        >
-          {!isSidebarSmall && (
-            <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
-              {darkMode ? t("sidebar.theme.dark") : t("sidebar.theme.light")}
-            </Typography>
-          )}
-          <IconButton size="small" onClick={onThemeChange} sx={{ p: 1, "&:hover": { backgroundColor: hoverColor } }}>
-            {darkMode ? (
-              <LightModeIcon sx={{ fontSize: "1rem", color: "text.secondary" }} />
-            ) : (
-              <DarkModeIcon sx={{ fontSize: "1rem", color: "text.secondary" }} />
-            )}
-          </IconButton>
-        </Box>
-
-        {!isSidebarSmall && (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              py: 1,
-              px: 2,
-              mt: 1,
-              width: "90%",
-              borderRadius: 1,
-            }}
-          >
-            <Typography variant="caption" color="text.secondary">
-              Website
-            </Typography>
-            <IconButton
-              color="inherit"
-              size="small"
-              onClick={() => window.open("https://fredk8.dev", "_blank", "noopener,noreferrer")}
-              sx={{ p: 0.3 }}
+        return (
+          <>
+            <ListItemButton
+              selected={active}
+              dense={indentation > 0}
+              key={item.key}
+              component={hasLink ? Link : "div"}
+              {...(hasLink ? { to: item.url } : {})}
+              onClick={
+                hasChildren ? () => setOpenKeys((prev) => ({ ...prev, [item.key]: !prev[item.key] })) : undefined
+              }
+              sx={{ pl: 2 + indentation * 2 }}
             >
-              <OpenInNewIcon sx={{ fontSize: "0.8rem", color: "text.secondary" }} />
-            </IconButton>
-          </Box>
-        )}
-      </Box>
-    </Box>
+              <ListItemIcon>{item.icon}</ListItemIcon>
+              <ListItemText primary={item.label} />
+              {hasChildren && (isOpen ? <ExpandLess /> : <ExpandMore />)}
+            </ListItemButton>
+            {true && <div></div>}
+            {item.children && item.children.length > 0 && (
+              <Collapse in={isSidebarOpen && isOpen} timeout="auto" unmountOnExit>
+                <SideBarMenuList
+                  menuItems={item.children}
+                  isSidebarOpen={isSidebarOpen}
+                  indentation={indentation + 1}
+                />
+              </Collapse>
+            )}
+          </>
+        );
+      })}
+    </List>
   );
 }

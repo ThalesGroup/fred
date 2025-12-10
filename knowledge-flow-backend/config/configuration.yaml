@@ -162,3 +162,7 @@ mcp:
   resources_enabled: true
   opensearch_ops_enabled: false
   neo4j_enabled: false
+  filesystem_enabled: true
+
+filesystem:
+  type: local

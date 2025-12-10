@@ -26,6 +26,7 @@ import { usePermissions } from "../../../security/usePermissions";
 import { type DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 import { getDocumentIcon } from "../common/DocumentIcon";
+import { DocumentVersionChip, extractDocumentVersion } from "../common/DocumentVersionChip";
 
 import KeywordsPreview from "./KeywordsPreview";
 import SummaryPreview from "./SummaryPreview";
@@ -54,6 +55,7 @@ export function DocumentRowCompact({
 
   const formatDate = (date?: string) => (date ? dayjs(date).format("DD/MM/YYYY") : "-");
   const isPdf = doc.identity.document_name.toLowerCase().endsWith(".pdf");
+  const version = extractDocumentVersion(doc);
 
   return (
     <Box
@@ -81,6 +83,7 @@ export function DocumentRowCompact({
         >
           {doc.identity.document_name || doc.identity.document_uid}
         </Typography>
+        <DocumentVersionChip version={version} />
       </Box>
       {/* 2) Summary (peek + dialog). Rationale: keep doc “why” close to the name. */}
       <Box sx={{ justifySelf: "start" }}>

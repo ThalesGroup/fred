@@ -45,6 +45,7 @@ class Resource(str, Enum):
     OPENSEARCH = "opensearch"
     NEO4J = "neo4j"
     LOGS = "logs"
+    FILES = "files"
 
     # Agentic Backend resources
     FEEDBACK = "feedback"
@@ -53,6 +54,7 @@ class Resource(str, Enum):
     AGENTS = "agents"
     SESSIONS = "sessions"
     MESSAGE_ATTACHMENTS = "message_attachments"
+    MCP_SERVERS = "mcp_servers"
 
     # Authorization subject
     USER = "user"

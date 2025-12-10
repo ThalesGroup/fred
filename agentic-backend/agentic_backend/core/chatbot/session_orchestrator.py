@@ -315,12 +315,20 @@ class SessionOrchestrator:
                     session.id
                 )
             )
+
+            # Retrieve all agents
+            history = self.get_session_history(session.id, user)
+            agents = {
+                msg.metadata.agent_name for msg in history if msg.metadata.agent_name
+            }
+
             attachments = [
                 AttachmentRef(id=att_id, name=name) for att_id, name in id_name_pairs
             ]
             enriched.append(
                 SessionWithFiles(
                     **session.model_dump(),
+                    agents=agents,
                     file_names=files_names,
                     attachments=attachments,
                 )

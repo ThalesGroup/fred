@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import List, Mapping, Optional, Protocol, Sequence, Union, runtime_checkable
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Union, runtime_checkable
 
 from attr import dataclass
 from langchain_core.documents import Document
@@ -75,10 +75,24 @@ class BaseVectorStore(ABC):
         """
         raise NotImplementedError("This vector store does not support retrievable toggling.")
 
+    def get_vectors_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
+        """Optional capability: fetch raw vector data for all chunks of a document."""
+        raise NotImplementedError("This vector store does not support fetching raw vectors.")
+
+    def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
+        """Optional capability: fetch raw chunk data for all chunks of a document."""
+        raise NotImplementedError("This vector store does not support fetching raw chunks.")
+
     @abstractmethod
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:
         """Semantic (ANN) search; should honor SearchFilter where supported."""
         raise NotImplementedError
+
+    def list_document_uids(self) -> list[str]:  # pragma: no cover - optional capability
+        """
+        Optional helper: return distinct document_uids tracked by the vector store.
+        """
+        return []
 
 
 @runtime_checkable

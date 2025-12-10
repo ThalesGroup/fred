@@ -37,6 +37,8 @@ METADATA_INDEX_MAPPING = {
             # identity
             "document_uid": {"type": "keyword"},
             "document_name": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "canonical_name": {"type": "keyword"},
+            "version": {"type": "integer"},
             "title": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
             "author": {"type": "keyword"},
             "created": {"type": "date"},
@@ -189,6 +191,8 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             # identity
             "document_uid": md.identity.document_uid,
             "document_name": md.identity.document_name,
+            "canonical_name": md.identity.canonical_name,
+            "version": md.identity.version,
             "title": md.identity.title,
             "author": md.identity.author,
             "created": md.identity.created,
@@ -250,6 +254,8 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             identity = Identity(
                 document_uid=src["document_uid"],
                 document_name=src["document_name"],
+                canonical_name=src.get("canonical_name"),
+                version=src.get("version", 0) or 0,
                 title=src.get("title"),
                 author=src.get("author"),
                 created=src.get("created"),

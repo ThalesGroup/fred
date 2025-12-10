@@ -192,6 +192,15 @@ class BaseContentStore(ABC):
         """
         pass
 
+    def list_document_uids(self) -> List[str]:  # pragma: no cover - optional capability
+        """
+        Optional helper: return the list of document_uids known to the content store.
+
+        Default implementation returns an empty list so callers can rely on hasattr()
+        or simply call and handle the empty result.
+        """
+        return []
+
     @abstractmethod
     def delete_object(self, key: str) -> None:
         """

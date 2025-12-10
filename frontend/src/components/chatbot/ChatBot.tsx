@@ -26,6 +26,7 @@ import {
   FinalEvent,
   RuntimeContext,
   SessionSchema,
+  SessionWithFiles,
   StreamEvent,
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
@@ -51,11 +52,11 @@ export interface ChatBotError {
 // }
 
 export interface ChatBotProps {
-  currentChatBotSession: SessionSchema;
+  currentChatBotSession: SessionWithFiles | null;
   currentAgent: AnyAgent;
   agents: AnyAgent[];
   onSelectNewAgent: (flow: AnyAgent) => void;
-  onUpdateOrAddSession: (session: SessionSchema) => void;
+  onUpdateOrAddSession: (session: SessionWithFiles | SessionSchema | Partial<SessionWithFiles>) => void;
   isCreatingNewConversation: boolean;
   runtimeContext?: RuntimeContext;
   onBindDraftAgentToSessionId?: (sessionId: string) => void;
@@ -418,6 +419,7 @@ const ChatBot = ({
         documentLibraryIds: userInputContext.documentLibraryIds ?? [],
         promptResourceIds: userInputContext.promptResourceIds ?? [],
         templateResourceIds: userInputContext.templateResourceIds ?? [],
+        skipRagSearch: userInputContext.skipRagSearch ?? false,
       };
       localStorage.setItem(storageKey, JSON.stringify(payload));
     } catch (e) {
@@ -427,6 +429,7 @@ const ChatBot = ({
     userInputContext?.documentLibraryIds,
     userInputContext?.promptResourceIds,
     userInputContext?.templateResourceIds,
+    userInputContext?.skipRagSearch,
     storageKey,
     currentChatBotSession?.id, // guard: only save when undefined
   ]);
@@ -443,6 +446,9 @@ const ChatBot = ({
 
     // Policy
     runtimeContext.search_policy = content.searchPolicy || "semantic";
+    if (content.skipRagSearch) {
+      runtimeContext.skip_rag_search = true;
+    }
 
     // Files are now uploaded immediately upon selection (not here)
 

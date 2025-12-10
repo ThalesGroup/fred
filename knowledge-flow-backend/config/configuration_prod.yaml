@@ -107,7 +107,7 @@ embedding_model:
   provider: openai
   name: text-embedding-3-large # or text-embedding-3-small
   settings: {}
-vision:
+vision_model:
   provider: openai
   name: gpt-4o-mini # or gpt-4o if you want higher fidelity
   settings:
@@ -237,3 +237,11 @@ mcp:
   resources_enabled: true
   opensearch_ops_enabled: true
   neo4j_enabled: false
+  filesystem_enabled: false
+
+filesystem:
+  type: minio
+  endpoint: http://localhost:9000
+  access_key: admin
+  bucket_name: filesystem
+  secure: false

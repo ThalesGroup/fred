@@ -20,6 +20,7 @@ import {
   useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
 } from "../slices/agentic/agenticOpenApi";
+import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
 type AgentBySessionMap = Record<string, string>;
 
@@ -105,10 +106,11 @@ export function useSessionController() {
   // ---- Hydration from queries ----
   useEffect(() => {
     if (!flowsLoading && flowsData) {
-      setAgents(flowsData);
+      const normalizedAgents = normalizeAgenticFlows(flowsData);
+      setAgents(normalizedAgents);
       L.group(
         "HYDRATE flows",
-        flowsData.map((f) => ({ name: f.name, role: f.tuning.role })),
+        normalizedAgents.map((f) => ({ name: f.name, role: f.tuning.role })),
       );
     }
   }, [flowsLoading, flowsData]);

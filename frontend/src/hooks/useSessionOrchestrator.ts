@@ -12,27 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useMemo, useState, useCallback } from "react";
-import type { SessionSchema } from "../slices/agentic/agenticOpenApi";
-import { useSessionAgent } from "./usePrefs";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnyAgent } from "../common/agent";
+import type { SessionSchema, SessionWithFiles } from "../slices/agentic/agenticOpenApi";
+import { useLocalStorageState } from "./useLocalStorageState";
 
 /**
- * Thin, predictable orchestrator over:
- * - server data (sessions, flows)
- * - local persistence (session->agent mapping via useSessionAgent)
+ * Thin, predictable orchestrator over server data (sessions, flows).
+ * Session selection is now managed via URL routing.
  *
  * It does NOT fetch anything; you pass sessions/flows in from your RTK hooks.
  */
 export function useSessionOrchestrator(params: {
-  sessionsFromServer: SessionSchema[];
-  agentsFromServer: AnyAgent[];
+  sessionsFromServer: SessionWithFiles[];
+  agents: AnyAgent[];
   loading: boolean;
 }) {
-  const { sessionsFromServer, agentsFromServer, loading } = params;
+  const { sessionsFromServer, agents, loading } = params;
 
   // Local mirror so we can upsert/delete without fighting server pagination/timing.
-  const [sessions, setSessions] = useState<SessionSchema[]>([]);
+  const [sessions, setSessions] = useState<SessionWithFiles[]>([]);
   useEffect(() => {
     console.log(
       "Orchestrator: useEffect triggered by sessionsFromServer change. New count:",
@@ -41,76 +40,104 @@ export function useSessionOrchestrator(params: {
     setSessions(sessionsFromServer ?? []);
   }, [sessionsFromServer]);
 
-  // Choose initial session id:
-  // - Prefer the most recently updated session if any
-  // - Else use "draft"
-  const defaultSessionId = useMemo(() => {
-    if (!sessionsFromServer?.length) return "draft";
-    const sorted = [...sessionsFromServer].sort(
-      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
-    );
-    return sorted[0].id ?? "draft";
-  }, [sessionsFromServer]);
+  // Track current session (managed by parent via selectSession)
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(defaultSessionId);
+  // Track manually selected agent (overrides default logic)
+  const [manuallySelectedAgentId, setManuallySelectedAgentId] = useState<string | null>(null);
 
-  // Keep default in sync if server list changes (e.g., first load)
-  useEffect(() => {
-    if (!currentSessionId) setCurrentSessionId(defaultSessionId);
-  }, [defaultSessionId, currentSessionId]);
+  // Store last agent used for new conversations in localStorage
+  const [lastNewConversationAgent, setLastNewConversationAgent] = useLocalStorageState<string | null>(
+    "chat.lastNewConversationAgent",
+    null,
+  );
 
-  // Persistence: session -> agent mapping (+ last used agent)
-  const { agentId, setAgentForSession, migrateSessionId } = useSessionAgent(currentSessionId);
-
-  // Derived “current” objects
+  // Derived "current" objects
   const currentSession = useMemo(
     () => sessions.find((s) => s.id === currentSessionId) ?? null,
     [sessions, currentSessionId],
   );
 
+  // Reset manual selection when session changes
+  useEffect(() => {
+    setManuallySelectedAgentId(null);
+  }, [currentSessionId]);
+
   const currentAgent = useMemo(() => {
-    if (!agentsFromServer?.length) return null;
-    // If we have a stored agent for this session, prefer that flow
-    const byStored = agentId ? (agentsFromServer.find((f) => f.name === agentId) ?? null) : null;
-    if (byStored) return byStored;
-    // Otherwise pick the first flow as a safe default
-    return agentsFromServer[0] ?? null;
-  }, [agentsFromServer, agentId]);
+    if (!agents?.length) return null;
+
+    // If user manually selected an agent, use that
+    if (manuallySelectedAgentId) {
+      const manualAgent = agents.find((a) => a.name === manuallySelectedAgentId);
+      if (manualAgent) return manualAgent;
+    }
+
+    // For existing sessions: use the first agent from the session's agents array
+    if (currentSession?.agents?.length) {
+      const sessionAgentName = currentSession.agents[0];
+      const sessionAgent = agents.find((a) => a.name === sessionAgentName);
+      if (sessionAgent) return sessionAgent;
+    }
+
+    // For new conversations (draft): use last agent from localStorage
+    if (!currentSession || currentSessionId === "draft") {
+      if (lastNewConversationAgent) {
+        const lastAgent = agents.find((a) => a.name === lastNewConversationAgent);
+        if (lastAgent) return lastAgent;
+      }
+    }
+
+    // Fallback to first agent in the list
+    return agents[0] ?? null;
+  }, [agents, currentSession, currentSessionId, lastNewConversationAgent, manuallySelectedAgentId]);
 
   const isCreatingNewConversation = !currentSession || currentSessionId === "draft";
 
   // Intentful API (page calls these)
 
-  const selectSession = useCallback((session: SessionSchema) => {
+  const selectSession = useCallback((session: SessionWithFiles) => {
     setCurrentSessionId(session.id);
   }, []);
 
   const selectAgentForCurrentSession = useCallback(
     (agent: AnyAgent) => {
-      setAgentForSession(agent.name);
+      // Set as manually selected agent (overrides default logic)
+      setManuallySelectedAgentId(agent.name);
+
+      // Also save to localStorage if we're in a new conversation
+      if (!currentSession || currentSessionId === "draft") {
+        setLastNewConversationAgent(agent.name);
+      }
     },
-    [setAgentForSession],
+    [currentSession, currentSessionId, setLastNewConversationAgent],
   );
 
   const startNewConversation = useCallback(() => {
     setCurrentSessionId("draft");
-    // no need to pre-set agent: useSessionAgent will reuse lastAgent until user picks another one
   }, []);
 
-  const updateOrAddSession = useCallback((session: SessionSchema) => {
+  const updateOrAddSession = useCallback((session: SessionWithFiles | SessionSchema | Partial<SessionWithFiles>) => {
     setSessions((prev) => {
       const idx = prev.findIndex((s) => s.id === session.id);
       if (idx >= 0) {
         const next = [...prev];
-        next[idx] = session;
+        // Merge with existing session to preserve fields like 'agents' that might not be in the update
+        next[idx] = { ...next[idx], ...session };
         return next;
       }
-      return [session, ...prev];
+      // When adding a new session, ensure it has default values for optional fields
+      const newSession: SessionWithFiles = {
+        ...(session as SessionWithFiles),
+        agents: (session as SessionWithFiles).agents ?? [],
+        file_names: (session as SessionWithFiles).file_names ?? [],
+        attachments: (session as SessionWithFiles).attachments ?? [],
+      };
+      return [newSession, ...prev];
     });
   }, []);
 
   const deleteSession = useCallback(
-    (session: SessionSchema) => {
+    (session: SessionWithFiles) => {
       console.log("Orchestrator: deleteSession called for session:", session.id);
       setSessions((prev) => {
         console.log("Orchestrator: Previous local state count:", prev.length);
@@ -126,19 +153,14 @@ export function useSessionOrchestrator(params: {
     [currentSessionId],
   );
 
-  const bindDraftAgentToSessionId = useCallback(
-    (newId: string) => {
-      // “Draft” session got a real id from backend: migrate the mapping and select it
-      migrateSessionId("draft", newId);
-      setCurrentSessionId(newId);
-    },
-    [migrateSessionId],
-  );
+  const bindDraftAgentToSessionId = useCallback((newId: string) => {
+    // "Draft" session got a real id from backend: select it
+    setCurrentSessionId(newId);
+  }, []);
 
   return {
     // data
     loading,
-    agenticFlows: agentsFromServer,
     sessions,
     currentSession,
     currentAgent,

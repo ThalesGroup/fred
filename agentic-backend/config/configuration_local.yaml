@@ -140,6 +140,9 @@ storage:
   agent_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/agent.duckdb"
+  mcp_servers_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/agentic/mcp_servers.duckdb"
   session_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/session.duckdb"

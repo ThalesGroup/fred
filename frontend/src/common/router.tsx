@@ -17,17 +17,19 @@ import { LayoutWithSidebar } from "../app/LayoutWithSidebar";
 import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { AgentHub } from "../pages/AgentHub";
-import Chat from "../pages/Chat";
+import DataHub from "../pages/DataHub";
 import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { Kpis } from "../pages/Kpis";
 import Logs from "../pages/Logs";
-import Runtime from "../pages/Runtime";
-import DataHub from "../pages/DataHub";
+import { McpHub } from "../pages/McpHub";
+import OldChat from "../pages/OldChat";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
-import { Profile } from "../pages/Profile";
 import ProcessorBench from "../pages/ProcessorBench";
 import ProcessorRunDetail from "../pages/ProcessorRunDetail";
+import { Profile } from "../pages/Profile";
+import ReleaseNotes from "../pages/ReleaseNotes";
+import Runtime from "../pages/Runtime";
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => <LayoutWithSidebar>{children}</LayoutWithSidebar>;
 
@@ -38,11 +40,11 @@ export const routes: RouteObject[] = [
     children: [
       {
         index: true,
-        element: <Chat />,
+        element: <OldChat />,
       },
       {
-        path: "chat",
-        element: <Chat />,
+        path: "chat/:sessionId?",
+        element: <OldChat />,
       },
       {
         path: "monitoring/kpis",
@@ -97,7 +99,7 @@ export const routes: RouteObject[] = [
         ),
       },
       {
-        path: "account",
+        path: "settings",
         element: <Profile />,
       },
       {
@@ -109,8 +111,16 @@ export const routes: RouteObject[] = [
         element: <RendererPlayground />,
       },
       {
-        path: "agentHub",
+        path: "agents",
         element: <AgentHub />,
+      },
+      {
+        path: "tools",
+        element: <McpHub />,
+      },
+      {
+        path: "release-notes",
+        element: <ReleaseNotes />,
       },
     ].filter(Boolean),
   },

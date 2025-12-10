@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 import uuid
 from typing import Awaitable, Callable
 
@@ -69,8 +70,8 @@ async def _load_openfga_engine() -> RebacEngine:
     except ValidationError as exc:
         pytest.skip(f"Invalid OpenFGA configuration: {exc}")
 
-    os.environ[mock_m2m.secret_env_var] = "test-secret"  # nosec: test secret for tests
-    os.environ[config.token_env_var] = "test-token"  # nosec: mock secret for tests
+    os.environ.setdefault(mock_m2m.secret_env_var, secrets.token_urlsafe(16))
+    os.environ.setdefault(config.token_env_var, secrets.token_urlsafe(16))
 
     try:
         engine = OpenFgaRebacEngine(config, mock_m2m, token=store)

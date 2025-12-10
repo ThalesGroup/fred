@@ -8,7 +8,10 @@
     "beta": "Beta",
     "retry": "Retry",
     "error": "Error",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "cancel": "Cancel",
+    "save": "Save",
+    "create": "Create"
   },
   "dataHub": {
     "title": "Data Hub - Document Lineage",
@@ -70,10 +73,12 @@
     "facts": "Facts",
     "audit": "Audit",
     "optimize": "Optimize",
-    "chat": "Chat",
+    "chat": "Chats",
     "monitoring": "Monitoring",
     "knowledge": "Resources",
+    "mcp": "Tools",
     "agent": "Agents",
+    "release_notes": "Release Notes",
     "workspaces": "Workspaces",
     "account": "Profile",
     "tooltip": {
@@ -84,9 +89,10 @@
       "chat": "Chat with the AI assistant team",
       "monitoring": "Monitor the backend AI calls",
       "knowledge": "Consult the content of your libraries",
+      "mcp": "Manage MCP servers",
       "agent": "View agents",
+      "release_notes": "View the latest release notes",
       "workspaces": "View Workspace",
-      "account": "View your account",
       "selectCluster": "Please select a cluster first",
       "monitoring_kpi": "Kpi Dashboard",
       "monitoring_logs": "Log Console",
@@ -106,7 +112,9 @@
     "monitoring_logs": "Logs",
     "monitoring_runtime": "Runtime",
     "monitoring_processors": "Processors",
-    "monitoring_data": "Data"
+    "monitoring_data": "Data",
+    "allAgents": "All agents",
+    "deleteSessionFailed": "Failed to delete conversation"
   },
   "runtime": {
     "title": "Runtime Summary",
@@ -240,7 +248,7 @@
     "noMcpServers": "No MCP servers are currently available."
   },
   "agentHub": {
-    "title": "Agent Hub",
+    "title": "Your agents",
     "confirmDeleteTitle": "Confirm deletion",
     "confirmDeleteMessage": "Delete this agent ? This action cannot be undone.",
     "description": "Explore and manage available AI agents",
@@ -249,6 +257,7 @@
     "agents": "Agents",
     "search": "Search",
     "filter": "Filter",
+    "restoreButton": "Restore from configuration",
     "create": "Create",
     "createAgent": "Create new agent",
     "noAgents": "No agents found",
@@ -275,6 +284,9 @@
         "name": "Name",
         "url": "URL",
         "transport": "Transport",
+        "transport_http": "streamable_http",
+        "transport_local": "stdio",
+        "command": "Command",
         "timeout": "Timeout"
       }
     },
@@ -291,7 +303,76 @@
     "success": {
       "summary": "Agent created",
       "detail": "The agent has been successfully created."
-    }
+    },
+    "toasts": {
+      "restored": "Static agents restored from configuration",
+      "error": "Operation failed"
+    },
+    "toolsSelection": {
+      "title": "Tools"
+    },
+    "confirmRestoreTitle": "Overwrite agents with configuration?",
+    "confirmRestoreMessage": "This will replace all tuned settings saved in the UI with the YAML configuration. You will lose any custom changes. This cannot be undone."
+  },
+  "mcpHub": {
+    "title": "Tools",
+    "subtitle": "Register and edit MCP servers available to agents.",
+    "restoreButton": "Restore from configuration",
+    "addButton": "Add MCP server",
+    "addTitle": "New MCP server",
+    "editTitle": "Edit MCP server",
+    "emptyTitle": "No MCP servers yet",
+    "emptyHint": "Create a server entry to let agents connect to it.",
+    "countLabel": "servers",
+    "search": "Search",
+    "filter": "Filter",
+    "confirmDeleteTitle": "Delete MCP server?",
+    "confirmDeleteMessage": "Delete MCP server {{id}}? This action cannot be undone.",
+    "fields": {
+      "id": "Identifier",
+      "name": "Display name (i18n key)",
+      "description": "Description (i18n key)",
+      "transport": "Transport",
+      "url": "Server URL",
+      "command": "Command",
+      "args": "Arguments",
+      "env": "Environment variables",
+      "enabled": "Enabled",
+      "timeout": "SSE timeout (s)",
+      "auth_mode": "Auth mode"
+    },
+    "helpers": {
+      "args": "Space or comma separated arguments",
+      "env": "One KEY=VALUE per line"
+    },
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "transport": {
+      "stdio": "stdio",
+      "streamable_http": "streamable_http",
+      "sse": "Server-sent events",
+      "websocket": "WebSocket"
+    },
+    "auth": {
+      "user_token": "User token",
+      "no_token": "No token",
+      "user_token_hint": "Forward the authenticated user's bearer token",
+      "present": "Auth configured",
+      "none": "No auth"
+    },
+    "toasts": {
+      "created": "MCP server created",
+      "updated": "MCP server updated",
+      "deleted": "MCP server deleted",
+      "enabled": "MCP server enabled",
+      "disabled": "MCP server disabled",
+      "restored": "Static MCP servers restored from configuration",
+      "error": "Operation failed"
+    },
+    "confirmRestoreTitle": "Overwrite MCP servers with configuration?",
+    "confirmRestoreMessage": "This will replace all MCP server changes saved in the UI with the YAML configuration. You will lose those changes. This cannot be undone."
   },
   "chatbot": {
     "menu": {
@@ -306,6 +387,7 @@
       "count": "{{count}} attached"
     },
     "uploadingFile": "Uploading {{name}}...",
+    "searchToggle": "Toggle retrieval: on searches documents, off skips RAG",
     "recordAudio": "Record audio",
     "sendMessage": "Send message",
     "stopResponse": "Stop response",
@@ -416,7 +498,7 @@
     }
   },
   "profile": {
-    "title": "User profile",
+    "title": "Settings",
     "description": "Manage your profile settings",
     "menu": {
       "account": "Account",
@@ -490,6 +572,7 @@
     "confirmBulkRemoveMessage": "Remove {{count}} document(s) from their libraries?",
     "bulkRemoveFromLibrary": "Remove from library",
     "removedOneDocument": "Document removed from library.",
+    "removedManyDocuments": "Documents removed from library.",
     "confirmDeleteFolderTitle": "Delete folder?",
     "confirmDeleteFolderMessage": "Delete empty folder « {{name}} »?",
     "folderDeleted": "Folder deleted",
@@ -743,5 +826,41 @@
   },
   "agentSelector": {
     "sendTo": "Send to"
+  },
+  "mcp": {
+    "servers": {
+      "search_documents": {
+        "name": "Search in documents",
+        "description": "Allow your agent to perform semantic search in documents uploaded to Fred (RAG)"
+      },
+      "tabular": {
+        "name": "Tabular data access",
+        "description": "Allow your agent to query tabular data sources (spreadsheets, csv...)"
+      },
+      "filesystem": {
+        "name": "Filesystem access",
+        "description": "Allow your agent to access a filesystem (local or Minio)"
+      },
+      "search_opensearch": {
+        "name": "Search in opensearch",
+        "description": "Allow your agent to search in opensearch indices"
+      },
+      "kubernetes": {
+        "name": "Kubernetes access",
+        "description": "Allow your agent to interact with Kubernetes clusters"
+      },
+      "jira": {
+        "name": "Jira access",
+        "description": "Allow your agent to interact with Jira"
+      },
+      "neo4j": {
+        "name": "Neo4j access",
+        "description": "Allow your agent to interact with Neo4j graph databases"
+      },
+      "local_stdio": {
+        "name": "Local stdio MCP",
+        "description": "Run a local MCP server over stdio (process-based tools)"
+      }
+    }
   }
 }

@@ -8,7 +8,10 @@
     "beta": "Bêta",
     "retry": "Réessayer",
     "error": "Erreur",
-    "refresh": "Rafraîchir"
+    "refresh": "Rafraîchir",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "create": "Créer"
   },
   "dataHub": {
     "title": "Hub des Données - Lignage des documents",
@@ -70,10 +73,12 @@
     "facts": "Faits",
     "audit": "Audit",
     "optimize": "Optimiser",
-    "chat": "Discussion",
+    "chat": "Conversations",
     "monitoring": "Supervision",
     "knowledge": "Ressources",
-    "agent": "Hub Agent",
+    "mcp": "Outils",
+    "agent": "Agents",
+    "release_notes": "Notes de version",
     "workspaces": "Espaces de travail",
     "account": "Profil",
     "tooltip": {
@@ -84,9 +89,10 @@
       "chat": "Discuter avec l'assistant IA",
       "monitoring": "Superviser les appels IA backend",
       "knowledge": "Consulter vos bibliothèques de documents et de prompts",
+      "mcp": "Gérer les serveurs MCP",
       "agent": "Voir les agents",
+      "release_notes": "Consulter les dernières notes de version",
       "workspaces": "Voir les espaces",
-      "account": "Voir votre profil",
       "selectCluster": "Veuillez d'abord sélectionner un cluster",
       "monitoring_kpi": "Vue d'ensemble des Kpis",
       "monitoring_logs": "Console de logs",
@@ -106,7 +112,9 @@
     "monitoring_logs": "Logs",
     "monitoring_runtime": "Runtime",
     "monitoring_processors": "Processeurs",
-    "monitoring_data": "Données"
+    "monitoring_data": "Données",
+    "allAgents": "Tous les agents",
+    "deleteSessionFailed": "La supression de la conversation a échoué"
   },
   "runtime": {
     "title": "Résumé d'exécution",
@@ -240,7 +248,7 @@
     "noMcpServers": "Aucun serveur MCP disponible pour le moment."
   },
   "agentHub": {
-    "title": "Centre des Agents",
+    "title": "Vos agents",
     "confirmDeleteTitle": "Confirmer la suppression",
     "confirmDeleteMessage": "Supprimer cet agent ? Cette action est irréversible.",
     "description": "Explorez et gérez les agents IA disponibles",
@@ -249,6 +257,7 @@
     "agents": "Agents",
     "search": "Rechercher",
     "filter": "Filtrer",
+    "restoreButton": "Restaurer depuis la configuration",
     "create": "Créer",
     "createAgent": "Créer un nouvel agent",
     "noAgents": "Aucun agent trouvé",
@@ -275,6 +284,9 @@
         "name": "Nom",
         "url": "URL",
         "transport": "Transport",
+        "transport_http": "streamable_http",
+        "transport_local": "stdio",
+        "command": "Commande",
         "timeout": "Timeout"
       }
     },
@@ -291,7 +303,76 @@
     "success": {
       "summary": "Agent créé",
       "detail": "L'agent a été créé avec succès."
-    }
+    },
+    "toasts": {
+      "restored": "Agents statiques restaurés depuis la configuration",
+      "error": "Échec de l'opération"
+    },
+    "toolsSelection": {
+      "title": "Outils"
+    },
+    "confirmRestoreTitle": "Écraser les agents avec la configuration ?",
+    "confirmRestoreMessage": "Cette action remplacera tous les réglages personnalisés saisis dans l'UI par ceux du YAML. Vous perdrez vos modifications. Cette opération est irréversible."
+  },
+  "mcpHub": {
+    "title": "Outils",
+    "subtitle": "Déclarez et modifiez les serveurs MCP accessibles aux agents.",
+    "addButton": "Ajouter un serveur MCP",
+    "restoreButton": "Restaurer depuis la configuration",
+    "addTitle": "Nouveau serveur MCP",
+    "editTitle": "Modifier un serveur MCP",
+    "emptyTitle": "Aucun serveur MCP pour l'instant",
+    "emptyHint": "Créez une entrée pour permettre aux agents de s'y connecter.",
+    "countLabel": "serveurs",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "confirmDeleteTitle": "Supprimer le serveur MCP ?",
+    "confirmDeleteMessage": "Supprimer le serveur MCP {{id}} ? Cette action est irréversible.",
+    "fields": {
+      "id": "Identifiant",
+      "name": "Nom affiché (clé i18n)",
+      "description": "Description (clé i18n)",
+      "transport": "Transport",
+      "url": "URL du serveur",
+      "command": "Commande",
+      "args": "Arguments",
+      "env": "Variables d'environnement",
+      "enabled": "Activé",
+      "timeout": "Timeout SSE (s)",
+      "auth_mode": "Mode d'authentification"
+    },
+    "helpers": {
+      "args": "Arguments séparés par un espace ou une virgule",
+      "env": "Une ligne KEY=VALUE par variable"
+    },
+    "status": {
+      "enabled": "Activé",
+      "disabled": "Désactivé"
+    },
+    "transport": {
+      "stdio": "stdio",
+      "streamable_http": "streamable_http",
+      "sse": "Server-sent events",
+      "websocket": "WebSocket"
+    },
+    "auth": {
+      "user_token": "Jeton utilisateur",
+      "no_token": "Pas de jeton",
+      "user_token_hint": "Transmettre le bearer token de l'utilisateur authentifié",
+      "present": "Auth configurée",
+      "none": "Pas d'auth"
+    },
+    "toasts": {
+      "created": "Serveur MCP créé",
+      "updated": "Serveur MCP mis à jour",
+      "deleted": "Serveur MCP supprimé",
+      "enabled": "Serveur MCP activé",
+      "disabled": "Serveur MCP désactivé",
+      "restored": "Serveurs MCP MCP statiques statiques restaurés depuis la configuration",
+      "error": "Échec de l'opération"
+    },
+    "confirmRestoreTitle": "Écraser les serveurs MCP avec la configuration ?",
+    "confirmRestoreMessage": "Cette action remplacera toutes les modifications de serveurs MCP saisies dans l'UI par celles du YAML. Vous perdrez ces changements. Cette opération est irréversible."
   },
   "chatbot": {
     "menu": {
@@ -306,6 +387,7 @@
       "count": "{{count}} pièces jointes"
     },
     "uploadingFile": "Téléversement de {{name}}...",
+    "searchToggle": "Recherche : activé = RAG (sources), désactivé = sans recherche",
     "recordAudio": "Enregistrer de l'audio",
     "sendMessage": "Envoyer le message",
     "stopResponse": "Arrêter la réponse",
@@ -416,7 +498,7 @@
     }
   },
   "profile": {
-    "title": "Profil utilisateur",
+    "title": "Paramètres",
     "description": "Gérez vos préférences utilisateur et vos profils de chat",
     "menu": {
       "account": "Compte",
@@ -490,6 +572,7 @@
     "confirmBulkRemoveMessage": "Supprimer {{count}} document(s) de leurs bibliothèques ?",
     "bulkRemoveFromLibrary": "Supprimer de la bibliothèque",
     "removedOneDocument": "Document supprimé de la bibliothèque.",
+    "removedManyDocuments": "Documents supprimés de la bibliothèque.",
     "confirmDeleteFolderTitle": "Supprimer le dossier ?",
     "confirmDeleteFolderMessage": "Supprimer le dossier vide « {{name}} » ?",
     "folderDeleted": "Dossier supprimé",
@@ -743,5 +826,41 @@
   },
   "agentSelector": {
     "sendTo": "Envoyer à"
+  },
+  "mcp": {
+    "servers": {
+      "search_documents": {
+        "name": "Rechercher dans les documents",
+        "description": "Permet à votre agent d'effectuer des recherches sémantiques dans les documents téléversés dans Fred (RAG)"
+      },
+      "tabular": {
+        "name": "Accès aux données tabulaires",
+        "description": "Permet à votre agent d'interroger des sources de données tabulaires (feuilles de calcul, csv...)"
+      },
+      "filesystem": {
+        "name": "Accès au système de fichiers",
+        "description": "Permet à votre agent d'accéder à un filesystem (système de fichiers) (local ou Minio)"
+      },
+      "search_opensearch": {
+        "name": "Rechercher dans opensearch",
+        "description": "Permet à votre agent de rechercher dans les indices opensearch"
+      },
+      "kubernetes": {
+        "name": "Accès Kubernetes",
+        "description": "Permet à votre agent d'interagir avec les clusters Kubernetes"
+      },
+      "jira": {
+        "name": "Accès Jira",
+        "description": "Permet à votre agent d'interagir avec Jira"
+      },
+      "neo4j": {
+        "name": "Accès Neo4j",
+        "description": "Permet à votre agent d'interagir avec les bases de données graphes Neo4j"
+      },
+      "local_stdio": {
+        "name": "MCP local (stdio)",
+        "description": "Exécute un serveur MCP local via stdio (outils basés sur un processus)"
+      }
+    }
   }
 }

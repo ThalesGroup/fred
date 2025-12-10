@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingGraph, ProcessingSummary
 from knowledge_flow_backend.common.utils import log_exception
-from knowledge_flow_backend.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError
+from knowledge_flow_backend.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError, StoreAuditFixResponse, StoreAuditReport
 from knowledge_flow_backend.features.pull.controller import PullDocumentsResponse
 from knowledge_flow_backend.features.pull.service import PullDocumentService
 
@@ -98,6 +98,11 @@ class MetadataController:
         self.service = MetadataService()
         self.content_store = ApplicationContext.get_instance().get_content_store()
         self.pull_document_service = pull_document_service
+
+        # ---- Schemas locaux pour les réponses ----
+        class VectorChunk(BaseModel):
+            chunk_uid: str = Field(..., description="Identifiant unique du chunk")
+            vector: List[float] = Field(..., description="Embedding du chunk")
 
         @router.post(
             "/documents/metadata/search",
@@ -231,3 +236,65 @@ class MetadataController:
 
             else:
                 raise HTTPException(status_code=400, detail=f"Unsupported source type '{config.type}'")
+
+        @router.get(
+            "/document/{document_uid}/vectors",
+            tags=["Documents"],
+            summary="Get document chunk vectors (embeddings)",
+            description=("Returns the list of chunk vectors (embeddings) associated with the given document."),
+            response_model=List[VectorChunk],
+        )
+        async def document_vectors(
+            document_uid: str,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                raw = await self.service.get_document_vectors(user, document_uid)
+                return [VectorChunk(**item) for item in raw]
+            except Exception as e:
+                raise handle_exception(e)
+
+        @router.get(
+            "/document/{document_uid}/chunks",
+            tags=["Documents"],
+            summary="Get document chunks with metadata",
+            description=("Returns the list of chunks associated with the given document, including their metadata."),
+            response_model=List[Dict[str, Any]],
+        )
+        async def document_chunks(
+            document_uid: str,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                chunks = await self.service.get_document_chunks(user, document_uid)
+                return chunks
+            except Exception as e:
+                raise handle_exception(e)
+
+        @router.get(
+            "/documents/audit",
+            tags=["Documents"],
+            summary="Audit metadata/content/vector stores for orphan or partial data",
+            response_model=StoreAuditReport,
+            description="Scans the metadata, content, and vector stores to surface inconsistencies (orphan vectors/content or partially deleted documents).",
+        )
+        async def audit_documents(user: KeycloakUser = Depends(get_current_user)):
+            try:
+                return await self.service.audit_stores(user)
+            except Exception as e:
+                log_exception(e)
+                raise handle_exception(e)
+
+        @router.post(
+            "/documents/audit/fix",
+            tags=["Documents"],
+            summary="Delete orphan or partial document data across stores",
+            response_model=StoreAuditFixResponse,
+            description="Runs the audit and deletes any orphan data to keep metadata, content, and vector stores in sync.",
+        )
+        async def fix_documents(user: KeycloakUser = Depends(get_current_user)):
+            try:
+                return await self.service.fix_store_anomalies(user)
+            except Exception as e:
+                log_exception(e)
+                raise handle_exception(e)
