@@ -15,7 +15,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any, Type, TypeVar
+from typing import Any, Dict, List, Optional, Type, TypeVar
 
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_core.documents import Document
