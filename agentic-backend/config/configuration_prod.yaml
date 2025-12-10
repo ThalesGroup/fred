@@ -130,6 +130,8 @@ ai:
       chat_options:
         search_policy_selection: true
         libraries_selection: true
+        search_rag_scoping: true
+        attach_files: true
       enabled: true
     - name: "Tessa"
       type: "agent"

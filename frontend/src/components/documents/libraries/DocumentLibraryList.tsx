@@ -34,6 +34,7 @@ import {
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
+import { useToast } from "../../ToastProvider";
 import { buildTree, findNode, TagNode } from "../../tags/tagTree";
 import { useDocumentCommands } from "../common/useDocumentCommands";
 import { docHasAnyTag, matchesDocByName } from "./documentHelper";
@@ -54,6 +55,7 @@ export default function DocumentLibraryList() {
   const [isPipelineDrawerOpen, setIsPipelineDrawerOpen] = React.useState(false);
   const [pipelineLibraryTagId, setPipelineLibraryTagId] = React.useState<string | null>(null);
   const [pipelineLibraryLabel, setPipelineLibraryLabel] = React.useState<string | null>(null);
+  const [downloadingDocUid, setDownloadingDocUid] = React.useState<string | null>(null);
   // Search + selection (docUid -> tag)
   const [query, setQuery] = React.useState<string>("");
   const [selectedDocs, setSelectedDocs] = React.useState<Record<string, TagWithItemsId>>({});
@@ -84,6 +86,7 @@ export default function DocumentLibraryList() {
   React.useEffect(() => {
     fetchAllDocuments({ filters: {} });
   }, [fetchAllDocuments]);
+  const { showInfo } = useToast();
 
   /* ---------------- Tree building ---------------- */
   const tree = React.useMemo<TagNode | null>(() => (tags ? buildTree(tags) : null), [tags]);
@@ -126,6 +129,24 @@ export default function DocumentLibraryList() {
     refetchTags: refetch,
     refetchDocs: () => fetchAllDocuments({ filters: {} }),
   });
+  const handleDownload = React.useCallback(
+    async (doc: DocumentMetadata) => {
+      const name = doc.identity.document_name || doc.identity.document_uid;
+      setDownloadingDocUid(doc.identity.document_uid);
+      showInfo?.({
+        summary: t("documentLibrary.downloadStarting") || "Downloading...",
+        detail: name,
+      });
+      try {
+        await download(doc);
+      } catch {
+        // Error toast already handled in useDocumentCommands
+      } finally {
+        setDownloadingDocUid((current) => (current === doc.identity.document_uid ? null : current));
+      }
+    },
+    [download, showInfo, t],
+  );
 
   /* ---------------- Search ---------------- */
   const filteredDocs = React.useMemo<DocumentMetadata[]>(() => {
@@ -372,7 +393,8 @@ export default function DocumentLibraryList() {
               documents={filteredDocs}
               onPreview={preview}
               onPdfPreview={previewPdf}
-              onDownload={download}
+              onDownload={handleDownload}
+              downloadingDocUid={downloadingDocUid}
               onToggleRetrievable={toggleRetrievable}
               onRemoveFromLibrary={removeOneWithConfirm}
               selectedDocs={selectedDocs}

@@ -114,22 +114,10 @@ generate_block_for_next_tag() {
   local message="$2"
   local prev="$3"
 
-  echo "### $display_tag"
-  echo
-
   # Release date = date of current HEAD
   local release_date=""
   release_date=$(git log -1 --pretty=format:"%ad" --date=short HEAD 2>/dev/null || true)
-  if [ -n "$release_date" ]; then
-    echo "_Release date: ${release_date}_"
-    echo
-  fi
-
-  # General comment / migration note
-  if [ -n "$message" ]; then
-    echo "$message"
-    echo
-  fi
+  local display_date="${release_date:-TBD}"
 
   # Commit range
   local range=""
@@ -154,21 +142,26 @@ generate_block_for_next_tag() {
   fi
 
   # Features
+  echo "- **${display_tag}** — 📅 ${display_date}  "
+  echo "  - **Summary**"
+  if [ -n "$message" ]; then
+    echo "    - ${message}"
+  else
+    echo "    - (add summary)"
+  fi
+
   if [ -n "$features" ]; then
-    echo "#### Features"
-    echo
-    printf '%s\n' "$features" | sed 's/^/- /'
-    echo
+    echo "  - **Features**"
+    printf '%s\n' "$features" | sed 's/^/    - /'
   fi
 
-  # Bug fixes
   if [ -n "$bugfixes" ]; then
-    echo "#### Bug fixes"
-    echo
-    printf '%s\n' "$bugfixes" | sed 's/^/- /'
-    echo
+    echo "  - **Bug fixes**"
+    printf '%s\n' "$bugfixes" | sed 's/^/    - /'
   fi
 
+  echo
+  echo "---"
   echo
 }
 

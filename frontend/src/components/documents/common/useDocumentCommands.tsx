@@ -180,6 +180,7 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
           summary: "Download failed",
           detail: `Could not download document: ${err?.data?.detail || err.message}`,
         });
+        throw err;
       }
     },
     [triggerDownloadBlob, showError],

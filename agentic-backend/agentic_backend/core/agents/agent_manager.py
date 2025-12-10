@@ -326,8 +326,6 @@ class AgentManager:
             return
 
         for agent_cfg in self.config.ai.agents:
-            if not agent_cfg.enabled:
-                continue
             tuning = agent_cfg.tuning
             if not tuning:
                 try:

@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-from typing import Callable, Optional
+from typing import Callable, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -33,7 +33,7 @@ class RuntimeContext(BaseModel):
     attachments_markdown: Optional[str] = (
         None  # if the session has some attachement files, this will hold their markdown representation
     )
-    skip_rag_search: Optional[bool] = None
+    search_rag_scope: Optional[Literal["corpus_only", "hybrid", "general_only"]] = None
 
 
 # Type alias for context provider functions
@@ -60,6 +60,26 @@ def get_search_policy(context: RuntimeContext | None) -> str:
     return context.search_policy if context.search_policy else "semantic"
 
 
+def get_rag_knowledge_scope(context: RuntimeContext | None) -> str:
+    """
+    Decide how the agent should use the corpus vs. general knowledge.
+
+    Order of precedence:
+    1. Explicit search_rag_scope if provided (corpus_only | hybrid | general_only)
+    2. Explicit rag_knowledge_scope (deprecated legacy)
+    3. Legacy skip_rag_search flag -> general_only
+    4. Default -> hybrid (corpus + general knowledge)
+    """
+    if not context:
+        return "hybrid"
+
+    scope = context.search_rag_scope
+    if scope in {"corpus_only", "hybrid", "general_only"}:
+        return scope
+
+    return "hybrid"
+
+
 def get_chat_context_libraries_ids(context: RuntimeContext | None) -> list[str] | None:
     """Helper to extract profile library IDs from context."""
     if not context:
@@ -83,6 +103,12 @@ def get_refresh_token(context: RuntimeContext | None) -> Optional[str]:
 
 def should_skip_rag_search(context: RuntimeContext | None) -> bool:
     """Helper to check whether retrieval should be bypassed for this message."""
-    if not context:
-        return False
-    return bool(context.skip_rag_search)
+    scope = get_rag_knowledge_scope(context)
+    if scope == "general_only":
+        return True
+    return False
+
+
+def is_corpus_only_mode(context: RuntimeContext | None) -> bool:
+    """Helper to check whether the agent must answer only from corpus documents."""
+    return get_rag_knowledge_scope(context) == "corpus_only"

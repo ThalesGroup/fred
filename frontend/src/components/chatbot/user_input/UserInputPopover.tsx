@@ -319,15 +319,15 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
 
           <MenuList dense sx={{ py: 0.25 }}>
             {agentChatOptions?.attach_files && (
-              <MenuItem onClick={onAttachFileClick}>
-                <ListItemIcon>
-                  <AttachFileIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText
-                  primary={
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <span>{t("chatbot.attachFiles")}</span>
-                      <Tooltip title={t("chatbot.attachments.betaNotice")}>
+              <Tooltip title={t("chatbot.attachments.betaNotice")} placement="right">
+                <MenuItem onClick={onAttachFileClick}>
+                  <ListItemIcon>
+                    <AttachFileIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={
+                      <Stack direction="row" alignItems="center" spacing={1}>
+                        <span>{t("chatbot.attachFiles")}</span>
                         <Chip
                           label={t("common.beta")}
                           size="small"
@@ -335,18 +335,25 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
                           variant="outlined"
                           sx={{ height: 15, fontSize: "0.5rem" }}
                         />
-                      </Tooltip>
-                    </Stack>
-                  }
-                  secondary={
-                    filesBlob?.length
-                      ? t("chatbot.attachments.count", {
-                          count: filesBlob.length,
-                        })
-                      : undefined
-                  }
-                />
-              </MenuItem>
+                      </Stack>
+                    }
+                    secondary={
+                      <Stack spacing={0.25}>
+                        {filesBlob?.length ? (
+                          <Typography variant="body2" color="text.secondary">
+                            {t("chatbot.attachments.count", {
+                              count: filesBlob.length,
+                            })}
+                          </Typography>
+                        ) : null}
+                        <Typography variant="caption" color="text.secondary">
+                          {t("chatbot.attachments.supportedFormats")}
+                        </Typography>
+                      </Stack>
+                    }
+                  />
+                </MenuItem>
+              </Tooltip>
             )}
             {agentChatOptions?.record_audio_files && (
               <MenuItem onClick={onRecordAudioClick}>

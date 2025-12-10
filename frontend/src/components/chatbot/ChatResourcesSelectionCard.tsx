@@ -8,6 +8,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import {
   Box,
+  Checkbox,
   IconButton,
   List,
   ListItem,
@@ -33,6 +34,7 @@ export interface ResourceLibrariesSelectionCardProps {
   libraryType: TagType;
   selectedResourceIds: string[];
   setSelectedResourceIds: (ids: string[]) => void;
+  selectionMode?: "single" | "multiple";
 }
 
 type Lib = Pick<TagWithItemsId, "id" | "name" | "path" | "description">;
@@ -41,6 +43,7 @@ export function ChatResourcesSelectionCard({
   libraryType,
   selectedResourceIds,
   setSelectedResourceIds,
+  selectionMode = "single",
 }: ResourceLibrariesSelectionCardProps) {
   const { t } = useTranslation();
 
@@ -129,20 +132,22 @@ export function ChatResourcesSelectionCard({
       .filter((entry): entry is { lib: Lib; resources: Resource[] } => entry !== null);
   }, [libs, resourcesByTag, searchQuery]);
 
+  const isMultiSelect = selectionMode === "multiple";
+
   // --- single-select helpers ---
   const selectResource = (id: string) => {
-    // force single selection
-    setSelectedResourceIds([id]);
+    if (!isMultiSelect) {
+      setSelectedResourceIds([id]);
+      return;
+    }
+
+    const isAlreadySelected = selectedResourceIds.includes(id);
+    const next = isAlreadySelected ? selectedResourceIds.filter((rid) => rid !== id) : [...selectedResourceIds, id];
+    setSelectedResourceIds(next);
   };
 
   const toggleSelectResource = (id: string) => {
-    // if already selected → unselect, else select
-    const current = selectedResourceIds[0];
-    if (current === id) {
-      setSelectedResourceIds([]);
-    } else {
-      setSelectedResourceIds([id]);
-    }
+    selectResource(id);
   };
 
   const toggleOpen = (id: string) => setOpenMap((m) => ({ ...m, [id]: !m[id] }));
@@ -182,7 +187,12 @@ export function ChatResourcesSelectionCard({
             {t("common.noResults", "No results")}
           </Typography>
         ) : (
-          <List dense disablePadding role="radiogroup" aria-label="library resources">
+          <List
+            dense
+            disablePadding
+            role={resourceKind ? (isMultiSelect ? "group" : "radiogroup") : undefined}
+            aria-label="library resources"
+          >
             {filtered.map(({ lib, resources: contents }) => {
               const isOpen = !!openMap[lib.id];
 
@@ -216,26 +226,40 @@ export function ChatResourcesSelectionCard({
                   {resourceKind && isOpen && contents.length > 0 && (
                     <List disablePadding>
                       {contents.map((r) => {
-                        const resChecked = selectedResourceIds[0] === r.id;
+                        const resChecked = selectedResourceIds.includes(r.id);
                         return (
-                          <ListItem key={r.id} dense role="radio" aria-checked={resChecked}>
+                          <ListItem key={r.id} dense role={isMultiSelect ? undefined : "radio"} aria-checked={resChecked}>
                             <ListItemButton
                               onClick={() => toggleSelectResource(r.id)}
                               selected={resChecked}
                               sx={{ borderRadius: 1 }}
                             >
                               <ListItemIcon sx={{ minWidth: 36 }}>
-                                <Radio
-                                  edge="start"
-                                  tabIndex={-1}
-                                  disableRipple
-                                  size="small"
-                                  checked={resChecked}
-                                  onChange={(e) => {
-                                    e.stopPropagation();
-                                    selectResource(r.id);
-                                  }}
-                                />
+                                {isMultiSelect ? (
+                                  <Checkbox
+                                    edge="start"
+                                    tabIndex={-1}
+                                    disableRipple
+                                    size="small"
+                                    checked={resChecked}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      toggleSelectResource(r.id);
+                                    }}
+                                  />
+                                ) : (
+                                  <Radio
+                                    edge="start"
+                                    tabIndex={-1}
+                                    disableRipple
+                                    size="small"
+                                    checked={resChecked}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      selectResource(r.id);
+                                    }}
+                                  />
+                                )}
                               </ListItemIcon>
                               <ListItemText primary={r.name} />
                             </ListItemButton>

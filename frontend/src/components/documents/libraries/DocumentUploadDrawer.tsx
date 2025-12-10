@@ -14,7 +14,7 @@
 
 import SaveIcon from "@mui/icons-material/Save";
 import UploadIcon from "@mui/icons-material/Upload";
-import { Box, Button, Drawer, FormControl, MenuItem, Paper, Select, Typography, useTheme } from "@mui/material";
+import { Box, Button, Drawer, FormControl, MenuItem, Paper, Select, Tooltip, Typography, useTheme } from "@mui/material";
 import React, { useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
@@ -180,64 +180,70 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
         </Select>
       </FormControl>
 
-      <Paper
-        {...getRootProps()}
-        sx={{
-          mt: 3,
-          p: 3,
-          border: "1px dashed",
-          borderColor: "divider",
-          borderRadius: "12px",
-          cursor: "pointer",
-          minHeight: "220px",
-          maxHeight: "60vh",
-          overflowY: "auto",
-          backgroundColor: isHighlighted ? theme.palette.action.hover : theme.palette.background.paper,
-          transition: "background-color 0.3s",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: tempFiles.length ? "stretch" : "center",
-          justifyContent: tempFiles.length ? "flex-start" : "center",
-          "&::-webkit-scrollbar": {
-            width: "8px",
-          },
-          "&::-webkit-scrollbar-thumb": {
-            backgroundColor: theme.palette.divider,
-            borderRadius: "4px",
-          },
-        }}
-        onClick={handleOpenFileSelector}
-        onDragOver={(event) => {
-          event.preventDefault();
-          setIsHighlighted(true);
-        }}
-        onDragLeave={() => setIsHighlighted(false)}
-      >
-        <input {...getInputProps()} />
-        {!tempFiles.length ? (
-          <Box textAlign="center">
-            <UploadIcon sx={{ fontSize: 40, color: "text.secondary", mb: 2 }} />
-            <Typography variant="body1" color="textSecondary">
-              {t("documentLibrary.dropFiles")}
-            </Typography>
-            <Typography variant="body2" color="textSecondary">
-              {t("documentLibrary.maxSize")}
-            </Typography>
-          </Box>
-        ) : (
-          <Box sx={{ width: "100%" }}>
-            <DocumentDrawerTable
-              files={tempFiles}
-              onDelete={handleDeleteTemp}
-              fileNameSx={{
-                whiteSpace: "nowrap",
-                textOverflow: "ellipsis",
-                overflow: "hidden",
-              }}
-            />
-          </Box>
-        )}
-      </Paper>
+      <Tooltip title={t("documentLibrary.uploadDrawerTooltip")} placement="left">
+        <Paper
+          {...getRootProps()}
+          sx={{
+            mt: 3,
+            p: 3,
+            border: "1px dashed",
+            borderColor: "divider",
+            borderRadius: "12px",
+            cursor: "pointer",
+            minHeight: "220px",
+            maxHeight: "60vh",
+            overflowY: "auto",
+            backgroundColor: isHighlighted ? theme.palette.action.hover : theme.palette.background.paper,
+            transition: "background-color 0.3s",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: tempFiles.length ? "stretch" : "center",
+            justifyContent: tempFiles.length ? "flex-start" : "center",
+            "&::-webkit-scrollbar": {
+              width: "8px",
+            },
+            "&::-webkit-scrollbar-thumb": {
+              backgroundColor: theme.palette.divider,
+              borderRadius: "4px",
+            },
+          }}
+          onClick={handleOpenFileSelector}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setIsHighlighted(true);
+          }}
+          onDragLeave={() => setIsHighlighted(false)}
+        >
+          <input {...getInputProps()} />
+          {!tempFiles.length ? (
+            <Box textAlign="center">
+              <UploadIcon sx={{ fontSize: 40, color: "text.secondary", mb: 2 }} />
+              <Typography variant="body1" color="textSecondary">
+                {t("documentLibrary.dropFiles")}
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                {t("documentLibrary.maxSize")}
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ width: "100%" }}>
+              <DocumentDrawerTable
+                files={tempFiles}
+                onDelete={handleDeleteTemp}
+                fileNameSx={{
+                  whiteSpace: "nowrap",
+                  textOverflow: "ellipsis",
+                  overflow: "hidden",
+                }}
+              />
+            </Box>
+          )}
+        </Paper>
+      </Tooltip>
+
+      <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: "block" }}>
+        {t("documentLibrary.supportedFormats")}
+      </Typography>
 
       {uploadProgressSteps.length > 0 && (
         <Box sx={{ mt: 3, width: "100%" }}>

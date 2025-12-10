@@ -101,6 +101,8 @@ ai:
       chat_options:
         search_policy_selection: true
         libraries_selection: true
+        search_rag_scoping: true
+        attach_files: true
     - name: "Tessa"
       type: "agent"
       class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
