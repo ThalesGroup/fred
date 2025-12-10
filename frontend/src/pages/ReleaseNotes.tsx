@@ -3,11 +3,10 @@
 
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import Editor from "@monaco-editor/react";
 import { Box, Button, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
 import { useEffect, useMemo, useState } from "react";
 import { getProperty } from "../common/config";
+import MarkdownRenderer from "../components/markdown/MarkdownRenderer";
 
 export default function ReleaseNotes() {
   const [brandMarkdown, setBrandMarkdown] = useState<string>("");
@@ -15,7 +14,6 @@ export default function ReleaseNotes() {
   const [brandLabel, setBrandLabel] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const theme = useTheme();
 
   useEffect(() => {
     const load = async () => {
@@ -47,9 +45,9 @@ export default function ReleaseNotes() {
           }
         };
 
-        // Try brand-specific first
+        // Try brand-specific first (single expected path)
         let brandDoc: string | null = null;
-        const brandPath = `/release-${releaseBrand}.md`;
+        const brandPath = `/contrib/${releaseBrand}/release.md`;
         const brandContent = await fetchDoc(brandPath);
         if (brandContent) {
           brandDoc = brandContent;
@@ -82,13 +80,13 @@ export default function ReleaseNotes() {
 
   const cards = useMemo(() => {
     const list: Array<{ key: "brand" | "base"; title: string; content: string }> = [];
+    if (baseMarkdown) list.push({ key: "base", title: "Base Fred Release", content: baseMarkdown });
     if (brandMarkdown)
       list.push({
         key: "brand",
-        title: brandLabel ? `Release (${brandLabel})` : "Release (brand)",
+        title: brandLabel ? `${brandLabel} release` : "Release",
         content: brandMarkdown,
       });
-    if (baseMarkdown) list.push({ key: "base", title: "Base Release (release.md)", content: baseMarkdown });
     return list;
   }, [baseMarkdown, brandLabel, brandMarkdown]);
 
@@ -134,7 +132,7 @@ export default function ReleaseNotes() {
                 py: 0.3,
                 "&.Mui-selected": {
                   backgroundColor: (theme) => theme.palette.action.selected,
-                  color: (theme) => theme.palette.primary.main,
+                  color: (theme) => theme.palette.text.primary,
                   borderColor: (theme) => theme.palette.primary.main,
                 },
               },
@@ -165,26 +163,19 @@ export default function ReleaseNotes() {
                 Copy
               </Button>
             </Stack>
-            <Box sx={{ flex: 1, minHeight: 0, borderRadius: 1, overflow: "hidden", border: (theme) => `1px solid ${theme.palette.divider}` }}>
-              <Editor
-                height="100%"
-                defaultLanguage="markdown"
-                value={isLoading ? "" : cards.find((c) => c.key === selectedKey)?.content || ""}
-                options={{
-                  readOnly: true,
-                  minimap: { enabled: false },
-                  scrollBeyondLastLine: false,
-                  lineNumbers: "off",
-                  folding: false,
-                  wordWrap: "on",
-                  fontSize: 13,
-                  smoothScrolling: true,
-                  renderLineHighlight: "none",
-                  renderWhitespace: "none",
-                  scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
-                }}
-                theme={theme.palette.mode === "dark" ? "vs-dark" : "vs"}
-              />
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                borderRadius: 2,
+                border: (theme) => `1px solid ${theme.palette.divider}`,
+                overflow: "auto",
+                p: 2,
+                bgcolor: "transparent",
+                boxShadow: "none",
+              }}
+            >
+              <MarkdownRenderer content={isLoading ? "" : cards.find((c) => c.key === selectedKey)?.content || ""} />
             </Box>
           </Box>
         )}
