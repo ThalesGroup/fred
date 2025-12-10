@@ -57,7 +57,7 @@ export interface ChatBotProps {
   agents: AnyAgent[];
   onSelectNewAgent: (flow: AnyAgent) => void;
   onUpdateOrAddSession: (session: SessionWithFiles | SessionSchema | Partial<SessionWithFiles>) => void;
-  onNewSessionCreated?: (sessionId: string) => void;
+  onNewSessionCreated: (sessionId: string) => void;
   isCreatingNewConversation: boolean;
   runtimeContext?: RuntimeContext;
 }
@@ -72,6 +72,7 @@ const ChatBot = ({
   isCreatingNewConversation,
   runtimeContext: baseRuntimeContext,
 }: ChatBotProps) => {
+  console.log("[CHATBOT] isCreatingNewConversation", isCreatingNewConversation);
   const theme = useTheme();
   const { t } = useTranslation();
 
@@ -97,6 +98,14 @@ const ChatBot = ({
   // When backend creates a session during first file upload, keep it locally
   // so the immediate next message uses the same session id.
   const pendingSessionIdRef = useRef<string | null>(null);
+  // Keep isCreatingNewConversation in a ref so WebSocket callbacks always see current value
+  const isCreatingNewConversationRef = useRef(isCreatingNewConversation);
+
+  // Sync ref with prop changes
+  useEffect(() => {
+    isCreatingNewConversationRef.current = isCreatingNewConversation;
+  }, [isCreatingNewConversation]);
+
   // Track files being uploaded right now to surface inline progress in the input bar
   const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
 
@@ -246,9 +255,8 @@ const ChatBot = ({
               setMessages(messagesRef.current);
 
               const sessionId = finalEvent.session.id;
-              const wasCreatingNew = !currentChatBotSession?.id;
               console.log("[FINAL] sessionId", sessionId);
-              console.log("[FINAL] wasCreatingNew", wasCreatingNew);
+              console.log("[FINAL] isCreatingNewConversation", isCreatingNewConversationRef.current);
               console.log("[FINAL] currentChatBotSession", currentChatBotSession);
 
               // Accept session update if backend created/switched it
@@ -256,9 +264,10 @@ const ChatBot = ({
                 onUpdateOrAddSession(finalEvent.session);
 
                 // If we were in draft mode and backend created a session, notify parent
-                if (wasCreatingNew && sessionId) {
-                  console.log("[FINAL] onNewSessionCreated");
-                  onNewSessionCreated?.(sessionId);
+                // Use ref to avoid stale closure - the ref always has the current value
+                if (isCreatingNewConversationRef.current && sessionId) {
+                  console.log("[FINAL] onNewSessionCreated", onNewSessionCreated);
+                  onNewSessionCreated(sessionId);
                 }
               }
               setWaitResponse(false);
@@ -575,7 +584,11 @@ const ChatBot = ({
   // After your state declarations
   const effectiveSessionId = pendingSessionIdRef.current || currentChatBotSession?.id || undefined;
 
-  const showWelcome = !waitResponse && isCreatingNewConversation;
+  const showWelcome = isCreatingNewConversation && !waitResponse && messages.length === 0;
+
+  console.log("[showWelcome] waitResponse", waitResponse);
+  console.log("[showWelcome] isCreatingNewConversation", isCreatingNewConversation);
+  console.log("[showWelcome] =====> showWelcome", showWelcome);
 
   const hasContext =
     !!userInputContext &&

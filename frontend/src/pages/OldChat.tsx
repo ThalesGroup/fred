@@ -76,9 +76,11 @@ export default function OldChat() {
   // Handle navigation when a new session is created
   const handleNewSessionCreated = (newSessionId: string) => {
     // Only navigate if we're currently in draft mode (no sessionId in URL)
-    if (!sessionId) {
-      navigate(`/chat/${newSessionId}`, { replace: true });
-    }
+    console.log("[FINAL] (final check) sessionId", sessionId);
+    // if (!sessionId) {
+    console.log("[FINAL] =====> REDIRECTING");
+    navigate(`/chat/${newSessionId}`, { replace: true });
+    // }
   };
 
   // todo: move to the new conversation page
@@ -140,6 +142,7 @@ export default function OldChat() {
     <Box sx={{ height: "100vh", position: "relative", overflow: "hidden" }}>
       <Grid2>
         <ChatBot
+          // key={sessionId}
           currentChatBotSession={currentSession}
           currentAgent={currentAgent!}
           agents={enabledAgents}
