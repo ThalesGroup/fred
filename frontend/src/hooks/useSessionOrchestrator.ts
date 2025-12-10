@@ -27,8 +27,9 @@ export function useSessionOrchestrator(params: {
   sessionsFromServer: SessionWithFiles[];
   agents: AnyAgent[];
   loading: boolean;
+  sessionId?: string; // from URL parameter
 }) {
-  const { sessionsFromServer, agents, loading } = params;
+  const { sessionsFromServer, agents, loading, sessionId } = params;
 
   // Local mirror so we can upsert/delete without fighting server pagination/timing.
   const [sessions, setSessions] = useState<SessionWithFiles[]>([]);
@@ -40,8 +41,9 @@ export function useSessionOrchestrator(params: {
     setSessions(sessionsFromServer ?? []);
   }, [sessionsFromServer]);
 
-  // Track current session (managed by parent via selectSession)
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  // Derive currentSessionId from URL: if no sessionId param, we're in "draft" mode
+  const currentSessionId = sessionId || "draft";
+  console.log("currentSessionId: ", currentSessionId);
 
   // Track manually selected agent (overrides default logic)
   const [manuallySelectedAgentId, setManuallySelectedAgentId] = useState<string | null>(null);
@@ -53,10 +55,12 @@ export function useSessionOrchestrator(params: {
   );
 
   // Derived "current" objects
+  // Only match real sessions, not "draft"
   const currentSession = useMemo(
-    () => sessions.find((s) => s.id === currentSessionId) ?? null,
+    () => (currentSessionId === "draft" ? null : (sessions.find((s) => s.id === currentSessionId) ?? null)),
     [sessions, currentSessionId],
   );
+  console.log("[SESS] currentSession", currentSession);
 
   // Reset manual selection when session changes
   useEffect(() => {
@@ -91,13 +95,9 @@ export function useSessionOrchestrator(params: {
     return agents[0] ?? null;
   }, [agents, currentSession, currentSessionId, lastNewConversationAgent, manuallySelectedAgentId]);
 
-  const isCreatingNewConversation = !currentSession || currentSessionId === "draft";
+  const isCreatingNewConversation = currentSessionId === "draft";
 
   // Intentful API (page calls these)
-
-  const selectSession = useCallback((session: SessionWithFiles) => {
-    setCurrentSessionId(session.id);
-  }, []);
 
   const selectAgentForCurrentSession = useCallback(
     (agent: AnyAgent) => {
@@ -111,10 +111,6 @@ export function useSessionOrchestrator(params: {
     },
     [currentSession, currentSessionId, setLastNewConversationAgent],
   );
-
-  const startNewConversation = useCallback(() => {
-    setCurrentSessionId("draft");
-  }, []);
 
   const updateOrAddSession = useCallback((session: SessionWithFiles | SessionSchema | Partial<SessionWithFiles>) => {
     setSessions((prev) => {
@@ -136,28 +132,6 @@ export function useSessionOrchestrator(params: {
     });
   }, []);
 
-  const deleteSession = useCallback(
-    (session: SessionWithFiles) => {
-      console.log("Orchestrator: deleteSession called for session:", session.id);
-      setSessions((prev) => {
-        console.log("Orchestrator: Previous local state count:", prev.length);
-        const next = prev.filter((s) => s.id !== session.id);
-        console.log("Orchestrator: New local state count after filter:", next.length);
-        return next;
-      });
-      // If we just deleted the active one, bounce to draft
-      if (session.id === currentSessionId) {
-        setCurrentSessionId("draft");
-      }
-    },
-    [currentSessionId],
-  );
-
-  const bindDraftAgentToSessionId = useCallback((newId: string) => {
-    // "Draft" session got a real id from backend: select it
-    setCurrentSessionId(newId);
-  }, []);
-
   return {
     // data
     loading,
@@ -167,11 +141,7 @@ export function useSessionOrchestrator(params: {
     isCreatingNewConversation,
 
     // actions
-    selectSession,
     selectAgentForCurrentSession,
-    startNewConversation,
     updateOrAddSession,
-    deleteSession,
-    bindDraftAgentToSessionId,
   };
 }

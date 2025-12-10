@@ -57,9 +57,9 @@ export interface ChatBotProps {
   agents: AnyAgent[];
   onSelectNewAgent: (flow: AnyAgent) => void;
   onUpdateOrAddSession: (session: SessionWithFiles | SessionSchema | Partial<SessionWithFiles>) => void;
+  onNewSessionCreated?: (sessionId: string) => void;
   isCreatingNewConversation: boolean;
   runtimeContext?: RuntimeContext;
-  onBindDraftAgentToSessionId?: (sessionId: string) => void;
 }
 
 const ChatBot = ({
@@ -68,9 +68,9 @@ const ChatBot = ({
   agents,
   onSelectNewAgent,
   onUpdateOrAddSession,
+  onNewSessionCreated,
   isCreatingNewConversation,
   runtimeContext: baseRuntimeContext,
-  onBindDraftAgentToSessionId,
 }: ChatBotProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -245,14 +245,21 @@ const ChatBot = ({
               messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
               setMessages(messagesRef.current);
 
-              const sid = finalEvent.session.id;
-              if (sid) {
-                console.log("[🔗 ChatBot] Binding draft agent to session id from final event:", sid);
-                onBindDraftAgentToSessionId?.(sid);
-              }
+              const sessionId = finalEvent.session.id;
+              const wasCreatingNew = !currentChatBotSession?.id;
+              console.log("[FINAL] sessionId", sessionId);
+              console.log("[FINAL] wasCreatingNew", wasCreatingNew);
+              console.log("[FINAL] currentChatBotSession", currentChatBotSession);
+
               // Accept session update if backend created/switched it
-              if (finalEvent.session.id !== currentChatBotSession?.id) {
+              if (sessionId !== currentChatBotSession?.id) {
                 onUpdateOrAddSession(finalEvent.session);
+
+                // If we were in draft mode and backend created a session, notify parent
+                if (wasCreatingNew && sessionId) {
+                  console.log("[FINAL] onNewSessionCreated");
+                  onNewSessionCreated?.(sessionId);
+                }
               }
               setWaitResponse(false);
               break;
@@ -357,9 +364,6 @@ const ChatBot = ({
         const sorted = sortMessages(serverMessages);
         messagesRef.current = sorted;
         setAllMessages(sorted); // layout effect will scroll
-        // NEW — If this is the first time we "see" this id, bind draft now.
-        console.log("[🔗 ChatBot] Binding draft agent to session id from history load:", id);
-        onBindDraftAgentToSessionId?.(id);
       })
       .catch((e) => {
         console.error("[❌ ChatBot] Failed to load messages:", e);
@@ -490,8 +494,9 @@ const ChatBot = ({
         }).unwrap();
         const sid = (res as any)?.session_id as string | undefined;
         if (!sessionId && sid && pendingSessionIdRef.current !== sid) {
-          onBindDraftAgentToSessionId?.(sid);
           pendingSessionIdRef.current = sid;
+          // Notify parent that a new session was created via file upload
+          onNewSessionCreated?.(sid);
         }
         console.log("✅ Uploaded file:", file.name);
         // Refresh attachments view in the popover
@@ -569,7 +574,8 @@ const ChatBot = ({
       : 0;
   // After your state declarations
   const effectiveSessionId = pendingSessionIdRef.current || currentChatBotSession?.id || undefined;
-  const showWelcome = !waitResponse && (isCreatingNewConversation || messages.length === 0);
+
+  const showWelcome = !waitResponse && isCreatingNewConversation;
 
   const hasContext =
     !!userInputContext &&

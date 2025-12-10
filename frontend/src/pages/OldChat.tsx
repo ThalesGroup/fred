@@ -54,39 +54,32 @@ export default function OldChat() {
     currentSession,
     currentAgent,
     isCreatingNewConversation,
-    selectSession,
     selectAgentForCurrentSession,
-    startNewConversation,
     updateOrAddSession,
-    bindDraftAgentToSessionId,
   } = useSessionOrchestrator({
     sessionsFromServer,
     agents: enabledAgents,
     loading: sessionsLoading || flowsLoading,
+    sessionId, // Pass URL parameter to orchestrator
   });
 
-  // Sync URL parameter with session selection
+  // Validate URL and handle navigation
   useEffect(() => {
-    if (flowsLoading || sessionsLoading) {
-      return;
-    }
+    if (flowsLoading || sessionsLoading) return;
 
-    if (sessionId) {
-      // URL has a session ID - ensure it's selected
-      const session = sessions.find((s) => s.id === sessionId);
-      if (session) {
-        selectSession(session);
-      } else if (!session && sessions.length > 0) {
-        // Invalid session ID - redirect to new chat (only if sessions have loaded)
-        navigate("/chat", { replace: true });
-      } else {
-      }
-    } else if (!sessionId) {
-      // URL is /chat without session ID - start new conversation
-      startNewConversation();
-    } else {
+    // If URL has invalid session ID, redirect to new chat
+    if (sessionId && !currentSession && sessions.length > 0) {
+      navigate("/chat", { replace: true });
     }
-  }, [sessionId, sessions, flowsLoading, sessionsLoading, selectSession, startNewConversation, navigate]);
+  }, [sessionId, currentSession, sessions.length, flowsLoading, sessionsLoading, navigate]);
+
+  // Handle navigation when a new session is created
+  const handleNewSessionCreated = (newSessionId: string) => {
+    // Only navigate if we're currently in draft mode (no sessionId in URL)
+    if (!sessionId) {
+      navigate(`/chat/${newSessionId}`, { replace: true });
+    }
+  };
 
   // todo: move to the new conversation page
   const [selectedChatContextIds, setSelectedChatContextIds] = useLocalStorageState<string[]>(
@@ -152,11 +145,11 @@ export default function OldChat() {
           agents={enabledAgents}
           onSelectNewAgent={handleSelectAgent}
           onUpdateOrAddSession={updateOrAddSession}
+          onNewSessionCreated={handleNewSessionCreated}
           isCreatingNewConversation={isCreatingNewConversation}
           runtimeContext={{
             selected_chat_context_ids: selectedChatContextIds.length ? selectedChatContextIds : undefined,
           }}
-          onBindDraftAgentToSessionId={bindDraftAgentToSessionId}
         />
       </Grid2>
     </Box>
