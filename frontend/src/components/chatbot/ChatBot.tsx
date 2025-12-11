@@ -98,14 +98,6 @@ const ChatBot = ({
   // When backend creates a session during first file upload, keep it locally
   // so the immediate next message uses the same session id.
   const pendingSessionIdRef = useRef<string | null>(null);
-  // Keep isCreatingNewConversation in a ref so WebSocket callbacks always see current value
-  const isCreatingNewConversationRef = useRef(isCreatingNewConversation);
-
-  // Sync ref with prop changes
-  useEffect(() => {
-    isCreatingNewConversationRef.current = isCreatingNewConversation;
-  }, [isCreatingNewConversation]);
-
   // Track files being uploaded right now to surface inline progress in the input bar
   const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
 
@@ -256,7 +248,7 @@ const ChatBot = ({
 
               const sessionId = finalEvent.session.id;
               console.log("[FINAL] sessionId", sessionId);
-              console.log("[FINAL] isCreatingNewConversation", isCreatingNewConversationRef.current);
+              console.log("[FINAL] isCreatingNewConversation", isCreatingNewConversation);
               console.log("[FINAL] currentChatBotSession", currentChatBotSession);
 
               // Accept session update if backend created/switched it
@@ -264,8 +256,7 @@ const ChatBot = ({
                 onUpdateOrAddSession(finalEvent.session);
 
                 // If we were in draft mode and backend created a session, notify parent
-                // Use ref to avoid stale closure - the ref always has the current value
-                if (isCreatingNewConversationRef.current && sessionId) {
+                if (isCreatingNewConversation && sessionId) {
                   console.log("[FINAL] onNewSessionCreated", onNewSessionCreated);
                   onNewSessionCreated(sessionId);
                 }
@@ -316,31 +307,18 @@ const ChatBot = ({
     });
   };
 
-  // Close the WebSocket connection when the component unmounts
-  useEffect(() => {
-    const socket: WebSocket | null = webSocket;
-    return () => {
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        showInfo({ summary: "Closed", detail: "Chat connection closed after unmount." });
-        console.debug("Closing WebSocket before unmounting...");
-        socket.close();
-      }
-      setWebSocket(null);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // mount/unmount
-
-  // Set up the WebSocket connection when the component mounts
+  // Set up the WebSocket connection when the component mounts or session changes
   useEffect(() => {
     setupWebSocket();
     return () => {
       if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.OPEN) {
+        console.log("[ChatBot] Closing websocket on component unmount");
         webSocketRef.current.close();
       }
       webSocketRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // mount/unmount
+  }, [currentChatBotSession?.id]); // Recreate WebSocket when session changes to avoid stale closures
 
   // Fetch messages when the session changes
   useEffect(() => {
