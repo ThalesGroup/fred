@@ -174,6 +174,7 @@ ECO_TUNING = AgentTuning(
         MCPServerRef(name="mcp-knowledge-flow-mcp-tabular"),
         MCPServerRef(name="mcp-co2-service", optional=True),
         MCPServerRef(name="mcp-geo-service", optional=True),
+        MCPServerRef(name="mcp-tcl-service", optional=True),
     ],
 )
 

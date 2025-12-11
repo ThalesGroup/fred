@@ -132,6 +132,12 @@ mcp:
       url: "http://localhost:9801/mcp"
       sse_read_timeout: 2000
       auth_mode: "no_token"
+    - id: "mcp-tcl-service"
+      name: "mcp-tcl-service"
+      transport: "streamable_http"
+      url: "http://localhost:9802/mcp"
+      sse_read_timeout: 2000
+      auth_mode: "no_token"
 
 storage:
   postgres:
