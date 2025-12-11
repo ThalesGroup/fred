@@ -17,6 +17,7 @@ import {
 } from "../components/sideBar";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { usePermissions } from "../security/usePermissions";
+import { ImageComponent } from "../utils/image";
 import { ApplicationContext } from "./ApplicationContextProvider";
 
 const drawerWidth = 280;
@@ -188,11 +189,11 @@ export default function SideBar() {
       <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
         {/* Header (icon + open/close button*/}
         <DrawerHeader>
-          {/* {open && (
+          {open && (
             <Box sx={{ display: "flex", width: "100%", justifyContent: "flex-start", alignItems: "center", pl: 1 }}>
               <ImageComponent name={darkMode ? logoNameDark : logoName} width="36px" height="36px" />
             </Box>
-          )} */}
+          )}
           <IconButton onClick={() => setOpen((open) => !open)} sx={{ mr: open ? 0 : 1 }}>
             {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
           </IconButton>
