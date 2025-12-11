@@ -69,6 +69,7 @@ export default function OldChat() {
 
     // If URL has invalid session ID, redirect to new chat
     if (sessionId && !currentSession && sessions.length > 0) {
+      console.log(`Unkown session id -> redirection to /chat`);
       navigate("/chat", { replace: true });
     }
   }, [sessionId, currentSession, sessions.length, flowsLoading, sessionsLoading, navigate]);
@@ -76,7 +77,7 @@ export default function OldChat() {
   // Handle navigation when a new session is created
   const handleNewSessionCreated = (newSessionId: string) => {
     console.log(`New session created -> redirecting to session page /chat/${newSessionId}`);
-    navigate(`/chat/${newSessionId}`, { replace: true });
+    navigate(`/chat/${newSessionId}`);
   };
 
   // todo: move to the new conversation page
@@ -138,7 +139,7 @@ export default function OldChat() {
     <Box sx={{ height: "100vh", position: "relative", overflow: "hidden" }}>
       <Grid2>
         <ChatBot
-          // key={sessionId}
+          key={sessionId || "draft"}
           currentChatBotSession={currentSession}
           currentAgent={currentAgent!}
           agents={enabledAgents}

@@ -249,7 +249,8 @@ const ChatBot = ({
 
               // Accept session update if backend created/switched it
               if (sessionId !== currentChatBotSession?.id) {
-                // onUpdateOrAddSession(finalEvent.session);
+                // Update local sessions state immediately so navigation doesn't fail validation
+                onUpdateOrAddSession(finalEvent.session);
 
                 // If we were in draft mode and backend created a session, notify parent
                 if (isCreatingNewConversation && sessionId) {
@@ -302,7 +303,7 @@ const ChatBot = ({
     });
   };
 
-  // Set up the WebSocket connection when the component mounts or session changes
+  // Set up the WebSocket connection when the component mounts
   useEffect(() => {
     setupWebSocket();
     return () => {
@@ -313,7 +314,7 @@ const ChatBot = ({
       webSocketRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentChatBotSession?.id]); // Recreate WebSocket when session changes to avoid stale closures
+  }, []); // Component remounts when key changes, no need to track session changes
 
   // Fetch messages when the session changes
   useEffect(() => {
@@ -537,12 +538,6 @@ const ChatBot = ({
     }
   };
 
-  // Reset the messages when the user starts a new conversation.
-  useEffect(() => {
-    if (!currentChatBotSession && isCreatingNewConversation) {
-      setAllMessages([]);
-    }
-  }, [isCreatingNewConversation, currentChatBotSession]);
 
   const outputTokenCounts: number =
     messages && messages.length
