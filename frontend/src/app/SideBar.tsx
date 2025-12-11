@@ -6,7 +6,9 @@ import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 import { Box, CSSObject, IconButton, Paper, styled, Theme } from "@mui/material";
 import MuiDrawer from "@mui/material/Drawer";
+import { useContext } from "react";
 import { useTranslation } from "react-i18next";
+import { getProperty } from "../common/config";
 import {
   SideBarConversationsSection,
   SideBarNavigationElement,
@@ -15,6 +17,7 @@ import {
 } from "../components/sideBar";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { usePermissions } from "../security/usePermissions";
+import { ApplicationContext } from "./ApplicationContextProvider";
 
 const drawerWidth = 280;
 
@@ -176,11 +179,20 @@ export default function SideBar() {
       : []),
   ];
 
+  const { darkMode } = useContext(ApplicationContext);
+  const logoName = getProperty("logoName") || "fred";
+  const logoNameDark = getProperty("logoNameDark") || "fred-dark";
+
   return (
     <Drawer variant="permanent" open={open}>
       <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
         {/* Header (icon + open/close button*/}
         <DrawerHeader>
+          {/* {open && (
+            <Box sx={{ display: "flex", width: "100%", justifyContent: "flex-start", alignItems: "center", pl: 1 }}>
+              <ImageComponent name={darkMode ? logoNameDark : logoName} width="36px" height="36px" />
+            </Box>
+          )} */}
           <IconButton onClick={() => setOpen((open) => !open)} sx={{ mr: open ? 0 : 1 }}>
             {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
           </IconButton>

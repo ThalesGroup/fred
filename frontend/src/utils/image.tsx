@@ -14,41 +14,25 @@
 
 import { Box, Typography, useTheme } from "@mui/material";
 import { useEffect, useState } from "react";
+
+const DEFAULT_FALLBACK_IMAGE = "/images/package-thin-svgrepo-com.svg";
+
 interface ImageProps {
   name: string;
   width?: string;
   height?: string;
   showLabel?: boolean;
+  fallback?: string;
 }
 
 // Functional component to return the image
-// It takes the name of the image, width, and height as props and will lokk for an image
+// It takes the name of the image, width, and height as props and will look for an image
 // in the public/images folder with the name provided. If the image is not found, it will
 // fallback to a default image.
-export const ImageComponent = ({ name, width, height }: ImageProps) => {
+export const ImageComponent = ({ name, width, height, fallback = DEFAULT_FALLBACK_IMAGE }: ImageProps) => {
   const [imageSrc, setImageSrc] = useState(`/images/${name}.svg`);
-  const [imageExists, setImageExists] = useState(true);
-  const imageStyle = { width, height };
 
-  useEffect(() => {
-    const img = new Image();
-    img.src = `/images/${name}.svg`;
-    img.onload = () => {
-      setImageExists(true); // If the image loads successfully
-      setImageSrc(`/images/${name}.svg`);
-    };
-
-    img.onerror = () => {
-      console.log("image not found", name);
-      setImageExists(false); // If the image doesn't exist, use fallback
-      setImageSrc(`/images/package-thin-svgrepo-com.svg`);
-    };
-  }, [name]);
-  return (
-    <div>
-      <img src={imageSrc} alt={imageExists ? name : "default"} style={imageStyle} />
-    </div>
-  );
+  return <img src={imageSrc} alt={name} style={{ width, height }} onError={() => setImageSrc(fallback)} />;
 };
 
 // Utility function to get logo for resource kind
