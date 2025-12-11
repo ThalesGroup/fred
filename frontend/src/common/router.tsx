@@ -43,7 +43,7 @@ export const routes: RouteObject[] = [
         element: <Chat />,
       },
       {
-        path: "chat/:sessionId?",
+        path: "chat/:sessionId",
         element: <Chat />,
       },
       {

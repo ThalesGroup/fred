@@ -35,7 +35,7 @@ export function SideBarConversationCard({ session, refetchSessions }: SideBarCon
       refetchSessions();
 
       if (isSelected) {
-        navigate("/chat");
+        navigate("/");
       }
     } catch (error) {
       console.error("Failed to delete conversation: ", error);

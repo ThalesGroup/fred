@@ -42,7 +42,7 @@ export function SideBarConversationsSection({ isSidebarOpen }: ConversationsSect
             <Typography variant="subtitle2" sx={{ color: theme.palette.text.secondary }}>
               {t("sidebar.chat")}
             </Typography>
-            <Button component={Link} to="/chat" variant="outlined" size="small" startIcon={<AddIcon />}>
+            <Button component={Link} to="/" variant="outlined" size="small" startIcon={<AddIcon />}>
               {t("common.create")}
             </Button>
           </Box>

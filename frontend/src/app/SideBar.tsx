@@ -9,6 +9,7 @@ import MuiDrawer from "@mui/material/Drawer";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { getProperty } from "../common/config";
+import InvisibleLink from "../components/InvisibleLink";
 import {
   SideBarConversationsSection,
   SideBarNavigationElement,
@@ -191,7 +192,9 @@ export default function SideBar() {
         <DrawerHeader>
           {open && (
             <Box sx={{ display: "flex", width: "100%", justifyContent: "flex-start", alignItems: "center", pl: 1 }}>
-              <ImageComponent name={darkMode ? logoNameDark : logoName} width="36px" height="36px" />
+              <InvisibleLink to="/">
+                <ImageComponent name={darkMode ? logoNameDark : logoName} width="36px" height="36px" />
+              </InvisibleLink>
             </Box>
           )}
           <IconButton onClick={() => setOpen((open) => !open)} sx={{ mr: open ? 0 : 1 }}>

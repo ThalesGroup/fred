@@ -70,7 +70,7 @@ export default function Chat() {
     // If URL has invalid session ID, redirect to new chat
     if (sessionId && !currentSession && sessions.length > 0) {
       console.log(`Unkown session id -> redirection to /chat`);
-      navigate("/chat", { replace: true });
+      navigate("/", { replace: true });
     }
   }, [sessionId, currentSession, sessions.length, flowsLoading, sessionsLoading, navigate]);
 
