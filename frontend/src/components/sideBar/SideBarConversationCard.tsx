@@ -1,6 +1,6 @@
 import DeleteIcon from "@mui/icons-material/Delete";
 import PersonIcon from "@mui/icons-material/Person";
-import { Box, IconButton, Typography, useTheme } from "@mui/material";
+import { Box, IconButton, Skeleton, Typography, useTheme } from "@mui/material";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -75,12 +75,15 @@ export function SideBarConversationCard({ session, refetchSessions }: SideBarCon
             flex: 1,
           }}
         >
+          {/* Agent name */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <PersonIcon sx={{ fontSize: "1rem", color: theme.palette.primary.main }} />
             <Typography variant="caption" sx={{ color: theme.palette.primary.main }}>
               {session.agents.length > 0 ? session.agents[0] : "..."}
             </Typography>
           </Box>
+
+          {/* Title */}
           <Typography
             variant="body2"
             sx={{
@@ -92,10 +95,14 @@ export function SideBarConversationCard({ session, refetchSessions }: SideBarCon
           >
             {session.title}
           </Typography>
+
+          {/* Date */}
           <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
             {dayjs(session.updated_at).format("L")}
           </Typography>
         </Box>
+
+        {/* Delete button */}
         <IconButton
           className="delete-button"
           size="small"
@@ -108,6 +115,14 @@ export function SideBarConversationCard({ session, refetchSessions }: SideBarCon
           <DeleteIcon fontSize="small" />
         </IconButton>
       </Box>
+    </Box>
+  );
+}
+
+export function SideBarConversationCardSkeleton() {
+  return (
+    <Box sx={{ px: 1.5, py: 1, borderRadius: 1, height: "75.83px" }}>
+      <Skeleton variant="rectangular" height="100%" width="100%" sx={{ borderRadius: 1 }} />
     </Box>
   );
 }

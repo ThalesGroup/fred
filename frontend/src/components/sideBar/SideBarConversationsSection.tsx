@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { useLocalStorageState } from "../../hooks/useLocalStorageState";
 import { useGetSessionsAgenticV1ChatbotSessionsGetQuery } from "../../slices/agentic/agenticOpenApi";
-import { SideBarConversationCard } from "./SideBarConversationCard";
+import { SideBarConversationCard, SideBarConversationCardSkeleton } from "./SideBarConversationCard";
 
 interface ConversationsSectionProps {
   isSidebarOpen: boolean;
@@ -29,10 +29,10 @@ export function SideBarConversationsSection({ isSidebarOpen }: ConversationsSect
   const uniqueAgents = Array.from(new Set(sessions?.flatMap((s) => s.agents) ?? [])).sort();
 
   const filteredSessions =
-    (selectedAgent === allAgentOptionValue
+    selectedAgent === allAgentOptionValue
       ? sessions
-      : sessions?.filter((session) => session.agents.includes(selectedAgent))) ?? [];
-
+      : sessions?.filter((session) => session.agents.includes(selectedAgent));
+  // const filteredSessions = undefined;
   return (
     <>
       {/* Conversation header */}
@@ -70,6 +70,11 @@ export function SideBarConversationsSection({ isSidebarOpen }: ConversationsSect
         sx={{ flexGrow: 1, overflowY: "auto", overflowX: "hidden", scrollbarWidth: "none", py: 1, px: 1 }}
       >
         {isSidebarOpen &&
+          filteredSessions === undefined &&
+          [...Array(15)].map(() => <SideBarConversationCardSkeleton />)}
+
+        {isSidebarOpen &&
+          filteredSessions !== undefined &&
           filteredSessions.map((session) => (
             <SideBarConversationCard key={session.id} session={session} refetchSessions={refetchSessions} />
           ))}
