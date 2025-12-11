@@ -17,12 +17,12 @@ import { LayoutWithSidebar } from "../app/LayoutWithSidebar";
 import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { AgentHub } from "../pages/AgentHub";
+import Chat from "../pages/Chat";
 import DataHub from "../pages/DataHub";
 import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { Kpis } from "../pages/Kpis";
 import Logs from "../pages/Logs";
 import { McpHub } from "../pages/McpHub";
-import OldChat from "../pages/OldChat";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
 import ProcessorBench from "../pages/ProcessorBench";
@@ -40,11 +40,11 @@ export const routes: RouteObject[] = [
     children: [
       {
         index: true,
-        element: <OldChat />,
+        element: <Chat />,
       },
       {
         path: "chat/:sessionId?",
-        element: <OldChat />,
+        element: <Chat />,
       },
       {
         path: "monitoring/kpis",

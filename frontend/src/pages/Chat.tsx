@@ -24,7 +24,7 @@ import {
 } from "../slices/agentic/agenticOpenApi";
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
-export default function OldChat() {
+export default function Chat() {
   const { sessionId } = useParams<{ sessionId?: string }>();
   const navigate = useNavigate();
 
