@@ -75,12 +75,8 @@ export default function OldChat() {
 
   // Handle navigation when a new session is created
   const handleNewSessionCreated = (newSessionId: string) => {
-    // Only navigate if we're currently in draft mode (no sessionId in URL)
-    console.log("[FINAL] (final check) sessionId", sessionId);
-    // if (!sessionId) {
-    console.log("[FINAL] =====> REDIRECTING");
+    console.log(`New session created -> redirecting to session page /chat/${newSessionId}`);
     navigate(`/chat/${newSessionId}`, { replace: true });
-    // }
   };
 
   // todo: move to the new conversation page

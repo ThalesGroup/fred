@@ -72,7 +72,6 @@ const ChatBot = ({
   isCreatingNewConversation,
   runtimeContext: baseRuntimeContext,
 }: ChatBotProps) => {
-  console.log("[CHATBOT] isCreatingNewConversation", isCreatingNewConversation);
   const theme = useTheme();
   const { t } = useTranslation();
 
@@ -247,17 +246,13 @@ const ChatBot = ({
               setMessages(messagesRef.current);
 
               const sessionId = finalEvent.session.id;
-              console.log("[FINAL] sessionId", sessionId);
-              console.log("[FINAL] isCreatingNewConversation", isCreatingNewConversation);
-              console.log("[FINAL] currentChatBotSession", currentChatBotSession);
 
               // Accept session update if backend created/switched it
               if (sessionId !== currentChatBotSession?.id) {
-                onUpdateOrAddSession(finalEvent.session);
+                // onUpdateOrAddSession(finalEvent.session);
 
                 // If we were in draft mode and backend created a session, notify parent
                 if (isCreatingNewConversation && sessionId) {
-                  console.log("[FINAL] onNewSessionCreated", onNewSessionCreated);
                   onNewSessionCreated(sessionId);
                 }
               }
@@ -547,7 +542,6 @@ const ChatBot = ({
     if (!currentChatBotSession && isCreatingNewConversation) {
       setAllMessages([]);
     }
-    console.log("isCreatingNewConversation", isCreatingNewConversation);
   }, [isCreatingNewConversation, currentChatBotSession]);
 
   const outputTokenCounts: number =
@@ -563,10 +557,6 @@ const ChatBot = ({
   const effectiveSessionId = pendingSessionIdRef.current || currentChatBotSession?.id || undefined;
 
   const showWelcome = isCreatingNewConversation && !waitResponse && messages.length === 0;
-
-  console.log("[showWelcome] waitResponse", waitResponse);
-  console.log("[showWelcome] isCreatingNewConversation", isCreatingNewConversation);
-  console.log("[showWelcome] =====> showWelcome", showWelcome);
 
   const hasContext =
     !!userInputContext &&

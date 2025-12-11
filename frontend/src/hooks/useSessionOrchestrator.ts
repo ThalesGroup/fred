@@ -43,7 +43,6 @@ export function useSessionOrchestrator(params: {
 
   // Derive currentSessionId from URL: if no sessionId param, we're in "draft" mode
   const currentSessionId = sessionId || "draft";
-  console.log("currentSessionId: ", currentSessionId);
 
   // Track manually selected agent (overrides default logic)
   const [manuallySelectedAgentId, setManuallySelectedAgentId] = useState<string | null>(null);
@@ -60,7 +59,6 @@ export function useSessionOrchestrator(params: {
     () => (currentSessionId === "draft" ? null : (sessions.find((s) => s.id === currentSessionId) ?? null)),
     [sessions, currentSessionId],
   );
-  console.log("[SESS] currentSession", currentSession);
 
   // Reset manual selection when session changes
   useEffect(() => {
