@@ -525,7 +525,17 @@ class ApplicationContext:
         # A default model is loaded if none is specified in the configuration.
         if not self.configuration.crossencoder_model:
             self.configuration.crossencoder_model = ModelConfiguration(provider=None, name="cross-encoder/ms-marco-MiniLM-L-12-v2")
-            return CrossEncoder(model_name_or_path="cross-encoder/ms-marco-MiniLM-L-12-v2", cache_folder=None)
+            try:
+                self.configuration.crossencoder_model = ModelConfiguration(provider=None, name="cross-encoder/ms-marco-MiniLM-L-12-v2")
+                return CrossEncoder(model_name_or_path="cross-encoder/ms-marco-MiniLM-L-12-v2", cache_folder=None)
+            except Exception as e:
+                logging.error(f"[CROSSENCODER][OFFLINE] The configuration is missing : Error: {e}")
+                logging.error("[CROSSENCODER][OFFLINE] Loading a default model : cross-encoder/ms-marco-MiniLM-L-12-v2")
+                return CrossEncoder(
+                    model_name_or_path="cross-encoder/ms-marco-MiniLM-L-12-v2",
+                    cache_folder="/app/models",
+                    local_files_only=True,
+                )
 
         model_config = self.configuration.crossencoder_model
         settings: Dict[str, Any] = model_config.settings or {}
