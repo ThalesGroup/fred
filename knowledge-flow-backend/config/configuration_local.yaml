@@ -81,6 +81,11 @@ chat_model:
   name: granite4:3b-h
   settings:
     base_url: http://localhost:11434
+crossencoder_model:
+  name: cross-encoder/ms-marco-MiniLM-L-12-v2
+  settings:
+    online: true
+    local_path: ~/.cache/huggingface/hub
 storage:
   postgres:
     host: localhost
