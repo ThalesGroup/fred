@@ -672,6 +672,15 @@ wheels = [
 ]
 
 [[package]]
+name = "diskcache"
+version = "5.6.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3f/21/1c1ffc1a039ddcc459db43cc108658f32c57d271d7289a2794e401d0fdb6/diskcache-5.6.3.tar.gz", hash = "sha256:2c3a3fa2743d8535d832ec61c2054a1641f41775aa7c556758a109941e33e4fc", size = 67916, upload-time = "2023-08-31T06:12:00.316Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3f/27/4570e78fc0bf5ea0ca45eb1de3818a23787af9b390c0b0a0033a1b8236f9/diskcache-5.6.3-py3-none-any.whl", hash = "sha256:5e31b2d5fbad117cc363ebaf6b689474db18a1f6438bc82358b024abd4c2ca19", size = 45550, upload-time = "2023-08-31T06:11:58.822Z" },
+]
+
+[[package]]
 name = "distlib"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1155,6 +1164,25 @@ wheels = [
 ]
 
 [[package]]
+name = "graphiti-core"
+version = "0.24.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "diskcache", marker = "sys_platform == 'linux'" },
+    { name = "neo4j", marker = "sys_platform == 'linux'" },
+    { name = "numpy", marker = "sys_platform == 'linux'" },
+    { name = "openai", marker = "sys_platform == 'linux'" },
+    { name = "posthog", marker = "sys_platform == 'linux'" },
+    { name = "pydantic", marker = "sys_platform == 'linux'" },
+    { name = "python-dotenv", marker = "sys_platform == 'linux'" },
+    { name = "tenacity", marker = "sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8c/6a/59db048896cc770b3cb13160770845007217d11406e51f5adf2d50482f71/graphiti_core-0.24.3.tar.gz", hash = "sha256:1bb34e46fe4e0c040912e3698daa71114dd4743fdbc9819c46cda0dc4dde3cdf", size = 6620478, upload-time = "2025-12-08T15:51:45.793Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3e/ed/1f89b1b7be984ce9e985821e85dd04fed46cf19172d6be52ce286dd5bd8b/graphiti_core-0.24.3-py3-none-any.whl", hash = "sha256:89136fa7b9f2db34fb328c433c1f38077123f348fe240904f3ac7a3b05852036", size = 176925, upload-time = "2025-12-08T15:51:44.124Z" },
+]
+
+[[package]]
 name = "greenlet"
 version = "3.2.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1569,6 +1597,7 @@ dependencies = [
     { name = "fastapi-mcp", marker = "sys_platform == 'linux'" },
     { name = "fred-core", marker = "sys_platform == 'linux'" },
     { name = "google-cloud-storage", marker = "sys_platform == 'linux'" },
+    { name = "graphiti-core", marker = "sys_platform == 'linux'" },
     { name = "hf-xet", marker = "sys_platform == 'linux'" },
     { name = "ipython", marker = "sys_platform == 'linux'" },
     { name = "joblib", marker = "sys_platform == 'linux'" },
@@ -1645,6 +1674,7 @@ requires-dist = [
     { name = "fastapi-mcp", specifier = "==0.4.0" },
     { name = "fred-core", editable = "../fred-core" },
     { name = "google-cloud-storage", specifier = "==3.1.0" },
+    { name = "graphiti-core", specifier = ">=0.24.3" },
     { name = "hf-xet", specifier = "==1.1.1" },
     { name = "ipython", specifier = "==8.31.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = "==5.10.1" },

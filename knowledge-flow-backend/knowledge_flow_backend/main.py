@@ -58,6 +58,7 @@ from knowledge_flow_backend.features.kpi.kpi_controller import KPIController
 from knowledge_flow_backend.features.kpi.opensearch_controller import (
     OpenSearchOpsController,
 )
+from knowledge_flow_backend.features.graph_search.controller import GraphNodeController
 from knowledge_flow_backend.features.metadata.controller import MetadataController
 from knowledge_flow_backend.features.neo4j.neo4j_controller import Neo4jController
 from knowledge_flow_backend.features.pull.controller import PullDocumentController
@@ -198,6 +199,7 @@ def create_app() -> FastAPI:
     router.include_router(users_controller.router)
     # Developer benchmarking tools (always mounted; auth-protected)
     BenchmarkController(router)
+    GraphNodeController(router)
 
     if configuration.mcp.tabular_enabled:
         # Required for Tessa
@@ -218,6 +220,12 @@ def create_app() -> FastAPI:
         logger.info("%s OpenSearchOpsController registered (mcp.opensearch_ops_enabled=true)", LOG_PREFIX)
     else:
         logger.warning("%s OpenSearchOpsController disabled via configuration.mcp.opensearch_ops_enabled=false", LOG_PREFIX)
+
+    if configuration.mcp.graph_enabled:
+        Neo4jController(router)
+        logger.info("%s GraphNodeController registered (mcp.graph_enabled=true)", LOG_PREFIX)
+    else:
+        logger.warning("%s GraphNodeController disabled via configuration.mcp.graph_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.neo4j_enabled:
         Neo4jController(router)
@@ -387,6 +395,25 @@ def create_app() -> FastAPI:
         mcp_text.mount_http(mount_path=f"{mcp_prefix}/mcp-text")
     else:
         logger.info("%s MCP Text disabled via configuration.mcp.text_enabled=false", LOG_PREFIX)
+
+    if configuration.mcp.graph_enabled:
+        mcp_graph = FastApiMCP(
+            app,
+            name="Knowledge Flow Graph Text MCP",
+            description=(
+                "Graph text search interface backed by neo4j. "
+                "Use this MCP to perform graph search over ingested documents, "
+                "retrieve relevant passages, and ground answers in source material. "
+                "It supports queries and centered queries (more precise)"
+            ),
+            include_tags=["GraphSearch"],
+            describe_all_responses=True,
+            describe_full_response_schema=True,
+            auth_config=auth_cfg,
+        )
+        mcp_graph.mount_http(mount_path=f"{mcp_prefix}/mcp-graph")
+    else:
+        logger.info("%s MCP Graph disabled via configuration.mcp.graph_text_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.templates_enabled:
         mcp_template = FastApiMCP(

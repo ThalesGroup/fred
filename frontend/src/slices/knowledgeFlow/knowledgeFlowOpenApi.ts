@@ -540,6 +540,18 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/dev/bench/runs/${queryArg.runId}`, method: "DELETE" }),
     }),
+    graphSearch: build.mutation<GraphSearchApiResponse, GraphSearchApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/graph/search`, method: "POST", body: queryArg.payload }),
+    }),
+    graphSearchCenter: build.mutation<GraphSearchCenterApiResponse, GraphSearchCenterApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/graph/search/center`, method: "POST", body: queryArg.payload }),
+    }),
+    graphAddTextNode: build.mutation<GraphAddTextNodeApiResponse, GraphAddTextNodeApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/graph/node`, method: "POST", body: queryArg.payload }),
+    }),
+    graphAddJsonNode: build.mutation<GraphAddJsonNodeApiResponse, GraphAddJsonNodeApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/graph/node/json`, method: "POST", body: queryArg.payload }),
+    }),
     listDatabases: build.query<ListDatabasesApiResponse, ListDatabasesApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/tabular/databases` }),
     }),
@@ -669,6 +681,42 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     runPca: build.mutation<RunPcaApiResponse, RunPcaApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/stat/pca`, method: "POST", body: queryArg.pcaRequest }),
+    }),
+    neo4JHealth: build.query<Neo4JHealthApiResponse, Neo4JHealthApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/neo4j/health` }),
+    }),
+    neo4JLabels: build.query<Neo4JLabelsApiResponse, Neo4JLabelsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/neo4j/labels`,
+        params: {
+          database: queryArg.database,
+        },
+      }),
+    }),
+    neo4JRelationshipTypes: build.query<Neo4JRelationshipTypesApiResponse, Neo4JRelationshipTypesApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/neo4j/relationship-types`,
+        params: {
+          database: queryArg.database,
+        },
+      }),
+    }),
+    neo4JSampleNeighbors: build.query<Neo4JSampleNeighborsApiResponse, Neo4JSampleNeighborsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/neo4j/sample-neighbors`,
+        params: {
+          label: queryArg.label,
+          limit: queryArg.limit,
+          database: queryArg.database,
+        },
+      }),
+    }),
+    neo4JQuery: build.mutation<Neo4JQueryApiResponse, Neo4JQueryApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/neo4j/query`,
+        method: "POST",
+        body: queryArg.cypherQueryRequest,
+      }),
     }),
     writeReportKnowledgeFlowV1McpReportsWritePost: build.mutation<
       WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse,
@@ -1054,6 +1102,30 @@ export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiResponse = /** sta
 export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiArg = {
   runId: string;
 };
+export type GraphSearchApiResponse = /** status 200 Successful Response */ any;
+export type GraphSearchApiArg = {
+  payload: {
+    [key: string]: any;
+  };
+};
+export type GraphSearchCenterApiResponse = /** status 200 Successful Response */ any;
+export type GraphSearchCenterApiArg = {
+  payload: {
+    [key: string]: any;
+  };
+};
+export type GraphAddTextNodeApiResponse = /** status 200 Successful Response */ any;
+export type GraphAddTextNodeApiArg = {
+  payload: {
+    [key: string]: any;
+  };
+};
+export type GraphAddJsonNodeApiResponse = /** status 200 Successful Response */ any;
+export type GraphAddJsonNodeApiArg = {
+  payload: {
+    [key: string]: any;
+  };
+};
 export type ListDatabasesApiResponse = /** status 200 Successful Response */ string[];
 export type ListDatabasesApiArg = void;
 export type ListTablesApiResponse = /** status 200 Successful Response */ ListTablesResponse;
@@ -1155,6 +1227,31 @@ export type DetectOutliersMlApiArg = {
 export type RunPcaApiResponse = /** status 200 Successful Response */ any;
 export type RunPcaApiArg = {
   pcaRequest: PcaRequest;
+};
+export type Neo4JHealthApiResponse = /** status 200 Successful Response */ any;
+export type Neo4JHealthApiArg = void;
+export type Neo4JLabelsApiResponse = /** status 200 Successful Response */ any;
+export type Neo4JLabelsApiArg = {
+  /** Optional target database */
+  database?: string | null;
+};
+export type Neo4JRelationshipTypesApiResponse = /** status 200 Successful Response */ any;
+export type Neo4JRelationshipTypesApiArg = {
+  /** Optional target database */
+  database?: string | null;
+};
+export type Neo4JSampleNeighborsApiResponse = /** status 200 Successful Response */ any;
+export type Neo4JSampleNeighborsApiArg = {
+  /** Label of starting nodes, e.g. 'Person' */
+  label: string;
+  /** Maximum number of paths to return */
+  limit?: number;
+  /** Optional target database */
+  database?: string | null;
+};
+export type Neo4JQueryApiResponse = /** status 200 Successful Response */ any;
+export type Neo4JQueryApiArg = {
+  cypherQueryRequest: CypherQueryRequest;
 };
 export type WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse =
   /** status 200 Successful Response */ WriteReportResponse;
@@ -1818,6 +1915,14 @@ export type PcaRequest = {
   features: string[];
   n_components?: number;
 };
+export type CypherQueryRequest = {
+  query: string;
+  parameters?: {
+    [key: string]: any;
+  } | null;
+  database?: string | null;
+  limit?: number | null;
+};
 export type WriteReportResponse = {
   document_uid: string;
   md_url: string;
@@ -1999,6 +2104,10 @@ export const {
   useGetRunKnowledgeFlowV1DevBenchRunsRunIdGetQuery,
   useLazyGetRunKnowledgeFlowV1DevBenchRunsRunIdGetQuery,
   useDeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteMutation,
+  useGraphSearchMutation,
+  useGraphSearchCenterMutation,
+  useGraphAddTextNodeMutation,
+  useGraphAddJsonNodeMutation,
   useListDatabasesQuery,
   useLazyListDatabasesQuery,
   useListTablesQuery,
@@ -2036,6 +2145,15 @@ export const {
   useLazyTestDistributionQuery,
   useDetectOutliersMlMutation,
   useRunPcaMutation,
+  useNeo4JHealthQuery,
+  useLazyNeo4JHealthQuery,
+  useNeo4JLabelsQuery,
+  useLazyNeo4JLabelsQuery,
+  useNeo4JRelationshipTypesQuery,
+  useLazyNeo4JRelationshipTypesQuery,
+  useNeo4JSampleNeighborsQuery,
+  useLazyNeo4JSampleNeighborsQuery,
+  useNeo4JQueryMutation,
   useWriteReportKnowledgeFlowV1McpReportsWritePostMutation,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useProcessLibraryKnowledgeFlowV1ProcessLibraryPostMutation,

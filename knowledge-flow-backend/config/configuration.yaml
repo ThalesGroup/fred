@@ -162,6 +162,7 @@ mcp:
   opensearch_ops_enabled: false
   neo4j_enabled: false
   filesystem_enabled: true
+  graph_enabled: true
 
 filesystem:
   type: local

@@ -213,6 +213,10 @@ class MCPConfig(BaseModel):
         default=False,
         description="Expose Neo4j graph exploration endpoints and the corresponding MCP server.",
     )
+    graph_enabled: bool = Field(
+        default=False,
+        description="Expose graph exploration endpoints and the corresponding MCP server.",
+    )
     filesystem_enabled: bool = Field(
         default=False,
         description="Expose agent filesystem utils endpoints and the corresponding MCP server.",
