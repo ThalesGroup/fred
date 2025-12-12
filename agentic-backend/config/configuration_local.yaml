@@ -84,6 +84,10 @@ ai:
       type: "agent"
       class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
       enabled: true
+      chat_options:
+        search_policy_selection: false
+        libraries_selection: false
+        attach_files: true
     - name: "Sammy"
       type: "agent"
       class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
@@ -95,33 +99,70 @@ ai:
       chat_options:
         search_policy_selection: true
         libraries_selection: true
+        search_rag_scoping: true
+        attach_files: true
     - name: "Tessa"
       type: "agent"
       class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
       enabled: true
+    - name: "Travel_agent"
+      type: "agent"
+      class_path: "agentic_backend.academy.07_travel_agent.travel_agent.Travel"
+      enabled: true
 
 mcp:
   servers:
-    - name: "mcp-knowledge-flow-mcp-tabular"
+    - id: "mcp-knowledge-flow-mcp-text"
+      name: "mcp.servers.search_documents.name"
+      description: "mcp.servers.search_documents.description"
+      transport: "streamable_http"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-text"
+      sse_read_timeout: 2000
+      auth_mode: "user_token"
+    - id: "mcp-knowledge-flow-mcp-tabular"
+      name: "mcp.servers.tabular.name"
+      description: "mcp.servers.tabular.description"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-tabular"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-knowledge-flow-opensearch-ops"
+    - id: "mcp-knowledge-flow-opensearch-ops"
+      name: "mcp.servers.search_opensearch.name"
+      description: "mcp.servers.search_opensearch.description"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-kubernetes-server"
+    - id: "mcp-fs"
+      name: "mcp.servers.filesystem.name"
+      description: "mcp.servers.filesystem.description"
+      transport: "streamable_http"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-filesystem"
+      sse_read_timeout: 2000
+      auth_mode: "user_token"
+    - id: "mcp-kubernetes-server"
+      name: "mcp.servers.kubernetes.name"
+      description: "mcp.servers.kubernetes.description"
+      enabled: false
       transport: "streamable_http"
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-atlassian-jira-server"
+    - id: "mcp-atlassian-jira-server"
+      name: "mcp.servers.jira.name"
+      description: "mcp.servers.jira.description"
+      enabled: false
       transport: "streamable_http"
       url: "http://localhost:8885/mcp"
       sse_read_timeout: 2000
       auth_mode: "no_token"
+    - id: "mcp-neo4j-graph-db"
+      name: "mcp.servers.neo4j.name"
+      description: "mcp.servers.neo4j.description"
+      transport: "streamable_http"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-neo4j"
+      sse_read_timeout: 2000
+      auth_mode: "user_token"
 
 storage:
   postgres:

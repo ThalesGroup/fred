@@ -15,7 +15,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Type, TypeVar, Sequence
+from typing import Any, Dict, List, Optional, Type, TypeVar
 
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_core.documents import Document
@@ -455,11 +455,9 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         except Exception:
             logger.exception("[VECTOR][OPENSEARCH] failed to delete chunk %s for document_uid=%s", chunk_uid, document_uid)
 
-    # ---------- BaseVectorStore: ANN (semantic) ----------
-    def _supports_knn_filter(self) -> bool:
-        """Detect if OpenSearch supports knn.filter (>=2.19). Cached after first check."""
-        if hasattr(self, "_knn_filter_supported"):
-            return self._knn_filter_supported
+    def _build_hits(self, hits_data: List, hit_type: Type[T]) -> List[T]:
+        """
+        Build a list of hit objects from OpenSearch hits data.
 
         Args:
             hits_data (List): Raw hit data from OpenSearch search results.
@@ -505,6 +503,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
 
         return results
 
+    # ---- helpers ----------------------------------------------------------
     def _build_ann_hits(self, hits_data: List) -> List[AnnHit]:
         return self._build_hits(hits_data, AnnHit)
 
