@@ -41,6 +41,7 @@ from agentic_backend.core.agents.runtime_context import (
     get_rag_knowledge_scope,
     get_search_policy,
     is_corpus_only_mode,
+    should_skip_rag_search,
 )
 from agentic_backend.core.runtime_source import expose_runtime_source
 
@@ -53,12 +54,15 @@ logger = logging.getLogger(__name__)
 # - These are *UI schema fields* (spec). Live values come from AgentSettings.tuning
 #   and are applied by AgentFlow at runtime.
 RAG_TUNING = AgentTuning(
-    # High-level role as seen by UI / other tools
-    role="Document Retrieval Agent",
+    role="Expert RAO Thales",
     description=(
-        "A general-purpose RAG agent that answers questions using retrieved document snippets. "
-        "It grounds all claims in the provided sources, cites them inline, and explicitly acknowledges "
-        "when the evidence is weak, conflicting, or missing."
+        "Agent RAG expert pour les réponses aux appels d’offres Thales. Archie analyse, sélectionne et synthétise "
+        "les informations issues des documents techniques, administratifs et méthodologiques (RAO, annexes, notes internes, fiches de service…). "
+        "Il rédige des réponses structurées, précises et argumentées, adaptées aux attentes des clients et conformes "
+        "aux bonnes pratiques RAO Thales : cohérence technique, pertinence des arguments, mise en avant de la valeur ajoutée, "
+        "respect des exigences du cahier des charges et absence d'engagement non validé.\n\n"
+        "Archie s’appuie prioritairement sur les extraits de documents fournis.  \n"
+        "Lorsqu’une information est manquante ou partielle, il complète prudemment sa réponse à l’aide de connaissances générales "
     ),
     tags=["document"],
     fields=[
@@ -67,33 +71,48 @@ RAG_TUNING = AgentTuning(
             type="prompt",
             title="RAG System Prompt",
             description=(
-                "Defines the assistant’s behavior for evidence-based answers, source usage, and citation style."
+                "Sets the assistant policy for evidence-based answers and citation style."
             ),
             required=True,
             default=(
-                "You are a general-purpose document retrieval and question-answering assistant.\n"
+                "Tu es Archie, un expert Thales spécialisé dans l’analyse documentaire et la rédaction de réponses aux appels d’offres (RAO).\n"
                 "\n"
-                "Your job is to answer user questions using the document excerpts (sources) that are provided to you.\n"
+                "Tu disposes de plusieurs extraits de documents techniques, administratifs ou méthodologiques fournis par l’utilisateur.\n"
+                "Ton rôle est de construire des réponses claires, fiables, structurées et argumentées, adaptées à un contexte RAO et appuyées sur les documents fournis.\n"
                 "\n"
-                "Core rules:\n"
-                "- Treat the provided sources as your primary ground truth for factual claims.\n"
-                "- When you make a factual claim supported by a source, add bracketed numeric citations like [1], [2]\n"
-                "  that correspond to the numbered sources you were given.\n"
-                "- If multiple sources support the same statement, you may list several citations (e.g. [1][3]).\n"
-                "- You may summarize, rephrase, and organize the content from the sources, but do not invent new facts\n"
-                "  that are not supported by them.\n"
-                "- If the sources are incomplete, ambiguous, or do not directly answer the question, say this explicitly\n"
-                "  and avoid speculation.\n"
-                "- If the user asks for background information that clearly goes beyond the sources, briefly explain\n"
-                "  that this is outside the provided documents instead of guessing.\n"
+                "Tes principes de réponse :\n"
+                "1. Priorité aux documents\n"
+                "   - Analyse attentivement les extraits fournis.\n"
+                "   - Utilise-les comme base principale de ta réponse.\n"
+                "   - Cite systématiquement la source utilisée (titre du document ou nom du fichier).\n"
                 "\n"
-                "Style guidelines:\n"
-                "- Be clear, concise, and neutral in tone.\n"
-                "- Prefer short paragraphs and, when helpful, bullet lists.\n"
-                "- Make the reasoning easy to follow, but do not expose chain-of-thought step by step.\n"
-                "- Always respond in {response_language}.\n"
+                "2. Compléments hors documents\n"
+                "   - Si les documents ne contiennent pas directement l’information demandée, complète la réponse avec tes connaissances générales (cybersécurité, SOC, cloud, systèmes critiques, certifications, normes, ITIL…).\n"
+                "   - Mentionne explicitement lorsque ces compléments ne proviennent pas des documents fournis.\n"
                 "\n"
-                "Today is {today}."
+                "3. Clarté et qualité rédactionnelle\n"
+                "   - Reformule les contenus pour les rendre lisibles, pertinents et synthétiques.\n"
+                "   - Adapte la granularité de ta réponse :\n"
+                "     • synthétique pour les questions générales ;\n"
+                "     • détaillée, argumentée et méthodologique pour les questions techniques ou complexes.\n"
+                "\n"
+                "4. Structure recommandée (si pertinente)\n"
+                "   - Contexte / Enjeux\n"
+                "   - Approche proposée / Méthodologie\n"
+                "   - Capacités et valeur ajoutée Thales\n"
+                "   - Éléments techniques ou organisationnels (ex : sécurité, certifications, gouvernance…)\n"
+                "   - Limites ou informations manquantes\n"
+                "   - Sources utilisées\n"
+                "\n"
+                "5. Exigences RAO Thales\n"
+                "   - Pas d’engagement contractuel non présent dans les documents.\n"
+                "   - Pas d’assertion qui contredirait les extraits fournis.\n"
+                "   - Signale si les documents se contredisent ou sont incomplets.\n"
+                "\n"
+                "Sois précis, rigoureux, factuel et orienté valeur.\n"
+                "Réponds toujours en {response_language}.\n"
+                "\n"
+                "Nous sommes le {today}.\n"
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
@@ -101,70 +120,63 @@ RAG_TUNING = AgentTuning(
             key="prompts.response_language",
             type="text",
             title="Response Language",
-            description="Language to use for all answers (e.g., 'English', 'Spanish').",
+            description="Language to use for all answers (e.g., 'français', 'English').",
             required=False,
-            default="English",
+            default="français",
             ui=UIHints(group="Prompts"),
         ),
         FieldSpec(
             key="prompts.with_sources",
             type="prompt",
-            title="Answer With Sources",
-            description=(
-                "User-facing instructions when sources are available. "
-                "Include placeholders for {question} and {sources}."
-            ),
+            title="Réponse avec sources",
+            description="Instructions quand des sources sont disponibles. Inclure {question} et {sources}.",
             required=True,
             default=(
-                "Base your answer on the following documents. Prioritize these sources and cite the document title.\n"
-                "If the information is missing, cautiously supplement with your general knowledge and state that it does not come from the documents.\n"
-                "If the sources conflict or are insufficient, mention it briefly.\n\n"
-                "Question:\n{question}\n\n"
-                "Documents:\n{sources}\n"
+                "Base ta réponse sur les documents suivants. Appuie-toi en priorité sur ces sources et cite le titre du document utilisé.\n"
+                "Si l'information manque, complète prudemment avec tes connaissances générales et précise que ce n'est pas issu des documents.\n"
+                "Si les sources se contredisent ou sont insuffisantes, signale-le brièvement.\n\n"
+                "Question :\n{question}\n\n"
+                "Documents :\n{sources}\n"
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
         FieldSpec(
             key="prompts.no_sources",
             type="prompt",
-            title="Answer Without Sources",
-            description=(
-                "Instructions when no usable sources remain after filtering. Include a {question} placeholder."
-            ),
+            title="Réponse sans sources",
+            description="Instructions quand aucune source pertinente n'est disponible. Inclure {question}.",
             required=True,
             default=(
-                "No relevant documents were found to answer this question. Respond using your general knowledge and explicitly state that your answer does not come from the provided documents.\n\n"
-                "Question:\n{question}"
+                "Aucun document pertinent n'a été trouvé pour répondre à cette question. "
+                "Réponds en t'appuyant sur tes connaissances générales et précise explicitement "
+                "que ta réponse ne provient pas des documents fournis.\n\n"
+                "Question :\n{question}"
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
         FieldSpec(
             key="prompts.no_results",
             type="prompt",
-            title="No Results Message",
-            description=(
-                "Message sent to the model when the search returns no documents at all. Include a {question} placeholder if needed."
-            ),
+            title="Message en absence de résultats",
+            description="Message envoyé quand la recherche ne retourne aucun document. Peut utiliser {question}.",
             required=True,
             default=(
-                "I couldn't find any relevant documents. Try rephrasing or expanding your query?"
+                "Je n'ai trouvé aucun document pertinent. Peux-tu reformuler ou préciser ta demande ?"
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
         FieldSpec(
             key="prompts.keyword_expansion",
             type="prompt",
-            title="Keyword Expansion Prompt",
-            description=(
-                "Prompt used to extract keywords before retrieval. Include the {question} placeholder."
-            ),
+            title="Extraction de mots-clés",
+            description="Prompt pour extraire des mots-clés avant la recherche. Inclure {question}.",
             required=True,
             default=(
-                "Here is a user question:\n"
+                "Voici une question utilisateur :\n"
                 "{question}\n\n"
-                "List at most 6 important keywords or keyphrases for a focused document search.\n"
-                "- Reply only with a comma-separated list.\n"
-                "- No sentences, no numbering."
+                "Donne au plus 6 mots-clés ou expressions importants pour une recherche documentaire précise.\n"
+                "- Réponds uniquement par une liste séparée par des virgules.\n"
+                "- Pas de phrase, pas de numérotation."
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
@@ -182,11 +194,20 @@ RAG_TUNING = AgentTuning(
             type="boolean",
             title="Enable Keyword Expansion",
             description=(
-                "If enabled, the model first extracts keywords and augments the query before vector search to widen recall."
+                "Extract keywords with the LLM and append them to the search query to widen recall."
             ),
             required=False,
             default=True,
             ui=UIHints(group="Retrieval"),
+        ),
+        FieldSpec(
+            key="prompts.include_chat_context",
+            type="boolean",
+            title="Append Chat Context to System Prompt",
+            description="If true, append the runtime chat context text after the system prompt.",
+            required=False,
+            default=False,
+            ui=UIHints(group="Prompts"),
         ),
         FieldSpec(
             key="rag.history_max_messages",
@@ -213,8 +234,8 @@ RAG_TUNING = AgentTuning(
 )
 
 
-@expose_runtime_source("agent.Rico")
-class Rico(AgentFlow):
+@expose_runtime_source("agent.Archie")
+class Archie(AgentFlow):
     """
     Retrieval-Augmented Generation expert.
 
@@ -245,8 +266,8 @@ class Rico(AgentFlow):
     def _render_tuned_prompt(self, key: str, **tokens) -> str:
         prompt = self.get_tuned_text(key)
         if not prompt:
-            logger.warning("Rico: no tuned prompt found for %s", key)
-            raise RuntimeError(f"Rico: no tuned prompt found for '{key}'.")
+            logger.warning("Archie: no tuned prompt found for %s", key)
+            raise RuntimeError(f"Archie: no tuned prompt found for '{key}'.")
         return self.render(prompt, **tokens)
 
     def _system_prompt(self) -> str:
@@ -254,14 +275,14 @@ class Rico(AgentFlow):
         Resolve the RAG system prompt from tuning; optionally append chat context text if enabled.
         """
         response_language = (
-            self.get_tuned_text("prompts.response_language") or "English"
+            self.get_tuned_text("prompts.response_language") or "français"
         )
         sys_text = self._render_tuned_prompt(
             "prompts.system", response_language=response_language
         )  # token-safe rendering (e.g. {today})
 
         logger.debug(
-            "Rico: resolved system prompt (len=%d, language=%s)",
+            "Archie: resolved system prompt (len=%d, language=%s)",
             len(sys_text),
             response_language or "default",
         )
@@ -284,7 +305,7 @@ class Rico(AgentFlow):
             return augmented, keywords
         except Exception as e:
             logger.warning(
-                "Rico: keyword expansion failed, using raw question. err=%s", e
+                "Archie: keyword expansion failed, using raw question. err=%s", e
             )
             return question, []
 
@@ -296,7 +317,13 @@ class Rico(AgentFlow):
             raise RuntimeError(
                 "Model is not initialized. Did you forget to call async_init()?"
             )
-
+        runtime_context = self.get_runtime_context()
+        rag_scope = get_rag_knowledge_scope(runtime_context)
+        logger.debug(
+            "[AGENT] rag_scope=%s skip_rag_search=%s",
+            rag_scope,
+            should_skip_rag_search(runtime_context),
+        )
         # Last user question (MessagesState ensures 'messages' is AnyMessage[])
         last = state["messages"][-1]
         if not isinstance(last.content, str):
@@ -306,11 +333,9 @@ class Rico(AgentFlow):
         question = last.content
 
         try:
-            runtime_context = self.get_runtime_context()
-            rag_scope = get_rag_knowledge_scope(runtime_context)
-
-            if rag_scope == "general_only":
-                logger.info("Rico: general-only mode; bypassing retrieval.")
+            skip_rag = rag_scope == "general_only"
+            if skip_rag:
+                logger.info("Archie: general-only mode; bypassing retrieval.")
                 sys_msg = SystemMessage(content=self._system_prompt())
                 history_max = self.get_tuned_int(
                     "rag.history_max_messages", default=6, min_value=0
@@ -340,28 +365,28 @@ class Rico(AgentFlow):
                     question
                 )
                 logger.debug(
-                    "[AGENT] keyword expansion enabled; raw_question=%r keywords=%s augmented=%r",
+                    "[AGENT]: keyword expansion enabled; raw_question=%r keywords=%s augmented=%r",
                     question,
                     keywords,
                     augmented_question,
                 )
             else:
                 logger.debug(
-                    "[AGENT] keyword expansion disabled; using raw_question=%r",
+                    "[AGENT]: keyword expansion disabled; using raw_question=%r",
                     question,
                 )
 
             # 1) Build retrieval scope from runtime context
             doc_tag_ids = get_document_library_tags_ids(runtime_context)
             search_policy = get_search_policy(runtime_context)
+            corpus_only = is_corpus_only_mode(runtime_context)
             top_k = self.get_tuned_int("rag.top_k", default=10)
             logger.debug(
-                "[AGENT] reasoning start question=%r doc_tag_ids=%s search_policy=%s top_k=%s rag_scope=%s",
+                "[AGENT]: reasoning start question=%r doc_tag_ids=%s search_policy=%s top_k=%s",
                 question,
                 doc_tag_ids,
                 search_policy,
                 top_k,
-                rag_scope,
             )
 
             # 2) Vector search
@@ -371,7 +396,7 @@ class Rico(AgentFlow):
                 document_library_tags_ids=doc_tag_ids,
                 search_policy=search_policy,
             )
-            logger.debug("[AGENT] vector search returned %d hit(s)", len(hits))
+            logger.debug("[AGENT]: vector search returned %d hit(s)", len(hits))
             if hits:
                 hit_summaries = []
                 for h in hits[:10]:
@@ -384,20 +409,19 @@ class Rico(AgentFlow):
                     hit_summaries.append(
                         f"[{h.rank}] score={score} title={label}{section}{page}"
                     )
-                logger.debug("[AGENT] top hits: %s", "; ".join(hit_summaries))
+                logger.debug("[AGENT]: top hits: %s", "; ".join(hit_summaries))
             if not hits:
-                if is_corpus_only_mode(runtime_context):
+                if corpus_only:
                     warn = (
                         "No relevant documents were found for this question. "
-                        "You must not use general knowledge. Explain that you cannot answer without evidence from the corpus "
-                        "and invite the user to refine the question or provide documents."
+                        "You must not use general knowledge in this mode. Explain that you cannot answer without corpus documents "
+                        "and invite the user to refine the request or provide documents."
                     )
                 else:
                     warn = self._render_tuned_prompt(
                         "prompts.no_results", question=question
                     )
-                messages = [HumanMessage(content=warn)]
-                messages = self.with_chat_context_text(messages)
+                messages = self.with_chat_context_text([HumanMessage(content=warn)])
 
                 return {"messages": [await self.model.ainvoke(messages)]}
 
@@ -415,14 +439,14 @@ class Rico(AgentFlow):
                     if isinstance(h.score, (int, float)) and h.score >= min_score
                 ]
                 logger.debug(
-                    "Rico: score filter applied min_score=%.3f kept=%d/%d",
+                    "[AGENT]: score filter applied min_score=%.3f kept=%d/%d",
                     min_score,
                     len(hits),
                     before,
                 )
             elif search_policy != "semantic":
                 logger.debug(
-                    "Rico: skipping min_score filter because search_policy=%s", search_policy
+                    "[AGENT]: skipping min_score filter because search_policy=%s", search_policy
                 )
 
             if not hits:
@@ -437,10 +461,10 @@ class Rico(AgentFlow):
                     include_tool=False,
                     drop_last=True,
                 )
-                if is_corpus_only_mode(runtime_context):
+                if corpus_only:
                     no_sources_text = (
                         "No relevant documents were found for this question. "
-                        "Answer that you cannot respond without corpus documents and refrain from using general knowledge.\n\n"
+                        "Answer that you cannot respond without corpus documents and do not use general knowledge.\n\n"
                         f"Question:\n{question}"
                     )
                 else:
@@ -474,11 +498,10 @@ class Rico(AgentFlow):
                 drop_last=True,
             )
             guardrails = ""
-            if is_corpus_only_mode(runtime_context):
+            if corpus_only:
                 guardrails = (
                     "\n\nIMPORTANT: Answer strictly using the provided documents. "
-                    "If they are insufficient, state that you cannot answer without evidence from the corpus. "
-                    "Do not rely on your general knowledge."
+                    "If they are insufficient, state that you cannot answer without evidence from the corpus and avoid using general knowledge."
                 )
             human_msg = HumanMessage(
                 content=self._render_tuned_prompt(
@@ -489,7 +512,7 @@ class Rico(AgentFlow):
                 + guardrails
             )
             logger.debug(
-                "[AGENT] prompt lengths sys=%d human=%d sources_chars=%d",
+                "[AGENT]: prompt lengths sys=%d human=%d sources_chars=%d",
                 len(sys_msg.content),
                 len(human_msg.content),
                 len(sources_block),
@@ -527,19 +550,9 @@ class Rico(AgentFlow):
                     "search_policy": locals().get("search_policy"),
                     "top_k": locals().get("top_k"),
                     "hits_count": hits_count,
-                    "exception": str(e),
                 },
             )
-            logger.error(
-                "[AGENT] error in reasoning step (guardrail=%s type=%s status=%s detail=%r): %s",
-                info.is_guardrail,
-                info.type_name,
-                info.status,
-                info.detail,
-                e,
-                extra={"err_ctx": log_ctx},
-                exc_info=True,
-            )
+            logger.error("[AGENT] error in reasoning step.", extra={"err_ctx": log_ctx})
 
             fallback_text = guardrail_fallback_message(
                 info,
