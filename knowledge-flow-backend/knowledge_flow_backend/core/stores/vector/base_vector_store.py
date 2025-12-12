@@ -13,10 +13,11 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Union, runtime_checkable
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Union
 
 from attr import dataclass
 from langchain_core.documents import Document
+from pydantic import BaseModel
 
 CHUNK_ID_FIELD = "chunk_uid"  # your canonical per-chunk id in metadata
 
@@ -35,20 +36,21 @@ class SearchFilter:
     metadata_terms: Optional[Mapping[str, Sequence[Union[str, int, float, bool]]]] = None
 
 
-@dataclass(frozen=True)
-class AnnHit:
-    """Semantic hit with hydrated Document (used directly for UI)."""
-
+class BaseVectorHit(BaseModel):
     document: Document
-    score: float  # cosine in [0,1] if normalized
-
-
-@dataclass(frozen=True)
-class LexicalHit:
-    """Lexical hit returns ids + score; hydrate on demand if needed."""
-
-    chunk_id: str
     score: float
+
+
+class AnnHit(BaseVectorHit):
+    pass
+
+
+class HybridHit(BaseVectorHit):
+    pass
+
+
+class FullTextHit(BaseVectorHit):
+    pass
 
 
 class BaseVectorStore(ABC):
@@ -93,17 +95,6 @@ class BaseVectorStore(ABC):
         Optional helper: return distinct document_uids tracked by the vector store.
         """
         return []
-
-
-@runtime_checkable
-class LexicalSearchable(Protocol):
-    """
-    Capability: BM25 + phrase search.
-    A store that implements this can be used by 'hybrid' and 'strict'.
-    """
-
-    def lexical_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None, operator_and: bool = True) -> List[LexicalHit]: ...
-    def phrase_search(self, phrase: str, *, fields: Sequence[str], k: int, search_filter: Optional[SearchFilter] = None) -> List[str]: ...
 
 
 class FetchById(Protocol):

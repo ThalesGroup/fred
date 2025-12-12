@@ -5,23 +5,17 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional, Set
+from typing import Any, List, Optional, Set
 
 from fred_core import Action, KeycloakUser, Resource, VectorSearchHit, authorize
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit, LexicalSearchable, SearchFilter
+from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit, FullTextHit, HybridHit, SearchFilter
+from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from knowledge_flow_backend.features.tag.structure import TagType
 from knowledge_flow_backend.features.tag.tag_service import TagService
-from knowledge_flow_backend.features.vector_search.vector_search_hybrid_retriever import HybridRetriever
-from knowledge_flow_backend.features.vector_search.vector_search_strict_retriever import StrictRetriever
-from knowledge_flow_backend.features.vector_search.vector_search_structures import (
-    POLICIES,
-    HybridPolicy,
-    SearchPolicy,
-    SearchPolicyName,
-)
+from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
 
 logger = logging.getLogger(__name__)
 
@@ -40,17 +34,8 @@ class VectorSearchService:
     def __init__(self):
         ctx = ApplicationContext.get_instance()
         self.embedder = ctx.get_embedder()
-        self.vector_store = ctx.get_create_vector_store(self.embedder)  # BaseVectorStore (+ LexicalSearchable in OS)
+        self.vector_store = ctx.get_create_vector_store(self.embedder)
         self.tag_service = TagService()
-
-        # Inject the same vector store (capability-checked inside retrievers)
-        self._hybrid_retriever = HybridRetriever(self.vector_store)
-        if isinstance(self.vector_store, LexicalSearchable):
-            self._strict_retriever = StrictRetriever(self.vector_store)
-        else:
-            self._strict_retriever = None
-        # default thresholds (can be overridden per call)
-        self._default_policy = SearchPolicy()
 
     # ---------- helpers -------------------------------------------------------
 
@@ -164,83 +149,136 @@ class VectorSearchService:
 
     # ---------- private strategies -------------------------------------------
 
-    async def _semantic(self, *, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str]) -> List[VectorSearchHit]:
+    async def _semantic(self, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str]) -> List[VectorSearchHit]:
         """
-        Semantic (legacy) — fast but no lexical guardrails.
-        Keep available for debugging or recall-heavy exploratory queries.
+        Perform a semantic search using the ANN (Approximate Nearest Neighbors) strategy.
+        This strategy relies purely on vector similarity.
+
+        Args:
+            question (str): The query string to search for.
+            user (KeycloakUser): The user performing the search.
+            k (int): The number of top results to return.
+            library_tags_ids (List[str]): List of tag IDs to filter the search results by.
+            document_uid (Optional[str]): Optional document UID to filter the search results by.
+
+        Returns:
+            List[VectorSearchHit]: A list of VectorSearchHit objects containing the search results.
         """
-        sf = SearchFilter(tag_ids=sorted(library_tags_ids), metadata_terms={"retrievable": [True]}) if library_tags_ids else SearchFilter(metadata_terms={"retrievable": [True]})
-        ann_hits: List[AnnHit] = self.vector_store.ann_search(question, k=k, search_filter=sf)
+        metadata_terms: dict[str, Any] = {"retrievable": [True]}
+
+        sf = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
+
+        try:
+            ann_hits: List[AnnHit] = self.vector_store.ann_search(question, k=k, search_filter=sf)
+        except Exception as e:
+            logger.error("[VECTOR][SEARCH][ANN] Unexpected error during search: %s", str(e))
+            raise
+
         return await asyncio.gather(*[self._to_hit(h.document, h.score, rank, user) for rank, h in enumerate(ann_hits, start=1)])
 
-    async def _strict(self, *, question: str, user: KeycloakUser, k: Optional[int], library_tags_ids: List[str], policy: SearchPolicy) -> List[VectorSearchHit]:
+    async def _strict(self, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str]) -> List[VectorSearchHit]:
         """
-        Strict = ANN ∩ BM25 ∩ (optional) exact phrase; returns [] when weak.
-        """
-        if self._strict_retriever is None:
-            logger.warning("StrictRetriever is not available for the current vector store.")
-            return []
-        p = policy if (k is None or k <= 0) else type(policy)(**{**policy.__dict__, "k_final": k})
-        docs = self._strict_retriever.search(query=question, scoped_document_ids=sorted(library_tags_ids), policy=p)
-        return await asyncio.gather(*[self._to_hit(doc, score=1.0, rank=i, user=user) for i, doc in enumerate(docs, start=1)])
+        Perform a strict search using BM25 (Best Matching 25).
+        This strategy is only available when using OpenSearch as the vector store.
 
-    async def _hybrid(self, *, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str], policy: HybridPolicy) -> List[VectorSearchHit]:
+        Args:
+            question (str): The query string to search for.
+            user (KeycloakUser): The user performing the search.
+            k (int): The number of top results to return.
+            library_tags_ids (List[str]): List of tag IDs to filter the search results by.
+
+        Returns:
+            List[VectorSearchHit]: A list of VectorSearchHit objects containing the search results.
+
+        Raises:
+            TypeError: If the vector_store is not an instance of OpenSearchVectorStoreAdapter.
         """
-        Hybrid (default) — RRF fusion of BM25 + ANN, MMR de-dup, calibrated gates.
+        if not isinstance(self.vector_store, OpenSearchVectorStoreAdapter):
+            raise TypeError(f"Strict search requires Opensearch, but vector_store is of type {type(self.vector_store).__name__}")
+
+        metadata_terms: dict[str, Any] = {"retrievable": [True]}
+        search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
+
+        try:
+            hits: List[FullTextHit] = self.vector_store.full_text_search(query=question, top_k=k, search_filter=search_filter)
+        except Exception as e:
+            logger.error("[VECTOR][SEARCH][FULLTEXT] Unexpected error during search: %s", str(e))
+            raise
+
+        return await asyncio.gather(*[self._to_hit(hit.document, hit.score, rank, user) for rank, hit in enumerate(hits, start=1)])
+
+    async def _hybrid(self, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str]) -> List[VectorSearchHit]:
         """
-        pairs = self._hybrid_retriever.search(query=question, scoped_document_ids=sorted(library_tags_ids), policy=policy)
-        # pairs: List[Tuple[Document, ann_cosine]]
-        return await asyncio.gather(*[self._to_hit(doc, score=ann_cos, rank=i, user=user) for i, (doc, ann_cos) in enumerate(pairs[:k], start=1)])
+        Hybrid search strategy that combines vector similarity and keyword matching.
+        This strategy is only available when using OpenSearch as the vector store.
+
+        Args:
+            question (str): The search query.
+            user (KeycloakUser): The user performing the search.
+            k (int): The number of top results to retrieve.
+            library_tags_ids (List[str]): The list of tag IDs to scope the search.
+
+        Returns:
+            List[VectorSearchHit]: A list of search hits with relevant metadata.
+
+        Raises:
+            TypeError: If the vector store is not an instance of OpenSearchVectorStoreAdapter.
+        """
+        if not isinstance(self.vector_store, OpenSearchVectorStoreAdapter):
+            raise TypeError(f"Hybrid search requires Opensearch, but vector_store is of type {type(self.vector_store).__name__}")
+
+        metadata_terms: dict[str, Any] = {"retrievable": [True]}
+        search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
+
+        try:
+            hits: List[HybridHit] = self.vector_store.hybrid_search(query=question, top_k=k, search_filter=search_filter)
+        except Exception as e:
+            logger.error("[VECTOR][SEARCH][HYBRID] Unexpected error during search: %s", str(e))
+            raise
+
+        return await asyncio.gather(*[self._to_hit(hit.document, hit.score, rank, user) for rank, hit in enumerate(hits, start=1)])
 
     # ---------- unified public API -------------------------------------------
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def search(
-        self,
-        *,
-        question: str,
-        user: KeycloakUser,
-        top_k: int = 10,
-        document_library_tags_ids: Optional[List[str]] = None,
-        policy_name: Optional[SearchPolicyName] = None,
+        self, *, question: str, user: KeycloakUser, top_k: int = 10, document_library_tags_ids: Optional[List[str]] = None, policy_name: Optional[SearchPolicyName] = None
     ) -> List[VectorSearchHit]:
         """
-        Unified vector search (enum-driven).
-        - hybrid  (default): ANN + BM25 (RRF fusion).
-        - strict            : intersection; returns [] when below bar.
-        - semantic          : pure ANN (legacy/debug).
-        We hard-scope by library (tags -> document_uids) to avoid cross-library leakage.
+        Args:
+            question (str): The search query string.
+            user (KeycloakUser): The user performing the search.
+            top_k (int): The number of top results to return. Defaults to 10.
+            document_library_tags_ids (Optional[List[str]]): List of tag IDs to filter the search by library.
+            policy_name (Optional[SearchPolicyName]): The search policy to use (hybrid, strict, semantic). Defaults to hybrid.
+            document_uid (Optional[str]): Optional document UID to filter the search results by.
+        Returns:
+            List[VectorSearchHit]: A list of VectorSearchHit objects containing the search results.
+
+        Raises:
+            TypeError: If the vector store does not support the selected search policy.
+            Exception: For any other unexpected errors during the search process.
         """
-        if not document_library_tags_ids or document_library_tags_ids == []:
-            document_library_tags_ids = await self._all_document_library_tags_ids(user)
-        policy_key = policy_name or SearchPolicyName.hybrid
-        if policy_key == SearchPolicyName.strict:
-            pol = POLICIES[SearchPolicyName.strict]
-            logger.info("Using strict search policy: %s", pol)
-            # If your StrictRetriever.search expects StrictPolicy, this is fine:
-            return await self._strict(
-                question=question,
-                user=user,
-                k=top_k,
-                library_tags_ids=document_library_tags_ids,
-                policy=pol,  # ✅ pass the policy object
-            )
+        try:
+            if not document_library_tags_ids or document_library_tags_ids == []:
+                document_library_tags_ids = await self._all_document_library_tags_ids(user)
 
-        if policy_key == SearchPolicyName.hybrid:
-            pol = POLICIES[SearchPolicyName.hybrid]
-            logger.info("Using hybrid search policy: %s", pol)
-            return await self._hybrid(
-                question=question,
-                user=user,
-                k=top_k,
-                library_tags_ids=document_library_tags_ids,
-                policy=pol,
-            )
+            policy_key = policy_name or SearchPolicyName.hybrid
+            if policy_key == SearchPolicyName.strict:
+                logger.info("[VECTOR][SEARCH] Using strict search policy")
+                return await self._strict(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
 
-        logger.info("Using semantic search policy (legacy)")
-        return await self._semantic(
-            question=question,
-            user=user,
-            k=top_k,
-            library_tags_ids=document_library_tags_ids,
-        )
+            elif policy_key == SearchPolicyName.hybrid:
+                logger.info("[VECTOR][SEARCH] Using hybrid search policy")
+                return await self._hybrid(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+            else:
+                logger.info("[VECTOR][SEARCH] Using semantic search policy (legacy)")
+                return await self._semantic(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+
+        except TypeError as e:
+            logger.error("[VECTOR][SEARCH]: %s", str(e))
+            raise
+
+        except Exception as e:
+            logger.error("[VECTOR][SEARCH] Unexpected error during search: %s", str(e))
+            raise
