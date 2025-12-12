@@ -99,10 +99,10 @@ class MetadataController:
         self.content_store = ApplicationContext.get_instance().get_content_store()
         self.pull_document_service = pull_document_service
 
-        # ---- Schemas locaux pour les réponses ----
+        # ---- Local schemas for responses ----
         class VectorChunk(BaseModel):
-            chunk_uid: str = Field(..., description="Identifiant unique du chunk")
-            vector: List[float] = Field(..., description="Embedding du chunk")
+            chunk_uid: str = Field(..., description="Unique identifier of the chunk")
+            vector: List[float] = Field(..., description="Chunk embedding")
 
         @router.post(
             "/documents/metadata/search",
@@ -238,10 +238,10 @@ class MetadataController:
                 raise HTTPException(status_code=400, detail=f"Unsupported source type '{config.type}'")
 
         @router.get(
-            "/document/{document_uid}/vectors",
+            "/documents/{document_uid}/vectors",
             tags=["Documents"],
             summary="Get document chunk vectors (embeddings)",
-            description=("Returns the list of chunk vectors (embeddings) associated with the given document."),
+            description="Returns the list of chunk vectors (embeddings) associated with the given document.",
             response_model=List[VectorChunk],
         )
         async def document_vectors(
@@ -255,10 +255,10 @@ class MetadataController:
                 raise handle_exception(e)
 
         @router.get(
-            "/document/{document_uid}/chunks",
+            "/documents/{document_uid}/chunks",
             tags=["Documents"],
             summary="Get document chunks with metadata",
-            description=("Returns the list of chunks associated with the given document, including their metadata."),
+            description="Returns the list of chunks associated with the given document, including their metadata.",
             response_model=List[Dict[str, Any]],
         )
         async def document_chunks(
@@ -297,4 +297,33 @@ class MetadataController:
                 return await self.service.fix_store_anomalies(user)
             except Exception as e:
                 log_exception(e)
+                raise handle_exception(e)
+
+        @router.get(
+            "/documents/{document_uid}/chunks/{chunk_id}",
+            tags=["Documents"],
+            summary="Get chunk with metadata",
+            description="Returns the chunk, including their metadata.",
+            response_model=Dict[str, Any],
+        )
+        async def get_chunk(
+            document_uid: str,
+            chunk_id: str,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                chunk = await self.service.get_chunk(user, document_uid, chunk_id)
+                return chunk
+            except Exception as e:
+                raise handle_exception(e)
+
+        @router.delete("/documents/{document_uid}/chunks/{chunk_id}", tags=["Documents"], summary="Delete chunk", description="Delete the chunk", status_code=200)
+        async def delete_chunk(
+            document_uid: str,
+            chunk_id: str,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                await self.service.delete_chunk(user, document_uid, chunk_id)
+            except Exception as e:
                 raise handle_exception(e)

@@ -13,7 +13,7 @@
 app:
   name: "Knowledge Flow Backend"
   base_url: "/knowledge-flow/v1"
-  address: "0.0.0.0"
+  address: "127.0.0.1"
   port: 8111
   log_level: "info"
   reload: true
@@ -33,9 +33,10 @@ security:
     realm_url: "http://app-keycloak:8080/realms/app"
   authorized_origins:
     - "http://localhost:5173"
+
 scheduler:
   enabled: true
-  backend: "temporal"
+  backend: "memory"
   temporal:
     host: "localhost:7233"
     namespace: "default"
@@ -44,7 +45,7 @@ scheduler:
     connect_timeout_seconds: 5
 input_processors:
   - prefix: ".pdf"
-    class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+    class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
   - prefix: ".docx"
     class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
   - prefix: ".pptx"
@@ -119,3 +120,18 @@ storage:
       database: "base_database"
       path: "~/.fred/knowledge-flow/db.duckdb"
       mode: "read_and_write"
+
+mcp:
+  reports_enabled: true
+  kpi_enabled: true
+  tabular_enabled: true
+  statistic_enabled: true
+  text_enabled: true
+  templates_enabled: true
+  resources_enabled: true
+  opensearch_ops_enabled: false
+  neo4j_enabled: false
+  filesystem_enabled: true
+
+filesystem:
+  type: local

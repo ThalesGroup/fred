@@ -41,6 +41,21 @@
     "hideSection": "Masquer",
     "showSection": "Afficher"
   },
+  "graphHub": {
+    "panelTitle": "Actions",
+    "selectTag": "Sélectionner une librairie",
+    "tag": "Librairie",
+    "umapError": "Erreur de projection",
+    "colorByCluster": "Colorer les groupes",
+    "showLinks": "Afficher les liens",
+    "training": "Entraînement…",
+    "trainModel": "Entraîner le modèle",
+    "refreshGraph": "Afficher le graphe",
+    "selection": {
+      "title": "Sélection"
+    },
+    "deleteSelection": "Supprimer la sélection"
+  },
   "resource": {
     "kind": {
       "prompt": {
@@ -98,7 +113,8 @@
       "monitoring_logs": "Console de logs",
       "monitoring_runtime": "Résumé d'exécution",
       "monitoring_processors": "Banc de test processeurs",
-      "monitoring_data": "Surveillance des données"
+      "monitoring_data": "Surveillance des données",
+      "monitoring_graph": "Surveillance des graphes de connaissances"
     },
     "theme": {
       "light": "clair",
@@ -112,7 +128,8 @@
     "monitoring_logs": "Logs",
     "monitoring_runtime": "Runtime",
     "monitoring_processors": "Processeurs",
-    "monitoring_data": "Données"
+    "monitoring_data": "Données",
+    "monitoring_graph": "Graphe"
   },
   "runtime": {
     "title": "Résumé d'exécution",

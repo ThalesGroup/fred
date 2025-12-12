@@ -41,6 +41,21 @@
     "hideSection": "Hide",
     "showSection": "Show"
   },
+  "graphHub": {
+    "panelTitle": "Actions",
+    "selectTag": "Select library",
+    "tag": "Library",
+    "umapError": "Error with projection",
+    "colorByCluster": "Color groups",
+    "showLinks": "Show links",
+    "training": "Training…",
+    "trainModel": "Train model",
+    "refreshGraph": "Show graph",
+    "selection": {
+      "title": "Selection"
+    },
+    "deleteSelection": "Delete selection"
+  },
   "resource": {
     "kind": {
       "prompt": {
@@ -98,7 +113,8 @@
       "monitoring_logs": "Log Console",
       "monitoring_runtime": "Runtime summary",
       "monitoring_processors": "Processor bench",
-      "monitoring_data": "Data monitoring"
+      "monitoring_data": "Data monitoring",
+      "monitoring_graph": "Knowledge Graph monitoring"
     },
     "theme": {
       "light": "light",
@@ -112,7 +128,8 @@
     "monitoring_logs": "Logs",
     "monitoring_runtime": "Runtime",
     "monitoring_processors": "Processors",
-    "monitoring_data": "Data"
+    "monitoring_data": "Data",
+    "monitoring_graph": "Graph"
   },
   "runtime": {
     "title": "Runtime Summary",
