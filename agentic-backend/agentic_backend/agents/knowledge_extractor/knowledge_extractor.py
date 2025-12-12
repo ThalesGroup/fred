@@ -96,6 +96,8 @@ globalSchema = {
                     "description": "Nom du fichier duquel les données sont exraites.",
                 },
             },
+            "additionalProperties": False,
+            "minProperties": 3,
         },
         "cv": {
             "type": "object",
@@ -283,6 +285,8 @@ globalSchema = {
                     "description": "Description des taches réalisées lors de la troisième expérience en 2-3 phrases.",
                 },
             },
+            "additionalProperties": False,
+            "minProperties": 40,
         },
         "prestationFinanciere": {
             "type": "object",
@@ -341,8 +345,12 @@ globalSchema = {
                     "description": "Coût total de toutes les prestations.",
                 },
             },
+            "additionalProperties": False,
+            "minProperties": 13,
         },
     },
+    "additionalProperties": False,
+    "minProperties": 3,
 }
 
 enjeuxBesoinsSchema = {
