@@ -283,7 +283,7 @@ class VectorSearchService:
         except Exception as e:
             logger.error("[VECTOR][SEARCH] Unexpected error during search: %s", str(e))
             raise
-    
+
     def rerank_documents(self, question: str, documents: List[VectorSearchHit], top_r: int) -> List[VectorSearchHit]:
         """
         Re-rank a list of documents using a cross-encoder model based on the relevance to a given question.
