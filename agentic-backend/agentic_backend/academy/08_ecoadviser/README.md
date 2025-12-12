@@ -69,6 +69,7 @@ Update the corresponding environment variables (see `.env` or `start.sh`) to wir
 - `reference_api/co2_reference_dataset.json` acts as the default payload for `CO2_REFERENCE_DATA`. Override the env var if you want to inject another JSON file or HTTP endpoint.  
 - Optional ADEME live fetch can be toggled with `ADEME_BASECARBONE_ENABLED=false` if your environment forbids outbound HTTP.  
 - The TCL transit MCP honors `TCL_WFS_BASE_URL`, `TCL_WFS_TYPENAME`, `TCL_WFS_SRSNAME`, `TCL_WFS_PAGE_SIZE`, `TCL_WFS_MAX_FEATURES`, and `TCL_STOPS_CACHE_TTL_SEC` to adapt to custom datasets; it automatically falls back to `data/tcl_stops_demo.csv` when the WFS cannot be reached.  
+- Provide `TCL_WFS_USERNAME` / `TCL_WFS_PASSWORD` so the MCP can authenticate against https://data.grandlyon.com and pull the live TCL stop feed; when omitted it will stay on the demo CSV.
 - Keep an eye on `MAX_TOOL_MESSAGE_CHARS` and `ECO_RECENT_MESSAGES` (env vars read by `eco_adviser.py`) to avoid oversized tool payloads.  
 - When adding new MCP endpoints, extend `ECO_TUNING.mcp_servers` and the global `config/configuration*.yaml` files in sync.
 

@@ -4,742 +4,849 @@ import csv
 import logging
 import math
 import os
+import re
 import threading
-from datetime import datetime, timedelta, timezone
+import time
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import httpx
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException
 from fastapi_mcp import FastApiMCP
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_WFS_BASE_URL = os.getenv(
-    "TCL_WFS_BASE_URL",
-    "https://data.grandlyon.com/geoserver/sytral/ows",
-)
-DEFAULT_WFS_TYPENAME = os.getenv(
-    "TCL_WFS_TYPENAME",
-    "sytral:tcl_sytral.tclarret",
-)
-DEFAULT_WFS_SRSNAME = os.getenv("TCL_WFS_SRSNAME", "EPSG:4326")
-DEFAULT_WFS_TIMEOUT = float(os.getenv("TCL_WFS_TIMEOUT_SEC", "10"))
-DEFAULT_WFS_PAGE_SIZE = int(os.getenv("TCL_WFS_PAGE_SIZE", "500"))
-DEFAULT_WFS_MAX_FEATURES = int(os.getenv("TCL_WFS_MAX_FEATURES", "8000"))
-DEFAULT_WFS_SORT_BY = os.getenv("TCL_WFS_SORT_BY", "gid")
-DEFAULT_WFS_USERNAME = os.getenv("TCL_WFS_USERNAME")
-DEFAULT_WFS_PASSWORD = os.getenv("TCL_WFS_PASSWORD")
-CACHE_TTL_SEC = int(os.getenv("TCL_STOPS_CACHE_TTL_SEC", "900"))
-
-FALLBACK_CSV_PATH = Path(
-    os.getenv(
-        "TCL_STOPS_FALLBACK_CSV",
-        str(
-            Path(__file__).resolve().parent.parent / "data" / "tcl_stops_demo.csv"
-        ),
-    )
-)
-
-STOP_ID_FIELDS = [
-    "stop_id",
-    "id",
-    "gid",
-    "objectid",
-    "idarret",
-    "id_arret",
-    "code_arret",
-]
-NAME_FIELDS = [
-    "stop_name",
-    "nom",
-    "nomarret",
-    "libelle",
-    "libelle_arret",
-    "nom_arret",
-]
-CITY_FIELDS = [
-    "commune",
-    "ville",
-    "nomcomm",
-    "nom_commune",
-    "nom_comm",
-]
-ADDRESS_FIELDS = [
-    "adresse",
-    "adresse_arret",
-    "adrligne1",
-    "adrligne2",
-    "libellevoie",
-]
-LINE_FIELDS = ["served_lines", "lignes", "ligne", "liste_ligne", "dessertes"]
-PMR_FIELDS = ["accessible_pmr", "pmr", "accessibilite", "accessibilité"]
-ELEVATOR_FIELDS = ["has_elevator", "ascenseur", "elevator"]
-ESCALATOR_FIELDS = ["has_escalator", "escalator"]
-ZONE_FIELDS = ["zone", "secteur"]
-INSEE_FIELDS = ["insee", "codeinsee", "code_insee"]
+os.environ.setdefault("TCL_WFS_BASE_URL", "https://data.grandlyon.com/geoserver/sytral/ows")
+os.environ.setdefault("TCL_WFS_TYPENAME", "sytral:tcl_sytral.tclarret")
+os.environ.setdefault("TCL_WFS_SRSNAME", "EPSG:4171")
+os.environ.setdefault("TCL_WFS_PAGE_SIZE", "200")
+os.environ.setdefault("TCL_WFS_MAX_FEATURES", "5000")
+os.environ.setdefault("TCL_WFS_TIMEOUT_SEC", "10")
+os.environ.setdefault("TCL_STOPS_CACHE_TTL_SEC", "900")
+os.environ.setdefault("TCL_WFS_SORT_BY", "gid")
+_fallback_default = Path(__file__).resolve().parent.parent / "data" / "tcl_stops_demo.csv"
+os.environ.setdefault("TCL_STOPS_FALLBACK_CSV", str(_fallback_default))
 
 
-def _normalize_string(value: Any) -> Optional[str]:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        cleaned = value.strip()
-        return cleaned or None
-    cleaned = str(value).strip()
-    return cleaned or None
+def _normalize_text(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    return " ".join(value.strip().lower().split())
 
 
-def _normalize_bool(value: Any) -> Optional[bool]:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"true", "1", "oui", "yes", "y"}:
-            return True
-        if lowered in {"false", "0", "non", "no", "n"}:
-            return False
+def _safe_float(value: Any) -> Optional[float]:
+    try:
+        parsed = float(value)
+        if math.isfinite(parsed):
+            return parsed
+    except (TypeError, ValueError):
+        pass
     return None
 
 
-def _normalize_lines(value: Any) -> List[str]:
-    if value is None:
-        return []
-    if isinstance(value, (list, tuple, set)):
-        parts = [str(item).strip() for item in value if str(item).strip()]
-        return parts
+def _split_lines(value: Any) -> List[str]:
+    tokens: List[str] = []
     if isinstance(value, str):
-        raw_parts = value.replace(";", ",").split(",")
-        parts = [part.strip() for part in raw_parts if part.strip()]
-        return parts
-    return [str(value).strip()] if str(value).strip() else []
+        chunks = re.split(r"[;,/|]", value)
+        for chunk in chunks:
+            token = chunk.strip().upper()
+            if token:
+                tokens.append(token)
+    elif isinstance(value, Iterable):
+        for item in value:
+            if not item:
+                continue
+            tokens.append(str(item).strip().upper())
+    return tokens
 
 
-def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+def _extract_coordinates(geometry: Any, properties: Dict[str, Any]) -> Optional[Tuple[float, float]]:
+    coords: Optional[Sequence[Any]] = None
+    if isinstance(geometry, dict):
+        coords = geometry.get("coordinates")
+    elif isinstance(geometry, (list, tuple)):
+        coords = geometry
+    if isinstance(coords, (list, tuple)) and len(coords) >= 2:
+        lon = _safe_float(coords[0])
+        lat = _safe_float(coords[1])
+        if lon is not None and lat is not None:
+            return lon, lat
+    lon = _safe_float(
+        properties.get("lon")
+        or properties.get("longitude")
+        or properties.get("x")
+        or properties.get("coordonneex")
+    )
+    lat = _safe_float(
+        properties.get("lat")
+        or properties.get("latitude")
+        or properties.get("y")
+        or properties.get("coordonneey")
+    )
+    if lon is not None and lat is not None:
+        return lon, lat
+    return None
+
+
+def _choose(properties: Dict[str, Any], keys: Sequence[str]) -> Optional[str]:
+    for key in keys:
+        value = properties.get(key)
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped:
+                return stripped
+        elif value is not None:
+            return str(value)
+    return None
+
+
+def _guess_line_label(properties: Dict[str, Any]) -> Optional[str]:
+    return _choose(
+        properties,
+        (
+            "libelleligne",
+            "ligne_libelle",
+            "ligne_longue",
+            "nom_ligne",
+            "ligne_nom",
+        ),
+    )
+
+
+def _simplify_props(properties: Dict[str, Any]) -> Dict[str, Any]:
+    simplified: Dict[str, Any] = {}
+    for key, value in properties.items():
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            simplified[key] = value
+        else:
+            simplified[key] = str(value)
+    return simplified
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     radius_km = 6371.0
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     d_phi = math.radians(lat2 - lat1)
     d_lambda = math.radians(lon2 - lon1)
-    a = (
-        math.sin(d_phi / 2) ** 2
-        + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
-    )
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return radius_km * c
+    return radius_km * c * 1000.0
 
 
-def _extract_property(
-    props: Dict[str, Any],
-    candidates: Sequence[str],
-) -> Optional[Any]:
-    if not props:
-        return None
-    lowered = {str(key).lower(): key for key in props.keys()}
-    for candidate in candidates:
-        key = lowered.get(candidate.lower())
-        if key is not None:
-            value = props.get(key)
-            if value not in (None, ""):
-                return value
-    return None
+@dataclass
+class TCLStopRecord:
+    stop_id: str
+    name: str
+    lat: float
+    lon: float
+    lines: set[str] = field(default_factory=set)
+    line_labels: Dict[str, str] = field(default_factory=dict)
+    city: Optional[str] = None
+    district: Optional[str] = None
+    zone: Optional[str] = None
+    raw: Dict[str, Any] = field(default_factory=dict)
 
+    def cache_key(self) -> str:
+        return f"{self.stop_id.lower()}|{round(self.lat, 5)}|{round(self.lon, 5)}"
 
-def _extract_coordinates(feature: Dict[str, Any]) -> Tuple[Optional[float], Optional[float]]:
-    geometry = feature.get("geometry") if isinstance(feature, dict) else None
-    if not isinstance(geometry, dict):
-        return None, None
-    coordinates = geometry.get("coordinates")
-    if geometry.get("type") == "Point" and isinstance(coordinates, (list, tuple)):
-        if len(coordinates) >= 2:
-            lon, lat = coordinates[0], coordinates[1]
-            try:
-                return float(lon), float(lat)
-            except (TypeError, ValueError):
-                return None, None
-    if geometry.get("type") == "MultiPoint" and isinstance(coordinates, list):
-        for entry in coordinates:
-            if isinstance(entry, (list, tuple)) and len(entry) >= 2:
-                try:
-                    return float(entry[0]), float(entry[1])
-                except (TypeError, ValueError):
+    def as_payload(
+        self,
+        source: str,
+        *,
+        include_raw: bool,
+        distance_m: Optional[float] = None,
+    ) -> "StopPayload":
+        return StopPayload(
+            stop_id=self.stop_id,
+            name=self.name,
+            city=self.city,
+            district=self.district,
+            zone=self.zone,
+            lat=self.lat,
+            lon=self.lon,
+            lines=sorted(self.lines),
+            line_labels={code: label for code, label in self.line_labels.items() if label},
+            distance_m=None if distance_m is None else round(distance_m, 2),
+            source=source,
+            attributes=dict(self.raw) if include_raw else {},
+        )
+
+    @staticmethod
+    def from_feature(feature: Dict[str, Any]) -> Optional["TCLStopRecord"]:
+        if not isinstance(feature, dict):
+            return None
+        properties = feature.get("properties") or {}
+        coordinates = _extract_coordinates(feature.get("geometry"), properties)
+        if not coordinates:
+            return None
+        lon, lat = coordinates
+        stop_id = _choose(
+            properties,
+            (
+                "code",
+                "mnemo",
+                "mnemoarret",
+                "objectid",
+                "id_arret",
+                "stop_id",
+                "gid",
+            ),
+        )
+        if not stop_id:
+            stop_id = feature.get("id")
+        if not stop_id:
+            stop_id = f"{lon:.6f},{lat:.6f}"
+        name = _choose(
+            properties,
+            (
+                "nom",
+                "nomlong",
+                "nom_long",
+                "nom_arret",
+                "libelle",
+                "libellearret",
+                "name",
+            ),
+        ) or str(stop_id)
+        lines = set(
+            _split_lines(
+                properties.get("ligne")
+                or properties.get("lignes")
+                or properties.get("code_ligne")
+                or properties.get("codes_lignes")
+                or properties.get("mnemo_ligne")
+            )
+        )
+        if not lines:
+            line_hint = _choose(properties, ("ligne", "code_ligne", "mnemo_ligne"))
+            if line_hint:
+                lines.add(line_hint.strip().upper())
+        city = _choose(properties, ("commune", "libelle_commune", "nom_commune", "ville"))
+        district = _choose(properties, ("arrondissement", "quartier", "secteur_quartier"))
+        zone = _choose(properties, ("secteur", "secteurcommercial", "poteau", "pole"))
+        line_label = _guess_line_label(properties)
+        record = TCLStopRecord(
+            stop_id=str(stop_id),
+            name=name,
+            lat=lat,
+            lon=lon,
+            city=city,
+            district=district,
+            zone=zone,
+            raw=_simplify_props(properties),
+        )
+        if not lines:
+            record.lines.add("TCL")
+        else:
+            for code in lines:
+                if not code:
                     continue
-    return None, None
+                record.lines.add(code)
+                if line_label:
+                    record.line_labels.setdefault(code, line_label)
+        return record
 
 
-class TCLStop(BaseModel):
-    stop_id: str = Field(..., description="Stable identifier from the SYTRAL dataset.")
-    name: str = Field(..., description="Published stop name.")
-    city: Optional[str] = Field(None, description="City or commune hosting the stop.")
-    address: Optional[str] = Field(None, description="Street-level address when available.")
-    lines: List[str] = Field(default_factory=list, description="List of TCL lines serving the stop.")
-    latitude: Optional[float] = Field(None, description="Latitude in WGS84.")
-    longitude: Optional[float] = Field(None, description="Longitude in WGS84.")
-    accessible_pmr: Optional[bool] = Field(None, description="True when the stop is declared PMR-friendly.")
-    has_elevator: Optional[bool] = Field(None, description="True when an elevator is available.")
-    has_escalator: Optional[bool] = Field(None, description="True when an escalator is available.")
-    zone: Optional[str] = Field(None, description="Fare zone or TCL sector.")
-    insee: Optional[str] = Field(None, description="INSEE commune code.")
-    source: str = Field(..., description="Origin dataset (WFS or fallback CSV).")
-    raw_properties: Optional[Dict[str, Any]] = Field(
+class StopPayload(BaseModel):
+    stop_id: str
+    name: str
+    city: Optional[str]
+    district: Optional[str]
+    zone: Optional[str]
+    lat: float
+    lon: float
+    lines: List[str]
+    line_labels: Dict[str, str] = Field(default_factory=dict)
+    distance_m: Optional[float] = Field(
         default=None,
-        description="Original WFS/CSV record so the agent can inspect additional attributes.",
+        description="Distance from the queried coordinate in meters (nearby search only).",
+    )
+    source: str
+    attributes: Dict[str, Any] = Field(default_factory=dict)
+
+
+class StopSearchRequest(BaseModel):
+    query: str = Field(..., min_length=2, description="Search string to match stop names or cities.")
+    limit: int = Field(
+        default=10,
+        ge=1,
+        le=25,
+        description="Maximum number of stops to return.",
+    )
+    city: Optional[str] = Field(
+        default=None,
+        description="Optional city filter (case insensitive substring).",
+    )
+    lines: Optional[List[str]] = Field(
+        default=None,
+        description="Optional list of TCL line codes to keep.",
+    )
+    include_raw: bool = Field(
+        default=False,
+        description="When true, include the raw feature attributes in the response.",
     )
 
-    def to_payload(self, include_raw: bool) -> Dict[str, Any]:
-        payload = self.model_dump(exclude_none=True)
-        if not include_raw:
-            payload.pop("raw_properties", None)
-        return payload
+    @field_validator("query")
+    @classmethod
+    def _trim_query(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned) < 2:
+            raise ValueError("Query must contain at least two characters.")
+        return cleaned
+
+    @field_validator("city")
+    @classmethod
+    def _normalize_city(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        return trimmed or None
+
+    @field_validator("lines", mode="before")
+    @classmethod
+    def _normalize_lines(cls, value: Any) -> Optional[List[str]]:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            candidates = [value]
+        else:
+            candidates = list(value)
+        normalized = []
+        for item in candidates:
+            if not item:
+                continue
+            normalized.append(str(item).strip().upper())
+        return normalized or None
 
 
-class TCLStopWithDistance(TCLStop):
-    distance_km: float = Field(..., description="Great-circle distance to the requested point.")
+class StopSearchResponse(BaseModel):
+    query: str
+    count: int
+    limit: int
+    city_filter: Optional[str]
+    line_filter: Optional[List[str]]
+    results: List[StopPayload]
+    source: str
+    refreshed_at: Optional[datetime]
 
 
-class TCLStopSearchResponse(BaseModel):
-    query: Optional[str]
-    city: Optional[str]
-    line: Optional[str]
+class NearbyStopsRequest(BaseModel):
+    lat: float = Field(..., ge=-90.0, le=90.0, description="Latitude in decimal degrees.")
+    lon: float = Field(..., ge=-180.0, le=180.0, description="Longitude in decimal degrees.")
+    radius_m: float = Field(
+        default=400.0,
+        ge=50.0,
+        le=3000.0,
+        description="Search radius in meters.",
+    )
+    limit: int = Field(
+        default=8,
+        ge=1,
+        le=20,
+        description="Maximum number of stops to return.",
+    )
+    include_raw: bool = Field(
+        default=False,
+        description="When true, include raw attributes for each stop.",
+    )
+
+
+class NearbyStopsResponse(BaseModel):
+    origin_lat: float
+    origin_lon: float
+    radius_m: float
     limit: int
     count: int
-    generated_at: datetime
+    results: List[StopPayload]
     source: str
-    stops: List[TCLStop]
+    refreshed_at: Optional[datetime]
 
 
-class TCLStopNearbyResponse(BaseModel):
-    latitude: float
-    longitude: float
-    radius_km: float
-    max_results: int
-    line: Optional[str]
+class LineSummary(BaseModel):
+    code: str
+    label: Optional[str]
+    stop_count: int
+
+
+class LinesResponse(BaseModel):
     count: int
-    generated_at: datetime
+    lines: List[LineSummary]
     source: str
-    stops: List[TCLStopWithDistance]
+    refreshed_at: Optional[datetime]
 
 
-class TCLLineSummary(BaseModel):
-    line: str
+class MetadataResponse(BaseModel):
+    source: str
     stop_count: int
-    sample_stop: Optional[str]
-
-
-class TCLDatasetMetadata(BaseModel):
-    stop_count: int
-    last_refresh: Optional[datetime]
+    line_count: int
+    last_refresh_utc: Optional[datetime]
     cache_ttl_sec: int
-    source: str
     wfs_base_url: str
     typename: str
     srs_name: str
+    fallback_csv: str
 
 
-class CacheReloadResponse(BaseModel):
+class ReloadResponse(BaseModel):
     stop_count: int
-    refreshed_at: datetime
+    line_count: int
     source: str
+    refreshed_at: Optional[datetime]
 
 
 class TCLWFSClient:
     def __init__(
         self,
+        *,
         base_url: str,
         typename: str,
         srs_name: str,
-        timeout: float,
+        username: Optional[str],
+        password: Optional[str],
         page_size: int,
         max_features: int,
-        sort_by: Optional[str],
-        auth: Optional[httpx.Auth],
-    ):
-        self.base_url = base_url
-        self.typename = typename
-        self.srs_name = srs_name
-        self.timeout = timeout
-        self.page_size = page_size
-        self.max_features = max_features
-        self.sort_by = sort_by
-        self._auth = auth
+        timeout: float,
+        sort_by: str,
+    ) -> None:
+        self._base_url = base_url
+        self._typename = typename
+        self._srs_name = srs_name
+        self._auth = (username, password) if username and password else None
+        self._page_size = max(1, page_size)
+        self._max_features = max(self._page_size, max_features)
+        self._timeout = max(3.0, timeout)
+        self._sort_by = sort_by
+
+    @property
+    def base_url(self) -> str:
+        return self._base_url
+
+    @property
+    def typename(self) -> str:
+        return self._typename
+
+    @property
+    def srs_name(self) -> str:
+        return self._srs_name
 
     def fetch_all(self) -> List[Dict[str, Any]]:
         features: List[Dict[str, Any]] = []
         start_index = 0
-        logger.info(
-            "TCLWFSClient: fetching dataset base_url=%s typename=%s",
-            self.base_url,
-            self.typename,
-        )
-        with httpx.Client(timeout=self.timeout, auth=self._auth) as client:
-            while start_index < self.max_features:
-                page_size = min(self.page_size, self.max_features - start_index)
-                params = {
-                    "SERVICE": "WFS",
-                    "VERSION": "2.0.0",
-                    "request": "GetFeature",
-                    "typename": self.typename,
-                    "outputFormat": "application/json",
-                    "SRSNAME": self.srs_name,
-                    "startIndex": start_index,
-                    "count": page_size,
-                }
-                if self.sort_by:
-                    params["sortby"] = self.sort_by
-                response = client.get(self.base_url, params=params)
+        while start_index < self._max_features:
+            batch = self._fetch_page(start_index)
+            if not batch:
+                break
+            features.extend(batch)
+            if len(batch) < self._page_size:
+                break
+            start_index += self._page_size
+        if features:
+            logger.info("Fetched %d TCL stops from WFS.", len(features))
+        return features[: self._max_features]
+
+    def _fetch_page(self, start_index: int) -> List[Dict[str, Any]]:
+        params = {
+            "SERVICE": "WFS",
+            "VERSION": "2.0.0",
+            "REQUEST": "GetFeature",
+            "typename": self._typename,
+            "outputFormat": "application/json",
+            "SRSNAME": self._srs_name,
+            "startIndex": start_index,
+            "count": self._page_size,
+            "sortBy": self._sort_by,
+        }
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "EcoAdvisor-TCL-MCP/0.1",
+        }
+        try:
+            with httpx.Client(timeout=self._timeout) as client:
+                response = client.get(
+                    self._base_url,
+                    params=params,
+                    headers=headers,
+                    auth=self._auth,
+                )
                 response.raise_for_status()
                 payload = response.json()
-                page_features = self._extract_features(payload)
-                if not page_features:
-                    logger.info(
-                        "TCLWFSClient: stop pagination because page is empty (startIndex=%s).",
-                        start_index,
-                    )
-                    break
-                features.extend(page_features)
-                logger.info(
-                    "TCLWFSClient: fetched %d features (total=%d).",
-                    len(page_features),
-                    len(features),
-                )
-                if len(page_features) < page_size:
-                    break
-                start_index += len(page_features)
+        except Exception:
+            logger.exception("Failed to fetch TCL stops page starting at %s", start_index)
+            return []
+        features = payload.get("features")
+        if not isinstance(features, list):
+            logger.warning("Unexpected WFS payload format: missing 'features' list.")
+            return []
         return features
-
-    @staticmethod
-    def _extract_features(payload: Any) -> List[Dict[str, Any]]:
-        if isinstance(payload, dict):
-            features = payload.get("features")
-            if isinstance(features, list):
-                return [feature for feature in features if isinstance(feature, dict)]
-        return []
 
 
 class TCLStopStore:
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._stops: List[TCLStop] = []
+    def __init__(self, *, client: TCLWFSClient, fallback_csv: Path, cache_ttl_sec: int) -> None:
+        self._client = client
+        self._fallback_csv = fallback_csv
+        self._cache_ttl = max(60, cache_ttl_sec)
+        self._lock = threading.RLock()
+        self._expires_at = 0.0
+        self._stops: List[TCLStopRecord] = []
+        self._line_counts: Dict[str, int] = {}
+        self._line_labels: Dict[str, str] = {}
         self._last_refresh: Optional[datetime] = None
-        self._source_label: str = "uninitialized"
-        self._cache_ttl = timedelta(seconds=CACHE_TTL_SEC)
-        auth = None
-        if DEFAULT_WFS_USERNAME and DEFAULT_WFS_PASSWORD:
-            auth = httpx.BasicAuth(DEFAULT_WFS_USERNAME, DEFAULT_WFS_PASSWORD)
+        self._source = "uninitialized"
 
-        self._wfs_client = TCLWFSClient(
-            base_url=DEFAULT_WFS_BASE_URL,
-            typename=DEFAULT_WFS_TYPENAME,
-            srs_name=DEFAULT_WFS_SRSNAME,
-            timeout=DEFAULT_WFS_TIMEOUT,
-            page_size=DEFAULT_WFS_PAGE_SIZE,
-            max_features=DEFAULT_WFS_MAX_FEATURES,
-            sort_by=DEFAULT_WFS_SORT_BY,
-            auth=auth,
-        )
-
-    def ensure_loaded(self) -> None:
-        if self._stops and not self._is_stale():
-            return
+    def ensure_cache(self) -> None:
         with self._lock:
-            if self._stops and not self._is_stale():
-                return
-            stops, source = self._load_dataset()
-            if not stops:
-                raise RuntimeError("Unable to load TCL stops from WFS or fallback CSV.")
-            self._stops = stops
-            self._source_label = source
-            self._last_refresh = datetime.now(timezone.utc)
-            logger.info(
-                "TCLStopStore: loaded %d stops from %s.",
-                len(self._stops),
-                self._source_label,
-            )
+            self._refresh_locked(force=False)
 
-    def reload(self) -> Tuple[int, str]:
+    def reload(self) -> Dict[str, Any]:
         with self._lock:
-            stops, source = self._load_dataset()
-            if not stops:
-                raise RuntimeError("Reload failed: dataset is empty.")
-            self._stops = stops
-            self._source_label = source
-            self._last_refresh = datetime.now(timezone.utc)
-            logger.info(
-                "TCLStopStore: reloaded %d stops from %s.",
-                len(self._stops),
-                self._source_label,
-            )
-            return len(self._stops), self._source_label
-
-    def metadata(self) -> TCLDatasetMetadata:
-        return TCLDatasetMetadata(
-            stop_count=len(self._stops),
-            last_refresh=self._last_refresh,
-            cache_ttl_sec=int(self._cache_ttl.total_seconds()),
-            source=self._source_label,
-            wfs_base_url=DEFAULT_WFS_BASE_URL,
-            typename=DEFAULT_WFS_TYPENAME,
-            srs_name=DEFAULT_WFS_SRSNAME,
-        )
+            return self._refresh_locked(force=True)
 
     def search(
         self,
-        query: Optional[str],
-        city: Optional[str],
-        line: Optional[str],
+        *,
+        query: str,
         limit: int,
-    ) -> List[TCLStop]:
-        self.ensure_loaded()
-        query_norm = query.lower().strip() if query else None
-        city_norm = city.lower().strip() if city else None
-        line_norm = line.lower().strip() if line else None
-        results: List[TCLStop] = []
+        city: Optional[str],
+        lines: Optional[List[str]],
+    ) -> List[TCLStopRecord]:
+        self._require_data()
+        query_norm = _normalize_text(query)
+        city_norm = _normalize_text(city)
+        line_filter = {code.upper() for code in lines} if lines else None
+        matches: List[Tuple[int, TCLStopRecord]] = []
         for stop in self._stops:
-            if query_norm:
-                haystacks = filter(
-                    None,
-                    [
-                        stop.name,
-                        stop.address,
-                        stop.city,
-                        " ".join(stop.lines) if stop.lines else None,
-                    ],
-                )
-                if not any(query_norm in segment.lower() for segment in haystacks):
-                    continue
             if city_norm:
-                if not stop.city or city_norm not in stop.city.lower():
+                hay_city = _normalize_text(stop.city)
+                if city_norm not in hay_city:
                     continue
-            if line_norm and not self._matches_line(stop, line_norm):
+            if line_filter:
+                if not line_filter.intersection({code.upper() for code in stop.lines}):
+                    continue
+            haystack = _normalize_text(" ".join(part for part in (stop.name, stop.city, stop.zone) if part))
+            if query_norm not in haystack:
                 continue
-            results.append(stop)
-            if len(results) >= limit:
-                break
-        return results
+            score = self._score_stop(query_norm, stop)
+            matches.append((score, stop))
+        matches.sort(key=lambda item: (item[0], item[1].name.lower()))
+        return [item[1] for item in matches[:limit]]
 
-    def find_nearby(
+    def nearby(
         self,
-        latitude: float,
-        longitude: float,
-        radius_km: float,
-        max_results: int,
-        line: Optional[str],
-    ) -> List[Tuple[TCLStop, float]]:
-        self.ensure_loaded()
-        line_norm = line.lower().strip() if line else None
-        matches: List[Tuple[TCLStop, float]] = []
+        *,
+        lat: float,
+        lon: float,
+        radius_m: float,
+        limit: int,
+    ) -> List[Tuple[TCLStopRecord, float]]:
+        self._require_data()
+        matches: List[Tuple[TCLStopRecord, float]] = []
         for stop in self._stops:
-            if stop.latitude is None or stop.longitude is None:
-                continue
-            if line_norm and not self._matches_line(stop, line_norm):
-                continue
-            distance = _haversine_km(latitude, longitude, stop.latitude, stop.longitude)
-            if distance <= radius_km:
-                matches.append((stop, distance))
-        matches.sort(key=lambda item: item[1])
-        return matches[:max_results]
+            distance_m = _haversine_m(lat, lon, stop.lat, stop.lon)
+            if distance_m <= radius_m:
+                matches.append((stop, distance_m))
+        matches.sort(key=lambda item: (item[1], item[0].name.lower()))
+        return matches[:limit]
 
-    def list_lines(self, min_count: int, limit: int) -> List[TCLLineSummary]:
-        self.ensure_loaded()
-        counters: Dict[str, int] = {}
-        samples: Dict[str, str] = {}
-        for stop in self._stops:
-            for line in stop.lines:
-                if not line:
-                    continue
-                counters[line] = counters.get(line, 0) + 1
-                samples.setdefault(line, stop.name)
-        summaries = [
-            TCLLineSummary(line=line, stop_count=count, sample_stop=samples.get(line))
-            for line, count in counters.items()
-            if count >= min_count
-        ]
-        summaries.sort(key=lambda item: (-item.stop_count, item.line))
-        return summaries[:limit]
+    def list_lines(self) -> List[LineSummary]:
+        self._require_data()
+        summaries: List[LineSummary] = []
+        for code in sorted(self._line_counts.keys()):
+            summaries.append(
+                LineSummary(
+                    code=code,
+                    label=self._line_labels.get(code),
+                    stop_count=self._line_counts[code],
+                )
+            )
+        return summaries
 
-    def _is_stale(self) -> bool:
-        if not self._last_refresh:
-            return True
-        return datetime.now(timezone.utc) - self._last_refresh > self._cache_ttl
+    def metadata(self) -> MetadataResponse:
+        return MetadataResponse(
+            source=self._source,
+            stop_count=len(self._stops),
+            line_count=len(self._line_counts),
+            last_refresh_utc=self._last_refresh,
+            cache_ttl_sec=self._cache_ttl,
+            wfs_base_url=self._client.base_url,
+            typename=self._client.typename,
+            srs_name=self._client.srs_name,
+            fallback_csv=str(self._fallback_csv),
+        )
 
-    def _load_dataset(self) -> Tuple[List[TCLStop], str]:
+    @property
+    def source_label(self) -> str:
+        return self._source
+
+    @property
+    def last_refresh(self) -> Optional[datetime]:
+        return self._last_refresh
+
+    def _require_data(self) -> None:
+        self.ensure_cache()
+        if not self._stops:
+            raise RuntimeError(
+                "No TCL stops available (WFS unreachable and fallback CSV missing)."
+            )
+
+    def _refresh_locked(self, *, force: bool) -> Dict[str, Any]:
+        now = time.monotonic()
+        if not force and self._stops and now < self._expires_at:
+            return self._stats()
+        features, source = self._load_features()
+        stops = self._normalize_features(features)
+        self._stops = stops
+        self._line_counts, self._line_labels = self._build_line_metadata(stops)
+        self._last_refresh = datetime.now(timezone.utc)
+        self._source = source
+        self._expires_at = time.monotonic() + self._cache_ttl
+        logger.info(
+            "TCL stop cache refreshed: %d stops (source=%s).",
+            len(stops),
+            source,
+        )
+        return self._stats()
+
+    def _stats(self) -> Dict[str, Any]:
+        return {
+            "stop_count": len(self._stops),
+            "line_count": len(self._line_counts),
+            "source": self._source,
+            "last_refresh": self._last_refresh,
+        }
+
+    def _load_features(self) -> Tuple[List[Dict[str, Any]], str]:
         try:
-            features = self._wfs_client.fetch_all()
-            stops = self._convert_features(features, source_label="grandlyon-wfs")
-            if stops:
-                return stops, "grandlyon-wfs"
+            features = self._client.fetch_all()
         except Exception:
-            logger.exception("TCLStopStore: failed to fetch WFS dataset, falling back to CSV.")
-        csv_stops = self._load_from_csv()
-        return csv_stops, f"csv:{FALLBACK_CSV_PATH.name}"
+            logger.exception("Unexpected error while fetching TCL stops from WFS.")
+            features = []
+        if features:
+            return features, "grandlyon_wfs"
+        fallback = self._load_csv_fallback()
+        if fallback:
+            return fallback, "fallback_csv"
+        return [], "unavailable"
 
-    def _convert_features(
-        self,
-        features: Iterable[Dict[str, Any]],
-        source_label: str,
-    ) -> List[TCLStop]:
-        stops: List[TCLStop] = []
-        for feature in features:
-            props = feature.get("properties") if isinstance(feature, dict) else None
-            if not isinstance(props, dict):
-                continue
-            stop_id = _normalize_string(
-                _extract_property(props, STOP_ID_FIELDS) or feature.get("id")
-            )
-            name = _normalize_string(_extract_property(props, NAME_FIELDS))
-            if not stop_id or not name:
-                continue
-            city = _normalize_string(_extract_property(props, CITY_FIELDS))
-            address = _normalize_string(_extract_property(props, ADDRESS_FIELDS))
-            lines = _normalize_lines(_extract_property(props, LINE_FIELDS))
-            latitude = longitude = None
-            lon, lat = _extract_coordinates(feature)
-            if lon is not None and lat is not None:
-                longitude, latitude = lon, lat
-            elif "lon" in props and "lat" in props:
-                try:
-                    longitude = float(props["lon"])
-                    latitude = float(props["lat"])
-                except (TypeError, ValueError):
-                    longitude = latitude = None
-            accessible = _normalize_bool(_extract_property(props, PMR_FIELDS))
-            elevator = _normalize_bool(_extract_property(props, ELEVATOR_FIELDS))
-            escalator = _normalize_bool(_extract_property(props, ESCALATOR_FIELDS))
-            zone = _normalize_string(_extract_property(props, ZONE_FIELDS))
-            insee = _normalize_string(_extract_property(props, INSEE_FIELDS))
-            stop = TCLStop(
-                stop_id=stop_id,
-                name=name,
-                city=city,
-                address=address,
-                lines=lines,
-                latitude=latitude,
-                longitude=longitude,
-                accessible_pmr=accessible,
-                has_elevator=elevator,
-                has_escalator=escalator,
-                zone=zone,
-                insee=insee,
-                source=source_label,
-                raw_properties=props,
-            )
-            stops.append(stop)
-        return stops
-
-    def _load_from_csv(self) -> List[TCLStop]:
-        if not FALLBACK_CSV_PATH.exists():
-            logger.error(
-                "TCLStopStore: fallback CSV does not exist at %s.",
-                FALLBACK_CSV_PATH,
-            )
+    def _load_csv_fallback(self) -> List[Dict[str, Any]]:
+        path = self._fallback_csv
+        if not path.exists():
+            logger.warning("TCL fallback CSV missing at %s", path)
             return []
-        stops: List[TCLStop] = []
+        rows: List[Dict[str, Any]] = []
         try:
-            with FALLBACK_CSV_PATH.open("r", encoding="utf-8") as handle:
+            with path.open("r", encoding="utf-8") as handle:
                 reader = csv.DictReader(handle)
                 for row in reader:
-                    stop_id = _normalize_string(row.get("stop_id"))
-                    name = _normalize_string(row.get("stop_name"))
-                    if not stop_id or not name:
-                        continue
-                    try:
-                        latitude = float(row["stop_lat"]) if row.get("stop_lat") else None
-                        longitude = float(row["stop_lon"]) if row.get("stop_lon") else None
-                    except (TypeError, ValueError):
-                        latitude = longitude = None
-                    stop = TCLStop(
-                        stop_id=stop_id,
-                        name=name,
-                        city=_normalize_string(row.get("city")),
-                        address=_normalize_string(row.get("address")),
-                        lines=_normalize_lines(row.get("served_lines")),
-                        latitude=latitude,
-                        longitude=longitude,
-                        accessible_pmr=_normalize_bool(row.get("accessible_pmr")),
-                        has_elevator=_normalize_bool(row.get("has_elevator")),
-                        has_escalator=_normalize_bool(row.get("has_escalator")),
-                        zone=_normalize_string(row.get("zone")),
-                        insee=_normalize_string(row.get("insee")),
-                        source=f"csv:{FALLBACK_CSV_PATH.name}",
-                        raw_properties=row,
-                    )
-                    stops.append(stop)
+                    lon = _safe_float(row.get("lon") or row.get("longitude"))
+                    lat = _safe_float(row.get("lat") or row.get("latitude"))
+                    geometry = None
+                    if lon is not None and lat is not None:
+                        geometry = {"type": "Point", "coordinates": [lon, lat]}
+                    rows.append({"properties": row, "geometry": geometry})
         except Exception:
-            logger.exception("TCLStopStore: failed to parse fallback CSV.")
+            logger.exception("Unable to parse TCL fallback CSV at %s", path)
             return []
-        return stops
+        return rows
+
+    def _normalize_features(self, features: Sequence[Dict[str, Any]]) -> List[TCLStopRecord]:
+        merged: Dict[str, TCLStopRecord] = {}
+        for feature in features:
+            record = TCLStopRecord.from_feature(feature)
+            if not record:
+                continue
+            key = record.cache_key()
+            existing = merged.get(key)
+            if existing:
+                existing.lines.update(record.lines)
+                for code, label in record.line_labels.items():
+                    if label and code not in existing.line_labels:
+                        existing.line_labels[code] = label
+                if not existing.city and record.city:
+                    existing.city = record.city
+                if not existing.district and record.district:
+                    existing.district = record.district
+                if not existing.zone and record.zone:
+                    existing.zone = record.zone
+            else:
+                merged[key] = record
+        return sorted(merged.values(), key=lambda stop: stop.name.lower())
+
+    def _build_line_metadata(
+        self, stops: Sequence[TCLStopRecord]
+    ) -> Tuple[Dict[str, int], Dict[str, str]]:
+        counts: Dict[str, int] = {}
+        labels: Dict[str, str] = {}
+        for stop in stops:
+            for code in stop.lines:
+                counts[code] = counts.get(code, 0) + 1
+                label = stop.line_labels.get(code)
+                if label and code not in labels:
+                    labels[code] = label
+        return counts, labels
 
     @staticmethod
-    def _matches_line(stop: TCLStop, line_norm: str) -> bool:
-        for candidate in stop.lines:
-            if line_norm in candidate.lower():
-                return True
-        return False
+    def _score_stop(query_norm: str, stop: TCLStopRecord) -> int:
+        name_norm = _normalize_text(stop.name)
+        if name_norm == query_norm:
+            return 0
+        if name_norm.startswith(query_norm):
+            return 1
+        if query_norm in name_norm:
+            return 2
+        city_norm = _normalize_text(stop.city)
+        if city_norm and query_norm in city_norm:
+            return 3
+        return 4
 
+
+cache_ttl = int(os.getenv("TCL_STOPS_CACHE_TTL_SEC", "900"))
+fallback_csv = Path(os.getenv("TCL_STOPS_FALLBACK_CSV", str(_fallback_default))).expanduser()
+client = TCLWFSClient(
+    base_url=os.getenv("TCL_WFS_BASE_URL", "https://data.grandlyon.com/geoserver/sytral/ows"),
+    typename=os.getenv("TCL_WFS_TYPENAME", "sytral:tcl_sytral.tclarret"),
+    srs_name=os.getenv("TCL_WFS_SRSNAME", "EPSG:4171"),
+    username=os.getenv("TCL_WFS_USERNAME"),
+    password=os.getenv("TCL_WFS_PASSWORD"),
+    page_size=int(os.getenv("TCL_WFS_PAGE_SIZE", "200")),
+    max_features=int(os.getenv("TCL_WFS_MAX_FEATURES", "5000")),
+    timeout=float(os.getenv("TCL_WFS_TIMEOUT_SEC", "10")),
+    sort_by=os.getenv("TCL_WFS_SORT_BY", "gid"),
+)
+store = TCLStopStore(client=client, fallback_csv=fallback_csv, cache_ttl_sec=cache_ttl)
 
 app = FastAPI(
     title="EcoAdvisor TCL Transit Service",
     version="0.1.0",
-    description=(
-        "Expose live TCL stops from data.grandlyon.com (SYTRAL WFS) with fallbacks "
-        "so EcoAdvisor agents can locate public transport options."
-    ),
+    description="Expose TCL stop locations via MCP using the Grand Lyon WFS feed.",
 )
 
-store = TCLStopStore()
 
-
-@app.get(
+@app.post(
     "/tcl/stops/search",
-    response_model=TCLStopSearchResponse,
+    response_model=StopSearchResponse,
     tags=["TCL"],
     operation_id="search_tcl_stops",
 )
-async def search_tcl_stops(
-    query: Optional[str] = Query(
-        default=None,
-        min_length=2,
-        description="Partial stop name, address or line identifier.",
-    ),
-    city: Optional[str] = Query(
-        default=None,
-        min_length=2,
-        description="Filter on the commune label.",
-    ),
-    line: Optional[str] = Query(
-        default=None,
-        min_length=1,
-        description="Filter stops that serve a given TCL line (e.g. 'C13', 'T1').",
-    ),
-    limit: int = Query(default=25, ge=1, le=200),
-    include_raw: bool = Query(
-        default=False,
-        description="Include the raw WFS properties in each stop payload.",
-    ),
-) -> TCLStopSearchResponse:
+async def search_tcl_stops(request: StopSearchRequest) -> StopSearchResponse:
     try:
-        stops = store.search(query=query, city=city, line=line, limit=limit)
+        stops = store.search(
+            query=request.query,
+            limit=request.limit,
+            city=request.city,
+            lines=request.lines,
+        )
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    payload = [
-        stop.to_payload(include_raw=include_raw)
+        raise HTTPException(status_code=503, detail=str(exc))
+    payloads = [
+        stop.as_payload(
+            store.source_label,
+            include_raw=request.include_raw,
+        )
         for stop in stops
     ]
-    return TCLStopSearchResponse(
-        query=query,
-        city=city,
-        line=line,
-        limit=limit,
-        count=len(payload),
-        generated_at=datetime.now(timezone.utc),
-        source=store.metadata().source,
-        stops=[TCLStop(**item) for item in payload],
+    return StopSearchResponse(
+        query=request.query,
+        count=len(payloads),
+        limit=request.limit,
+        city_filter=request.city,
+        line_filter=request.lines,
+        results=payloads,
+        source=store.source_label,
+        refreshed_at=store.last_refresh,
     )
 
 
-@app.get(
+@app.post(
     "/tcl/stops/nearby",
-    response_model=TCLStopNearbyResponse,
+    response_model=NearbyStopsResponse,
     tags=["TCL"],
     operation_id="find_nearby_tcl_stops",
 )
-async def find_nearby_tcl_stops(
-    latitude: float = Query(..., ge=40.0, le=52.0, description="Latitude in decimal degrees (WGS84)."),
-    longitude: float = Query(..., ge=-2.0, le=10.0, description="Longitude in decimal degrees (WGS84)."),
-    radius_km: float = Query(1.5, gt=0.1, le=25.0, description="Search radius in kilometers."),
-    max_results: int = Query(20, ge=1, le=100),
-    line: Optional[str] = Query(
-        default=None,
-        description="Optional TCL line filter (case-insensitive).",
-    ),
-    include_raw: bool = Query(
-        default=False,
-        description="Include raw WFS properties for each stop.",
-    ),
-) -> TCLStopNearbyResponse:
+async def find_nearby_tcl_stops(request: NearbyStopsRequest) -> NearbyStopsResponse:
     try:
-        matches = store.find_nearby(
-            latitude=latitude,
-            longitude=longitude,
-            radius_km=radius_km,
-            max_results=max_results,
-            line=line,
+        matches = store.nearby(
+            lat=request.lat,
+            lon=request.lon,
+            radius_m=request.radius_m,
+            limit=request.limit,
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    stops_with_distance: List[TCLStopWithDistance] = []
-    for stop, distance in matches:
-        payload = stop.to_payload(include_raw=include_raw)
-        stops_with_distance.append(
-            TCLStopWithDistance(**payload, distance_km=round(distance, 3))
+        raise HTTPException(status_code=503, detail=str(exc))
+    payloads = [
+        stop.as_payload(
+            store.source_label,
+            include_raw=request.include_raw,
+            distance_m=distance,
         )
-    return TCLStopNearbyResponse(
-        latitude=latitude,
-        longitude=longitude,
-        radius_km=radius_km,
-        max_results=max_results,
-        line=line,
-        count=len(stops_with_distance),
-        generated_at=datetime.now(timezone.utc),
-        source=store.metadata().source,
-        stops=stops_with_distance,
+        for stop, distance in matches
+    ]
+    return NearbyStopsResponse(
+        origin_lat=request.lat,
+        origin_lon=request.lon,
+        radius_m=request.radius_m,
+        limit=request.limit,
+        count=len(payloads),
+        results=payloads,
+        source=store.source_label,
+        refreshed_at=store.last_refresh,
     )
 
 
 @app.get(
     "/tcl/lines",
-    response_model=List[TCLLineSummary],
+    response_model=LinesResponse,
     tags=["TCL"],
     operation_id="list_tcl_lines",
 )
-async def list_tcl_lines(
-    min_count: int = Query(5, ge=1, le=100),
-    limit: int = Query(100, ge=1, le=500),
-) -> List[TCLLineSummary]:
+async def list_tcl_lines() -> LinesResponse:
     try:
-        return store.list_lines(min_count=min_count, limit=limit)
+        summaries = store.list_lines()
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail=str(exc))
+    return LinesResponse(
+        count=len(summaries),
+        lines=summaries,
+        source=store.source_label,
+        refreshed_at=store.last_refresh,
+    )
 
 
 @app.get(
     "/tcl/metadata",
-    response_model=TCLDatasetMetadata,
+    response_model=MetadataResponse,
     tags=["TCL"],
     operation_id="get_tcl_metadata",
 )
-async def get_tcl_metadata() -> TCLDatasetMetadata:
-    try:
-        store.ensure_loaded()
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+async def get_tcl_metadata() -> MetadataResponse:
     return store.metadata()
 
 
 @app.post(
     "/tcl/reload",
-    response_model=CacheReloadResponse,
+    response_model=ReloadResponse,
     tags=["TCL"],
     operation_id="reload_tcl_stops_cache",
 )
-async def reload_tcl_stops_cache() -> CacheReloadResponse:
-    try:
-        count, source = store.reload()
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return CacheReloadResponse(
-        stop_count=count,
-        refreshed_at=datetime.now(timezone.utc),
-        source=source,
+async def reload_tcl_stops_cache() -> ReloadResponse:
+    stats = store.reload()
+    return ReloadResponse(
+        stop_count=stats["stop_count"],
+        line_count=stats["line_count"],
+        source=stats["source"],
+        refreshed_at=stats.get("last_refresh"),
     )
 
 
 mcp = FastApiMCP(
     app,
     name="EcoAdvisor TCL Transit MCP",
-    description="Provides TCL stop search, proximity lookups and metadata backed by the Grand Lyon SYTRAL feed.",
+    description=(
+        "Provides access to TCL stop locations sourced from the Grand Lyon SYTRAL WFS feed "
+        "with an optional CSV fallback for offline demos."
+    ),
     include_tags=["TCL"],
     describe_all_responses=True,
     describe_full_response_schema=True,
@@ -747,3 +854,4 @@ mcp = FastApiMCP(
 mcp.mount_http(mount_path="/mcp")
 
 __all__ = ["app"]
+
