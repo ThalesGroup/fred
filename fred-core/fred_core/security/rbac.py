@@ -74,8 +74,6 @@ class RBACProvider(AuthorizationProvider):
                 Resource.SESSIONS: CRUD,
                 Resource.MESSAGE_ATTACHMENTS: {Action.CREATE},
                 Resource.PROMPT_COMPLETIONS: {Action.CREATE},
-                # Viewer can create and use Chat Context (resources)
-                Resource.RESOURCES: CRUD,
                 # Viewer can create and use files in the filesystem endpoint
                 Resource.FILES: CRUD,
             },
