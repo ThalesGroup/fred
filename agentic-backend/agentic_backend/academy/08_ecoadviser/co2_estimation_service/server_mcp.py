@@ -6,6 +6,7 @@ import os
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
+import difflib
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -255,11 +256,21 @@ class EmissionFactorStore:
         logger.info("CO₂ reference now tracks %d canonical modes.", len(self._records))
 
     def _resolve_mode(self, mode: str) -> str:
-        key = mode.strip().lower()
+        key = mode.strip().lower().replace("-", "_")
         if key in self._records:
             return key
         if key in self._alias_index:
             return self._alias_index[key]
+        # Last resort: fuzzy match against known modes
+        candidates = list(self._records.keys())
+        match = difflib.get_close_matches(key, candidates, n=1, cutoff=0.72)
+        if match:
+            logger.info(
+                "EmissionFactorStore: auto-mapped mode '%s' to '%s' via fuzzy match.",
+                mode,
+                match[0],
+            )
+            return match[0]
         raise KeyError(mode)
 
     def list_modes(self) -> List[EmissionFactor]:
@@ -353,12 +364,18 @@ async def get_emission_factor(mode: str) -> EmissionFactor:
     operation_id="compare_trip_modes",
 )
 async def compare_trip_modes(request: TripComparisonRequest) -> TripComparisonResponse:
-    results = store.compare_modes(
-        distance_km=request.distance_km,
-        frequency_days=request.frequency_days,
-        round_trips_per_day=request.round_trips_per_day,
-        modes=request.modes,
-    )
+    try:
+        results = store.compare_modes(
+            distance_km=request.distance_km,
+            frequency_days=request.frequency_days,
+            round_trips_per_day=request.round_trips_per_day,
+            modes=request.modes,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unknown mode '{exc.args[0]}'.")
+    except Exception as exc:
+        logger.exception("compare_trip_modes failed: %s", exc)
+        raise HTTPException(status_code=500, detail=f"compare_trip_modes failed: {exc}")
     weekly_distance = request.distance_km * request.frequency_days * request.round_trips_per_day
     methodology = (
         "Weekly emissions = factor_kg_per_km × distance_km (one-way) × "

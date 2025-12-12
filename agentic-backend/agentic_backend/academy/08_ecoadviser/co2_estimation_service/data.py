@@ -89,6 +89,7 @@ DEFAULT_EMISSION_FACTORS: List[EmissionFactorDict] = [
         "aliases": [
             "tram",
             "tcl_tram",
+            "tram_tcl",
             "tramway tcl",
         ],
     },
@@ -124,6 +125,7 @@ DEFAULT_EMISSION_FACTORS: List[EmissionFactorDict] = [
             "public_transport",
             "transports_en_commun",
             "transport_en_commun",
+            "bus_urban",
         ],
     },
     {
@@ -158,6 +160,10 @@ DEFAULT_EMISSION_FACTORS: List[EmissionFactorDict] = [
             "velo",
             "vélo",
             "bicycle",
+            "bike_electric_shared",
+            "bike_shared",
+            "vélo partagé",
+            "bike_classic",
         ],
     },
     {
@@ -196,6 +202,8 @@ DEFAULT_EMISSION_FACTORS: List[EmissionFactorDict] = [
             "trottinette",
             "trottinette_electrique",
             "trottinette électrique",
+            "escooter_shared",
+            "trottinette_partagee",
         ],
     },
 ]
