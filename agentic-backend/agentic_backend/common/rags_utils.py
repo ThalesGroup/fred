@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional
+from typing import List, Optional, Any
 
 from fred_core import VectorSearchHit
 
@@ -67,6 +67,23 @@ def format_sources_for_prompt(
         n = h.rank if h.rank is not None else "?"
         lines.append(f"[{n}] {label}\n{snippet}")
     return "\n\n".join(lines)
+
+def format_rag_sources_for_prompt(hits: List[Any]) -> str :
+    lines = []
+    for h in hits:
+        fact = h.get("fact")
+        valid = h.get("valid_at")
+
+        if not fact:
+            continue  # les hits sans 'fact' ne servent à rien pour le RAG
+
+        if valid:
+            lines.append(f"- {fact} (date: {valid})")
+        else:
+            lines.append(f"- {fact}")
+
+    return "\n".join(lines)
+
 
 
 def _extract_url_from_hit(hit: VectorSearchHit) -> Optional[str]:
