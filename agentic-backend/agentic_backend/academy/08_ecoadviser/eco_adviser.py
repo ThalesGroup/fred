@@ -31,7 +31,7 @@ Fred rationale:
 import json
 import logging
 import os
-from typing import Annotated, Any, Dict, List, TypedDict, Union
+from typing import Annotated, Any, Dict, List, Optional, TypedDict, Union
 
 from langchain_core.messages import AnyMessage, HumanMessage, ToolMessage
 from langgraph.constants import START
@@ -50,12 +50,14 @@ from agentic_backend.core.agents.agent_spec import (
     UIHints,
 )
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.chatbot.chat_schema import GeoPart
 from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_MESSAGE_CHARS = int(os.getenv("ECO_MAX_TOOL_MESSAGE_CHARS", "4000"))
 RECENT_MESSAGES_WINDOW = int(os.getenv("ECO_RECENT_MESSAGES", "12"))
+MAX_MAP_FEATURES = int(os.getenv("ECO_MAX_MAP_FEATURES", "60"))
 
 DatabaseContextPayload = Union[List[Dict[str, Any]], Dict[str, Any], str, None]
 
@@ -77,79 +79,19 @@ ECO_TUNING = AgentTuning(
             type="prompt",
             title="System Prompt",
             description=(
-                "EcoAdvisor's operating instructions: guide the user to describe "
-                "their trip, query tabular mobility datasets (CSV/Excel via MCP), "
-                "estimate CO₂ impact and propose low-carbon alternatives."
+                "EcoAdvisor's operating instructions: gather trip context, query "
+                "the MCP tools, summarize findings, and compute CO₂ guidance."
             ),
             required=True,
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
             default=(
-                "You are **EcoAdvisor**, a mobility and CO₂ impact assistant.\n\n"
-                "Your mission is to help users understand and reduce the carbon footprint "
-                "of their daily trips (home ↔ work, regular commutes, etc.).\n\n"
-                "### Persona utilisateur\n"
-                "{persona_salarie_cnr}\n"
-                "Always answer in the same language the user used (if unsure, default to French,"
-                " and keep all follow-up questions in that language).\n\n"
-                "### Data & Tools\n"
-                "- You can access structured tabular datasets (CSV/Excel) via tools.\n"
-                "- First, **list the available datasets and their schema** using the tools.\n"
-                "- Then, select the relevant tables and run queries to inspect nearby bike lanes\n"
-                "  and public transport options.\n\n"
-                "### TCL Transit Live Tools\n"
-                "- Use the dedicated `mcp-tcl-service` whenever you need authoritative stop data.\n"
-                "- Available tools:\n"
-                "  - `search_tcl_stops` — keyword search with optional city/line filters.\n"
-                "  - `find_nearby_tcl_stops` — input lat/lon + radius to list the closest stops (returns precise distances and served lines).\n"
-                "  - `list_tcl_lines` and `get_tcl_metadata` — understand which lines are tracked and when the cache last refreshed.\n"
-                "- Always surface the `source` and `refreshed_at` fields returned by these tools so the user trusts the provenance (Grand Lyon WFS vs fallback CSV).\n\n"
-                "### CO₂ Reference Service\n"
-                "- Do NOT rely on hardcoded emission factors. Always call the MCP tools provided by the CO₂ reference service (`mcp-co2-service`).\n"
-                "- `list_emission_modes` helps you discover all supported modes and their metadata.\n"
-                "- `get_emission_factor` returns a single factor with `source` and `last_update` so you can cite the reference explicitly.\n"
-                "- `compare_trip_modes` should be used when you know the distance and frequency: it returns a comparison payload (weekly emissions per mode) ready to transform into a Markdown table.\n"
-                "- When the service is unavailable, fall back to the baseline assumptions (car 0.192 kg/km, TCL 0.01 kg/km, bike/walk 0 kg/km) and clearly state that you relied on the backup factors.\n\n"
-                "### Workflow\n"
-                "1. Clarify the user's context:\n"
-                "   - origin and destination (city or district is enough)\n"
-                "   - main current mode of transport (car, bike, TCL, etc.)\n"
-                "   - approximate one-way distance or time if available\n"
-                "   - frequency (e.g., 5 days/week)\n"
-                "2. Use tools to **list datasets and their schema**.\n"
-                "3. Identify which tables are relevant (e.g., bike_infra_demo for active modes) and when to pivot to the TCL MCP for stops or line metadata.\n"
-                "4. Combine SQL-like queries with the TCL tools to:\n"
-                "   - find long bike lanes near the origin/destination city\n"
-                "   - look up TCL stops/lines around the user request (search or nearby lookup)\n"
-                "5. Based on distance and mode, estimate weekly CO₂ emissions using the factors above.\n"
-                "6. Compare current mode vs alternatives (TCL, bike, walking if realistic).\n"
-                "7. Produce a clear, concise **markdown summary** with:\n"
-                "   - a short explanation in natural language\n"
-                "   - a markdown table comparing modes and weekly CO₂\n"
-                "   - explicit assumptions you made (distance, days/week, factors)\n\n"
-                "### Vulgarisation CO₂\n"
-                "- Après avoir affiché le total hebdomadaire en kg CO₂e, ajoute un bref passage `Équivalences quotidiennes` pour donner un ordre de grandeur.\n"
-                "- Convertis systématiquement ce total en:\n"
-                "  - heures d'aspirateur : 1 h (aspirateur 1 200 W, mix électrique UE 2023) ≈ 0,35 kg CO₂e\n"
-                "  - jours de chauffage électrique d'une pièce de 20 m² : 1 jour (radiateur 1,5 kW pendant 8 h) ≈ 3,5 kg CO₂e\n"
-                "- Arrondis ces équivalences au demi le plus proche (`≈ 2,5 h d'aspirateur`, `≈ 3 jours de chauffage`) et précise qu'il s'agit d'approximations.\n"
-                "- Garde toujours la réponse technique chiffrée en kg CO₂e dans le tableau et le résumé.\n\n"
-                "### Présentation UI\n"
-                "- Structure ta réponse avec des sous-titres Markdown (`### Synthèse rapide`, `### Options détaillées`, `### Données & hypothèses`).\n"
-                "- Mets en évidence les données ou ordres de grandeur critiques avec du gras limité (`**CO₂ actuel**`, `**Point critique**`).\n"
-                "- Reste concis: phrases courtes, pas de redites inutiles.\n"
-                "- Utilise des pastilles couleurs via emoji standards pour qualifier les options: `🟢` (option bas carbone), `🟠` (point de vigilance), `🔴` (action à éviter). Ne dépasse jamais trois pastilles par réponse.\n"
-                "- Ajoute au besoin des emojis transport (🚲, 🚗, 🚌, 🚶, etc ...) pour illustrer les options.\n"
-                "- Termine les recommandations chiffrées par un tableau Markdown (colonnes `Mode | CO₂ hebdo | Hypothèses`) et ajoute un bloc `Hypothèses` en liste courte.\n"
-                "- Fractionne les paragraphes en listes ou phrases courtes pour rester lisible dans l'UI.\n\n"
-                "### Rules\n"
-                "- ALWAYS base your conclusions on actual tool results when referring to datasets.\n"
-                "- NEVER invent columns or tables that do not exist in the schema.\n"
-                "- Cite the CO₂ references by including the `source` and `last_update` returned by the emission tools.\n"
-                "- Use markdown tables to present numeric comparisons.\n"
-                "- If the user did not provide enough information (distance, frequency),\n"
-                "  ask targeted follow-up questions before estimating CO₂.\n"
-                "- If you are unsure about a detail, state your assumptions explicitly.\n\n"
-                "Current date: {today}.\n\n"
+                "You are **EcoAdvisor**, a pragmatic mobility and CO₂ guide.\n"
+                "- Work in the user's language.\n"
+                "- Use MCP tools instead of guessing; cite the `source` / `refreshed_at` fields they return.\n"
+                "- Any tool output with lat/lon must be turned into the map already rendered in the UI—just describe what it shows and avoid suggesting external mapping steps unless the user asks.\n"
+                "- Summaries stay short: headings, bullet lists, one Markdown table `Mode | CO₂ hebdo | Hypothèses`, then the key assumptions and rough everyday equivalents (aspirateur, chauffage...).\n"
+                "- If data is missing or a tool fails, say so and state the fallback factors you used instead of hallucinating.\n"
+                "Current date: {today}."
             ),
         ),
         FieldSpec(
@@ -160,14 +102,10 @@ ECO_TUNING = AgentTuning(
             required=False,
             ui=UIHints(group="Personas", multiline=True, markdown=True),
             default=(
-                "**Persona : Salarié CNR (Compagnie Nationale du Rhône)**\n"
-                "- **Domaines** : hydroélectricité, transport fluvial, aménagement territorial.\n"
-                "- **Métiers clés** : ingénieurs énergie, techniciens maintenance, exploitants, pilotes fluviaux, logisticiens, écologues, chefs de projet RSE, juristes spécialisés.\n"
-                "- **Diplômes** : BTS/DUT électrotechnique ou maintenance, écoles d’ingénieurs énergie/environnement (INSA Lyon, Grenoble INP, ENSEEIHT), certifications navigation rhodanienne.\n"
-                "- **Compétences** : transition bas-carbone, biodiversité, réglementation eau/environnement, adaptabilité (astreintes, travail en équipe).\n"
-                "- **Profil sociodémographique** : mix d’experts seniors hydro historiques et jeunes diplômés ENR, majorité CDI, efforts parité.\n"
-                "- **Culture & valeurs** : engagement transition énergétique, ancrage territorial, partenariats collectivités.\n"
-                "- **Enjeux actuels** : développement hydro/ENR, adaptation crues-sécheresses, innovation (smart grids, stockage énergie).\n"
+                "**Persona : Salarié CNR**\n"
+                "- Travaille dans l'énergie (hydro, logistique fluviale, maintenance).\n"
+                "- Sensibilisé à la transition bas carbone mais cherche des conseils pratiques.\n"
+                "- Mix bureau / terrain, trajets domicile-travail variés autour de Lyon."
             ),
         ),
     ],
@@ -250,119 +188,67 @@ class EcoAdvisor(AgentFlow):
     # -----------------------------------------------------------------------
     # Helpers MCP / contexte tabulaire
     # -----------------------------------------------------------------------
-    def _maybe_parse_json(self, payload: Any) -> Any:
+    def _format_context_for_prompt(self, database_context: DatabaseContextPayload) -> str:
+        entries = self._normalize_context_entries(database_context)
+        if not entries:
+            return ""
+
+        lines = ["Available datasets:"]
+        for entry in entries:
+            db = entry.get("database") or entry.get("db_name") or "unknown"
+            tables = ", ".join(self._extract_table_names(entry.get("tables")))
+            lines.append(f"- {db}: {tables or 'no visible tables'}")
+        return "\n".join(lines) + "\n\n"
+
+    def _normalize_context_entries(
+        self, context: DatabaseContextPayload
+    ) -> List[Dict[str, Any]]:
+        payload = self._maybe_parse_json(context)
+        if isinstance(payload, dict):
+            return [
+                {"database": db_name, "tables": tables}
+                for db_name, tables in payload.items()
+            ]
+        if isinstance(payload, list):
+            out = []
+            for entry in payload:
+                parsed = self._maybe_parse_json(entry)
+                if isinstance(parsed, dict):
+                    out.append(parsed)
+            return out
+        if payload:
+            return [{"database": "unknown", "tables": payload}]
+        return []
+
+    @staticmethod
+    def _extract_table_names(tables: Any) -> List[str]:
+        if isinstance(tables, dict):
+            return list(tables.keys())
+        if isinstance(tables, list):
+            names = []
+            for item in tables:
+                if isinstance(item, str):
+                    names.append(item)
+                elif isinstance(item, dict):
+                    names.append(
+                        item.get("table_name")
+                        or item.get("name")
+                        or item.get("table")
+                        or "table"
+                    )
+            return names
+        if isinstance(tables, str):
+            return [tables]
+        return []
+
+    @staticmethod
+    def _maybe_parse_json(payload: Any) -> Any:
         if isinstance(payload, str):
             try:
                 return json.loads(payload)
             except Exception:
                 return payload
         return payload
-
-    def _format_context_for_prompt(self, database_context: DatabaseContextPayload) -> str:
-        """
-        Formatte la liste des bases / tables accessibles pour injection dans le prompt.
-
-        Fred rationale:
-        - On donne au LLM une vue synthétique des datasets disponibles
-          → il n'a pas à "deviner" les noms de tables.
-        """
-        context_payload = self._maybe_parse_json(database_context)
-        normalized_entries: List[Dict[str, Any]] = []
-
-        if isinstance(context_payload, dict):
-            normalized_entries = [
-                {"database": db_name, "tables": tables}
-                for db_name, tables in context_payload.items()
-            ]
-        elif isinstance(context_payload, list):
-            for entry in context_payload:
-                parsed_entry = self._maybe_parse_json(entry)
-                if isinstance(parsed_entry, dict):
-                    if "database" not in parsed_entry and "db_name" in parsed_entry:
-                        parsed_entry["database"] = parsed_entry.get("db_name")
-                    normalized_entries.append(parsed_entry)
-                else:
-                    normalized_entries.append(
-                        {"database": "unknown_database", "tables": parsed_entry}
-                    )
-        elif context_payload:
-            normalized_entries = [
-                {"database": "unknown_database", "tables": context_payload}
-            ]
-
-        if not normalized_entries:
-            return "No databases or tables currently loaded.\n"
-
-        lines = ["You currently have access to the following structured datasets:\n"]
-        for entry in normalized_entries:
-            if not isinstance(entry, dict):
-                lines.append(f"- {entry}")
-                continue
-            db = (
-                entry.get("database")
-                or entry.get("db_name")
-                or "unknown_database"
-            )
-            tables_summary = self._summarize_tables(entry.get("tables"))
-            lines.append(f"- Database: `{db}` with tables: {tables_summary}")
-        return "\n".join(lines) + "\n\n"
-
-    def _summarize_tables(self, tables: Any) -> str:
-        """
-        Retourne une représentation courte des tables accessibles dans une base.
-        """
-        if isinstance(tables, dict):
-            summaries = []
-            for table_name, columns in tables.items():
-                detail = ""
-                if isinstance(columns, list):
-                    detail = f"{len(columns)} columns"
-                summaries.append(
-                    f"{table_name}{f' ({detail})' if detail else ''}"
-                )
-            return "[" + ", ".join(summaries) + "]" if summaries else "[]"
-
-        if isinstance(tables, list):
-            display_parts = []
-            for table in tables:
-                parsed = self._maybe_parse_json(table)
-                if isinstance(parsed, dict):
-                    table_name = (
-                        parsed.get("table_name")
-                        or parsed.get("name")
-                        or parsed.get("table")
-                        or "unknown_table"
-                    )
-                    row_count = parsed.get("row_count")
-                    columns = parsed.get("columns")
-                    column_summary = ""
-                    if isinstance(columns, list):
-                        column_names = [
-                            col.get("name", "?")
-                            for col in columns[:4]
-                            if isinstance(col, dict)
-                        ]
-                        if column_names:
-                            suffix = "…" if len(columns) > len(column_names) else ""
-                            column_summary = f"cols: {', '.join(column_names)}{suffix}"
-                    details = []
-                    if isinstance(row_count, int):
-                        details.append(f"{row_count} rows")
-                    if column_summary:
-                        details.append(column_summary)
-                    if details:
-                        display_parts.append(
-                            f"{table_name} ({'; '.join(details)})"
-                        )
-                    else:
-                        display_parts.append(table_name)
-                else:
-                    display_parts.append(str(parsed))
-            return "[" + "; ".join(display_parts) + "]" if display_parts else "[]"
-
-        if tables in (None, "", []):
-            return "[]"
-        return str(tables)
 
     async def _ensure_database_context(self, state: EcoState) -> DatabaseContextPayload:
         """
@@ -472,6 +358,154 @@ class EcoAdvisor(AgentFlow):
         ]
 
     # -----------------------------------------------------------------------
+    #  Helper: map rendering
+    # -----------------------------------------------------------------------
+    @staticmethod
+    def _safe_float(value: Any) -> Optional[float]:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed
+
+    def _maybe_build_geo_part_from_tools(
+        self, tool_payloads: Dict[str, Any]
+    ) -> Optional[GeoPart]:
+        """
+        Convert any tool payload containing lat/lon info into a GeoPart so the UI can render maps.
+        """
+
+        features: List[Dict[str, Any]] = []
+
+        def _extract_feature(entry: Dict[str, Any], source: str) -> Optional[Dict[str, Any]]:
+            geometry = entry.get("geometry")
+            if isinstance(geometry, dict):
+                coords = geometry.get("coordinates")
+                if (
+                    geometry.get("type") == "Point"
+                    and isinstance(coords, (list, tuple))
+                    and len(coords) >= 2
+                ):
+                    lon = self._safe_float(coords[0])
+                    lat = self._safe_float(coords[1])
+                    if lat is not None and lon is not None:
+                        return {
+                            "type": "Feature",
+                            "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                            "properties": _build_properties(entry, source),
+                        }
+
+            lon = (
+                entry.get("lon")
+                or entry.get("longitude")
+                or entry.get("lng")
+                or entry.get("x")
+            )
+            lat = entry.get("lat") or entry.get("latitude") or entry.get("y")
+            lat_val = self._safe_float(lat)
+            lon_val = self._safe_float(lon)
+            if lat_val is None or lon_val is None:
+                return None
+            return {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [lon_val, lat_val]},
+                "properties": _build_properties(entry, source),
+            }
+
+        def _build_properties(entry: Dict[str, Any], source: str) -> Dict[str, Any]:
+            candidates = [
+                entry.get("name"),
+                entry.get("label"),
+                entry.get("stop_id"),
+                entry.get("id"),
+            ]
+            name = next((value for value in candidates if isinstance(value, str) and value.strip()), None)
+            properties: Dict[str, Any] = {
+                "name": name or f"Point ({source})",
+                "source": entry.get("source") or source,
+            }
+            optional_keys = [
+                "stop_id",
+                "city",
+                "district",
+                "zone",
+                "lines",
+                "distance_m",
+                "line",
+                "mode",
+                "label",
+            ]
+            for key in optional_keys:
+                value = entry.get(key)
+                if value in (None, "", []):
+                    continue
+                if key == "lines" and isinstance(value, list):
+                    properties[key] = ", ".join(str(v) for v in value)
+                elif key == "distance_m":
+                    try:
+                        properties[key] = round(float(value), 1)
+                    except (TypeError, ValueError):
+                        continue
+                else:
+                    properties[key] = value
+            return properties
+
+        def _collect(payload: Any, source: str):
+            if len(features) >= MAX_MAP_FEATURES:
+                return
+            if isinstance(payload, dict):
+                feature = _extract_feature(payload, source)
+                if feature:
+                    features.append(feature)
+                    if len(features) >= MAX_MAP_FEATURES:
+                        return
+                for key in (
+                    "results",
+                    "items",
+                    "data",
+                    "records",
+                    "features",
+                    "points",
+                ):
+                    nested = payload.get(key)
+                    if isinstance(nested, (list, tuple)):
+                        for item in nested:
+                            _collect(item, source)
+                    elif isinstance(nested, dict):
+                        _collect(nested, source)
+                if "origin_lat" in payload and "origin_lon" in payload:
+                    lat = self._safe_float(payload.get("origin_lat"))
+                    lon = self._safe_float(payload.get("origin_lon"))
+                    if lat is not None and lon is not None:
+                        features.append(
+                            {
+                                "type": "Feature",
+                                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                                "properties": {
+                                    "name": "Point de référence",
+                                    "source": source,
+                                },
+                            }
+                        )
+            elif isinstance(payload, (list, tuple)):
+                for item in payload:
+                    _collect(item, source)
+
+        for tool_name, payload in tool_payloads.items():
+            _collect(payload, tool_name)
+            if len(features) >= MAX_MAP_FEATURES:
+                break
+
+        if not features:
+            return None
+
+        return GeoPart(
+            geojson={"type": "FeatureCollection", "features": features},
+            popup_property="name",
+            fit_bounds=True,
+        )
+
+    # -----------------------------------------------------------------------
     # 3) Noeud LLM principal
     # -----------------------------------------------------------------------
     async def reasoner(self, state: EcoState):
@@ -527,6 +561,17 @@ class EcoAdvisor(AgentFlow):
             tools_md.update(tool_payloads)
             md["tools"] = tools_md
             response.response_metadata = md
+            geo_part = self._maybe_build_geo_part_from_tools(tool_payloads)
+            if geo_part:
+                add_kwargs = getattr(response, "additional_kwargs", None)
+                if add_kwargs is None or not isinstance(add_kwargs, dict):
+                    add_kwargs = {}
+                    response.additional_kwargs = add_kwargs
+                fred_parts = add_kwargs.get("fred_parts")
+                if not isinstance(fred_parts, list):
+                    fred_parts = []
+                fred_parts.append(geo_part.model_dump())
+                add_kwargs["fred_parts"] = fred_parts
 
             return {
                 "messages": [response],
