@@ -422,7 +422,8 @@ class Rico(AgentFlow):
                 )
             elif search_policy != "semantic":
                 logger.debug(
-                    "Rico: skipping min_score filter because search_policy=%s", search_policy
+                    "Rico: skipping min_score filter because search_policy=%s",
+                    search_policy,
                 )
 
             if not hits:
