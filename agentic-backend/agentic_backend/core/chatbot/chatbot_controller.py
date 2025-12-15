@@ -15,7 +15,9 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import List, Literal, Union
+from uuid import uuid4
 
 from fastapi import (
     APIRouter,
@@ -44,6 +46,11 @@ from starlette.websockets import WebSocketState
 from agentic_backend.application_context import get_configuration, get_rebac_engine
 from agentic_backend.common.structures import AgentSettings, FrontendSettings
 from agentic_backend.common.utils import log_exception
+from agentic_backend.core.a2a.a2a_bridge import (
+    get_proxy_for_agent,
+    is_a2a_agent,
+    stream_a2a_as_chat_messages,
+)
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.chatbot.chat_schema import (
@@ -55,6 +62,7 @@ from agentic_backend.core.chatbot.chat_schema import (
     SessionSchema,
     SessionWithFiles,
     StreamEvent,
+    make_user_text,
 )
 from agentic_backend.core.chatbot.metric_structures import (
     MetricsBucket,
@@ -182,7 +190,8 @@ def get_agentic_flows(
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),  # Inject the dependency
 ) -> List[AgentSettings]:
-    return agent_manager.get_agentic_flows()
+    flows = agent_manager.get_agentic_flows()
+    return flows
 
 
 @router.websocket("/chatbot/query/ws")
@@ -191,6 +200,7 @@ async def websocket_chatbot_question(
     session_orchestrator: SessionOrchestrator = Depends(
         get_session_orchestrator_ws
     ),  # Use WebSocket-specific dependency
+    agent_manager: AgentManager = Depends(get_agent_manager_ws),
 ):
     """
     Transport-only:
@@ -265,24 +275,83 @@ async def websocket_chatbot_question(
                     event = StreamEvent(type="stream", message=ChatMessage(**msg_dict))
                     await websocket.send_text(event.model_dump_json())
 
-                (
-                    session,
-                    final_messages,
-                ) = await session_orchestrator.chat_ask_websocket(
-                    user=active_user,
-                    callback=ws_callback,
-                    session_id=ask.session_id,
-                    message=ask.message,
-                    agent_name=ask.agent_name,
-                    runtime_context=ask.runtime_context,
-                    client_exchange_id=ask.client_exchange_id,
-                )
+                # Route to A2A proxy if the stub agent is selected
+                target_settings = agent_manager.get_agent_settings(ask.agent_name)
+                if target_settings and is_a2a_agent(target_settings):
+                    meta = target_settings.metadata or {}
+                    base_url = meta.get("a2a_base_url")
+                    token = meta.get("a2a_token")
+                    force_disable_streaming = bool(meta.get("a2a_disable_streaming"))
+                    if not base_url:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Agent '{ask.agent_name}' is marked as A2A but is missing 'a2a_base_url' metadata.",
+                        )
+                    proxy = get_proxy_for_agent(
+                        websocket.app,
+                        ask.agent_name,
+                        base_url,
+                        token,
+                        force_disable_streaming=force_disable_streaming,
+                    )
+                    session_id = ask.session_id or f"a2a-{uuid4()}"
+                    exchange_id = ask.client_exchange_id or str(uuid4())
+                    rank = 0
 
-                await websocket.send_text(
-                    FinalEvent(
-                        type="final", messages=final_messages, session=session
-                    ).model_dump_json()
-                )
+                    # Emit the user message first
+                    user_msg = make_user_text(
+                        session_id, exchange_id, rank, ask.message
+                    )
+                    await websocket.send_text(
+                        StreamEvent(type="stream", message=user_msg).model_dump_json()
+                    )
+                    rank += 1
+
+                    async for msg in stream_a2a_as_chat_messages(
+                        proxy=proxy,
+                        user_id=active_user.uid,
+                        access_token=active_token,
+                        text=ask.message,
+                        session_id=session_id,
+                        exchange_id=exchange_id,
+                        start_rank=rank,
+                    ):
+                        rank = msg.rank + 1
+                        await websocket.send_text(
+                            StreamEvent(type="stream", message=msg).model_dump_json()
+                        )
+
+                    session = SessionSchema(
+                        id=session_id,
+                        user_id=active_user.uid,
+                        title="A2A session",
+                        updated_at=datetime.utcnow(),
+                    )
+                    await websocket.send_text(
+                        FinalEvent(
+                            type="final", messages=[], session=session
+                        ).model_dump_json()
+                    )
+
+                else:
+                    (
+                        session,
+                        final_messages,
+                    ) = await session_orchestrator.chat_ask_websocket(
+                        user=active_user,
+                        callback=ws_callback,
+                        session_id=ask.session_id,
+                        message=ask.message,
+                        agent_name=ask.agent_name,
+                        runtime_context=ask.runtime_context,
+                        client_exchange_id=ask.client_exchange_id,
+                    )
+
+                    await websocket.send_text(
+                        FinalEvent(
+                            type="final", messages=final_messages, session=session
+                        ).model_dump_json()
+                    )
 
             except WebSocketDisconnect:
                 logger.debug("Client disconnected from chatbot WebSocket")

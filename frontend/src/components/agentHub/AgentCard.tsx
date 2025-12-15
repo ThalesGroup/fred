@@ -15,15 +15,17 @@
 // limitations under the License.
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CodeIcon from "@mui/icons-material/Code";
+import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import DeleteIcon from "@mui/icons-material/Delete";
 import GroupIcon from "@mui/icons-material/Group"; // for crew
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import StarIcon from "@mui/icons-material/Star";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 
 import StarOutlineIcon from "@mui/icons-material/StarOutline";
 import TuneIcon from "@mui/icons-material/Tune";
-import { Box, Card, CardContent, Chip, IconButton, Stack, Tooltip, Typography, useTheme } from "@mui/material";
+import { alpha, Box, Card, CardContent, Chip, IconButton, Stack, Tooltip, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 // OpenAPI types
@@ -41,6 +43,7 @@ type AgentCardProps = {
   onDelete?: (agent: AnyAgent) => void;
   onManageAssets?: (agent: AnyAgent) => void;
   onInspectCode?: (agent: AnyAgent) => void;
+  onViewA2ACard?: (agent: AnyAgent) => void;
 };
 
 /**
@@ -61,6 +64,7 @@ export const AgentCard = ({
   onDelete,
   onManageAssets,
   onInspectCode,
+  onViewA2ACard,
 }: AgentCardProps) => {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -68,6 +72,10 @@ export const AgentCard = ({
   const tags = agent.tuning.tags ?? [];
   const tagLabel = tags.join(", ");
   const tooltipBg = theme.palette.mode === "dark" ? "rgba(19, 23, 31, 0.94)" : theme.palette.background.paper;
+  const hasA2aCard = Boolean(agent.metadata && (agent.metadata as any).a2a_card);
+  const isA2A = Boolean(agent.metadata && (agent.metadata as any).a2a_base_url);
+  const a2aBorder = theme.palette.success.main;
+  const baseBorderColor = isA2A ? alpha(a2aBorder, 0.45) : theme.palette.divider;
 
   return (
     <Card
@@ -78,12 +86,12 @@ export const AgentCard = ({
         flexDirection: "column",
         borderRadius: 2,
         bgcolor: "transparent",
-        borderColor: "divider",
+        border: `1px solid ${baseBorderColor}`,
         boxShadow: "none",
         transition: "border-color 0.2s ease, transform 0.2s ease",
         "&:hover": {
           transform: "translateY(-2px)",
-          borderColor: theme.palette.primary.main,
+          borderColor: isA2A ? a2aBorder : theme.palette.primary.main,
         },
       }}
     >
@@ -109,7 +117,41 @@ export const AgentCard = ({
         >
           {/* Left: Agent Chip (includes name) */}
           <Box sx={{ flexShrink: 0 }}>
-            <AgentChipWithIcon agent={agent} />
+            {isA2A ? (
+              <Box
+                sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 0.6,
+                  minWidth: 0,
+                }}
+              >
+                <CloudQueueIcon
+                  sx={{
+                    fontSize: 18,
+                    color: a2aBorder,
+                    flexShrink: 0,
+                  }}
+                />
+                <Typography
+                  variant="body1"
+                  fontWeight={700}
+                  sx={{
+                    color: a2aBorder,
+                    lineHeight: 1.2,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    maxWidth: 180,
+                  }}
+                  title={agent.name}
+                >
+                  {agent.name}
+                </Typography>
+              </Box>
+            ) : (
+              <AgentChipWithIcon agent={agent} />
+            )}
           </Box>
 
           {/* Right: Tags + Favorite Star */}
@@ -227,7 +269,7 @@ export const AgentCard = ({
               </IconButton>
             </Tooltip>
           )}
-          {onManageAssets && (
+          {!isA2A && onManageAssets && (
             <Tooltip title={t("agentCard.manageAssets")}>
               <IconButton
                 size="small"
@@ -239,7 +281,7 @@ export const AgentCard = ({
               </IconButton>
             </Tooltip>
           )}
-          {onEdit && (
+          {!isA2A && onEdit && (
             <Tooltip title={t("agentCard.edit")}>
               <IconButton
                 size="small"
@@ -251,7 +293,7 @@ export const AgentCard = ({
               </IconButton>
             </Tooltip>
           )}
-          {onInspectCode && (
+          {!isA2A && onInspectCode && (
             <Tooltip title={t("agentCard.inspectCode", "Inspect Source Code")}>
               <IconButton
                 size="small"
@@ -261,6 +303,18 @@ export const AgentCard = ({
                 aria-label="inspect agent source code"
               >
                 <CodeIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {onViewA2ACard && hasA2aCard && (
+            <Tooltip title={t("agentCard.viewA2ACard", "View A2A card")}>
+              <IconButton
+                size="small"
+                onClick={() => onViewA2ACard(agent)}
+                sx={{ color: "text.secondary" }}
+                aria-label="view a2a card"
+              >
+                <VisibilityIcon fontSize="small" />
               </IconButton>
             </Tooltip>
           )}

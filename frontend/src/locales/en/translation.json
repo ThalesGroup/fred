@@ -10,7 +10,8 @@
     "error": "Error",
     "refresh": "Refresh",
     "cancel": "Cancel",
-    "save": "Save"
+    "save": "Save",
+    "invalidUrl": "Invalid URL"
   },
   "dataHub": {
     "title": "Data Hub - Document Lineage",
@@ -287,8 +288,14 @@
       "nickname": "Nickname",
       "description": "Description",
       "role": "Role",
+      "agentType": "Agent Type",
       "base_prompt": "Base Prompt",
       "agent_type": "Agent Type",
+      "a2aProxyToggle": "A2A Proxy",
+      "a2aBaseUrl": "A2A Base URL",
+      "a2aBaseUrlRequired": "A2A base URL is required for an A2A agent.",
+      "a2aToken": "A2A Token (optional)",
+      "optional": "Optional",
       "icon": "Icon",
       "tags": "Tags",
       "custom_tag": "Add custom tag",
@@ -327,7 +334,17 @@
       "title": "Tools"
     },
     "confirmRestoreTitle": "Overwrite agents with configuration?",
-    "confirmRestoreMessage": "This will replace all tuned settings saved in the UI with the YAML configuration. You will lose any custom changes. This cannot be undone."
+    "confirmRestoreMessage": "This will replace all tuned settings saved in the UI with the YAML configuration. You will lose any custom changes. This cannot be undone.",
+    "registerA2A": "Register",
+    "noA2ACardSummary": "No A2A card stored",
+    "noA2ACardDetail": "This agent does not have a stored A2A agent card yet.",
+    "a2aCardTitle": "A2A Agent Card",
+    "a2aCapabilities": "Capabilities",
+    "a2aStreaming": "Streaming",
+    "a2aPush": "Push notifications",
+    "a2aHistory": "State history",
+    "a2aSkills": "Skills",
+    "a2aExamples": "Examples"
   },
   "mcpHub": {
     "title": "MCP Servers",
@@ -490,7 +507,9 @@
     "favorite": "Add the agent to your favorites",
     "unfavorite": "Remove the agent from your favorites",
     "manageAssets": "Manage Assets",
-    "manageCrew": "Manage Crew"
+    "manageCrew": "Manage Crew",
+    "inspectCode": "Inspect source code",
+    "viewA2ACard": "View A2A card"
   },
   "dialogs": {
     "create": {

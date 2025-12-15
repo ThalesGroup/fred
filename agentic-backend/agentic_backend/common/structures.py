@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Annotated, Dict, List, Literal, Optional, Union
+from typing import Annotated, Dict, List, Literal, Optional, Union, Any
 
 from fred_core import (
     LogStorageConfig,
@@ -121,6 +121,10 @@ class BaseAgent(BaseModel):
     class_path: Optional[str] = None  # None → dynamic/UI agent
     tuning: Optional[AgentTuning] = None
     chat_options: AgentChatOptions = AgentChatOptions()
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional arbitrary metadata for integrations (e.g., A2A proxy config).",
+    )
     # Added for backward compatibility with older YAML files
     mcp_servers: List[MCPServerConfiguration] = Field(
         default_factory=list,
