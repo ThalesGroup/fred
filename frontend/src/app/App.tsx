@@ -87,7 +87,7 @@ const LoadingScreen = ({
       >
         <Box
           component="img"
-          src={`/images/${dark ? logoNameDark : logoName}.svg`}
+          src={`./images/${dark ? logoNameDark : logoName}.svg`}
           alt={alt}
           sx={{
             width: 68,
@@ -136,8 +136,8 @@ function FredUi() {
     document.title = siteDisplayName;
     const favicon = document.getElementById("favicon") as HTMLLinkElement;
     const isDark = window.matchMedia("(prefers-color-scheme: dark)");
-    if (isDark.matches) favicon.href = `/images/${logoNameDark}.svg`;
-    else favicon.href = `/images/${logoName}.svg`;
+    if (isDark.matches) favicon.href = `./images/${logoNameDark}.svg`;
+    else favicon.href = `./images/${logoName}.svg`;
 
     const listener = (event: MediaQueryListEvent) => setPrefersDark(event.matches);
     const storageListener = (event: StorageEvent) => {

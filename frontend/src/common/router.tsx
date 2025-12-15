@@ -32,6 +32,9 @@ import ProcessorBench from "../pages/ProcessorBench";
 import ProcessorRunDetail from "../pages/ProcessorRunDetail";
 import { McpHub } from "../pages/McpHub";
 import GraphHub from "../pages/GraphHub.tsx";
+import { getConfig } from "./config";
+
+const basename = getConfig().frontend_basename;
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => <LayoutWithSidebar>{children}</LayoutWithSidebar>;
 
@@ -164,4 +167,4 @@ export const routes: RouteObject[] = [
   },
 ];
 
-export const router = createBrowserRouter(routes);
+export const router = createBrowserRouter(routes, { basename });
