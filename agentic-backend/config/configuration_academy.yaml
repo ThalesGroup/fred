@@ -118,9 +118,9 @@ ai:
       type: "agent"
       class_path: "agentic_backend.agents.statistics.statistics_expert.Sage"
       enabled: true
-    - name: "EcoAdviser"
+    - name: "Eco"
       type: "agent"
-      class_path: "agentic_backend.academy.08_ecoadviser.eco_adviser.EcoAdvisor"
+      class_path: "agentic_backend.academy.08_eco_advisor.eco_advisor.EcoAdvisor"
       enabled: true
 
 mcp:
@@ -159,24 +159,6 @@ mcp:
       name: "minimal-mcp-service"
       transport: "streamable_http"
       url: "http://localhost:9797/mcp"
-      sse_read_timeout: 2000
-      auth_mode: "no_token"
-    - id: "mcp-co2-service"
-      name: "mcp-co2-service"
-      transport: "streamable_http"
-      url: "http://localhost:9798/mcp"
-      sse_read_timeout: 2000
-      auth_mode: "no_token"
-    - id: "mcp-geo-service"
-      name: "mcp-geo-service"
-      transport: "streamable_http"
-      url: "http://localhost:9801/mcp"
-      sse_read_timeout: 2000
-      auth_mode: "no_token"
-    - id: "mcp-tcl-service"
-      name: "mcp-tcl-service"
-      transport: "streamable_http"
-      url: "http://localhost:9802/mcp"
       sse_read_timeout: 2000
       auth_mode: "no_token"
 

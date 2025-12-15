@@ -1,0 +1,161 @@
+﻿libelleparcours;libellepointorigine;libellepointdestination;idtempsparcoursvlentree;idtempsparcoursvlsortie;metaparcours;idmetaparcourspereentree;idmetaparcoursperesortie;longueur;tempsparcoursentree;tempsparcourssortie;vitesseentree;vitessesortie;lat_epsg4171;long_epsg4171;observation;gid
+Villefranche-sur-Saône / Givors (A46N_Periph);Villefranche-sur-Saône;Givors;1036;1037;True;;;65900;2640;2580;90,00;92,00;45.78264000019085;4.891170000521084;;83
+Villefranche-sur-Saône / Givors (A432);Villefranche-sur-Saône;Givors;1040;1041;True;;;90000;3180;3300;82,00;82,00;45.70443000015891;4.965029999975321;;118
+Villefranche-sur-Saône / Neuville-sur-Saône;Villefranche-sur-Saône;Neuville-sur-Saône;50;150;False;;;15500;600;600;93,00;93,00;45.927090000348464;4.753040000593268;;86
+Limonest (A6) / Dardilly (M6);Limonest (A6);Dardilly (M6);307;308;False;;;2500;120;120;75,00;75,00;45.82481000006943;4.7633699996026495;;192
+PortedelaSoie_PortedeCroix-Luizet;Porte de la Soie;Porte de Croix-Luizet;39;139;False;1026;1027;2600;120;120;78,00;78,00;45.77386897467759;4.899635975186285;;56
+TCR_Perrache;Tunnel Croix Rousse;Perrache;14;114;False;1010;1011;2800;300;300;33,60;33,60;45.759132000189;4.837488002081964;;25
+EchangeurA43A46_PortedesAlpes;Manissieux;Porte des Alpes;34;134;False;1012;1013;3300;120;120;90,00;90,00;45.71183521903145;4.948295024533886;;50
+PontdelaMulatière_Cordeliers;Pont de la Mulatière;Cordeliers;6;106;False;1002;1003;4000;300;300;48,00;48,00;45.74657394248629;4.829091635866168;;30
+Garibaldi / Monplaisir;Garibaldi;Monplaisir;203;;False;;;2100;240;;31,50;;45.74700999964978;4.860149999497386;;152
+Villefranche-sur-Saône / Givors (BPNL Periph);Villefranche-sur-Saône;Givors;1038;1039;True;;;66000;2760;2760;86,00;86,00;45.78369000019714;4.802589999876739;;84
+PontUniversité / AccèsA6;Pont de l'Université;Accès A6;225;;False;;;1800;180;;36,00;;45.74924000029227;4.8283499997185775;;159
+Ménival_ÉchangeurTassin;Ménival;Échangeur Tassin;29;129;False;1020;1021;2100;120;120;60,00;60,00;45.76623200091855;4.789013001247219;;20
+BdTchécoslovaques_Part-Dieu;Bd des Tchécoslovaques;Part-Dieu;17;117;False;1012;1013;2100;240;300;34,80;30,00;45.75110200075904;4.859888000037105;;28
+Pusignan / Meyzieu;Pusignan;Meyzieu;47;147;False;1030;1031;2300;120;120;90,00;90,00;45.760467838213664;4.985226680848797;;68
+Ambérieux / Les Chères;Ambérieux;Les Chères;57;157;False;;;3100;120;120;93,00;93,00;45.911500668355686;4.740377735130877;;93
+Santy / Bachut;Santy ;Bachut;93;;False;;;2071;360;;20,00;;45.728720000446664;4.87690000023761;;131
+Vénissieux/Le Velin;Vénissieux;Le Velin;42;142;False;1028;1029;3800;120;120;90,00;90,00;45.67428448090308;4.905976693671721;;62
+Caluire-et-cuire_Transbordeur;Caluire-et-cuire;Transbordeur;7;107;False;1004;1005;1800;180;180;40,00;40,00;45.793926000684124;4.859682000251511;;5
+MontéeBoucle_TCR;Montée de la Boucle;Tunnel Croix Rousse;13;113;False;1010;1011;1800;180;180;36,00;36,00;45.78147100116308;4.83930400016561;;24
+PorteduValvert_Cordeliers;Porte du Valvert;Cordeliers;3;103;False;1000;1001;6000;420;420;51,40;51,40;45.75525294310506;4.8168836364161445;;3
+PontduRhône_PortedeGerland;Pont du Rhône;Porte de Gerland;35;135;False;1026;1027;2500;120;120;72,00;72,00;45.70718353989725;4.843763091373344;;52
+Manissieux/Part-Dieu;Manissieux;Part-Dieu;1012;1013;True;;;11800;900;1080;47,50;43,50;45.729034000740924;4.898248000015077;;37
+St-Priest/Manissieux;St-Priest;Manissieux;44;144;False;1030;1031;2600;120;120;90,00;90,00;45.69121995001907;4.96680919025524;;65
+Feyzin/Vénissieux;Feyzin;Vénissieux;41;141;False;1028;1029;3400;120;120;90,00;90,00;45.6869102602761;4.866862536435195;;61
+Transbordeur_Part-Dieu-Villette;Transbordeur;Part-Dieu-Villette;8;108;False;1004;1005;2800;420;420;23,00;24,00;45.7723880000437;4.858727001976691;;6
+RoutedeVienne / LyonCentre;Route de Vienne;Lyon Centre;221;;False;;;5400;720;;27,00;;45.74283000039752;4.850489999476338;;156
+Stgermainmontdor_NeuvillesurSaône;St-Germain-Mt-d’Or;Neuville-sur-Saône;22;122;False;1018;1019;2800;180;180;56,00;56,00;45.880314001271074;4.820381000273823;;11
+BerthelotEtatsUnis / Monplaisir;Berthelot EtatsUnis;Monplaisir;285;;False;;;1800;240;;27,00;;45.74580999966608;4.863830000329632;;172
+PortedeGerland_PortedesÉtatsUnis;Porte de Gerland;Porte des États-Unis;36;136;False;1026;1027;2300;120;120;70,00;70,00;45.7175021967987;4.860979384044968;;53
+PortedesÉtatsUnis_PortedesEssarts;Porte des États-Unis;Porte des Essarts;37;137;False;1026;1027;2200;120;120;66,00;66,00;45.722042784368085;4.886847395026522;;54
+Meyzieu / Genas;Meyzieu;Genas;75;175;False;;;3000;180;180;60,00;60,00;45.739599999589394;5.024059999370758;;113
+Saint Genis (RD486) / Oullins (Grande Rue);Saint Genis (RD486);Oullins (Grande Rue);323;324;False;;;2200;300;300;26,40;26,40;45.711279999655886;4.801439999635295;;202
+PortedeGerland_PontPasteur;Porte de Gerland;Pont Pasteur;49;149;False;;;3500;360;360;35,00;35,00;45.72656562211997;4.832741116392661;;71
+Saint-Laurent-de-Mure / Satolas;Saint-Laurent-de-Mure;Satolas;62;162;False;;;2800;120;120;84,00;84,00;45.68765999988499;5.058710000313715;;98
+Porte de Rochecardon / Porte de Saint-Clair;Porte de Rochecardon;Porte de Saint-Clair;78;178;False;1038;1039;3800;180;180;80,00;80,00;45.792350000160965;4.835180000321731;;116
+PortedesEssarts_BdTchécoslovaques;Porte des Essarts ;Bd des Tchécoslovaques;16;116;False;1012;1013;3600;420;480;30,80;25,30;45.73363900135409;4.878188000779838;;27
+PortedesEssarts_PortedelaSoie;Porte des Essarts;Porte de la Soie;38;138;False;1026;1027;3900;180;180;78,00;78,00;45.745223272355695;4.906374796058981;;55
+Brignais_PontduRhône;Brignais;Pont du Rhône;33;133;False;1024;1025;5800;240;240;87,00;87,00;45.68506999998717;4.806589001152879;;22
+Meyzieu / Cordeliers;Meyzieu;Cordeliers;1006;1007;True;;;16700;1020;1020;60,00;67,50;45.78996460018253;4.904668893422808;;47
+EtoileAlaï_Ménival;Etoile d'Alaï;Ménival;28;128;False;1020;1021;1200;120;120;36,00;36,00;45.75420400114325;4.777528000685936;;19
+PortedeLyon_PorteduValvert;Porte de Lyon;Porte du Valvert;2;102;False;1000;1001;6400;240;240;96,00;96,00;45.79389200050761;4.780605001652271;;2
+Anse_Stgermainmontdor;Anse;St-Germain-Mt-d’Or;21;121;False;1018;1019;9000;540;540;60,00;60,00;45.917847000267095;4.7671690009885745;;10
+Montée de la boucle / Perrache;Montée de la boucle;Perrache;1010;1011;True;;;4600;420;420;39,43;39,43;45.768608001088324;4.83782999989161;;36
+Garibaldi / AccesA6/A7;Garibaldi;Acces A6/A7;201;;False;;;3100;360;;31,00;;45.74844000012268;4.843279999907842;;151
+Lyon 9 (Bourgogne) / Limonest (RD306)  ;Lyon 9 (Bourgogne)  ;Limonest (RD306)  ;314;;False;;;3900;420;;33,43;;45.794279999817334;4.793389999673709;;196
+Le Tupinier / Cordeliers (RD489);Le Tupinier;Cordeliers (RD489);1022;1023;True;;;14200;1320;1320;40,57;40,57;45.753928944033994;4.776441637595042;;41
+PortedeCroix-Luizet_Transbordeur;Porte de Croix-Luizet;Transbordeur;12;112;False;1008;1009;3700;300;240;49,20;51,00;45.78732300032808;4.879622001605929;;23
+Saint-Bonnet-de-Mure / Genas;Aéroport de Lyon-St Exupéry;Genas;74;174;False;;;4200;240;240;63,00;63,00;45.710659999873;5.027339999433092;;112
+PontduRhône_PontdelaMulatière;Pont du Rhône;Pont de la Mulatière;5;105;False;1002;1003;4600;180;180;92,00;92,00;45.71114680911443;4.825810687801092;;44
+LeTupinier_11novembre;Le Tupinier;Rue du 11 Novembre;30;130;False;1022;1023;2300;180;180;44,00;44,00;45.74737500103788;4.72838799999706;;17
+ La Boisse / Beynost ; La Boisse;Beynost ;55;155;False;;;2900;120;120;87,00;87,00;45.82547999992893;5.009959999648504;;91
+BerthelotTchecoslovaques / Vénissieux;Berthelot Tchecoslovaques;Vénissieux;292;;False;;;3300;300;;40,00;;45.73258999999344;4.864989999657168;;174
+Pierre Benite (M7) / Saint Fons (A7);Pierre Benite (M7);Saint Fons (A7);303;304;False;;;2600;120;120;78,00;78,00;45.69469000012017;4.841679999618854;;190
+GorgedeLoup / TCroixRousse;Gorge de Loup;Tunnel de la Croix Rousse;246;;False;;;1700;240;;25,50;;45.77268999995974;4.805410000116669;;165
+PlaceCroixLuizet / Charpennes;Place Croix Luizet;Charpennes;209;;False;;;2100;240;;31,50;;45.77650000015056;4.873709999868859;;154
+RN7SaintJean / TdeFourvière;RN7 Saint Jean ;Tunnel de Fourvière;217;;False;;;3300;360;;33,00;;45.76415000017425;4.784189999380931;;177
+Quai Gillet /_Saxe Lafayette ;Quai Gillet ;Saxe/Lafayette ;86;;False;;;4100;480;;31,00;;45.773360000210324;4.827940000006027;;125
+RoutedeStrasbourg / GarePartDieu;Route de Strasbourg;Gare Part-Dieu;182;;False;;;4063;420;;34,00;;45.77841000012343;4.859420000372986;;137
+PortedeMontchat / GarePartDieu;Porte de Montchat ;Gare Part-Dieu;96;;False;;;4558;600;;28,00;;45.75450000045173;4.882000000198865;;136
+La Tour-de-Salvagny / Cordeliers;La Tour-de-Salvagny;Cordeliers;1016;1017;True;;;15500;1200;1080;46,50;51,67;45.767508943713096;4.782537637650388;;39
+Quai Gillet / Perrache;Quai Gillet;Perrache;84;;False;;;4700;660;;26,00;;45.76818000016132;4.822159999413419;;123
+Saint-Laurent-de-Mure / Aéroport de Lyon-St Exupéry;Saint-Laurent-de-Mure ;Aéroport de Lyon-St Exupéry;65;165;False;;;3600;180;180;72,00;72,00;45.708819999988854;5.071349999795329;;103
+Dardilly (Guy Collongue) / Ecully (Guy Collongue);Dardilly (Guy Collongue);Ecully (Guy Collongue);315;316;False;;;3000;300;300;36,00;36,00;45.787479999607854;4.764849999606439;;198
+Pont Gallien / Porte de  Gerland;Pont Galliéni;Porte de  Gerland;81;;False;;;5000;660;;27,00;;45.726619999910056;4.831600000554831;;121
+La Tour-de-Salvagny_PorteduValvert;La Tour-de-Salvagny;Porte du Valvert;20;120;False;1016;1017;9500;720;660;47,50;50,00;45.78280600140133;4.7499610002375405;;29
+Pusignan / Saint-Laurent-de-Mure;Pusignan;Saint-Laurent-de-Mure;61;161;False;;;9500;300;300;114,00;114,00;45.723749999678866;5.096309999489455;;97
+PontPoincaré / CCPartDieu;Pont Poincaré;Centre Commercial Part-Dieu;90;;False;;;3906;420;;33,00;;45.772499999753634;4.858770000422067;;130
+ÉchangeurTassin_Cordeliers;Échangeur Tassin;Cordeliers;32;132;False;1022;1023;4900;480;360;40,50;50,00;45.753985942456794;4.818483636817616;;21
+Aéroport de Lyon-St Exupéry / Meyzieu;Aéroport de Lyon-St Exupéry;Meyzieu;66;166;False;;;7000;480;480;52,50;52,50;45.74773000013575;5.059600000244716;;104
+Brignais / Cordeliers;Brignais;Cordeliers;1024;1025;True;;;16100;840;840;70,00;70,00;45.689322942736354;4.814763632678098;;45
+Meyzieu / Pusignan ;Meyzieu;Pusignan ;64;164;False;;;3700;180;180;74,00;74,00;45.75241999978136;5.0120199995213275;;102
+Beaunant_EtoileAlaï;Beaunant;Etoile d'Alaï;27;127;False;1020;1021;3300;300;300;39,60;39,60;45.737297001309706;4.774218002262928;;16
+PortedesAlpes_PortedesEssarts ;Porte des Alpes;Porte des Essarts ;15;115;False;1012;1013;2900;120;120;90,00;90,00;45.726181001228234;4.9184570020163605;;26
+NeuvillesurSaône_FontainesurSaône;Neuville-sur-Saône;Fontaine-sur-Saône;23;123;False;1018;1019;5900;420;420;50,60;50,60;45.850979001656405;4.833080000993195;;12
+Le Velin/Saint-Priest;Le Velin ;Saint-Priest;43;143;False;1030;1031;4000;180;180;90,00;90,00;45.67198196791076;4.940965114362651;;64
+Genas / Aéroport de Lyon-St Exupéry;Genas;Aéroport de Lyon-St Exupéry;76;176;False;;;4100;240;240;61,50;61,50;45.719840000357;5.053680000551552;;114
+GorgedeLoup / TassinHorloge;Gorge de Loup;Tassin l'Horloge;247;;False;;;2800;360;;28,00;;45.76358999995448;4.79611000007103;;166
+Zola4aout / Charpennes;Zola 4 aout;Charpennes;289;;False;;;3100;420;;27,00;;45.76895000005259;4.882650000606717;;173
+Noeud-des-îles_PortedeCroix-Luizet;Noeud des îles;Porte de Croix-Luizet;10;110;False;1006;1007;3400;120;120;99,00;99,00;45.79029100134984;4.905989002434006;;8
+MermozTerray / GarePartDieu;Mermoz Terray;Gare Part Dieu;286;;False;;;5300;600;;32,00;;45.738359999906166;4.867260000176779;;179
+Charbonnières (Av. Jean Bergeron) / Tassin (11 novembre);Charbonnières (Av. Jean Bergeron);Tassin (11 novembre);311;312;False;;;3000;300;300;36,00;36,00;45.765229999676194;4.753760000001652;;194
+Pont Gallieni / Mermoz A43;Pont Galliéni;Mermoz A43;82;;False;;;5600;1020;;20,00;;45.73761000016571;4.865549999396901;;119
+Givors / Communay;Givors;Communay;53;153;False;;;6600;240;240;99,00;99,00;45.588664009169236;4.8130130395977035;;186
+Le Velin/Noeud des îles;Le Velin;Noeud des îles;1030;1031;True;;;20600;900;900;90,00;90,00;45.72686654443194;4.976044163813311;;69
+Lyon 9 (M6) / Tassin (RD307);Lyon 9 (M6);Tassin (RD307);313;;False;;;3100;360;;31,00;;45.764080000022524;4.782600000596793;;195
+Neuville-sur-Saône / Les Echets;Neuville-sur-Saône;Les Echets;51;151;False;;;9800;300;300;118,00;118,00;45.90238000013982;4.87228000049777;;87
+DuquesneBelges / PeriphNord;Duquesne Belges;Periphérique Nord;224;;False;;;3200;300;;38,00;;45.78489000035906;4.851529999595218;;157
+Santy / GarePartDieu;Santy;Gare Part-Dieu;92;;False;;;5405;840;;23,00;;45.738670000403715;4.866910000401536;;129
+Lafayette / PortedeCusset;Lafayette;Porte de Cusset;189;;False;;;5182;840;;22,00;;45.76389000010573;4.87457999966826;;138
+Saint-Priest-centre / Porte des Parilly;Saint-Priest-centre ;Porte des Parilly;69;169;False;;;7000;720;720;35,00;35,00;45.69854999965983;4.922720000248241;;107
+LesRonzières/Brignais;Les Ronzières;Brignais;48;148;False;1024;1025;2200;120;120;80,00;80,00;45.66609286230396;4.761808001043518;;70
+FerryBelgesRecamier / Vaise;Ferry Belges Recamier;Vaise;213;;False;;;4600;360;;46,00;;45.773039999788516;4.832020000284272;;155
+ChambaudSurville / LyonCentre;Chambaud Surville ;Lyon Centre;196;;False;;;6500;600;;29,00;;45.742010000418276;4.825159999827658;;147
+Villefranche-sur-Saône / Cordeliers;Villefranche-sur-Saône;Cordeliers;1000;1001;True;;;32200;1500;1500;77,28;77,28;45.84640094588589;4.747421642028463;;31
+Communay / Le Velin ;Communay;Le Velin ;54;154;False;;;10100;360;360;101,00;101,00;45.62733000044669;4.893729999727196;;90
+Brignais_Beaunant;Brignais;Beaunant;26;126;False;1020;1021;6500;480;480;49,00;49,00;45.69853599997064;4.76660500123581;;15
+Caluire-et-Cuire / Part-Dieu-Villette;Caluire-et-Cuire;Part-Dieu-Villette;1004;1005;True;;;4600;480;540;39,43;32,00;45.78012100064215;4.859670000774747;;33
+Villefranche-sur-Saône / Givors (A6/A7);Villefranche-sur-Saône;Givors;1032;1033;True;;;53300;2220;2220;86,50;86,50;45.77412794415504;4.785099638307651;;77
+PorteduVinatier / GarePartDieu;Porte du Vinatier ;Gare Part-Dieu;94;;False;;;4813;600;;29,00;;45.743600000261495;4.876899999815779;;133
+Les Echets / Noeud des îles;Les Echets;Noeud des îles;52;152;False;;;7200;240;240;108,00;108,00;45.82986000010352;4.918459999420377;;88
+Porte du Valvert / Pont de la Mulatière;Porte du Valvert;Pont de la Mulatière;79;179;False;1032;1033;6300;360;360;63,00;63,00;45.75514999959146;4.816839999959843;;117
+Anse / Cordeliers Saône (RD51);Anse;Cordeliers Saône (RD51);1018;1019;True;;;28200;2220;2220;46,22;46,22;45.84893800125742;4.832161001365496;;38
+Dardilly (M6) / Ecully (M6);Dardilly (M6);Eculy (M6);309;310;False;;;4500;180;180;90,00;90,00;45.795479999785044;4.778979999530475;;193
+Genas / Porte de Montchat;Genas ;Porte de Montchat;73;173;False;;;6000;540;540;40,00;40,00;45.742120000085734;4.9433199995550305;;111
+PontPasteurRD / Oullins;Pont Pasteur rive droite;Oullins;230;;False;;;2200;240;;33,00;;45.72650000005658;4.8145000002199225;;160
+VittonThiers / LyonCentre;Vitton Thiers;Lyon Centre;233;;False;;;3700;420;;32,00;;45.768690000019845;4.844220000400658;;161
+Saint-Laurent-de-Mure / Mi-Plaine;Saint-Laurent-de-Mure;Mi-Plaine;67;167;False;;;7400;660;660;40,00;40,00;45.698840000256226;5.011869999455624;;105
+Villefranche-sur-Saône_PortedeLyon;Villefranche-sur-Saône;Porte de Lyon;1;101;False;1000;1001;19800;720;780;99,00;93,00;45.905472002427146;4.728415002686589;;1
+LanessanSansSoucis / GaredeVaise;Lanessan Sans Soucis;Gare de Vaise;242;;False;;;5200;480;;39,00;;45.79154999981224;4.796889999663848;;164
+Pusignan / La Boisse;La Boisse;Pusignan;60;160;False;;;9000;300;300;108,00;108,00;45.80738000028933;5.065559999512122;;96
+Collonges (D51) / Lyon 9 (Jaÿr);Collonges (D51);Lyon 9 (Jaÿr);321;322;False;;;7900;720;720;39,50;39,50;45.799469999934644;4.834900000068414;;201
+Les Echets /  La Boisse;Les Echets;La Boisse;59;159;False;;;10500;300;300;126,00;126,00;45.86010000020708;4.971580000489624;;95
+Tassin (Barthélémy) / Lyon 5 (Choulans);Tassin (Barthélémy);Lyon 05 (Choulans);317;318;False;;;4000;480;480;30,00;30,00;45.759850000386564;4.806870000055091;;199
+Saint Priest (Provence) / Corbas (Dauphiné);Saint Priest (Provence);Corbas (Dauphiné);331;332;False;;;3000;360;360;30,00;30,00;45.68774000023118;4.913429999770898;;207
+Lyon 9 (Bourgogne) / Lyon 5 (Apollinaire);Lyon 9 (Bourgogne);Lyon 5 (Apollinaire);319;320;False;;;3000;360;360;30,00;30,00;45.77059999992886;4.796900000428501;;200
+Feyzin / Porte du Moulin À Vent;Feyzin ;Porte du Moulin À Vent;71;171;False;;;3500;420;420;30,00;30,00;45.70052000033514;4.8563400004925805;;109
+Meyzieu / Porte de la Soie;Meyzieu ;Porte de la Soie;72;172;False;;;5600;660;660;30,50;30,50;45.769600000127426;4.948570000198132;;110
+QuaiLamartine / CaluireCentre;Quai Lamartine;Caluire Centre;250;;False;;;3700;300;;44,00;;45.823959999816374;4.8609700000496545;;168
+Dardilly (RD307) / Tassin (RD307);Dardilly (RD307);Tassin (RD307);305;306;False;;;7100;480;480;53,25;53,25;45.78839999991551;4.745670000409145;;191
+Satolas / Manissieux;Satolas;Manissieux;58;158;False;;;7600;240;240;114,00;114,00;45.683820000146675;5.007420000576426;;94
+ThomasRollet / GarePartDieu;Thomas Rollet;Gare PartDieu;293;;False;;;1400;180;;28,00;;45.753950000325084;4.861590000106751;;176
+Mi-Plaine / Porte du Vinatier;Mi-Plaine;Porte du Vinatier;68;168;False;;;6000;660;660;33,00;33,00;45.724249999925746;4.936740000520721;;106
+Pont du Rhône/ Porte de Saint Clair;Pont du Rhône;Porte de Saint Clair;1026;1027;True;;;16700;780;780;80,00;80,00;45.73392935289833;4.90098335159194;;60
+Quai Gillet / Part-Dieu;Quai Gillet;Part-Dieu;83;;False;;;5600;660;;31,00;;45.772710000308116;4.836259999375151;;122
+Porte du Valvert / Porte de Rochecardon;Porte du Valvert;Porte de Rochecardon;77;177;False;1038;1039;3000;120;120;90,00;90,00;45.782200000373855;4.800350000577426;;115
+Beynost / Noeud des îles;Beynost ;Noeud des îles;56;156;False;;;6100;240;240;91,00;91,00;45.81492999978606;4.9572800002686215;;92
+QuaiLamartine / LyonCentre;Quai Lamartine;Lyon Centre;251;;False;;;11900;1080;;40,00;;45.7961799997385;4.832920000283594;;169
+Villefranche-sur-Saône / Givors (A46);Villefranche-sur-Saône;Givors;1034;1035;True;;;71300;2760;2700;93,00;95,00;45.81037000021238;4.916449999679668;;81
+TCR_Cordeliers;Tunnel Croix Rousse;Cordeliers;25;125;False;1018;1019;2500;240;360;37,50;28,00;45.76816600144947;4.822007000239925;;14
+Communay / Feyzin ;Communay;Feyzin ;70;170;False;;;10000;600;600;60,00;60,00;45.64242000040601;4.856220000585375;;108
+Quai Gillet / Porte de Cusset;Quai Gillet;Porte de Cusset;85;;False;;;10500;600;;63,00;;45.78785999969196;4.8594600005247335;;124
+Givors / Cordeliers;Givors;Cordeliers;1002;1003;True;;;25000;1140;1140;79,00;79,00;45.64827694258962;4.833769629213964;;48
+Meyzieu_Nœud-des-îles;Meyzieu;Nœud des îles;9;109;False;1006;1007;6100;240;240;90,00;90,00;45.785478451630695;4.956012191427459;;7
+DeGaulleVénissieux / GarePartDieu;De Gaulle Vénissieux;Gare Part Dieu;253;;False;;;6500;720;;32,00;;45.735649999890306;4.870020000572478;;170
+Échangeur de Feyzin/Le Velin ;Feyzin;Le Velin ;1028;1029;True;;;7200;240;240;90,00;90,00;45.68264600452439;4.886184372939227;;63
+PontIleBarbeRD / GaredeVaise;Pont de l'Ile Barbe rive droite;Gare de Vaise;237;;False;;;3000;360;;30,00;;45.791160000373004;4.81513999990567;;162
+Porte de Croix-Luizet_PortedeSaint-Clair;Porte de Croix-Luizet;Porte de Saint-Clair;40;140;False;1026;1027;3100;180;180;78,00;78,00;45.79365526924897;4.877305473470105;;57
+QuaiLamartine / TCroixRousse;Quai Lamartine ;Tunnel de la Croix Rousse;249;;False;;;8900;780;;41,00;;45.79927999960241;4.839779999879349;;167
+Brignais / Tassin (RD342);Brignais;Tassin (RD342);1020;1021;True;;;13100;1140;1080;83,08;83,08;45.72903799999658;4.77781200054831;;40
+Givors_Pont du Rhône;Givors;Pont du Rhône;4;104;False;1002;1003;16400;600;600;98,00;96,00;45.63502403798389;4.82108498690099;;185
+Manissieux/Chassieu;Manissieux;Chassieu;45;145;False;1030;1031;3300;120;120;99,00;99,00;45.71780489060311;4.971016702177307;;66
+Pusignan / Meyzieu;Pusignan ;Meyzieu;63;163;False;;;5000;240;240;75,00;75,00;45.76616999980586;5.056349999576022;;101
+JoliotCurie / LyonCentre;Joliot Curie;Lyon Centre;191;;False;;;6100;720;;30,50;;45.74367000005966;4.853040000368129;;145
+PontIleBarbeRD / LyonCentre;Pont de Ile Barbe rive droite;Lyon Centre;236;;False;;;680;720;;34,00;;45.772110000025975;4.813500000119074;;178
+11novembre_EtoileAlï;Rue du 11 Novembre;Etoile d'Alaï;31;131;False;1022;1023;3700;420;420;31,70;31,70;45.74733000039899;4.750850000627302;;18
+QuaiGailleton / CentreCongres;Quai Gailleton ;Centre des Congres;197;;False;;;5100;420;;44,00;;45.77085999966531;4.838169999428248;;148
+DeGaulleVénissieux / MermozPinel;De Gaulle Vénissieux;Mermoz Pinel;254;;False;;;3900;540;;26,00;;45.73239000013998;4.8883900000355895;;171
+TassinValvert / TCroixRousse;Tassin Valvert;Tunnel de la Croix Rousse;204;;False;;;2500;300;;30,00;;45.775929999646685;4.800439999678865;;153
+Meyzieu / Part-Dieu-Villette;Meyzieu;Part-Dieu-Villette;1008;1009;True;;;15900;1020;1020;56,67;56,67;45.79249090427179;4.915592948138545;;46
+Brignais (Route de Lyon) / Saint Genis (Foche);Brignais (Route de lyon);Saint genis (Foche);327;328;False;;;1800;;180;36,00;36,00;45.68152999979268;4.779160000455463;<Nul>;204
+Chassieu/Pusignan;Chassieu;Pusignan;46;146;False;1030;1031;2300;120;120;90,00;90,00;45.739430516700025;4.985156777296973;;67
+Pierre Bénite (Sémard) / Mulatière (Europe)  ;Pierre Bénite (Sémard)  ;Mulatière (Europe)    ;329;330;False;;;3900;540;540;26,00;26,00;45.71191000038423;4.819929999421637;<Nul>;205
+Pont Galliéni / Part-Dieu;Pont Galliéni;Part-Dieu;80;;False;;;4300;660;;23,50;;45.742679999819664;4.849810000102665;;120
+Saint Genis Laval (A450) / Feyzin (BUS);Saint Genis Laval (A450);Feyzin (BUS);301;;False;;;7500;300;;90,00;;45.693879999624066;4.826920000194708;;188
+Porte de Croix-Luizet_Cordeliers;Porte de Croix-Luizet;Cordeliers;11;111;False;1006;1007;7200;540;600;51,30;40,80;45.78491200161578;4.864265000742294;;9
+Feyzin (BUS) / Saint Genis Laval (A450);Feyzin (BUS);Saint Genis Laval (A450);302;;False;;;7726;360;;77,00;;45.69399999984593;4.826790000087891;;208
+PorteduVinatier / LyonCentre;Porte du Vinatier ;Lyon Centre;95;;False;;;5946;720;;30,00;;45.7469800002898;4.867069999470799;;135
+QuaiGailleton / CroixRousse;Quai Gailleton;Croix Rousse;199;;False;;;4500;360;;45,00;;45.768869999580474;4.8381499999321225;;150
+Saint Genis (Foche)  / Saint Genis (Clémenceau);Saint Genis (Foche);Saint Genis (Clémenceau);325;326;False;;;2100;240;240;31,50;31,50;45.69649000028469;4.786489999680484;;203
+FontainesurSaône_TCR;Fontaine-sur-Saône;Tunnel Croix Rousse;24;124;False;1018;1019;8000;720;720;40,00;40,00;45.798481001607556;4.838904000446328;;13

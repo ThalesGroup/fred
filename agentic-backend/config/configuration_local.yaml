@@ -105,9 +105,9 @@ ai:
       type: "agent"
       class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
       enabled: true
-    - name: "Travel_agent"
+    - name: "Eco"
       type: "agent"
-      class_path: "agentic_backend.academy.07_travel_agent.travel_agent.Travel"
+      class_path: "agentic_backend.academy.08_eco_advisor.eco_advisor.EcoAdvisor"
       enabled: true
 
 mcp:

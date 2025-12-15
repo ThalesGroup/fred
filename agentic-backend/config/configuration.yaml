@@ -109,7 +109,7 @@ ai:
       enabled: true
     - name: "Eco"
       type: "agent"
-      class_path: "agentic_backend.academy.08_ecoadviser.eco_adviser.EcoAdvisor"
+      class_path: "agentic_backend.academy.08_eco_advisor.eco_advisor.EcoAdvisor"
       enabled: true
 
 mcp:
@@ -165,24 +165,6 @@ mcp:
       url: "http://localhost:8111/knowledge-flow/v1/mcp-neo4j"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - id: "mcp-co2-service"
-      name: "mcp-co2-service"
-      transport: "streamable_http"
-      url: "http://localhost:9798/mcp"
-      sse_read_timeout: 2000
-      auth_mode: "no_token"
-    - id: "mcp-geo-service"
-      name: "mcp-geo-service"
-      transport: "streamable_http"
-      url: "http://localhost:9801/mcp"
-      sse_read_timeout: 2000
-      auth_mode: "no_token"
-    - id: "mcp-tcl-service"
-      name: "mcp-tcl-service"
-      transport: "streamable_http"
-      url: "http://localhost:9802/mcp"
-      sse_read_timeout: 2000
-      auth_mode: "no_token"
 
 storage:
   postgres:
