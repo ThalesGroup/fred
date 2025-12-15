@@ -283,6 +283,78 @@ class TagService:
         tag.updated_at = datetime.now()
         self._tag_store.update_tag_by_id(tag_id, tag)
 
+    @authorize(Action.UPDATE, Resource.TAGS)
+    async def backfill_rebac_relations(self, user: KeycloakUser) -> dict:
+        """
+        Recreate missing ReBAC relations for existing tags and their documents.
+        Intended for migrations when enabling ReBAC on an existing instance.
+        """
+        # If ReBAC is disabled, no-op but stay consistent with other calls.
+        if getattr(self.rebac, "enabled", True) is False:
+            return {
+                "rebac_enabled": False,
+                "tags_seen": 0,
+                "documents_seen": 0,
+                "tag_owner_relations_created": 0,
+                "tag_parent_relations_created": 0,
+            }
+
+        tags = self._tag_store.list_tags_for_user(user)
+        tag_owner_relations_created = 0
+        tag_parent_relations_created = 0
+        documents_seen = 0
+
+        # Access underlying stores directly to avoid permission-filtered queries during migration.
+        metadata_store = self.document_metadata_service.metadata_store
+
+        for tag in tags:
+            try:
+                await self.rebac.add_relation(
+                    Relation(
+                        subject=RebacReference(type=Resource.USER, id=tag.owner_id),
+                        relation=RelationType.OWNER,
+                        resource=RebacReference(type=Resource.TAGS, id=tag.id),
+                    )
+                )
+                tag_owner_relations_created += 1
+            except Exception as exc:
+                logger.warning("Failed to backfill owner relation for tag %s: %s", tag.id, exc)
+
+            # Only tags that represent document libraries need tag->document relations today.
+            if tag.type != TagType.DOCUMENT:
+                continue
+
+            try:
+                docs = metadata_store.get_metadata_in_tag(tag.id)
+            except Exception as exc:
+                logger.warning("Failed to list documents for tag %s during backfill: %s", tag.id, exc)
+                continue
+
+            for doc in docs:
+                doc_uid = getattr(doc, "document_uid", None) or getattr(doc.identity, "document_uid", None)
+                if not doc_uid:
+                    continue
+                documents_seen += 1
+                try:
+                    await self.rebac.add_relation(
+                        Relation(
+                            subject=RebacReference(type=Resource.TAGS, id=tag.id),
+                            relation=RelationType.PARENT,
+                            resource=RebacReference(type=Resource.DOCUMENTS, id=doc_uid),
+                        )
+                    )
+                    tag_parent_relations_created += 1
+                except Exception as exc:
+                    logger.warning("Failed to backfill tag->document relation for tag %s doc %s: %s", tag.id, doc_uid, exc)
+
+        return {
+            "rebac_enabled": True,
+            "tags_seen": len(tags),
+            "documents_seen": documents_seen,
+            "tag_owner_relations_created": tag_owner_relations_created,
+            "tag_parent_relations_created": tag_parent_relations_created,
+        }
+
     # ---------- Internals / helpers ----------
 
     async def _get_tag_members_by_type(self, tag_id: str, subject_type: Resource) -> dict[str, UserTagRelation]:

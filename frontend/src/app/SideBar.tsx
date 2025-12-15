@@ -24,6 +24,7 @@ import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import ShieldIcon from "@mui/icons-material/Shield";
 import {
   Avatar,
   Box,
@@ -78,6 +79,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
   const canReadOpenSearch = can("opensearch", "create");
   const canReadLogs = can("logs", "create");
   const canReadRuntime = can("kpi", "create");
+  const canUpdateTag = can("tag", "update");
 
   const menuItems: MenuItemCfg[] = [
     {
@@ -90,7 +92,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
     },
 
     // Only show monitoring if user has permission
-    ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime
+    ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime || canUpdateTag
       ? [
           {
             key: "monitoring",
@@ -137,15 +139,15 @@ export default function SideBar({ darkMode, onThemeChange }) {
                 : []),
               ...(canReadRuntime
                 ? [
-                  {
-                    key: "monitoring-graph",
-                    label: t("sidebar.monitoring_graph", "Graph Hub"),
-                    icon: <MonitorHeartIcon />,
-                    url: `/monitoring/graph`,
-                    canBeDisabled: false,
-                    tooltip: t("sidebar.tooltip.monitoring_graph", "Knowledge graph view"),
-                  },
-                ]
+                    {
+                      key: "monitoring-graph",
+                      label: t("sidebar.monitoring_graph", "Graph Hub"),
+                      icon: <MonitorHeartIcon />,
+                      url: `/monitoring/graph`,
+                      canBeDisabled: false,
+                      tooltip: t("sidebar.tooltip.monitoring_graph", "Knowledge graph view"),
+                    },
+                  ]
                 : []),
               ...(canReadRuntime
                 ? [
@@ -155,7 +157,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/processors`,
                       canBeDisabled: false,
-                      tooltip: t("sidebar.tooltip.monitoring_processors", "Processor bench"),
+                      tooltip: t("sidebar.tooltip.monitoring_processors"),
                     },
                   ]
                 : []),
@@ -167,7 +169,19 @@ export default function SideBar({ darkMode, onThemeChange }) {
                       icon: <MenuBookIcon />,
                       url: `/monitoring/logs`,
                       canBeDisabled: false,
-                      tooltip: t("sidebar.tooltip.monitoring_logs") || "Log Console",
+                      tooltip: t("sidebar.tooltip.monitoring_logs"),
+                    },
+                  ]
+                : []),
+              ...(canUpdateTag
+                ? [
+                    {
+                      key: "monitoring-rebac-backfill",
+                      label: t("sidebar.migration"),
+                      icon: <ShieldIcon />,
+                      url: `/monitoring/rebac-backfill`,
+                      canBeDisabled: false,
+                      tooltip: t("sidebar.tooltip.migration", "Rebuild ReBAC relations"),
                     },
                   ]
                 : []),

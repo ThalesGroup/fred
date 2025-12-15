@@ -84,12 +84,13 @@
     "deleted": "Deleted"
   },
   "sidebar": {
+    "migration": "Migration",
     "cluster": "Cluster",
     "facts": "Facts",
     "audit": "Audit",
     "optimize": "Optimize",
     "chat": "Chat",
-    "monitoring": "Monitoring",
+    "monitoring": "Admin",
     "knowledge": "Resources",
     "mcp": "MCP Servers",
     "agent": "Agents",
@@ -97,6 +98,7 @@
     "workspaces": "Workspaces",
     "account": "Profile",
     "tooltip": {
+      "migration": "Check or run migration actions after an update",
       "cluster": "Explain the cluster",
       "facts": "Checkout the business and usage facts associated with the cluster",
       "audit": "View a complete eco-score audit of the selected cluster",

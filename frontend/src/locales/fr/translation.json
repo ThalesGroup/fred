@@ -84,6 +84,7 @@
     "deleted": "Supprimé"
   },
   "sidebar": {
+    "migration": "Migration",
     "cluster": "Cluster",
     "facts": "Faits",
     "audit": "Audit",
@@ -97,6 +98,7 @@
     "workspaces": "Espaces de travail",
     "account": "Profil",
     "tooltip": {
+      "migration": "Vérifier ou exécuter des actions de migration après une mise à jour",
       "cluster": "Expliquer le cluster",
       "facts": "Consulter les faits métier et d'usage du cluster",
       "audit": "Afficher un audit complet éco-score du cluster",

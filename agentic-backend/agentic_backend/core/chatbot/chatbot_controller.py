@@ -15,7 +15,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import List, Literal, Union
 from uuid import uuid4
 
@@ -32,6 +31,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fred_core import (
+    Action,
     KeycloakUser,
     RBACProvider,
     UserSecurity,
@@ -68,7 +68,10 @@ from agentic_backend.core.chatbot.metric_structures import (
     MetricsBucket,
     MetricsResponse,
 )
-from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
+from agentic_backend.core.chatbot.session_orchestrator import (
+    SessionOrchestrator,
+    _utcnow_dt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -295,13 +298,27 @@ async def websocket_chatbot_question(
                         force_disable_streaming=force_disable_streaming,
                     )
                     session_id = ask.session_id or f"a2a-{uuid4()}"
+                    # If a session_id was provided, enforce ownership to match regular agents
+                    if ask.session_id:
+                        session_orchestrator._authorize_user_action_on_session(  # type: ignore[attr-defined]
+                            ask.session_id, active_user, Action.UPDATE
+                        )
+                    # Get or create the persisted session just like the regular flow
+                    session = session_orchestrator._get_or_create_session(  # type: ignore[attr-defined]
+                        user_id=active_user.uid,
+                        query=ask.message,
+                        session_id=session_id,
+                    )
+                    prior = session_orchestrator.history_store.get(session.id) or []
+                    base_rank = len(prior)
                     exchange_id = ask.client_exchange_id or str(uuid4())
-                    rank = 0
+                    rank = base_rank
 
                     # Emit the user message first
                     user_msg = make_user_text(
                         session_id, exchange_id, rank, ask.message
                     )
+                    collected_messages = [user_msg]
                     await websocket.send_text(
                         StreamEvent(type="stream", message=user_msg).model_dump_json()
                     )
@@ -318,19 +335,20 @@ async def websocket_chatbot_question(
                         start_rank=rank,
                     ):
                         rank = msg.rank + 1
+                        collected_messages.append(msg)
                         await websocket.send_text(
                             StreamEvent(type="stream", message=msg).model_dump_json()
                         )
 
-                    session = SessionSchema(
-                        id=session_id,
-                        user_id=active_user.uid,
-                        title="A2A session",
-                        updated_at=datetime.utcnow(),
+                    session.updated_at = _utcnow_dt()
+                    # Persist session + history so it behaves like regular agents
+                    session_orchestrator.session_store.save(session)
+                    session_orchestrator.history_store.save(
+                        session.id, prior + collected_messages, active_user.uid
                     )
                     await websocket.send_text(
                         FinalEvent(
-                            type="final", messages=[], session=session
+                            type="final", messages=collected_messages, session=session
                         ).model_dump_json()
                     )
 
