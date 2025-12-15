@@ -434,6 +434,7 @@ applications:
         backend_url_api: "http://fred.dev.fred.thalesgroup.com"
         backend_url_knowledge: "https://fred.dev.fred.thalesgroup.com"
         websocket_url: "ws://fred.dev.fred.thalesgroup.com/fred/chatbot/query"
+        frontend_basename : "/"
 
   knowledge-flow-backend:
     enabled: true
