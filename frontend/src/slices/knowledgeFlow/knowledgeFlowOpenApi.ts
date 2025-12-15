@@ -419,6 +419,12 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    backfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPost: build.mutation<
+      BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiResponse,
+      BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/tags/rebac/backfill`, method: "POST" }),
+    }),
     echoSchemaKnowledgeFlowV1SchemasEchoPost: build.mutation<
       EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse,
       EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg
@@ -1027,6 +1033,9 @@ export type UnshareTagKnowledgeFlowV1TagsTagIdShareTargetIdDeleteApiArg = {
   targetId: string;
   targetType: ShareTargetResource;
 };
+export type BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiResponse =
+  /** status 200 Successful Response */ RebacBackfillResponse;
+export type BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiArg = void;
 export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ any;
 export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg = {
   echoEnvelope: EchoEnvelope;
@@ -1650,6 +1659,13 @@ export type TagShareRequest = {
   target_type: ShareTargetResource;
   relation: UserTagRelation;
 };
+export type RebacBackfillResponse = {
+  rebac_enabled: boolean;
+  tags_seen: number;
+  documents_seen: number;
+  tag_owner_relations_created: number;
+  tag_parent_relations_created: number;
+};
 export type SearchPolicyName = "hybrid" | "strict" | "semantic";
 export type EchoEnvelope = {
   kind: "SearchPolicyName";
@@ -2098,6 +2114,7 @@ export const {
   useLazyListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery,
   useShareTagKnowledgeFlowV1TagsTagIdSharePostMutation,
   useUnshareTagKnowledgeFlowV1TagsTagIdShareTargetIdDeleteMutation,
+  useBackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostMutation,
   useEchoSchemaKnowledgeFlowV1SchemasEchoPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
   useTestPostSuccessMutation,
