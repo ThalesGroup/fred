@@ -99,6 +99,9 @@ router = APIRouter(tags=["Agents"])
 
 class CreateAgentRequest(BaseModel):
     name: str
+    type: str = "basic"
+    a2a_base_url: str | None = None
+    a2a_token: str | None = None
 
 
 @router.post(
@@ -112,7 +115,13 @@ async def create_agent(
 ):
     try:
         service = AgentService(agent_manager=agent_manager)
-        await service.create_agent(user, request.name)
+        await service.create_agent(
+            user,
+            request.name,
+            agent_type=request.type,
+            a2a_base_url=request.a2a_base_url,
+            a2a_token=request.a2a_token,
+        )
     except Exception as e:
         log_exception(e)
         raise handle_exception(e)

@@ -10,7 +10,8 @@
     "error": "Erreur",
     "refresh": "Rafraîchir",
     "cancel": "Annuler",
-    "save": "Enregistrer"
+    "save": "Enregistrer",
+    "invalidUrl": "URL invalide"
   },
   "dataHub": {
     "title": "Hub des Données - Lignage des documents",
@@ -287,8 +288,14 @@
       "nickname": "Diminutif",
       "description": "Description",
       "role": "Rôle",
+      "agentType": "Type d'agent",
       "base_prompt": "Prompt",
       "agent_type": "Type d'agent",
+      "a2aProxyToggle": "Proxy A2A",
+      "a2aBaseUrl": "URL de base A2A",
+      "a2aBaseUrlRequired": "L'URL de base A2A est requise pour un agent A2A.",
+      "a2aToken": "Jeton A2A (optionnel)",
+      "optional": "Optionnel",
       "icon": "Icône",
       "tags": "Tags",
       "custom_tag": "Nouveau tag",
@@ -327,7 +334,17 @@
       "title": "Outils"
     },
     "confirmRestoreTitle": "Écraser les agents avec la configuration ?",
-    "confirmRestoreMessage": "Cette action remplacera tous les réglages personnalisés saisis dans l'UI par ceux du YAML. Vous perdrez vos modifications. Cette opération est irréversible."
+    "confirmRestoreMessage": "Cette action remplacera tous les réglages personnalisés saisis dans l'UI par ceux du YAML. Vous perdrez vos modifications. Cette opération est irréversible.",
+    "registerA2A": "Enrôler",
+    "noA2ACardSummary": "Aucune carte A2A stockée",
+    "noA2ACardDetail": "Cet agent ne possède pas encore de carte A2A stockée.",
+    "a2aCardTitle": "Carte Agent A2A",
+    "a2aCapabilities": "Capacités",
+    "a2aStreaming": "Streaming",
+    "a2aPush": "Notifications push",
+    "a2aHistory": "Historique d'état",
+    "a2aSkills": "Compétences",
+    "a2aExamples": "Exemples"
   },
   "mcpHub": {
     "title": "Hub MCP",
@@ -490,7 +507,9 @@
     "favorite": "Ajouter l'agent à vos favoris",
     "unfavorite": "Retirer l'agent de vos favoris",
     "manageAssets": "Gérer les ressources",
-    "manageCrew": "Gérer l'équipe"
+    "manageCrew": "Gérer l'équipe",
+    "inspectCode": "Inspecter le code source",
+    "viewA2ACard": "Voir la carte A2A"
   },
   "dialogs": {
     "create": {

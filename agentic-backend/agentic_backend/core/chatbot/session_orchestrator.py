@@ -563,6 +563,9 @@ class SessionOrchestrator:
         """Check if a user can perform an action on a session"""
         session = self.session_store.get(session_id)
         if session is None:
+            # A2A proxy sessions are not persisted locally; allow access to avoid noisy warnings.
+            if session_id.startswith("a2a-"):
+                return True
             return False
 
         # For now, ignore action, only owners can access their sessions
