@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Annotated, Dict, List, Literal, Optional, Union, Any
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from fred_core import (
     LogStorageConfig,

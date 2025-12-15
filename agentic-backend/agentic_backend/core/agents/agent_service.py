@@ -24,11 +24,11 @@ from fred_core import Action, KeycloakUser, Resource, authorize
 
 from agentic_backend.application_context import get_agent_store
 from agentic_backend.common.structures import Agent, AgentSettings
+from agentic_backend.core.agents.a2a_proxy_agent import A2AProxyAgent
 from agentic_backend.core.agents.agent_manager import (
     AgentAlreadyExistsException,
     AgentManager,
 )
-from agentic_backend.core.agents.a2a_proxy_agent import A2AProxyAgent
 from agentic_backend.core.agents.basic_react_agent import (
     BASIC_REACT_TUNING,
     BasicReActAgent,

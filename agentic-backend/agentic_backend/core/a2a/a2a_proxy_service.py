@@ -14,8 +14,8 @@
 
 from __future__ import annotations
 
-import logging
 import json
+import logging
 from typing import AsyncIterator, Optional, Tuple, cast
 from uuid import uuid4
 
@@ -32,10 +32,10 @@ from a2a.types import (
     MessageSendParams,
     Part,
     Role,
-    SendStreamingMessageSuccessResponse,
     SendMessageRequest,
-    TextPart,
     SendStreamingMessageResponse,
+    SendStreamingMessageSuccessResponse,
+    TextPart,
 )
 from a2a.types import Message as A2AMessage
 from a2a.utils.constants import EXTENDED_AGENT_CARD_PATH
@@ -266,7 +266,5 @@ class A2AProxyService:
                 if access_token
                 else None
             )
-            response = await client.send_message(
-                send_request, http_kwargs=http_kwargs
-            )
+            response = await client.send_message(send_request, http_kwargs=http_kwargs)
             yield response
