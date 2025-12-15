@@ -280,7 +280,7 @@ async def websocket_chatbot_question(
                 if target_settings and is_a2a_agent(target_settings):
                     meta = target_settings.metadata or {}
                     base_url = meta.get("a2a_base_url")
-                    token = meta.get("a2a_token")
+                    configured_a2a_token = meta.get("a2a_token")
                     force_disable_streaming = bool(meta.get("a2a_disable_streaming"))
                     if not base_url:
                         raise HTTPException(
@@ -310,7 +310,8 @@ async def websocket_chatbot_question(
                     async for msg in stream_a2a_as_chat_messages(
                         proxy=proxy,
                         user_id=active_user.uid,
-                        access_token=active_token,
+                        # Prefer the configured agent token; fall back to the caller token.
+                        access_token=configured_a2a_token or active_token,
                         text=ask.message,
                         session_id=session_id,
                         exchange_id=exchange_id,
