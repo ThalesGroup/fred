@@ -1,4 +1,4 @@
-/// Copyright Thales 2025
+// Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@
 // Why: avoid two near-identical components (short vs. full); keep UI consistent.
 
 import { Box, ButtonGroup } from "@mui/material";
-import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import dayjs, { Dayjs } from "dayjs";
 import { useTranslation } from "react-i18next";
 import QuickRangeButton from "./QuickRangeButton";

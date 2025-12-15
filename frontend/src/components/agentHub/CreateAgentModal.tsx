@@ -13,10 +13,21 @@
 // limitations under the License.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from "@mui/material";
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  FormControlLabel,
+  FormLabel,
+  Switch,
+  TextField,
+} from "@mui/material";
 import Grid2 from "@mui/material/Grid2";
 import React from "react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
@@ -28,10 +39,28 @@ import {
 
 import { useToast } from "../ToastProvider";
 
-// 1. Simplified Schema: Only includes the required 'name' field
 const createSimpleAgentSchema = (t: (key: string, options?: any) => string) =>
   z.object({
-    name: z.string().min(1, { message: t("validation.required", { defaultValue: "Required" }) }),
+    name: z.string().min(1, { message: t("validation.required") }),
+    type: z.enum(["basic", "a2a_proxy"]),
+    a2a_base_url: z.union([
+      z.literal(""),
+      z
+        .string()
+        .trim()
+        .refine(
+          (val) => {
+            try {
+              new URL(val);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          { message: t("common.invalidUrl") }
+        ),
+    ]),
+    a2a_token: z.string().optional(),
   });
 
 type FormData = z.infer<ReturnType<typeof createSimpleAgentSchema>>;
@@ -40,9 +69,17 @@ interface CreateAgentModalProps {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
+  initialType?: "basic" | "a2a_proxy";
+  disableTypeToggle?: boolean;
 }
 
-export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({ open, onClose, onCreated }) => {
+export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
+  open,
+  onClose,
+  onCreated,
+  initialType = "basic",
+  disableTypeToggle = false,
+}) => {
   const { t } = useTranslation();
   const schema = createSimpleAgentSchema(t);
   const { showError, showSuccess } = useToast();
@@ -57,14 +94,28 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({ open, onClos
     resolver: zodResolver(schema),
     defaultValues: {
       name: "",
+      type: initialType,
+      a2a_base_url: "",
+      a2a_token: "",
     },
   });
+  const watchType = useWatch({ control, name: "type", defaultValue: initialType });
+  const isA2aType = watchType === "a2a_proxy";
 
   const submit = async (data: FormData) => {
-    // 2. Construct the request object.
-    // Set all suppressed fields to safe, empty values to satisfy the API contract.
+    if (data.type === "a2a_proxy" && !data.a2a_base_url) {
+      showError({
+        summary: t("validation.required"),
+        detail: t("agentHub.fields.a2aBaseUrlRequired"),
+      });
+      return;
+    }
+
     const req: CreateAgentRequest = {
       name: data.name.trim(),
+      type: data.type,
+      a2a_base_url: data.type === "a2a_proxy" ? data.a2a_base_url?.trim() || undefined : undefined,
+      a2a_token: data.type === "a2a_proxy" ? data.a2a_token?.trim() || undefined : undefined,
     };
 
     try {
@@ -73,7 +124,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({ open, onClos
       reset();
       onClose();
       showSuccess({
-        summary: t("agentHub.success.summary", "Agent created"),
+        summary: t("agentHub.success.summary"),
         detail: t("agentHub.success.detail"),
       });
     } catch (e: any) {
@@ -88,13 +139,12 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({ open, onClos
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
-      <DialogTitle>{t("agentHub.createAgent")}</DialogTitle>
+      <DialogTitle>{isA2aType ? t("agentHub.registerA2A") : t("agentHub.createAgent")}</DialogTitle>
       <DialogContent dividers>
         {/* Note: The <form> element is required for handleSubmit, but we'll manually trigger it below */}
         <form onSubmit={handleSubmit(submit)}>
           <Grid2 container spacing={2}>
             <Grid2 size={12}>
-              {/* Only the 'name' field remains in the UI */}
               <Controller
                 name="name"
                 control={control}
@@ -104,20 +154,81 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({ open, onClos
                     fullWidth
                     size="small"
                     required
-                    label={t("agentHub.fields.name", "Agent Name")}
+                    label={t("agentHub.fields.name")}
                     error={!!errors.name}
                     helperText={(errors.name?.message as string) || ""}
                   />
                 )}
               />
             </Grid2>
+
+            {!disableTypeToggle && (
+              <Grid2 size={12}>
+                <FormControl component="fieldset" fullWidth>
+                  <FormLabel component="legend">{t("agentHub.fields.agentType")}</FormLabel>
+                  <Controller
+                    name="type"
+                    control={control}
+                    render={({ field }) => (
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            size="small"
+                            checked={field.value === "a2a_proxy"}
+                            onChange={(_, checked) => field.onChange(checked ? "a2a_proxy" : "basic")}
+                          />
+                        }
+                        label={t("agentHub.fields.a2aProxyToggle")}
+                      />
+                    )}
+                  />
+                </FormControl>
+              </Grid2>
+            )}
+
+            {watchType === "a2a_proxy" && (
+              <>
+                <Controller
+                  name="a2a_base_url"
+                  control={control}
+                  render={({ field: f }) => (
+                    <Grid2 size={12}>
+                      <TextField
+                        {...f}
+                        fullWidth
+                        size="small"
+                        label={t("agentHub.fields.a2aBaseUrl")}
+                        placeholder="https://example.com"
+                        required
+                      />
+                    </Grid2>
+                  )}
+                />
+
+                <Controller
+                  name="a2a_token"
+                  control={control}
+                  render={({ field: f }) => (
+                    <Grid2 size={12}>
+                      <TextField
+                        {...f}
+                        fullWidth
+                        size="small"
+                        label={t("agentHub.fields.a2aToken")}
+                        placeholder={t("agentHub.fields.optional")}
+                      />
+                    </Grid2>
+                  )}
+                />
+              </>
+            )}
           </Grid2>
         </form>
       </DialogContent>
 
       <DialogActions>
         <Button size="small" onClick={onClose} disabled={isLoading || isSubmitting}>
-          {t("dialogs.cancel", "Cancel")}
+          {t("dialogs.cancel")}
         </Button>
         <Button
           size="small"
@@ -126,7 +237,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({ open, onClos
           onClick={handleSubmit(submit)}
           disabled={isLoading || isSubmitting}
         >
-          {t("dialogs.create.confirm", "Create")}
+          {isA2aType ? t("agentHub.registerA2A") : t("dialogs.create.confirm")}
         </Button>
       </DialogActions>
     </Dialog>

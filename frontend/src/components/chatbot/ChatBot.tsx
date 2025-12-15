@@ -13,8 +13,7 @@
 // limitations under the License.
 
 import { Box, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
-import { keyframes } from "@mui/material/styles";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
@@ -51,22 +50,6 @@ export interface ChatBotError {
 //   text?: string;
 // }
 
-const gradientShift = keyframes`
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-`;
-
-const fadeInUp = keyframes`
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-`;
-
-const blinkCaret = keyframes`
-  from, to { opacity: 0; }
-  50% { opacity: 1; }
-`;
-
 export interface ChatBotProps {
   currentChatBotSession: SessionSchema;
   currentAgent: AnyAgent;
@@ -91,36 +74,15 @@ const ChatBot = ({
   const theme = useTheme();
   const { t } = useTranslation();
   const username =
-    KeyCloakService.GetUserGivenName?.() || KeyCloakService.GetUserFullName?.() || KeyCloakService.GetUserName?.() || "";
+    KeyCloakService.GetUserGivenName?.() ||
+    KeyCloakService.GetUserFullName?.() ||
+    KeyCloakService.GetUserName?.() ||
+    "";
   const greetingText = username ? t("chatbot.welcomeUser", { username }) : t("chatbot.welcomeFallback");
-  const [typedGreeting, setTypedGreeting] = useState<string>("");
-  const typingTimerRef = useRef<number | null>(null);
-
-  const startTypingGreeting = useCallback(() => {
-    if (typingTimerRef.current) {
-      window.clearInterval(typingTimerRef.current);
-      typingTimerRef.current = null;
-    }
-
-    setTypedGreeting("");
-    const chars = greetingText.split("");
-    let idx = 0;
-    const tick = () => {
-      setTypedGreeting((prev) => {
-        if (idx >= chars.length) return prev;
-        const next = prev + chars[idx];
-        idx += 1;
-        if (idx === chars.length && typingTimerRef.current) {
-          window.clearInterval(typingTimerRef.current);
-          typingTimerRef.current = null;
-        }
-        return next;
-      });
-    };
-
-    typingTimerRef.current = window.setInterval(tick, 65);
+  const [typedGreeting, setTypedGreeting] = useState<string>(greetingText);
+  useEffect(() => {
+    setTypedGreeting(greetingText);
   }, [greetingText]);
-
 
   const [contextOpen, setContextOpen] = useState<boolean>(() => {
     try {
@@ -634,35 +596,8 @@ const ChatBot = ({
 
   useEffect(() => {
     if (!showWelcome) return;
-
-    startTypingGreeting();
-
-    return () => {
-      if (typingTimerRef.current) {
-        window.clearInterval(typingTimerRef.current);
-        typingTimerRef.current = null;
-      }
-    };
-  }, [greetingText, showWelcome, startTypingGreeting]);
-
-  useEffect(() => {
-    if (!showWelcome) return;
-    const handleVisibility = () => {
-      if (document.visibilityState === "hidden") {
-        if (typingTimerRef.current) {
-          window.clearInterval(typingTimerRef.current);
-          typingTimerRef.current = null;
-        }
-        setTypedGreeting("");
-      } else if (document.visibilityState === "visible") {
-        startTypingGreeting();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [showWelcome, startTypingGreeting]);
+    setTypedGreeting(greetingText);
+  }, [greetingText, showWelcome]);
 
   return (
     <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center" sx={{ minHeight: 0 }}>
@@ -701,7 +636,6 @@ const ChatBot = ({
               sx={{
                 width: "100%",
                 textAlign: "center",
-                animation: `${fadeInUp} 0.6s ease`,
               }}
             >
               <Typography
@@ -712,39 +646,18 @@ const ChatBot = ({
                   whiteSpace: "nowrap",
                   overflow: "hidden",
                   position: "relative",
-                  background:
-                    theme.palette.mode === "dark"
-                      ? "linear-gradient(120deg, #9bb7ff, #6fe7ff, #cfa2ff)"
-                      : "linear-gradient(120deg, #004fc4, #00bcd4, #7c4dff)",
+                  background: theme.palette.primary.main,
                   backgroundSize: "200% 200%",
                   backgroundClip: "text",
                   WebkitTextFillColor: "transparent",
-                  animation: `${gradientShift} 8s ease infinite`,
                   letterSpacing: 0.5,
                 }}
               >
                 {typedGreeting}
-                <Box
-                  component="span"
-                  sx={{
-                    display: "inline-block",
-                    width: "2px",
-                    height: "1.1em",
-                    marginLeft: "4px",
-                    backgroundColor: theme.palette.mode === "dark" ? "#dbe8ff" : "#0d2a5c",
-                    animation: `${blinkCaret} 1s steps(1) infinite`,
-                    verticalAlign: "-0.08em",
-                    opacity: typedGreeting ? 1 : 0,
-                  }}
-                />
               </Typography>
             </Box>
             {/* Welcome hint */}
-            <Typography
-              variant="h5"
-              color="text.primary"
-              sx={{ textAlign: "center", animation: `${fadeInUp} 0.75s ease` }}
-            >
+            <Typography variant="h5" color="text.primary" sx={{ textAlign: "center" }}>
               {t("chatbot.startNew", { name: currentAgent?.name ?? "assistant" })}
             </Typography>
             {/* Input area */}

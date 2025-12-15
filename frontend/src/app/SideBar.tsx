@@ -137,6 +137,18 @@ export default function SideBar({ darkMode, onThemeChange }) {
                 : []),
               ...(canReadRuntime
                 ? [
+                  {
+                    key: "monitoring-graph",
+                    label: t("sidebar.monitoring_graph", "Graph Hub"),
+                    icon: <MonitorHeartIcon />,
+                    url: `/monitoring/graph`,
+                    canBeDisabled: false,
+                    tooltip: t("sidebar.tooltip.monitoring_graph", "Knowledge graph view"),
+                  },
+                ]
+                : []),
+              ...(canReadRuntime
+                ? [
                     {
                       key: "monitoring-processors",
                       label: t("sidebar.monitoring_processors", "Processors"),

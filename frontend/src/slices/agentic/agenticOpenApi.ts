@@ -366,6 +366,9 @@ export type HttpValidationError = {
 };
 export type CreateAgentRequest = {
   name: string;
+  type?: string;
+  a2a_base_url?: string | null;
+  a2a_token?: string | null;
 };
 export type UiHints = {
   multiline?: boolean;
@@ -473,6 +476,10 @@ export type Agent = {
   class_path?: string | null;
   tuning?: AgentTuning | null;
   chat_options?: AgentChatOptions;
+  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
+  metadata?: {
+    [key: string]: any;
+  } | null;
   /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
   mcp_servers?: McpServerConfiguration[];
   type?: "agent";
@@ -483,6 +490,10 @@ export type Leader = {
   class_path?: string | null;
   tuning?: AgentTuning | null;
   chat_options?: AgentChatOptions;
+  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
+  metadata?: {
+    [key: string]: any;
+  } | null;
   /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
   mcp_servers?: McpServerConfiguration[];
   type?: "leader";
@@ -784,6 +795,10 @@ export type Agent2 = {
   class_path?: string | null;
   tuning?: AgentTuning2 | null;
   chat_options?: AgentChatOptions;
+  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
+  metadata?: {
+    [key: string]: any;
+  } | null;
   /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
   mcp_servers?: McpServerConfiguration[];
   type?: "agent";
@@ -794,6 +809,10 @@ export type Leader2 = {
   class_path?: string | null;
   tuning?: AgentTuning2 | null;
   chat_options?: AgentChatOptions;
+  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
+  metadata?: {
+    [key: string]: any;
+  } | null;
   /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
   mcp_servers?: McpServerConfiguration[];
   type?: "leader";

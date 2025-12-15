@@ -202,11 +202,11 @@ RAG_TUNING = AgentTuning(
             type="number",
             title="Minimum Score (filter)",
             description=(
-                "Filter out retrieved chunks with a score below this value. "
-                "Use 0 to disable score-based filtering."
+                "Semantic search only: filter out vector hits with a score below this value. "
+                "Ignored for other search modes. Set 0.0 to disable (default)."
             ),
             required=False,
-            default=0.6,
+            default=0.0,
             ui=UIHints(group="Retrieval"),
         ),
     ],
@@ -406,8 +406,8 @@ class Rico(AgentFlow):
             ensure_ranks(hits)
 
             # 3b) Optional score filter
-            min_score = self.get_tuned_number("rag.min_score", default=0.6)
-            if min_score and min_score > 0:
+            min_score = self.get_tuned_number("rag.min_score", default=0.0)
+            if search_policy == "semantic" and min_score and min_score > 0:
                 before = len(hits)
                 hits = [
                     h
@@ -419,6 +419,11 @@ class Rico(AgentFlow):
                     min_score,
                     len(hits),
                     before,
+                )
+            elif search_policy != "semantic":
+                logger.debug(
+                    "Rico: skipping min_score filter because search_policy=%s",
+                    search_policy,
                 )
 
             if not hits:
@@ -523,9 +528,19 @@ class Rico(AgentFlow):
                     "search_policy": locals().get("search_policy"),
                     "top_k": locals().get("top_k"),
                     "hits_count": hits_count,
+                    "exception": str(e),
                 },
             )
-            logger.error("[AGENT] error in reasoning step.", extra={"err_ctx": log_ctx})
+            logger.error(
+                "[AGENT] error in reasoning step (guardrail=%s type=%s status=%s detail=%r): %s",
+                info.is_guardrail,
+                info.type_name,
+                info.status,
+                info.detail,
+                e,
+                extra={"err_ctx": log_ctx},
+                exc_info=True,
+            )
 
             fallback_text = guardrail_fallback_message(
                 info,

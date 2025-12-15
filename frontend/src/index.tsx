@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { StrictMode } from "react";
 import { Provider } from "react-redux";
 import "./styles.css";
 import "./index.scss";
@@ -37,10 +38,13 @@ const startApp = async () => {
     await loadConfig(); // <-- await config loading FIRST
     console.info("Configuration loaded successfully");
     KeyCloakService.CallLogin(() => {
-      createRoot(document.getElementById("root") as HTMLElement).render(
-        <Provider store={store}>
-          <FredUi />
-        </Provider>,
+      const root = createRoot(document.getElementById('root'));
+      root.render(
+        <StrictMode>
+          <Provider store={store}>
+            <FredUi />
+          </Provider>
+        </StrictMode>,
       );
     });
   } catch (error) {
