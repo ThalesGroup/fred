@@ -173,10 +173,10 @@ applications:
           #   X-Custom-Header: "value"
       frontend_settings:
         feature_flags:
-          # If true activate the backend and frontend modules in charge of K8.
+          # If true activate the backend and frontend modules in charge of K8
           # and frugality monitoring
           enableK8Features: false
-          # If true activate support for an electronic warfare demonstration.
+          # If true activate support for an electronic warfare demonstration
           enableElecWarfare: false
         properties:
           logoName: "fred"
