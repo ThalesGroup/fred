@@ -10,7 +10,7 @@ from langchain.agents.middleware import after_model
 from langchain.tools import tool
 from langgraph.graph.state import CompiledStateGraph
 
-from agentic_backend.agents.knowledge_extractor.knowledge_extractor import globalSchema
+from agentic_backend.agents.knowledge_extractor.jsonschema import globalSchema
 from agentic_backend.agents.knowledge_extractor.powerpoint_template_util import (
     fill_slide_from_structured_response,
 )

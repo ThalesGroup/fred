@@ -22,14 +22,25 @@ def fill_slide_from_structured_response(ppt_path, structured_response, output_pa
                 continue
 
             for paragraph in shape.text_frame.paragraphs:  # type: ignore
-                for run in paragraph.runs:
+                i = 0
+                while i < len(paragraph.runs):
+                    # merge text fields (called 'runs') that contain split placeholder keys
+                    run = paragraph.runs[i]
                     text = run.text
+                    if "{" in run and "}" not in run:
+                        for run2 in paragraph.runs[i + 1 :]:
+                            text += run2.text
+                            i += 1
+                            if "}" in text:
+                                break
+                    i += 1
+                    # find placeholder keys and replace them with text
                     matches = pattern.findall(text)
                     for key in matches:
                         if key in response.keys():
                             text = text.replace(f"{{{key}}}", str(response[key]))
 
-                    run.text = text
+                    paragraph.runs[i].text = text
 
     prs.save(output_path)
     return output_path
