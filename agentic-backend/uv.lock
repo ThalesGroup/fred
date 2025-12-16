@@ -850,7 +850,7 @@ requires-dist = [
     { name = "langchain-ollama", specifier = ">=1.0.0" },
     { name = "langchain-openai", specifier = ">=1.0.0" },
     { name = "minio", specifier = ">=7.2.20" },
-    { name = "openfga-sdk", specifier = ">=0.9.7" },
+    { name = "openfga-sdk", specifier = ">=0.9.9" },
     { name = "opensearch-py", specifier = "==2.8.0" },
     { name = "pandas", specifier = ">=2.2.2,<3.0.0" },
     { name = "pydantic", specifier = ">=2.5.2,<3.0.0" },
@@ -1829,7 +1829,7 @@ wheels = [
 
 [[package]]
 name = "openfga-sdk"
-version = "0.9.7"
+version = "0.9.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -1837,9 +1837,9 @@ dependencies = [
     { name = "python-dateutil" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/14/dd/c6c611bde97749b762de5014b20c0ac5918a5472254309d31ee5f755720d/openfga_sdk-0.9.7.tar.gz", hash = "sha256:a6e779cabc25c0e7b5c5266bddc86e9e07eb5b227ecb80acc9fe9fac9ef90ebb", size = 311813, upload-time = "2025-10-06T20:52:25.386Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/1d/db68e86b07d5dd461ba2d90c4fc69f57107fd2c35bf19febc2ac1f4e2b5f/openfga_sdk-0.9.9.tar.gz", hash = "sha256:4d0b8bf3f7525b268c5d3cde6e1c62688fbb455216736df6ec51abbe24119114", size = 326407, upload-time = "2025-12-08T18:56:06.176Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/05/89/692544ad2be78e5f2f514f46d77caaef076292d3d85173c3341d697a3f41/openfga_sdk-0.9.7-py3-none-any.whl", hash = "sha256:534b5ee71ab83029e6f27b3d5ea31dfbbfbe3d93218b0072bafec2bc96b10f72", size = 261729, upload-time = "2025-10-06T20:52:23.666Z" },
+    { url = "https://files.pythonhosted.org/packages/12/b8/f69abd2e5752db2f9c92d73accf44871d4ff732c768fff9d89a2047e0773/openfga_sdk-0.9.9-py3-none-any.whl", hash = "sha256:91ef8973ca1159278cc47b6f6a6d409ef0504ced95e7b28b6252d25e4ab18830", size = 259519, upload-time = "2025-12-08T18:56:04.915Z" },
 ]
 
 [[package]]
