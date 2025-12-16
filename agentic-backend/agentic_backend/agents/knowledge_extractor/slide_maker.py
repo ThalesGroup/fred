@@ -6,6 +6,7 @@ from pathlib import Path
 
 from jsonschema import Draft7Validator
 from langchain.agents import create_agent
+from langchain.agents.middleware import after_model
 from langchain.tools import tool
 from langgraph.graph.state import CompiledStateGraph
 
@@ -74,6 +75,15 @@ Tu DOIS extraire UNIQUEMENT des informations présentes dans les documents.
 - Doute sur une donnée → recherche supplémentaire
 - Après plusieurs tentatives infructueuses → champ vide
 
+🚨 RÈGLE SPÉCIALE POUR LES DONNÉES FINANCIÈRES (prestationFinanciere) :
+- Les montants, tarifs, TJM, budgets doivent être EXPLICITEMENT écrits dans les documents
+- INTERDIT d'estimer, déduire, ou calculer des montants financiers
+- Si le montant exact n'est pas écrit en toutes lettres → champ vide ("")
+- Exemples :
+  * Document dit "TJM: 600€" → ✅ tu peux utiliser 600
+  * Document dit "profil senior" → ❌ ne déduis PAS un TJM, laisse vide
+  * Document dit "budget conséquent" → ❌ laisse vide, pas de montant explicite
+
 ## 2. Validation obligatoire avant soumission
 Séquence stricte : validator_tool → correction (si erreurs) → template_tool
 
@@ -115,10 +125,12 @@ a) Contexte et enjeux du projet (requête : "contexte mission enjeux besoins")
 b) Profil et CV du candidat (requête : "CV profil candidat expérience")
 c) Compétences techniques (requête : "compétences techniques expertise")
 d) Expériences professionnelles détaillées (requête : "expériences missions réalisées")
-e) Informations financières (requête : "tarif coût TJM budget prestation")
+e) Informations financières (requête : "tarif coût TJM budget prestation" - si aucun montant EXPLICITE trouvé, laisse tous les champs financiers vides)
 
 Paramètres : top_k=7, search_policy='semantic'
 Si résultats insuffisants : reformule avec des synonymes et réessaie
+
+⚠️ RAPPEL : Pour les données financières, cherche des MONTANTS EXPLICITES uniquement (nombres + devise). Aucune déduction autorisée.
 
 2. **Construction du JSON**
 - Inclus UNIQUEMENT les données extraites (pas d'invention)
@@ -139,7 +151,7 @@ Si retour ≠ [] → corrige les erreurs :
 Rappelle validator_tool jusqu'à obtenir []
 
 4. **Génération** (uniquement après validation réussie)
-- Appelle template_tool avec le JSON validé
+- Appelle template_tool avec le JSON validé (sans afficher de texte, appel silencieux)
 - Fournis le lien de téléchargement à l'utilisateur
 
 ## B. Mise à jour du PowerPoint généré
@@ -164,7 +176,7 @@ Rappelle validator_tool jusqu'à obtenir []
 
 ## Paramètres RAG optimaux
 - **top_k** : 5-7 pour contexte général, 8-10 pour CVs détaillés
-- **search_policy** : 'semantic' (par défaut pour informations conceptuelles)
+- **search_policy** : 'semantic' par défaut pour informations conceptuelles
 - **document_library_tags_ids** : ne pas utiliser (non pertinent)
 
 ## Gestion des erreurs
@@ -191,7 +203,7 @@ Bon exemple ✅ :
 ## Pendant le processus
 - Pendant les recherches RAG : AUCUN texte, appelle les outils directement en silence
 - Pendant la correction d'erreurs de validation : explique brièvement les corrections en cours (sans montrer le JSON)
-- Après génération réussie : fournis le lien + résumé comme spécifié ci-dessous
+- Après génération réussie : fournis le lien + résumé comme spécifié ci-dessous (sans montrer le JSON)
 
 ## Format de réponse après génération
 1. Lien de téléchargement (markdown)
@@ -225,12 +237,37 @@ class SlideMaker(AgentFlow):
         template_tool = self.get_template_tool()
         validator_tool = self.get_validator_tool()
 
+        @after_model
+        def extract_text_from_thinking_model(state, runtime):
+            """Extract text content from thinking model response and update state"""
+            messages = state.get("messages", [])
+            if not messages:
+                return None
+
+            last_message = messages[-1]
+
+            # If content is already a string, no processing needed
+            if isinstance(last_message.content, str):
+                return None
+
+            # Handle thinking model content blocks
+            if isinstance(last_message.content, list):
+                for block in last_message.content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text_content = block.get("text", "")
+                        if text_content:
+                            # Update the last message with extracted text
+                            last_message.content = text_content
+                            return {"messages": messages}
+
+            return None
+
         return create_agent(
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[template_tool, validator_tool, *self.mcp.get_tools()],
             checkpointer=self.streaming_memory,
-            middleware=[],
+            middleware=[extract_text_from_thinking_model],
         )
 
     def get_validator_tool(self):
@@ -241,11 +278,24 @@ class SlideMaker(AgentFlow):
             L'outil retourne [] si le schéma est valide et la liste des erreurs sinon.
             """
             if len(data.keys()) != 3:
-                return "Bad root key format. There should be 3 root keys."
+                return (
+                    "Bad root key format. The JSON should have the following format:\n"
+                    "{{\n"
+                    '    "enjeuxBesoins": {{...}},\n'
+                    '    "cv": {{...}},\n'
+                    '    "prestationFinanciere": {{...}}\n'
+                    "}}"
+                )
+
+            def shorten_error_message(error):
+                """Convert verbose validation errors to concise messages"""
+                field_path = ".".join(str(p) for p in error.path) or "root"
+                if error.validator == "type":
+                    return f"{field_path} type invalid. Expected {error.schema.get('type')}."
+                return f"{field_path} invalid. Reason: {error.validator}."
+
             validator = Draft7Validator(globalSchema)
-            errors = [
-                f"{error.path} {error.message}" for error in validator.iter_errors(data)
-            ]
+            errors = [shorten_error_message(e) for e in validator.iter_errors(data)]
             return errors
 
         return validator_tool

@@ -250,7 +250,7 @@ globalSchema = {
                 },
                 "realisations1": {
                     "type": "string",
-                    "description": "Description des taches réalisées lors de la première expérience en 2-3 phrases.",
+                    "description": "Description des taches réalisées lors de la première expérience en quelques phrases.",
                 },
                 "entreprise2": {
                     "type": "string",
@@ -266,7 +266,7 @@ globalSchema = {
                 },
                 "realisations2": {
                     "type": "string",
-                    "description": "Description des taches réalisées lors de la seconde expérience en 2-3 phrases.",
+                    "description": "Description des taches réalisées lors de la seconde expérience en quelques phrases.",
                 },
                 "entreprise3": {
                     "type": "string",
@@ -282,7 +282,7 @@ globalSchema = {
                 },
                 "realisations3": {
                     "type": "string",
-                    "description": "Description des taches réalisées lors de la troisième expérience en 2-3 phrases.",
+                    "description": "Description des taches réalisées lors de la troisième expérience en quelques phrases.",
                 },
             },
             "additionalProperties": False,
