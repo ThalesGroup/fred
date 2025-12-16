@@ -31,8 +31,9 @@ Fred rationale:
 import json
 import logging
 import os
-from typing import Annotated, Any, Dict, List, Optional, TypedDict, Union
+from typing import Annotated, Any, Dict, List, Optional, TypedDict, Union, cast
 
+from fred_core import VectorSearchHit
 from langchain_core.messages import AnyMessage, HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import StateGraph
@@ -41,6 +42,7 @@ from langgraph.prebuilt import tools_condition
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
+from agentic_backend.common.rags_utils import attach_sources_to_llm_response
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import (
@@ -49,7 +51,12 @@ from agentic_backend.core.agents.agent_spec import (
     MCPServerRef,
     UIHints,
 )
-from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.runtime_context import (
+    RuntimeContext,
+    get_document_library_tags_ids,
+    get_search_policy,
+    should_skip_rag_search,
+)
 from agentic_backend.core.chatbot.chat_schema import GeoPart
 from agentic_backend.core.runtime_source import expose_runtime_source
 
@@ -58,8 +65,17 @@ logger = logging.getLogger(__name__)
 MAX_TOOL_MESSAGE_CHARS = int(os.getenv("ECO_MAX_TOOL_MESSAGE_CHARS", "4000"))
 RECENT_MESSAGES_WINDOW = int(os.getenv("ECO_RECENT_MESSAGES", "12"))
 MAX_MAP_FEATURES = int(os.getenv("ECO_MAX_MAP_FEATURES", "60"))
+MAX_DOC_SNIPPETS = max(0, int(os.getenv("ECO_MAX_DOC_SNIPPETS", "4")))
+DOC_SNIPPET_CHAR_LIMIT = max(120, int(os.getenv("ECO_DOC_SNIPPET_CHARS", "600")))
+DOC_SEARCH_TOP_K = max(MAX_DOC_SNIPPETS, int(os.getenv("ECO_DOC_TOP_K", "6")))
 
 DatabaseContextPayload = Union[List[Dict[str, Any]], Dict[str, Any], str, None]
+
+
+class DocumentContextPayload(TypedDict, total=False):
+    query: str
+    hits: List[Dict[str, Any]]
+    snippets: List[Dict[str, Any]]
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +104,7 @@ ECO_TUNING = AgentTuning(
                 "You are **EcoAdvisor**, a pragmatic mobility and CO₂ guide.\n"
                 "- Work in the user's language.\n"
                 "- You can read the tabular datasets loaded via the Knowledge Flow UI and combine them with the MCP tools when relevant.\n"
+                "- When a commute answer would benefit from official documents, call the Knowledge Flow text MCP (`search_documents_using_vectorization`) to grab PDF excerpts and cite their title and, when present, the page number.\n"
                 "- Use MCP tools instead of guessing; cite only the `source` / `last_update` fields they return.\n"
                 "- You can display a map if it's pertinent.\n"
                 "- Reply in one short paragraph (≤4 lignes). And if it's pertinent add a Markdown table `Mode | CO₂ hebdo | Hypothèses` or / and a single sentence for the equivalences (aspirateur/chauffage...).\n"
@@ -113,6 +130,7 @@ ECO_TUNING = AgentTuning(
     ],
     mcp_servers=[
         MCPServerRef(name="mcp-knowledge-flow-mcp-tabular"),
+        MCPServerRef(name="mcp-knowledge-flow-mcp-text", optional=True),
         MCPServerRef(name="mcp-fs", optional=True),
         MCPServerRef(name="mcp-geo-service", optional=True),
         MCPServerRef(name="mcp-tcl-service", optional=True),
@@ -120,7 +138,7 @@ ECO_TUNING = AgentTuning(
 )
 
 
-class EcoState(TypedDict):
+class EcoState(TypedDict, total=False):
     """
     State LangGraph pour EcoAdvisor.
 
@@ -133,6 +151,7 @@ class EcoState(TypedDict):
 
     messages: Annotated[list[AnyMessage], add_messages]
     database_context: DatabaseContextPayload
+    document_context: DocumentContextPayload
 
 
 @expose_runtime_source("agent.EcoAdvisor")
@@ -283,6 +302,290 @@ class EcoAdvisor(AgentFlow):
         except Exception as e:
             logger.warning(f"EcoAdvisor: could not load database context: {e}")
             return []
+
+    # -----------------------------------------------------------------------
+    # Prompt + document context helpers
+    # -----------------------------------------------------------------------
+    async def _prepare_system_prompt(
+        self, state: EcoState
+    ) -> tuple[str, DatabaseContextPayload, DocumentContextPayload]:
+        """Build the system prompt once (datasets + document snippets)."""
+
+        tpl = self.get_tuned_text("prompts.system") or ""
+
+        database_context = await self._ensure_database_context(state)
+        tpl += self._format_context_for_prompt(database_context)
+
+        document_context: DocumentContextPayload = (
+            cast(DocumentContextPayload, state.get("document_context"))
+            if isinstance(state.get("document_context"), dict)
+            else {}
+        )
+
+        runtime_context = self.get_runtime_context()
+        should_lookup_docs = (
+            MAX_DOC_SNIPPETS > 0 and not should_skip_rag_search(runtime_context)
+        )
+        if should_lookup_docs:
+            doc_block, document_context = await self._ensure_document_context(
+                state, document_context
+            )
+        else:
+            doc_block = ""
+
+        if doc_block:
+            tpl += f"\n\n{doc_block}"
+
+        return self.render(tpl), database_context, document_context
+
+    async def _ensure_document_context(
+        self, state: EcoState, payload: DocumentContextPayload
+    ) -> tuple[str, DocumentContextPayload]:
+        """
+        Cache document hits keyed by the latest user question to avoid re-searching
+        when the user follows up.
+        """
+        question = self._extract_latest_user_question(state.get("messages") or [])
+        if not question:
+            return "", payload
+
+        cached_query = payload.get("query")
+        hits = payload.get("hits") or []
+        if cached_query != question or not hits:
+            hits = await self._search_pdf_resources(question)
+            payload = cast(
+                DocumentContextPayload,
+                {"query": question, "hits": hits, "snippets": hits[:MAX_DOC_SNIPPETS]},
+            )
+        else:
+            payload["snippets"] = payload.get("snippets") or hits[:MAX_DOC_SNIPPETS]
+
+        state["document_context"] = payload
+        block = self._format_document_snippets(payload.get("snippets"))
+        return block, payload
+
+    async def _search_pdf_resources(self, question: str) -> List[Dict[str, Any]]:
+        if not question:
+            return []
+
+        tools = self.mcp.get_tools()
+        tool = next(
+            (t for t in tools if t.name == "search_documents_using_vectorization"),
+            None,
+        )
+        if not tool:
+            logger.info(
+                "EcoAdvisor: MCP tool 'search_documents_using_vectorization' unavailable."
+            )
+            return []
+
+        payload: Dict[str, Any] = {
+            "question": question,
+            "top_k": DOC_SEARCH_TOP_K,
+        }
+        tags = get_document_library_tags_ids(self.get_runtime_context())
+        if tags:
+            payload["document_library_tags_ids"] = tags
+        search_policy = get_search_policy(self.get_runtime_context())
+        if search_policy:
+            payload["search_policy"] = search_policy
+
+        try:
+            raw_hits = await tool.ainvoke(payload)
+        except Exception as exc:
+            logger.warning("EcoAdvisor: vector search failed: %s", exc)
+            return []
+
+        return self._normalize_document_hits(raw_hits)
+
+    def _normalize_document_hits(self, raw_hits: Any) -> List[Dict[str, Any]]:
+        if isinstance(raw_hits, str):
+            try:
+                raw_hits = json.loads(raw_hits)
+            except Exception:
+                logger.debug("EcoAdvisor: could not parse document hits JSON.")
+                return []
+
+        if isinstance(raw_hits, VectorSearchHit):
+            return [raw_hits.model_dump()]
+
+        if not isinstance(raw_hits, list):
+            return []
+
+        hits: List[Dict[str, Any]] = []
+        for entry in raw_hits[:DOC_SEARCH_TOP_K]:
+            if isinstance(entry, VectorSearchHit):
+                hits.append(entry.model_dump())
+            elif isinstance(entry, dict):
+                hits.append(entry)
+            else:
+                logger.debug(
+                    "EcoAdvisor: ignoring document hit of unsupported type %s",
+                    type(entry).__name__,
+                )
+        return hits
+
+    def _format_document_snippets(
+        self, hits: Optional[List[Dict[str, Any]]]
+    ) -> str:
+        if not hits:
+            return ""
+
+        lines = [
+            "Relevant PDF excerpts from Knowledge Flow (cite title + page when you use them):"
+        ]
+        for idx, hit in enumerate(hits, start=1):
+            if not isinstance(hit, dict):
+                continue
+            title = (
+                hit.get("title")
+                or hit.get("file_name")
+                or hit.get("uid")
+                or "Document"
+            )
+            page = hit.get("page")
+            tags = hit.get("tag_names") or []
+            tags_text = (
+                ", ".join(t for t in tags if isinstance(t, str) and t.strip())
+                if isinstance(tags, list)
+                else ""
+            )
+            meta_parts = []
+            if page not in (None, ""):
+                meta_parts.append(f"p.{page}")
+            if tags_text:
+                meta_parts.append(tags_text)
+            meta_suffix = f" ({'; '.join(meta_parts)})" if meta_parts else ""
+
+            snippet_text = self._clean_snippet(hit.get("content"))
+            if not snippet_text:
+                snippet_text = "(no excerpt available)"
+            lines.append(f"{idx}. {title}{meta_suffix}: {snippet_text}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _clean_snippet(raw: Any) -> str:
+        if not raw:
+            return ""
+        snippet = str(raw)
+        snippet = " ".join(snippet.split())
+        if DOC_SNIPPET_CHAR_LIMIT > 0 and len(snippet) > DOC_SNIPPET_CHAR_LIMIT:
+            return snippet[:DOC_SNIPPET_CHAR_LIMIT].rstrip() + "…"
+        return snippet
+
+    def _extract_latest_user_question(
+        self, messages: List[AnyMessage]
+    ) -> Optional[str]:
+        for msg in reversed(messages):
+            if isinstance(msg, HumanMessage):
+                text = self._message_to_text(msg)
+                if text:
+                    return text
+        return None
+
+    @staticmethod
+    def _message_to_text(message: HumanMessage) -> str:
+        content = message.content
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            parts: List[str] = []
+            for item in content:
+                if isinstance(item, dict):
+                    text = item.get("text") or item.get("content")
+                    if isinstance(text, str):
+                        parts.append(text)
+                elif isinstance(item, str):
+                    parts.append(item)
+            return "\n".join(p.strip() for p in parts if p.strip())
+        return ""
+
+    def _coerce_vector_hits(
+        self, hits: Optional[List[Any]]
+    ) -> List[VectorSearchHit]:
+        if not hits:
+            return []
+
+        parsed: List[VectorSearchHit] = []
+        for entry in hits:
+            if isinstance(entry, VectorSearchHit):
+                parsed.append(entry)
+                continue
+            if isinstance(entry, dict):
+                try:
+                    parsed.append(VectorSearchHit.model_validate(entry))
+                except Exception as exc:
+                    logger.debug(
+                        "EcoAdvisor: failed to coerce document hit: %s",
+                        exc,
+                    )
+        return parsed
+
+    def _collect_tool_payloads(
+        self, messages: List[AnyMessage]
+    ) -> Dict[str, Any]:
+        payloads: Dict[str, Any] = {}
+        for msg in messages:
+            if isinstance(msg, ToolMessage) and getattr(msg, "name", ""):
+                raw = msg.content
+                try:
+                    normalized = json.loads(raw) if isinstance(raw, str) else raw
+                except Exception:
+                    normalized = raw
+                payloads[msg.name or "tool"] = normalized
+        return payloads
+
+    def _enrich_response_metadata(
+        self,
+        response: AnyMessage,
+        *,
+        tool_payloads: Dict[str, Any],
+        document_context: DocumentContextPayload,
+    ) -> None:
+        metadata = getattr(response, "response_metadata", {}) or {}
+        tools_md = metadata.get("tools", {}) or {}
+        tools_md.update(tool_payloads)
+        metadata["tools"] = tools_md
+        response.response_metadata = metadata
+
+        snippet_hits = self._coerce_vector_hits(document_context.get("snippets"))
+        if snippet_hits:
+            attach_sources_to_llm_response(response, snippet_hits)
+
+    def _attach_geo_part(
+        self, response: AnyMessage, tool_payloads: Dict[str, Any]
+    ) -> None:
+        geo_part = self._maybe_build_geo_part_from_tools(tool_payloads)
+        if not geo_part:
+            return
+        add_kwargs = getattr(response, "additional_kwargs", None)
+        if add_kwargs is None or not isinstance(add_kwargs, dict):
+            add_kwargs = {}
+            response.additional_kwargs = add_kwargs
+        fred_parts = add_kwargs.get("fred_parts")
+        if not isinstance(fred_parts, list):
+            fred_parts = []
+        fred_parts.append(geo_part.model_dump())
+        add_kwargs["fred_parts"] = fred_parts
+
+    async def _handle_reasoner_failure(
+        self, document_context: DocumentContextPayload
+    ) -> Dict[str, Any]:
+        fallback = await self.model.ainvoke(
+            [
+                HumanMessage(
+                    content=(
+                        "An error occurred while analyzing mobility data. "
+                        "Please try again or simplify your question."
+                    )
+                )
+            ]
+        )
+        return {
+            "messages": [fallback],
+            "database_context": [],
+            "document_context": document_context,
+        }
 
     # -----------------------------------------------------------------------
     # 2) Construction du graphe LangGraph
@@ -543,13 +846,9 @@ class EcoAdvisor(AgentFlow):
                 "EcoAdvisor: model is not initialized. Call async_init() first."
             )
 
-        # 1) Récupérer le prompt système tunable (via YAML/UI)
-        tpl = self.get_tuned_text("prompts.system") or ""
-
-        # 2) Charger / mettre à jour le contexte des bases/tabulaires
-        database_context = await self._ensure_database_context(state)
-        tpl += self._format_context_for_prompt(database_context)
-        system_text = self.render(tpl)
+        system_text, database_context, document_context = await self._prepare_system_prompt(
+            state
+        )
 
         # 3) Construire l'historique de conversation minimal
         recent_history = self.recent_messages(
@@ -563,52 +862,20 @@ class EcoAdvisor(AgentFlow):
             # 4) LLM + tool-calling: le modèle peut décider d'appeler MCP ou non
             response = await self.model.ainvoke(messages)
 
-            # 5) Injecter dans les metadata les payloads des tools déjà appelés
-            tool_payloads: Dict[str, Any] = {}
-            for msg in state["messages"]:
-                if isinstance(msg, ToolMessage) and getattr(msg, "name", ""):
-                    raw = msg.content
-                    try:
-                        normalized = json.loads(raw) if isinstance(raw, str) else raw
-                    except Exception:
-                        normalized = raw
-                    tool_payloads[msg.name or "unknown_tool"] = normalized
-
-            md = getattr(response, "response_metadata", {}) or {}
-            tools_md = md.get("tools", {}) or {}
-            tools_md.update(tool_payloads)
-            md["tools"] = tools_md
-            response.response_metadata = md
-            geo_part = self._maybe_build_geo_part_from_tools(tool_payloads)
-            if geo_part:
-                add_kwargs = getattr(response, "additional_kwargs", None)
-                if add_kwargs is None or not isinstance(add_kwargs, dict):
-                    add_kwargs = {}
-                    response.additional_kwargs = add_kwargs
-                fred_parts = add_kwargs.get("fred_parts")
-                if not isinstance(fred_parts, list):
-                    fred_parts = []
-                fred_parts.append(geo_part.model_dump())
-                add_kwargs["fred_parts"] = fred_parts
+            tool_payloads = self._collect_tool_payloads(state["messages"])
+            self._enrich_response_metadata(
+                response,
+                tool_payloads=tool_payloads,
+                document_context=document_context,
+            )
+            self._attach_geo_part(response, tool_payloads)
 
             return {
                 "messages": [response],
                 "database_context": database_context,
+                "document_context": document_context,
             }
 
         except Exception:
             logger.exception("EcoAdvisor failed during reasoning.")
-            fallback = await self.model.ainvoke(
-                [
-                    HumanMessage(
-                        content=(
-                            "An error occurred while analyzing mobility data. "
-                            "Please try again or simplify your question."
-                        )
-                    )
-                ]
-            )
-            return {
-                "messages": [fallback],
-                "database_context": [],
-            }
+            return await self._handle_reasoner_failure(document_context)
