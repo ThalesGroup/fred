@@ -32,7 +32,7 @@ security:
   authorized_origins:
     - "http://localhost:5173"
   rebac:
-    enabled: false
+    enabled: true
     type: openfga
     api_url: "http://localhost:9080"
 

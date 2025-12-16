@@ -23,6 +23,7 @@ import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { Kpis } from "../pages/Kpis";
 import Logs from "../pages/Logs";
 import Runtime from "../pages/Runtime";
+import RebacBackfill from "../pages/RebacBackfill";
 import DataHub from "../pages/DataHub";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
@@ -31,6 +32,9 @@ import ProcessorBench from "../pages/ProcessorBench";
 import ProcessorRunDetail from "../pages/ProcessorRunDetail";
 import { McpHub } from "../pages/McpHub";
 import GraphHub from "../pages/GraphHub.tsx";
+import { getConfig } from "./config";
+
+const basename = getConfig().frontend_basename;
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => <LayoutWithSidebar>{children}</LayoutWithSidebar>;
 
@@ -88,6 +92,14 @@ export const routes: RouteObject[] = [
             anyResource // means that any of the permissions is enough so the user can have opensearch:create || logs:create and it would let the user pass.
           >
             <Logs />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "monitoring/rebac-backfill",
+        element: (
+          <ProtectedRoute resource="tag" action="update">
+            <RebacBackfill />
           </ProtectedRoute>
         ),
       },
@@ -155,4 +167,4 @@ export const routes: RouteObject[] = [
   },
 ];
 
-export const router = createBrowserRouter(routes);
+export const router = createBrowserRouter(routes, { basename });

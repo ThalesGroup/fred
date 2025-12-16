@@ -50,7 +50,7 @@ const ExtIcon: React.FC<ExtIconProps> = ({ ext, size = 20 }) => {
   }, [ext, style]);
 
   if (ext && imgOk) {
-    const src = `/images/filetypes/${ext}.svg`;
+    const src = `./images/filetypes/${ext}.svg`;
     return (
       <img
         src={src}
