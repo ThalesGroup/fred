@@ -998,7 +998,7 @@ requires-dist = [
     { name = "langchain-ollama", specifier = ">=1.0.0" },
     { name = "langchain-openai", specifier = ">=1.0.0" },
     { name = "minio", specifier = ">=7.2.20" },
-    { name = "openfga-sdk", specifier = ">=0.9.7" },
+    { name = "openfga-sdk", specifier = ">=0.9.9" },
     { name = "opensearch-py", specifier = "==2.8.0" },
     { name = "pandas", specifier = ">=2.2.2,<3.0.0" },
     { name = "pydantic", specifier = ">=2.5.2,<3.0.0" },
@@ -2479,7 +2479,7 @@ wheels = [
 
 [[package]]
 name = "openfga-sdk"
-version = "0.9.8"
+version = "0.9.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp", marker = "sys_platform == 'linux'" },
@@ -2487,9 +2487,9 @@ dependencies = [
     { name = "python-dateutil", marker = "sys_platform == 'linux'" },
     { name = "urllib3", marker = "sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d7/18/f3932ed70328a53c0a4d5e2e787d3fe6f1d64a352cedddf93839ffd20498/openfga_sdk-0.9.8.tar.gz", hash = "sha256:a5898fccd7ffcdb8ae046ae3032675c716af4f80aeb74ef418ee75b0402f56ea", size = 320023, upload-time = "2025-11-04T22:25:12.469Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/1d/db68e86b07d5dd461ba2d90c4fc69f57107fd2c35bf19febc2ac1f4e2b5f/openfga_sdk-0.9.9.tar.gz", hash = "sha256:4d0b8bf3f7525b268c5d3cde6e1c62688fbb455216736df6ec51abbe24119114", size = 326407, upload-time = "2025-12-08T18:56:06.176Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/38/cd/56f39ad2d13009d6fb435e878f28115bd703e9525cd40bab7993c7b70d6f/openfga_sdk-0.9.8-py3-none-any.whl", hash = "sha256:c9d75685e84ca3c8b598eeab8ccc0c8e2de8a16617b5cef02ab4d3b4d0056b22", size = 258094, upload-time = "2025-11-04T22:25:10.558Z" },
+    { url = "https://files.pythonhosted.org/packages/12/b8/f69abd2e5752db2f9c92d73accf44871d4ff732c768fff9d89a2047e0773/openfga_sdk-0.9.9-py3-none-any.whl", hash = "sha256:91ef8973ca1159278cc47b6f6a6d409ef0504ced95e7b28b6252d25e4ab18830", size = 259519, upload-time = "2025-12-08T18:56:04.915Z" },
 ]
 
 [[package]]
