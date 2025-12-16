@@ -1,79 +1,3 @@
-import logging
-from dataclasses import dataclass
-
-from langchain.agents import create_agent
-from langchain.agents.middleware import TodoListMiddleware, after_agent
-from langchain.agents.structured_output import ProviderStrategy, ToolStrategy
-from langgraph.graph.state import CompiledStateGraph
-
-from agentic_backend.application_context import get_default_chat_model
-from agentic_backend.common.mcp_runtime import MCPRuntime
-from agentic_backend.core.agents.agent_flow import AgentFlow
-from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
-from agentic_backend.core.agents.runtime_context import RuntimeContext
-
-logger = logging.getLogger(__name__)
-
-# ---------------------------
-# Tuning spec (UI-editable)
-# ---------------------------
-BASIC_REACT_TUNING = AgentTuning(
-    role="Define here the high-level role of the MCP agent.",
-    description="Define here a detailed description of the MCP agent's purpose and behavior.",
-    tags=[],
-    fields=[
-        FieldSpec(
-            key="prompts.system",
-            type="prompt",
-            title="System Prompt",
-            description=(
-                "High-level instructions for the agent. "
-                "State the mission, how to use the available tools, and constraints."
-            ),
-            required=True,
-            default=(
-                "You are an general assistant with tools. Use the available instructions and tools to solve the user's request.\n"
-                "If you have tools:\n"
-                "- ALWAYS use the tools at your disposal before providing any answer.\n"
-                "- Prefer concrete evidence from tool outputs.\n"
-                "- Be explicit about which tools you used and why.\n"
-                "- When you reference tool results, keep short inline markers (e.g., [tool_name]).\n"
-                "Current date: {today}."
-            ),
-            ui=UIHints(group="Prompts", multiline=True, markdown=True),
-        ),
-    ],
-)
-
-
-class Kelly(AgentFlow):
-    """Simple ReAct agent used for dynamic UI-created agents."""
-
-    tuning = BASIC_REACT_TUNING
-
-    async def async_init(self, runtime_context: RuntimeContext):
-        await super().async_init(runtime_context=runtime_context)
-
-        # Initialize MCP runtime
-        self.mcp = MCPRuntime(
-            agent=self,
-        )
-        await self.mcp.init()
-
-    async def aclose(self):
-        await self.mcp.aclose()
-
-    def get_compiled_graph(self) -> CompiledStateGraph:
-        return create_agent(
-            model=get_default_chat_model(),
-            system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
-            tools=[*self.mcp.get_tools()],
-            checkpointer=self.streaming_memory,
-            response_format=ProviderStrategy(globalSchema),  # type: ignore
-            # middleware=[TodoListMiddleware()],
-        )
-
-
 globalSchema = {
     "type": "object",
     "properties": {
@@ -84,18 +8,20 @@ globalSchema = {
                 "contexte": {
                     "type": "string",
                     "description": "Court résumé du contexte du projet. Longueur maximale: 300 caractères (une à deux phrases).",
-                    "maxLength": 300,
+                    "maxLength": 270,
                 },
                 "missions": {
                     "type": "string",
                     "description": "Court résumé de l'ensemble des missions et objectifs. Longueur maximale: 300 caractères (une à deux phrases).",
-                    "maxLength": 300,
+                    "maxLength": 270,
                 },
                 "refCahierCharges": {
                     "type": "string",
                     "description": "Nom du fichier duquel les données sont exraites.",
                 },
             },
+            "additionalProperties": False,
+            "minProperties": 3,
         },
         "cv": {
             "type": "object",
@@ -248,7 +174,7 @@ globalSchema = {
                 },
                 "realisations1": {
                     "type": "string",
-                    "description": "Description des taches réalisées lors de la première expérience en 2-3 phrases.",
+                    "description": "Description des taches réalisées lors de la première expérience en quelques phrases.",
                 },
                 "entreprise2": {
                     "type": "string",
@@ -264,7 +190,7 @@ globalSchema = {
                 },
                 "realisations2": {
                     "type": "string",
-                    "description": "Description des taches réalisées lors de la seconde expérience en 2-3 phrases.",
+                    "description": "Description des taches réalisées lors de la seconde expérience en quelques phrases.",
                 },
                 "entreprise3": {
                     "type": "string",
@@ -280,9 +206,11 @@ globalSchema = {
                 },
                 "realisations3": {
                     "type": "string",
-                    "description": "Description des taches réalisées lors de la troisième expérience en 2-3 phrases.",
+                    "description": "Description des taches réalisées lors de la troisième expérience en quelques phrases.",
                 },
             },
+            "additionalProperties": False,
+            "minProperties": 40,
         },
         "prestationFinanciere": {
             "type": "object",
@@ -341,10 +269,14 @@ globalSchema = {
                     "description": "Coût total de toutes les prestations.",
                 },
             },
+            "additionalProperties": False,
+            "minProperties": 13,
         },
     },
+    "additionalProperties": False,
+    "minProperties": 3,
 }
-
+"""
 enjeuxBesoinsSchema = {
     "type": "object",
     "description": "Informations sur le contexte et les missions du projet.",
@@ -512,7 +444,7 @@ prestationFinanciereSchema = {
 
 listSchema = [enjeuxBesoinsSchema, cvSchema, prestationFinanciereSchema]
 
-"""
+
 @dataclass
 class EnjeuxBesoins:
     contexte: str

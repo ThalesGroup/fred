@@ -85,6 +85,29 @@ def _utcnow_dt() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
 
 
+def _extract_text_from_message_content(content) -> str:
+    """
+    Extract text content from a message, handling both string and content blocks format.
+    This is needed for thinking models that return content as a list of blocks.
+    """
+    if isinstance(content, str):
+        return content
+
+    # Handle thinking model content blocks
+    if isinstance(content, list):
+        text_parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text", "")
+                if text:
+                    text_parts.append(text)
+        if text_parts:
+            return " ".join(text_parts)
+
+    # Fallback for unexpected content types
+    return str(content) if content else ""
+
+
 class SessionOrchestrator:
     """
     Why this class exists (architecture note):
@@ -782,14 +805,11 @@ class SessionOrchestrator:
                 return existing
 
         new_session_id = secrets.token_urlsafe(8)
-        title: str = (
-            get_default_model()
-            .invoke(
-                "Give a short, clear title for this conversation based on the user's question. "
-                "Return a few keywords only. Question: " + query
-            )
-            .content
+        title_response = get_default_model().invoke(
+            "Give a short, clear title for this conversation based on the user's question. "
+            "Return a few keywords only. Question: " + query
         )
+        title: str = _extract_text_from_message_content(title_response.content)
         session = SessionSchema(
             id=new_session_id, user_id=user_id, title=title, updated_at=_utcnow_dt()
         )
