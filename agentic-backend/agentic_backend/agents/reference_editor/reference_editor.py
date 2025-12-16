@@ -71,14 +71,14 @@ Ton objectif est d'extraire des informations depuis des documents (via recherche
 
 2. **validator_tool(data: dict)**
    - Valide la structure JSON avant templetisation
-   - Retourne une liste vide [] si valide, sinon retourne la liste des erreurs
+   - Retourne un message de succès si valide, sinon retourne la liste des erreurs
    - Tu DOIS appeler cet outil avant template_tool
 
 3. **template_tool(data: dict)**
    - Génère le PowerPoint templatisé
    - Retourne automatiquement un objet LinkPart avec le lien de téléchargement formaté pour l'interface utilisateur
-   - Ne peut être appelé qu'après une validation réussie (validator_tool retournant []), doit être absolument appelé.
-   - Doit être appelé obligatoirement à chaque interaction utlisateur
+   - IMPÉRATIF : Dès que validator_tool retourne un message de succès, tu DOIS IMMÉDIATEMENT appeler template_tool(data={{...}}) avec exactement les mêmes données
+   - Ne JAMAIS afficher le JSON à l'utilisateur, appelle directement template_tool
 
 # RÈGLES D'EXTRACTION DES DONNÉES
 
@@ -146,12 +146,15 @@ Par exemple, synthèseprojet ne doit jamais être en dehors de data.
 ## Étape 3 : Validation obligatoire
 - Appelle validator_tool avec ton JSON complet : validator_tool(data={{...}})
 - Analyse le résultat :
-  - Si [] (liste vide) : validation réussie → passe à l'étape 4
-  - Si erreurs présentes : lis les erreurs, corrige le JSON, et rappelle validator_tool
-- Répète jusqu'à obtenir [] (0 erreur)
+  - Si message de succès : validation réussie → APPELLE IMMÉDIATEMENT template_tool à l'étape 4 (NE PAS S'ARRÊTER)
+  - Si liste d'erreurs : lis les erreurs, corrige le JSON, et rappelle validator_tool
+- Répète jusqu'à obtenir un message de succès
 
-## Étape 4 : Templetisation
-- Une fois validator_tool retourne [], appelle obligatoirement template_tool avec le JSON validé : template_tool(data={{...}})
+## Étape 4 : Templetisation (OBLIGATOIRE, NE PAS SAUTER)
+- CRITIQUE : Dès que validator_tool retourne un message de succès, tu DOIS appeler template_tool dans le MÊME tour de conversation
+- Appelle : template_tool(data={{...}}) avec exactement les mêmes données validées
+- NE JAMAIS afficher le JSON brut à l'utilisateur
+- NE JAMAIS t'arrêter après validation sans appeler template_tool
 - L'outil retourne automatiquement un objet LinkPart contenant le lien de téléchargement formaté
 
 ## Étape 5 : Restitution à l'utilisateur
@@ -167,16 +170,21 @@ Si l'utilisateur demande des modifications :
 2. Intègre les nouvelles informations
 3. Effectue des recherches RAG supplémentaires uniquement si nécessaire
 4. Reconstruis le JSON COMPLET (anciennes données + nouvelles données)
-5. Valide avec validator_tool jusqu'à obtenir []
-6. Appelle template_tool (obligatoire même pour une mise à jour mineure)
+5. Valide avec validator_tool jusqu'à obtenir un message de succès
+6. Appelle IMMÉDIATEMENT template_tool (obligatoire même pour une mise à jour mineure)
 7. Fournis le nouveau lien de téléchargement
 
 # CONSIGNES TECHNIQUES
 
-- Ne jamais afficher le JSON dans ton message texte utilisateur
-- Toujours appeler validator_tool avant template_tool
+⚠️ RÈGLE ABSOLUE : VALIDATION → TEMPLETISATION (SÉQUENCE OBLIGATOIRE)
+1. Appelle validator_tool(data={{...}})
+2. Si retour = message de succès → Appelle IMMÉDIATEMENT template_tool(data={{...}}) dans la MÊME réponse
+3. Ne JAMAIS afficher le JSON à l'utilisateur
+4. Ne JAMAIS t'arrêter entre validation et templetisation
+
+Autres règles :
 - Ne jamais appeler template_tool si validator_tool a retourné des erreurs
-- À chaque génération ou modification : validation + templetisation complète
+- À chaque génération ou modification : validation + templetisation complète (les deux dans le même tour)
 - Le lien de téléchargement est automatiquement généré par template_tool, utilise-le directement
 
 # EXEMPLE DE RÉPONSE UTILISATEUR
@@ -233,12 +241,35 @@ class ReferenceEditor(AgentFlow):
             """
             Outil permettant de valider le format des données avant de les passer à l'outil de templetisation.
             L'outil retourne [] si le schéma est valide et la liste des erreurs sinon.
+
+            IMPORTANT : Si cet outil retourne [] (liste vide), tu DOIS IMMÉDIATEMENT appeler template_tool(data={{...}})
+            avec exactement les mêmes données dans le MÊME tour de conversation. Ne t'arrête pas ici.
             """
+            if len(data.keys()) != 3:
+                return (
+                    "Bad root key format. The JSON should have the following format:\n"
+                    "{{\n"
+                    '    "enjeuxBesoins": {{...}},\n'
+                    '    "cv": {{...}},\n'
+                    '    "prestationFinanciere": {{...}}\n'
+                    "}}"
+                )
+
+            def shorten_error_message(error):
+                """Convert verbose validation errors to concise messages"""
+                field_path = ".".join(str(p) for p in error.path) or "root"
+                if error.validator == "type":
+                    return f"{field_path} type invalid. Expected {error.schema.get('type')}."
+                return f"{field_path} invalid. Reason: {error.validator}."
+
             validator = Draft7Validator(referenceSchema)
-            errors = [
-                f"{error.path} {error.message}" for error in validator.iter_errors(data)
-            ]
+
+            errors = [shorten_error_message(e) for e in validator.iter_errors(data)]
+            if not errors:
+                return "✓ Validation réussie ! Appelle maintenant template_tool(data={{...}}) avec ces mêmes données."
             return errors
+
+        return validator_tool
 
         return validator_tool
 
