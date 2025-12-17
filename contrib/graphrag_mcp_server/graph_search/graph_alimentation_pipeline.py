@@ -19,7 +19,7 @@ from typing import Dict, List
 
 from tqdm import tqdm
 
-from service import GraphSearchService
+from graph_search.service import GraphSearchService
 from graph_search.utils import semantic_chunking
 
 
@@ -74,22 +74,23 @@ if __name__ == "__main__":
 
         total_chunks = sum(len(chunks) for chunks in docs.values())
 
-        # Add chunks as Graphiti episodes
-        with tqdm(total=total_chunks, desc="Chunk ingestion") as pbar:
-            for doc_name, chunks in docs.items():
-                for i, chunk in enumerate(chunks, start=1):
-                    node_name = f"{doc_name} - chunk {i}"
+        try:
+            # Add chunks as Graphiti episodes
+            with tqdm(total=total_chunks, desc="Chunk ingestion") as pbar:
+                for doc_name, chunks in docs.items():
+                    for i, chunk in enumerate(chunks, start=1):
+                        node_name = f"{doc_name} - chunk {i}"
 
-                    await service.add_text_node(
-                        name=node_name,
-                        text=chunk,
-                        description=f"Chunked document {doc_name}"
-                    )
+                        await service.add_text_node(
+                            name=node_name,
+                            text=chunk,
+                            description=f"Chunked document {doc_name}"
+                        )
 
-                    pbar.set_postfix(doc=doc_name, chunk=i)
-                    pbar.update(1)
-
-                await service.close()
+                        pbar.set_postfix(doc=doc_name, chunk=i)
+                        pbar.update(1)
+        finally:
+            await service.close()
         print("\n✔ Import Done.\n")
 
     asyncio.run(_main())
