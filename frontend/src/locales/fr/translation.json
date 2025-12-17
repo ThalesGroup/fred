@@ -605,6 +605,8 @@
     "removeError": "Échec de la suppression",
     "removeErrorGeneric": "Impossible de supprimer les documents de la bibliothèque",
     "removeFromLibrary": "Supprimer de la bibliothèque",
+    "removeForbiddenSummary": "Non autorisé",
+    "removeForbiddenDetail": "Vous n'êtes pas autorisé à supprimer des éléments de la bibliothèque « {{folder}} ».",
     "emptyLibraryTitle": "Aucun document dans cette bibliothèque",
     "emptyLibraryDescription": "Cette bibliothèque est vide. Commencez par ajouter votre premier document pour le rendre consultable par vos assistants IA.",
     "uploadFirstDocument": "Ajouter votre premier document",
@@ -668,6 +670,7 @@
     "addAccessTab": "Ajouter un accès",
     "currentAccessTab": "Accès actuels",
     "shareError": "Impossible d'appliquer les paramètres de partage. Veuillez réessayer.",
+    "shareForbidden": "Vous n'êtes pas autorisé à partager la bibliothèque « {{name}} ».",
     "shareButton": "Partager",
     "searchPlaceholder": "Rechercher des utilisateurs ou des groupes…",
     "usersToggle": "Utilisateurs",
@@ -710,6 +713,10 @@
     "expandAll": "Tout développer",
     "folderDeleteSuccess": "Dossier supprimé",
     "folderDeleteDetail": "Le dossier « {{name}} » a été supprimé.",
+    "folderDeleteForbiddenSummary": "Non autorisé",
+    "folderDeleteForbiddenDetail": "Seul le propriétaire peut supprimer la bibliothèque « {{name}} ».",
+    "removeForbiddenSummary": "Non autorisé",
+    "removeForbiddenDetail": "Seul le propriétaire peut supprimer des éléments de la bibliothèque « {{folder}} ».",
     "searchPlaceholder": "Rechercher un(e) {{typeOne}}",
     "importDrawerTitle": "Importer un(e) {{typeOne}}",
     "dropFiles": "Déposez vos {{typePlural}} ici",
@@ -732,7 +739,8 @@
     "shareFolder": "Partager le dossier",
     "shareFolderWithName": "Partager \"{{name}}\"",
     "deleteFolder": "Supprimer le dossier",
-    "deleteFolderDisabled": "Une bibliothèque doit être vide pour être supprimée"
+    "deleteFolderDisabled": "Une bibliothèque doit être vide pour être supprimée",
+    "ownerTooltip": "Propriétaire : {{name}}"
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",

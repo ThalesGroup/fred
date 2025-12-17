@@ -85,6 +85,7 @@ interface DocumentLibraryTreeProps {
   setSelectedDocs: React.Dispatch<React.SetStateAction<Record<string, TagWithItemsId>>>;
   canDeleteDocument?: boolean;
   canDeleteFolder?: boolean;
+  ownerNamesById?: Record<string, string>;
 }
 
 export function DocumentLibraryTree({
@@ -106,6 +107,7 @@ export function DocumentLibraryTree({
   setSelectedDocs,
   canDeleteDocument = true,
   canDeleteFolder = true,
+  ownerNamesById,
 }: DocumentLibraryTreeProps) {
   const { t } = useTranslation();
   const [shareTarget, setShareTarget] = React.useState<TagNode | null>(null);
@@ -169,6 +171,7 @@ export function DocumentLibraryTree({
       const folderIndeterminate = selectedForTag > 0 && selectedForTag < totalForTag;
 
       const canBeDeleted = !!folderTag && !!onDeleteFolder && canDeleteFolder;
+      const ownerName = folderTag ? ownerNamesById?.[folderTag.owner_id] : undefined;
 
       return (
         <TreeItem
@@ -226,8 +229,37 @@ export function DocumentLibraryTree({
                 </Tooltip>
               </Box>
 
-              {/* Right: share + delete */}
+              {/* Right: owner + share + delete */}
               <Box sx={{ ml: "auto", display: "flex", alignItems: "center" }}>
+                {feature_flags.is_rebac_enabled && ownerName && (
+                  <Tooltip title={t("documentLibraryTree.ownerTooltip", { name: ownerName })}>
+                    <Box
+                      sx={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 0.5,
+                        px: 0.75,
+                        py: 0.25,
+                        borderRadius: 999,
+                        bgcolor: "action.hover",
+                        color: "text.secondary",
+                        fontSize: "0.75rem",
+                        mr: 0.5,
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          bgcolor: "primary.main",
+                          flexShrink: 0,
+                        }}
+                      />
+                      <span style={{ whiteSpace: "nowrap" }}>{ownerName}</span>
+                    </Box>
+                  </Tooltip>
+                )}
                 {feature_flags.is_rebac_enabled && (
                   <Tooltip title={t("documentLibraryTree.shareFolder")} enterTouchDelay={10}>
                     <IconButton
