@@ -216,3 +216,6 @@ knowledge-flow-backend/openapi.json
 /developer_tools/evaluation_results/
 
 **/.deepeval
+
+# graph search input files
+knowledge-flow-backend/knowledge_flow_backend/features/graph_search/data/*
