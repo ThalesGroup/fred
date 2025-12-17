@@ -34,7 +34,7 @@ import os
 from typing import Annotated, Any, Dict, List, Optional, TypedDict, Union, cast
 
 from fred_core import VectorSearchHit
-from langchain_core.messages import AnyMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
@@ -525,14 +525,18 @@ class EcoAdvisor(AgentFlow):
         self, messages: List[AnyMessage]
     ) -> Dict[str, Any]:
         payloads: Dict[str, Any] = {}
-        for msg in messages:
+        for msg in reversed(messages):
             if isinstance(msg, ToolMessage) and getattr(msg, "name", ""):
                 raw = msg.content
                 try:
                     normalized = json.loads(raw) if isinstance(raw, str) else raw
                 except Exception:
                     normalized = raw
-                payloads[msg.name or "tool"] = normalized
+                tool_name = msg.name or "tool"
+                if tool_name not in payloads:
+                    payloads[tool_name] = normalized
+            elif isinstance(msg, AIMessage):
+                break
         return payloads
 
     def _enrich_response_metadata(
@@ -569,18 +573,16 @@ class EcoAdvisor(AgentFlow):
         add_kwargs["fred_parts"] = fred_parts
 
     async def _handle_reasoner_failure(
-        self, document_context: DocumentContextPayload
+        self, state: EcoState, document_context: DocumentContextPayload
     ) -> Dict[str, Any]:
-        fallback = await self.model.ainvoke(
-            [
-                HumanMessage(
-                    content=(
-                        "An error occurred while analyzing mobility data. "
-                        "Please try again or simplify your question."
-                    )
-                )
-            ]
-        )
+        user_text = self._extract_latest_user_question(state.get("messages") or [])
+        prompt_lines = [
+            "You are EcoAdvisor. A technical error happened while analyzing mobility data.",
+            "Write a brief apology that asks the user to retry or simplify their question.",
+            "Respond in the same language as this text (default to English if empty):",
+            user_text or "English",
+        ]
+        fallback = await self.model.ainvoke([HumanMessage(content="\n".join(prompt_lines))])
         return {
             "messages": [fallback],
             "database_context": [],
@@ -878,4 +880,4 @@ class EcoAdvisor(AgentFlow):
 
         except Exception:
             logger.exception("EcoAdvisor failed during reasoning.")
-            return await self._handle_reasoner_failure(document_context)
+            return await self._handle_reasoner_failure(state, document_context)

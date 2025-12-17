@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import heapq
 import logging
 import math
 import os
@@ -19,16 +20,7 @@ from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
-os.environ.setdefault("TCL_WFS_BASE_URL", "https://data.grandlyon.com/geoserver/sytral/ows")
-os.environ.setdefault("TCL_WFS_TYPENAME", "sytral:tcl_sytral.tclarret")
-os.environ.setdefault("TCL_WFS_SRSNAME", "EPSG:4171")
-os.environ.setdefault("TCL_WFS_PAGE_SIZE", "200")
-os.environ.setdefault("TCL_WFS_MAX_FEATURES", "5000")
-os.environ.setdefault("TCL_WFS_TIMEOUT_SEC", "10")
-os.environ.setdefault("TCL_STOPS_CACHE_TTL_SEC", "900")
-os.environ.setdefault("TCL_WFS_SORT_BY", "gid")
-_fallback_default = Path(__file__).resolve().parent.parent / "data" / "tcl_stops_demo.csv"
-os.environ.setdefault("TCL_STOPS_FALLBACK_CSV", str(_fallback_default))
+_FALLBACK_DEFAULT = Path(__file__).resolve().parent.parent / "data" / "tcl_stops_demo.csv"
 
 
 def _normalize_text(value: Optional[str]) -> str:
@@ -148,6 +140,10 @@ class TCLStopRecord:
     district: Optional[str] = None
     zone: Optional[str] = None
     raw: Dict[str, Any] = field(default_factory=dict)
+    name_norm: str = ""
+    city_norm: str = ""
+    haystack: str = ""
+    line_codes_upper: set[str] = field(default_factory=set)
 
     def cache_key(self) -> str:
         return f"{self.stop_id.lower()}|{round(self.lat, 5)}|{round(self.lon, 5)}"
@@ -173,6 +169,13 @@ class TCLStopRecord:
             source=source,
             attributes=dict(self.raw) if include_raw else {},
         )
+
+    def prepare_for_search(self) -> None:
+        self.name_norm = _normalize_text(self.name)
+        self.city_norm = _normalize_text(self.city)
+        haystack_parts = [self.name, self.city, self.zone]
+        self.haystack = _normalize_text(" ".join(part for part in haystack_parts if part))
+        self.line_codes_upper = {code.upper() for code in self.lines if code}
 
     @staticmethod
     def from_feature(feature: Dict[str, Any]) -> Optional["TCLStopRecord"]:
@@ -410,6 +413,7 @@ class TCLWFSClient:
         max_features: int,
         timeout: float,
         sort_by: str,
+        property_names: Optional[List[str]] = None,
     ) -> None:
         self._base_url = base_url
         self._typename = typename
@@ -419,6 +423,14 @@ class TCLWFSClient:
         self._max_features = max(self._page_size, max_features)
         self._timeout = max(3.0, timeout)
         self._sort_by = sort_by
+        self._property_names = property_names
+        self._http_client = httpx.Client(
+            timeout=self._timeout,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "EcoAdvisor-TCL-MCP/0.1",
+            },
+        )
 
     @property
     def base_url(self) -> str:
@@ -459,20 +471,16 @@ class TCLWFSClient:
             "count": self._page_size,
             "sortBy": self._sort_by,
         }
-        headers = {
-            "Accept": "application/json",
-            "User-Agent": "EcoAdvisor-TCL-MCP/0.1",
-        }
+        if self._property_names:
+            params["propertyName"] = ",".join(self._property_names)
         try:
-            with httpx.Client(timeout=self._timeout) as client:
-                response = client.get(
-                    self._base_url,
-                    params=params,
-                    headers=headers,
-                    auth=self._auth,
-                )
-                response.raise_for_status()
-                payload = response.json()
+            response = self._http_client.get(
+                self._base_url,
+                params=params,
+                auth=self._auth,
+            )
+            response.raise_for_status()
+            payload = response.json()
         except Exception:
             logger.exception("Failed to fetch TCL stops page starting at %s", start_index)
             return []
@@ -481,6 +489,9 @@ class TCLWFSClient:
             logger.warning("Unexpected WFS payload format: missing 'features' list.")
             return []
         return features
+
+    def close(self) -> None:
+        self._http_client.close()
 
 
 class TCLStopStore:
@@ -518,15 +529,11 @@ class TCLStopStore:
         line_filter = {code.upper() for code in lines} if lines else None
         matches: List[Tuple[int, TCLStopRecord]] = []
         for stop in self._stops:
-            if city_norm:
-                hay_city = _normalize_text(stop.city)
-                if city_norm not in hay_city:
-                    continue
-            if line_filter:
-                if not line_filter.intersection({code.upper() for code in stop.lines}):
-                    continue
-            haystack = _normalize_text(" ".join(part for part in (stop.name, stop.city, stop.zone) if part))
-            if query_norm not in haystack:
+            if city_norm and city_norm not in stop.city_norm:
+                continue
+            if line_filter and not line_filter.intersection(stop.line_codes_upper):
+                continue
+            if query_norm not in stop.haystack:
                 continue
             score = self._score_stop(query_norm, stop)
             matches.append((score, stop))
@@ -542,13 +549,17 @@ class TCLStopStore:
         limit: int,
     ) -> List[Tuple[TCLStopRecord, float]]:
         self._require_data()
-        matches: List[Tuple[TCLStopRecord, float]] = []
+        candidates: List[Tuple[float, TCLStopRecord]] = []
         for stop in self._stops:
             distance_m = _haversine_m(lat, lon, stop.lat, stop.lon)
             if distance_m <= radius_m:
-                matches.append((stop, distance_m))
-        matches.sort(key=lambda item: (item[1], item[0].name.lower()))
-        return matches[:limit]
+                candidates.append((distance_m, stop))
+        best = heapq.nsmallest(
+            limit,
+            candidates,
+            key=lambda item: (item[0], item[1].name.lower()),
+        )
+        return [(stop, distance) for distance, stop in best]
 
     def list_lines(self) -> List[LineSummary]:
         self._require_data()
@@ -669,9 +680,11 @@ class TCLStopStore:
                 if not existing.district and record.district:
                     existing.district = record.district
                 if not existing.zone and record.zone:
-                    existing.zone = record.zone
+                        existing.zone = record.zone
             else:
                 merged[key] = record
+        for stop in merged.values():
+            stop.prepare_for_search()
         return sorted(merged.values(), key=lambda stop: stop.name.lower())
 
     def _build_line_metadata(
@@ -689,21 +702,25 @@ class TCLStopStore:
 
     @staticmethod
     def _score_stop(query_norm: str, stop: TCLStopRecord) -> int:
-        name_norm = _normalize_text(stop.name)
-        if name_norm == query_norm:
+        if stop.name_norm == query_norm:
             return 0
-        if name_norm.startswith(query_norm):
+        if stop.name_norm.startswith(query_norm):
             return 1
-        if query_norm in name_norm:
+        if query_norm in stop.name_norm:
             return 2
-        city_norm = _normalize_text(stop.city)
-        if city_norm and query_norm in city_norm:
+        if stop.city_norm and query_norm in stop.city_norm:
             return 3
         return 4
 
 
 cache_ttl = int(os.getenv("TCL_STOPS_CACHE_TTL_SEC", "900"))
-fallback_csv = Path(os.getenv("TCL_STOPS_FALLBACK_CSV", str(_fallback_default))).expanduser()
+fallback_csv = Path(os.getenv("TCL_STOPS_FALLBACK_CSV", str(_FALLBACK_DEFAULT))).expanduser()
+property_names_env = os.getenv("TCL_WFS_PROPERTY_NAMES")
+property_names = (
+    [token.strip() for token in property_names_env.split(",") if token.strip()]
+    if property_names_env
+    else None
+)
 client = TCLWFSClient(
     base_url=os.getenv("TCL_WFS_BASE_URL", "https://data.grandlyon.com/geoserver/sytral/ows"),
     typename=os.getenv("TCL_WFS_TYPENAME", "sytral:tcl_sytral.tclarret"),
@@ -714,6 +731,7 @@ client = TCLWFSClient(
     max_features=int(os.getenv("TCL_WFS_MAX_FEATURES", "5000")),
     timeout=float(os.getenv("TCL_WFS_TIMEOUT_SEC", "10")),
     sort_by=os.getenv("TCL_WFS_SORT_BY", "gid"),
+    property_names=property_names,
 )
 store = TCLStopStore(client=client, fallback_csv=fallback_csv, cache_ttl_sec=cache_ttl)
 
@@ -840,6 +858,11 @@ async def reload_tcl_stops_cache() -> ReloadResponse:
     )
 
 
+@app.on_event("shutdown")
+def shutdown_wfs_client() -> None:
+    client.close()
+
+
 mcp = FastApiMCP(
     app,
     name="EcoAdvisor TCL Transit MCP",
@@ -854,4 +877,3 @@ mcp = FastApiMCP(
 mcp.mount_http(mount_path="/mcp")
 
 __all__ = ["app"]
-

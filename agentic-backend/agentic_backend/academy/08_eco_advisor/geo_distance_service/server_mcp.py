@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import os
 import re
 import unicodedata
+from collections import OrderedDict
 from datetime import datetime, timezone
+from time import monotonic
 from typing import Any, Dict, List, Optional, Set
 
 import httpx
@@ -255,6 +258,13 @@ class NominatimClient:
             "false",
             "0",
         )
+        self.request_delay = max(0.0, float(os.getenv("ECO_GEO_ATTEMPT_DELAY", "0.0")))
+        self.max_query_attempts = max(1, int(os.getenv("ECO_GEO_MAX_QUERY_ATTEMPTS", "20")))
+        self.cache_ttl = max(0.0, float(os.getenv("ECO_GEO_CACHE_TTL", "30.0")))
+        self.cache_max_entries = max(0, int(os.getenv("ECO_GEO_CACHE_MAX", "128")))
+        self._cache: OrderedDict[str, tuple[float, List[Dict[str, Any]], str, Optional[str]]] = OrderedDict()
+        self._cache_lock = asyncio.Lock()
+        self._client = httpx.AsyncClient(timeout=self.timeout, headers={"User-Agent": self.user_agent})
 
     def _should_append_city(self, query: str) -> bool:
         if not self.default_city_suffix:
@@ -373,6 +383,58 @@ class NominatimClient:
         collapsed = re.sub(r"\s+", " ", no_hyphen)
         return collapsed.strip()
 
+    def _cache_key(
+        self,
+        query: str,
+        limit: int,
+        countrycodes: Optional[str],
+        language: Optional[str],
+        allow_default_city: bool,
+    ) -> str:
+        normalized_query = re.sub(r"\s+", " ", query.strip()).lower()
+        parts = [
+            normalized_query,
+            str(limit),
+            (countrycodes or "").lower(),
+            (language or "").lower(),
+            "1" if allow_default_city else "0",
+        ]
+        return "|".join(parts)
+
+    async def _cache_get(
+        self, key: str
+    ) -> Optional[tuple[List[Dict[str, Any]], str, Optional[str]]]:
+        if self.cache_ttl <= 0 or self.cache_max_entries <= 0:
+            return None
+        async with self._cache_lock:
+            entry = self._cache.get(key)
+            if not entry:
+                return None
+            ts, payload, eff_query, eff_codes = entry
+            if monotonic() - ts > self.cache_ttl:
+                self._cache.pop(key, None)
+                return None
+            self._cache.move_to_end(key)
+            return payload, eff_query, eff_codes
+
+    async def _cache_set(
+        self,
+        key: str,
+        payload: List[Dict[str, Any]],
+        effective_query: str,
+        effective_codes: Optional[str],
+    ) -> None:
+        if self.cache_ttl <= 0 or self.cache_max_entries <= 0:
+            return
+        async with self._cache_lock:
+            self._cache[key] = (monotonic(), payload, effective_query, effective_codes)
+            self._cache.move_to_end(key)
+            while len(self._cache) > self.cache_max_entries:
+                self._cache.popitem(last=False)
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
     async def _call_nominatim(
         self,
         query: str,
@@ -390,17 +452,22 @@ class NominatimClient:
             params["countrycodes"] = countrycodes
         lang = language or self.default_language
         if lang:
-            params["accept-language"] = lang
+            request_headers = {"Accept-Language": lang}
+        else:
+            request_headers = None
 
-        headers = {"User-Agent": self.user_agent}
-        async with httpx.AsyncClient(timeout=self.timeout, headers=headers) as client:
-            response = await client.get(self.base_url, params=params)
-            try:
-                response.raise_for_status()
-            except httpx.HTTPStatusError as exc:
-                logger.warning("Nominatim error: %s", exc)
-                raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
-            payload = response.json()
+        try:
+            response = await self._client.get(self.base_url, params=params, headers=request_headers)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            logger.warning("Nominatim error: %s", exc)
+            status = exc.response.status_code if exc.response else 502
+            detail = exc.response.text if exc.response else str(exc)
+            raise HTTPException(status_code=status, detail=detail) from exc
+        except httpx.RequestError as exc:
+            logger.warning("Nominatim request error: %s", exc)
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        payload = response.json()
 
         if not isinstance(payload, list):
             raise HTTPException(status_code=502, detail="Invalid response from Nominatim (expected list).")
@@ -420,20 +487,14 @@ class NominatimClient:
         preferred_codes = countrycodes or self.default_countrycodes
         preferred_language = language or self.default_language
         base_query = query.strip()
+        cache_key = self._cache_key(base_query, limit, preferred_codes, preferred_language, allow_default_city)
+        cached = await self._cache_get(cache_key)
+        if cached:
+            payload, eff_query, eff_codes = cached
+            return payload, eff_query, eff_codes
         query_variants = self._enumerate_query_variants(base_query)
 
-        attempts: List[tuple[str, Optional[str], bool, str]] = []
-        for variant, reason in query_variants:
-            attempts.append((variant, preferred_codes, False, reason))
-            if allow_default_city and self.default_city_suffix and self._should_append_city(variant):
-                appended_query = f"{variant}, {self.default_city_suffix}"
-                attempts.append((appended_query, preferred_codes, True, f"{reason}+city_suffix"))
-
-        if preferred_codes:
-            attempts.extend(
-                (q, None, flag, f"{reason}+no_country") for q, _, flag, reason in attempts.copy()
-            )
-
+        attempts = self._build_attempts(query_variants, preferred_codes, allow_default_city)
         seen = set()
         last_query = base_query
         last_codes = preferred_codes
@@ -457,6 +518,8 @@ class NominatimClient:
                 if attempt_codes is None:
                     last_query = attempt_query
                     last_codes = attempt_codes
+                if self.request_delay > 0:
+                    await asyncio.sleep(self.request_delay)
                 continue
 
             last_query = attempt_query
@@ -476,14 +539,46 @@ class NominatimClient:
                     )
                 if attempt_codes is None and (countrycodes or self.default_countrycodes):
                     logger.info("Nominatim fallback succeeded without country restriction for query=%r", attempt_query)
+                await self._cache_set(cache_key, payload, attempt_query, attempt_codes)
                 return payload, attempt_query, attempt_codes
+            if self.request_delay > 0:
+                await asyncio.sleep(self.request_delay)
 
         logger.warning(
             "Nominatim returns no result for query=%r even after %d attempts.",
             query,
             len(seen),
         )
+        await self._cache_set(cache_key, [], last_query, last_codes)
         return [], last_query, last_codes
+
+    def _build_attempts(
+        self,
+        query_variants: List[tuple[str, str]],
+        preferred_codes: Optional[str],
+        allow_default_city: bool,
+    ) -> List[tuple[str, Optional[str], bool, str]]:
+        attempts: List[tuple[str, Optional[str], bool, str]] = []
+        base_attempts: List[tuple[str, Optional[str], bool, str]] = []
+        for variant, reason in query_variants:
+            entry = (variant, preferred_codes, False, reason)
+            attempts.append(entry)
+            base_attempts.append(entry)
+            if (
+                allow_default_city
+                and self.default_city_suffix
+                and self._should_append_city(variant)
+            ):
+                appended_query = f"{variant}, {self.default_city_suffix}"
+                attempts.append((appended_query, preferred_codes, True, f"{reason}+city_suffix"))
+
+        if preferred_codes:
+            for variant, _, flag, reason in base_attempts:
+                attempts.append((variant, None, flag, f"{reason}+no_country"))
+
+        if self.max_query_attempts > 0:
+            attempts = attempts[: self.max_query_attempts]
+        return attempts
 
 
 class OSRMClient:
@@ -498,6 +593,7 @@ class OSRMClient:
             "false",
             "0",
         )
+        self._client = httpx.AsyncClient(timeout=self.timeout, headers={"User-Agent": self.user_agent})
 
     async def route(
         self,
@@ -517,17 +613,24 @@ class OSRMClient:
             "alternatives": "false",
             "annotations": "distance,duration",
         }
-        headers = {"User-Agent": self.user_agent}
-
-        async with httpx.AsyncClient(timeout=self.timeout, headers=headers) as client:
-            response = await client.get(url, params=params)
+        try:
+            response = await self._client.get(url, params=params)
             response.raise_for_status()
-            payload = response.json()
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code if exc.response else "unknown"
+            detail = exc.response.text[:200] if exc.response and exc.response.text else str(exc)
+            raise RuntimeError(f"OSRM HTTP {status}: {detail}") from exc
+        except httpx.RequestError as exc:
+            raise RuntimeError(f"OSRM request error: {exc}") from exc
 
+        payload = response.json()
         if payload.get("code") != "Ok" or not payload.get("routes"):
             message = payload.get("message") or "OSRM did not return a valid route."
             raise RuntimeError(message)
         return payload["routes"][0]
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
 
 geocoder = NominatimClient()
@@ -682,20 +785,24 @@ def _build_trip_resolution(query: str, payload: Dict[str, Any]) -> TripAddressRe
     response_model=TripEstimateResponse,
 )
 async def estimate_trip_between_addresses(request: TripEstimateRequest) -> TripEstimateResponse:
-    origin_candidates, origin_effective_query, origin_codes = await geocoder.geocode(
+    origin_task = geocoder.geocode(
         query=request.origin_query,
         limit=1,
         countrycodes=request.countrycodes,
         language=request.language,
         allow_default_city=request.allow_default_city,
     )
-    destination_candidates, destination_effective_query, destination_codes = await geocoder.geocode(
+    destination_task = geocoder.geocode(
         query=request.destination_query,
         limit=1,
         countrycodes=request.countrycodes,
         language=request.language,
         allow_default_city=request.allow_default_city,
     )
+    (
+        (origin_candidates, origin_effective_query, origin_codes),
+        (destination_candidates, destination_effective_query, destination_codes),
+    ) = await asyncio.gather(origin_task, destination_task)
 
     if not origin_candidates:
         raise HTTPException(status_code=404, detail=f"Origin '{request.origin_query}' not found.")
@@ -742,6 +849,11 @@ async def healthcheck() -> Dict[str, Any]:
         "osrm_url": router.base_url,
         "osrm_enabled": router.enabled,
     }
+
+
+@app.on_event("shutdown")
+async def shutdown_clients() -> None:
+    await asyncio.gather(geocoder.aclose(), router.aclose())
 
 
 mcp = FastApiMCP(
