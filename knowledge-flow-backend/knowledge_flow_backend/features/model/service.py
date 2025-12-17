@@ -231,7 +231,7 @@ class ModelService:
                 best_model = km
 
         if best_model is not None:
-            logger.info("3D clustering model trained with %d clusters (silhouette: %.3f)", best_model.n_clusters, best_score)
+            logger.info("3D clustering model trained with %d clusters (silhouette: %.3f)", best_model.cluster_centers_.shape[0], best_score)
             # Save the trained model
             save_clustering_model(self.file_store, self.NAMESPACE, cluster_3d_key(tag_uid), best_model)
         else:
@@ -292,6 +292,7 @@ class ModelService:
                 model = None
 
         # Otherwise, perform new clustering (for backward compatibility)
+        labels = []
         if model is None:
             from sklearn.metrics import silhouette_score
 
@@ -324,8 +325,9 @@ class ModelService:
         for i, lbl in enumerate(labels):
             if points[i].clusters is None:
                 points[i].clusters = Clusters()
-            if points[i].clusters:
-                points[i].clusters.d3 = int(lbl)
+            clusters = points[i].clusters
+            if clusters:
+                clusters.d3 = int(lbl)
 
         return points
 
@@ -372,7 +374,7 @@ class ModelService:
                 best_model = km
 
         if best_model is not None:
-            logger.info("Vector clustering model trained with %d clusters (silhouette: %.3f)", best_model.n_clusters, best_score)
+            logger.info("Vector clustering model trained with %d clusters (silhouette: %.3f)", best_model.cluster_centers_.shape[0], best_score)
             # Save the trained model
             save_clustering_model(self.file_store, self.NAMESPACE, cluster_vector_key(tag_uid), best_model)
         else:
@@ -425,6 +427,7 @@ class ModelService:
                 model = None
 
         # Otherwise, perform new clustering (for backward compatibility)
+        labels = []
         if model is None:
             from sklearn.metrics import silhouette_score
 
@@ -457,8 +460,9 @@ class ModelService:
         for i, lbl in enumerate(labels):
             if points[i].clusters is None:
                 points[i].clusters = Clusters()
-            if points[i].clusters:
-                points[i].clusters.vector = int(lbl)
+            clusters = points[i].clusters
+            if clusters:
+                clusters.vector = int(lbl)
 
         return points
 
@@ -536,8 +540,9 @@ class ModelService:
         for i, dist_value in enumerate(normalized_distances):
             if points[i].clusters is None:
                 points[i].clusters = Clusters()
-            if points[i].clusters:
-                points[i].clusters.distance = int(dist_value)
+            clusters = points[i].clusters
+            if clusters:
+                clusters.distance = int(dist_value)
 
         logger.info(
             "Distance-based coloring completed: min=%.2f, max=%.2f, mean=%.2f (original range: %.2f-%.2f)",
