@@ -14,14 +14,22 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph3D, { ForceGraphMethods } from "react-force-graph-3d";
-import {
-  GraphPoint,
-} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+import { GraphPoint } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { buildOverlapMap, getNodeId, isAdditiveEvent, makePosKey } from "./selectionUtils";
+import { Box, IconButton, Menu, MenuItem, TextField, InputAdornment, CircularProgress, Tooltip } from "@mui/material";
+import HubIcon from "@mui/icons-material/Hub";
+import PaletteIcon from "@mui/icons-material/Palette";
+import SendIcon from "@mui/icons-material/Send";
+import { useTranslation } from "react-i18next";
+import { useLocalStorageState } from "../../hooks/useLocalStorageState.ts";
+import { useProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostMutation } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+
+export type ColorMode = "none" | "3d" | "vector" | "distance";
 
 type Props = {
   points: GraphPoint[];
   darkMode: boolean;
+  tagUid?: string; // Add tagUid to props for API calls
   onSelectionChange?: (selectedIds: string[]) => void;
   // When this counter changes, the graph will perform a zoomToFit.
   // Useful to fit only on new projections, but not on local deletions.
@@ -35,34 +43,58 @@ type Props = {
   // Precision used to consider two nodes as overlapped (by rounding coordinates).
   // Example: 6 means rounding to 1e-6. Defaults to 6.
   overlapPrecision?: number;
-  // If true, color nodes by cluster number (from point_3d.cluster). Defaults to false.
-  colorByCluster?: boolean;
-  // If true, show document links between chunks; defaults to false.
-  showLinks?: boolean;
 };
 
-export default function Graph3DView({ points, darkMode, onSelectionChange, fitVersion, fitOnResize, selectOverlaps = true, overlapPrecision = 6, colorByCluster = false, showLinks = false }: Props) {
+export default function Graph3DView({
+  points,
+  darkMode,
+  tagUid,
+  onSelectionChange,
+  fitVersion,
+  fitOnResize,
+  selectOverlaps = true,
+  overlapPrecision = 6,
+}: Props) {
+  const { t } = useTranslation();
   const fgRef = useRef<ForceGraphMethods | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Multi-selection state (chunk_uid values)
+  // Multi-selection state (chunk_id values)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Internal UI state with localStorage persistence
+  const [showLinks, setShowLinks] = useLocalStorageState<boolean>("graph.showLinks", false);
+  const [colorMode, setColorMode] = useLocalStorageState<ColorMode>("graph.colorMode", "3d");
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+
+  // Question input state
+  const [question, setQuestion] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [questionPoint, setQuestionPoint] = useState<any | null>(null);
+
+  // API mutation for projecting question
+  const [projectQuestion] = useProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostMutation();
+
   const { nodes, links } = useMemo(() => {
-    const nodes = points.map((p, i) => {
+    const nodes: any[] = points.map((p, i) => {
       const id = p.metadata?.chunk_uid ?? i;
       const name = p.metadata?.chunk_uid ?? String(i);
       const docId = p.metadata?.document_uid ?? String(i);
       const x = p.point_3d?.x ?? 0;
       const y = p.point_3d?.y ?? 0;
       const z = p.point_3d?.z ?? 0;
-      const cluster = (p as any)?.point_3d?.cluster ?? null;
+      // Extract clusters from new structure
+      const clusterD3 = p.clusters?.d3 ?? null;
+      const clusterVector = p.clusters?.vector ?? null;
+      const clusterDistance = p.clusters?.distance ?? null;
       const text = p.metadata?.text ?? undefined;
       return {
         id,
         name,
         doc_id: docId,
-        cluster,
+        cluster_d3: clusterD3,
+        cluster_vector: clusterVector,
+        cluster_distance: clusterDistance,
         text,
         // Fix positions (no simulation drift)
         fx: x,
@@ -74,6 +106,25 @@ export default function Graph3DView({ points, darkMode, onSelectionChange, fitVe
         z,
       };
     });
+    // Add question point if it exists
+    if (questionPoint) {
+      nodes.push({
+        id: "question",
+        name: "Question",
+        doc_id: "question",
+        cluster_d3: null,
+        cluster_vector: null,
+        cluster_distance: null,
+        text: questionPoint.text,
+        fx: questionPoint.x,
+        fy: questionPoint.y,
+        fz: questionPoint.z,
+        x: questionPoint.x,
+        y: questionPoint.y,
+        z: questionPoint.z,
+        isQuestion: true,
+      });
+    }
     // Build lightweight links between chunks of the same document.
     // Use a star topology (first node in the doc as hub) to avoid O(n^2) links.
     const byDoc = new Map<string, any[]>();
@@ -81,7 +132,8 @@ export default function Graph3DView({ points, darkMode, onSelectionChange, fitVe
       const d = n.doc_id;
       if (!d) continue;
       const arr = byDoc.get(d);
-      if (arr) arr.push(n); else byDoc.set(d, [n]);
+      if (arr) arr.push(n);
+      else byDoc.set(d, [n]);
     }
     const links: any[] = [];
     for (const arr of byDoc.values()) {
@@ -93,12 +145,20 @@ export default function Graph3DView({ points, darkMode, onSelectionChange, fitVe
       }
     }
     return { nodes, links };
-  }, [points]);
+  }, [points, questionPoint]);
 
   // Group nodes by quantized position to detect overlaps
   const posKey = useMemo(() => makePosKey(overlapPrecision), [overlapPrecision]);
 
   const overlapMap = useMemo(() => buildOverlapMap(nodes, posKey), [nodes, posKey]);
+
+  // Clear question point when points array becomes empty (graph is cleared)
+  useEffect(() => {
+    if (points.length === 0 && questionPoint !== null) {
+      setQuestionPoint(null);
+      setQuestion("");
+    }
+  }, [points.length, questionPoint]);
 
   // Controlled fit: only when fitVersion increments (e.g., on a new projection)
   // NOTE: Do NOT depend on nodes.length here, otherwise every deletion would retrigger a fit.
@@ -108,7 +168,9 @@ export default function Graph3DView({ points, darkMode, onSelectionChange, fitVe
       if (api && nodes.length) {
         try {
           api.zoomToFit(400, 0);
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       }
     };
     // Trigger only when requested (on fitVersion change)
@@ -129,7 +191,9 @@ export default function Graph3DView({ points, darkMode, onSelectionChange, fitVe
         if (api && nodes.length) {
           try {
             api.zoomToFit(400, 0);
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
         }
       });
     });
@@ -180,7 +244,8 @@ ${bodySafe}
       if (!additive) return new Set(groupIds);
       const next = new Set(prev);
       for (const gid of groupIds) {
-        if (next.has(gid)) next.delete(gid); else next.add(gid);
+        if (next.has(gid)) next.delete(gid);
+        else next.add(gid);
       }
       return next;
     });
@@ -194,14 +259,115 @@ ${bodySafe}
     onSelectionChange(Array.from(selectedIds));
   }, [selectedIds, onSelectionChange]);
 
+  // UI handlers
+  const handleToggleLinks = () => setShowLinks(!showLinks);
+  const handleColorMenuClick = (event: React.MouseEvent<HTMLElement>) => setAnchorEl(event.currentTarget);
+  const handleColorMenuClose = () => setAnchorEl(null);
+  const handleColorModeSelect = (mode: ColorMode) => {
+    setColorMode(mode);
+    handleColorMenuClose();
+  };
+
+  const handleSubmitQuestion = async () => {
+    if (!question.trim() || isSubmitting || !tagUid) return;
+    setIsSubmitting(true);
+    try {
+      const result = await projectQuestion({
+        refTagUid: tagUid,
+        projectTextRequest: { text: question.trim() },
+      }).unwrap();
+
+      setQuestionPoint({
+        x: result.graph_point.point_3d.x,
+        y: result.graph_point.point_3d.y,
+        z: result.graph_point.point_3d.z,
+        text: result.graph_point.metadata?.text || question.trim(),
+      });
+      setQuestion("");
+    } catch (error) {
+      console.error("Error submitting question:", error);
+      // TODO: Show error toast/notification to user
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const getColorModeLabel = (mode: ColorMode): string => {
+    switch (mode) {
+      case "none":
+        return t("graph3DView.colorMode.none", "No coloring");
+      case "3d":
+        return t("graph3DView.colorMode.3d", "3D coloring");
+      case "vector":
+        return t("graph3DView.colorMode.vector", "Vector coloring");
+      case "distance":
+        return t("graph3DView.colorMode.distance", "Distance coloring");
+    }
+  };
+
+  // Color calculation based on mode
+  const getNodeColorByMode = (node: any): string => {
+    // Special color for question node
+    if (node.isQuestion) {
+      return darkMode ? "#FFFFFF" : "#000000"; // White in dark mode, black in light mode
+    }
+
+    if (selectedIds.has(getNodeId(node))) {
+      if (colorMode !== "none") return darkMode ? "#EEEEEE" : "#444444";
+      return darkMode ? "#4FC3F7" : "#1976D2";
+    }
+
+    switch (colorMode) {
+      case "none":
+        return darkMode ? "#EEEEEE" : "#444444";
+      case "3d":
+        return getClusterColor(node.cluster_d3);
+      case "vector":
+        return getClusterColor(node.cluster_vector);
+      case "distance": {
+        // Use cluster_distance [0-100] for continuous heatmap coloring
+        const distanceValue = node.cluster_distance;
+        if (distanceValue === null || distanceValue === undefined) {
+          return darkMode ? "#EEEEEE" : "#444444";
+        }
+        // Normalize to [0, 1] range (linear scale)
+        const normalized = Math.min(Math.max(distanceValue / 100, 0), 1);
+
+        // Classic heatmap: blue (cold/close) -> cyan -> green -> yellow -> red (hot/far)
+        // Using HSL with hue going from 240° (blue) through 180° (cyan), 120° (green), 60° (yellow) to 0° (red)
+        const hue = (1 - normalized) * 240; // Inverted: 0=close=blue, 100=far=red
+        const saturation = 90; // High saturation for vivid colors
+        const lightness = darkMode ? 55 : 45;
+
+        return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+      }
+    }
+  };
+
   // Deterministic cluster color palette (max 10 clusters)
   const clusterPaletteLight = [
-    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
-    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#7f7f7f",
+    "#bcbd22",
+    "#17becf",
   ];
   const clusterPaletteDark = [
-    "#4FC3F7", "#FFB74D", "#81C784", "#E57373", "#BA68C8",
-    "#A1887F", "#F48FB1", "#BDBDBD", "#DCE775", "#4DD0E1"
+    "#4FC3F7",
+    "#FFB74D",
+    "#81C784",
+    "#E57373",
+    "#BA68C8",
+    "#A1887F",
+    "#F48FB1",
+    "#BDBDBD",
+    "#DCE775",
+    "#4DD0E1",
   ];
   const getClusterColor = (c: any): string => {
     const pal = darkMode ? clusterPaletteDark : clusterPaletteLight;
@@ -220,36 +386,134 @@ ${bodySafe}
   };
 
   return (
-    <div ref={containerRef} style={{ width: "100%", height: "100%" }}>
+    <Box ref={containerRef} sx={{ position: "relative", width: "100%", height: "100%" }}>
+      {/* Control buttons */}
+      <Box
+        sx={{
+          position: "absolute",
+          top: 12,
+          right: 12,
+          zIndex: 10,
+          display: "flex",
+          gap: 1,
+        }}
+      >
+        <Tooltip title={t("graph3DView.toggleLinks", "Afficher/masquer les liens")}>
+          <IconButton
+            size="small"
+            onClick={handleToggleLinks}
+            color={showLinks ? "primary" : "default"}
+            sx={{
+              bgcolor: (theme) => theme.palette.background.paper,
+              "&:hover": { bgcolor: (theme) => theme.palette.action.hover },
+            }}
+          >
+            <HubIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+
+        <Tooltip title={t("graph3DView.colorMode.title", "Mode de coloration")}>
+          <IconButton
+            size="small"
+            onClick={handleColorMenuClick}
+            color={colorMode !== "none" ? "primary" : "default"}
+            sx={{
+              bgcolor: (theme) => theme.palette.background.paper,
+              "&:hover": { bgcolor: (theme) => theme.palette.action.hover },
+            }}
+          >
+            <PaletteIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleColorMenuClose}
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+          transformOrigin={{ vertical: "top", horizontal: "right" }}
+        >
+          <MenuItem selected={colorMode === "none"} onClick={() => handleColorModeSelect("none")}>
+            {getColorModeLabel("none")}
+          </MenuItem>
+          <MenuItem selected={colorMode === "3d"} onClick={() => handleColorModeSelect("3d")}>
+            {getColorModeLabel("3d")}
+          </MenuItem>
+          <MenuItem selected={colorMode === "vector"} onClick={() => handleColorModeSelect("vector")}>
+            {getColorModeLabel("vector")}
+          </MenuItem>
+          <MenuItem selected={colorMode === "distance"} onClick={() => handleColorModeSelect("distance")}>
+            {getColorModeLabel("distance")}
+          </MenuItem>
+        </Menu>
+      </Box>
+
+      {/* 3D Graph */}
       <ForceGraph3D
         ref={fgRef as any}
         graphData={{ nodes, links: showLinks ? links : [] }}
         backgroundColor="rgba(0,0,0,0)"
         enableNodeDrag={false}
         showNavInfo={false}
-        // Tooltip on hover: chunk_uid + fetched chunk text
         nodeLabel={(n: any) => getNodeTooltip(n)}
         onNodeClick={handleNodeClick}
         onBackgroundClick={() => clearSelection()}
         nodeRelSize={0.05}
         nodeOpacity={0.9}
-        nodeVal={(n: any) => (selectedIds.has(getNodeId(n)) ? 3 : 1)}
-        nodeColor={(n: any) => {
-          if (selectedIds.has(getNodeId(n))) {
-            // When color-by-cluster is enabled, selection color should be
-            // white in dark mode and black in light mode for maximum contrast.
-            if (colorByCluster) return darkMode ? "#EEEEEE" : "#444444";
-            // Otherwise keep the previous theme selection colors
-            return darkMode ? "#4FC3F7" : "#1976D2";
-          }
-          if (colorByCluster) return getClusterColor((n as any).cluster);
-          return darkMode ? "#EEEEEE" : "#444444";
-        }}
-        // Document links styling
+        nodeVal={(n: any) => (n.isQuestion ? 8 : selectedIds.has(getNodeId(n)) ? 3 : 1)}
+        nodeColor={(n: any) => getNodeColorByMode(n)}
         linkColor={() => (darkMode ? "#888888" : "#BBBBBB")}
         linkOpacity={0.35}
         linkWidth={0}
       />
-    </div>
+
+      {/* Question Input */}
+      <Box
+        sx={{
+          position: "absolute",
+          bottom: 16,
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: "90%",
+          maxWidth: 600,
+          zIndex: 10,
+        }}
+      >
+        <TextField
+          fullWidth
+          size="small"
+          multiline
+          minRows={1}
+          maxRows={4}
+          placeholder={t("graph3DView.testPromptPlaceholder", "Saisir un prompt de test...")}
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          onKeyPress={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !isSubmitting && question.trim()) {
+              e.preventDefault();
+              handleSubmitQuestion();
+            }
+          }}
+          disabled={isSubmitting}
+          InputProps={{
+            sx: {
+              bgcolor: (theme) => theme.palette.background.paper,
+              backdropFilter: "blur(10px)",
+            },
+            endAdornment: (
+              <InputAdornment position="end">
+                {isSubmitting ? (
+                  <CircularProgress size={20} />
+                ) : (
+                  <IconButton size="small" onClick={handleSubmitQuestion} disabled={!question.trim()} color="primary">
+                    <SendIcon fontSize="small" />
+                  </IconButton>
+                )}
+              </InputAdornment>
+            ),
+          }}
+        />
+      </Box>
+    </Box>
   );
 }
