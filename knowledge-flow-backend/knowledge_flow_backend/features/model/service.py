@@ -269,13 +269,14 @@ class ModelService:
             return points
 
         try:
-            from sklearn.cluster import KMeans
+            pass
         except Exception as e:
             logger.warning("3D clustering disabled: scikit-learn not available (%s)", e)
             return points
 
         # If we have a trained model, use it for prediction
         # Otherwise, try to load from file
+        labels = []
         if model is None:
             try:
                 model = load_clustering_model(self.file_store, self.NAMESPACE, cluster_3d_key(tag_uid))
@@ -290,36 +291,6 @@ class ModelService:
             except Exception as e:
                 logger.warning("Failed to predict with trained model, falling back to new clustering: %s", e)
                 model = None
-
-        # Otherwise, perform new clustering (for backward compatibility)
-        labels = []
-        if model is None:
-            from sklearn.metrics import silhouette_score
-
-            max_k = max(2, min(10, n - 1))
-            best_score = -1.0
-            best_labels = None
-
-            for k in range(2, max_k + 1):
-                km = KMeans(n_clusters=k, n_init="auto", random_state=42)
-                labels = km.fit_predict(coords)
-                if len(set(labels)) < 2:
-                    continue
-                try:
-                    score = silhouette_score(coords, labels, metric="euclidean")
-                except Exception:
-                    logger.warning("Failed to compute silhouette score for k=%d", k)
-                    score = -1.0
-                if score > best_score:
-                    best_score = score
-                    best_labels = labels
-
-            if best_labels is None:
-                logger.warning("Failed to find optimal clustering for 3D points")
-                return points
-
-            labels = best_labels
-            logger.info("3D clustering completed with %d clusters (silhouette: %.3f)", len(set(labels)), best_score)
 
         # Assign clusters to points
         for i, lbl in enumerate(labels):
@@ -404,13 +375,14 @@ class ModelService:
             return points
 
         try:
-            from sklearn.cluster import KMeans
+            pass
         except Exception as e:
             logger.warning("Vector clustering disabled: scikit-learn not available (%s)", e)
             return points
 
         # If we have a trained model, use it for prediction
         # Otherwise, try to load from file
+        labels = []
         if model is None:
             try:
                 model = load_clustering_model(self.file_store, self.NAMESPACE, cluster_vector_key(tag_uid))
@@ -425,36 +397,6 @@ class ModelService:
             except Exception as e:
                 logger.warning("Failed to predict with trained model, falling back to new clustering: %s", e)
                 model = None
-
-        # Otherwise, perform new clustering (for backward compatibility)
-        labels = []
-        if model is None:
-            from sklearn.metrics import silhouette_score
-
-            max_k = max(2, min(10, n - 1))
-            best_score = -1.0
-            best_labels = None
-
-            for k in range(2, max_k + 1):
-                km = KMeans(n_clusters=k, n_init="auto", random_state=42)
-                labels = km.fit_predict(vectors)
-                if len(set(labels)) < 2:
-                    continue
-                try:
-                    score = silhouette_score(vectors, labels, metric="euclidean")
-                except Exception:
-                    logger.warning("Failed to compute silhouette score for k=%d in vector space", k)
-                    score = -1.0
-                if score > best_score:
-                    best_score = score
-                    best_labels = labels
-
-            if best_labels is None:
-                logger.warning("Failed to find optimal clustering for vector space")
-                return points
-
-            labels = best_labels
-            logger.info("Vector clustering completed with %d clusters (silhouette: %.3f)", len(set(labels)), best_score)
 
         # Assign vector clusters to points
         for i, lbl in enumerate(labels):
