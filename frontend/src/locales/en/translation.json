@@ -910,6 +910,32 @@
       }
     }
   },
+  "rebac": {
+    "backfill": {
+      "title": "ReBAC Backfill",
+      "subtitle": "Rebuild owner and tag-to-document relations after enabling ReBAC.",
+      "description": "Use this once after turning on ReBAC in an existing deployment to restore access to libraries and their documents.",
+      "run": "Run backfill",
+      "running": "Running...",
+      "success": {
+        "title": "ReBAC relations rebuilt",
+        "detail": "{{owners}} owner relations and {{parents}} tag→doc relations created."
+      },
+      "disabled": {
+        "title": "ReBAC disabled",
+        "detail": "ReBAC is turned off; nothing to backfill."
+      },
+      "error": {
+        "title": "Backfill failed"
+      },
+      "stats": {
+        "tags": "Tags processed",
+        "docs": "Documents scanned",
+        "ownerRelations": "Owner relations created",
+        "parentRelations": "Tag→doc relations created"
+      }
+    }
+  },
   "app": {
     "loading": {
       "router": "Fred is starting...",

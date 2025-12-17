@@ -17,14 +17,18 @@ import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
+import PersonAddAltIcon from "@mui/icons-material/PersonAddAlt";
 import { Box, Checkbox, IconButton, Tooltip } from "@mui/material";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
+import { getConfig } from "../../common/config";
 
 import { Resource, TagWithItemsId } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { TagNode } from "../tags/tagTree";
 import { ResourceRowCompact } from "./ResourceRowCompact";
+import { DocumentLibraryShareDialog } from "../documents/libraries/sharing/DocumentLibraryShareDialog";
 
 /* --------------------------------------------------------------------------
  * Helpers (mirrors DocumentLibraryTree)
@@ -62,7 +66,7 @@ type Props = {
   expanded: string[];
   setExpanded: (ids: string[]) => void;
   selectedFolder: string | null;
-  setSelectedFolder: (full: string) => void;
+  setSelectedFolder: (full: string | null) => void;
   getChildren: (n: TagNode) => TagNode[];
   resources: Resource[];
   onPreview?: (p: Resource) => void;
@@ -92,6 +96,7 @@ export function ResourceLibraryTree({
   selectedItems = {},
   setSelectedItems,
 }: Props) {
+  const { t } = useTranslation();
   /** Select/unselect all resources in a folder’s subtree (by that folder’s primary tag). */
   const toggleFolderSelection = React.useCallback(
     (node: TagNode) => {
@@ -123,6 +128,14 @@ export function ResourceLibraryTree({
     },
     [resources, getChildren, setSelectedItems],
   );
+
+  const [shareTarget, setShareTarget] = React.useState<TagNode | null>(null);
+
+  const { feature_flags } = getConfig();
+
+  const handleCloseShareDialog = React.useCallback(() => {
+    setShareTarget(null);
+  }, []);
 
   /** Recursive renderer. */
   const renderTree = (n: TagNode): React.ReactNode[] =>
@@ -187,6 +200,19 @@ export function ResourceLibraryTree({
 
               {/* Right: delete (only when selected + empty + real tag + handler) */}
               <Box sx={{ ml: "auto", display: "flex", alignItems: "center" }}>
+                {feature_flags.is_rebac_enabled && (
+                  <Tooltip title={t("documentLibraryTree.shareFolder")} enterTouchDelay={10}>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (hereTag) setShareTarget(c);
+                      }}
+                    >
+                      <PersonAddAltIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
                 <Tooltip title="Delete folder">
                   <IconButton
                     size="small"
@@ -253,15 +279,22 @@ export function ResourceLibraryTree({
     });
 
   return (
-    <SimpleTreeView
-      sx={{
-        "& .MuiTreeItem-content .MuiTreeItem-label": { flex: 1, width: "100%", overflow: "visible" },
-      }}
-      expandedItems={expanded}
-      onExpandedItemsChange={(_, ids) => setExpanded(ids as string[])}
-      slots={{ expandIcon: KeyboardArrowRightIcon, collapseIcon: KeyboardArrowDownIcon }}
-    >
-      {renderTree(tree)}
-    </SimpleTreeView>
+    <>
+      <SimpleTreeView
+        sx={{
+          "& .MuiTreeItem-content .MuiTreeItem-label": { flex: 1, width: "100%", overflow: "visible" },
+        }}
+        expandedItems={expanded}
+        onExpandedItemsChange={(_, ids) => setExpanded(ids as string[])}
+        slots={{ expandIcon: KeyboardArrowRightIcon, collapseIcon: KeyboardArrowDownIcon }}
+      >
+        {renderTree(tree)}
+      </SimpleTreeView>
+      <DocumentLibraryShareDialog
+        open={!!shareTarget}
+        tag={shareTarget?.tagsHere?.[0]}
+        onClose={handleCloseShareDialog}
+      />
+    </>
   );
 }

@@ -54,7 +54,7 @@ type document
     define process: update from parent
 
 
-type resources
+type resource
   relations
     define parent: [tag]
 

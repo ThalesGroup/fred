@@ -910,6 +910,32 @@
       }
     }
   },
+  "rebac": {
+    "backfill": {
+      "title": "Backfill ReBAC",
+      "subtitle": "Reconstruit les relations propriétaire et tag-vers-document après activation de ReBAC.",
+      "description": "Utilisez-le une fois après avoir activé ReBAC sur un déploiement existant afin de restaurer l'accès aux bibliothèques et à leurs documents.",
+      "run": "Lancer le backfill",
+      "running": "Exécution...",
+      "success": {
+        "title": "Relations ReBAC reconstruites",
+        "detail": "{{owners}} relations propriétaire et {{parents}} relations tag->doc créées."
+      },
+      "disabled": {
+        "title": "ReBAC désactivé",
+        "detail": "ReBAC est désactivé ; aucune reconstruction nécessaire."
+      },
+      "error": {
+        "title": "Échec du backfill"
+      },
+      "stats": {
+        "tags": "Tags traités",
+        "docs": "Documents analysés",
+        "ownerRelations": "Relations propriétaire créées",
+        "parentRelations": "Relations tag->doc créées"
+      }
+    }
+  },
   "app": {
     "loading": {
       "router": "Fred démarre...",
