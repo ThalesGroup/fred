@@ -52,3 +52,25 @@ type document
     # Can process document: for RAG or SQL data extraction
     # -> must be able to manage parent tag (at least editor)
     define process: update from parent
+
+
+type resources
+  relations
+    define parent: [tag]
+
+    # --- Permissions (computed relations) ---
+    # Can read resources: see its content
+    # -> must be able to read parent tag (at least viewer)
+    define read: read from parent
+
+    # Can update resources: change its name, content...
+    # -> must be able to manage parent tag (at least editor)
+    define update: update from parent
+
+    # Can delete resources
+    # -> must be able to manage parent tag (at least editor)
+    define delete: update from parent
+
+    # Can share resources: add/remove editors/viewers
+    # -> must be owner
+    define share: share from parent
