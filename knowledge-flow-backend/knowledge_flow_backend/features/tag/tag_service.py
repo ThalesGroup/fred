@@ -151,9 +151,7 @@ class TagService:
 
         # Link to parent tag in ReBAC when the new tag is nested.
         if norm_path:
-            parent_tag = self._tag_store.get_by_owner_type_full_path(
-                owner_id=user.uid, tag_type=tag_data.type, full_path=norm_path
-            )
+            parent_tag = self._tag_store.get_by_owner_type_full_path(owner_id=user.uid, tag_type=tag_data.type, full_path=norm_path)
             if parent_tag:
                 await self.rebac.add_relation(
                     Relation(
