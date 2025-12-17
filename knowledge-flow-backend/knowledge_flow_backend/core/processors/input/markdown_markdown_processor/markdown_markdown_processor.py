@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# processors/sample_markdown_processor.py
-
 from pathlib import Path
 
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
