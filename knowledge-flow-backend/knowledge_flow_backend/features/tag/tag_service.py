@@ -32,6 +32,7 @@ from fred_core import (
 )
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.core.stores.resources.base_resource_store import ResourceNotFoundError
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError
 from knowledge_flow_backend.features.groups.groups_service import get_groups_by_ids
 from knowledge_flow_backend.features.groups.groups_structures import GroupSummary
@@ -295,6 +296,7 @@ class TagService:
                 "rebac_enabled": False,
                 "tags_seen": 0,
                 "documents_seen": 0,
+                "resources_seen": 0,
                 "tag_owner_relations_created": 0,
                 "tag_parent_relations_created": 0,
             }
@@ -303,9 +305,11 @@ class TagService:
         tag_owner_relations_created = 0
         tag_parent_relations_created = 0
         documents_seen = 0
+        resources_seen = 0
 
         # Access underlying stores directly to avoid permission-filtered queries during migration.
         metadata_store = self.document_metadata_service.metadata_store
+        resource_store = self.resource_service._resource_store
 
         for tag in tags:
             try:
@@ -320,37 +324,61 @@ class TagService:
             except Exception as exc:
                 logger.warning("Failed to backfill owner relation for tag %s: %s", tag.id, exc)
 
-            # Only tags that represent document libraries need tag->document relations today.
-            if tag.type != TagType.DOCUMENT:
-                continue
-
-            try:
-                docs = metadata_store.get_metadata_in_tag(tag.id)
-            except Exception as exc:
-                logger.warning("Failed to list documents for tag %s during backfill: %s", tag.id, exc)
-                continue
-
-            for doc in docs:
-                doc_uid = getattr(doc, "document_uid", None) or getattr(doc.identity, "document_uid", None)
-                if not doc_uid:
-                    continue
-                documents_seen += 1
+            # Tags drive parent relations depending on their type (documents vs other resources)
+            if tag.type == TagType.DOCUMENT:
                 try:
-                    await self.rebac.add_relation(
-                        Relation(
-                            subject=RebacReference(type=Resource.TAGS, id=tag.id),
-                            relation=RelationType.PARENT,
-                            resource=RebacReference(type=Resource.DOCUMENTS, id=doc_uid),
-                        )
-                    )
-                    tag_parent_relations_created += 1
+                    docs = metadata_store.get_metadata_in_tag(tag.id)
                 except Exception as exc:
-                    logger.warning("Failed to backfill tag->document relation for tag %s doc %s: %s", tag.id, doc_uid, exc)
+                    logger.warning("Failed to list documents for tag %s during backfill: %s", tag.id, exc)
+                    continue
+
+                for doc in docs:
+                    doc_uid = getattr(doc, "document_uid", None) or getattr(doc.identity, "document_uid", None)
+                    if not doc_uid:
+                        continue
+                    documents_seen += 1
+                    try:
+                        await self.rebac.add_relation(
+                            Relation(
+                                subject=RebacReference(type=Resource.TAGS, id=tag.id),
+                                relation=RelationType.PARENT,
+                                resource=RebacReference(type=Resource.DOCUMENTS, id=doc_uid),
+                            )
+                        )
+                        tag_parent_relations_created += 1
+                    except Exception as exc:
+                        logger.warning("Failed to backfill tag->document relation for tag %s doc %s: %s", tag.id, doc_uid, exc)
+            elif tag.type == TagType.CHAT_CONTEXT:
+                try:
+                    resources = resource_store.get_resources_in_tag(tag.id)
+                except ResourceNotFoundError:
+                    resources = []
+                except Exception as exc:
+                    logger.warning("Failed to list resources for tag %s during backfill: %s", tag.id, exc)
+                    continue
+
+                for res in resources:
+                    resources_seen += 1
+                    try:
+                        await self.rebac.add_relation(
+                            Relation(
+                                subject=RebacReference(type=Resource.TAGS, id=tag.id),
+                                relation=RelationType.PARENT,
+                                resource=RebacReference(type=Resource.RESOURCES, id=res.id),
+                            )
+                        )
+                        tag_parent_relations_created += 1
+                    except Exception as exc:
+                        logger.warning("Failed to backfill tag->resource relation for tag %s resource %s: %s", tag.id, res.id, exc)
+            else:
+                # No parent relations to backfill for other tag types.
+                continue
 
         return {
             "rebac_enabled": True,
             "tags_seen": len(tags),
             "documents_seen": documents_seen,
+            "resources_seen": resources_seen,
             "tag_owner_relations_created": tag_owner_relations_created,
             "tag_parent_relations_created": tag_parent_relations_created,
         }
