@@ -1,0 +1,104 @@
+# Richard vs Rico — Agentic Duel in Fred
+
+In the Fred repository (an open agentic platform developed by Thales), the agentic-backend is the core of the AI capabilities. It is a Python server orchestrating intelligent agents using FastAPI and LangGraph, capable of reasoning, interacting with documents, and generating answers from external knowledge.
+
+Among these agents, there are classic RAG (Retrieval-Augmented Generation) mechanisms — such as Rico — as well as more advanced concepts explored with Richard, combining graphiti / graphrag and OpenAI.
+
+## Contextualizing RAG in Fred: what does agentic RAG mean here?
+
+In Fred, a RAG agent is not just a rigid pipeline query → retrieval → generation as in traditional RAG systems. Instead, it is an agentic workflow in which:
+
+The agent decides when to trigger information retrieval.
+
+It can evaluate the quality of its results (both documents and answers).
+
+It can rewrite queries, rerank results, or re-launch retrieval if results are not satisfactory.
+
+Each step is orchestrated as a state graph using LangGraph.
+Fred
+
+This approach is inspired by Agentic RAG, a paradigm in which the agent actively makes decisions throughout the RAG process, rather than relying on a static RAG pipeline.
+
+## Rico: the reflective and pragmatic RAG agent
+
+Rico is Fred’s document expert agent. In simple terms:
+
+Objective: answer precise questions using documents from the Knowledge Flow.
+
+Approach: first retrieves relevant documents, then grades and reranks them, generates an answer, and finally performs self-evaluation.
+
+It implements a loop inspired by Self-RAG, where, if the answer is deemed insufficient, the query is rewritten and the process is retried.
+
+The internal architecture of a RAG agent in Fred (i.e., retrieval → grading → generation → answer grading → retry) is expressed with LangGraph, making Rico modular, declarative, and observable.
+
+What Rico does particularly well:
+
+Pre-filtering and reranking documents to reduce noise.
+
+Self-evaluation of answers, capable of triggering multiple cycles until a satisfactory response is produced.
+
+Decision traceability (useful for auditability and metrics).
+
+## Richard: the graph-based agent (GraphRAG / Graphiti + OpenAI)
+
+Richard explores another dimension of RAG:
+
+Instead of considering only text snippets, Richard structures knowledge as semantic graphs.
+
+This graph links entities, concepts, and passages, and can be exploited for logical multi-hop reasoning (e.g., “How is X related to Y through Z?”).
+
+This type of pipeline corresponds to what is commonly referred to as GraphRAG or graph-centric RAG, where structured relationships enrich both retrieval and generation.
+
+The core idea behind graphrag / graphiti:
+
+Using graph structures to go beyond simple vector search and capture complex relationships between entities and concepts, improving contextual relevance and reducing hallucinations.
+
+## Conceptual comparison — Rico vs Richard
+
+| Criterion | Rico (Reflective Self-RAG) | Richard (Graph-centric / GraphRAG) |
+| ------------------------------ | ------------------------------------------------------- | --------------------------------------------------------------- |
+| Type of RAG | Agentic RAG based on re-retrieval, reranking, grading | GraphRAG — RAG enriched with knowledge graphs |
+| Agentic decision-making | Yes, autonomous reflective loop | Yes, with graph traversal for contextualization |
+| Knowledge management | Vector store + grading + retrieval | Entity graphs with explicit relationships |
+| Best suited for | Precise, robust factual answers | Multi-step reasoning / conceptual links |
+| Explainability | Traceability of reranking and phases | Explicit graph structures linking concepts |
+| Complexity | Moderate | High (graph construction and exploitation) |
+
+In practice:
+
+- Rico is more pragmatic and robust for questions grounded in large document collections (PDFs, internal guides, procedures, etc.).
+
+- Richard is better suited for complex queries requiring a deep understanding of relationships between elements in the knowledge base.
+
+# Empirical evaluation in Fred: Richard vs Rico
+
+Beyond architectural differences, Richard (GraphRAG) and Rico (reflective RAG with reranking) were evaluated through a series of comparative tests, directly aligned with the use cases of Fred’s agentic backend.
+
+Both agents were submitted to the same queries, on the same corpus, with evaluation based on two key metrics:
+
+- Faithfulness score: measures how faithful the answer is to the retrieved sources.
+
+- Answer relevancy score: measures the overall relevance of the answer with respect to the question.
+
+Each test directly compares GraphRAG vs RAG, with a win / tie / loss verdict from the perspective of GraphRAG.
+
+| Metric | GraphRAG (Richard) | RAG (Rico) |
+| -------------------------- | ------------------ | ---------- |
+| Faithfulness score | 0.7945 | 0.7419 |
+| Answer relevancy score | 0.8781 | 0.8127 |
+
+## Experimental results — GraphRAG vs RAG comparison
+
+The performance of Richard (GraphRAG) and Rico (reflective RAG) was evaluated on a set of 47 comparative tests, conducted on the same corpus with identical queries.
+The results are analyzed from the perspective of GraphRAG, using win / tie / loss verdicts.
+
+| Metric | GraphRAG wins | Ties | Losses | Weighted win rate |
+| -------------------------- | ------------------ | -------- | -------- | ---------------- |
+| Faithfulness score | 20 | 14 | 13 | 57.4 % |
+| Answer relevancy score | 17 | 21 | 9 | 58.5 % |
+
+Across both evaluated metrics, GraphRAG achieves a win rate above 57%, indicating a systematic advantage over a classic RAG enriched with reranking and self-evaluation.
+
+The faithfulness score shows that GraphRAG more frequently produces answers better grounded in the sources, suggesting reduced drift associated with purely text-based context aggregation.
+
+The answer relevancy score confirms a better alignment between the generated answer and the intent of the question, particularly for queries involving multiple documents or implicit relationships.
