@@ -149,6 +149,28 @@ class TagService:
 
         await self.rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.TAGS, resource_id=tag.id)
 
+        # Link to parent tag in ReBAC when the new tag is nested.
+        if norm_path:
+            parent_tag = self._tag_store.get_by_owner_type_full_path(
+                owner_id=user.uid, tag_type=tag_data.type, full_path=norm_path
+            )
+            if parent_tag:
+                await self.rebac.add_relation(
+                    Relation(
+                        subject=RebacReference(type=Resource.TAGS, id=parent_tag.id),
+                        relation=RelationType.PARENT,
+                        resource=RebacReference(type=Resource.TAGS, id=tag.id),
+                    )
+                )
+            else:
+                logger.warning(
+                    "[TAGS] Parent tag not found for full_path=%s (owner=%s, type=%s) during creation of %s",
+                    norm_path,
+                    user.uid,
+                    tag_data.type,
+                    tag.id,
+                )
+
         return TagWithItemsId.from_tag(tag, [])
 
     @authorize(Action.UPDATE, Resource.TAGS)
