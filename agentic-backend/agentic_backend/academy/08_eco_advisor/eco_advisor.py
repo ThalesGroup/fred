@@ -65,9 +65,31 @@ logger = logging.getLogger(__name__)
 MAX_TOOL_MESSAGE_CHARS = int(os.getenv("ECO_MAX_TOOL_MESSAGE_CHARS", "4000"))
 RECENT_MESSAGES_WINDOW = int(os.getenv("ECO_RECENT_MESSAGES", "12"))
 MAX_MAP_FEATURES = int(os.getenv("ECO_MAX_MAP_FEATURES", "60"))
+MAP_STICKINESS_TURNS = max(0, int(os.getenv("ECO_MAP_STICKINESS_TURNS", "2")))
 MAX_DOC_SNIPPETS = max(0, int(os.getenv("ECO_MAX_DOC_SNIPPETS", "4")))
 DOC_SNIPPET_CHAR_LIMIT = max(120, int(os.getenv("ECO_DOC_SNIPPET_CHARS", "600")))
 DOC_SEARCH_TOP_K = max(MAX_DOC_SNIPPETS, int(os.getenv("ECO_DOC_TOP_K", "6")))
+MAP_REQUEST_KEYWORDS = (
+    "carte",
+    "cartes",
+    "cartographie",
+    "carto",
+    "map",
+    "maps",
+    "plan",
+    "plans",
+    "geoloc",
+    "géolocalise",
+    "geolocalise",
+    "geolocate",
+    "voir sur une carte",
+    "montre la carte",
+    "montrez la carte",
+    "affiche la carte",
+    "afficher la carte",
+    "show me the map",
+    "show the map",
+)
 
 DatabaseContextPayload = Union[List[Dict[str, Any]], Dict[str, Any], str, None]
 
@@ -76,6 +98,11 @@ class DocumentContextPayload(TypedDict, total=False):
     query: str
     hits: List[Dict[str, Any]]
     snippets: List[Dict[str, Any]]
+
+
+class GeoContext(TypedDict, total=False):
+    geo_part: Dict[str, Any]
+    remaining_turns: int
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +179,7 @@ class EcoState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], add_messages]
     database_context: DatabaseContextPayload
     document_context: DocumentContextPayload
+    geo_context: GeoContext
 
 
 @expose_runtime_source("agent.EcoAdvisor")
@@ -307,7 +335,7 @@ class EcoAdvisor(AgentFlow):
     # Prompt + document context helpers
     # -----------------------------------------------------------------------
     async def _prepare_system_prompt(
-        self, state: EcoState
+        self, state: EcoState, *, map_requested: bool = False
     ) -> tuple[str, DatabaseContextPayload, DocumentContextPayload]:
         """Build the system prompt once (datasets + document snippets)."""
 
@@ -335,6 +363,21 @@ class EcoAdvisor(AgentFlow):
 
         if doc_block:
             tpl += f"\n\n{doc_block}"
+
+        if map_requested:
+            geo_ctx = cast(Optional[GeoContext], state.get("geo_context"))
+            has_cached_geo = bool(
+                isinstance(geo_ctx, dict) and isinstance(geo_ctx.get("geo_part"), dict)
+            )
+            instruction_lines = [
+                "The latest user turn explicitly asked to see a map.",
+                "Reuse the cached GeoPart if it exists, otherwise call the geo MCP tools to build one.",
+            ]
+            if not has_cached_geo:
+                instruction_lines.append(
+                    "There is no cached map yet, so plan on invoking the geo MCP."
+                )
+            tpl += "\n\n" + " ".join(instruction_lines)
 
         return self.render(tpl), database_context, document_context
 
@@ -483,6 +526,13 @@ class EcoAdvisor(AgentFlow):
                     return text
         return None
 
+    def _user_requests_map(self, state: EcoState) -> bool:
+        question = self._extract_latest_user_question(state.get("messages") or [])
+        if not question:
+            return False
+        normalized = question.casefold()
+        return any(keyword in normalized for keyword in MAP_REQUEST_KEYWORDS)
+
     @staticmethod
     def _message_to_text(message: HumanMessage) -> str:
         content = message.content
@@ -556,12 +606,7 @@ class EcoAdvisor(AgentFlow):
         if snippet_hits:
             attach_sources_to_llm_response(response, snippet_hits)
 
-    def _attach_geo_part(
-        self, response: AnyMessage, tool_payloads: Dict[str, Any]
-    ) -> None:
-        geo_part = self._maybe_build_geo_part_from_tools(tool_payloads)
-        if not geo_part:
-            return
+    def _attach_geo_part(self, response: AnyMessage, geo_part: GeoPart) -> None:
         add_kwargs = getattr(response, "additional_kwargs", None)
         if add_kwargs is None or not isinstance(add_kwargs, dict):
             add_kwargs = {}
@@ -571,6 +616,38 @@ class EcoAdvisor(AgentFlow):
             fred_parts = []
         fred_parts.append(geo_part.model_dump())
         add_kwargs["fred_parts"] = fred_parts
+
+    def _remember_geo_part(self, state: EcoState, geo_part: GeoPart) -> None:
+        state["geo_context"] = {
+            "geo_part": geo_part.model_dump(),
+            "remaining_turns": MAP_STICKINESS_TURNS,
+        }
+
+    def _consume_cached_geo_part(
+        self, state: EcoState, *, force: bool = False
+    ) -> Optional[GeoPart]:
+        geo_ctx = cast(Optional[GeoContext], state.get("geo_context"))
+        if not geo_ctx:
+            return None
+        geo_dict = geo_ctx.get("geo_part")
+        if not isinstance(geo_dict, dict):
+            state.pop("geo_context", None)
+            return None
+        remaining = int(geo_ctx.get("remaining_turns", 0) or 0)
+        if force:
+            refresh = max(MAP_STICKINESS_TURNS, 1)
+            if remaining < refresh:
+                remaining = refresh
+        elif remaining <= 0:
+            return None
+        if remaining <= 0:
+            return None
+        geo_ctx["remaining_turns"] = max(remaining - 1, 0)
+        try:
+            return GeoPart.model_validate(geo_dict)
+        except Exception:
+            state.pop("geo_context", None)
+            return None
 
     async def _handle_reasoner_failure(
         self, state: EcoState, document_context: DocumentContextPayload
@@ -587,6 +664,7 @@ class EcoAdvisor(AgentFlow):
             "messages": [fallback],
             "database_context": [],
             "document_context": document_context,
+            "geo_context": state.get("geo_context"),
         }
 
     # -----------------------------------------------------------------------
@@ -848,9 +926,12 @@ class EcoAdvisor(AgentFlow):
                 "EcoAdvisor: model is not initialized. Call async_init() first."
             )
 
-        system_text, database_context, document_context = await self._prepare_system_prompt(
-            state
-        )
+        wants_map = self._user_requests_map(state)
+        (
+            system_text,
+            database_context,
+            document_context,
+        ) = await self._prepare_system_prompt(state, map_requested=wants_map)
 
         # 3) Construire l'historique de conversation minimal
         recent_history = self.recent_messages(
@@ -870,12 +951,22 @@ class EcoAdvisor(AgentFlow):
                 tool_payloads=tool_payloads,
                 document_context=document_context,
             )
-            self._attach_geo_part(response, tool_payloads)
+            geo_part = self._maybe_build_geo_part_from_tools(tool_payloads)
+            if geo_part:
+                self._attach_geo_part(response, geo_part)
+                self._remember_geo_part(state, geo_part)
+            else:
+                cached_geo_part = self._consume_cached_geo_part(
+                    state, force=wants_map
+                )
+                if cached_geo_part:
+                    self._attach_geo_part(response, cached_geo_part)
 
             return {
                 "messages": [response],
                 "database_context": database_context,
                 "document_context": document_context,
+                "geo_context": state.get("geo_context"),
             }
 
         except Exception:
