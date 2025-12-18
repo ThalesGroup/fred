@@ -88,7 +88,6 @@ class VectorizationProcessor(BaseOutputProcessor):
         doc_uid = None
         chunks_count = None
         vectors_count = None
-        bytes_in = None
 
         # Try to grab file size (bytes_in) early; keep best-effort
         try:
@@ -116,7 +115,6 @@ class VectorizationProcessor(BaseOutputProcessor):
             # 1.b) Summarize ONCE per doc (size-aware; non-blocking)
             if self.context.is_summary_generation_enabled():
                 abstract: Optional[str]
-                keywords = None
                 abstract, keywords = self.smart_summarizer.summarize_document(document)
 
                 if abstract or keywords:

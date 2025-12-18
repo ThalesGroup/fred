@@ -44,18 +44,35 @@
   },
   "graphHub": {
     "panelTitle": "Actions",
+    "trainModelSection": "Train Model",
+    "selectLibrary": "Reference Library",
+    "showGraphSection": "Show Graph",
+    "selectLibraries": "Libraries",
     "selectTag": "Select library",
     "tag": "Library",
     "umapError": "Error with projection",
-    "colorByCluster": "Color groups",
-    "showLinks": "Show links",
-    "training": "Training…",
+    "modelNotFoundError": "Model not found",
+    "modelNotFoundDetail": "The UMAP model has not been trained yet. Please train the model first.",
+    "training": "Training...",
     "trainModel": "Train model",
     "refreshGraph": "Show graph",
+    "deletionError": "Error deleting chunks",
+    "deletionErrorDetail": "{{failed}} out of {{total}} chunks could not be deleted",
     "selection": {
       "title": "Selection"
     },
     "deleteSelection": "Delete selection"
+  },
+  "graph3DView": {
+    "toggleLinks": "Show/hide links",
+    "colorMode": {
+      "title": "Coloring mode",
+      "none": "No coloring",
+      "3d": "3D coloring",
+      "vector": "Vector coloring",
+      "distance": "Distance coloring"
+    },
+    "testPromptPlaceholder": "Enter a test prompt..."
   },
   "resource": {
     "kind": {
