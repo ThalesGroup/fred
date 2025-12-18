@@ -99,9 +99,20 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
           console.warn("[useDocumentCommands] removeFromLibrary: 404 Not Found, ignoring", e);
           return;
         }
-          showError?.({
-          summary: t("validation.error") || "Error",
-          detail: e?.data?.detail || e?.message || "Failed to remove from library.",
+        const isForbidden = status === 403;
+
+        showError?.({
+          summary:
+            (isForbidden && (t("documentLibrary.removeForbiddenSummary") || "Not allowed")) ||
+            t("validation.error") ||
+            "Error",
+          detail:
+            (isForbidden &&
+              (t("documentLibrary.removeForbiddenDetail", { folder: tag.name }) ||
+                "You do not have permission to remove items from this library.")) ||
+            e?.data?.detail ||
+            e?.message ||
+            "Failed to remove from library.",
         });
       }
     },

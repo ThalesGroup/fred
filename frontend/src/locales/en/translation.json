@@ -622,6 +622,8 @@
     "removeError": "Remove Failed",
     "removeErrorGeneric": "Failed to remove documents from library",
     "removeFromLibrary": "Remove from library",
+    "removeForbiddenSummary": "Not allowed",
+    "removeForbiddenDetail": "Only library owners can remove items from the \"{{folder}}\" library.",
     "emptyLibraryTitle": "No documents in this library",
     "emptyLibraryDescription": "This library is empty. Add your first documents to make them available to your AI assistants.",
     "uploadFirstDocument": "Add your first document",
@@ -685,6 +687,7 @@
     "addAccessTab": "Add access",
     "currentAccessTab": "Current access",
     "shareError": "We couldn't apply sharing settings. Please try again.",
+    "shareForbidden": "You do not have permission to share the \"{{name}}\" library.",
     "shareButton": "Share",
     "searchPlaceholder": "Search users or groups…",
     "usersToggle": "Users",
@@ -727,6 +730,10 @@
     "expandAll": "Expand all",
     "folderDeleteSuccess": "Folder deleted",
     "folderDeleteDetail": "The folder « {{name}} » has been deleted.",
+    "folderDeleteForbiddenSummary": "Not allowed",
+    "folderDeleteForbiddenDetail": "Only a library owner can delete the « {{name}} » library.",
+    "removeForbiddenSummary": "Not allowed",
+    "removeForbiddenDetail": "Only library owners can remove items from the « {{folder}} » library.",
     "searchPlaceholder": "Search a {{typeOne}}",
     "importDrawerTitle": "Import {{typeOne}}",
     "dropFiles": "Drop your {{typePlural}} here",
@@ -749,7 +756,8 @@
     "shareFolder": "Share folder",
     "shareFolderWithName": "Share \"{{name}}\"",
     "deleteFolder": "Delete folder",
-    "deleteFolderDisabled": "A library should be empty to be deleted"
+    "deleteFolderDisabled": "A library should be empty to be deleted",
+    "ownerTooltip": "Owner: {{name}}"
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",
@@ -924,6 +932,32 @@
       "local_stdio": {
         "name": "Local stdio MCP",
         "description": "Run a local MCP server over stdio (process-based tools)"
+      }
+    }
+  },
+  "rebac": {
+    "backfill": {
+      "title": "ReBAC Backfill",
+      "subtitle": "Rebuild owner and tag-to-document relations after enabling ReBAC.",
+      "description": "Use this once after turning on ReBAC in an existing deployment to restore access to libraries and their documents.",
+      "run": "Run backfill",
+      "running": "Running...",
+      "success": {
+        "title": "ReBAC relations rebuilt",
+        "detail": "{{owners}} owner relations and {{parents}} tag→doc relations created."
+      },
+      "disabled": {
+        "title": "ReBAC disabled",
+        "detail": "ReBAC is turned off; nothing to backfill."
+      },
+      "error": {
+        "title": "Backfill failed"
+      },
+      "stats": {
+        "tags": "Tags processed",
+        "docs": "Documents scanned",
+        "ownerRelations": "Owner relations created",
+        "parentRelations": "Tag→doc relations created"
       }
     }
   },
