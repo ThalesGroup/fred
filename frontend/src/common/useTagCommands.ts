@@ -51,9 +51,21 @@ export function useTagCommands({ refetchTags, refetchResources, refetchDocs }: R
         // 💡 CRUCIAL CHANGE: Return a value or use a signal if needed
         return true;
       } catch (e: any) {
+        const status = e?.status ?? e?.originalStatus ?? e?.data?.status;
+        const isForbidden = status === 403;
+        const detailFromApi = e?.data?.detail || e?.message;
+
         showError?.({
-          summary: t("validation.error") || "Error",
-          detail: e?.data?.detail || e?.message || "Failed to delete folder.",
+          summary:
+            (isForbidden && (t("resourceLibrary.folderDeleteForbiddenSummary") || "Not allowed")) ||
+            t("validation.error") ||
+            "Error",
+          detail:
+            (isForbidden &&
+              (t("resourceLibrary.folderDeleteForbiddenDetail", { name: tag.name }) ||
+                "You do not have permission to delete this library.")) ||
+            detailFromApi ||
+            "Failed to delete folder.",
         });
         throw e;
       }

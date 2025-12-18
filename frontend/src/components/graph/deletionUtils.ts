@@ -13,7 +13,7 @@
 // limitations under the License.
 
 export const buildChunkToDocMap = (
-  // Accept both flat points ({ chunk_uid, document_uid }) and GraphPoints with metadata
+  // Accept both flat points ({ chunk_id, document_id }) and GraphPoints with metadata
   points: Array<
     | { chunk_uid?: string | number | null; document_uid?: string | number | null }
     | { metadata?: { chunk_uid?: string | number | null; document_uid?: string | number | null } | null }

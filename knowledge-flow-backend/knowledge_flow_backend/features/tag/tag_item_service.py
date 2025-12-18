@@ -48,14 +48,14 @@ class ResourceTagItemService(TagItemService):
         self.resource_service = ResourceService()
 
     async def retrieve_items_ids_for_tag(self, user: KeycloakUser, tag_id: str) -> list[str]:
-        all_resources = self.resource_service.list_resources_by_kind(kind=self.resource_kind, user=user)
+        all_resources = await self.resource_service.list_resources_by_kind(kind=self.resource_kind, user=user)
         return [res.id for res in all_resources if tag_id in res.library_tags]
 
     async def add_tag_id_to_item(self, user: KeycloakUser, item_id: str, new_tag_id: str) -> None:
-        self.resource_service.add_tag_to_resource(user, item_id, new_tag_id)
+        await self.resource_service.add_tag_to_resource(user, item_id, new_tag_id)
 
     async def remove_tag_id_from_item(self, user: KeycloakUser, item_id: str, tag_id_to_remove: str) -> None:
-        self.resource_service.remove_tag_from_resource(user, item_id, tag_id_to_remove)
+        await self.resource_service.remove_tag_from_resource(user, item_id, tag_id_to_remove)
 
 
 def get_specific_tag_item_service(tag_type: TagType) -> TagItemService:

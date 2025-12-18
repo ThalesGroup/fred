@@ -82,7 +82,7 @@ class ResourceController:
             user: KeycloakUser = Depends(get_current_user),
         ) -> Resource:
             try:
-                return self.service.create(library_tag_id=library_tag_id, payload=payload, user=user)
+                return await self.service.create(library_tag_id=library_tag_id, payload=payload, user=user)
             except Exception as e:
                 raise handle_exception(e)
 
@@ -99,7 +99,7 @@ class ResourceController:
             user: KeycloakUser = Depends(get_current_user),
         ) -> Resource:
             try:
-                return self.service.update(resource_id=resource_id, payload=payload, user=user)
+                return await self.service.update(resource_id=resource_id, payload=payload, user=user)
             except Exception as e:
                 raise handle_exception(e)
 
@@ -115,7 +115,7 @@ class ResourceController:
             user: KeycloakUser = Depends(get_current_user),
         ) -> Resource:
             try:
-                return self.service.get(resource_id=resource_id, user=user)
+                return await self.service.get(resource_id=resource_id, user=user)
             except Exception as e:
                 raise handle_exception(e)
 
@@ -131,7 +131,7 @@ class ResourceController:
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[Resource]:
             try:
-                return self.service.list_resources_by_kind(kind=kind, user=user)
+                return await self.service.list_resources_by_kind(kind=kind, user=user)
             except Exception as e:
                 raise handle_exception(e)
 
@@ -145,6 +145,6 @@ class ResourceController:
             user: KeycloakUser = Depends(get_current_user),
         ) -> None:
             try:
-                self.service.delete(resource_id=resource_id, user=user)
+                await self.service.delete(resource_id=resource_id, user=user)
             except Exception as e:
                 raise handle_exception(e)

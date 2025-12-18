@@ -31,6 +31,7 @@ import {
   DocumentMetadata,
   TagWithItemsId,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
+  useListUsersKnowledgeFlowV1UsersGetQuery,
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
@@ -68,6 +69,16 @@ export default function DocumentLibraryList() {
   const canDeleteDocument = can("document", "delete");
   const canDeleteFolder = can("tag", "delete");
   const canCreateTag = can("tag", "create");
+  const { data: users = [] } = useListUsersKnowledgeFlowV1UsersGetQuery();
+  const ownerNamesById = React.useMemo(() => {
+    const m: Record<string, string> = {};
+    users.forEach((u) => {
+      const fullName = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
+      const name = fullName || u.username || "";
+      if (name) m[u.id] = name;
+    });
+    return m;
+  }, [users]);
 
   /* ---------------- Data fetching ---------------- */
   const {
@@ -402,6 +413,7 @@ export default function DocumentLibraryList() {
               onDeleteFolder={handleDeleteFolder}
               canDeleteDocument={canDeleteDocument}
               canDeleteFolder={canDeleteFolder}
+              ownerNamesById={ownerNamesById}
             />
           </Box>
         </Card>
