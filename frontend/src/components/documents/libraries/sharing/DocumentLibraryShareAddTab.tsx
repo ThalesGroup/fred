@@ -78,7 +78,13 @@ export function DocumentLibraryShareAddTab({ tag, onShared }: DocumentLibrarySha
       setAudience("user");
       onShared?.();
     } catch (error) {
-      let message = t("documentLibraryShareDialog.shareError");
+      const status = (error as any)?.status ?? (error as any)?.originalStatus ?? (error as any)?.data?.status;
+      const isForbidden = status === 403;
+
+      let message =
+        (isForbidden && t("documentLibraryShareDialog.shareForbidden", { name: tag.name })) ||
+        t("documentLibraryShareDialog.shareError");
+
       if (error && typeof error === "object" && "data" in error) {
         const data = (error as { data?: unknown }).data;
         if (data && typeof data === "object" && "detail" in data) {

@@ -12,17 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Button, CircularProgress, FormControl, IconButton, InputLabel, MenuItem, Paper, Select, SelectChangeEvent, Typography, Switch, FormControlLabel, Divider } from "@mui/material";
+import {
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  FormControl,
+  IconButton,
+  InputLabel,
+  ListItemText,
+  MenuItem,
+  OutlinedInput,
+  Paper,
+  Select,
+  SelectChangeEvent,
+  Typography,
+  Divider,
+} from "@mui/material";
 import { useTranslation } from "react-i18next";
-import { useContext, useRef, useState } from "react";
-import AnalyticsIcon from '@mui/icons-material/Analytics';
-import RefreshIcon from '@mui/icons-material/Refresh';
+import { useContext, useEffect, useRef, useState } from "react";
+import AnalyticsIcon from "@mui/icons-material/Analytics";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { useLocalStorageState } from "../hooks/useLocalStorageState.ts";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import Graph3DView from "../components/graph/Graph3DView.tsx";
 import {
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
-  useProjectKnowledgeFlowV1ModelsUmapTagIdProjectPostMutation,
+  useProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostMutation,
   useDeleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDeleteMutation,
   useTrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostMutation,
 } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -30,6 +46,7 @@ import { ApplicationContext } from "../app/ApplicationContextProvider.tsx";
 import { usePointsSync } from "../components/graph/graphPoints";
 import { buildChunkToDocMap, filterDeletableIds, removePointsByChunkIds } from "../components/graph/deletionUtils";
 import SelectionPanel from "../components/graph/SelectionPanel";
+import { useToast } from "../components/ToastProvider";
 
 const PANEL_W = { xs: 300, sm: 340, md: 360 };
 
@@ -38,6 +55,7 @@ type PanelContentType = "actions" | null;
 export default function GraphHub() {
   const { darkMode } = useContext(ApplicationContext);
   const { t } = useTranslation();
+  const { showError } = useToast();
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const [panelContentType, setPanelContentType] = useLocalStorageState<PanelContentType>(
@@ -56,29 +74,95 @@ export default function GraphHub() {
   // Tags for documents
   const { data: tagsData } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" });
   const [selectedTagId, setSelectedTagId] = useState<string | "">("");
-  const handleSelectTag = (e: SelectChangeEvent<string>) => setSelectedTagId(e.target.value as string);
-
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  
   // UMAP projection for a whole tag
-  const [projectUmap, { data: projection, isLoading: isProjecting, error: projectError }] =
-    useProjectKnowledgeFlowV1ModelsUmapTagIdProjectPostMutation();
+  const [projectUmap, { data: projection, isLoading: isProjecting, error: projectError, reset: resetProjection }] =
+    useProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostMutation();
+
+  // Selected nodes from the 3D graph
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Local points sync and fit control
+  const { points, setPoints, fitVersion } = usePointsSync(projection?.graph_points, isProjecting);
+
+  const handleSelectTag = (e: SelectChangeEvent<string>) => {
+    setSelectedTagId(e.target.value as string);
+    // Clear graph when reference library changes
+    resetProjection();
+    setPoints([]);
+    setSelectedIds([]);
+  };
+  
+  const handleSelectTagIds = (event: SelectChangeEvent<typeof selectedTagIds>) => {
+    const value = event.target.value;
+    setSelectedTagIds(typeof value === "string" ? value.split(",") : value);
+    // Clear graph when libraries selection changes
+    resetProjection();
+    setPoints([]);
+    setSelectedIds([]);
+  };
+
+  // Track if error has been shown to avoid duplicates
+  const errorShownRef = useRef(false);
+
+  // Show error toast when projection fails (only once)
+  useEffect(() => {
+    if (projectError && !errorShownRef.current) {
+      errorShownRef.current = true;
+      const errorData = (projectError as any)?.data;
+      const detail = errorData?.detail || (projectError as any)?.message || String(projectError);
+      
+      // Check if it's a "model not found" error
+      let summary = t("graphHub.umapError", "Error with projection");
+      let message = detail;
+      
+      if (typeof detail === 'string' && detail.includes('Object not found') && detail.includes('model.umap')) {
+        summary = t("graphHub.modelNotFoundError", "Model not found");
+        message = t("graphHub.modelNotFoundDetail", "The UMAP model has not been trained yet. Please train the model first.");
+      }
+      
+      showError({
+        summary,
+        detail: message,
+      });
+    }
+  }, [projectError, showError, t]);
+
+  // Reset error flag when starting a new projection
+  useEffect(() => {
+    if (isProjecting) {
+      errorShownRef.current = false;
+    }
+  }, [isProjecting]);
 
   // Delete chunk mutation
-  const [deleteChunk, { isLoading: isDeleting } ] =
+  const [deleteChunk, { isLoading: isDeleting }] =
     useDeleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDeleteMutation();
 
   // Train UMAP model for selected tag
-  const [trainUmap, { isLoading: isTraining }] =
-    useTrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostMutation();
+  const [trainUmap, { isLoading: isTraining }] = useTrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostMutation();
 
   const handleRefresh = () => {
-    if (selectedTagId) {
-      projectUmap({ tagId: selectedTagId, projectRequest: {} });
+    if (selectedTagId && selectedTagIds.length > 0) {
+      // Clear current graph data and selection immediately
+      resetProjection();
+      setPoints([]);
+      setSelectedIds([]);
+      // Use the reference library model (selectedTagId) to project the selected libraries
+      projectUmap({ 
+        refTagUid: selectedTagId, 
+        projectRequest: { 
+          tag_uids: selectedTagIds 
+        } 
+      });
     }
   };
 
   const handleTrain = async () => {
     if (!selectedTagId || isTraining) return;
     // Clear current graph data and selection immediately
+    resetProjection();
     setPoints([]);
     setSelectedIds([]);
     try {
@@ -88,15 +172,6 @@ export default function GraphHub() {
       // Silently fail for now; could add snackbar later
     }
   };
-
-  // Selected nodes from the 3D graph
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-
-  // Local points sync and fit control
-  const { points, setPoints, fitVersion } = usePointsSync(
-    projection?.graph_points,
-    isProjecting,
-  );
 
   // Map chunk_uid -> document_uid for quick lookup when deleting
   const idToDocMap = buildChunkToDocMap(points);
@@ -112,18 +187,6 @@ export default function GraphHub() {
     return acc;
   }, {});
 
-  // Toggle: color nodes by cluster id
-  const [colorByCluster, setColorByCluster] = useLocalStorageState<boolean>(
-    "graph.colorByCluster",
-    false,
-  );
-
-  // Toggle: show/hide document links between chunks (default: hidden)
-  const [showLinks, setShowLinks] = useLocalStorageState<boolean>(
-    "graph.showLinks",
-    false,
-  );
-
   const handleDeleteSelection = async () => {
     if (!deletableIds.length) return;
     try {
@@ -137,15 +200,29 @@ export default function GraphHub() {
         .filter(Boolean) as { chunkId: string; promise: Promise<any> }[];
       if (tasks.length === 0) return;
       const results = await Promise.allSettled(tasks.map((t) => t.promise));
-      // Collect successfully deleted ids
+      // Collect successfully deleted ids and failed deletions
       const successfulIds = new Set<string>();
+      let failedCount = 0;
       results.forEach((res, idx) => {
         if (res.status === "fulfilled") {
           successfulIds.add(tasks[idx].chunkId);
+        } else {
+          failedCount++;
         }
       });
       if (successfulIds.size > 0) {
         setPoints((prev) => removePointsByChunkIds(prev, successfulIds));
+      }
+      // Show a single error message if any deletions failed
+      if (failedCount > 0) {
+        showError({
+          summary: t("graphHub.deletionError", "Error deleting chunks"),
+          detail: t("graphHub.deletionErrorDetail", {
+            failed: failedCount,
+            total: tasks.length,
+            defaultValue: `${failedCount} out of ${tasks.length} chunks could not be deleted`,
+          }),
+        });
       }
     } finally {
       // Clear selection regardless of partial failures
@@ -165,10 +242,10 @@ export default function GraphHub() {
     // Conditional left position to move the buttons when the panel is open
     left: isPanelOpen
       ? {
-        xs: `calc(${PANEL_W.xs}px + 12px)`,
-        sm: `calc(${PANEL_W.sm}px + 12px)`,
-        md: `calc(${PANEL_W.md}px + 12px)`,
-      }
+          xs: `calc(${PANEL_W.xs}px + 12px)`,
+          sm: `calc(${PANEL_W.sm}px + 12px)`,
+          md: `calc(${PANEL_W.md}px + 12px)`,
+        }
       : 12, // Original position when closed
   };
 
@@ -239,15 +316,15 @@ export default function GraphHub() {
               overflowY: "auto",
               display: "flex",
               flexDirection: "column",
-              }}
+            }}
           >
             <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 2 }}>
-              <Typography variant="subtitle2">{t("graphHub.selectTag", "Select library")}</Typography>
+              <Typography variant="subtitle2">{t("graphHub.trainModelSection", "Train Model")}</Typography>
               <FormControl size="small" fullWidth>
-                <InputLabel id="tag-select-label">{t("graphHub.tag", "Library")}</InputLabel>
+                <InputLabel id="tag-select-label">{t("graphHub.selectLibrary", "Reference library")}</InputLabel>
                 <Select
                   labelId="tag-select-label"
-                  label={t("graphHub.tag", "Library")}
+                  label={t("graphHub.selectLibrary", "Reference library")}
                   value={selectedTagId}
                   onChange={handleSelectTag}
                 >
@@ -258,32 +335,7 @@ export default function GraphHub() {
                   ))}
                 </Select>
               </FormControl>
-              {projectError && (
-                <Typography color="error" variant="body2">
-                  {t("graphHub.umapError", "Error with projection")}
-                </Typography>
-              )}
-              <FormControlLabel
-                control={
-                  <Switch
-                    size="small"
-                    checked={!!colorByCluster}
-                    onChange={(e) => setColorByCluster(e.target.checked)}
-                  />
-                }
-                label={t("graphHub.colorByCluster", "Color groups")}
-              />
-              <FormControlLabel
-                control={
-                  <Switch
-                    size="small"
-                    checked={!!showLinks}
-                    onChange={(e) => setShowLinks(e.target.checked)}
-                  />
-                }
-                label={t("graphHub.showLinks", "Show links")}
-              />
-              <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 1 }}>
+              <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
                 <Button
                   variant="outlined"
                   size="small"
@@ -293,16 +345,49 @@ export default function GraphHub() {
                 >
                   {isTraining ? t("graphHub.training", "Training…") : t("graphHub.trainModel", "Train model")}
                 </Button>
+              </Box>
+
+              <Divider sx={{ my: 1 }} />
+
+              <Typography variant="subtitle2">{t("graphHub.showGraphSection", "Show Graph")}</Typography>
+              <FormControl size="small" fullWidth>
+                <InputLabel id="multi-tag-select-label">{t("graphHub.selectLibraries", "Libraries")}</InputLabel>
+                <Select
+                  labelId="multi-tag-select-label"
+                  label={t("graphHub.selectLibraries", "Libraries")}
+                  multiple
+                  value={selectedTagIds}
+                  onChange={handleSelectTagIds}
+                  input={<OutlinedInput label={t("graphHub.selectLibraries", "Libraries")} />}
+                  renderValue={(selected) => (
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                      {selected.map((tagId) => {
+                        const tag = (tagsData ?? []).find((t) => t.id === tagId);
+                        const label = tag ? (tag.path ? `${tag.path}/${tag.name}` : tag.name) : tagId;
+                        return <Chip key={tagId} label={label} size="small" />;
+                      })}
+                    </Box>
+                  )}
+                >
+                  {(tagsData ?? []).map((tag) => (
+                    <MenuItem key={tag.id} value={tag.id}>
+                      <ListItemText primary={tag.path ? `${tag.path}/${tag.name}` : tag.name} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
                 <Button
                   variant="contained"
                   size="small"
                   startIcon={<RefreshIcon />}
                   onClick={handleRefresh}
-                  disabled={!selectedTagId || isProjecting || isDeleting || isTraining}
+                  disabled={!selectedTagId || selectedTagIds.length === 0 || isProjecting || isDeleting || isTraining}
                 >
                   {t("graphHub.refreshGraph", "Show graph")}
                 </Button>
               </Box>
+              
               {/* Separator and selection accordions are visible only when there is a selection */}
               {selectedIds.length > 0 && (
                 <>
@@ -324,7 +409,16 @@ export default function GraphHub() {
         {/* Main 3D Graph Area */}
         <Box sx={{ position: "relative", height: "100%", width: "100%", bgcolor: (t) => t.palette.background.default }}>
           {isProjecting && (
-            <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>
+            <Box
+              sx={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 2,
+              }}
+            >
               <CircularProgress />
             </Box>
           )}
@@ -332,11 +426,10 @@ export default function GraphHub() {
             <Graph3DView
               points={points}
               darkMode={darkMode}
+              tagUid={selectedTagId || undefined}
               onSelectionChange={setSelectedIds}
               fitVersion={fitVersion}
               fitOnResize={false}
-              colorByCluster={!!colorByCluster}
-              showLinks={!!showLinks}
             />
           </Box>
         </Box>

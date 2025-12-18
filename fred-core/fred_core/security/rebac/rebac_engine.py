@@ -49,7 +49,16 @@ class DocumentPermission(str, Enum):
     DELETE = "delete"
 
 
-RebacPermission = TagPermission | DocumentPermission
+class ResourcePermission(str, Enum):
+    """Resource permissions encoded in the graph."""
+
+    READ = "read"
+    UPDATE = "update"
+    DELETE = "delete"
+    SHARE = "share"
+
+
+RebacPermission = TagPermission | DocumentPermission | ResourcePermission
 
 
 def _resource_for_permission(permission: RebacPermission) -> Resource:
@@ -57,6 +66,8 @@ def _resource_for_permission(permission: RebacPermission) -> Resource:
         return Resource.TAGS
     if isinstance(permission, DocumentPermission):
         return Resource.DOCUMENTS
+    if isinstance(permission, ResourcePermission):
+        return Resource.RESOURCES
     raise ValueError(f"Unsupported permission type: {permission!r}")
 
 

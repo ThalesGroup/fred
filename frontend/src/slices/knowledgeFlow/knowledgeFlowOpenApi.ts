@@ -108,26 +108,36 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/models/umap/${queryArg.tagId}/train`, method: "POST" }),
     }),
-    modelStatusKnowledgeFlowV1ModelsUmapTagIdGet: build.query<
-      ModelStatusKnowledgeFlowV1ModelsUmapTagIdGetApiResponse,
-      ModelStatusKnowledgeFlowV1ModelsUmapTagIdGetApiArg
+    modelStatusKnowledgeFlowV1ModelsUmapTagUidGet: build.query<
+      ModelStatusKnowledgeFlowV1ModelsUmapTagUidGetApiResponse,
+      ModelStatusKnowledgeFlowV1ModelsUmapTagUidGetApiArg
     >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/models/umap/${queryArg.tagId}` }),
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/models/umap/${queryArg.tagUid}` }),
     }),
-    deleteModelKnowledgeFlowV1ModelsUmapTagIdDelete: build.mutation<
-      DeleteModelKnowledgeFlowV1ModelsUmapTagIdDeleteApiResponse,
-      DeleteModelKnowledgeFlowV1ModelsUmapTagIdDeleteApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/models/umap/${queryArg.tagId}`, method: "DELETE" }),
-    }),
-    projectKnowledgeFlowV1ModelsUmapTagIdProjectPost: build.mutation<
-      ProjectKnowledgeFlowV1ModelsUmapTagIdProjectPostApiResponse,
-      ProjectKnowledgeFlowV1ModelsUmapTagIdProjectPostApiArg
+    projectKnowledgeFlowV1ModelsUmapRefTagUidProjectPost: build.mutation<
+      ProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostApiResponse,
+      ProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostApiArg
     >({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/models/umap/${queryArg.tagId}/project`,
+        url: `/knowledge-flow/v1/models/umap/${queryArg.refTagUid}/project`,
         method: "POST",
         body: queryArg.projectRequest,
+      }),
+    }),
+    deleteModelKnowledgeFlowV1ModelsUmapRefTagUidDelete: build.mutation<
+      DeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteApiResponse,
+      DeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/models/umap/${queryArg.refTagUid}`, method: "DELETE" }),
+    }),
+    projectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPost: build.mutation<
+      ProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostApiResponse,
+      ProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/models/umap/${queryArg.refTagUid}/project-text`,
+        method: "POST",
+        body: queryArg.projectTextRequest,
       }),
     }),
     listCatalogFilesKnowledgeFlowV1PullCatalogFilesGet: build.query<
@@ -833,22 +843,28 @@ export type TrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostApiResponse =
 export type TrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostApiArg = {
   tagId: string;
 };
-export type ModelStatusKnowledgeFlowV1ModelsUmapTagIdGetApiResponse =
+export type ModelStatusKnowledgeFlowV1ModelsUmapTagUidGetApiResponse =
   /** status 200 Successful Response */ StatusResponse;
-export type ModelStatusKnowledgeFlowV1ModelsUmapTagIdGetApiArg = {
-  tagId: string;
+export type ModelStatusKnowledgeFlowV1ModelsUmapTagUidGetApiArg = {
+  tagUid: string;
 };
-export type DeleteModelKnowledgeFlowV1ModelsUmapTagIdDeleteApiResponse = /** status 200 Successful Response */ {
+export type ProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostApiResponse =
+  /** status 200 Successful Response */ ProjectResponse;
+export type ProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostApiArg = {
+  refTagUid: string;
+  projectRequest: ProjectRequest;
+};
+export type DeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteApiResponse = /** status 200 Successful Response */ {
   [key: string]: any;
 };
-export type DeleteModelKnowledgeFlowV1ModelsUmapTagIdDeleteApiArg = {
-  tagId: string;
+export type DeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteApiArg = {
+  refTagUid: string;
 };
-export type ProjectKnowledgeFlowV1ModelsUmapTagIdProjectPostApiResponse =
-  /** status 200 Successful Response */ ProjectResponse;
-export type ProjectKnowledgeFlowV1ModelsUmapTagIdProjectPostApiArg = {
-  tagId: string;
-  projectRequest: ProjectRequest;
+export type ProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostApiResponse =
+  /** status 200 Successful Response */ ProjectTextResponse;
+export type ProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostApiArg = {
+  refTagUid: string;
+  projectTextRequest: ProjectTextRequest;
 };
 export type ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiResponse =
   /** status 200 Successful Response */ PullFileEntry[];
@@ -1453,7 +1469,7 @@ export type TrainResponse = {
   embedding_model?: string | null;
 };
 export type StatusResponse = {
-  tag_id: string;
+  tag_uid: string;
   exists: boolean;
   trained_at?: string | null;
   n_chunks?: number | null;
@@ -1465,12 +1481,16 @@ export type Point3D = {
   x: number;
   y: number;
   z: number;
-  cluster?: number | null;
 };
 export type Point2D = {
   x: number;
   y: number;
-  cluster?: number | null;
+};
+export type Clusters = {
+  d3?: number | null;
+  d2?: number | null;
+  vector?: number | null;
+  distance?: number | null;
 };
 export type PointMetadata = {
   chunk_order?: number | null;
@@ -1479,9 +1499,9 @@ export type PointMetadata = {
   text?: string | null;
 };
 export type GraphPoint = {
-  point_3d: Point3D;
+  point_3d?: Point3D | null;
   point_2d?: Point2D | null;
-  cluster?: string | null;
+  clusters?: Clusters | null;
   metadata?: PointMetadata | null;
 };
 export type ProjectResponse = {
@@ -1490,10 +1510,19 @@ export type ProjectResponse = {
 export type ProjectRequest = {
   /** Documents UIDs list to project. If None, all chunks will be projected. */
   document_uids?: string[] | null;
+  /** Library UIDs list to filter documents before projection. */
+  tag_uids?: string[] | null;
   /** Whether to include clustering information in the projection. */
   with_clustering?: boolean | null;
   /** Whether to include documents text in the projection. */
   with_documents?: boolean | null;
+};
+export type ProjectTextResponse = {
+  graph_point: GraphPoint;
+};
+export type ProjectTextRequest = {
+  /** The text to vectorize and project in 3D space. */
+  text: string;
 };
 export type PullFileEntry = {
   path: string;
@@ -2061,10 +2090,11 @@ export const {
   useLazyGetChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGetQuery,
   useDeleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDeleteMutation,
   useTrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostMutation,
-  useModelStatusKnowledgeFlowV1ModelsUmapTagIdGetQuery,
-  useLazyModelStatusKnowledgeFlowV1ModelsUmapTagIdGetQuery,
-  useDeleteModelKnowledgeFlowV1ModelsUmapTagIdDeleteMutation,
-  useProjectKnowledgeFlowV1ModelsUmapTagIdProjectPostMutation,
+  useModelStatusKnowledgeFlowV1ModelsUmapTagUidGetQuery,
+  useLazyModelStatusKnowledgeFlowV1ModelsUmapTagUidGetQuery,
+  useProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostMutation,
+  useDeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteMutation,
+  useProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostMutation,
   useListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
   useLazyListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
   useRescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostMutation,
