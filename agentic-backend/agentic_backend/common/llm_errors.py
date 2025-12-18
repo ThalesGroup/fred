@@ -20,6 +20,7 @@ slightly different error handling logic.
 """
 
 import logging
+import json
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -96,18 +97,34 @@ def normalize_llm_exception(exc: Exception) -> LlmErrorInfo:
     headers = getattr(response, "headers", None)
     headers_dict = dict(headers) if headers else None
 
-    detail = None
-    if isinstance(body, dict):
-        detail = body.get("error", {}).get("message") or body.get("message")
+    # Some SDKs populate `body` as a JSON string or a Pydantic model; normalize for detail extraction.
+    normalized_body = body
+    if hasattr(normalized_body, "model_dump"):
+        try:
+            normalized_body = normalized_body.model_dump()  # type: ignore[assignment]
+        except Exception:
+            pass
+    if isinstance(normalized_body, str):
+        try:
+            decoded = json.loads(normalized_body)
+            normalized_body = decoded
+        except Exception:
+            pass
 
-    is_guardrail = _is_guardrail(status, exc, body)
+    detail = None
+    if isinstance(normalized_body, dict):
+        detail = normalized_body.get("error", {}).get("message") or normalized_body.get(
+            "message"
+        )
+
+    is_guardrail = _is_guardrail(status, exc, normalized_body)
 
     return LlmErrorInfo(
         type_name=type(exc).__name__,
         status=status,
         request_id=request_id,
         headers=headers_dict,
-        body=body,
+        body=normalized_body,
         is_guardrail=is_guardrail,
         detail=detail,
     )

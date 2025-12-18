@@ -41,8 +41,10 @@ function SourceRow({
   onOpen: () => void;
   highlighted: boolean;
 }) {
-  const bestScore = Math.max(...hits.map((h) => h.score ?? 0));
+  const scores = hits.map((h) => h.score).filter((s): s is number => typeof s === "number" && !Number.isNaN(s));
+  const bestScore = scores.length ? Math.max(...scores) : 0;
   const bestPct = Math.round(Math.max(0, Math.min(1, bestScore)) * 100);
+  const isIrrelevant = bestPct === 0;
   const first = hits[0] ?? ({} as VectorSearchHit);
   const title = (hits.find((h) => h.title)?.title || first.title || first.file_name || uid)?.trim() || uid;
   const fileName = first.file_name || "";
@@ -86,8 +88,8 @@ function SourceRow({
               minWidth: 44,
               height: 24,
               borderRadius: 1,
-              bgcolor: "primary.main",
-              color: "primary.contrastText",
+              bgcolor: isIrrelevant ? "grey.600" : "primary.main",
+              color: isIrrelevant ? "common.white" : "primary.contrastText",
               fontSize: 12,
               fontWeight: 700,
               display: "inline-flex",
@@ -95,8 +97,9 @@ function SourceRow({
               justifyContent: "center",
               px: 1,
             }}
+            title={isIrrelevant ? "Irrelevant / unscored source" : `Score: ${bestPct}%`}
           >
-            {bestPct}%
+            {isIrrelevant ? "IRR" : `${bestPct}%`}
           </Box>
         </Grid2>
 

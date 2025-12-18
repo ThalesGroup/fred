@@ -16,6 +16,7 @@ from pathlib import Path
 import json
 import logging
 from datetime import datetime, timezone
+import inspect
 
 from dotenv import load_dotenv
 from graphiti_core.nodes import EpisodeType
@@ -50,6 +51,7 @@ class GraphSearchService:
         llm = OpenAIClient(client=self.openai_client, config=LLMConfig(model=model, small_model=model))
         embedder = OpenAIEmbedder(config=OpenAIEmbedderConfig(embedding_model=embedding_model), client=self.openai_client)
         self.graph = Graphiti(neo4j_uri, neo4j_username, neo4j_password, llm_client=llm, embedder=embedder)
+        self._graph_search_center_param: str | None = None
 
     # -----------------------------------------------------------
     # EPISODE CREATION (TEXT)
@@ -112,8 +114,34 @@ class GraphSearchService:
     async def search_nodes(self, query: str, top_k: int = 5, center_uid: str = ""):
         if top_k > 10:
             raise ValueError("top_k value must under or equal 10")
-        if center_uid != "":
-            resp = await self.graph.search(query, center_uid=center_uid)
+        if center_uid:
+            # Graphiti versions differ: some accept `center_uid`, others don't support centering.
+            # We detect support once and fall back gracefully (no centering) when unsupported.
+            if self._graph_search_center_param is None:
+                try:
+                    sig = inspect.signature(self.graph.search)
+                    for candidate in ("center_uid", "center_node_uid", "center_id"):
+                        if candidate in sig.parameters:
+                            self._graph_search_center_param = candidate
+                            break
+                    else:
+                        self._graph_search_center_param = ""
+                except Exception:
+                    self._graph_search_center_param = ""
+
+            if self._graph_search_center_param:
+                try:
+                    resp = await self.graph.search(
+                        query, **{self._graph_search_center_param: center_uid}
+                    )
+                except TypeError:
+                    logger.info(
+                        "Graphiti.search() does not support centering in this version; ignoring center_uid."
+                    )
+                    self._graph_search_center_param = ""
+                    resp = await self.graph.search(query)
+            else:
+                resp = await self.graph.search(query)
         else:
             resp = await self.graph.search(query)
         return resp[:top_k]

@@ -14,9 +14,14 @@
 
 
 import logging
+import re
+import json
+import time
+from uuid import uuid4
 from typing import Any, List, Tuple
 
-from langchain_core.messages import HumanMessage, SystemMessage
+import requests
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
 from agentic_backend.application_context import get_default_chat_model
@@ -37,6 +42,90 @@ from agentic_backend.core.agents.runtime_context import (
     is_corpus_only_mode,
 )
 from agentic_backend.core.runtime_source import expose_runtime_source
+
+
+_EXPLICIT_ID_RE = re.compile(
+    r"\b(?:CR-\d+|SYS-REQ-\d+|SAF-REQ-\d+|HAZ-\d+|TC-\d+|SW-COMP-\d+)\b"
+)
+
+
+def extract_explicit_ids(text: str) -> list[str]:
+    if not isinstance(text, str) or not text:
+        return []
+    return _EXPLICIT_ID_RE.findall(text)
+
+
+def extract_ids_from_hits(hits: List[Any]) -> list[str]:
+    """
+    Deterministically extract requirement/hazard/test identifiers from retrieved hits.
+    This provides an "allowed IDs" set to reduce hallucinations and force explicit ID usage.
+    """
+    found: list[str] = []
+    for h in hits:
+        if not isinstance(h, dict):
+            continue
+        for key in ("fact", "text", "content", "name", "title"):
+            v = h.get(key)
+            if isinstance(v, str):
+                found.extend(extract_explicit_ids(v))
+    # preserve order while de-duping
+    out: list[str] = []
+    seen: set[str] = set()
+    for x in found:
+        if x not in seen:
+            out.append(x)
+            seen.add(x)
+    return out
+
+
+def mk_thought(*, label: str, node: str, task: str, content: str) -> AIMessage:
+    """
+    Emit an assistant-side 'thought' trace.
+    The UI shows it under the Thoughts accordion (channel=thought).
+    """
+    return AIMessage(
+        content="",  # keep content empty; StreamTranscoder will emit only the thought trace
+        response_metadata={
+            "thought": content,
+            "extras": {"task": task, "node": node, "label": label},
+        },
+    )
+
+
+def mk_tool_call(*, call_id: str, name: str, args: dict) -> AIMessage:
+    """
+    Emit a tool_call trace line without actually invoking an LLM tool.
+    This makes internal actions (like retrieval) visible in the UI.
+    """
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "id": call_id,
+                "name": name,
+                "args": args,
+            }
+        ],
+        response_metadata={"extras": {"task": "retrieval", "node": name}},
+    )
+
+
+def mk_tool_result(
+    *,
+    call_id: str,
+    content: str,
+    ok: bool | None = None,
+    latency_ms: int | None = None,
+    extras: dict | None = None,
+) -> ToolMessage:
+    md: dict[str, Any] = {}
+    if extras:
+        md["extras"] = extras
+    if latency_ms is not None:
+        md["latency_ms"] = latency_ms
+    if ok is not None:
+        md["ok"] = ok
+    return ToolMessage(content=content, tool_call_id=call_id, response_metadata=md)
 
 
 def rag_hits_to_citations(hits: List[Any]) -> List[dict]:
@@ -65,18 +154,35 @@ def attach_rag_sources_to_llm_response(answer, hits: List[Any]):
 
     answer.additional_kwargs = getattr(answer, "additional_kwargs", {}) or {}
 
-    # Ne garder que les infos RAG utiles
-    clean_sources = []
-    for h in hits:
-        clean_sources.append(
+    # The frontend Sources panel expects VectorSearchHit-like objects with `uid` and `rank`.
+    # We map GraphRAG hits (dicts) into a minimal compatible shape.
+    sources = []
+    for idx, h in enumerate(hits, start=1):
+        if not isinstance(h, dict):
+            continue
+        uid = h.get("uuid") or h.get("uid") or h.get("id") or f"graph-hit-{idx}"
+        fact = h.get("fact") or h.get("text") or h.get("content") or ""
+        score = h.get("score")
+        title = h.get("title") or h.get("name") or "GraphRAG"
+        valid_at = h.get("valid_at")
+
+        sources.append(
             {
-                "uuid": h.get("uuid"),
-                "fact": h.get("fact"),
-                "valid_at": h.get("valid_at"),
+                "uid": str(uid),
+                "rank": idx,
+                # fred_core.VectorSearchHit requires a numeric score; Graphiti hits may omit it.
+                "score": float(score) if isinstance(score, (int, float)) else 0.0,
+                "title": str(title) if title else None,
+                "content": str(fact) if fact else "",
+                "file_name": None,
+                "mime_type": None,
+                "created": valid_at,
+                "retrieved_at": None,
+                "type": "graph_rag",
             }
         )
 
-    answer.additional_kwargs["sources"] = clean_sources
+    answer.additional_kwargs["sources"] = sources
     answer.additional_kwargs["citations"] = rag_hits_to_citations(hits)
 
     return answer
@@ -109,26 +215,20 @@ RAG_TUNING = AgentTuning(
             ),
             required=True,
             default=(
-                "You are a general-purpose document retrieval and question-answering assistant.\n"
+                "You are a GraphRAG traceability analyst for engineering artifacts (requirements, hazards, tests).\n"
+                "You answer questions by extracting *explicit identifiers* and *explicit relationships* from the provided sources.\n"
                 "\n"
-                "Your job is to answer user questions using the document excerpts (sources) that are provided to you.\n"
+                "Non-negotiable rules:\n"
+                "- Treat sources as ground truth. Do NOT invent IDs, requirements, hazards, tests, components, or links.\n"
+                "- Only assert a relationship (A -> B) if a source explicitly states or clearly implies it.\n"
+                "- Every row you output must include evidence markers like [1], [2] that reference the provided sources.\n"
+                "- If information is missing, write 'NOT_EVIDENCED' (do not guess).\n"
                 "\n"
-                "Core rules:\n"
-                "- Treat the provided sources as your primary ground truth for factual claims.\n"
-                "- When you make a factual claim supported by a source, add bracketed numeric citations like [1], [2]\n"
-                "  that correspond to the numbered sources you were given.\n"
-                "- If multiple sources support the same statement, you may list several citations (e.g. [1][3]).\n"
-                "- You may summarize, rephrase, and organize the content from the sources, but do not invent new facts\n"
-                "  that are not supported by them.\n"
-                "- If the sources are incomplete, ambiguous, or do not directly answer the question, say this explicitly\n"
-                "  and avoid speculation.\n"
-                "- If the user asks for background information that clearly goes beyond the sources, briefly explain\n"
-                "  that this is outside the provided documents instead of guessing.\n"
+                "Identifier patterns (examples): CR-123, SYS-REQ-12, SAF-REQ-03, HAZ-07, TC-04, SW-COMP-01.\n"
                 "\n"
-                "Style guidelines:\n"
-                "- Be clear, concise, and neutral in tone.\n"
-                "- Prefer short paragraphs and, when helpful, bullet lists.\n"
-                "- Make the reasoning easy to follow, but do not expose chain-of-thought step by step.\n"
+                "Output format:\n"
+                "- Prefer structured outputs (Markdown tables / impact matrix), not free-form prose.\n"
+                "- Keep explanations short and evidence-driven.\n"
                 "- Always respond in {response_language}.\n"
                 "\n"
                 "Today is {today}."
@@ -154,11 +254,40 @@ RAG_TUNING = AgentTuning(
             ),
             required=True,
             default=(
-                "Base your answer on the following documents. Prioritize these sources and cite the document title.\n"
-                "If the information is missing, cautiously supplement with your general knowledge and state that it does not come from the documents.\n"
-                "If the sources conflict or are insufficient, mention it briefly.\n\n"
-                "Question:\n{question}\n\n"
-                "Documents:\n{sources}\n"
+                "You are given:\n"
+                "- Question\n"
+                "- Sources (each line is labeled [n], e.g. [1])\n"
+                "- Allowed IDs: {allowed_ids}\n"
+                "\n"
+                "Task:\n"
+                "1) Extract all explicit IDs present in the sources (requirements/hazards/tests/components).\n"
+                "2) Extract explicit links between IDs only when evidenced (e.g., 'CR-012 implemented by SW-COMP-01').\n"
+                "3) Build relationship paths using only evidenced links (multi-hop allowed).\n"
+                "\n"
+                "Hard constraints:\n"
+                "- Do NOT output any ID that is not present in the sources. If Allowed IDs is NONE_FOUND, say NOT_EVIDENCED.\n"
+                "- For every relationship/path, cite the supporting source line(s) [S#].\n"
+                "- When evidence is missing, write NOT_EVIDENCED.\n"
+                "\n"
+                "Return exactly these sections (Markdown):\n"
+                "## Impact Matrix\n"
+                "| ID | Type | Summary | Linked IDs (direct) | Evidence |\n"
+                "|---|---|---|---|---|\n"
+                "| ... |\n"
+                "\n"
+                "## Trace Paths\n"
+                "| Path | Hop Evidence | Notes |\n"
+                "|---|---|---|\n"
+                "| CR-012 → SW-COMP-01 → SAF-REQ-03 → TC-04 | [2],[7],... | ... |\n"
+                "\n"
+                "## Gaps / Not Evidenced\n"
+                "- Bullet list of what could not be evidenced from sources.\n"
+                "\n"
+                "Question:\n"
+                "{question}\n"
+                "\n"
+                "Sources:\n"
+                "{sources}\n"
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
@@ -171,8 +300,12 @@ RAG_TUNING = AgentTuning(
             ),
             required=True,
             default=(
-                "No relevant documents were found to answer this question. Respond using your general knowledge and explicitly state that your answer does not come from the provided documents.\n\n"
-                "Question:\n{question}"
+                "No relevant sources were retrieved.\n"
+                "Do NOT guess or invent requirement/hazard/test IDs.\n"
+                "Reply with 'NOT_EVIDENCED' and suggest how to ingest/index the missing documents.\n"
+                "\n"
+                "Question:\n"
+                "{question}"
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
@@ -268,7 +401,7 @@ class Richard(AgentFlow):
         """Bind the model, create the vector search client, and build the graph."""
         self.model = get_default_chat_model()
         self.search_client = GraphSearchClient(
-            base_url="http://localhost:8080/graph-rag"
+            base_url="http://localhost:9666/graph-rag"
         )
         self._graph = self._build_graph()
 
@@ -345,6 +478,7 @@ class Richard(AgentFlow):
             )
         question = last.content
 
+        trace_msgs: list[Any] = []
         try:
             runtime_context = self.get_runtime_context()
             rag_scope = get_rag_knowledge_scope(runtime_context)
@@ -393,6 +527,7 @@ class Richard(AgentFlow):
 
             # 1) Build retrieval scope from runtime context
             top_k = self.get_tuned_int("rag.top_k", default=5)
+            min_score = float(self.get_tuned_any("rag.min_score") or 0.0)
             logger.debug(
                 "[AGENT] reasoning start question=%r top_k=%s rag_scope=%s",
                 question,
@@ -400,17 +535,119 @@ class Richard(AgentFlow):
                 rag_scope,
             )
 
-            # 2) Vector search
+            # 2) Graph search (instrumented so UI can show it)
+            call_id = f"tc_graph_search_{uuid4().hex[:8]}"
+            trace_msgs.append(
+                mk_tool_call(
+                    call_id=call_id,
+                    name="graph.search",
+                    args={
+                        "base_url": self.search_client.base_url,
+                        "query": augmented_question,
+                        "top_k": top_k,
+                        "min_score": min_score,
+                    },
+                )
+            )
+            t0 = time.perf_counter()
             hits: List[Any] = self.search_client.search(
                 question=augmented_question, top_k=top_k
             )
+            # Best-effort score filtering if backend provides `score`.
+            if min_score > 0:
+                hits = [
+                    h
+                    for h in hits
+                    if not isinstance(h, dict)
+                    or not isinstance(h.get("score"), (int, float))
+                    or float(h["score"]) >= min_score
+                ]
+
+            # 2b) Optional "graph-ish" expansion passes:
+            # - Centered search around the top hit (if the backend returns a stable uid/uuid).
+            # - Re-query by extracted IDs to pull relationship facts and improve traceability.
+            center_uid = None
+            if hits and isinstance(hits[0], dict):
+                center_uid = hits[0].get("uuid") or hits[0].get("uid")
+            extra: list[Any] = []
+            if isinstance(center_uid, str) and center_uid.strip():
+                try:
+                    extra.extend(
+                        self.search_client.search(
+                            question=augmented_question,
+                            top_k=max(1, min(5, top_k)),
+                            center_uid=center_uid,
+                        )
+                    )
+                except Exception:
+                    logger.debug(
+                        "[AGENT] centered graph search failed for center_uid=%s",
+                        center_uid,
+                    )
+
+            allowed_ids = extract_ids_from_hits(hits)
+            if allowed_ids:
+                per_id_k = max(1, min(3, top_k))
+                for rid in allowed_ids[:25]:  # safety cap
+                    try:
+                        extra.extend(
+                            self.search_client.search(question=rid, top_k=per_id_k)
+                        )
+                    except Exception:
+                        logger.debug("[AGENT] ID expansion search failed for %s", rid)
+
+            if extra:
+                def _hit_key(h: Any) -> tuple[str, str]:
+                    if not isinstance(h, dict):
+                        return ("", str(h))
+                    uid = str(h.get("uuid") or h.get("uid") or "")
+                    fact = str(
+                        h.get("fact") or h.get("text") or h.get("content") or ""
+                    )
+                    return (uid, fact)
+
+                merged: list[Any] = []
+                seen: set[tuple[str, str]] = set()
+                for h in [*hits, *extra]:
+                    k = _hit_key(h)
+                    if k in seen:
+                        continue
+                    seen.add(k)
+                    merged.append(h)
+                hits = merged
             logger.debug("[AGENT] graph search returned %d hit(s)", len(hits))
+            dt_ms = int((time.perf_counter() - t0) * 1000)
+            trace_summary = {
+                "hits": len(hits),
+                "ids_found": len(extract_ids_from_hits(hits)),
+                "center_uid_used": center_uid if isinstance(center_uid, str) else None,
+                "expansion_calls": len(extra),
+            }
+            trace_msgs.append(
+                mk_tool_result(
+                    call_id=call_id,
+                    content=json.dumps(trace_summary, ensure_ascii=False),
+                    ok=True,
+                    latency_ms=dt_ms,
+                    extras={"task": "retrieval", "node": "graph.search"},
+                )
+            )
+            trace_msgs.append(
+                mk_thought(
+                    label="graph_search",
+                    node="graph.search",
+                    task="retrieval",
+                    content=f"Graph search completed: hits={len(hits)} ids={len(extract_ids_from_hits(hits))} latency_ms={dt_ms}",
+                )
+            )
 
             # 3) Build messages explicitly (no magic)
             #    - One SystemMessage with policy/tone (from tuning)
             #    - One HumanMessage with task + formatted sources
             sys_msg = SystemMessage(content=self._system_prompt())
             sources_block = format_rag_sources_for_prompt(hits)
+            allowed_ids = extract_ids_from_hits(hits)
+            allowed_ids_csv = ", ".join(allowed_ids) if allowed_ids else "NONE_FOUND"
             logger.debug(
                 "[AGENT] prepared %d source(s) for prompt (chars=%s)",
                 len(hits),
@@ -438,6 +675,7 @@ class Richard(AgentFlow):
                     "prompts.with_sources",
                     question=question,
                     sources=sources_block,
+                    allowed_ids=allowed_ids_csv,
                 )
                 + guardrails
             )
@@ -461,9 +699,60 @@ class Richard(AgentFlow):
             answer = await self.model.ainvoke(messages)
 
             # 5) Attach rich sources metadata for the UI
-            # attach_rag_sources_to_llm_response(answer, hits)
+            attach_rag_sources_to_llm_response(answer, hits)
 
-            return {"messages": [answer]}
+            return {"messages": [*trace_msgs, answer]}
+
+        except requests.exceptions.RequestException as e:
+            # Retrieval service failure (GraphRAG FastAPI / MCP server not running, wrong port, wrong base path, etc.)
+            resp = getattr(e, "response", None)
+            status = getattr(resp, "status_code", None)
+            url = (
+                getattr(resp, "url", None)
+                or f"{self.search_client.base_url}/graph/search"
+            )
+
+            if status == 404:
+                fallback_text = (
+                    "GraphRAG retrieval service endpoint was not found.\n\n"
+                    f"- URL: {url}\n"
+                    "- Likely cause: the `contrib/graphrag_mcp_server` is not running, "
+                    "or it is running on a different port/base path.\n"
+                    "- Fix: start it with `cd contrib/graphrag_mcp_server && make run` "
+                    "(default: `http://localhost:8080/graph-rag`).\n"
+                    "- If port 8080 is already used by another service, change `APP_PORT` "
+                    "in `contrib/graphrag_mcp_server/.env` and update this agent's `base_url`."
+                )
+            elif status is not None:
+                fallback_text = (
+                    "GraphRAG retrieval service request failed.\n\n"
+                    f"- HTTP {status} at: {url}\n"
+                    f"- Error: {e}"
+                )
+            else:
+                fallback_text = (
+                    "Cannot reach the GraphRAG retrieval service.\n\n"
+                    f"- Base URL: {self.search_client.base_url}\n"
+                    f"- Error: {type(e).__name__}: {e}\n"
+                    "- Fix: start `contrib/graphrag_mcp_server` (see `contrib/graphrag_mcp_server/README.md`)."
+                )
+
+            logger.error(
+                "[AGENT] graph retrieval failed (status=%s url=%s err=%s)",
+                status,
+                url,
+                e,
+            )
+            # Make the failure visible in the trace accordion as well.
+            trace_msgs.append(
+                mk_thought(
+                    label="graph_search_error",
+                    node="graph.search",
+                    task="retrieval",
+                    content=f"Graph search request failed: {type(e).__name__}: {e}",
+                )
+            )
+            return {"messages": [*trace_msgs, AIMessage(content=fallback_text)]}
 
         except Exception as e:
             info = normalize_llm_exception(e)
@@ -489,5 +778,4 @@ class Richard(AgentFlow):
                 language=self.get_tuned_text("prompts.response_language"),
                 default_message="An unexpected error occurred while searching documents. Please try again.",
             )
-            fallback = await self.model.ainvoke([HumanMessage(content=fallback_text)])
-            return {"messages": [fallback]}
+            return {"messages": [AIMessage(content=fallback_text)]}

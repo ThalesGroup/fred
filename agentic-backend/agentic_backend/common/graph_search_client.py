@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -29,14 +29,14 @@ class GraphSearchClient:
         *,
         question: str,
         top_k: int = 10,
-        center_uid: Optional[Sequence[str]] = None,
+        center_uid: Optional[str] = None,
     ) -> List[Any]:
         payload: Dict[str, Any] = {
             "query": question,
             "top_k": top_k,
         }
-        if center_uid:
-            payload["center_uid"] = center_uid
+        if isinstance(center_uid, str) and center_uid.strip():
+            payload["center_uid"] = center_uid.strip()
 
         url = f"{self.base_url}/graph/search"
 

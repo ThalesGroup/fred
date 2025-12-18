@@ -70,18 +70,36 @@ def format_sources_for_prompt(
 
 
 def format_rag_sources_for_prompt(hits: List[Any]) -> str:
-    lines = []
-    for h in hits:
-        fact = h.get("fact")
-        valid = h.get("valid_at")
+    """
+    Render GraphRAG / Graphiti search hits for inclusion in prompts.
 
-        if not fact:
-            continue  # les hits sans 'fact' ne servent à rien pour le RAG
+    Notes:
+    - We keep this string *dense* and *machine-citable* (stable [n] markers),
+      because downstream prompts may require strict evidence referencing.
+    - The upstream GraphRAG service returns dict-like objects; we tolerate missing keys.
+    """
+    lines: List[str] = []
+    for idx, h in enumerate(hits, start=1):
+        if not isinstance(h, dict):
+            continue
+        fact = h.get("fact") or h.get("text") or h.get("content")
+        if not isinstance(fact, str) or not fact.strip():
+            continue  # hits without text are not useful to ground answers
 
-        if valid:
-            lines.append(f"- {fact} (date: {valid})")
-        else:
-            lines.append(f"- {fact}")
+        uid = h.get("uuid") or h.get("uid") or h.get("id")
+        valid = h.get("valid_at") or h.get("date")
+        score = h.get("score")
+
+        meta_bits: List[str] = []
+        if isinstance(uid, str) and uid.strip():
+            meta_bits.append(f"uid={uid.strip()}")
+        if isinstance(score, (int, float)):
+            meta_bits.append(f"score={float(score):.3f}")
+        if isinstance(valid, str) and valid.strip():
+            meta_bits.append(f"date={valid.strip()}")
+
+        meta = f" ({', '.join(meta_bits)})" if meta_bits else ""
+        lines.append(f"[{idx}] {fact.strip()}{meta}")
 
     return "\n".join(lines)
 

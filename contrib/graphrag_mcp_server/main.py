@@ -26,12 +26,15 @@ from graph_search.controller import GraphNodeController
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 LOG_PREFIX = "[GRAPH-RAG]"
+# Neo4j driver emits INFO notifications for schema no-ops (e.g., "... already exists.")
+# These are harmless; keep logs focused on real errors.
+logging.getLogger("neo4j.notifications").setLevel(logging.WARNING)
 
 load_dotenv()  # Load all config from .env
 
 APP_BASE_URL = os.getenv("APP_BASE_URL", "/graph-rag")
 APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
-APP_PORT = int(os.getenv("APP_PORT", 8080))
+APP_PORT = int(os.getenv("APP_PORT", 9666))
 APP_RELOAD = os.getenv("APP_RELOAD", "False").lower() == "true"
 LOG_LEVEL = os.getenv("APP_LOG_LEVEL", "INFO")
 
@@ -49,7 +52,7 @@ if not GPU_ENABLED:
 # -----------------------
 
 def create_app() -> FastAPI:
-
+    logger.info("%d MCP %s", APP_PORT, APP_BASE_URL)
     app = FastAPI(
         docs_url=f"{APP_BASE_URL}/docs",
         redoc_url=f"{APP_BASE_URL}/redoc",

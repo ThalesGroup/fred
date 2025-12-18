@@ -173,7 +173,7 @@ mcp:
       name: "mcp.servers.graph.name"
       description: "mcp.servers.graph.description"
       transport: "streamable_http"
-      url: "http://localhost:8080/graph-rag/mcp-graph"
+      url: "http://localhost:9666/graph-rag/mcp-graph"
       sse_read_timeout: 2000
       auth_mode: "user_token"
 
