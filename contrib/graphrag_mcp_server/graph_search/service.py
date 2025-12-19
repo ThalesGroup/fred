@@ -112,8 +112,6 @@ class GraphSearchService:
     # SEARCH
     # -----------------------------------------------------------
     async def search_nodes(self, query: str, top_k: int = 5, center_uid: str = ""):
-        if top_k > 10:
-            raise ValueError("top_k value must under or equal 10")
         if center_uid:
             # Graphiti versions differ: some accept `center_uid`, others don't support centering.
             # We detect support once and fall back gracefully (no centering) when unsupported.
