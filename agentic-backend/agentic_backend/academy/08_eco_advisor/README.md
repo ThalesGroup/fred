@@ -25,7 +25,7 @@ Before you start, make sure you are on the branch `826-create-eco-adviser-academ
    - Knowledge Flow tabular backend: `cd knowledge-flow-backend && make run`
    - Agentic UI: `cd frontend && make run`
    - EcoAdvisor MCP micro-services: `cd agentic-backend/agentic_backend/academy/08_eco_advisor && make run`
-2. In **Fred UI (http://localhost:5173) → Ressources**, import every CSV that ships in `agentic_backend/academy/08_eco_advisor/data`.
+2. In **Fred UI (http://localhost:5173) → Ressources**, import every files from `agentic_backend/academy/08_eco_advisor/data`.
 3. In **Fred UI (http://localhost:5173) → MCP servers** register the MCP:
    | Alias in UI | URL |
    | --- | --- |
