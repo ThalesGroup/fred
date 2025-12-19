@@ -1,54 +1,44 @@
-# EcoAdvisor - Mobility & CO2 demo
+# EcoAdvisor - Mobility & CO₂ Demo
 
-EcoAdvisor is the Academy showcase that walks a Fred agent through low-carbon commute ideas around Lyon. The flow is intentionally lean: LangGraph (`reasoner ↔ tools`) plus two local MCP micro-services so the agent can cite real datasets instead of inventing numbers.
+EcoAdvisor is the Academy showcase that walks a Fred agent through low-carbon commute ideas around Lyon.
 
-## Demo flow
-1. Import the demo CSVs from `data/` into the Knowledge Flow tabular server: `bike_infra_demo`, `tcl_stops_demo`, plus `co2_emission_factors` (seeded from `data/Base_Carbone_V23.6.csv` or your trimmed ADEME export). The UI now owns CO₂ factors, no extra MCP service required. Upload any PDF resources you want the agent to cite (ADEME guides, Plan de Mobilité, subsidies, …) through **Knowledge → Documents** and drop them in a document library you will select for the chat session.
-2. Launch each service with its Makefile (separate terminals recommended):
-   - Agentic Backend API: `cd agentic-backend && make run`
-   - Knowledge Flow tabular backend: `cd knowledge-flow-backend && make run`
-   - Agentic UI: `cd frontend && make run`
-   - EcoAdvisor MCP micro-services: `cd agentic-backend/agentic_backend/academy/08_eco_advisor && make run`
-3. In the Agentic UI, go to **Tools → MCP servers → Add server** and register the remaining local services (configs no longer autoload them):
-   | Alias in UI | URL |
-   | --- | --- |
-   | `mcp-geo-service` | `http://localhost:9801/mcp` |
-   | `mcp-tcl-service` | `http://localhost:9802/mcp` |
-   | `mcp-knowledge-flow-mcp-text` | `http://localhost:8111/knowledge-flow/v1/mcp-text` |
-4. Pick the **EcoAdvisor** agent, point it at a commute scenario, and let it call the MCP tools plus the tabular datasets. The agent responds with a Markdown brief (comparison table + CO₂ totals + assumptions).
+Before you start, make sure you are on the branch `826-create-eco-adviser-academy-agent`.
 
-## Repo tour
+## Repository Overview
 | Path | Purpose |
 | --- | --- |
 | `eco_adviser.py` | LangGraph agent + tuning metadata. |
 | `geo_distance_service/` | FastAPI MCP for Nominatim/OSRM distance estimates with a haversine fallback. |
-| `tcl_transit_service/` | FastAPI MCP for SYTRAL/TCL stops, with CSV fallback for offline demos. |
+| `tcl_transit_service/` | FastAPI MCP for SYTRAL/TCL stops location, with CSV fallback for offline demos. |
 | `data/` | Curated CSVs (bike infra, TCL stops, ADEME CO₂ factors, etc.) ready to import via the UI. |
 
-Old side documents (`TECH_DOC.md`, `ROADMAP.md`, …) were merged into this single README so every required instruction lives here.
-
-## Demo datasets
-- `data/bike_infra_demo.csv` – curated slice of the Lyon cycling infrastructure feed.
-- `data/tcl_stops_demo.csv` – readable subset of TCL stops.
-- `data/Base_Carbone_V23.6.csv` – ADEME emission factors: import it (or a trimmed version) as the `co2_emission_factors` table inside Knowledge Flow so EcoAdvisor can query it like any other dataset.
-
-Need more context (energy mix, historic traffic, etc.)? Pull it from https://data.grandlyon.com or https://transport.data.gouv.fr directly—the repo purposely stays light.
-
-## PDF resources
-1. Upload the PDF playbooks you need (regulation summaries, company plans, subsidy sheets, etc.) in the Knowledge Flow UI and assign them to one or more document libraries.
-2. Register the `mcp-knowledge-flow-mcp-text` server in the UI (see table above) so EcoAdvisor can hit the vector search MCP.
-3. In the chat sidebar, select the document library you created. EcoAdvisor will now pull short snippets from those PDFs, cite the document title/page, and surface them alongside the tabular CO₂ comparisons.
-
-## Local MCP services
-| Service | Port | Key tools | Notes |
+## External API Calls
+| Service | Default endpoint | Why EcoAdvisor calls it | Configuration & fallback |
 | --- | --- | --- | --- |
-| `geo_distance_service` | `9801` | `geocode_location`, `compute_trip_distance`, `estimate_trip_between_addresses` | Wraps Nominatim + OSRM; falls back to simple haversine math offline. |
-| `tcl_transit_service` | `9802` | `search_tcl_stops`, `find_nearby_tcl_stops`, `list_tcl_lines`, `get_tcl_metadata`, `reload_tcl_stops_cache` | Pulls SYTRAL/TCL WFS with a CSV fallback (`data/tcl_stops_demo.csv`). |
+| Nominatim (OpenStreetMap) | `https://nominatim.openstreetmap.org/search` | `geo_distance_service` geocodes the origin/destination text entered in the UI before running CO₂ math. | Override with `ECO_GEO_NOMINATIM_URL`, set `ECO_GEO_USER_AGENT`, and throttle via `ECO_GEO_ATTEMPT_DELAY`/cache settings. If disabled (`ECO_GEO_GEOCODING_ENABLED=false`), the service returns an error and the demo cannot resolve addresses. |
+| OSRM public router | `https://router.project-osrm.org/route/v1/{profile}/{lon},{lat};{lon},{lat}` | Provides precise distance/duration for car/bike/walk profiles. | Override with `ECO_GEO_OSRM_URL`. If routing is disabled (`ECO_GEO_ROUTING_ENABLED=false`) or the endpoint fails, EcoAdvisor falls back to a haversine estimate and flags the response as approximate. |
+| Grand Lyon SYTRAL WFS | `https://data.grandlyon.com/geoserver/sytral/ows` (`sytral:tcl_sytral.tclarret`) | `tcl_transit_service` refreshes stop metadata (lines, coordinates, zones) so the agent can surface nearby transit options. | All request details are driven by the `TCL_WFS_*` env vars (URL, credentials, pagination). If the feed is unreachable, the service automatically reloads the local CSV `data/tcl_stops_demo.csv`. |
 
-CO₂ computation is now fully tabular: load the emission CSV into Knowledge Flow and EcoAdvisor will query it through `mcp-knowledge-flow-mcp-tabular`. Because the UI owns MCP registration, `config/configuration*.yaml` only contains global defaults (no ECO-specific entries). If you run another instance, repeat the UI step above.
+## Demo Setup
+1. Launch each service with its Makefile:
+   - Agentic Backend API: `cd agentic-backend && make run`
+   - Knowledge Flow tabular backend: `cd knowledge-flow-backend && make run`
+   - Agentic UI: `cd frontend && make run`
+   - EcoAdvisor MCP micro-services: `cd agentic-backend/agentic_backend/academy/08_eco_advisor && make run`
+2. In **Fred UI (http://localhost:5173) → Ressources**, import every CSV that ships in `agentic_backend/academy/08_eco_advisor/data`.
+3. In **Fred UI (http://localhost:5173) → MCP servers** register the MCP:
+   | Alias in UI | URL |
+   | --- | --- |
+   | `mcp-geo-service` | `http://localhost:9801/mcp` |
+   | `mcp-tcl-service` | `http://localhost:9802/mcp` |
 
-## How the agent reasons
-- Minimal LangGraph state (`messages`, `database_context`).
-- Loop pattern: `reasoner → tools → reasoner` until `tools_condition` says no more calls.
-- System prompt automatically lists the DuckDB tables returned by the tabular MCP `get_context` call.
-- Output: Markdown recap with a comparison table, total weekly CO₂, explicit assumptions, and tangible equivalents (vacuum hours, heating days, …).
+## Demo Questions
+In **Fred UI (http://localhost:5173) → Chat** pick the **Eco** agent and ask the following questions:
+   1. Quel est le bilan carbone (en kg CO₂) de mon trajet quotidien entre les locaux de la CNR 2 rue André Bonin, Lyon et mon domicile au 44 boulevard marius vivier merle, Lyon en voiture essence ?
+   2. Pour ce même trajet, quelle serait la différence d’émissions CO₂ si je prenais :
+      - Les transports en commun (métro D + bus C7) ?
+      - Un vélo personnel ou un Vélov’ (location) ?
+      - Une trottinette électrique en free-floating (ex : Lime) ?
+   3. Montres moi les arrêts de transport en commun les plus proche de chez moi.
+   4. Quelles bonnes pratiques sont proposées pour les trajets domicile‑école des enfants ?
+   5. Quels sont les dispositifs d’aides financières (ex : prime à la conversion, forfait mobilité durable) auxquels je pourrais prétendre à Lyon ?
