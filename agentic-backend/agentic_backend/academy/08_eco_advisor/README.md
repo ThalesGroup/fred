@@ -20,13 +20,14 @@ Before you start, make sure you are on the branch `826-create-eco-adviser-academ
 | Grand Lyon SYTRAL WFS | `https://data.grandlyon.com/geoserver/sytral/ows` (`sytral:tcl_sytral.tclarret`) | `tcl_transit_service` refreshes stop metadata (lines, coordinates, zones) so the agent can surface nearby transit options. | All request details are driven by the `TCL_WFS_*` env vars (URL, credentials, pagination). If the feed is unreachable, the service automatically reloads the local CSV `data/tcl_stops_demo.csv`. |
 
 ## Demo Setup
-1. Launch each service with its Makefile:
+1. Create and fill `agentic-backend/config/.env`.
+2. Launch each service with its Makefile:
    - Agentic Backend API: `cd agentic-backend && make run`
    - Knowledge Flow tabular backend: `cd knowledge-flow-backend && make run`
    - Agentic UI: `cd frontend && make run`
    - EcoAdvisor MCP micro-services: `cd agentic-backend/agentic_backend/academy/08_eco_advisor && make run`
-2. In **Fred UI (http://localhost:5173) → Ressources**, import every files from `agentic_backend/academy/08_eco_advisor/data`.
-3. In **Fred UI (http://localhost:5173) → MCP servers** register the MCP:
+3. In **Fred UI (http://localhost:5173) → Ressources**, import every files from `agentic_backend/academy/08_eco_advisor/data`.
+4. In **Fred UI (http://localhost:5173) → MCP servers** register the MCP:
    | Alias in UI | URL |
    | --- | --- |
    | `mcp-geo-service` | `http://localhost:9801/mcp` |
