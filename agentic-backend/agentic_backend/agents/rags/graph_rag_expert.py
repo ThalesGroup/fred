@@ -13,12 +13,12 @@
 # limitations under the License.
 
 
+import json
 import logging
 import re
-import json
 import time
-from uuid import uuid4
 from typing import Any, List, Tuple
+from uuid import uuid4
 
 import requests
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -42,7 +42,6 @@ from agentic_backend.core.agents.runtime_context import (
     is_corpus_only_mode,
 )
 from agentic_backend.core.runtime_source import expose_runtime_source
-
 
 _EXPLICIT_ID_RE = re.compile(
     r"\b(?:CR-\d+|SYS-REQ-\d+|SAF-REQ-\d+|HAZ-\d+|TC-\d+|SW-COMP-\d+)\b"
@@ -597,13 +596,12 @@ class Richard(AgentFlow):
                         logger.debug("[AGENT] ID expansion search failed for %s", rid)
 
             if extra:
+
                 def _hit_key(h: Any) -> tuple[str, str]:
                     if not isinstance(h, dict):
                         return ("", str(h))
                     uid = str(h.get("uuid") or h.get("uid") or "")
-                    fact = str(
-                        h.get("fact") or h.get("text") or h.get("content") or ""
-                    )
+                    fact = str(h.get("fact") or h.get("text") or h.get("content") or "")
                     return (uid, fact)
 
                 merged: list[Any] = []

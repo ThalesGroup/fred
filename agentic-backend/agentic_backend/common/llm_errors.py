@@ -19,8 +19,8 @@ This keeps guardrail/refusal detection centralized so agents do not each hand-ro
 slightly different error handling logic.
 """
 
-import logging
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -103,12 +103,14 @@ def normalize_llm_exception(exc: Exception) -> LlmErrorInfo:
         try:
             normalized_body = normalized_body.model_dump()  # type: ignore[assignment]
         except Exception:
+            logger.debug("Failed to dump exception body model to dict", exc_info=True)
             pass
     if isinstance(normalized_body, str):
         try:
             decoded = json.loads(normalized_body)
             normalized_body = decoded
         except Exception:
+            logger.debug("Failed to decode exception body as JSON", exc_info=True)
             pass
 
     detail = None
