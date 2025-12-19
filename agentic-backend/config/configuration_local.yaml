@@ -110,6 +110,8 @@ ai:
       class_path: "agentic_backend.academy.08_eco_advisor.eco_advisor.EcoAdvisor"
       enabled: true
       chat_options:
+        libraries_selection: true
+        attach_files: true
         search_rag_scoping: true
 
 mcp:

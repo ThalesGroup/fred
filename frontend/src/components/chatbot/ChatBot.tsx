@@ -442,12 +442,6 @@ const ChatBot = ({
         searchRagScope: userInputContext.searchRagScope,
       };
       localStorage.setItem(storageKey, JSON.stringify(payload));
-      setInitialCtx({
-        documentLibraryIds: payload.documentLibraryIds,
-        promptResourceIds: payload.promptResourceIds,
-        templateResourceIds: payload.templateResourceIds,
-        searchRagScope: payload.searchRagScope,
-      });
     } catch (e) {
       console.warn("Local context save failed:", e);
     }
@@ -603,6 +597,9 @@ const ChatBot = ({
   const effectiveSessionId = pendingSessionIdRef.current || currentChatBotSession?.id || undefined;
   const showWelcome = !waitResponse && (isCreatingNewConversation || messages.length === 0);
 
+  // Keep the latest RAG scope choice sticky across re-mounts during the same session.
+  const initialSearchRagScope = userInputContext?.searchRagScope ?? initialCtx.searchRagScope;
+
   const hasContext =
     !!userInputContext &&
     ((userInputContext?.files?.length ?? 0) > 0 ||
@@ -693,7 +690,7 @@ const ChatBot = ({
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
                 initialPromptResourceIds={initialCtx.promptResourceIds}
                 initialTemplateResourceIds={initialCtx.templateResourceIds}
-                initialSearchRagScope={initialCtx.searchRagScope}
+                initialSearchRagScope={initialSearchRagScope}
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}
@@ -752,7 +749,7 @@ const ChatBot = ({
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
                 initialPromptResourceIds={initialCtx.promptResourceIds}
                 initialTemplateResourceIds={initialCtx.templateResourceIds}
-                initialSearchRagScope={initialCtx.searchRagScope}
+                initialSearchRagScope={initialSearchRagScope}
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}

@@ -397,7 +397,8 @@ class EcoAdvisor(AgentFlow):
             tpl += (
                 "\n\nUser selected *Local data* mode: ground every recommendation in the tabular datasets "
                 "or PDF snippets provided via the MCP tools. If a fact is missing from those resources, "
-                "say so explicitly instead of inventing an answer."
+                "say so explicitly instead of inventing an answer. Do not rely on external or general knowledge. "
+                "Only use facts coming from the MCP tool outputs, database context, or the PDF snippets above."
             )
 
         if map_requested:
@@ -1090,6 +1091,15 @@ class EcoAdvisor(AgentFlow):
         messages = self.with_system(system_text, recent_history)
         messages = self.with_chat_context_text(messages)
         messages = self._compact_messages_for_llm(messages)
+        if rag_scope == "corpus_only":
+            guardrail_msg = SystemMessage(
+                content=(
+                    "CORPUS-ONLY GUARDRAIL: Use only facts returned by the MCP tools or the PDF snippets/context provided. "
+                    "If the data is missing or incomplete, state that you cannot answer without corpus evidence. "
+                    "Do not use general knowledge."
+                )
+            )
+            messages = [guardrail_msg, *messages]
 
         try:
             # 4) LLM + tool-calling: le modèle peut décider d'appeler MCP ou non
