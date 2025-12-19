@@ -34,15 +34,22 @@ import os
 from typing import Annotated, Any, Dict, List, Optional, TypedDict, Union, cast
 
 from fred_core import VectorSearchHit
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import tools_condition
 
 from agentic_backend.application_context import get_default_chat_model
+from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
 from agentic_backend.common.mcp_runtime import MCPRuntime
-from agentic_backend.common.rags_utils import attach_sources_to_llm_response
+from agentic_backend.common.rags_utils import (
+    attach_sources_to_llm_response,
+    ensure_ranks,
+    format_sources_for_prompt,
+    sort_hits,
+)
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import (
@@ -54,6 +61,7 @@ from agentic_backend.core.agents.agent_spec import (
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
+    get_rag_knowledge_scope,
     get_search_policy,
     should_skip_rag_search,
 )
@@ -128,15 +136,18 @@ ECO_TUNING = AgentTuning(
             required=True,
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
             default=(
-                "You are **EcoAdvisor**, a pragmatic mobility and CO₂ guide.\n"
-                "- Work in the user's language.\n"
-                "- You can read the tabular datasets loaded via the Knowledge Flow UI and combine them with the MCP tools when relevant.\n"
-                "- When a commute answer would benefit from official documents, call the Knowledge Flow text MCP (`search_documents_using_vectorization`) to grab PDF excerpts and cite their title and, when present, the page number.\n"
-                "- Use MCP tools instead of guessing; cite only the `source` / `last_update` fields they return.\n"
-                "- You can display a map if it's pertinent.\n"
-                "- Reply in one short paragraph (≤4 lignes). And if it's pertinent add a Markdown table `Mode | CO₂ hebdo | Hypothèses` or / and a single sentence for the equivalences (aspirateur/chauffage...).\n"
-                "- No detailed calculations unless the user insists.\n"
-                "- If some data is missing or a tool fails, say so briefly and note which assumption you used instead of exposing the computation."
+                "You are **EcoAdvisor**, a concise mobility & CO₂ guide.\n"
+                "- Answer in the user's language and rely on the datasets imported via Knowledge Flow.\n"
+                "- Tools (choose only what helps the current turn):\n"
+                "  * `mcp-knowledge-flow-mcp-tabular` — context + SQL on the CSV datasets (bike infra, ADEME CO₂ factors, TCL stops, travel times).\n"
+                "  * `mcp-knowledge-flow-mcp-text` — `search_documents_using_vectorization` to cite PDF excerpts (guides, aides financières, bonnes pratiques).\n"
+                "  * `mcp-geo-service` — `geocode_location`, `compute_trip_distance`, `estimate_trip_between_addresses` for addresses and mode comparisons.\n"
+                "  * `mcp-tcl-service` — `find_nearby_tcl_stops`, `search_tcl_stops`, `list_tcl_lines` for transit context.\n"
+                "  * `mcp-fs` — `read_file` when you must surface a user attachment.\n"
+                "- Prefer tool evidence over guesses; cite dataset `source`/`last_update` or PDF title + page.\n"
+                "- Only show a map when locations truly matter.\n"
+                "- Final answer: ≤4 short sentences; optionally add a Markdown table `Mode | CO₂ hebdo | Hypothèses` plus one real-world equivalence.\n"
+                "- If data is missing or a call fails, state the gap and the assumption you used instead of inventing values."
                 "Current date: {today}."
             ),
         ),
@@ -207,6 +218,8 @@ class EcoAdvisor(AgentFlow):
         super().__init__(agent_settings=agent_settings)
         # Runtime MCP partagé avec Tessa: même principe, agent différent.
         self.mcp = MCPRuntime(agent=self)
+        self._base_model: Optional[BaseChatModel] = None
+        self.search_client = VectorSearchClient(agent=self)
 
     # -----------------------------------------------------------------------
     # Bootstrap: modèle + MCP + graphe
@@ -214,14 +227,15 @@ class EcoAdvisor(AgentFlow):
     async def async_init(self, runtime_context: RuntimeContext):
         await super().async_init(runtime_context)
         # Modele "par défaut" de Fred pour le chat (fourni par la factory centrale).
-        self.model = get_default_chat_model()
+        base_model = get_default_chat_model()
+        self._base_model = base_model
 
         # Démarre la stack MCP tabulaire (client JSON-RPC, discovery des tools, etc.).
         await self.mcp.init()
 
         # On bind les tools MCP directement au modèle:
         # cela permet au LLM d'appeler des tools "nativement" via l'OpenAI tool-calling.
-        self.model = self.model.bind_tools(self.mcp.get_tools())
+        self.model = base_model.bind_tools(self.mcp.get_tools())
 
         # Construction du graphe LangGraph pour cet agent.
         self._graph = self._build_graph()
@@ -296,6 +310,10 @@ class EcoAdvisor(AgentFlow):
                 return payload
         return payload
 
+    def _system_prompt(self) -> str:
+        """Return the base system prompt (without auto-injected context)."""
+        return self.render(self.get_tuned_text("prompts.system") or "")
+
     async def _ensure_database_context(self, state: EcoState) -> DatabaseContextPayload:
         """
         Charge la liste des bases/tables disponibles via un tool MCP (ex: get_context).
@@ -351,6 +369,7 @@ class EcoAdvisor(AgentFlow):
         )
 
         runtime_context = self.get_runtime_context()
+        rag_scope = get_rag_knowledge_scope(runtime_context)
         should_lookup_docs = (
             MAX_DOC_SNIPPETS > 0 and not should_skip_rag_search(runtime_context)
         )
@@ -360,9 +379,26 @@ class EcoAdvisor(AgentFlow):
             )
         else:
             doc_block = ""
+            # Purge any cached snippets so we don't cite PDFs while in general-only mode.
+            if document_context:
+                document_context = cast(DocumentContextPayload, {})
+                state["document_context"] = document_context
 
         if doc_block:
             tpl += f"\n\n{doc_block}"
+
+        if rag_scope == "general_only":
+            tpl += (
+                "\n\nUser selected *General knowledge* mode: do not rely on the local CSV/PDF "
+                "datasets nor call their MCP tools unless absolutely required to clarify the request. "
+                "Answer from broad knowledge and be transparent when data points would need local imports."
+            )
+        elif rag_scope == "corpus_only":
+            tpl += (
+                "\n\nUser selected *Local data* mode: ground every recommendation in the tabular datasets "
+                "or PDF snippets provided via the MCP tools. If a fact is missing from those resources, "
+                "say so explicitly instead of inventing an answer."
+            )
 
         if map_requested:
             geo_ctx = cast(Optional[GeoContext], state.get("geo_context"))
@@ -380,6 +416,108 @@ class EcoAdvisor(AgentFlow):
             tpl += "\n\n" + " ".join(instruction_lines)
 
         return self.render(tpl), database_context, document_context
+
+    def _general_only_system_prompt(self) -> str:
+        tpl = self.get_tuned_text("prompts.system") or ""
+        tpl += (
+            "\n\nGeneral knowledge mode is active: ignore the local CSV/PDF datasets and MCP tools. "
+            "Answer using broad mobility and sustainability expertise, and state when precise local numbers "
+            "would require re-enabling the data sources."
+        )
+        return self.render(tpl)
+
+    async def _answer_general_only(self, state: EcoState) -> Dict[str, Any]:
+        model = self._base_model or self.model
+        if model is None:
+            raise RuntimeError("EcoAdvisor: model is not initialized. Call async_init() first.")
+
+        system_text = self._general_only_system_prompt()
+        history = self.recent_messages(
+            state.get("messages") or [], max_messages=max(RECENT_MESSAGES_WINDOW, 1)
+        )
+        messages = self.with_system(system_text, history)
+        messages = self.with_chat_context_text(messages)
+        messages = self._compact_messages_for_llm(messages)
+        response = await model.ainvoke(messages)
+        return {
+            "messages": [response],
+            "database_context": [],
+            "document_context": {},
+            "geo_context": state.get("geo_context"),
+        }
+
+    async def _answer_corpus_only(self, state: EcoState) -> Dict[str, Any]:
+        model = self._base_model or self.model
+        if model is None:
+            raise RuntimeError("EcoAdvisor: model is not initialized. Call async_init() first.")
+
+        runtime_context = self.get_runtime_context()
+        question = self._extract_latest_user_question(state.get("messages") or []) or ""
+        doc_tag_ids = get_document_library_tags_ids(runtime_context)
+        search_policy = get_search_policy(runtime_context)
+        top_k = max(1, self.get_tuned_int("rag.top_k", default=10, min_value=1))
+
+        hits = self.search_client.search(
+            question=question,
+            top_k=top_k,
+            document_library_tags_ids=doc_tag_ids,
+            search_policy=search_policy,
+        )
+        if not hits:
+            warn = (
+                "No relevant documents were found for this question. "
+                "You must not use general knowledge. Explain that you cannot answer without evidence from the corpus "
+                "and invite the user to refine the question or provide documents."
+            )
+            return {
+                "messages": [AIMessage(content=warn)],
+                "database_context": [],
+                "document_context": {},
+                "geo_context": state.get("geo_context"),
+            }
+
+        hits = sort_hits(hits)
+        ensure_ranks(hits)
+
+        sources_block = format_sources_for_prompt(
+            hits[:MAX_DOC_SNIPPETS], snippet_chars=DOC_SNIPPET_CHAR_LIMIT
+        )
+        document_context: DocumentContextPayload = {
+            "query": question,
+            "hits": [h.model_dump() for h in hits],
+            "snippets": [h.model_dump() for h in hits[:MAX_DOC_SNIPPETS]],
+        }
+        state["document_context"] = document_context
+
+        sys_msg = SystemMessage(content=self._system_prompt())
+        history_max = self.get_tuned_int("rag.history_max_messages", default=6, min_value=0)
+        history = self.get_recent_history(
+            state["messages"],
+            max_messages=history_max,
+            include_system=False,
+            include_tool=False,
+            drop_last=True,
+        )
+        guardrails = (
+            "\n\nIMPORTANT: Answer strictly using the provided documents. "
+            "If they are insufficient, state that you cannot answer without evidence from the corpus. "
+            "Do not rely on your general knowledge."
+        )
+        template = self.get_tuned_text("prompts.with_sources") or "Question:\n{question}\n\nDocuments:\n{sources}"
+        rendered = self.render(template, question=question, sources=sources_block)
+        human_msg = HumanMessage(content=rendered + guardrails)
+
+        messages = [sys_msg, *history, human_msg]
+        messages = self.with_chat_context_text(messages)
+        messages = self._compact_messages_for_llm(messages)
+        answer = await model.ainvoke(messages)
+        attach_sources_to_llm_response(answer, hits[:MAX_DOC_SNIPPETS])
+        return {
+            "messages": [answer],
+            "database_context": [],
+            "document_context": document_context,
+            "geo_context": state.get("geo_context"),
+        }
 
     async def _ensure_document_context(
         self, state: EcoState, payload: DocumentContextPayload
@@ -409,6 +547,12 @@ class EcoAdvisor(AgentFlow):
 
     async def _search_pdf_resources(self, question: str) -> List[Dict[str, Any]]:
         if not question:
+            return []
+
+        # Respect the UI toggle: skip document retrieval when the user selected
+        # the "General knowledge" scope.
+        if should_skip_rag_search(self.get_runtime_context()):
+            logger.debug("EcoAdvisor: skipping PDF search because general-only mode is active.")
             return []
 
         tools = self.mcp.get_tools()
@@ -925,6 +1069,12 @@ class EcoAdvisor(AgentFlow):
             raise RuntimeError(
                 "EcoAdvisor: model is not initialized. Call async_init() first."
             )
+
+        runtime_context = self.get_runtime_context()
+        rag_scope = get_rag_knowledge_scope(runtime_context)
+        if rag_scope == "general_only":
+            state["document_context"] = {}
+            return await self._answer_general_only(state)
 
         wants_map = self._user_requests_map(state)
         (

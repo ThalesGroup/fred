@@ -387,11 +387,16 @@ const ChatBot = ({
     documentLibraryIds: string[];
     promptResourceIds: string[];
     templateResourceIds: string[];
+    searchRagScope?: "corpus_only" | "hybrid" | "general_only";
   }>({
     documentLibraryIds: [],
     promptResourceIds: [],
     templateResourceIds: [],
+    searchRagScope: undefined,
   });
+
+  const parseRagScope = (value: any) =>
+    value === "corpus_only" || value === "hybrid" || value === "general_only" ? value : undefined;
 
   // load from local storage
   // Load defaults for a brand-new convo (no session yet). These act as initial* props for UserInput.
@@ -404,9 +409,15 @@ const ChatBot = ({
           documentLibraryIds: parsed.documentLibraryIds ?? [],
           promptResourceIds: parsed.promptResourceIds ?? [],
           templateResourceIds: parsed.templateResourceIds ?? [],
+          searchRagScope: parseRagScope(parsed.searchRagScope),
         });
       } else {
-        setInitialCtx({ documentLibraryIds: [], promptResourceIds: [], templateResourceIds: [] });
+        setInitialCtx({
+          documentLibraryIds: [],
+          promptResourceIds: [],
+          templateResourceIds: [],
+          searchRagScope: undefined,
+        });
       }
     } catch (e) {
       console.warn("Local context load failed:", e);
@@ -431,6 +442,12 @@ const ChatBot = ({
         searchRagScope: userInputContext.searchRagScope,
       };
       localStorage.setItem(storageKey, JSON.stringify(payload));
+      setInitialCtx({
+        documentLibraryIds: payload.documentLibraryIds,
+        promptResourceIds: payload.promptResourceIds,
+        templateResourceIds: payload.templateResourceIds,
+        searchRagScope: payload.searchRagScope,
+      });
     } catch (e) {
       console.warn("Local context save failed:", e);
     }
@@ -676,6 +693,7 @@ const ChatBot = ({
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
                 initialPromptResourceIds={initialCtx.promptResourceIds}
                 initialTemplateResourceIds={initialCtx.templateResourceIds}
+                initialSearchRagScope={initialCtx.searchRagScope}
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}
@@ -734,6 +752,7 @@ const ChatBot = ({
                 initialDocumentLibraryIds={initialCtx.documentLibraryIds}
                 initialPromptResourceIds={initialCtx.promptResourceIds}
                 initialTemplateResourceIds={initialCtx.templateResourceIds}
+                initialSearchRagScope={initialCtx.searchRagScope}
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}

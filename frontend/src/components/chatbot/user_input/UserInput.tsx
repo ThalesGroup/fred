@@ -109,6 +109,7 @@ export default function UserInput({
   initialDocumentLibraryIds,
   initialPromptResourceIds,
   initialTemplateResourceIds,
+  initialSearchRagScope,
   initialSearchPolicy = "semantic",
   currentAgent,
   agents,
@@ -127,6 +128,7 @@ export default function UserInput({
   initialDocumentLibraryIds?: string[];
   initialPromptResourceIds?: string[];
   initialTemplateResourceIds?: string[];
+  initialSearchRagScope?: SearchRagScope;
   initialSearchPolicy?: SearchPolicyName;
   currentAgent: AnyAgent;
   agents: AnyAgent[];
@@ -149,7 +151,7 @@ export default function UserInput({
   const [filesBlob, setFilesBlob] = useState<File[] | null>(null);
   // Only show the selector when the agent explicitly opts in via config (new flag, fallback to old).
   const supportsRagScopeSelection = agentChatOptions?.search_rag_scoping === true;
-  const computeDefaultRagScope = (): SearchRagScope => "hybrid";
+  const computeDefaultRagScope = (): SearchRagScope => parseRagScope(initialSearchRagScope) ?? "hybrid";
   const [searchRagScope, setSearchRagScope] = useState<SearchRagScope>(computeDefaultRagScope);
 
   console.log("UserInput render", { searchRagScope, supportsRagScopeSelection });
@@ -193,12 +195,8 @@ export default function UserInput({
   // When switching agents (no active session), align default skip state with the agent option
   useEffect(() => {
     if (sessionId) return; // do not override an active session choice
-    if (supportsRagScopeSelection) {
-      setSearchRagScope("hybrid");
-    } else {
-      setSearchRagScope("hybrid");
-    }
-  }, [agentChatOptions?.search_rag_scoping, supportsRagScopeSelection, sessionId]);
+    setSearchRagScope(parseRagScope(initialSearchRagScope) ?? "hybrid");
+  }, [agentChatOptions?.search_rag_scoping, supportsRagScopeSelection, sessionId, initialSearchRagScope]);
 
   // Hydration guard: run at most once per session id.
   const hydratedForSession = useRef<string | undefined>(undefined);

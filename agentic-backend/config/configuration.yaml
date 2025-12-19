@@ -111,6 +111,8 @@ ai:
       type: "agent"
       class_path: "agentic_backend.academy.08_eco_advisor.eco_advisor.EcoAdvisor"
       enabled: true
+      chat_options:
+        search_rag_scoping: true
 
 mcp:
   servers:
