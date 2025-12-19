@@ -31,6 +31,7 @@ export interface ProgressStep {
   step: string;
   filename: string;
   status: string;
+  error?: string;
 }
 
 export interface ProgressStepperProps {
@@ -115,9 +116,16 @@ export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
                   </Typography>
                 </StepLabel>
                 <StepContent>
-                  <Typography variant="body2" color="textSecondary" sx={{ ml: 1, maxWidth: "100%" }}>
-                    {step.status}
-                  </Typography>
+                  <Box sx={{ ml: 1, maxWidth: "100%" }}>
+                    <Typography variant="body2" color="textSecondary">
+                      {step.status}
+                    </Typography>
+                    {step.error && (
+                      <Typography variant="caption" color="error">
+                        {step.error}
+                      </Typography>
+                    )}
+                  </Box>
                 </StepContent>
               </Step>
             ))}
