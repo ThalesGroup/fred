@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { keyframes } from "@emotion/react";
 import {
   Box,
   Button,
@@ -30,10 +29,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ProgressStep, ProgressStepper } from "../../ProgressStepper";
 
-const progressShimmer = keyframes`
-  0% { background-position: 0% 50%; }
-  100% { background-position: 200% 50%; }
-`;
 
 interface DocumentUploadProgressModalProps {
   open: boolean;
