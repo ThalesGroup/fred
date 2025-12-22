@@ -59,7 +59,7 @@ dependencies = [
   # PyTorch for ARM64 (M1/M2 Macs, Graviton, Raspberry Pi)
   "torch==2.7.1; platform_machine == 'aarch64' or platform_machine == 'arm64'",
   "torchvision==0.22.1; platform_machine == 'aarch64' or platform_machine == 'arm64'",
-  "sentence-transformers==5.1.1",,
+  "sentence-transformers==5.1.1",
   "umap-learn>=0.5.9.post2",
 ]
 
