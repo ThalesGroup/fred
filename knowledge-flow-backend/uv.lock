@@ -997,7 +997,7 @@ requires-dist = [
     { name = "langchain-ollama", specifier = ">=1.0.0" },
     { name = "langchain-openai", specifier = ">=1.0.0" },
     { name = "minio", specifier = ">=7.2.20" },
-    { name = "openfga-sdk", specifier = ">=0.9.7" },
+    { name = "openfga-sdk", specifier = ">=0.9.9" },
     { name = "opensearch-py", specifier = "==2.8.0" },
     { name = "pandas", specifier = ">=2.2.2,<3.0.0" },
     { name = "pydantic", specifier = ">=2.5.2,<3.0.0" },
@@ -1601,6 +1601,7 @@ dependencies = [
     { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "torchvision", version = "0.22.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'arm64' and sys_platform == 'linux')" },
     { name = "torchvision", version = "0.22.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "umap-learn", marker = "sys_platform == 'linux'" },
     { name = "uv", marker = "sys_platform == 'linux'" },
     { name = "uvicorn", extra = ["standard"], marker = "sys_platform == 'linux'" },
     { name = "weaviate-client", marker = "sys_platform == 'linux'" },
@@ -1686,6 +1687,7 @@ requires-dist = [
     { name = "torchvision", marker = "platform_machine == 'aarch64' or platform_machine == 'arm64'", specifier = "==0.22.1" },
     { name = "torchvision", marker = "platform_machine == 'x86_64'", specifier = "==0.22.1+cpu", index = "https://download.pytorch.org/whl/cpu" },
     { name = "tox", marker = "extra == 'dev'", specifier = "==4.27.0" },
+    { name = "umap-learn", specifier = ">=0.5.9.post2" },
     { name = "uv" },
     { name = "uvicorn", extras = ["standard"], specifier = "==0.34.0" },
     { name = "weaviate-client", specifier = "<4.0.0" },
@@ -1938,6 +1940,16 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6f/6b/c875b30a1ba490860c93da4cabf479e03f584eba06fe5963f6f6644653d8/lazy_loader-0.4.tar.gz", hash = "sha256:47c75182589b91a4e1a85a136c074285a5ad4d9f39c63e0d7fb76391c4574cd1", size = 15431, upload-time = "2024-04-05T13:03:12.261Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/83/60/d497a310bde3f01cb805196ac61b7ad6dc5dcf8dce66634dc34364b20b4f/lazy_loader-0.4-py3-none-any.whl", hash = "sha256:342aa8e14d543a154047afb4ba8ef17f5563baad3fc610d7b15b213b0f119efc", size = 12097, upload-time = "2024-04-05T13:03:10.514Z" },
+]
+
+[[package]]
+name = "llvmlite"
+version = "0.46.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/74/cd/08ae687ba099c7e3d21fe2ea536500563ef1943c5105bf6ab4ee3829f68e/llvmlite-0.46.0.tar.gz", hash = "sha256:227c9fd6d09dce2783c18b754b7cd9d9b3b3515210c46acc2d3c5badd9870ceb", size = 193456, upload-time = "2025-12-08T18:15:36.295Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/aa/85/4890a7c14b4fa54400945cb52ac3cd88545bbdb973c440f98ca41591cdc5/llvmlite-0.46.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:3535bd2bb6a2d7ae4012681ac228e5132cdb75fefb1bcb24e33f2f3e0c865ed4", size = 56275176, upload-time = "2025-12-08T18:15:03.936Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/07/3d31d39c1a1a08cd5337e78299fca77e6aebc07c059fbd0033e3edfab45c/llvmlite-0.46.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:4cbfd366e60ff87ea6cc62f50bc4cd800ebb13ed4c149466f50cf2163a473d1e", size = 55128630, upload-time = "2025-12-08T18:15:07.196Z" },
 ]
 
 [[package]]
@@ -2360,6 +2372,20 @@ wheels = [
 ]
 
 [[package]]
+name = "numba"
+version = "0.63.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "llvmlite", marker = "sys_platform == 'linux'" },
+    { name = "numpy", marker = "sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c5/00/c45e314a72382c5e32e642de45a4fd33f7d519b3d9b49bc33171ded3f55b/numba-0.63.0.tar.gz", hash = "sha256:27e525ce6f9f727c4f61e89b9d453d4a7d0aabbbf110278988334f43cbd70fdc", size = 2761458, upload-time = "2025-12-09T04:16:23.626Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4d/c0/5081186f2e2bb14853360243c5b244fd17b393d368369213cce5eae8fc7c/numba-0.63.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:2279cbcd459440eca36be1078ad14e96a7a339124065a83577feb8849d28453d", size = 3801646, upload-time = "2025-12-09T04:16:05.447Z" },
+    { url = "https://files.pythonhosted.org/packages/48/11/a725835fe4d57f8482491bd846c1bb504f1072e40380b442ec15da66922f/numba-0.63.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:18add2794439ae7289f1836ef73901b2a9e2c1fd91f7389af0c447626955519d", size = 3501848, upload-time = "2025-12-09T04:16:06.926Z" },
+]
+
+[[package]]
 name = "numpy"
 version = "2.3.5"
 source = { registry = "https://pypi.org/simple" }
@@ -2453,7 +2479,7 @@ wheels = [
 
 [[package]]
 name = "openfga-sdk"
-version = "0.9.8"
+version = "0.9.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp", marker = "sys_platform == 'linux'" },
@@ -2461,9 +2487,9 @@ dependencies = [
     { name = "python-dateutil", marker = "sys_platform == 'linux'" },
     { name = "urllib3", marker = "sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d7/18/f3932ed70328a53c0a4d5e2e787d3fe6f1d64a352cedddf93839ffd20498/openfga_sdk-0.9.8.tar.gz", hash = "sha256:a5898fccd7ffcdb8ae046ae3032675c716af4f80aeb74ef418ee75b0402f56ea", size = 320023, upload-time = "2025-11-04T22:25:12.469Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/1d/db68e86b07d5dd461ba2d90c4fc69f57107fd2c35bf19febc2ac1f4e2b5f/openfga_sdk-0.9.9.tar.gz", hash = "sha256:4d0b8bf3f7525b268c5d3cde6e1c62688fbb455216736df6ec51abbe24119114", size = 326407, upload-time = "2025-12-08T18:56:06.176Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/38/cd/56f39ad2d13009d6fb435e878f28115bd703e9525cd40bab7993c7b70d6f/openfga_sdk-0.9.8-py3-none-any.whl", hash = "sha256:c9d75685e84ca3c8b598eeab8ccc0c8e2de8a16617b5cef02ab4d3b4d0056b22", size = 258094, upload-time = "2025-11-04T22:25:10.558Z" },
+    { url = "https://files.pythonhosted.org/packages/12/b8/f69abd2e5752db2f9c92d73accf44871d4ff732c768fff9d89a2047e0773/openfga_sdk-0.9.9-py3-none-any.whl", hash = "sha256:91ef8973ca1159278cc47b6f6a6d409ef0504ced95e7b28b6252d25e4ab18830", size = 259519, upload-time = "2025-12-08T18:56:04.915Z" },
 ]
 
 [[package]]
@@ -3047,6 +3073,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f5/ae/1fe3fcd9f959efa0ebe200b8de88b5a5ce3e767e38c7ac32fb179f16a388/pymysql-1.1.2.tar.gz", hash = "sha256:4961d3e165614ae65014e361811a724e2044ad3ea3739de9903ae7c21f539f03", size = 48258, upload-time = "2025-08-24T12:55:55.146Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7c/4c/ad33b92b9864cbde84f259d5df035a6447f91891f5be77788e2a3892bce3/pymysql-1.1.2-py3-none-any.whl", hash = "sha256:e6b1d89711dd51f8f74b1631fe08f039e7d76cf67a42a323d3178f0f25762ed9", size = 45300, upload-time = "2025-08-24T12:55:53.394Z" },
+]
+
+[[package]]
+name = "pynndescent"
+version = "0.5.13"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "joblib", marker = "sys_platform == 'linux'" },
+    { name = "llvmlite", marker = "sys_platform == 'linux'" },
+    { name = "numba", marker = "sys_platform == 'linux'" },
+    { name = "scikit-learn", marker = "sys_platform == 'linux'" },
+    { name = "scipy", marker = "sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7e/58/560a4db5eb3794d922fe55804b10326534ded3d971e1933c1eef91193f5e/pynndescent-0.5.13.tar.gz", hash = "sha256:d74254c0ee0a1eeec84597d5fe89fedcf778593eeabe32c2f97412934a9800fb", size = 2975955, upload-time = "2024-06-17T15:48:32.914Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d2/53/d23a97e0a2c690d40b165d1062e2c4ccc796be458a1ce59f6ba030434663/pynndescent-0.5.13-py3-none-any.whl", hash = "sha256:69aabb8f394bc631b6ac475a1c7f3994c54adf3f51cd63b2730fefba5771b949", size = 56850, upload-time = "2024-06-17T15:48:31.184Z" },
 ]
 
 [[package]]
@@ -4119,6 +4161,23 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/8b/2e/c14812d3d4d9cd1773c6be938f89e5735a1f11a9f184ac3639b93cef35d5/tzlocal-5.3.1.tar.gz", hash = "sha256:cceffc7edecefea1f595541dbd6e990cb1ea3d19bf01b2809f362a03dd7921fd", size = 30761, upload-time = "2025-03-05T21:17:41.549Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c2/14/e2a54fabd4f08cd7af1c07030603c3356b74da07f7cc056e600436edfa17/tzlocal-5.3.1-py3-none-any.whl", hash = "sha256:eb1a66c3ef5847adf7a834f1be0800581b683b5608e74f86ecbcef8ab91bb85d", size = 18026, upload-time = "2025-03-05T21:17:39.857Z" },
+]
+
+[[package]]
+name = "umap-learn"
+version = "0.5.9.post2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numba", marker = "sys_platform == 'linux'" },
+    { name = "numpy", marker = "sys_platform == 'linux'" },
+    { name = "pynndescent", marker = "sys_platform == 'linux'" },
+    { name = "scikit-learn", marker = "sys_platform == 'linux'" },
+    { name = "scipy", marker = "sys_platform == 'linux'" },
+    { name = "tqdm", marker = "sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5f/ee/6bc65bd375c812026a7af63fe9d09d409382120aff25f2152f1ba12af5ec/umap_learn-0.5.9.post2.tar.gz", hash = "sha256:bdf60462d779bd074ce177a0714ced17e6d161285590fa487f3f9548dd3c31c9", size = 95441, upload-time = "2025-07-03T00:18:02.479Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6b/b1/c24deeda9baf1fd491aaad941ed89e0fed6c583a117fd7b79e0a33a1e6c0/umap_learn-0.5.9.post2-py3-none-any.whl", hash = "sha256:fbe51166561e0e7fab00ef3d516ac2621243b8d15cf4bef9f656d701736b16a0", size = 90146, upload-time = "2025-07-03T00:18:01.042Z" },
 ]
 
 [[package]]

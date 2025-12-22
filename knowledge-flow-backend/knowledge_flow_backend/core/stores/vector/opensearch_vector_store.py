@@ -332,6 +332,129 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             logger.exception("[VECTOR][OPENSEARCH] failed to update retrievable flag for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to update retrievable flag in OpenSearch.")
 
+    # ---------- Diagnostics / Introspection ----------
+
+    def get_vectors_for_document(self, document_uid: str, with_document: bool = True) -> List[Dict[str, Any]]:
+        """
+        Return all vectors for the given document. Depending on index mapping, the raw vector
+        may or may not be stored in _source. If not available, entries without vectors are skipped.
+
+        Returns: [{"chunk_uid": str, "vector": list[float], (optional) "text": str}]
+        """
+        try:
+            body = {
+                "size": 10000,
+                "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
+                "_source": ["vector_field", "text"],
+            }
+            res = self._client.search(index=self._index, body=body)
+            hits = res.get("hits", {}).get("hits", [])
+            out: List[Dict[str, Any]] = []
+            for h in hits:
+                src = h.get("_source", {}) or {}
+                vec = src.get("vector_field")
+                if vec is None:
+                    # vector might not be stored in _source
+                    continue
+                entry: Dict[str, Any] = {"chunk_uid": h.get("_id"), "vector": vec}
+                if with_document:
+                    entry["text"] = src.get("text", "")
+                out.append(entry)
+            logger.info(
+                "[VECTOR][OPENSEARCH] fetched %d vectors for document_uid=%s from index=%s",
+                len(out),
+                document_uid,
+                self._index,
+            )
+            return out
+        except Exception:
+            logger.exception("[VECTOR][OPENSEARCH] failed to fetch vectors for document_uid=%s", document_uid)
+            return []
+
+    def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
+        """
+        Return all chunks (text + metadata) for the given document.
+
+        Returns: [{"chunk_uid": str, "text": str, "metadata": dict}]
+        """
+        try:
+            body = {
+                "size": 10000,
+                "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
+                "_source": ["text", "metadata"],
+            }
+            res = self._client.search(index=self._index, body=body)
+            hits = res.get("hits", {}).get("hits", [])
+            out: List[Dict[str, Any]] = []
+            for h in hits:
+                src = h.get("_source", {}) or {}
+                out.append(
+                    {
+                        "chunk_uid": h.get("_id"),
+                        "text": src.get("text", ""),
+                        "metadata": src.get("metadata", {}) or {},
+                    }
+                )
+            logger.info(
+                "[VECTOR][OPENSEARCH] fetched %d chunks for document_uid=%s from index=%s",
+                len(out),
+                document_uid,
+                self._index,
+            )
+            return out
+        except Exception:
+            logger.exception("[VECTOR][OPENSEARCH] failed to fetch chunks for document_uid=%s", document_uid)
+            return []
+
+    def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
+        """
+        Return a single chunk (text + metadata) if it belongs to the given document.
+        """
+        try:
+            res = self._client.get(index=self._index, id=chunk_uid)
+            if not res or res.get("found") is not True:
+                logger.warning("[VECTOR][OPENSEARCH] chunk not found: %s", chunk_uid)
+                return {"chunk_uid": chunk_uid}
+            src = res.get("_source", {}) or {}
+            md = src.get("metadata", {}) or {}
+            if md.get("document_uid") != document_uid:
+                logger.warning(
+                    "[VECTOR][OPENSEARCH] chunk %s does not belong to document_uid=%s",
+                    chunk_uid,
+                    document_uid,
+                )
+                return {"chunk_uid": chunk_uid}
+            return {
+                "chunk_uid": chunk_uid,
+                "text": src.get("text", ""),
+                "metadata": md,
+            }
+        except Exception:
+            logger.exception("[VECTOR][OPENSEARCH] failed to fetch chunk %s", chunk_uid)
+            return {"chunk_uid": chunk_uid}
+
+    def delete_chunk(self, document_uid: str, chunk_uid: str) -> None:
+        """Delete a single chunk by id; if it doesn't belong to the given document, do nothing."""
+        try:
+            # Ensure ownership by checking metadata.document_uid
+            res = self._client.get(index=self._index, id=chunk_uid)
+            if not res or res.get("found") is not True:
+                logger.warning("[VECTOR][OPENSEARCH] cannot delete; chunk not found: %s", chunk_uid)
+                return
+            src = res.get("_source", {}) or {}
+            md = src.get("metadata", {}) or {}
+            if md.get("document_uid") != document_uid:
+                logger.warning(
+                    "[VECTOR][OPENSEARCH] not deleting chunk %s: mismatched document_uid=%s",
+                    chunk_uid,
+                    document_uid,
+                )
+                return
+            self._client.delete(index=self._index, id=chunk_uid)
+            logger.info("[VECTOR][OPENSEARCH] deleted chunk %s for document_uid=%s", chunk_uid, document_uid)
+        except Exception:
+            logger.exception("[VECTOR][OPENSEARCH] failed to delete chunk %s for document_uid=%s", chunk_uid, document_uid)
+
     def _build_hits(self, hits_data: List, hit_type: Type[T]) -> List[T]:
         """
         Build a list of hit objects from OpenSearch hits data.
@@ -380,6 +503,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
 
         return results
 
+    # ---- helpers ----------------------------------------------------------
     def _build_ann_hits(self, hits_data: List) -> List[AnnHit]:
         return self._build_hits(hits_data, AnnHit)
 

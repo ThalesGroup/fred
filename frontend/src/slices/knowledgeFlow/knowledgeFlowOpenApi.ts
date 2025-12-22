@@ -63,17 +63,17 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.browseDocumentsRequest,
       }),
     }),
-    documentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGet: build.query<
-      DocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetApiResponse,
-      DocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetApiArg
+    documentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGet: build.query<
+      DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse,
+      DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiArg
     >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/document/${queryArg.documentUid}/vectors` }),
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/vectors` }),
     }),
-    documentChunksKnowledgeFlowV1DocumentDocumentUidChunksGet: build.query<
-      DocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetApiResponse,
-      DocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetApiArg
+    documentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGet: build.query<
+      DocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetApiResponse,
+      DocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetApiArg
     >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/document/${queryArg.documentUid}/chunks` }),
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/chunks` }),
     }),
     auditDocumentsKnowledgeFlowV1DocumentsAuditGet: build.query<
       AuditDocumentsKnowledgeFlowV1DocumentsAuditGetApiResponse,
@@ -86,6 +86,59 @@ const injectedRtkApi = api.injectEndpoints({
       FixDocumentsKnowledgeFlowV1DocumentsAuditFixPostApiArg
     >({
       query: () => ({ url: `/knowledge-flow/v1/documents/audit/fix`, method: "POST" }),
+    }),
+    getChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGet: build.query<
+      GetChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGetApiResponse,
+      GetChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/chunks/${queryArg.chunkId}` }),
+    }),
+    deleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDelete: build.mutation<
+      DeleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDeleteApiResponse,
+      DeleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/chunks/${queryArg.chunkId}`,
+        method: "DELETE",
+      }),
+    }),
+    trainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPost: build.mutation<
+      TrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostApiResponse,
+      TrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/models/umap/${queryArg.tagId}/train`, method: "POST" }),
+    }),
+    modelStatusKnowledgeFlowV1ModelsUmapTagUidGet: build.query<
+      ModelStatusKnowledgeFlowV1ModelsUmapTagUidGetApiResponse,
+      ModelStatusKnowledgeFlowV1ModelsUmapTagUidGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/models/umap/${queryArg.tagUid}` }),
+    }),
+    projectKnowledgeFlowV1ModelsUmapRefTagUidProjectPost: build.mutation<
+      ProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostApiResponse,
+      ProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/models/umap/${queryArg.refTagUid}/project`,
+        method: "POST",
+        body: queryArg.projectRequest,
+      }),
+    }),
+    deleteModelKnowledgeFlowV1ModelsUmapRefTagUidDelete: build.mutation<
+      DeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteApiResponse,
+      DeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/models/umap/${queryArg.refTagUid}`, method: "DELETE" }),
+    }),
+    projectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPost: build.mutation<
+      ProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostApiResponse,
+      ProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/models/umap/${queryArg.refTagUid}/project-text`,
+        method: "POST",
+        body: queryArg.projectTextRequest,
+      }),
     }),
     listCatalogFilesKnowledgeFlowV1PullCatalogFilesGet: build.query<
       ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiResponse,
@@ -375,6 +428,12 @@ const injectedRtkApi = api.injectEndpoints({
           target_type: queryArg.targetType,
         },
       }),
+    }),
+    backfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPost: build.mutation<
+      BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiResponse,
+      BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiArg
+    >({
+      query: () => ({ url: `/knowledge-flow/v1/tags/rebac/backfill`, method: "POST" }),
     }),
     echoSchemaKnowledgeFlowV1SchemasEchoPost: build.mutation<
       EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse,
@@ -750,16 +809,16 @@ export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiResponse =
 export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiArg = {
   browseDocumentsRequest: BrowseDocumentsRequest;
 };
-export type DocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetApiResponse =
+export type DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse =
   /** status 200 Successful Response */ VectorChunk[];
-export type DocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetApiArg = {
+export type DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiArg = {
   documentUid: string;
 };
-export type DocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetApiResponse =
+export type DocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetApiResponse =
   /** status 200 Successful Response */ {
     [key: string]: any;
   }[];
-export type DocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetApiArg = {
+export type DocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetApiArg = {
   documentUid: string;
 };
 export type AuditDocumentsKnowledgeFlowV1DocumentsAuditGetApiResponse =
@@ -768,6 +827,48 @@ export type AuditDocumentsKnowledgeFlowV1DocumentsAuditGetApiArg = void;
 export type FixDocumentsKnowledgeFlowV1DocumentsAuditFixPostApiResponse =
   /** status 200 Successful Response */ StoreAuditFixResponse;
 export type FixDocumentsKnowledgeFlowV1DocumentsAuditFixPostApiArg = void;
+export type GetChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGetApiArg = {
+  documentUid: string;
+  chunkId: string;
+};
+export type DeleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDeleteApiResponse =
+  /** status 200 Successful Response */ any;
+export type DeleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDeleteApiArg = {
+  documentUid: string;
+  chunkId: string;
+};
+export type TrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostApiResponse =
+  /** status 200 Successful Response */ TrainResponse;
+export type TrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostApiArg = {
+  tagId: string;
+};
+export type ModelStatusKnowledgeFlowV1ModelsUmapTagUidGetApiResponse =
+  /** status 200 Successful Response */ StatusResponse;
+export type ModelStatusKnowledgeFlowV1ModelsUmapTagUidGetApiArg = {
+  tagUid: string;
+};
+export type ProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostApiResponse =
+  /** status 200 Successful Response */ ProjectResponse;
+export type ProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostApiArg = {
+  refTagUid: string;
+  projectRequest: ProjectRequest;
+};
+export type DeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type DeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteApiArg = {
+  refTagUid: string;
+};
+export type ProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostApiResponse =
+  /** status 200 Successful Response */ ProjectTextResponse;
+export type ProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostApiArg = {
+  refTagUid: string;
+  projectTextRequest: ProjectTextRequest;
+};
 export type ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiResponse =
   /** status 200 Successful Response */ PullFileEntry[];
 export type ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiArg = {
@@ -951,6 +1052,9 @@ export type UnshareTagKnowledgeFlowV1TagsTagIdShareTargetIdDeleteApiArg = {
   targetId: string;
   targetType: ShareTargetResource;
 };
+export type BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiResponse =
+  /** status 200 Successful Response */ RebacBackfillResponse;
+export type BackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostApiArg = void;
 export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ any;
 export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg = {
   echoEnvelope: EchoEnvelope;
@@ -1332,9 +1436,9 @@ export type BrowseDocumentsRequest = {
   sort_by?: SortOption[] | null;
 };
 export type VectorChunk = {
-  /** Identifiant unique du chunk */
+  /** Unique identifier of the chunk */
   chunk_uid: string;
-  /** Embedding du chunk */
+  /** Chunk embedding */
   vector: number[];
 };
 export type StoreAuditFinding = {
@@ -1362,6 +1466,70 @@ export type StoreAuditFixResponse = {
   deleted_metadata?: string[];
   deleted_vectors?: string[];
   deleted_content?: string[];
+};
+export type TrainResponse = {
+  tag_id: string;
+  trained_at: string;
+  n_chunks: number;
+  n_documents: number;
+  model_kind: string;
+  embedding_model?: string | null;
+};
+export type StatusResponse = {
+  tag_uid: string;
+  exists: boolean;
+  trained_at?: string | null;
+  n_chunks?: number | null;
+  n_documents?: number | null;
+  model_kind?: string | null;
+  embedding_model?: string | null;
+};
+export type Point3D = {
+  x: number;
+  y: number;
+  z: number;
+};
+export type Point2D = {
+  x: number;
+  y: number;
+};
+export type Clusters = {
+  d3?: number | null;
+  d2?: number | null;
+  vector?: number | null;
+  distance?: number | null;
+};
+export type PointMetadata = {
+  chunk_order?: number | null;
+  chunk_uid?: string | null;
+  document_uid?: string | null;
+  text?: string | null;
+};
+export type GraphPoint = {
+  point_3d?: Point3D | null;
+  point_2d?: Point2D | null;
+  clusters?: Clusters | null;
+  metadata?: PointMetadata | null;
+};
+export type ProjectResponse = {
+  graph_points: GraphPoint[];
+};
+export type ProjectRequest = {
+  /** Documents UIDs list to project. If None, all chunks will be projected. */
+  document_uids?: string[] | null;
+  /** Library UIDs list to filter documents before projection. */
+  tag_uids?: string[] | null;
+  /** Whether to include clustering information in the projection. */
+  with_clustering?: boolean | null;
+  /** Whether to include documents text in the projection. */
+  with_documents?: boolean | null;
+};
+export type ProjectTextResponse = {
+  graph_point: GraphPoint;
+};
+export type ProjectTextRequest = {
+  /** The text to vectorize and project in 3D space. */
+  text: string;
 };
 export type PullFileEntry = {
   path: string;
@@ -1526,6 +1694,13 @@ export type TagShareRequest = {
   target_id: string;
   target_type: ShareTargetResource;
   relation: UserTagRelation;
+};
+export type RebacBackfillResponse = {
+  rebac_enabled: boolean;
+  tags_seen: number;
+  documents_seen: number;
+  tag_owner_relations_created: number;
+  tag_parent_relations_created: number;
 };
 export type SearchPolicyName = "hybrid" | "strict" | "semantic";
 export type EchoEnvelope = {
@@ -1917,13 +2092,22 @@ export const {
   useLazyGetProcessingSummaryKnowledgeFlowV1DocumentsProcessingSummaryGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
-  useDocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetQuery,
-  useLazyDocumentVectorsKnowledgeFlowV1DocumentDocumentUidVectorsGetQuery,
-  useDocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetQuery,
-  useLazyDocumentChunksKnowledgeFlowV1DocumentDocumentUidChunksGetQuery,
+  useDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
+  useLazyDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
+  useDocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetQuery,
+  useLazyDocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetQuery,
   useAuditDocumentsKnowledgeFlowV1DocumentsAuditGetQuery,
   useLazyAuditDocumentsKnowledgeFlowV1DocumentsAuditGetQuery,
   useFixDocumentsKnowledgeFlowV1DocumentsAuditFixPostMutation,
+  useGetChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGetQuery,
+  useLazyGetChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdGetQuery,
+  useDeleteChunkKnowledgeFlowV1DocumentsDocumentUidChunksChunkIdDeleteMutation,
+  useTrainUmapKnowledgeFlowV1ModelsUmapTagIdTrainPostMutation,
+  useModelStatusKnowledgeFlowV1ModelsUmapTagUidGetQuery,
+  useLazyModelStatusKnowledgeFlowV1ModelsUmapTagUidGetQuery,
+  useProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostMutation,
+  useDeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteMutation,
+  useProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostMutation,
   useListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
   useLazyListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
   useRescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostMutation,
@@ -1973,6 +2157,7 @@ export const {
   useLazyListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery,
   useShareTagKnowledgeFlowV1TagsTagIdSharePostMutation,
   useUnshareTagKnowledgeFlowV1TagsTagIdShareTargetIdDeleteMutation,
+  useBackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostMutation,
   useEchoSchemaKnowledgeFlowV1SchemasEchoPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
   useTestPostSuccessMutation,

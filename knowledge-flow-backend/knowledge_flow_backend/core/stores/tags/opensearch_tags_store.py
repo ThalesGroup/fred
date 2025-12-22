@@ -219,7 +219,7 @@ class OpenSearchTagStore(BaseTagStore):
             "query": {
                 "bool": {
                     "filter": [
-                        # {"term": {"owner_id": owner_id}}, # Tag will be public until we add ReBAC
+                        {"term": {"owner_id": owner_id}},
                         {"term": {"type": tag_type.value}},
                         {"term": {"full_path": full_path}},
                     ]

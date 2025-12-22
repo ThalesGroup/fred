@@ -77,13 +77,21 @@ class BaseVectorStore(ABC):
         """
         raise NotImplementedError("This vector store does not support retrievable toggling.")
 
-    def get_vectors_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
+    def get_vectors_for_document(self, document_uid: str, with_document: bool = True) -> List[Dict[str, Any]]:
         """Optional capability: fetch raw vector data for all chunks of a document."""
         raise NotImplementedError("This vector store does not support fetching raw vectors.")
 
     def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
         """Optional capability: fetch raw chunk data for all chunks of a document."""
         raise NotImplementedError("This vector store does not support fetching raw chunks.")
+
+    def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
+        """Optional capability: fetch raw chunk data for all chunks of a document."""
+        raise NotImplementedError("This vector store does not support fetching raw chunks.")
+
+    def delete_chunk(self, document_uid: str, chunk_uid: str) -> None:
+        """Optional capability: delete chunks for a logical document."""
+        raise NotImplementedError("This vector store does not support deleting raw chunks.")
 
     @abstractmethod
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:
