@@ -138,7 +138,7 @@ ai:
       class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
       enabled: true
       metadata:
-        internal_use: true
+        rag_delegation_only: true
     - name: "Tessa"
       type: "agent"
       class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"

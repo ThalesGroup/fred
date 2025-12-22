@@ -387,10 +387,14 @@ const ChatBot = ({
     documentLibraryIds: string[];
     promptResourceIds: string[];
     templateResourceIds: string[];
+    searchRagScope?: "corpus_only" | "hybrid" | "general_only";
+    deepSearch?: boolean;
   }>({
     documentLibraryIds: [],
     promptResourceIds: [],
     templateResourceIds: [],
+    searchRagScope: undefined,
+    deepSearch: undefined,
   });
 
   // load from local storage
@@ -404,9 +408,17 @@ const ChatBot = ({
           documentLibraryIds: parsed.documentLibraryIds ?? [],
           promptResourceIds: parsed.promptResourceIds ?? [],
           templateResourceIds: parsed.templateResourceIds ?? [],
+          searchRagScope: parsed.searchRagScope,
+          deepSearch: parsed.deepSearch,
         });
       } else {
-        setInitialCtx({ documentLibraryIds: [], promptResourceIds: [], templateResourceIds: [] });
+        setInitialCtx({
+          documentLibraryIds: [],
+          promptResourceIds: [],
+          templateResourceIds: [],
+          searchRagScope: undefined,
+          deepSearch: undefined,
+        });
       }
     } catch (e) {
       console.warn("Local context load failed:", e);
@@ -414,6 +426,18 @@ const ChatBot = ({
   }, [storageKey]);
 
   const [userInputContext, setUserInputContext] = useState<any>(null);
+  const initialDocumentLibraryIds =
+    userInputContext?.documentLibraryIds ?? initialCtx.documentLibraryIds;
+  const initialPromptResourceIds =
+    userInputContext?.promptResourceIds ?? initialCtx.promptResourceIds;
+  const initialTemplateResourceIds =
+    userInputContext?.templateResourceIds ?? initialCtx.templateResourceIds;
+  const initialSearchPolicy =
+    userInputContext?.searchPolicy ?? "semantic";
+  const initialSearchRagScope =
+    userInputContext?.searchRagScope ?? initialCtx.searchRagScope ?? undefined;
+  const initialDeepSearch =
+    typeof userInputContext?.deepSearch === "boolean" ? userInputContext.deepSearch : initialCtx.deepSearch;
 
   // IMPORTANT:
   // Save per-agent defaults *only before a session exists* (pre-session seeding).
@@ -678,9 +702,12 @@ const ChatBot = ({
                 uploadingFiles={uploadingFiles}
                 onFilesSelected={handleFilesSelected}
                 attachmentsRefreshTick={attachmentsRefreshTick}
-                initialDocumentLibraryIds={initialCtx.documentLibraryIds}
-                initialPromptResourceIds={initialCtx.promptResourceIds}
-                initialTemplateResourceIds={initialCtx.templateResourceIds}
+                initialDocumentLibraryIds={initialDocumentLibraryIds}
+                initialPromptResourceIds={initialPromptResourceIds}
+                initialTemplateResourceIds={initialTemplateResourceIds}
+                initialSearchPolicy={initialSearchPolicy}
+                initialSearchRagScope={initialSearchRagScope}
+                initialDeepSearch={initialDeepSearch}
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}
@@ -736,9 +763,12 @@ const ChatBot = ({
                 uploadingFiles={uploadingFiles}
                 onFilesSelected={handleFilesSelected}
                 attachmentsRefreshTick={attachmentsRefreshTick}
-                initialDocumentLibraryIds={initialCtx.documentLibraryIds}
-                initialPromptResourceIds={initialCtx.promptResourceIds}
-                initialTemplateResourceIds={initialCtx.templateResourceIds}
+                initialDocumentLibraryIds={initialDocumentLibraryIds}
+                initialPromptResourceIds={initialPromptResourceIds}
+                initialTemplateResourceIds={initialTemplateResourceIds}
+                initialSearchPolicy={initialSearchPolicy}
+                initialSearchRagScope={initialSearchRagScope}
+                initialDeepSearch={initialDeepSearch}
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}

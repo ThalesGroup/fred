@@ -33,22 +33,56 @@ export function UserInputDeepSearchToggle({ value, onChange, disabled }: Props) 
         disabled={disabled}
         onChange={() => onChange(!value)}
         aria-label={t("chatbot.deepSearch.label", "Deep Search")}
-        sx={{
-          borderRadius: 2,
-          px: 1.1,
-          py: 0.4,
-          textTransform: "none",
-          borderColor: "divider",
-          backgroundColor: "background.paper",
-          "&.Mui-selected": {
-            color: "primary.main",
-            backgroundColor: "primary.main",
-            "& svg": { color: "common.white" },
-            "&:hover": { backgroundColor: "primary.dark" },
-          },
+        sx={(theme) => {
+          const rimA = theme.palette.primary.main;
+          const rimB = theme.palette.secondary.main;
+          const rimC = theme.palette.info.main;
+          const rimD = theme.palette.success.main;
+          const rimE = theme.palette.warning.main;
+
+          return {
+            borderRadius: 2,
+            px: 0.85,
+            py: 0.35,
+            textTransform: "none",
+            border: "none",
+            background: `conic-gradient(${rimA}, ${rimB}, ${rimC}, ${rimD}, ${rimE}, ${rimA})`,
+            padding: "2px",
+            "& .MuiTouchRipple-root": {
+              borderRadius: 8,
+            },
+            "&.Mui-selected": {
+              "& > .deep-search-inner": {
+                color: theme.palette.primary.contrastText,
+                backgroundColor: theme.palette.primary.main,
+              },
+            },
+            "&.Mui-selected:hover > .deep-search-inner": {
+              color: theme.palette.primary.contrastText,
+              backgroundColor: theme.palette.primary.dark,
+            },
+            "&:hover > .deep-search-inner": {
+              backgroundColor:
+                theme.palette.mode === "light"
+                  ? theme.palette.grey[50]
+                  : theme.palette.grey[900],
+            },
+          };
         }}
       >
-        <Stack direction="row" alignItems="center" spacing={0.5}>
+        <Stack
+          className="deep-search-inner"
+          direction="row"
+          alignItems="center"
+          spacing={0.5}
+          sx={(theme) => ({
+            borderRadius: 1.5,
+            px: 0.9,
+            py: 0.35,
+            color: theme.palette.text.secondary,
+            backgroundColor: theme.palette.background.paper,
+          })}
+        >
           <TravelExploreOutlinedIcon fontSize="small" />
           <Typography variant="caption" color="inherit">
             {t("chatbot.deepSearch.label", "Deep Search")}

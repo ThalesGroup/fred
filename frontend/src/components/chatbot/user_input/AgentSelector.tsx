@@ -108,7 +108,7 @@ export interface AgentPopoverPickerProps {
 }
 
 export function AgentPopoverPicker({ currentAgent, agents, onSelectNewAgent }: AgentPopoverPickerProps) {
-  const visibleAgents = agents.filter((agent) => !agent.metadata?.internal_use);
+  const visibleAgents = agents.filter((agent) => !agent.metadata?.rag_delegation_only);
 
   return (
     <List>
