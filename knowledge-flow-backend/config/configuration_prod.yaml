@@ -113,6 +113,11 @@ vision_model:
   settings:
     temperature: 0 # optional
     max_retries: 2 # optional
+crossencoder_model:
+  name: cross-encoder/ms-marco-MiniLM-L-12-v2
+  settings:
+    online: true
+    local_path: ~/.cache/huggingface/hub
 
 # chat_model:
 #   provider: ollama

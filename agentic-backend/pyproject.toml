@@ -39,7 +39,7 @@ dependencies = [
   "Pillow>=10.0.0",
   "fred-core",
   "uv",
-  "pyparsing>=3.2.5",
+  "pyparsing>=3.2.5"
 ]
 
 [project.optional-dependencies]
