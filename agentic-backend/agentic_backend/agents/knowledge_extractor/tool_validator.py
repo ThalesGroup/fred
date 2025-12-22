@@ -1,3 +1,7 @@
+"""
+Clauded
+"""
+
 from __future__ import annotations
 
 import json
@@ -266,3 +270,29 @@ def create_tool_call_validator_middleware(tool_names: list[str]) -> Callable:
         return {"messages": messages}
 
     return validator_middleware
+
+
+def has_validation_error(messages: list) -> bool:
+    """
+    Check if the last messages contain a validation error from the validator middleware.
+
+    Args:
+        messages: List of messages to check
+
+    Returns:
+        True if there's a validation error, False otherwise
+    """
+    if not messages:
+        return False
+
+    # Check the last few messages for system error messages
+    for msg in reversed(messages[-3:]):  # Check last 3 messages
+        if getattr(msg, "type", "") == "system":
+            content = getattr(msg, "content", "")
+            if isinstance(content, str) and (
+                "❌ ERROR: Tool Call Format Invalid" in content
+                or "❌ CRITICAL ERROR: Invalid Tool Call Structure" in content
+            ):
+                return True
+
+    return False
