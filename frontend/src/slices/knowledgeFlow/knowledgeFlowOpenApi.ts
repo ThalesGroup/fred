@@ -450,6 +450,9 @@ const injectedRtkApi = api.injectEndpoints({
     testPostSuccess: build.mutation<TestPostSuccessApiResponse, TestPostSuccessApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/vector/test`, method: "POST" }),
     }),
+    rerankDocuments: build.mutation<RerankDocumentsApiResponse, RerankDocumentsApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/rerank`, method: "POST", body: queryArg.rerankRequest }),
+    }),
     queryKnowledgeFlowV1KpiQueryPost: build.mutation<
       QueryKnowledgeFlowV1KpiQueryPostApiResponse,
       QueryKnowledgeFlowV1KpiQueryPostApiArg
@@ -1062,6 +1065,10 @@ export type SearchDocumentsUsingVectorizationApiArg = {
 };
 export type TestPostSuccessApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
 export type TestPostSuccessApiArg = void;
+export type RerankDocumentsApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
+export type RerankDocumentsApiArg = {
+  rerankRequest: RerankRequest;
+};
 export type QueryKnowledgeFlowV1KpiQueryPostApiResponse = /** status 200 Successful Response */ KpiQueryResult;
 export type QueryKnowledgeFlowV1KpiQueryPostApiArg = {
   kpiQuery: KpiQuery;
@@ -1747,6 +1754,12 @@ export type SearchRequest = {
   /** Optional search policy preset. If omitted, defaults to 'hybrid'. */
   search_policy?: SearchPolicyName | null;
 };
+export type RerankRequest = {
+  question: string;
+  documents: VectorSearchHit[];
+  /** Number of top-reranked chunks to consider */
+  top_r?: number;
+};
 export type KpiQueryResultRow = {
   group: {
     [key: string]: any;
@@ -2148,6 +2161,7 @@ export const {
   useEchoSchemaKnowledgeFlowV1SchemasEchoPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
   useTestPostSuccessMutation,
+  useRerankDocumentsMutation,
   useQueryKnowledgeFlowV1KpiQueryPostMutation,
   useGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
   useLazyGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
