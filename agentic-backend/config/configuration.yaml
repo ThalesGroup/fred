@@ -102,7 +102,14 @@ ai:
         search_policy_selection: true
         libraries_selection: true
         search_rag_scoping: true
+        deep_search_delegate: true
         attach_files: true
+    - name: "Rico Senior"
+      type: "agent"
+      class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
+      enabled: true
+      metadata:
+        internal_use: true
     - name: "Tessa"
       type: "agent"
       class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"

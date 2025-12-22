@@ -108,9 +108,11 @@ export interface AgentPopoverPickerProps {
 }
 
 export function AgentPopoverPicker({ currentAgent, agents, onSelectNewAgent }: AgentPopoverPickerProps) {
+  const visibleAgents = agents.filter((agent) => !agent.metadata?.internal_use);
+
   return (
     <List>
-      {agents.map((agent) => {
+      {visibleAgents.map((agent) => {
         return (
           <AgentTooltip agent={agent}>
             <ListItemButton onClick={() => onSelectNewAgent(agent)} selected={agent.name === currentAgent.name}>

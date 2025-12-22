@@ -431,6 +431,10 @@
       "tooltipHybrid": "Utiliser le corpus documentaire et les connaissances générales du modèle pour répondre",
       "tooltipGeneral": "Utiliser seulement les connaissances générales du modèle pour répondre"
     },
+    "deepSearch": {
+      "label": "Recherche approfondie",
+      "tooltip": "Déléguer la recherche RAG à Rico Senior"
+    },
     "menu": {
       "addToSetup": "Ajouter à la configuration de la conversation"
     },

@@ -52,7 +52,11 @@ from agentic_backend.core.a2a.a2a_bridge import (
     stream_a2a_as_chat_messages,
 )
 from agentic_backend.core.agents.agent_manager import AgentManager
-from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.runtime_context import (
+    RuntimeContext,
+    get_deep_search_enabled,
+    get_rag_knowledge_scope,
+)
 from agentic_backend.core.chatbot.chat_schema import (
     ChatAskInput,
     ChatbotRuntimeSummary,
@@ -274,12 +278,29 @@ async def websocket_chatbot_question(
                 ask.runtime_context.access_token = active_token
                 ask.runtime_context.refresh_token = active_refresh_token
 
+                target_agent_name = ask.agent_name
+                if get_deep_search_enabled(ask.runtime_context) and ask.agent_name == "Rico":
+                    rag_scope = get_rag_knowledge_scope(ask.runtime_context)
+                    if rag_scope == "general_only":
+                        logger.info(
+                            "[CHATBOT] Deep search ignored because RAG scope is general-only."
+                        )
+                    elif agent_manager.get_agent_settings("Rico Senior"):
+                        target_agent_name = "Rico Senior"
+                        logger.info(
+                            "[CHATBOT] Deep search enabled; delegating Rico request to Rico Senior."
+                        )
+                    else:
+                        logger.warning(
+                            "[CHATBOT] Deep search requested for Rico but Rico Senior is not configured; falling back to Rico."
+                        )
+
                 async def ws_callback(msg_dict: dict):
                     event = StreamEvent(type="stream", message=ChatMessage(**msg_dict))
                     await websocket.send_text(event.model_dump_json())
 
                 # Route to A2A proxy if the stub agent is selected
-                target_settings = agent_manager.get_agent_settings(ask.agent_name)
+                target_settings = agent_manager.get_agent_settings(target_agent_name)
                 if target_settings and is_a2a_agent(target_settings):
                     meta = target_settings.metadata or {}
                     base_url = meta.get("a2a_base_url")
@@ -288,11 +309,11 @@ async def websocket_chatbot_question(
                     if not base_url:
                         raise HTTPException(
                             status_code=400,
-                            detail=f"Agent '{ask.agent_name}' is marked as A2A but is missing 'a2a_base_url' metadata.",
+                            detail=f"Agent '{target_agent_name}' is marked as A2A but is missing 'a2a_base_url' metadata.",
                         )
                     proxy = get_proxy_for_agent(
                         websocket.app,
-                        ask.agent_name,
+                        target_agent_name,
                         base_url,
                         token,
                         force_disable_streaming=force_disable_streaming,
@@ -361,7 +382,7 @@ async def websocket_chatbot_question(
                         callback=ws_callback,
                         session_id=ask.session_id,
                         message=ask.message,
-                        agent_name=ask.agent_name,
+                        agent_name=target_agent_name,
                         runtime_context=ask.runtime_context,
                         client_exchange_id=ask.client_exchange_id,
                     )

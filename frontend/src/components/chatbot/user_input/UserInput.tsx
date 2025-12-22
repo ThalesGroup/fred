@@ -39,6 +39,7 @@ import {
 } from "../../../slices/agentic/agenticOpenApi.ts";
 import { AgentSelector } from "./AgentSelector.tsx";
 import { UserInputAttachments } from "./UserInputAttachments.tsx";
+import { UserInputDeepSearchToggle } from "./UserInputDeepSearchToggle.tsx";
 import { UserInputPopover } from "./UserInputPopover.tsx";
 import { UserInputRagScope } from "./UserInputRagScope.tsx";
 import { SearchRagScope } from "./types.ts";
@@ -53,6 +54,7 @@ export interface UserInputContent {
   profileResourceIds?: string[];
   searchPolicy?: SearchPolicyName;
   searchRagScope?: SearchRagScope;
+  deepSearch?: boolean;
 }
 
 type PersistedCtx = {
@@ -62,6 +64,7 @@ type PersistedCtx = {
   profileResourceIds?: string[];
   searchPolicy?: SearchPolicyName;
   searchRagScope?: SearchRagScope;
+  deepSearch?: boolean;
   ragKnowledgeScope?: SearchRagScope; // legacy persisted field
   skipRagSearch?: boolean; // legacy persisted flag
 };
@@ -149,8 +152,10 @@ export default function UserInput({
   const [filesBlob, setFilesBlob] = useState<File[] | null>(null);
   // Only show the selector when the agent explicitly opts in via config (new flag, fallback to old).
   const supportsRagScopeSelection = agentChatOptions?.search_rag_scoping === true;
+  const supportsDeepSearchSelection = agentChatOptions?.deep_search_delegate === true;
   const computeDefaultRagScope = (): SearchRagScope => "hybrid";
   const [searchRagScope, setSearchRagScope] = useState<SearchRagScope>(computeDefaultRagScope);
+  const [deepSearchEnabled, setDeepSearchEnabled] = useState<boolean>(false);
 
   console.log("UserInput render", { searchRagScope, supportsRagScopeSelection });
   console.log("Agent chat options", agentChatOptions);
@@ -179,6 +184,7 @@ export default function UserInput({
         templateResourceIds: selectedTemplateResourceIds,
         searchPolicy: selectedSearchPolicyName,
         searchRagScope: searchRagScope,
+        deepSearch: deepSearchEnabled,
       };
     }
   }, [
@@ -188,6 +194,7 @@ export default function UserInput({
     selectedTemplateResourceIds,
     selectedSearchPolicyName,
     searchRagScope,
+    deepSearchEnabled,
   ]);
 
   // When switching agents (no active session), align default skip state with the agent option
@@ -198,7 +205,18 @@ export default function UserInput({
     } else {
       setSearchRagScope("hybrid");
     }
-  }, [agentChatOptions?.search_rag_scoping, supportsRagScopeSelection, sessionId]);
+    if (supportsDeepSearchSelection) {
+      setDeepSearchEnabled(false);
+    } else {
+      setDeepSearchEnabled(false);
+    }
+  }, [
+    agentChatOptions?.search_rag_scoping,
+    agentChatOptions?.deep_search_delegate,
+    supportsRagScopeSelection,
+    supportsDeepSearchSelection,
+    sessionId,
+  ]);
 
   // Hydration guard: run at most once per session id.
   const hydratedForSession = useRef<string | undefined>(undefined);
@@ -247,11 +265,13 @@ export default function UserInput({
       parseRagScope(pre.ragKnowledgeScope) ??
       (pre.skipRagSearch ? "general_only" : undefined);
     const ragScope = persistedScope ?? preScope ?? computeDefaultRagScope();
+    const deepSearch = persisted.deepSearch ?? pre.deepSearch ?? false;
     setSelectedSearchPolicyName(searchPolicy);
     setSelectedDocumentLibrariesIds(libs);
     setSelectedPromptResourceIds(prompts);
     setSelectedTemplateResourceIds(templates);
     setSearchRagScope(ragScope);
+    setDeepSearchEnabled(deepSearch);
 
     // Save immediately so storage stays the source of truth for this session.
     saveSessionCtx(sessionId, {
@@ -260,6 +280,7 @@ export default function UserInput({
       templateResourceIds: templates,
       searchPolicy: searchPolicy,
       searchRagScope: ragScope,
+      deepSearch,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
@@ -275,6 +296,7 @@ export default function UserInput({
           templateResourceIds: selectedTemplateResourceIds,
           searchPolicy: selectedSearchPolicyName,
           searchRagScope,
+          deepSearch: deepSearchEnabled,
         });
       return value;
     });
@@ -289,6 +311,7 @@ export default function UserInput({
           templateResourceIds: selectedTemplateResourceIds,
           searchPolicy: selectedSearchPolicyName,
           searchRagScope,
+          deepSearch: deepSearchEnabled,
         });
       return value;
     });
@@ -303,6 +326,7 @@ export default function UserInput({
           templateResourceIds: value,
           searchPolicy: selectedSearchPolicyName,
           searchRagScope,
+          deepSearch: deepSearchEnabled,
         });
       return value;
     });
@@ -317,6 +341,7 @@ export default function UserInput({
           templateResourceIds: selectedTemplateResourceIds,
           searchPolicy: value,
           searchRagScope,
+          deepSearch: deepSearchEnabled,
         });
       return value;
     });
@@ -330,6 +355,19 @@ export default function UserInput({
         templateResourceIds: selectedTemplateResourceIds,
         searchPolicy: selectedSearchPolicyName,
         searchRagScope: next,
+        deepSearch: deepSearchEnabled,
+      });
+  };
+  const setDeepSearch = (next: boolean) => {
+    setDeepSearchEnabled(next);
+    if (sessionId)
+      saveSessionCtx(sessionId, {
+        documentLibraryIds: selectedDocumentLibrariesIds,
+        promptResourceIds: selectedPromptResourceIds,
+        templateResourceIds: selectedTemplateResourceIds,
+        searchPolicy: selectedSearchPolicyName,
+        searchRagScope,
+        deepSearch: next,
       });
   };
 
@@ -399,6 +437,7 @@ export default function UserInput({
       templateResourceIds: selectedTemplateResourceIds.length ? selectedTemplateResourceIds : undefined,
       searchPolicy: selectedSearchPolicyName,
       searchRagScope: supportsRagScopeSelection ? searchRagScope : undefined,
+      deepSearch: supportsDeepSearchSelection ? deepSearchEnabled : undefined,
     });
   }, [
     filesBlob,
@@ -408,7 +447,9 @@ export default function UserInput({
     selectedTemplateResourceIds,
     selectedSearchPolicyName,
     searchRagScope,
+    deepSearchEnabled,
     supportsRagScopeSelection,
+    supportsDeepSearchSelection,
     onContextChange,
   ]);
 
@@ -439,6 +480,7 @@ export default function UserInput({
       templateResourceIds: selectedTemplateResourceIds,
       searchPolicy: selectedSearchPolicyName,
       searchRagScope: supportsRagScopeSelection ? searchRagScope : undefined,
+      deepSearch: supportsDeepSearchSelection ? deepSearchEnabled : undefined,
     });
     setUserInput("");
     setAudioBlob(null);
@@ -519,6 +561,9 @@ export default function UserInput({
               alignItems: "center",
             }}
           >
+            {supportsDeepSearchSelection && (
+              <UserInputDeepSearchToggle value={deepSearchEnabled} onChange={setDeepSearch} disabled={isWaiting} />
+            )}
             {supportsRagScopeSelection && (
               <UserInputRagScope value={searchRagScope} onChange={setRagScope} disabled={isWaiting} />
             )}

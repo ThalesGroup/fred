@@ -429,6 +429,7 @@ const ChatBot = ({
         promptResourceIds: userInputContext.promptResourceIds ?? [],
         templateResourceIds: userInputContext.templateResourceIds ?? [],
         searchRagScope: userInputContext.searchRagScope,
+        deepSearch: userInputContext.deepSearch,
       };
       localStorage.setItem(storageKey, JSON.stringify(payload));
     } catch (e) {
@@ -439,6 +440,7 @@ const ChatBot = ({
     userInputContext?.promptResourceIds,
     userInputContext?.templateResourceIds,
     userInputContext?.searchRagScope,
+    userInputContext?.deepSearch,
     storageKey,
     currentChatBotSession?.id, // guard: only save when undefined
   ]);
@@ -457,6 +459,9 @@ const ChatBot = ({
     runtimeContext.search_policy = content.searchPolicy || "semantic";
     if (content.searchRagScope) {
       runtimeContext.search_rag_scope = content.searchRagScope;
+    }
+    if (typeof content.deepSearch === "boolean") {
+      runtimeContext.deep_search = content.deepSearch;
     }
 
     // Files are now uploaded immediately upon selection (not here)

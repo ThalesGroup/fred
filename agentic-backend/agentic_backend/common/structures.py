@@ -103,6 +103,12 @@ class AgentChatOptions(BaseModel):
             "Expose a selector to decide how the agent should use the corpus: documents only, hybrid, or general knowledge only."
         ),
     )
+    deep_search_delegate: bool = Field(
+        default=False,
+        description=(
+            "Expose a toggle to delegate RAG retrieval to a senior agent (deep search) when available."
+        ),
+    )
 
 
 # ---------------- Base: shared identity + UX + tuning ----------------
