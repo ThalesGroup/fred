@@ -133,12 +133,15 @@ ai:
         search_rag_scoping: true
         deep_search_delegate: true
         attach_files: true
+      metadata:
+        # Deep-search delegation target
+        deep_search_delegate_to: "Rico Senior"
     - name: "Rico Senior"
       type: "agent"
       class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
       enabled: true
       metadata:
-        rag_delegation_only: true
+        deep_search_hidden_in_ui: true
     - name: "Tessa"
       type: "agent"
       class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"

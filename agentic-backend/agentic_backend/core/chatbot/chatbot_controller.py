@@ -279,21 +279,33 @@ async def websocket_chatbot_question(
                 ask.runtime_context.refresh_token = active_refresh_token
 
                 target_agent_name = ask.agent_name
-                if get_deep_search_enabled(ask.runtime_context) and ask.agent_name == "Rico":
+                if get_deep_search_enabled(ask.runtime_context):
                     rag_scope = get_rag_knowledge_scope(ask.runtime_context)
                     if rag_scope == "general_only":
                         logger.info(
                             "[CHATBOT] Deep search ignored because RAG scope is general-only."
                         )
-                    elif agent_manager.get_agent_settings("Rico Senior"):
-                        target_agent_name = "Rico Senior"
-                        logger.info(
-                            "[CHATBOT] Deep search enabled; delegating Rico request to Rico Senior."
-                        )
                     else:
-                        logger.warning(
-                            "[CHATBOT] Deep search requested for Rico but Rico Senior is not configured; falling back to Rico."
+                        base_settings = agent_manager.get_agent_settings(ask.agent_name)
+                        delegate_to = (
+                            base_settings.metadata.get("deep_search_delegate_to")
+                            if base_settings and base_settings.metadata
+                            else None
                         )
+                        if delegate_to:
+                            if agent_manager.get_agent_settings(delegate_to):
+                                target_agent_name = delegate_to
+                                logger.info(
+                                    "[CHATBOT] Deep search enabled; delegating %s request to %s.",
+                                    ask.agent_name,
+                                    delegate_to,
+                                )
+                            else:
+                                logger.warning(
+                                    "[CHATBOT] Deep search requested for %s but delegate '%s' is not configured; falling back.",
+                                    ask.agent_name,
+                                    delegate_to,
+                                )
 
                 async def ws_callback(msg_dict: dict):
                     event = StreamEvent(type="stream", message=ChatMessage(**msg_dict))
