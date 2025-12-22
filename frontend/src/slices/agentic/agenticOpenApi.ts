@@ -443,6 +443,8 @@ export type AgentChatOptions = {
   attach_files?: boolean;
   /** Expose a selector to decide how the agent should use the corpus: documents only, hybrid, or general knowledge only. */
   search_rag_scoping?: boolean;
+  /** Expose a toggle to delegate RAG retrieval to a senior agent (deep search) when available. */
+  deep_search_delegate?: boolean;
 };
 export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
@@ -617,6 +619,7 @@ export type RuntimeContext = {
   access_token_expires_at?: number | null;
   attachments_markdown?: string | null;
   search_rag_scope?: ("corpus_only" | "hybrid" | "general_only") | null;
+  deep_search?: boolean | null;
 };
 export type ChatMetadata = {
   model?: string | null;
