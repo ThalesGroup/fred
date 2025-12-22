@@ -14,6 +14,9 @@ from agentic_backend.agents.knowledge_extractor.jsonschema import globalSchema
 from agentic_backend.agents.knowledge_extractor.powerpoint_template_util import (
     fill_slide_from_structured_response,
 )
+from agentic_backend.agents.knowledge_extractor.tool_validator import (
+    create_tool_call_validator_middleware,
+)
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.core.agents.agent_flow import AgentFlow
@@ -237,6 +240,17 @@ class SlideMaker(AgentFlow):
         template_tool = self.get_template_tool()
         validator_tool = self.get_validator_tool()
 
+        # Get all tool names for validation (including MCP tools)
+        all_tool_names = ["template_tool", "validator_tool"]
+        # Add MCP tool names dynamically
+        mcp_tools = self.mcp.get_tools()
+        all_tool_names.extend([t.name for t in mcp_tools])
+
+        # Create validator middleware for all available tools
+        tool_call_validator = create_tool_call_validator_middleware(
+            tool_names=all_tool_names
+        )
+
         @after_model
         def extract_text_from_thinking_model(state, runtime):
             """Extract text content from thinking model response and update state"""
@@ -262,12 +276,20 @@ class SlideMaker(AgentFlow):
 
             return None
 
+        @after_model
+        def validate_tool_calls(state, runtime):
+            """Validate tool calls and provide feedback if malformed"""
+            return tool_call_validator(state, runtime)
+
         return create_agent(
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[template_tool, validator_tool, *self.mcp.get_tools()],
             checkpointer=self.streaming_memory,
-            middleware=[extract_text_from_thinking_model],
+            middleware=[
+                extract_text_from_thinking_model,
+                validate_tool_calls,
+            ],
         )
 
     def get_validator_tool(self):
