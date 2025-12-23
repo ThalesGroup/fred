@@ -18,7 +18,7 @@ import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import PersonAddAltIcon from "@mui/icons-material/PersonAddAlt";
-import { Box, Button, Checkbox, IconButton, Tooltip } from "@mui/material";
+import { Box, Button, Checkbox, IconButton, Skeleton, Tooltip } from "@mui/material";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import * as React from "react";
@@ -113,6 +113,7 @@ interface DocumentLibraryTreeProps {
   perTagTotals?: Record<string, number>;
   hasMore?: boolean;
   onLoadMore?: () => void;
+  onLoadAll?: () => void;
   isLoadingMore?: boolean;
   canDeleteDocument?: boolean;
   canDeleteFolder?: boolean;
@@ -141,6 +142,7 @@ export function DocumentLibraryTree({
   perTagTotals,
   hasMore = false,
   onLoadMore,
+  onLoadAll,
   isLoadingMore = false,
   canDeleteDocument = true,
   canDeleteFolder = true,
@@ -420,26 +422,108 @@ export function DocumentLibraryTree({
                       }}
                       onToggleRetrievable={onToggleRetrievable}
                     />
-                  </Box>
-              }
-            />
-          );
-        })}
+              </Box>
+          }
+        />
+      );
+    })}
           {isSelected && hasMore && (
-            <Box sx={{ display: "flex", justifyContent: "flex-start", pl: 5, pb: 1 }}>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onLoadMore?.();
-                }}
-                disabled={isLoadingMore}
-              >
-                {isLoadingMore
-                  ? t("documentLibrary.loadingMore", "Loading…")
-                  : t("documentLibrary.loadMore", "Load more")}
-              </Button>
+            <Box sx={{ width: "100%", pl: 5, pr: 0.5, pb: 1, display: "flex", flexDirection: "column", gap: 1 }}>
+              {!isLoadingMore && (
+                <>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onLoadMore?.();
+                    }}
+                    sx={{
+                      width: "100%",
+                      alignSelf: "stretch",
+                      textTransform: "none",
+                      justifyContent: "center",
+                      borderRadius: 1,
+                      boxShadow: "none",
+                      bgcolor: "primary.main",
+                      color: "primary.contrastText",
+                      "&:hover": { bgcolor: "primary.dark" },
+                    }}
+                  >
+                    {t("documentLibrary.loadMore", "Load more")}
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onLoadAll?.();
+                    }}
+                    sx={{
+                      width: "100%",
+                      alignSelf: "stretch",
+                      textTransform: "none",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {t("documentLibrary.loadAll", "Load all")}
+                  </Button>
+                </>
+              )}
+
+              {isLoadingMore ? (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+                  {Array.from({ length: 3 }).map((_, idx) => (
+                    <Box key={idx} sx={{ display: "flex", alignItems: "center", gap: 1, pl: 1.25, pr: 0.5 }}>
+                      <Skeleton animation="pulse" variant="rounded" width={18} height={18} />
+                      <Box
+                        sx={{
+                          display: "grid",
+                          gridTemplateColumns: "minmax(0, 2fr) auto auto auto auto auto auto auto",
+                          alignItems: "center",
+                          columnGap: 2,
+                          width: "100%",
+                          px: 1,
+                          py: 0.75,
+                          borderRadius: 1,
+                          border: "1px solid",
+                          borderColor: "divider",
+                          bgcolor: "background.paper",
+                        }}
+                      >
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+                          <Skeleton animation="pulse" variant="circular" width={20} height={20} />
+                          <Skeleton animation="pulse" variant="text" width="55%" />
+                          <Skeleton animation="pulse" variant="rounded" width={32} height={18} />
+                        </Box>
+                        <Skeleton animation="pulse" variant="circular" width={22} height={22} />
+                        <Skeleton animation="pulse" variant="circular" width={22} height={22} />
+                        <Skeleton animation="pulse" variant="circular" width={22} height={22} />
+                        <Box sx={{ display: "flex", gap: 0.5 }}>
+                          {["success.light", "success.light", "success.light", "grey.400", "grey.500"].map(
+                            (color, bubbleIdx) => (
+                              <Skeleton
+                                key={bubbleIdx}
+                                animation="pulse"
+                                variant="circular"
+                                width={18}
+                                height={18}
+                                sx={{ bgcolor: color, opacity: 0.65 }}
+                              />
+                            ),
+                          )}
+                        </Box>
+                        <Skeleton animation="pulse" variant="text" width={64} />
+                        <Skeleton animation="pulse" variant="circular" width={24} height={24} />
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, justifySelf: "end" }}>
+                          <Skeleton animation="pulse" variant="circular" width={24} height={24} />
+                          <Skeleton animation="pulse" variant="circular" width={24} height={24} />
+                        </Box>
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              ) : null}
             </Box>
           )}
         </TreeItem>

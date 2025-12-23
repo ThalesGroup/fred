@@ -14,10 +14,10 @@
 
 import AddIcon from "@mui/icons-material/Add";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
+import SchemaOutlinedIcon from "@mui/icons-material/SchemaOutlined";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
 import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
 import UploadIcon from "@mui/icons-material/Upload";
-import SchemaOutlinedIcon from "@mui/icons-material/SchemaOutlined";
 import { Box, Breadcrumbs, Button, Card, Chip, IconButton, Link, TextField, Tooltip, Typography } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -30,13 +30,13 @@ import { useLocalStorageState } from "../../../hooks/useLocalStorageState";
 import {
   DocumentMetadata,
   TagWithItemsId,
+  useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useListUsersKnowledgeFlowV1UsersGetQuery,
-  useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
-import { useToast } from "../../ToastProvider";
 import { buildTree, findNode, TagNode } from "../../tags/tagTree";
+import { useToast } from "../../ToastProvider";
 import { useDocumentCommands } from "../common/useDocumentCommands";
 import { docHasAnyTag, matchesDocByName } from "./documentHelper";
 import { DocumentLibraryTree } from "./DocumentLibraryTree";
@@ -104,7 +104,7 @@ export default function DocumentLibraryList() {
   const { showInfo } = useToast();
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
 
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = 20;
   const [currentTagId, setCurrentTagId] = React.useState<string | null>(null);
   const [allDocuments, setAllDocuments] = React.useState<DocumentMetadata[]>([]);
   const [totalDocuments, setTotalDocuments] = React.useState<number>(0);
@@ -117,14 +117,20 @@ export default function DocumentLibraryList() {
   const documentsByTagId = React.useMemo<Record<string, DocumentMetadata[]>>(() => perTagDocs, [perTagDocs]);
 
   const loadPage = React.useCallback(
-    async (tagId: string, offset: number, append: boolean, applyToCurrent: boolean = true) => {
+    async (
+      tagId: string,
+      offset: number,
+      append: boolean,
+      applyToCurrent: boolean = true,
+      limit: number = PAGE_SIZE,
+    ) => {
       if (applyToCurrent) setIsLoadingPage(true);
       try {
         const res = await browseDocumentsByTag({
           browseDocumentsByTagRequest: {
             tag_id: tagId,
             offset,
-            limit: PAGE_SIZE,
+            limit,
           },
         }).unwrap();
         const docs = res.documents || [];
@@ -172,6 +178,12 @@ export default function DocumentLibraryList() {
     if (!currentTagId) return;
     void loadPage(currentTagId, nextOffset, true);
   }, [currentTagId, loadPage, nextOffset]);
+
+  const loadAll = React.useCallback(() => {
+    if (!currentTagId) return;
+    const remaining = Math.max(totalDocuments - nextOffset, PAGE_SIZE);
+    void loadPage(currentTagId, nextOffset, true, true, remaining);
+  }, [currentTagId, loadPage, nextOffset, totalDocuments]);
 
   // Prefetch first page for each tag to populate counters (cap to avoid overload)
   React.useEffect(() => {
@@ -518,15 +530,16 @@ export default function DocumentLibraryList() {
               setSelectedDocs={setSelectedDocs}
               onDeleteFolder={handleDeleteFolder}
               documentsByTagId={documentsByTagId}
-              selectedFolderTotal={totalDocuments}
-              perTagTotals={perTagTotals}
-              hasMore={hasMore}
-              onLoadMore={loadMore}
-              isLoadingMore={isLoadingPage}
-              canDeleteDocument={canDeleteDocument}
-              canDeleteFolder={canDeleteFolder}
-              ownerNamesById={ownerNamesById}
-            />
+            selectedFolderTotal={totalDocuments}
+            perTagTotals={perTagTotals}
+            hasMore={hasMore}
+            onLoadMore={loadMore}
+            onLoadAll={loadAll}
+            isLoadingMore={isLoadingPage}
+            canDeleteDocument={canDeleteDocument}
+            canDeleteFolder={canDeleteFolder}
+            ownerNamesById={ownerNamesById}
+          />
           </Box>
         </Card>
       )}
