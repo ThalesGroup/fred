@@ -14,6 +14,10 @@ from agentic_backend.agents.knowledge_extractor.jsonschema import globalSchema
 from agentic_backend.agents.knowledge_extractor.powerpoint_template_util import (
     fill_slide_from_structured_response,
 )
+from agentic_backend.agents.knowledge_extractor.tool_validator import (
+    create_tool_call_validator_middleware,
+    has_validation_error,
+)
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.core.agents.agent_flow import AgentFlow
@@ -233,9 +237,79 @@ class SlideMaker(AgentFlow):
     async def aclose(self):
         await self.mcp.aclose()
 
+    async def astream_updates(self, state, *, config, **kwargs):
+        """
+        Clauded
+        Override to add validation retry logic.
+        If the agent generates a tool call validation error, automatically retry up to 2 times.
+        """
+        max_retries = 2
+        current_state = state
+
+        for attempt in range(max_retries + 1):
+            logger.info(f"Agent execution attempt {attempt + 1}/{max_retries + 1}")
+
+            # Collect events without yielding them yet (in case we need to retry)
+            collected_events = []
+            final_state_messages = []
+
+            async for event in super().astream_updates(
+                current_state,  # type: ignore
+                config=config,
+                **kwargs,
+            ):
+                collected_events.append(event)
+
+                # Collect messages from events to check for validation errors
+                for node_name, node_data in event.items():
+                    if isinstance(node_data, dict) and "messages" in node_data:
+                        final_state_messages = node_data["messages"]
+
+            # Check if there's a validation error in the final state
+            if has_validation_error(final_state_messages):
+                if attempt < max_retries:
+                    logger.warning(
+                        f"⚠️ Validation error detected on attempt {attempt + 1}. "
+                        f"Retrying automatically ({attempt + 1}/{max_retries} retries used)..."
+                    )
+                    # Update state with the error message for retry
+                    current_state = {"messages": final_state_messages}
+                    # DON'T yield events from failed attempts - discard them
+                    # Continue to next retry
+                    continue
+                else:
+                    logger.error(
+                        f"❌ Validation errors persist after {max_retries} retries. "
+                        f"Giving up and returning events with error."
+                    )
+                    # Yield the events even with error (last attempt)
+                    for event in collected_events:
+                        yield event
+                    break
+            else:
+                # No validation error - success! Yield all collected events
+                if attempt > 0:
+                    logger.info(
+                        f"✅ Agent succeeded after {attempt} retry(ies). Validation passed."
+                    )
+                for event in collected_events:
+                    yield event
+                break
+
     def get_compiled_graph(self) -> CompiledStateGraph:
         template_tool = self.get_template_tool()
         validator_tool = self.get_validator_tool()
+
+        # Get all tool names for validation (including MCP tools)
+        all_tool_names = ["template_tool", "validator_tool"]
+        # Add MCP tool names dynamically
+        mcp_tools = self.mcp.get_tools()
+        all_tool_names.extend([t.name for t in mcp_tools])
+
+        # Create validator middleware for all available tools
+        tool_call_validator = create_tool_call_validator_middleware(
+            tool_names=all_tool_names
+        )
 
         @after_model
         def extract_text_from_thinking_model(state, runtime):
@@ -262,12 +336,20 @@ class SlideMaker(AgentFlow):
 
             return None
 
+        @after_model
+        def validate_tool_calls(state, runtime):
+            """Validate tool calls and provide feedback if malformed"""
+            return tool_call_validator(state, runtime)
+
         return create_agent(
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[template_tool, validator_tool, *self.mcp.get_tools()],
             checkpointer=self.streaming_memory,
-            middleware=[extract_text_from_thinking_model],
+            middleware=[
+                extract_text_from_thinking_model,
+                validate_tool_calls,
+            ],
         )
 
     def get_validator_tool(self):
@@ -295,7 +377,9 @@ class SlideMaker(AgentFlow):
                 return f"{field_path} invalid. Reason: {error.validator}."
 
             validator = Draft7Validator(globalSchema)
-            errors = [shorten_error_message(e) for e in validator.iter_errors(data)]
+            errors = " | ".join(
+                [shorten_error_message(e) for e in validator.iter_errors(data)]
+            )
             return errors
 
         return validator_tool

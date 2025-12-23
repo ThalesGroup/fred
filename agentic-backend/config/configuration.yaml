@@ -65,7 +65,7 @@ ai:
     # Required in .env:
     # - OPENAI_API_KEY
     provider: "openai"
-    name: "mistral-large-latest"
+    name: "mistral-medium-latest"
     settings:
       base_url: https://api.mistral.ai/v1
       temperature: 0.0
@@ -75,7 +75,7 @@ ai:
     # Required in .env:
     # - OPENAI_API_KEY
     provider: "openai"
-    name: "mistral-large-latest"
+    name: "mistral-medium-latest"
     settings:
       base_url: https://api.mistral.ai/v1
       temperature: 0.0
