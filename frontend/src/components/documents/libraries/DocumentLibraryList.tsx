@@ -32,7 +32,7 @@ import {
   TagWithItemsId,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useListUsersKnowledgeFlowV1UsersGetQuery,
-  useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
+  useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
 import { useToast } from "../../ToastProvider";
@@ -91,14 +91,6 @@ export default function DocumentLibraryList() {
     { refetchOnMountOrArgChange: true },
   );
 
-  const [fetchAllDocuments, { data: allDocuments = [] }] =
-    useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation();
-
-  React.useEffect(() => {
-    fetchAllDocuments({ filters: {} });
-  }, [fetchAllDocuments]);
-  const { showInfo } = useToast();
-
   /* ---------------- Tree building ---------------- */
   const tree = React.useMemo<TagNode | null>(() => (tags ? buildTree(tags) : null), [tags]);
   const hasFolders = Boolean(tree && tree.children.size > 0);
@@ -108,6 +100,112 @@ export default function DocumentLibraryList() {
     arr.sort((a, b) => a.name.localeCompare(b.name));
     return arr;
   }, []);
+
+  const { showInfo } = useToast();
+  const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
+
+  const PAGE_SIZE = 50;
+  const [currentTagId, setCurrentTagId] = React.useState<string | null>(null);
+  const [allDocuments, setAllDocuments] = React.useState<DocumentMetadata[]>([]);
+  const [totalDocuments, setTotalDocuments] = React.useState<number>(0);
+  const [isLoadingPage, setIsLoadingPage] = React.useState(false);
+  const [nextOffset, setNextOffset] = React.useState(0);
+  const [perTagDocs, setPerTagDocs] = React.useState<Record<string, DocumentMetadata[]>>({});
+  const [perTagTotals, setPerTagTotals] = React.useState<Record<string, number>>({});
+  const prefetchedTagsRef = React.useRef<Set<string>>(new Set());
+  const prefetchingTagsRef = React.useRef<Set<string>>(new Set());
+  const documentsByTagId = React.useMemo<Record<string, DocumentMetadata[]>>(() => perTagDocs, [perTagDocs]);
+
+  const loadPage = React.useCallback(
+    async (tagId: string, offset: number, append: boolean, applyToCurrent: boolean = true) => {
+      if (applyToCurrent) setIsLoadingPage(true);
+      try {
+        const res = await browseDocumentsByTag({
+          browseDocumentsByTagRequest: {
+            tag_id: tagId,
+            offset,
+            limit: PAGE_SIZE,
+          },
+        }).unwrap();
+        const docs = res.documents || [];
+
+        setPerTagDocs((prev) => {
+            const existing = prev[tagId] || [];
+            const merged = append ? [...existing, ...docs] : docs;
+            return { ...prev, [tagId]: merged };
+          });
+        setPerTagTotals((prev) => ({ ...prev, [tagId]: res.total || docs.length }));
+
+        if (applyToCurrent && tagId === currentTagId) {
+          setAllDocuments((prev) => (append ? [...prev, ...docs] : docs));
+          setTotalDocuments(res.total || docs.length);
+          setNextOffset(offset + docs.length);
+        }
+      } finally {
+        if (applyToCurrent) setIsLoadingPage(false);
+      }
+    },
+    [browseDocumentsByTag, currentTagId],
+  );
+
+  // Load first page when folder changes
+  React.useEffect(() => {
+    if (!tree || !selectedFolder) return;
+    const node = findNode(tree, selectedFolder);
+    const tagId = node?.tagsHere?.[0]?.id;
+    setCurrentTagId(tagId || null);
+    if (tagId) {
+      const cachedDocs = perTagDocs[tagId] || [];
+      const cachedTotal = perTagTotals[tagId];
+      setAllDocuments(cachedDocs);
+      setTotalDocuments(cachedTotal ?? cachedDocs.length);
+      setNextOffset(cachedDocs.length);
+      if (cachedDocs.length === 0) void loadPage(tagId, 0, false, true);
+    } else {
+      setAllDocuments([]);
+      setTotalDocuments(0);
+      setNextOffset(0);
+    }
+  }, [tree, selectedFolder, perTagDocs, perTagTotals, loadPage]);
+
+  const loadMore = React.useCallback(() => {
+    if (!currentTagId) return;
+    void loadPage(currentTagId, nextOffset, true);
+  }, [currentTagId, loadPage, nextOffset]);
+
+  // Prefetch first page for each tag to populate counters (cap to avoid overload)
+  React.useEffect(() => {
+    if (!tags) return;
+    const MAX_PREFETCH = 50;
+    const missing = tags
+      .map((t) => t.id)
+      .filter((id): id is string => Boolean(id))
+      .filter(
+        (id) =>
+          perTagTotals[id] === undefined &&
+          !prefetchedTagsRef.current.has(id) &&
+          !prefetchingTagsRef.current.has(id),
+      )
+      .slice(0, MAX_PREFETCH);
+
+    if (missing.length === 0) return;
+
+    missing.forEach((id) => prefetchingTagsRef.current.add(id));
+
+    const run = async () => {
+      for (const tagId of missing) {
+        try {
+          await loadPage(tagId, 0, false, false);
+          prefetchedTagsRef.current.add(tagId);
+        } catch (e) {
+          console.warn("[DocumentLibraryList] Prefetch failed for tag", tagId, e);
+        } finally {
+          prefetchingTagsRef.current.delete(tagId);
+        }
+      }
+    };
+    void run();
+  }, [tags, perTagTotals, loadPage]);
 
   /* ---------------- Expand/collapse helpers ---------------- */
   const setAllExpanded = (expand: boolean) => {
@@ -122,6 +220,13 @@ export default function DocumentLibraryList() {
     walk(tree);
     setExpanded(expand ? ids : []);
   };
+
+  // Auto-select first folder when tree loads to avoid empty initial view
+  React.useEffect(() => {
+    if (selectedFolder || !tree) return;
+    const first = getChildren(tree)[0];
+    if (first) setSelectedFolder(first.full);
+  }, [selectedFolder, tree, getChildren]);
 
   const handleOpenPipelineDrawer = () => {
     if (!tree || !selectedFolder) return;
@@ -138,7 +243,7 @@ export default function DocumentLibraryList() {
   /* ---------------- Commands ---------------- */
   const { toggleRetrievable, removeFromLibrary, bulkRemoveFromLibraryForTag, preview, previewPdf, download } = useDocumentCommands({
     refetchTags: refetch,
-    refetchDocs: () => fetchAllDocuments({ filters: {} }),
+    refetchDocs: () => (currentTagId ? loadPage(currentTagId, 0, false) : Promise.resolve()),
   });
   const handleDownload = React.useCallback(
     async (doc: DocumentMetadata) => {
@@ -165,6 +270,7 @@ export default function DocumentLibraryList() {
     if (!q) return allDocuments;
     return allDocuments.filter((d) => matchesDocByName(d, q));
   }, [allDocuments, query]);
+  const hasMore = React.useMemo(() => allDocuments.length < totalDocuments, [allDocuments.length, totalDocuments]);
 
   // Auto-expand branches that contain matches (based on filteredDocs)
   React.useEffect(() => {
@@ -239,7 +345,7 @@ export default function DocumentLibraryList() {
 
   const { confirmDeleteFolder } = useTagCommands({
     refetchTags: refetch,
-    refetchDocs: () => fetchAllDocuments({ filters: {} }),
+    refetchDocs: () => (currentTagId ? loadPage(currentTagId, 0, false) : Promise.resolve()),
   });
   const handleDeleteFolder = React.useCallback(
     (tag: TagWithItemsId) => {
@@ -411,6 +517,12 @@ export default function DocumentLibraryList() {
               selectedDocs={selectedDocs}
               setSelectedDocs={setSelectedDocs}
               onDeleteFolder={handleDeleteFolder}
+              documentsByTagId={documentsByTagId}
+              selectedFolderTotal={totalDocuments}
+              perTagTotals={perTagTotals}
+              hasMore={hasMore}
+              onLoadMore={loadMore}
+              isLoadingMore={isLoadingPage}
               canDeleteDocument={canDeleteDocument}
               canDeleteFolder={canDeleteFolder}
               ownerNamesById={ownerNamesById}
@@ -451,7 +563,9 @@ export default function DocumentLibraryList() {
         onClose={() => setOpenUploadDrawer(false)}
         onUploadComplete={async () => {
           await refetch();
-          await fetchAllDocuments({ filters: {} });
+          if (currentTagId) {
+            await loadPage(currentTagId, 0, false);
+          }
         }}
         metadata={{ tags: [uploadTargetTagId] }}
       />

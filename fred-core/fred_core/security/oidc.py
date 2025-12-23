@@ -25,6 +25,7 @@ from fastapi import HTTPException, Security
 from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWKClient
 
+from fred_core.common.lru_cache import ThreadSafeLRUCache
 from fred_core.security.structure import KeycloakUser, UserSecurity
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,9 @@ STRICT_AUDIENCE = os.getenv("FRED_STRICT_AUDIENCE", "false").lower() in (
     "yes",
 )
 CLOCK_SKEW_SECONDS = int(os.getenv("FRED_JWT_CLOCK_SKEW", "0"))  # optional leeway
+JWT_CACHE_ENABLED = os.getenv("FRED_JWT_CACHE_ENABLED", "true").lower() in ("1", "true", "yes")
+JWT_CACHE_TTL_SECONDS = int(os.getenv("FRED_JWT_CACHE_TTL", "60"))
+JWT_CACHE_MAX_SIZE = int(os.getenv("FRED_JWT_CACHE_SIZE", "512"))
 
 # Initialize global variables (to be set later)
 KEYCLOAK_ENABLED = False
@@ -44,6 +48,9 @@ KEYCLOAK_URL = ""
 KEYCLOAK_JWKS_URL = ""
 KEYCLOAK_CLIENT_ID = ""
 _JWKS_CLIENT: PyJWKClient | None = None  # cached for perf
+_JWT_CACHE: ThreadSafeLRUCache[str, tuple[float, KeycloakUser]] = ThreadSafeLRUCache(
+    JWT_CACHE_MAX_SIZE
+)
 
 
 def _b64json(data: str) -> Dict[str, Any]:
@@ -156,6 +163,56 @@ def _get_jwks_client() -> PyJWKClient:
     return _JWKS_CLIENT
 
 
+def _get_cached_user(token: str) -> KeycloakUser | None:
+    if not JWT_CACHE_ENABLED or not token:
+        return None
+
+    entry = _JWT_CACHE.get(token)
+    if entry is None:
+        return None
+
+    expires_at, user = entry
+    now = time.time()
+    if expires_at > now:
+        logger.debug(
+            "[SECURITY] JWT cache hit for subject=%s (expires_at=%s)",
+            user.uid,
+            _iso(expires_at),
+        )
+        return user
+
+    # stale entry
+    _JWT_CACHE.delete(token)
+    return None
+
+
+def _cache_user(token: str, payload: Dict[str, Any], user: KeycloakUser) -> None:
+    if not JWT_CACHE_ENABLED or JWT_CACHE_MAX_SIZE <= 0:
+        return
+
+    now = time.time()
+    token_exp = payload.get("exp")
+    ttl_exp = now + JWT_CACHE_TTL_SECONDS if JWT_CACHE_TTL_SECONDS > 0 else None
+
+    # pick the earliest non-null expiry between token exp and TTL
+    expires_at_candidates = []
+    for candidate in (token_exp, ttl_exp):
+        try:
+            if candidate:
+                expires_at_candidates.append(float(candidate))
+        except Exception:
+            continue
+
+    if not expires_at_candidates:
+        return
+
+    expires_at = min(expires_at_candidates)
+    if expires_at <= now:
+        return
+
+    _JWT_CACHE.set(token, (expires_at, user))
+
+
 def decode_jwt(token: str) -> KeycloakUser:
     """Decodes a JWT token using PyJWT and retrieves user information with rich diagnostics."""
     if not KEYCLOAK_ENABLED:
@@ -163,6 +220,10 @@ def decode_jwt(token: str) -> KeycloakUser:
         return KeycloakUser(
             uid="admin", username="admin", roles=["admin"], email="dev@localhost"
         )
+
+    cached_user = _get_cached_user(token)
+    if cached_user:
+        return cached_user
 
     # quick header/claim peek for logs (never log raw token)
     header, payload_peek = _peek_header_and_claims(token)
@@ -273,6 +334,7 @@ def decode_jwt(token: str) -> KeycloakUser:
         groups=payload.get("groups", []),
     )
     logger.debug("KeycloakUser built: %s", user)
+    _cache_user(token, payload, user)
     return user
 
 
