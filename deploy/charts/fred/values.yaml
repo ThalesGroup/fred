@@ -218,6 +218,11 @@ applications:
             temperature: 0.0
             max_retries: 2
             request_timeout: 30
+        crossencoder_model:
+          name: cross-encoder/ms-marco-MiniLM-L-12-v2
+          settings:
+            online: false
+            local_path: /app/models
 
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the chat model
