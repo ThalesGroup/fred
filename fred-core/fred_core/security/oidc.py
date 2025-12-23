@@ -199,13 +199,14 @@ def _cache_user(token: str, payload: Dict[str, Any], user: KeycloakUser) -> None
     ttl_exp = now + JWT_CACHE_TTL_SECONDS if JWT_CACHE_TTL_SECONDS > 0 else None
 
     # pick the earliest non-null expiry between token exp and TTL
-    expires_at_candidates = []
+    expires_at_candidates: list[float] = []
     for candidate in (token_exp, ttl_exp):
-        try:
-            if candidate:
-                expires_at_candidates.append(float(candidate))
-        except Exception:
+        if candidate is None:
             continue
+        try:
+            expires_at_candidates.append(float(candidate))
+        except (TypeError, ValueError) as exc:
+            logger.debug("[SECURITY] Ignoring invalid expiry candidate %s (%s)", candidate, exc)
 
     if not expires_at_candidates:
         return
