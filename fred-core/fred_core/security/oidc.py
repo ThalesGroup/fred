@@ -38,7 +38,11 @@ STRICT_AUDIENCE = os.getenv("FRED_STRICT_AUDIENCE", "false").lower() in (
     "yes",
 )
 CLOCK_SKEW_SECONDS = int(os.getenv("FRED_JWT_CLOCK_SKEW", "0"))  # optional leeway
-JWT_CACHE_ENABLED = os.getenv("FRED_JWT_CACHE_ENABLED", "true").lower() in ("1", "true", "yes")
+JWT_CACHE_ENABLED = os.getenv("FRED_JWT_CACHE_ENABLED", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 JWT_CACHE_TTL_SECONDS = int(os.getenv("FRED_JWT_CACHE_TTL", "60"))
 JWT_CACHE_MAX_SIZE = int(os.getenv("FRED_JWT_CACHE_SIZE", "512"))
 
