@@ -206,7 +206,9 @@ def _cache_user(token: str, payload: Dict[str, Any], user: KeycloakUser) -> None
         try:
             expires_at_candidates.append(float(candidate))
         except (TypeError, ValueError) as exc:
-            logger.debug("[SECURITY] Ignoring invalid expiry candidate %s (%s)", candidate, exc)
+            logger.debug(
+                "[SECURITY] Ignoring invalid expiry candidate %s (%s)", candidate, exc
+            )
 
     if not expires_at_candidates:
         return
