@@ -38,13 +38,6 @@ function getPrimaryTag(n: TagNode): TagWithItemsId | undefined {
   return n.tagsHere?.[0];
 }
 
-/** Doc belongs directly to this node (has one of this node's tag ids). */
-function docBelongsToNode(doc: DocumentMetadata, node: TagNode): boolean {
-  const idsAtNode = (node.tagsHere ?? []).map((t) => t.id);
-  const docTagIds = doc.tags?.tag_ids ?? [];
-  return docTagIds.some((id) => idsAtNode.includes(id));
-}
-
 /** Docs linked to any of the provided tag ids (deduped). */
 function getDocsForTags(tagIds: string[], docsByTagId: Record<string, DocumentMetadata[]>): DocumentMetadata[] {
   if (!tagIds.length) return [];
