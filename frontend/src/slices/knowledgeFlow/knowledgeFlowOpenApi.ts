@@ -63,6 +63,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.browseDocumentsRequest,
       }),
     }),
+    browseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePost: build.mutation<
+      BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiResponse,
+      BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/metadata/browse`,
+        method: "POST",
+        body: queryArg.browseDocumentsByTagRequest,
+      }),
+    }),
     documentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGet: build.query<
       DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse,
       DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiArg
@@ -809,6 +819,11 @@ export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiResponse =
 export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiArg = {
   browseDocumentsRequest: BrowseDocumentsRequest;
 };
+export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiResponse =
+  /** status 200 Successful Response */ PullDocumentsResponse;
+export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiArg = {
+  browseDocumentsByTagRequest: BrowseDocumentsByTagRequest;
+};
 export type DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse =
   /** status 200 Successful Response */ VectorChunk[];
 export type DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiArg = {
@@ -1434,6 +1449,12 @@ export type BrowseDocumentsRequest = {
   offset?: number;
   limit?: number;
   sort_by?: SortOption[] | null;
+};
+export type BrowseDocumentsByTagRequest = {
+  /** Library tag identifier */
+  tag_id: string;
+  offset?: number;
+  limit?: number;
 };
 export type VectorChunk = {
   /** Unique identifier of the chunk */
@@ -2092,6 +2113,7 @@ export const {
   useLazyGetProcessingSummaryKnowledgeFlowV1DocumentsProcessingSummaryGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
+  useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
   useDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
   useLazyDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
   useDocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetQuery,

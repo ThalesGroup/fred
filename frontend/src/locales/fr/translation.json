@@ -653,6 +653,8 @@
     "deleteFolder": "Supprimer le dossier",
     "download": "Télécharger",
     "downloadStarting": "Préparation du téléchargement...",
+    "loadMore": "Charger plus",
+    "loadAll": "Tout charger",
     "pipeline": {
       "title": "Configurer le pipeline de traitement",
       "description": "Définissez la chaîne de processeurs à appliquer pour chaque type de fichier de cette bibliothèque.",
