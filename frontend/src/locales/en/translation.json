@@ -431,6 +431,10 @@
       "tooltipHybrid": "Use both the selected document libraries and the model general knowledge to answer",
       "tooltipGeneral": "Use only the model general knowledge to answer"
     },
+    "deepSearch": {
+      "label": "Deep Search",
+      "tooltip": "Delegate RAG retrieval to Rico Senior"
+    },
     "menu": {
       "addToSetup": "Add to conversation setup"
     },

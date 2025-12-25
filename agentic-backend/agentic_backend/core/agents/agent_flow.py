@@ -710,6 +710,10 @@ class AgentFlow:
                 continue
             if isinstance(m, ToolMessage) and not include_tool:
                 continue
+            if not include_tool and isinstance(m, AIMessage):
+                tool_calls = getattr(m, "tool_calls", None)
+                if tool_calls:
+                    continue
             selected.append(m)
             if len(selected) >= max_messages:
                 break
