@@ -4,6 +4,7 @@
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Set
 
@@ -18,6 +19,8 @@ from knowledge_flow_backend.features.tag.tag_service import TagService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
 
 logger = logging.getLogger(__name__)
+_PAGE_SINGLE_RE = re.compile(r"\b(?:page|p)\s*\.?\s*(\d{1,4})\b", re.IGNORECASE)
+_PAGE_RANGE_RE = re.compile(r"\b(?:page|p)\s*\.?\s*(\d{1,4})\s*[-–—]\s*(\d{1,4})\b", re.IGNORECASE)
 
 
 class VectorSearchService:
@@ -150,7 +153,9 @@ class VectorSearchService:
 
     # ---------- private strategies -------------------------------------------
 
-    async def _semantic(self, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str]) -> List[VectorSearchHit]:
+    async def _semantic(
+        self, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str], *, metadata_terms: Optional[dict[str, Any]] = None
+    ) -> List[VectorSearchHit]:
         """
         Perform a semantic search using the ANN (Approximate Nearest Neighbors) strategy.
         This strategy relies purely on vector similarity.
@@ -165,9 +170,7 @@ class VectorSearchService:
         Returns:
             List[VectorSearchHit]: A list of VectorSearchHit objects containing the search results.
         """
-        metadata_terms: dict[str, Any] = {"retrievable": [True]}
-
-        sf = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
+        sf = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms or {"retrievable": [True]})
 
         try:
             ann_hits: List[AnnHit] = self.vector_store.ann_search(question, k=k, search_filter=sf)
@@ -177,7 +180,9 @@ class VectorSearchService:
 
         return await asyncio.gather(*[self._to_hit(h.document, h.score, rank, user) for rank, h in enumerate(ann_hits, start=1)])
 
-    async def _strict(self, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str]) -> List[VectorSearchHit]:
+    async def _strict(
+        self, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str], *, metadata_terms: Optional[dict[str, Any]] = None
+    ) -> List[VectorSearchHit]:
         """
         Perform a strict search using BM25 (Best Matching 25).
         This strategy is only available when using OpenSearch as the vector store.
@@ -197,8 +202,7 @@ class VectorSearchService:
         if not isinstance(self.vector_store, OpenSearchVectorStoreAdapter):
             raise TypeError(f"Strict search requires Opensearch, but vector_store is of type {type(self.vector_store).__name__}")
 
-        metadata_terms: dict[str, Any] = {"retrievable": [True]}
-        search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
+        search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms or {"retrievable": [True]})
 
         try:
             hits: List[FullTextHit] = self.vector_store.full_text_search(query=question, top_k=k, search_filter=search_filter)
@@ -208,7 +212,9 @@ class VectorSearchService:
 
         return await asyncio.gather(*[self._to_hit(hit.document, hit.score, rank, user) for rank, hit in enumerate(hits, start=1)])
 
-    async def _hybrid(self, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str]) -> List[VectorSearchHit]:
+    async def _hybrid(
+        self, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str], *, metadata_terms: Optional[dict[str, Any]] = None
+    ) -> List[VectorSearchHit]:
         """
         Hybrid search strategy that combines vector similarity and keyword matching.
         This strategy is only available when using OpenSearch as the vector store.
@@ -228,8 +234,7 @@ class VectorSearchService:
         if not isinstance(self.vector_store, OpenSearchVectorStoreAdapter):
             raise TypeError(f"Hybrid search requires Opensearch, but vector_store is of type {type(self.vector_store).__name__}")
 
-        metadata_terms: dict[str, Any] = {"retrievable": [True]}
-        search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
+        search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms or {"retrievable": [True]})
 
         try:
             hits: List[HybridHit] = self.vector_store.hybrid_search(query=question, top_k=k, search_filter=search_filter)
@@ -265,16 +270,50 @@ class VectorSearchService:
                 document_library_tags_ids = await self._all_document_library_tags_ids(user)
 
             policy_key = policy_name or SearchPolicyName.hybrid
+            supports_full_text = isinstance(self.vector_store, OpenSearchVectorStoreAdapter)
+            fallback_reason: Optional[str] = None
+            metadata_terms: dict[str, Any] = {"retrievable": [True]}
+            page_numbers = self._extract_page_numbers(question)
+            use_page_filter = bool(page_numbers)
+            if use_page_filter:
+                metadata_terms["page"] = page_numbers
+                logger.info("[VECTOR][SEARCH] Detected page hint in query -> metadata filter: page=%s", page_numbers)
+
+            async def run_with_page_fallback(fn):
+                hits = await fn(metadata_terms)
+                if use_page_filter and not hits:
+                    logger.info("[VECTOR][SEARCH] No hits with page filter %s; retrying without page constraint.", page_numbers)
+                    hits = await fn({"retrievable": [True]})
+                return hits
+
             if policy_key == SearchPolicyName.strict:
                 logger.info("[VECTOR][SEARCH] Using strict search policy")
-                return await self._strict(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+                if supports_full_text:
+                    return await run_with_page_fallback(
+                        lambda terms: self._strict(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids, metadata_terms=terms)
+                    )
+                fallback_reason = "strict"
+                policy_key = SearchPolicyName.semantic
 
-            elif policy_key == SearchPolicyName.hybrid:
+            if policy_key == SearchPolicyName.hybrid:
                 logger.info("[VECTOR][SEARCH] Using hybrid search policy")
-                return await self._hybrid(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
-            else:
-                logger.info("[VECTOR][SEARCH] Using semantic search policy (legacy)")
-                return await self._semantic(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+                if supports_full_text:
+                    return await run_with_page_fallback(
+                        lambda terms: self._hybrid(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids, metadata_terms=terms)
+                    )
+                fallback_reason = "hybrid"
+                policy_key = SearchPolicyName.semantic
+
+            if fallback_reason:
+                logger.warning(
+                    "[VECTOR][SEARCH] %s search policy requested but vector store %s does not support full-text; falling back to semantic search",
+                    fallback_reason.capitalize(),
+                    type(self.vector_store).__name__,
+                )
+            logger.info("[VECTOR][SEARCH] Using semantic search policy (legacy)")
+            return await run_with_page_fallback(
+                lambda terms: self._semantic(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids, metadata_terms=terms)
+            )
 
         except TypeError as e:
             logger.error("[VECTOR][SEARCH]: %s", str(e))
@@ -306,3 +345,21 @@ class VectorSearchService:
         logger.info("[VECTOR][RERANK] Reranked %s documents, keeping top %s", len(documents), len(reranked_documents))
 
         return reranked_documents
+
+    @staticmethod
+    def _extract_page_numbers(question: str) -> List[int]:
+        """
+        Grab page numbers explicitly mentioned in the query (e.g., 'page 5', 'p. 3-4').
+        Returns a sorted, unique list to use as a metadata filter.
+        """
+        if not question:
+            return []
+        nums: set[int] = set()
+        for start, end in _PAGE_RANGE_RE.findall(question):
+            s, e = int(start), int(end)
+            if e < s:
+                s, e = e, s
+            nums.update(range(s, e + 1))
+        for single in _PAGE_SINGLE_RE.findall(question):
+            nums.add(int(single))
+        return sorted(n for n in nums if n > 0)

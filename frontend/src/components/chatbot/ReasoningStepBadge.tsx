@@ -54,6 +54,8 @@ export default function ReasoningStepBadge({
   chipNode,
   chipTask,
   toolName,
+  toolOriginLabel,
+  toolOriginTooltip,
   resultOk,
 }: {
   message: ChatMessage;
@@ -69,6 +71,8 @@ export default function ReasoningStepBadge({
   chipNode?: string;
   chipTask?: string;
   toolName?: string;
+  toolOriginLabel?: string;
+  toolOriginTooltip?: string;
   resultOk?: boolean;
 }) {
   const theme = useTheme();
@@ -204,6 +208,11 @@ export default function ReasoningStepBadge({
                 backgroundColor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.2 : 0.08),
               }}
             />
+          )}
+          {toolOriginLabel && (
+            <Tooltip title={toolOriginTooltip || "Appel MCP"}>
+              <Chip size="small" variant="outlined" color="info" label={toolOriginLabel} />
+            </Tooltip>
           )}
           {!toolName && chipNode && <Chip label={chipNode} size="small" variant="outlined" />}
           {derivedStatus && (

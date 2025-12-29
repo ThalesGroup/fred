@@ -66,6 +66,20 @@ const toolName = (m: ChatMessage): string | undefined => {
   return p?.name;
 };
 
+const toolOrigin = (
+  call?: ChatMessage,
+  result?: ChatMessage
+): { label: string; tooltip?: string; kind: "mcp" | "local" } | undefined => {
+  const extras = (result?.metadata?.extras ?? call?.metadata?.extras) as any;
+  if (!extras) return undefined;
+  if (extras && (extras.tool_kind === "mcp" || extras.tool_origin === "mcp")) {
+    const label = extras.mcp_server_name || extras.mcp_server_id || "MCP";
+    const tooltip = extras.mcp_server_id ? `MCP: ${extras.mcp_server_name || extras.mcp_server_id}` : "MCP tool";
+    return { label: String(label), tooltip, kind: "mcp" };
+  }
+  return { label: "Local tool", tooltip: "Hors MCP", kind: "local" };
+};
+
 const okFlag = (m: ChatMessage): boolean | undefined => {
   const p = m.parts.find((p) => p.type === "tool_result") as
     | Extract<ChatMessage["parts"][number], { type: "tool_result" }>
@@ -282,9 +296,14 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
                     channel: message.channel,
                     nodeType: typeof nodeRaw,
                     taskType: typeof taskRaw,
-                    previewType: typeof previewRaw,
+                        previewType: typeof previewRaw,
                   });
                 }
+
+                const origin = toolOrigin(
+                  entry.kind === "combo" ? entry.call : message,
+                  entry.kind === "combo" ? entry.result : undefined
+                );
 
                 return (
                   <React.Fragment key={key}>
@@ -302,6 +321,8 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
                       chipNode={chipNode}
                       chipTask={chipTask}
                       toolName={toolName(entry.kind === "combo" ? entry.call : message)}
+                      toolOriginLabel={origin?.label}
+                      toolOriginTooltip={origin?.tooltip}
                       resultOk={resultOk}
                     />
                     {idx < ordered.length - 1 && <Divider component="li" />}

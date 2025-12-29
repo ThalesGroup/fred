@@ -61,6 +61,20 @@ class StandardToolNode:
             tool_name = tool_call["name"]
             tool = self.tools_by_name.get(tool_name)
 
+            origin_extras = {
+                "tool_kind": "local",
+                "mcp_server_id": None,
+                "mcp_server_name": None,
+            }
+            if tool and hasattr(tool, "_mcp_server_id"):
+                origin_extras.update(
+                    {
+                        "tool_kind": "mcp",
+                        "mcp_server_id": getattr(tool, "_mcp_server_id", None),
+                        "mcp_server_name": getattr(tool, "_mcp_server_name", None),
+                    }
+                )
+
             if not tool:
                 error_msg = (
                     f"Tool '{tool_name}' requested but not found in available tools."
@@ -71,6 +85,7 @@ class StandardToolNode:
                         content=f"Error: {error_msg}",
                         tool_call_id=tool_call["id"],
                         name=tool_name,
+                        response_metadata={"extras": origin_extras},
                     )
                 )
                 continue
@@ -85,7 +100,10 @@ class StandardToolNode:
 
                 tool_results.append(
                     ToolMessage(
-                        content=content, tool_call_id=tool_call["id"], name=tool_name
+                        content=content,
+                        tool_call_id=tool_call["id"],
+                        name=tool_name,
+                        response_metadata={"extras": origin_extras},
                     )
                 )
             except Exception as e:
@@ -99,6 +117,7 @@ class StandardToolNode:
                         content=f"Tool Failed: {e.__class__.__name__}. See logs for details.",
                         tool_call_id=tool_call["id"],
                         name=tool_name,
+                        response_metadata={"extras": origin_extras},
                     )
                 )
 

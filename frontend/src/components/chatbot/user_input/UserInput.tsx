@@ -114,7 +114,6 @@ export default function UserInput({
   initialTemplateResourceIds,
   initialSearchRagScope,
   initialSearchPolicy = "semantic",
-  initialSearchRagScope,
   initialDeepSearch,
   currentAgent,
   agents,
@@ -135,7 +134,6 @@ export default function UserInput({
   initialTemplateResourceIds?: string[];
   initialSearchRagScope?: SearchRagScope;
   initialSearchPolicy?: SearchPolicyName;
-  initialSearchRagScope?: SearchRagScope;
   initialDeepSearch?: boolean;
   currentAgent: AnyAgent;
   agents: AnyAgent[];

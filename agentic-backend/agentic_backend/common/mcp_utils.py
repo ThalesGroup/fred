@@ -321,6 +321,13 @@ async def get_connected_mcp_client_for_agent(
                     CONNECT_MAX_ATTEMPTS,
                 )
                 tools = await client.get_tools(server_name=server.id)
+                # Tag tools with their origin server for downstream telemetry/UI.
+                for t in tools or []:
+                    try:
+                        setattr(t, "_mcp_server_id", server.id)
+                        setattr(t, "_mcp_server_name", server.name or server.id)
+                    except Exception:
+                        logger.debug("[MCP][%s] Could not tag tool origin for %s", agent_name, server.id)
                 dur_ms = (time.perf_counter() - start) * 1000
                 logger.info(
                     "[MCP][%s] connected name=%s transport=%s endpoint=%s tools=%d dur_ms=%.0f attempt=%d/%d",

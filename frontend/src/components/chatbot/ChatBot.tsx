@@ -411,7 +411,7 @@ const ChatBot = ({
           documentLibraryIds: parsed.documentLibraryIds ?? [],
           promptResourceIds: parsed.promptResourceIds ?? [],
           templateResourceIds: parsed.templateResourceIds ?? [],
-          searchRagScope: parsed.searchRagScope,
+          searchRagScope: parseRagScope(parsed.searchRagScope),
           deepSearch: parsed.deepSearch,
         });
       } else {
@@ -617,9 +617,6 @@ const ChatBot = ({
   // After your state declarations
   const effectiveSessionId = pendingSessionIdRef.current || currentChatBotSession?.id || undefined;
   const showWelcome = !waitResponse && (isCreatingNewConversation || messages.length === 0);
-
-  // Keep the latest RAG scope choice sticky across re-mounts during the same session.
-  const initialSearchRagScope = userInputContext?.searchRagScope ?? initialCtx.searchRagScope;
 
   const hasContext =
     !!userInputContext &&

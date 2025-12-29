@@ -88,6 +88,15 @@ class McpToolkit(BaseToolkit):
                         "[MCP] discovered %d base tools via get_tools()",
                         len(base_tools),
                     )
+                    # Tag origin so downstream can display MCP badges even when not prefetched.
+                    for t in base_tools:
+                        try:
+                            if not hasattr(t, "_mcp_server_id"):
+                                setattr(t, "_mcp_server_id", getattr(t, "server_name", None) or "mcp")
+                            if not hasattr(t, "_mcp_server_name"):
+                                setattr(t, "_mcp_server_name", getattr(t, "server_name", None) or "MCP")
+                        except Exception:
+                            logger.debug("[MCP] Could not tag tool origin for %s", t)
                 return base_tools
             except Exception as e:
                 logger.warning("[MCP] tool discovery via get_tools failed: %s", e)
