@@ -39,6 +39,7 @@ import {
 } from "../../../slices/agentic/agenticOpenApi.ts";
 import { AgentSelector } from "./AgentSelector.tsx";
 import { UserInputAttachments } from "./UserInputAttachments.tsx";
+import { UserInputDeepSearchToggle } from "./UserInputDeepSearchToggle.tsx";
 import { UserInputPopover } from "./UserInputPopover.tsx";
 import { UserInputRagScope } from "./UserInputRagScope.tsx";
 import { SearchRagScope } from "./types.ts";
@@ -53,6 +54,7 @@ export interface UserInputContent {
   profileResourceIds?: string[];
   searchPolicy?: SearchPolicyName;
   searchRagScope?: SearchRagScope;
+  deepSearch?: boolean;
 }
 
 type PersistedCtx = {
@@ -62,6 +64,7 @@ type PersistedCtx = {
   profileResourceIds?: string[];
   searchPolicy?: SearchPolicyName;
   searchRagScope?: SearchRagScope;
+  deepSearch?: boolean;
   ragKnowledgeScope?: SearchRagScope; // legacy persisted field
   skipRagSearch?: boolean; // legacy persisted flag
 };
@@ -111,6 +114,8 @@ export default function UserInput({
   initialTemplateResourceIds,
   initialSearchRagScope,
   initialSearchPolicy = "semantic",
+  initialSearchRagScope,
+  initialDeepSearch,
   currentAgent,
   agents,
   onSelectNewAgent,
@@ -130,6 +135,8 @@ export default function UserInput({
   initialTemplateResourceIds?: string[];
   initialSearchRagScope?: SearchRagScope;
   initialSearchPolicy?: SearchPolicyName;
+  initialSearchRagScope?: SearchRagScope;
+  initialDeepSearch?: boolean;
   currentAgent: AnyAgent;
   agents: AnyAgent[];
   onSelectNewAgent: (flow: AnyAgent) => void;
@@ -151,18 +158,30 @@ export default function UserInput({
   const [filesBlob, setFilesBlob] = useState<File[] | null>(null);
   // Only show the selector when the agent explicitly opts in via config (new flag, fallback to old).
   const supportsRagScopeSelection = agentChatOptions?.search_rag_scoping === true;
-  const computeDefaultRagScope = (): SearchRagScope => parseRagScope(initialSearchRagScope) ?? "hybrid";
-  const [searchRagScope, setSearchRagScope] = useState<SearchRagScope>(computeDefaultRagScope);
+  const supportsDeepSearchSelection = agentChatOptions?.deep_search_delegate === true;
+  const computeDefaultRagScope = (): SearchRagScope => "hybrid";
+  const [searchRagScope, setSearchRagScope] = useState<SearchRagScope>(
+    initialSearchRagScope ?? computeDefaultRagScope,
+  );
+  const [deepSearchEnabled, setDeepSearchEnabled] = useState<boolean>(initialDeepSearch ?? false);
 
   console.log("UserInput render", { searchRagScope, supportsRagScopeSelection });
   console.log("Agent chat options", agentChatOptions);
   // --- Fred rationale ---
   // These three selections are *session-scoped context* (used by agents for retrieval/templates).
   // Rule: hydrate exactly once per session. Persist to localStorage to restore when returning.
-  const [selectedDocumentLibrariesIds, setSelectedDocumentLibrariesIds] = useState<string[]>([]);
-  const [selectedPromptResourceIds, setSelectedPromptResourceIds] = useState<string[]>([]);
-  const [selectedTemplateResourceIds, setSelectedTemplateResourceIds] = useState<string[]>([]);
-  const [selectedSearchPolicyName, setSelectedSearchPolicyName] = useState<SearchPolicyName>("semantic");
+  const [selectedDocumentLibrariesIds, setSelectedDocumentLibrariesIds] = useState<string[]>(
+    initialDocumentLibraryIds ?? [],
+  );
+  const [selectedPromptResourceIds, setSelectedPromptResourceIds] = useState<string[]>(
+    initialPromptResourceIds ?? [],
+  );
+  const [selectedTemplateResourceIds, setSelectedTemplateResourceIds] = useState<string[]>(
+    initialTemplateResourceIds ?? [],
+  );
+  const [selectedSearchPolicyName, setSelectedSearchPolicyName] = useState<SearchPolicyName>(
+    initialSearchPolicy,
+  );
   const canSend = !!userInput.trim() || !!audioBlob; // files upload immediately now
 
   const canAttach = Object.values(agentChatOptions || {})
@@ -171,6 +190,11 @@ export default function UserInput({
 
   // Selections made *before* we get a real sessionId (first question) — migrate them.
   const preSessionRef = useRef<PersistedCtx>({});
+
+  const updatePreSession = (patch: Partial<PersistedCtx>) => {
+    if (sessionId) return;
+    preSessionRef.current = { ...preSessionRef.current, ...patch };
+  };
 
   // Capture pre-session picks while sessionId is undefined.
   useEffect(() => {
@@ -181,6 +205,7 @@ export default function UserInput({
         templateResourceIds: selectedTemplateResourceIds,
         searchPolicy: selectedSearchPolicyName,
         searchRagScope: searchRagScope,
+        deepSearch: deepSearchEnabled,
       };
     }
   }, [
@@ -190,13 +215,29 @@ export default function UserInput({
     selectedTemplateResourceIds,
     selectedSearchPolicyName,
     searchRagScope,
+    deepSearchEnabled,
   ]);
 
   // When switching agents (no active session), align default skip state with the agent option
   useEffect(() => {
     if (sessionId) return; // do not override an active session choice
-    setSearchRagScope(parseRagScope(initialSearchRagScope) ?? "hybrid");
-  }, [agentChatOptions?.search_rag_scoping, supportsRagScopeSelection, sessionId, initialSearchRagScope]);
+    const hasPreScope = Boolean(preSessionRef.current.searchRagScope);
+    const hasPreDeep = typeof preSessionRef.current.deepSearch === "boolean";
+    if (!hasPreScope) {
+      setSearchRagScope(initialSearchRagScope ?? "hybrid");
+    }
+    if (!hasPreDeep) {
+      setDeepSearchEnabled(initialDeepSearch ?? false);
+    }
+  }, [
+    agentChatOptions?.search_rag_scoping,
+    agentChatOptions?.deep_search_delegate,
+    supportsRagScopeSelection,
+    supportsDeepSearchSelection,
+    initialSearchRagScope,
+    initialDeepSearch,
+    sessionId,
+  ]);
 
   // Hydration guard: run at most once per session id.
   const hydratedForSession = useRef<string | undefined>(undefined);
@@ -244,12 +285,14 @@ export default function UserInput({
       parseRagScope(pre.searchRagScope) ??
       parseRagScope(pre.ragKnowledgeScope) ??
       (pre.skipRagSearch ? "general_only" : undefined);
-    const ragScope = persistedScope ?? preScope ?? computeDefaultRagScope();
+    const ragScope = persistedScope ?? preScope ?? initialSearchRagScope ?? computeDefaultRagScope();
+    const deepSearch = persisted.deepSearch ?? pre.deepSearch ?? initialDeepSearch ?? false;
     setSelectedSearchPolicyName(searchPolicy);
     setSelectedDocumentLibrariesIds(libs);
     setSelectedPromptResourceIds(prompts);
     setSelectedTemplateResourceIds(templates);
     setSearchRagScope(ragScope);
+    setDeepSearchEnabled(deepSearch);
 
     // Save immediately so storage stays the source of truth for this session.
     saveSessionCtx(sessionId, {
@@ -258,6 +301,7 @@ export default function UserInput({
       templateResourceIds: templates,
       searchPolicy: searchPolicy,
       searchRagScope: ragScope,
+      deepSearch,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
@@ -266,6 +310,7 @@ export default function UserInput({
   const setLibs = (next: React.SetStateAction<string[]>) => {
     setSelectedDocumentLibrariesIds((prev) => {
       const value = typeof next === "function" ? (next as any)(prev) : next;
+      updatePreSession({ documentLibraryIds: value });
       if (sessionId)
         saveSessionCtx(sessionId, {
           documentLibraryIds: value,
@@ -273,6 +318,7 @@ export default function UserInput({
           templateResourceIds: selectedTemplateResourceIds,
           searchPolicy: selectedSearchPolicyName,
           searchRagScope,
+          deepSearch: deepSearchEnabled,
         });
       return value;
     });
@@ -280,6 +326,7 @@ export default function UserInput({
   const setPrompts = (next: React.SetStateAction<string[]>) => {
     setSelectedPromptResourceIds((prev) => {
       const value = typeof next === "function" ? (next as any)(prev) : next;
+      updatePreSession({ promptResourceIds: value });
       if (sessionId)
         saveSessionCtx(sessionId, {
           documentLibraryIds: selectedDocumentLibrariesIds,
@@ -287,6 +334,7 @@ export default function UserInput({
           templateResourceIds: selectedTemplateResourceIds,
           searchPolicy: selectedSearchPolicyName,
           searchRagScope,
+          deepSearch: deepSearchEnabled,
         });
       return value;
     });
@@ -294,6 +342,7 @@ export default function UserInput({
   const setTemplates = (next: React.SetStateAction<string[]>) => {
     setSelectedTemplateResourceIds((prev) => {
       const value = typeof next === "function" ? (next as any)(prev) : next;
+      updatePreSession({ templateResourceIds: value });
       if (sessionId)
         saveSessionCtx(sessionId, {
           documentLibraryIds: selectedDocumentLibrariesIds,
@@ -301,6 +350,7 @@ export default function UserInput({
           templateResourceIds: value,
           searchPolicy: selectedSearchPolicyName,
           searchRagScope,
+          deepSearch: deepSearchEnabled,
         });
       return value;
     });
@@ -308,6 +358,7 @@ export default function UserInput({
   const setSearchPolicy = (next: React.SetStateAction<SearchPolicyName>) => {
     setSelectedSearchPolicyName((prev) => {
       const value = typeof next === "function" ? (next as any)(prev) : next;
+      updatePreSession({ searchPolicy: value });
       if (sessionId)
         saveSessionCtx(sessionId, {
           documentLibraryIds: selectedDocumentLibrariesIds,
@@ -315,12 +366,14 @@ export default function UserInput({
           templateResourceIds: selectedTemplateResourceIds,
           searchPolicy: value,
           searchRagScope,
+          deepSearch: deepSearchEnabled,
         });
       return value;
     });
   };
   const setRagScope = (next: SearchRagScope) => {
     setSearchRagScope(next);
+    updatePreSession({ searchRagScope: next });
     if (sessionId)
       saveSessionCtx(sessionId, {
         documentLibraryIds: selectedDocumentLibrariesIds,
@@ -328,6 +381,20 @@ export default function UserInput({
         templateResourceIds: selectedTemplateResourceIds,
         searchPolicy: selectedSearchPolicyName,
         searchRagScope: next,
+        deepSearch: deepSearchEnabled,
+      });
+  };
+  const setDeepSearch = (next: boolean) => {
+    setDeepSearchEnabled(next);
+    updatePreSession({ deepSearch: next });
+    if (sessionId)
+      saveSessionCtx(sessionId, {
+        documentLibraryIds: selectedDocumentLibrariesIds,
+        promptResourceIds: selectedPromptResourceIds,
+        templateResourceIds: selectedTemplateResourceIds,
+        searchPolicy: selectedSearchPolicyName,
+        searchRagScope,
+        deepSearch: next,
       });
   };
 
@@ -397,6 +464,7 @@ export default function UserInput({
       templateResourceIds: selectedTemplateResourceIds.length ? selectedTemplateResourceIds : undefined,
       searchPolicy: selectedSearchPolicyName,
       searchRagScope: supportsRagScopeSelection ? searchRagScope : undefined,
+      deepSearch: supportsDeepSearchSelection ? deepSearchEnabled : undefined,
     });
   }, [
     filesBlob,
@@ -406,7 +474,9 @@ export default function UserInput({
     selectedTemplateResourceIds,
     selectedSearchPolicyName,
     searchRagScope,
+    deepSearchEnabled,
     supportsRagScopeSelection,
+    supportsDeepSearchSelection,
     onContextChange,
   ]);
 
@@ -437,6 +507,7 @@ export default function UserInput({
       templateResourceIds: selectedTemplateResourceIds,
       searchPolicy: selectedSearchPolicyName,
       searchRagScope: supportsRagScopeSelection ? searchRagScope : undefined,
+      deepSearch: supportsDeepSearchSelection ? deepSearchEnabled : undefined,
     });
     setUserInput("");
     setAudioBlob(null);
@@ -517,6 +588,9 @@ export default function UserInput({
               alignItems: "center",
             }}
           >
+            {supportsDeepSearchSelection && (
+              <UserInputDeepSearchToggle value={deepSearchEnabled} onChange={setDeepSearch} disabled={isWaiting} />
+            )}
             {supportsRagScopeSelection && (
               <UserInputRagScope value={searchRagScope} onChange={setRagScope} disabled={isWaiting} />
             )}

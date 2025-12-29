@@ -63,6 +63,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.browseDocumentsRequest,
       }),
     }),
+    browseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePost: build.mutation<
+      BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiResponse,
+      BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/metadata/browse`,
+        method: "POST",
+        body: queryArg.browseDocumentsByTagRequest,
+      }),
+    }),
     documentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGet: build.query<
       DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse,
       DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiArg
@@ -450,6 +460,9 @@ const injectedRtkApi = api.injectEndpoints({
     testPostSuccess: build.mutation<TestPostSuccessApiResponse, TestPostSuccessApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/vector/test`, method: "POST" }),
     }),
+    rerankDocuments: build.mutation<RerankDocumentsApiResponse, RerankDocumentsApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/rerank`, method: "POST", body: queryArg.rerankRequest }),
+    }),
     queryKnowledgeFlowV1KpiQueryPost: build.mutation<
       QueryKnowledgeFlowV1KpiQueryPostApiResponse,
       QueryKnowledgeFlowV1KpiQueryPostApiArg
@@ -806,6 +819,11 @@ export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiResponse =
 export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiArg = {
   browseDocumentsRequest: BrowseDocumentsRequest;
 };
+export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiResponse =
+  /** status 200 Successful Response */ PullDocumentsResponse;
+export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiArg = {
+  browseDocumentsByTagRequest: BrowseDocumentsByTagRequest;
+};
 export type DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiResponse =
   /** status 200 Successful Response */ VectorChunk[];
 export type DocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetApiArg = {
@@ -1062,6 +1080,10 @@ export type SearchDocumentsUsingVectorizationApiArg = {
 };
 export type TestPostSuccessApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
 export type TestPostSuccessApiArg = void;
+export type RerankDocumentsApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
+export type RerankDocumentsApiArg = {
+  rerankRequest: RerankRequest;
+};
 export type QueryKnowledgeFlowV1KpiQueryPostApiResponse = /** status 200 Successful Response */ KpiQueryResult;
 export type QueryKnowledgeFlowV1KpiQueryPostApiArg = {
   kpiQuery: KpiQuery;
@@ -1428,6 +1450,12 @@ export type BrowseDocumentsRequest = {
   limit?: number;
   sort_by?: SortOption[] | null;
 };
+export type BrowseDocumentsByTagRequest = {
+  /** Library tag identifier */
+  tag_id: string;
+  offset?: number;
+  limit?: number;
+};
 export type VectorChunk = {
   /** Unique identifier of the chunk */
   chunk_uid: string;
@@ -1746,6 +1774,12 @@ export type SearchRequest = {
   document_library_tags_ids?: string[] | null;
   /** Optional search policy preset. If omitted, defaults to 'hybrid'. */
   search_policy?: SearchPolicyName | null;
+};
+export type RerankRequest = {
+  question: string;
+  documents: VectorSearchHit[];
+  /** Number of top-reranked chunks to consider */
+  top_r?: number;
 };
 export type KpiQueryResultRow = {
   group: {
@@ -2079,6 +2113,7 @@ export const {
   useLazyGetProcessingSummaryKnowledgeFlowV1DocumentsProcessingSummaryGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
+  useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
   useDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
   useLazyDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
   useDocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetQuery,
@@ -2148,6 +2183,7 @@ export const {
   useEchoSchemaKnowledgeFlowV1SchemasEchoPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
   useTestPostSuccessMutation,
+  useRerankDocumentsMutation,
   useQueryKnowledgeFlowV1KpiQueryPostMutation,
   useGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,
   useLazyGetCreateResSchemaKnowledgeFlowV1ResourcesSchemaGetQuery,

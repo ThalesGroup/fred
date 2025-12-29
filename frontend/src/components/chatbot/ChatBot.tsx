@@ -388,11 +388,13 @@ const ChatBot = ({
     promptResourceIds: string[];
     templateResourceIds: string[];
     searchRagScope?: "corpus_only" | "hybrid" | "general_only";
+    deepSearch?: boolean;
   }>({
     documentLibraryIds: [],
     promptResourceIds: [],
     templateResourceIds: [],
     searchRagScope: undefined,
+    deepSearch: undefined,
   });
 
   const parseRagScope = (value: any) =>
@@ -409,7 +411,8 @@ const ChatBot = ({
           documentLibraryIds: parsed.documentLibraryIds ?? [],
           promptResourceIds: parsed.promptResourceIds ?? [],
           templateResourceIds: parsed.templateResourceIds ?? [],
-          searchRagScope: parseRagScope(parsed.searchRagScope),
+          searchRagScope: parsed.searchRagScope,
+          deepSearch: parsed.deepSearch,
         });
       } else {
         setInitialCtx({
@@ -417,6 +420,7 @@ const ChatBot = ({
           promptResourceIds: [],
           templateResourceIds: [],
           searchRagScope: undefined,
+          deepSearch: undefined,
         });
       }
     } catch (e) {
@@ -425,6 +429,18 @@ const ChatBot = ({
   }, [storageKey]);
 
   const [userInputContext, setUserInputContext] = useState<any>(null);
+  const initialDocumentLibraryIds =
+    userInputContext?.documentLibraryIds ?? initialCtx.documentLibraryIds;
+  const initialPromptResourceIds =
+    userInputContext?.promptResourceIds ?? initialCtx.promptResourceIds;
+  const initialTemplateResourceIds =
+    userInputContext?.templateResourceIds ?? initialCtx.templateResourceIds;
+  const initialSearchPolicy =
+    userInputContext?.searchPolicy ?? "semantic";
+  const initialSearchRagScope =
+    userInputContext?.searchRagScope ?? initialCtx.searchRagScope ?? undefined;
+  const initialDeepSearch =
+    typeof userInputContext?.deepSearch === "boolean" ? userInputContext.deepSearch : initialCtx.deepSearch;
 
   // IMPORTANT:
   // Save per-agent defaults *only before a session exists* (pre-session seeding).
@@ -440,6 +456,7 @@ const ChatBot = ({
         promptResourceIds: userInputContext.promptResourceIds ?? [],
         templateResourceIds: userInputContext.templateResourceIds ?? [],
         searchRagScope: userInputContext.searchRagScope,
+        deepSearch: userInputContext.deepSearch,
       };
       localStorage.setItem(storageKey, JSON.stringify(payload));
     } catch (e) {
@@ -450,6 +467,7 @@ const ChatBot = ({
     userInputContext?.promptResourceIds,
     userInputContext?.templateResourceIds,
     userInputContext?.searchRagScope,
+    userInputContext?.deepSearch,
     storageKey,
     currentChatBotSession?.id, // guard: only save when undefined
   ]);
@@ -468,6 +486,9 @@ const ChatBot = ({
     runtimeContext.search_policy = content.searchPolicy || "semantic";
     if (content.searchRagScope) {
       runtimeContext.search_rag_scope = content.searchRagScope;
+    }
+    if (typeof content.deepSearch === "boolean") {
+      runtimeContext.deep_search = content.deepSearch;
     }
 
     // Files are now uploaded immediately upon selection (not here)
@@ -687,10 +708,12 @@ const ChatBot = ({
                 uploadingFiles={uploadingFiles}
                 onFilesSelected={handleFilesSelected}
                 attachmentsRefreshTick={attachmentsRefreshTick}
-                initialDocumentLibraryIds={initialCtx.documentLibraryIds}
-                initialPromptResourceIds={initialCtx.promptResourceIds}
-                initialTemplateResourceIds={initialCtx.templateResourceIds}
+                initialDocumentLibraryIds={initialDocumentLibraryIds}
+                initialPromptResourceIds={initialPromptResourceIds}
+                initialTemplateResourceIds={initialTemplateResourceIds}
+                initialSearchPolicy={initialSearchPolicy}
                 initialSearchRagScope={initialSearchRagScope}
+                initialDeepSearch={initialDeepSearch}
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}
@@ -746,10 +769,12 @@ const ChatBot = ({
                 uploadingFiles={uploadingFiles}
                 onFilesSelected={handleFilesSelected}
                 attachmentsRefreshTick={attachmentsRefreshTick}
-                initialDocumentLibraryIds={initialCtx.documentLibraryIds}
-                initialPromptResourceIds={initialCtx.promptResourceIds}
-                initialTemplateResourceIds={initialCtx.templateResourceIds}
+                initialDocumentLibraryIds={initialDocumentLibraryIds}
+                initialPromptResourceIds={initialPromptResourceIds}
+                initialTemplateResourceIds={initialTemplateResourceIds}
+                initialSearchPolicy={initialSearchPolicy}
                 initialSearchRagScope={initialSearchRagScope}
+                initialDeepSearch={initialDeepSearch}
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}

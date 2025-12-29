@@ -414,6 +414,38 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             logger.error(f"Deserialization failed for results tagged '{tag_id}': {e}")
             raise MetadataDeserializationError from e
 
+    def browse_metadata_in_tag(self, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[List[DocumentMetadata], int]:
+        if not tag_id:
+            raise ValueError("Tag ID must be provided.")
+        try:
+            logger.debug(
+                "[PAGINATION] browse_metadata_in_tag(tag_id=%s, offset=%s, limit=%s)",
+                tag_id,
+                offset,
+                limit,
+            )
+            query = {"query": {"term": {"tag_ids": tag_id}}}
+            # Note: some OpenSearch deployments expect track_total_hits as a string.
+            params = {"from": offset, "size": limit, "track_total_hits": "true"}
+            resp = self.client.search(index=self.metadata_index_name, body=query, params=params)
+            hits = resp["hits"]["hits"]
+            total_hits = resp["hits"]["total"]["value"] if isinstance(resp["hits"]["total"], dict) else resp["hits"]["total"]
+            logger.debug(
+                "[PAGINATION] browse_metadata_in_tag result: returned=%s total=%s",
+                len(hits),
+                total_hits,
+            )
+        except Exception as e:
+            logger.error(f"OpenSearch paginated query failed for tag '{tag_id}': {e}")
+            raise
+
+        try:
+            docs = [self._deserialize(hit["_source"]) for hit in hits]
+            return docs, int(total_hits)
+        except Exception as e:
+            logger.error(f"Deserialization failed for paginated results tagged '{tag_id}': {e}")
+            raise MetadataDeserializationError from e
+
     # ---------- writes ----------
 
     def save_metadata(self, metadata: DocumentMetadata) -> None:

@@ -34,6 +34,7 @@ class RuntimeContext(BaseModel):
         None  # if the session has some attachement files, this will hold their markdown representation
     )
     search_rag_scope: Optional[Literal["corpus_only", "hybrid", "general_only"]] = None
+    deep_search: Optional[bool] = None
 
 
 # Type alias for context provider functions
@@ -78,6 +79,16 @@ def get_rag_knowledge_scope(context: RuntimeContext | None) -> str:
         return scope
 
     return "hybrid"
+
+
+def get_deep_search_enabled(context: RuntimeContext | None) -> bool:
+    """
+    Decide whether deep search delegation should be enabled for this request.
+    Mirrors the runtime-context precedence style used for RAG scope.
+    """
+    if not context:
+        return False
+    return bool(context.deep_search)
 
 
 def get_chat_context_libraries_ids(context: RuntimeContext | None) -> list[str] | None:

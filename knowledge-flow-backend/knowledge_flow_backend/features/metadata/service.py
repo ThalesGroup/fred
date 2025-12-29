@@ -230,6 +230,33 @@ class MetadataService:
         return []
 
     @authorize(Action.READ, Resource.DOCUMENTS)
+    async def browse_documents_in_tag(self, user: KeycloakUser, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[list[DocumentMetadata], int]:
+        """
+        Paginated fetch of documents in a given tag.
+        """
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+
+        docs, total = self.metadata_store.browse_metadata_in_tag(tag_id, offset=offset, limit=limit)
+        logger.debug(
+            "[PAGINATION] browse_documents_in_tag tag=%s offset=%s limit=%s -> fetched=%s total=%s",
+            tag_id,
+            offset,
+            limit,
+            len(docs),
+            total,
+        )
+
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            return docs, total
+
+        authorized_doc_ids = {d.id for d in authorized_doc_ref}
+        filtered = [d for d in docs if d.identity.document_uid in authorized_doc_ids]
+
+        # Total reflects store count; computing an authorized-only total would require
+        # scanning all authorized documents. We keep store total to preserve pagination hints.
+        return filtered, total
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_chunk(self, user: KeycloakUser, document_uid: str, chunk_uid: str) -> dict:
         """
         Return chunk.

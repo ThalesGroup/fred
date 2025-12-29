@@ -46,6 +46,12 @@ class BrowseDocumentsRequest(BaseModel):
     sort_by: Optional[List[SortOption]] = None
 
 
+class BrowseDocumentsByTagRequest(BaseModel):
+    tag_id: str = Field(..., description="Library tag identifier")
+    offset: int = Field(0, ge=0)
+    limit: int = Field(50, gt=0, le=500)
+
+
 def handle_exception(e: Exception) -> HTTPException | Exception:
     if isinstance(e, MetadataNotFound):
         return HTTPException(status_code=404, detail=str(e))
@@ -236,6 +242,25 @@ class MetadataController:
 
             else:
                 raise HTTPException(status_code=400, detail=f"Unsupported source type '{config.type}'")
+
+        @router.post(
+            "/documents/metadata/browse",
+            tags=["Documents"],
+            summary="Paginated documents by library tag",
+            response_model=PullDocumentsResponse,
+            description="Returns documents for a library tag with pagination support.",
+        )
+        async def browse_documents_by_tag(req: BrowseDocumentsByTagRequest, user: KeycloakUser = Depends(get_current_user)):
+            docs, total = await self.service.browse_documents_in_tag(user, tag_id=req.tag_id, offset=req.offset, limit=req.limit)
+            logger.info(
+                "[PAGINATION] browse_documents_by_tag tag=%s offset=%s limit=%s returned=%s total=%s",
+                req.tag_id,
+                req.offset,
+                req.limit,
+                len(docs),
+                total,
+            )
+            return PullDocumentsResponse(documents=docs, total=total)
 
         @router.get(
             "/documents/{document_uid}/vectors",

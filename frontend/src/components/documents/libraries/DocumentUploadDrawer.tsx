@@ -15,13 +15,14 @@
 import SaveIcon from "@mui/icons-material/Save";
 import UploadIcon from "@mui/icons-material/Upload";
 import { Box, Button, Drawer, FormControl, MenuItem, Paper, Select, Tooltip, Typography, useTheme } from "@mui/material";
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 import { streamUploadOrProcessDocument } from "../../../slices/streamDocumentUpload";
-import { ProgressStep, ProgressStepper } from "../../ProgressStepper";
+import { ProgressStep } from "../../ProgressStepper";
 import { useToast } from "../../ToastProvider";
 import { DocumentDrawerTable } from "./DocumentDrawerTable";
+import { DocumentUploadProgressModal } from "./DocumentUploadProgressModal";
 
 interface DocumentUploadDrawerProps {
   isOpen: boolean;
@@ -45,10 +46,38 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   const [uploadProgressSteps, setUploadProgressSteps] = useState<ProgressStep[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isHighlighted, setIsHighlighted] = useState(false);
+  const [showProgressModal, setShowProgressModal] = useState(false);
+  const [totalFilesCount, setTotalFilesCount] = useState(0);
 
   const stepDelayMs = 180;
-  const closeExtraDelayMs = 500;
   const displayIndexRef = useRef(0);
+
+  const totalUploads = useMemo(() => {
+    if (totalFilesCount) return totalFilesCount;
+    const filenames = new Set<string>();
+    tempFiles.forEach((file) => filenames.add(file.name));
+    uploadProgressSteps.forEach((step) => filenames.add(step.filename));
+    return filenames.size;
+  }, [tempFiles, totalFilesCount, uploadProgressSteps]);
+
+  const processedCount = useMemo(() => {
+    const terminalStatuses = new Set(["finished", "error", "ignored"]);
+    const latestStatusByFile = new Map<string, string>();
+
+    uploadProgressSteps.forEach((step) => {
+      if (!step.filename) return;
+      latestStatusByFile.set(step.filename, step.status);
+    });
+
+    let processed = 0;
+    latestStatusByFile.forEach((status) => {
+      if (terminalStatuses.has(status)) processed += 1;
+    });
+    return processed;
+  }, [uploadProgressSteps]);
+
+  const progressPercent = totalUploads ? Math.round((processedCount / totalUploads) * 100) : 0;
+  const isUploadFinished = totalUploads > 0 && processedCount === totalUploads && !isLoading;
 
   const { getRootProps, getInputProps, open } = useDropzone({
     noKeyboard: true,
@@ -77,6 +106,8 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
     setTempFiles([]);
     setUploadProgressSteps([]);
     setIsLoading(false);
+    setShowProgressModal(false);
+    setTotalFilesCount(0);
     displayIndexRef.current = 0;
   };
 
@@ -89,6 +120,9 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
     setIsLoading(true);
     setUploadProgressSteps([]);
     displayIndexRef.current = 0;
+    const filesCount = tempFiles.length;
+    setTotalFilesCount(filesCount);
+    setShowProgressModal(filesCount > 0);
 
     try {
       for (const file of tempFiles) {
@@ -101,6 +135,7 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
                 step: progress.step,
                 status: progress.status,
                 filename: file.name,
+                error: progress.error,
               };
               const delay = displayIndexRef.current * stepDelayMs;
               displayIndexRef.current += 1;
@@ -136,10 +171,6 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
       setIsLoading(false);
       setTempFiles([]);
       onUploadComplete?.();
-      const totalDelay = displayIndexRef.current * stepDelayMs + closeExtraDelayMs;
-      window.setTimeout(() => {
-        handleClose();
-      }, totalDelay);
     }
   };
 
@@ -245,12 +276,6 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
         {t("documentLibrary.supportedFormats")}
       </Typography>
 
-      {uploadProgressSteps.length > 0 && (
-        <Box sx={{ mt: 3, width: "100%" }}>
-          <ProgressStepper steps={uploadProgressSteps} />
-        </Box>
-      )}
-
       <Box sx={{ mt: 3, display: "flex", justifyContent: "space-between" }}>
         <Button variant="outlined" onClick={handleClose} sx={{ borderRadius: "8px" }}>
           {t("documentLibrary.cancel")}
@@ -267,6 +292,20 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
           {isLoading ? t("documentLibrary.saving") : t("documentLibrary.save")}
         </Button>
       </Box>
+
+      <DocumentUploadProgressModal
+        open={showProgressModal}
+        onClose={() => {
+          setShowProgressModal(false);
+          handleClose();
+        }}
+        isLoading={isLoading}
+        processedCount={processedCount}
+        totalUploads={totalUploads}
+        progressPercent={progressPercent}
+        steps={uploadProgressSteps}
+        isUploadFinished={isUploadFinished}
+      />
     </Drawer>
   );
 };

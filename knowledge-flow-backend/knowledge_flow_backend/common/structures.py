@@ -408,6 +408,7 @@ class Configuration(BaseModel):
     chat_model: ModelConfiguration
     embedding_model: ModelConfiguration
     vision_model: Optional[ModelConfiguration] = None
+    crossencoder_model: Optional[ModelConfiguration] = None
     security: SecurityConfiguration
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
