@@ -47,6 +47,7 @@ class ContentSaveState(TypedDict):
 
     messages: List[AnyMessage]
     _generated_content: str  # Internal field to hold generated content
+    question: str
 
 
 # 2. Declare tunables
@@ -130,6 +131,8 @@ class ContentSave(AgentFlow):
             error_msg = f"[Content Generation Error: {e}]"
             state["_generated_content"] = error_msg
 
+        state["question"] = prompt
+
         return state
 
     async def upload_node(self, state: ContentSaveState) -> ContentSaveState:
@@ -137,6 +140,7 @@ class ContentSave(AgentFlow):
         Node 2: Upload the generated content to user assets and return a download link.
         """
         generated_content = state.get("_generated_content", "")
+        question = "Question : " + state.get("question", "") + "\n\n"
         filename = self.get_tuned_text("content.filename") or DEFAULT_FILENAME
         asset_key = self.get_tuned_text("content.asset_key") or DEFAULT_ASSET_KEY
 
@@ -156,7 +160,7 @@ class ContentSave(AgentFlow):
 
         try:
             # Convert content to bytes
-            file_content = generated_content.encode("utf-8")
+            file_content = question.encode("utf-8") + generated_content.encode("utf-8")
             logger.info(f"File content size: {len(file_content)} bytes")
 
             # Add timestamp to make asset key and filename unique
