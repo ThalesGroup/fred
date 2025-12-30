@@ -23,6 +23,11 @@ from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, StateGraph
 
+from agentic_backend.common.conversation_exporter import (
+    export_conversation_to_asset,
+    format_conversation_from_messages
+)
+
 from agentic_backend.agents.rags.prompt import (
     generate_answer_prompt,
     grade_answer_prompt,
@@ -708,9 +713,36 @@ class AdvancedRico(AgentFlow):
                 self.get_tuned_text("export.enable_conversation_download") != "false"
             )
             if enable_export:
-                # Pass the state to export so it can access conversation history
-                download_url, asset_key = await self.export_conversation(state)
+                # Get the full conversation history from runtime context
+                runtime_context = self.get_runtime_context()
+                full_messages = []
                 
+                # Try to get messages from runtime context
+                if runtime_context:
+                    for attr in ["messages", "chat_history", "history", "conversation_history"]:
+                        if hasattr(runtime_context, attr):
+                            history = getattr(runtime_context, attr, None)
+                            if history and isinstance(history, list):
+                                full_messages = history
+                                logger.info(f"Found {len(full_messages)} messages in runtime_context.{attr}")
+                                break
+                
+                # Format conversation using the generic function
+                conversation_text = format_conversation_from_messages(
+                    messages=full_messages,
+                    question=state.get("question"),
+                    generation=generation,
+                    sources=state.get("sources", []),
+                )
+                
+                # Export using the generic function
+                download_url, _ = await export_conversation_to_asset(
+                    agent=self,
+                    conversation_text=conversation_text,
+                    filename=self.get_tuned_text("export.filename") or "conversation.txt",
+                    asset_key_prefix="rico_conversation",
+                )
+
                 # Add download link to response
                 export_msg = (
                     f"\n\n---\n"
@@ -801,192 +833,3 @@ class AdvancedRico(AgentFlow):
             return "abort"
         else:
             return "not useful"
-
-    async def export_conversation(self, state: RagGraphState) -> tuple[str, str]:
-        """
-        Export the current conversation to a downloadable file.
-
-        Args:
-            state: The current graph state containing conversation history
-
-        Returns:
-            tuple[str, str]: A tuple containing (download_url, asset_key)
-        """
-        enable_export = (
-            self.get_tuned_text("export.enable_conversation_download") != "false"
-        )
-        if not enable_export:
-            raise ValueError("Conversation download is disabled in agent settings.")
-
-        filename = self.get_tuned_text("export.filename") or "conversation.txt"
-
-        # Format conversation history using state
-        conversation_text = self._format_conversation(state)
-
-        # Convert to bytes
-        file_content = conversation_text.encode("utf-8")
-        logger.info(f"Exporting conversation: {len(file_content)} bytes")
-
-        # Add timestamp to make asset key unique
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        name, ext = (
-            filename.rsplit(".", 1) if "." in filename else (filename, "")
-        )
-        unique_filename = (
-            f"{name}_{timestamp}.{ext}" if ext else f"{filename}_{timestamp}"
-        )
-        unique_asset_key = f"rico_conversation_{timestamp}"
-
-        logger.info(
-            f"Using unique asset key: {unique_asset_key}, "
-            f"filename: {unique_filename}"
-        )
-
-        try:
-            # Upload the asset to user storage
-            upload_result = await self.upload_user_asset(
-                key=unique_asset_key,
-                file_content=file_content,
-                filename=unique_filename,
-                content_type="text/plain",
-            )
-
-            logger.info(
-                f"Conversation exported successfully. Key: {upload_result.key}, "
-                f"Size: {upload_result.size}"
-            )
-
-            # Construct the download URL
-            download_url = self.get_asset_download_url(
-                asset_key=upload_result.key, scope="user"
-            )
-
-            return download_url, upload_result.key
-        except AttributeError as e:
-            logger.error(
-                f"Asset client not initialized: {e}. "
-                f"Ensure async_init() is called properly."
-            )
-            raise
-
-
-    def _format_conversation(self, state: RagGraphState) -> str:
-        """
-        Format the conversation history into a readable text format.
-
-        Args:
-            state: The current graph state
-
-        Returns:
-            str: Formatted conversation text
-        """
-        formatted_lines: list[str] = [
-            "=" * 80,
-            "CONVERSATION HISTORY",
-            "=" * 80,
-            f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            "=" * 80,
-            "",
-        ]
-
-        # Get the original question
-        question = state.get("question", "")
-        if question:
-            formatted_lines.extend([
-                "[1] 👤 User",
-                "-" * 40,
-                question,
-                "",
-            ])
-
-        # Get all messages from the state (these are the agent's internal messages)
-        messages = state.get("messages", [])
-        
-        # Try to get the runtime context for full chat history
-        runtime_context = self.get_runtime_context()
-        chat_history = []
-        
-        if runtime_context:
-            # Try to access chat history from various possible attributes
-            for attr in ["messages", "chat_history", "history", "conversation_history"]:
-                if hasattr(runtime_context, attr):
-                    history = getattr(runtime_context, attr, None)
-                    if history and isinstance(history, list):
-                        chat_history = history
-                        logger.info(f"Found {len(chat_history)} messages in {attr}")
-                        break
-        
-        # Format chat history if available
-        if chat_history:
-            msg_counter = 1
-            for msg in chat_history:
-                msg_type = getattr(msg, "type", "unknown").upper()
-                
-                # Skip system messages
-                if msg_type == "SYSTEM":
-                    continue
-                
-                # Format role
-                if msg_type in ("HUMAN", "USER"):
-                    role_label = "👤 User"
-                elif msg_type in ("AI", "ASSISTANT"):
-                    role_label = "🤖 Assistant"
-                elif msg_type == "TOOL":
-                    role_label = "🔧 Tool"
-                else:
-                    role_label = f"📌 {msg_type}"
-                
-                # Extract content
-                content = getattr(msg, "content", "")
-                if not content or content == "":
-                    continue
-                
-                formatted_lines.extend([
-                    f"[{msg_counter}] {role_label}",
-                    "-" * 40,
-                    str(content),
-                    "",
-                ])
-                msg_counter += 1
-        
-        # If no chat history, use state information
-        if not chat_history:
-            # Add the generated answer
-            generation = state.get("generation")
-            if generation:
-                formatted_lines.extend([
-                    "[2] 🤖 Assistant",
-                    "-" * 40,
-                    generation.content,
-                    "",
-                ])
-            
-            # Add document sources if available
-            sources = state.get("sources", [])
-            if sources:
-                formatted_lines.extend([
-                    "",
-                    "=" * 80,
-                    "SOURCES USED",
-                    "=" * 80,
-                    "",
-                ])
-                for i, doc in enumerate(sources, 1):
-                    formatted_lines.extend([
-                        f"Source {i}:",
-                        f"  File: {doc.file_name or doc.title}",
-                        f"  Page: {getattr(doc, 'page', 'n/a')}",
-                        f"  Content: {doc.content[:200]}...",
-                        "",
-                    ])
-        
-        if len(formatted_lines) <= 6:  # Only headers, no actual content
-            return "No conversation history available."
-        
-        formatted_lines.extend([
-            "=" * 80,
-            "END OF CONVERSATION",
-            "=" * 80,
-        ])
-
-        return "\n".join(formatted_lines)
