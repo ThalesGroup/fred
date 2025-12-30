@@ -614,8 +614,13 @@
       "templates": "Modèles",
       "prompts": "Prompts",
       "documents": "Documents",
+      "userAssets": "Mes fichiers",
       "operations": "Opérations",
       "chatContexts": "Contextes de conversation"
+    },
+    "userAssets": {
+      "title": "Mes fichiers",
+      "subtitle": "Fichiers générés par vous ou vos agents, associés à votre compte."
     }
   },
   "documentLibrary": {
@@ -717,7 +722,13 @@
       "close": "Fermer",
       "addLibraryProcessor": "Ajouter un processeur de bibliothèque",
       "noLibraryProcessorAvailable": "Aucun processeur de bibliothèque disponible."
-    }
+    },
+    "configurePipeline": "Configurer le pipeline de traitement",
+    "viewOriginalPdf": "Voir le PDF original",
+    "makeExcluded": "Exclure de la recherche",
+    "makeSearchable": "Rendre recherchable",
+    "searchOn": "Recherche activée",
+    "searchOff": "Recherche désactivée"
   },
   "documentLibraryShareDialog": {
     "subtitle": "Ajoutez des utilisateurs ou des groupes et gérez les permissions d'accès pour cette bibliothèque.",
