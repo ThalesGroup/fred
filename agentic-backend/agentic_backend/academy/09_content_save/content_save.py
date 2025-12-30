@@ -20,7 +20,6 @@
 from __future__ import annotations
 
 import logging
-from io import BytesIO
 from typing import List, TypedDict
 from datetime import datetime
 
