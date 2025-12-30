@@ -151,6 +151,28 @@
     "monitoring_data": "Données",
     "monitoring_graph": "Graphe"
   },
+  "chat": {
+    "common": {
+      "unknown": "Inconnu"
+    },
+    "feedback": {
+      "error": "Erreur de retour",
+      "submitted": "Retour envoyé",
+      "thanks": "Merci pour votre retour."
+    },
+    "labels": {
+      "task": "Tâche",
+      "node": "Nœud"
+    },
+    "message": {
+      "waiting": "En attente de réponse…",
+      "toolResult": "Résultat de l'outil"
+    },
+    "actions": {
+      "copyMessage": "Copier le message",
+      "openFeedback": "Ouvrir le retour"
+    }
+  },
   "runtime": {
     "title": "Résumé d'exécution",
     "sessions": "Sessions",

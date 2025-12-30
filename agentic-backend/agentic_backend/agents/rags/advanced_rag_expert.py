@@ -36,6 +36,10 @@ from agentic_backend.agents.rags.structures import (
 from agentic_backend.application_context import (
     get_default_chat_model,
 )
+from agentic_backend.common.conversation_exporter import (
+    export_conversation_to_asset,
+    format_conversation_from_messages,
+)
 from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
 from agentic_backend.common.rags_utils import attach_sources_to_llm_response
 from agentic_backend.common.structures import AgentChatOptions, AgentSettings
@@ -45,6 +49,12 @@ from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
     get_search_policy,
+)
+from agentic_backend.core.chatbot.chat_schema import (
+    LinkKind,
+    LinkPart,
+    MessagePart,
+    TextPart,
 )
 from agentic_backend.core.runtime_source import expose_runtime_source
 
@@ -194,6 +204,24 @@ class AdvancedRico(AgentFlow):
                 default=6,
                 ui=UIHints(group="Reranking"),
             ),
+            FieldSpec(
+                key="export.enable_conversation_download",
+                type="boolean",
+                title="Enable Conversation Download",
+                description="Allow users to download the conversation history as a file.",
+                required=False,
+                default=True,
+                ui=UIHints(group="Export"),
+            ),
+            FieldSpec(
+                key="export.filename",
+                type="text",
+                title="Conversation Export Filename",
+                description="The filename for exported conversations (e.g., 'conversation.txt').",
+                required=False,
+                default="conversation.txt",
+                ui=UIHints(group="Export"),
+            ),
         ],
     )
 
@@ -206,6 +234,7 @@ class AdvancedRico(AgentFlow):
         super().__init__(agent_settings=agent_settings)
 
     async def async_init(self, runtime_context: RuntimeContext):
+        await super().async_init(runtime_context)  # ← Important !
         self.model = get_default_chat_model()
         self.search_client = VectorSearchClient(agent=self)
         self.base_prompt = self._generate_prompt()
@@ -668,6 +697,76 @@ class AdvancedRico(AgentFlow):
             cleared intermediate fields to prevent carryover in subsequent runs.
         """
         generation = cast(AIMessage, state["generation"])
+
+        # Try to export conversation if enabled
+        try:
+            enable_export = (
+                self.get_tuned_text("export.enable_conversation_download") != "false"
+            )
+            if enable_export:
+                # Get the full conversation history from runtime context
+                runtime_context = self.get_runtime_context()
+                full_messages = []
+
+                # Try to get messages from runtime context
+                if runtime_context:
+                    for attr in [
+                        "messages",
+                        "chat_history",
+                        "history",
+                        "conversation_history",
+                    ]:
+                        if hasattr(runtime_context, attr):
+                            history = getattr(runtime_context, attr, None)
+                            if history and isinstance(history, list):
+                                full_messages = history
+                                logger.info(
+                                    f"Found {len(full_messages)} messages in runtime_context.{attr}"
+                                )
+                                break
+
+                # Format conversation using the generic function
+                conversation_text = format_conversation_from_messages(
+                    messages=full_messages,
+                    question=state.get("question"),
+                    generation=generation,
+                    sources=state.get("sources", []),
+                )
+
+                # Export using the generic function
+                download_url, _ = await export_conversation_to_asset(
+                    agent=self,
+                    conversation_text=conversation_text,
+                    filename=self.get_tuned_text("export.filename")
+                    or "conversation.txt",
+                    asset_key_prefix="rico_conversation",
+                )
+
+                # Add structured content + download link to response
+                answer_text = self._get_text_content(generation)
+                link_parts = cast(
+                    List[MessagePart],
+                    [
+                        TextPart(text=answer_text),
+                        LinkPart(
+                            href=download_url,
+                            title="Download conversation.txt",
+                            kind=LinkKind.download,
+                            mime="text/plain",
+                            file_name="conversation.txt",
+                        ),
+                    ],
+                )
+                generation = AIMessage(
+                    content=answer_text,
+                    additional_kwargs=getattr(generation, "additional_kwargs", {}),
+                    response_metadata=generation.response_metadata,
+                    parts=link_parts,
+                )
+
+        except Exception as e:
+            logger.warning(f"Failed to export conversation: {e}")
+            # Don't fail the workflow, just skip export
 
         state["messages"] = [generation]
         state["question"] = ""
