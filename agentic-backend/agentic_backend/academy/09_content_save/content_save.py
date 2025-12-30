@@ -93,7 +93,9 @@ class ContentSave(AgentFlow):
         await super().async_init(runtime_context)
         self.model = get_default_chat_model()
         self._graph = self._build_graph()
-        logger.info("ContentSaveAgent initialized with content generation and asset upload.")
+        logger.info(
+            "ContentSaveAgent initialized with content generation and asset upload."
+        )
 
     def _build_graph(self) -> StateGraph:
         """The agent's state machine: START -> generate_node -> upload_node -> END."""
@@ -113,13 +115,13 @@ class ContentSave(AgentFlow):
 
         try:
             # Call the LLM to generate content
-            response = await self.model.ainvoke(
-                [{"role": "user", "content": prompt}]
-            )
+            response = await self.model.ainvoke([{"role": "user", "content": prompt}])
             logger.info(f"LLM response type: {type(response)}, content: {response}")
 
             generated_content = self._get_text_content(response)
-            logger.info(f"Extracted content: '{generated_content}' (length: {len(generated_content)})")
+            logger.info(
+                f"Extracted content: '{generated_content}' (length: {len(generated_content)})"
+            )
 
             # Store the generated content in the state
             state["_generated_content"] = generated_content
@@ -167,7 +169,9 @@ class ContentSave(AgentFlow):
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             unique_asset_key = f"{asset_key}_{timestamp}"
             name, ext = filename.rsplit(".", 1) if "." in filename else (filename, "")
-            unique_filename = f"{name}_{timestamp}.{ext}" if ext else f"{filename}_{timestamp}"
+            unique_filename = (
+                f"{name}_{timestamp}.{ext}" if ext else f"{filename}_{timestamp}"
+            )
 
             logger.info(
                 f"Using unique asset key: {unique_asset_key}, "
@@ -206,8 +210,6 @@ class ContentSave(AgentFlow):
 
         except Exception as e:
             logger.error(f"Failed to upload content: {e}", exc_info=True)
-            error_msg = (
-                f"❌ **Error:** Failed to upload content to assets: {str(e)}"
-            )
+            error_msg = f"❌ **Error:** Failed to upload content to assets: {str(e)}"
             ai_response = AIMessage(content=error_msg)
             return self.delta(ai_response)

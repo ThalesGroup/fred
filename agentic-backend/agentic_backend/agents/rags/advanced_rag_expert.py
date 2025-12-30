@@ -25,7 +25,7 @@ from langgraph.graph import END, StateGraph
 
 from agentic_backend.common.conversation_exporter import (
     export_conversation_to_asset,
-    format_conversation_from_messages
+    format_conversation_from_messages,
 )
 
 from agentic_backend.agents.rags.prompt import (
@@ -716,17 +716,24 @@ class AdvancedRico(AgentFlow):
                 # Get the full conversation history from runtime context
                 runtime_context = self.get_runtime_context()
                 full_messages = []
-                
+
                 # Try to get messages from runtime context
                 if runtime_context:
-                    for attr in ["messages", "chat_history", "history", "conversation_history"]:
+                    for attr in [
+                        "messages",
+                        "chat_history",
+                        "history",
+                        "conversation_history",
+                    ]:
                         if hasattr(runtime_context, attr):
                             history = getattr(runtime_context, attr, None)
                             if history and isinstance(history, list):
                                 full_messages = history
-                                logger.info(f"Found {len(full_messages)} messages in runtime_context.{attr}")
+                                logger.info(
+                                    f"Found {len(full_messages)} messages in runtime_context.{attr}"
+                                )
                                 break
-                
+
                 # Format conversation using the generic function
                 conversation_text = format_conversation_from_messages(
                     messages=full_messages,
@@ -734,20 +741,18 @@ class AdvancedRico(AgentFlow):
                     generation=generation,
                     sources=state.get("sources", []),
                 )
-                
+
                 # Export using the generic function
                 download_url, _ = await export_conversation_to_asset(
                     agent=self,
                     conversation_text=conversation_text,
-                    filename=self.get_tuned_text("export.filename") or "conversation.txt",
+                    filename=self.get_tuned_text("export.filename")
+                    or "conversation.txt",
                     asset_key_prefix="rico_conversation",
                 )
 
                 # Add download link to response
-                export_msg = (
-                    f"\n\n---\n"
-                    f"📥 [Download Conversation]({download_url})"
-                )
+                export_msg = f"\n\n---\n📥 [Download Conversation]({download_url})"
                 generation.content = generation.content + export_msg
 
         except Exception as e:

@@ -48,17 +48,12 @@ async def export_conversation_to_asset(
 
     # Add timestamp to make asset key unique
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    name, ext = (
-        filename.rsplit(".", 1) if "." in filename else (filename, "")
-    )
-    unique_filename = (
-        f"{name}_{timestamp}.{ext}" if ext else f"{filename}_{timestamp}"
-    )
+    name, ext = filename.rsplit(".", 1) if "." in filename else (filename, "")
+    unique_filename = f"{name}_{timestamp}.{ext}" if ext else f"{filename}_{timestamp}"
     unique_asset_key = f"{asset_key_prefix}_{timestamp}"
 
     logger.info(
-        f"Using unique asset key: {unique_asset_key}, "
-        f"filename: {unique_filename}"
+        f"Using unique asset key: {unique_asset_key}, filename: {unique_filename}"
     )
 
     try:
@@ -92,23 +87,23 @@ async def export_conversation_to_asset(
 def _extract_message_content(msg: Any) -> str:
     """
     Extract content from a message, checking multiple possible locations.
-    
+
     Args:
         msg: A message object
-        
+
     Returns:
         str: The extracted content, or empty string if none found
     """
     # First try the direct content attribute
     content = getattr(msg, "content", "")
-    
+
     # If content is empty, try to get it from response_metadata
     if not content or content == "":
         metadata = getattr(msg, "response_metadata", {})
         if metadata:
             # Try 'thought' field first (for thought messages)
             content = metadata.get("thought", "")
-            
+
             # If still empty, check for tool_calls
             if not content:
                 tool_calls = getattr(msg, "tool_calls", None)
@@ -116,14 +111,19 @@ def _extract_message_content(msg: Any) -> str:
                     # Format tool calls
                     tool_parts = []
                     for tc in tool_calls:
-                        tool_name = tc.get("name", "unknown") if isinstance(tc, dict) else getattr(tc, "name", "unknown")
-                        tool_args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
-                        tool_parts.append(
-                            f"Tool: {tool_name}\n"
-                            f"Args: {tool_args}"
+                        tool_name = (
+                            tc.get("name", "unknown")
+                            if isinstance(tc, dict)
+                            else getattr(tc, "name", "unknown")
                         )
+                        tool_args = (
+                            tc.get("args", {})
+                            if isinstance(tc, dict)
+                            else getattr(tc, "args", {})
+                        )
+                        tool_parts.append(f"Tool: {tool_name}\nArgs: {tool_args}")
                     content = "\n".join(tool_parts)
-    
+
     return content
 
 
@@ -189,7 +189,7 @@ def format_conversation_from_messages(
 
             # Extract content using the helper function
             content = _extract_message_content(msg)
-            
+
             # Skip if no content found
             if not content or content == "":
                 continue
