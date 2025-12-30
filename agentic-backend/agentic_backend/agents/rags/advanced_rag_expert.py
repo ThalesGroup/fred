@@ -16,7 +16,6 @@
 import logging
 from typing import Any, Dict, List, Literal, Optional, cast
 
-import requests
 from fred_core import VectorSearchHit
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -36,7 +35,6 @@ from agentic_backend.agents.rags.structures import (
 )
 from agentic_backend.application_context import (
     get_default_chat_model,
-    get_knowledge_flow_base_url,
 )
 from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
 from agentic_backend.common.rags_utils import attach_sources_to_llm_response
@@ -387,20 +385,9 @@ class AdvancedRico(AgentFlow):
         documents = cast(List[VectorSearchHit], state["documents"])
         top_r = self.get_tuned_int("rerankink.top_r", default=6)
 
-        response = requests.post(
-            f"{get_knowledge_flow_base_url()}/vector/rerank",
-            timeout=30,
-            json={
-                "question": question,
-                "top_r": top_r,
-                "documents": [document.model_dump() for document in documents],
-            },
+        reranked_documents = self.search_client.rerank(
+            question=question, documents=documents, top_r=top_r
         )
-        response.raise_for_status()
-        response_data = response.json()
-        reranked_documents: List[VectorSearchHit] = [
-            VectorSearchHit(**document) for document in response_data
-        ]
 
         seen = set()
         keep_documents = []
@@ -503,7 +490,7 @@ class AdvancedRico(AgentFlow):
             kept_docs = filtered_docs
 
         logger.info(
-            f"✅ {len(kept_docs)} documents are relevant (of {len(documents or [])})"
+            f"[AGENTS][RAG] {len(kept_docs)} documents are relevant (of {len(documents or [])})"
         )
 
         # Build response message
