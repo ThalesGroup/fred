@@ -36,6 +36,7 @@ from fred_core import (
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
     OpenSearchLogStore,
+    PostgresStoreConfig,
     RamLogStore,
     RebacEngine,
     SQLStorageConfig,
@@ -46,6 +47,7 @@ from fred_core import (
     rebac_factory,
     split_realm_url,
 )
+from fred_core.sql import EngineConfig, create_engine_from_config
 from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
@@ -86,6 +88,7 @@ from knowledge_flow_backend.core.stores.files.minio_file_store import MinioFileS
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from knowledge_flow_backend.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
 from knowledge_flow_backend.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
+from knowledge_flow_backend.core.stores.metadata.postgres_metadata_store import PostgresMetadataStore
 from knowledge_flow_backend.core.stores.resources.base_resource_store import BaseResourceStore
 from knowledge_flow_backend.core.stores.resources.duckdb_resource_store import DuckdbResourceStore
 from knowledge_flow_backend.core.stores.resources.opensearch_resource_store import OpenSearchResourceStore
@@ -628,6 +631,14 @@ class ApplicationContext:
         if isinstance(store_config, DuckdbStoreConfig):
             db_path = Path(store_config.duckdb_path).expanduser()
             self._metadata_store_instance = DuckdbMetadataStore(db_path)
+        elif isinstance(store_config, PostgresStoreConfig):
+            engine = create_engine_from_config(EngineConfig(url=store_config.dsn()))
+            table_name = store_config.table_name or "metadata_v2"
+            self._metadata_store_instance = PostgresMetadataStore(
+                engine=engine,
+                table_name=table_name,
+                prefix="metadata_",
+            )
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
             password = opensearch_config.password

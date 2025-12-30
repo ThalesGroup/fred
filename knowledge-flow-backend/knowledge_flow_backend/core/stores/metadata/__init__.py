@@ -11,4 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from knowledge_flow_backend.core.stores.metadata.postgres_metadata_store import (
+    PostgresMetadataStore,
+)

@@ -61,6 +61,7 @@ class DuckdbStoreConfig(BaseModel):
 
 
 class PostgresStoreConfig(BaseModel):
+    type: Literal["postgres"] = "postgres"
     host: str = Field(..., description="PostgreSQL host")
     port: int = 5432
     database: str
@@ -68,6 +69,7 @@ class PostgresStoreConfig(BaseModel):
     password: Optional[str] = Field(
         default_factory=lambda: os.getenv("POSTGRES_PASSWORD")
     )
+    table_name: Optional[str] = None
 
     def dsn(self) -> str:
         return f"postgresql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
