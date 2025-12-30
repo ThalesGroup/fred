@@ -151,6 +151,28 @@
     "monitoring_data": "Data",
     "monitoring_graph": "Graph"
   },
+  "chat": {
+    "common": {
+      "unknown": "Unknown"
+    },
+    "feedback": {
+      "error": "Feedback error",
+      "submitted": "Feedback submitted",
+      "thanks": "Thanks for your feedback."
+    },
+    "labels": {
+      "task": "Task",
+      "node": "Node"
+    },
+    "message": {
+      "waiting": "Waiting for response...",
+      "toolResult": "Tool result"
+    },
+    "actions": {
+      "copyMessage": "Copy message",
+      "openFeedback": "Open feedback"
+    }
+  },
   "runtime": {
     "title": "Runtime Summary",
     "sessions": "Sessions",
