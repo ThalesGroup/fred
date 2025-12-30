@@ -50,6 +50,12 @@ from agentic_backend.core.agents.runtime_context import (
     get_document_library_tags_ids,
     get_search_policy,
 )
+from agentic_backend.core.chatbot.chat_schema import (
+    LinkKind,
+    LinkPart,
+    MessagePart,
+    TextPart,
+)
 from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
@@ -736,9 +742,27 @@ class AdvancedRico(AgentFlow):
                     asset_key_prefix="rico_conversation",
                 )
 
-                # Add download link to response
-                export_msg = f"\n\n---\n📥 [Download Conversation]({download_url})"
-                generation.content = generation.content + export_msg
+                # Add structured content + download link to response
+                answer_text = self._get_text_content(generation)
+                link_parts = cast(
+                    List[MessagePart],
+                    [
+                        TextPart(text=answer_text),
+                        LinkPart(
+                            href=download_url,
+                            title="Download conversation.txt",
+                            kind=LinkKind.download,
+                            mime="text/plain",
+                            file_name="conversation.txt",
+                        ),
+                    ],
+                )
+                generation = AIMessage(
+                    content=answer_text,
+                    additional_kwargs=getattr(generation, "additional_kwargs", {}),
+                    response_metadata=generation.response_metadata,
+                    parts=link_parts,
+                )
 
         except Exception as e:
             logger.warning(f"Failed to export conversation: {e}")
