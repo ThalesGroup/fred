@@ -92,7 +92,12 @@ export default function DocumentLibraryList() {
   );
 
   /* ---------------- Tree building ---------------- */
-  const tree = React.useMemo<TagNode | null>(() => (tags ? buildTree(tags) : null), [tags]);
+  const libraryTags = React.useMemo(
+    () => tags?.filter((t) => t.name !== "User Assets" && t.path !== "user-assets"),
+    [tags],
+  );
+
+  const tree = React.useMemo<TagNode | null>(() => (libraryTags ? buildTree(libraryTags) : null), [libraryTags]);
   const hasFolders = Boolean(tree && tree.children.size > 0);
 
   const getChildren = React.useCallback((n: TagNode) => {
@@ -187,9 +192,9 @@ export default function DocumentLibraryList() {
 
   // Prefetch first page for each tag to populate counters (cap to avoid overload)
   React.useEffect(() => {
-    if (!tags) return;
+    if (!libraryTags) return;
     const MAX_PREFETCH = 50;
-    const missing = tags
+    const missing = libraryTags
       .map((t) => t.id)
       .filter((id): id is string => Boolean(id))
       .filter(
@@ -372,7 +377,7 @@ export default function DocumentLibraryList() {
   return (
     <Box display="flex" flexDirection="column" gap={2}>
       {/* Top toolbar */}
-      <Box display="flex" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
+        <Box display="flex" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
         <Breadcrumbs>
           <Chip
             label={t("documentLibrariesList.documents")}

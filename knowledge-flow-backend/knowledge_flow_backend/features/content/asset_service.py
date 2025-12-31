@@ -17,6 +17,10 @@ from knowledge_flow_backend.core.stores.content.base_content_store import Stored
 from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 from knowledge_flow_backend.features.tag.tag_service import TagCreate, TagService, TagType
 
+USER_ASSET_TAG_NAME = "User Assets"
+USER_ASSET_TAG_PATH = "user-assets"
+USER_ASSET_TAG_DESCRIPTION = "Personal assets generated or uploaded by the current user (including agent outputs)."
+
 # Define the scope type for clarity
 ScopeType = Literal["agents", "users"]
 
@@ -120,15 +124,15 @@ class AssetService:  # RENAMED from AgentAssetService
         ingestion_service = IngestionService()
         tag_service = TagService()
 
-        # 0️⃣ Get or create the "user_asset" tag
+        # 0️⃣ Get or create the "user_asset" tag (single source of truth)
         existing_tags = await tag_service.list_all_tags_for_user(user, tag_type=TagType.DOCUMENT)
-        user_asset_tag = next((t for t in existing_tags if t.name == "User Space"), None)
+        user_asset_tag = next((t for t in existing_tags if t.name == USER_ASSET_TAG_NAME), None)
         if user_asset_tag is None:
             created_tag = await tag_service.create_tag_for_user(
                 TagCreate(
-                    name="User Space",
-                    path=None,
-                    description="Generic tag for all files uploaded by users",
+                    name=USER_ASSET_TAG_NAME,
+                    path=USER_ASSET_TAG_PATH,
+                    description=USER_ASSET_TAG_DESCRIPTION,
                     type=TagType.DOCUMENT,
                 ),
                 user,
