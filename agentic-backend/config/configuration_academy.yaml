@@ -106,6 +106,10 @@ ai:
       type: "agent"
       class_path: "agentic_backend.academy.06_simple_leader.mini_data_expert.MiniDataExpert"
       enabled: true
+    - name: "DownloadableContentMaker"
+      type: "agent"
+      class_path: "agentic_backend.academy.09_downloadable_content_maker.downloadable_content_maker.DownloadableContentMaker"
+      enabled: true
     - name: "Appolo"
       type: "leader"
       class_path: "agentic_backend.academy.06_simple_leader.mini_llm_orchestrator.MiniLLMOrchestrator"

@@ -476,7 +476,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             text = src.get("text", "")
             cid = meta.get(CHUNK_ID_FIELD) or h.get("_id")
 
-            logger.info(
+            logger.debug(
                 "[VECTOR][OPENSEARCH] hit rank=%d doc_uid=%s chunk_uid=%s retrievable=%s score=%.4f",
                 rank,
                 meta.get("document_uid"),

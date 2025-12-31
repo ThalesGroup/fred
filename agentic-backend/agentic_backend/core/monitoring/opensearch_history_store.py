@@ -257,7 +257,7 @@ class OpensearchHistoryStore(BaseHistoryStore):
             response = self.client.search(index=self.index, body=query)
             hits = response.get("hits", {}).get("hits", [])
             logger.info(
-                "[OpenSearch GET] Loaded %d messages for session %s",
+                "[OPENSEARCH] Loaded %d messages for session %s",
                 len(hits),
                 session_id,
             )
@@ -267,7 +267,9 @@ class OpensearchHistoryStore(BaseHistoryStore):
             return messages
         except Exception as e:
             logger.error(
-                "Failed to retrieve messages for session %s: %s", session_id, e
+                "[OPENSEARCH] Failed to retrieve messages for session %s: %s",
+                session_id,
+                e,
             )
             return []
 
