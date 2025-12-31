@@ -80,11 +80,13 @@ class StandardToolNode:
                     f"Tool '{tool_name}' requested but not found in available tools."
                 )
                 logger.error(error_msg)
+                extra_kwargs = {"raw_tool_content": error_msg}
                 tool_results.append(
                     ToolMessage(
                         content=f"Error: {error_msg}",
                         tool_call_id=tool_call["id"],
                         name=tool_name,
+                        additional_kwargs=extra_kwargs,
                         response_metadata={"extras": origin_extras},
                     )
                 )
@@ -97,12 +99,14 @@ class StandardToolNode:
 
                 # LangGraph expects the output to be a string/json in ToolMessage
                 content = json.dumps(result)
+                extra_kwargs = {"raw_tool_content": result}
 
                 tool_results.append(
                     ToolMessage(
                         content=content,
                         tool_call_id=tool_call["id"],
                         name=tool_name,
+                        additional_kwargs=extra_kwargs,
                         response_metadata={"extras": origin_extras},
                     )
                 )
@@ -112,11 +116,13 @@ class StandardToolNode:
                 )
                 # The RefreshableTool should ideally catch and retry, but if it
                 # fails permanently, we return a clear error message.
+                extra_kwargs = {"raw_tool_content": str(e)}
                 tool_results.append(
                     ToolMessage(
                         content=f"Tool Failed: {e.__class__.__name__}. See logs for details.",
                         tool_call_id=tool_call["id"],
                         name=tool_name,
+                        additional_kwargs=extra_kwargs,
                         response_metadata={"extras": origin_extras},
                     )
                 )

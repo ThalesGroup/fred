@@ -723,6 +723,8 @@ class EcoAdvisor(AgentFlow):
         for msg in reversed(messages):
             if isinstance(msg, ToolMessage) and getattr(msg, "name", ""):
                 raw = msg.content
+                if isinstance(getattr(msg, "additional_kwargs", None), dict):
+                    raw = msg.additional_kwargs.get("raw_tool_content", raw)
                 try:
                     normalized = json.loads(raw) if isinstance(raw, str) else raw
                 except Exception:
@@ -870,11 +872,15 @@ class EcoAdvisor(AgentFlow):
             len(serialized),
             MAX_TOOL_MESSAGE_CHARS,
         )
+        extra_kwargs = getattr(message, "additional_kwargs", {}) or {}
+        extra_kwargs = dict(extra_kwargs)
+        extra_kwargs["raw_tool_content"] = serialized
+
         return ToolMessage(
             content=trimmed,
             name=message.name or "tool",
             tool_call_id=(message.tool_call_id or ""),
-            additional_kwargs=getattr(message, "additional_kwargs", {}),
+            additional_kwargs=extra_kwargs,
             id=getattr(message, "id", None),
         )
 
