@@ -19,9 +19,7 @@ from knowledge_flow_backend.features.tag.tag_service import TagCreate, TagServic
 
 USER_ASSET_TAG_NAME = "User Assets"
 USER_ASSET_TAG_PATH = "user-assets"
-USER_ASSET_TAG_DESCRIPTION = (
-    "Personal assets generated or uploaded by the current user (including agent outputs)."
-)
+USER_ASSET_TAG_DESCRIPTION = "Personal assets generated or uploaded by the current user (including agent outputs)."
 
 # Define the scope type for clarity
 ScopeType = Literal["agents", "users"]
