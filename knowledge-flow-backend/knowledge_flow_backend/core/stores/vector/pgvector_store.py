@@ -194,12 +194,15 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 res = conn.execute(
                     text(
                         """
-                        SELECT COUNT(*) FROM langchain_pg_embedding
-                        WHERE cmetadata ? 'document_uid'
-                          AND cmetadata ->> 'document_uid' = :doc_uid
+                        SELECT COUNT(*)
+                        FROM langchain_pg_embedding e
+                        JOIN langchain_pg_collection c ON e.collection_id = c.uuid
+                        WHERE c.name = :collection
+                          AND e.cmetadata ? 'document_uid'
+                          AND e.cmetadata ->> 'document_uid' = :doc_uid
                         """
                     ),
-                    {"doc_uid": document_uid},
+                    {"doc_uid": document_uid, "collection": self.collection_name},
                 ).scalar_one()
                 return int(res)
         except Exception:
@@ -215,11 +218,14 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 rows = conn.execute(
                     text(
                         """
-                        SELECT DISTINCT cmetadata ->> 'document_uid' AS doc_uid
-                        FROM langchain_pg_embedding
-                        WHERE cmetadata ? 'document_uid'
+                        SELECT DISTINCT e.cmetadata ->> 'document_uid' AS doc_uid
+                        FROM langchain_pg_embedding e
+                        JOIN langchain_pg_collection c ON e.collection_id = c.uuid
+                        WHERE c.name = :collection
+                          AND e.cmetadata ? 'document_uid'
                         """
-                    )
+                    ),
+                    {"collection": self.collection_name},
                 ).fetchall()
                 return [r[0] for r in rows if r[0]]
         except Exception:
