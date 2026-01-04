@@ -18,10 +18,10 @@ import logging
 from typing import List, Optional
 
 from fred_core.sql import BaseSqlStore
+from pydantic import TypeAdapter
 from sqlalchemy import Column, MetaData, String, Table, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
-from pydantic import TypeAdapter
 
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_spec import AgentTuning
