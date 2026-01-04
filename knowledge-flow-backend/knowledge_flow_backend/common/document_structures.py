@@ -257,6 +257,11 @@ class ProcessingGraphNode(BaseModel):
         description="Document version (0=base, 1=draft). Set only for document nodes.",
         ge=0,
     )
+    # Optional backend/system metadata for the UI (vector/table nodes)
+    backend: Optional[str] = None  # e.g., opensearch | pgvector
+    backend_detail: Optional[str] = None  # e.g., index name or collection/table
+    embedding_model: Optional[str] = None
+    embedding_dimension: Optional[int] = None
 
 
 class ProcessingGraphEdge(BaseModel):

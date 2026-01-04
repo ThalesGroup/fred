@@ -1348,6 +1348,10 @@ export type ProcessingGraphNode = {
   source_tag?: string | null;
   /** Document version (0=base, 1=draft). Set only for document nodes. */
   version?: number | null;
+  backend?: string | null;
+  backend_detail?: string | null;
+  embedding_model?: string | null;
+  embedding_dimension?: number | null;
 };
 export type ProcessingGraphEdge = {
   source: string;

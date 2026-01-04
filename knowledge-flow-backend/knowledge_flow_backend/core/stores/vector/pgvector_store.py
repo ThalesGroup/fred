@@ -90,6 +90,46 @@ def _ensure_chunk_uid(md: Dict[str, Any]) -> str:
     return cid
 
 
+def _as_vector_list(vec: Any) -> Optional[List[float]]:
+    """
+    Best-effort conversion of a vector to a list[float], handling:
+    - plain lists/tuples
+    - numpy arrays
+    - JSON-stringified lists (common when stored as text)
+    """
+    if vec is None:
+        return None
+
+    # Already a numeric iterable
+    if isinstance(vec, (list, tuple)):
+        try:
+            return [float(v) for v in vec]
+        except Exception:
+            return None
+
+    # Numpy array without importing globally
+    try:
+        import numpy as np  # type: ignore
+    except Exception:
+        np = None
+    if np is not None and isinstance(vec, np.ndarray):
+        try:
+            return [float(v) for v in vec.tolist()]
+        except Exception:
+            return None
+
+    # JSON string representation
+    if isinstance(vec, str):
+        try:
+            parsed = json.loads(vec)
+            if isinstance(parsed, (list, tuple)):
+                return [float(v) for v in parsed]
+        except Exception:
+            return None
+
+    return None
+
+
 class PgVectorStoreAdapter(BaseVectorStore):
     """
     PostgreSQL/pgvector-backed vector store via LangChain's PGVector.
@@ -184,6 +224,79 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 return [r[0] for r in rows if r[0]]
         except Exception:
             logger.exception("[VECTOR][PGVECTOR] Failed to list document_uids")
+            return []
+
+    def get_vectors_for_document(self, document_uid: str, with_document: bool = True) -> List[Dict[str, Any]]:
+        """
+        Return all vectors for a given document from langchain_pg_embedding.
+        """
+        try:
+            sql = text(
+                """
+                SELECT e.custom_id, e.embedding, e.document, e.cmetadata
+                FROM langchain_pg_embedding e
+                JOIN langchain_pg_collection c ON e.collection_id = c.uuid
+                WHERE c.name = :collection
+                  AND e.cmetadata ? 'document_uid'
+                  AND e.cmetadata ->> 'document_uid' = :doc_uid
+                """
+            )
+            with self._engine.connect() as conn:
+                rows = conn.execute(sql, {"collection": self.collection_name, "doc_uid": document_uid}).fetchall()
+            out: List[Dict[str, Any]] = []
+            for cid, vec, doc, meta in rows:
+                vec_list = _as_vector_list(vec)
+                if vec_list is None:
+                    logger.warning("[VECTOR][PGVECTOR] skipped vector for chunk_uid=%s (could not parse vector payload)", cid)
+                    continue
+                entry: Dict[str, Any] = {"chunk_uid": cid, "vector": vec_list}
+                if with_document:
+                    entry["text"] = doc or ""
+                # Preserve normalized metadata when available
+                if isinstance(meta, dict):
+                    entry["metadata"] = meta
+                out.append(entry)
+            logger.info(
+                "[VECTOR][PGVECTOR] fetched %d vectors for document_uid=%s collection=%s",
+                len(out),
+                document_uid,
+                self.collection_name,
+            )
+            return out
+        except Exception:
+            logger.exception("[VECTOR][PGVECTOR] failed to fetch vectors for document_uid=%s", document_uid)
+            return []
+
+    def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
+        """
+        Return all chunks (text + metadata) for the given document.
+        """
+        try:
+            sql = text(
+                """
+                SELECT e.custom_id, e.document, e.cmetadata
+                FROM langchain_pg_embedding e
+                JOIN langchain_pg_collection c ON e.collection_id = c.uuid
+                WHERE c.name = :collection
+                  AND e.cmetadata ? 'document_uid'
+                  AND e.cmetadata ->> 'document_uid' = :doc_uid
+                """
+            )
+            with self._engine.connect() as conn:
+                rows = conn.execute(sql, {"collection": self.collection_name, "doc_uid": document_uid}).fetchall()
+            out: List[Dict[str, Any]] = []
+            for cid, doc, meta in rows:
+                entry: Dict[str, Any] = {"chunk_uid": cid, "text": doc or "", "metadata": meta or {}}
+                out.append(entry)
+            logger.info(
+                "[VECTOR][PGVECTOR] fetched %d chunks for document_uid=%s collection=%s",
+                len(out),
+                document_uid,
+                self.collection_name,
+            )
+            return out
+        except Exception:
+            logger.exception("[VECTOR][PGVECTOR] failed to fetch chunks for document_uid=%s", document_uid)
             return []
 
     # ---------- BaseVectorStore: ANN search ----------

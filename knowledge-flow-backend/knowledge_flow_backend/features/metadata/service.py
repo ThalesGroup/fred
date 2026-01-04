@@ -29,6 +29,10 @@ from knowledge_flow_backend.common.document_structures import (
     ProcessingSummary,
 )
 from knowledge_flow_backend.common.utils import sanitize_sql_name
+from knowledge_flow_backend.common.structures import (
+    OpenSearchVectorIndexConfig,
+    PgVectorStorageConfig,
+)
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import MetadataDeserializationError
 
 logger = logging.getLogger(__name__)
@@ -382,6 +386,24 @@ class MetadataService:
             except Exception as e:
                 logger.warning(f"[GRAPH] Failed to list tables from tabular store: {e}")
 
+        # Vector backend info (for UI diagnostics)
+        vector_backend: str | None = None
+        vector_detail: str | None = None
+        embedding_model_name: str | None = getattr(self.config.embedding_model, "name", None)
+        try:
+            vs_cfg = self.config.storage.vector_store
+            if isinstance(vs_cfg, OpenSearchVectorIndexConfig):
+                vector_backend = "opensearch"
+                vector_detail = f"index={vs_cfg.index}"
+            elif isinstance(vs_cfg, PgVectorStorageConfig):
+                vector_backend = "pgvector"
+                vector_detail = f"collection={vs_cfg.collection_name}"
+            else:
+                vector_backend = type(vs_cfg).__name__
+                vector_detail = None
+        except Exception as e:
+            logger.debug("[GRAPH] Unable to resolve vector backend info: %s", e)
+
         for metadata in visible_docs:
             doc_uid = metadata.document_uid
             doc_node_id = f"doc:{doc_uid}"
@@ -418,6 +440,9 @@ class MetadataService:
                         label=f"Vectors for {metadata.document_name}",
                         document_uid=doc_uid,
                         vector_count=vector_count,
+                        backend=vector_backend,
+                        backend_detail=vector_detail,
+                        embedding_model=embedding_model_name,
                     )
                 )
                 edges.append(
