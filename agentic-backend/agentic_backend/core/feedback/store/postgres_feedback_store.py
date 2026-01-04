@@ -72,9 +72,7 @@ class PostgresFeedbackStore(BaseFeedbackStore):
         return self._row_to_record(row) if row else None
 
     def save(self, feedback: FeedbackRecord) -> None:
-        values = FeedbackAdapter.dump_python(
-            feedback, mode="json", exclude_none=True
-        )
+        values = FeedbackAdapter.dump_python(feedback, mode="json", exclude_none=True)
         with self.store.begin() as conn:
             self.store.upsert(
                 conn,
@@ -103,5 +101,7 @@ class PostgresFeedbackStore(BaseFeedbackStore):
         try:
             return FeedbackAdapter.validate_python(data)
         except Exception:
-            logger.exception("[FEEDBACK][PG] Failed to parse feedback row id=%s", data.get("id"))
+            logger.exception(
+                "[FEEDBACK][PG] Failed to parse feedback row id=%s", data.get("id")
+            )
             raise

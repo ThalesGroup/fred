@@ -607,7 +607,9 @@ class ApplicationContext:
                 logger.error(
                     "[AGENTS][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres agent store)"
                 )
-                raise RuntimeError("POSTGRES_PASSWORD is required for Postgres agent store")
+                raise RuntimeError(
+                    "POSTGRES_PASSWORD is required for Postgres agent store"
+                )
             pg = get_configuration().storage.postgres
             engine = create_engine_from_config(pg)
             from agentic_backend.core.agents.store.postgres_agent_store import (
@@ -678,7 +680,9 @@ class ApplicationContext:
                 logger.error(
                     "[MCP][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres MCP server store)"
                 )
-                raise RuntimeError("POSTGRES_PASSWORD is required for Postgres MCP server store")
+                raise RuntimeError(
+                    "POSTGRES_PASSWORD is required for Postgres MCP server store"
+                )
             pg = get_configuration().storage.postgres
             engine = create_engine_from_config(pg)
             self._mcp_server_store_instance = PostgresMcpServerStore(
@@ -767,7 +771,9 @@ class ApplicationContext:
                 logger.error(
                     "[FEEDBACK][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres feedback store)"
                 )
-                raise RuntimeError("POSTGRES_PASSWORD is required for Postgres feedback store")
+                raise RuntimeError(
+                    "POSTGRES_PASSWORD is required for Postgres feedback store"
+                )
             pg = get_configuration().storage.postgres
             engine = create_engine_from_config(pg)
             self._feedback_store_instance = PostgresFeedbackStore(

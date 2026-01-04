@@ -428,6 +428,8 @@ class ApplicationContext:
         config = ApplicationContext.get_instance().get_config().storage.log_store
         if isinstance(config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if not opensearch_config:
+                raise ValueError("Missing OpenSearch configuration")
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
@@ -584,6 +586,8 @@ class ApplicationContext:
 
         if isinstance(store, OpenSearchVectorIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if not opensearch_config:
+                raise ValueError("Missing OpenSearch configuration")
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
@@ -652,6 +656,8 @@ class ApplicationContext:
             )
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if not opensearch_config:
+                raise ValueError("Missing OpenSearch configuration")
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
@@ -672,6 +678,9 @@ class ApplicationContext:
             return self._opensearch_client
 
         opensearch_config = get_configuration().storage.opensearch
+        if not opensearch_config:
+            raise ValueError("Missing OpenSearch configuration")
+
         self._opensearch_client = OpenSearch(
             opensearch_config.host,
             http_auth=(opensearch_config.username, opensearch_config.password),
@@ -724,6 +733,8 @@ class ApplicationContext:
         store_config = get_configuration().storage.kpi_store
         if isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if not opensearch_config:
+                raise ValueError("Missing OpenSearch configuration")
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
@@ -759,6 +770,8 @@ class ApplicationContext:
             )
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if not opensearch_config:
+                raise ValueError("Missing OpenSearch configuration")
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
@@ -792,6 +805,8 @@ class ApplicationContext:
             )
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if not opensearch_config:
+                raise ValueError("Missing OpenSearch configuration")
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
@@ -1001,8 +1016,13 @@ class ApplicationContext:
         logger.info(f"  📚 Vector store backend: {vector_type}")
         try:
             store = self.configuration.storage.vector_store
-            s = self.configuration.storage.opensearch
+
             if isinstance(store, OpenSearchIndexConfig):
+                s = self.configuration.storage.opensearch
+                if not s:
+                    logger.error("     ❌ Missing OpenSearch configuration (required for OpenSearch-backed vector store)")
+                    raise RuntimeError("OpenSearch configuration is required for OpenSearch vector store")
+                _require_env("OPENSEARCH_PASSWORD")
                 logger.info(f"     ↳ Host: {s.host}")
                 logger.info(f"     ↳ Vector Index: {store.index}")
                 logger.info(f"     ↳ Secure (TLS): {s.secure}")
@@ -1011,17 +1031,16 @@ class ApplicationContext:
                 self._log_sensitive("OPENSEARCH_PASSWORD", os.getenv("OPENSEARCH_PASSWORD"))
             elif isinstance(store, PgVectorStorageConfig):
                 pg = self.configuration.storage.postgres
-                if not os.getenv("POSTGRES_PASSWORD"):
-                    logger.error("     ❌ Missing POSTGRES_PASSWORD environment variable (required for Postgres-backed vector store)")
-                    raise RuntimeError("POSTGRES_PASSWORD is required for Postgres vector store")
+                _require_env("POSTGRES_PASSWORD")
                 logger.info("     ↳ Backend: pgvector")
                 logger.info("     ↳ Host: %s  Port: %s  DB: %s", pg.host, pg.port, pg.database)
                 logger.info("     ↳ Collection: %s", store.collection_name)
                 logger.info("     ↳ Username: %s", pg.username)
                 self._log_sensitive("POSTGRES_PASSWORD", os.getenv("POSTGRES_PASSWORD"))
-            elif isinstance(s, WeaviateVectorStorage):
-                logger.info(f"     ↳ Host: {s.host}")
-                logger.info(f"     ↳ Index Name: {s.index_name}")
+            elif isinstance(store, WeaviateVectorStorage):
+                _require_env("WEAVIATE_API_KEY")
+                logger.info(f"     ↳ Host: {store.host}")
+                logger.info(f"     ↳ Index Name: {store.index_name}")
                 self._log_sensitive("WEAVIATE_API_KEY", os.getenv("WEAVIATE_API_KEY"))
             elif vector_type == "in_memory":
                 logger.info("     ↳ In-memory vector store (no host/index)")
@@ -1038,6 +1057,9 @@ class ApplicationContext:
 
                 elif isinstance(store_cfg, OpenSearchIndexConfig):
                     os_cfg = self.configuration.storage.opensearch
+                    if not os_cfg:
+                        raise ValueError("Missing OpenSearch configuration")
+                    _require_env("OPENSEARCH_PASSWORD")
                     logger.info(
                         "     • %-14s OpenSearch host=%s index=%s secure=%s verify=%s",
                         label,

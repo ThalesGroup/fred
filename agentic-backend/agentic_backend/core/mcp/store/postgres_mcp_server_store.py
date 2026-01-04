@@ -79,7 +79,9 @@ class PostgresMcpServerStore(BaseMcpServerStore):
             return None
         with self.store.begin() as conn:
             row = conn.execute(
-                select(self.table.c.payload_json).where(self.table.c.server_id == server_id)
+                select(self.table.c.payload_json).where(
+                    self.table.c.server_id == server_id
+                )
             ).fetchone()
         if not row:
             return None
@@ -87,9 +89,7 @@ class PostgresMcpServerStore(BaseMcpServerStore):
             payload = row[0] if row[0] is not None else {}
             return McpServerAdapter.validate_python(payload)
         except Exception:
-            logger.exception(
-                "[STORE][PG][MCP] Failed to parse server id=%s", server_id
-            )
+            logger.exception("[STORE][PG][MCP] Failed to parse server id=%s", server_id)
             return None
 
     def save(self, server: MCPServerConfiguration) -> None:

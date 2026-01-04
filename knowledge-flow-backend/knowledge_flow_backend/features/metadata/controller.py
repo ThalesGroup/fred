@@ -217,12 +217,7 @@ class MetadataController:
             """,
         )
         async def browse_documents(req: BrowseDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
-            config = self.context.get_config().document_sources.get(req.source_tag)
-            if not config:
-                raise HTTPException(status_code=404, detail=f"Source tag '{req.source_tag}' not found")
-
             filters = req.filters or {}
-            filters["source"] = {"source_tag": req.source_tag}
             docs = await self.service.get_documents_metadata(user, filters)
             sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]
 

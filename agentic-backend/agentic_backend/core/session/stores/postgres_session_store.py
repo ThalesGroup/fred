@@ -15,7 +15,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fred_core.sql import BaseSqlStore
@@ -23,8 +22,8 @@ from sqlalchemy import Column, DateTime, MetaData, String, Table, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
 
-from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 from agentic_backend.core.chatbot.chat_schema import SessionSchema
+from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +71,9 @@ class PostgresSessionStore(BaseSessionStore):
     def get(self, session_id: str) -> Optional[SessionSchema]:
         with self.store.begin() as conn:
             row = conn.execute(
-                select(self.table.c.session_data).where(self.table.c.session_id == session_id)
+                select(self.table.c.session_data).where(
+                    self.table.c.session_id == session_id
+                )
             ).fetchone()
         if not row:
             return None
@@ -80,7 +81,9 @@ class PostgresSessionStore(BaseSessionStore):
 
     def delete(self, session_id: str) -> None:
         with self.store.begin() as conn:
-            conn.execute(self.table.delete().where(self.table.c.session_id == session_id))
+            conn.execute(
+                self.table.delete().where(self.table.c.session_id == session_id)
+            )
 
     def get_for_user(self, user_id: str) -> List[SessionSchema]:
         with self.store.begin() as conn:

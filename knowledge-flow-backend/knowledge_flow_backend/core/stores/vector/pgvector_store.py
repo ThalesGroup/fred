@@ -254,9 +254,7 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 )
                 return store
             except Exception:
-                logger.exception(
-                    "[VECTOR][PGVECTOR] Failed to init langchain-postgres PGVector, falling back to legacy implementation"
-                )
+                logger.exception("[VECTOR][PGVECTOR] Failed to init langchain-postgres PGVector, falling back to legacy implementation")
 
         # Legacy fallback
         store = LegacyPGVector(
