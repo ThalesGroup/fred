@@ -1,3 +1,16 @@
+- **v1.1.0** — 2026-01-04
+  - **Summary**
+    - New PostgreSQL/pgvector option so Fred can run fully without OpenSearch, plus in-UI Mermaid rendering for agent replies.
+  - **Features**
+    - Add a Postgres-first deployment path (metadata + vectors) across knowledge-flow and agentic backends (#933)
+    - Surface vector backend details (pgvector or OpenSearch) in the admin views (#933)
+  - **Bug fixes**
+    - Fix Mermaid diagrams rendering in chat by generating safe SVG previews and stabilizing layout (#933)
+  - **Impact**
+    - Teams can choose a single Postgres stack for persistence; diagrams now display cleanly without layout jumps.
+
+---
+
 - **v1.0.9** — 2025-12-09
   - **Summary**
     - Corrected the OpenSearch k-NN query to use the proper `{ knn: … }` structure with filters inside the k-NN block, avoiding sub-optimal or inconsistent results.

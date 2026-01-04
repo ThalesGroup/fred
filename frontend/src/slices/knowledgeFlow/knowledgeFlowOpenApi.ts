@@ -150,44 +150,6 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.projectTextRequest,
       }),
     }),
-    listCatalogFilesKnowledgeFlowV1PullCatalogFilesGet: build.query<
-      ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiResponse,
-      ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/pull/catalog/files`,
-        params: {
-          source_tag: queryArg.sourceTag,
-          offset: queryArg.offset,
-          limit: queryArg.limit,
-        },
-      }),
-    }),
-    rescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPost: build.mutation<
-      RescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostApiResponse,
-      RescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/pull/catalog/rescan/${queryArg.sourceTag}`, method: "POST" }),
-    }),
-    listDocumentSourcesKnowledgeFlowV1DocumentsSourcesGet: build.query<
-      ListDocumentSourcesKnowledgeFlowV1DocumentsSourcesGetApiResponse,
-      ListDocumentSourcesKnowledgeFlowV1DocumentsSourcesGetApiArg
-    >({
-      query: () => ({ url: `/knowledge-flow/v1/documents/sources` }),
-    }),
-    listPullDocumentsKnowledgeFlowV1PullDocumentsGet: build.query<
-      ListPullDocumentsKnowledgeFlowV1PullDocumentsGetApiResponse,
-      ListPullDocumentsKnowledgeFlowV1PullDocumentsGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/pull/documents`,
-        params: {
-          source_tag: queryArg.sourceTag,
-          offset: queryArg.offset,
-          limit: queryArg.limit,
-        },
-      }),
-    }),
     getMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGet: build.query<
       GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiResponse,
       GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiArg
@@ -815,12 +777,12 @@ export type UpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocu
   retrievable: boolean;
 };
 export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiResponse =
-  /** status 200 Successful Response */ PullDocumentsResponse;
+  /** status 200 Successful Response */ BrowseDocumentsResponse;
 export type BrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostApiArg = {
   browseDocumentsRequest: BrowseDocumentsRequest;
 };
 export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiResponse =
-  /** status 200 Successful Response */ PullDocumentsResponse;
+  /** status 200 Successful Response */ BrowseDocumentsResponse;
 export type BrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostApiArg = {
   browseDocumentsByTagRequest: BrowseDocumentsByTagRequest;
 };
@@ -883,34 +845,6 @@ export type ProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostApiRespo
 export type ProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostApiArg = {
   refTagUid: string;
   projectTextRequest: ProjectTextRequest;
-};
-export type ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiResponse =
-  /** status 200 Successful Response */ PullFileEntry[];
-export type ListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetApiArg = {
-  /** The source tag for the cataloged files */
-  sourceTag: string;
-  /** Number of entries to skip */
-  offset?: number;
-  /** Max number of entries to return */
-  limit?: number;
-};
-export type RescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostApiResponse =
-  /** status 200 Successful Response */ any;
-export type RescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostApiArg = {
-  sourceTag: string;
-};
-export type ListDocumentSourcesKnowledgeFlowV1DocumentsSourcesGetApiResponse =
-  /** status 200 Successful Response */ DocumentSourceInfo[];
-export type ListDocumentSourcesKnowledgeFlowV1DocumentsSourcesGetApiArg = void;
-export type ListPullDocumentsKnowledgeFlowV1PullDocumentsGetApiResponse =
-  /** status 200 Successful Response */ PullDocumentsResponse;
-export type ListPullDocumentsKnowledgeFlowV1PullDocumentsGetApiArg = {
-  /** The pull source tag to list documents from */
-  sourceTag: string;
-  /** Start offset for pagination */
-  offset?: number;
-  /** Maximum number of documents to return */
-  limit?: number;
 };
 export type GetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetApiResponse =
   /** status 200 Successful Response */ MarkdownContentResponse;
@@ -1414,6 +1348,10 @@ export type ProcessingGraphNode = {
   source_tag?: string | null;
   /** Document version (0=base, 1=draft). Set only for document nodes. */
   version?: number | null;
+  backend?: string | null;
+  backend_detail?: string | null;
+  embedding_model?: string | null;
+  embedding_dimension?: number | null;
 };
 export type ProcessingGraphEdge = {
   source: string;
@@ -1431,7 +1369,7 @@ export type ProcessingSummary = {
   failed: number;
   not_started: number;
 };
-export type PullDocumentsResponse = {
+export type BrowseDocumentsResponse = {
   total: number;
   documents: DocumentMetadata[];
 };
@@ -1440,8 +1378,6 @@ export type SortOption = {
   direction: "asc" | "desc";
 };
 export type BrowseDocumentsRequest = {
-  /** Tag of the document source to browse (pull or push) */
-  source_tag: string;
   /** Optional metadata filters */
   filters?: {
     [key: string]: any;
@@ -1551,19 +1487,6 @@ export type ProjectTextResponse = {
 export type ProjectTextRequest = {
   /** The text to vectorize and project in 3D space. */
   text: string;
-};
-export type PullFileEntry = {
-  path: string;
-  size: number;
-  modified_time: number;
-  hash: string;
-};
-export type DocumentSourceInfo = {
-  tag: string;
-  type: "push" | "pull";
-  provider?: string | null;
-  description: string;
-  catalog_supported?: boolean | null;
 };
 export type MarkdownContentResponse = {
   content: string;
@@ -2130,13 +2053,6 @@ export const {
   useProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostMutation,
   useDeleteModelKnowledgeFlowV1ModelsUmapRefTagUidDeleteMutation,
   useProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostMutation,
-  useListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
-  useLazyListCatalogFilesKnowledgeFlowV1PullCatalogFilesGetQuery,
-  useRescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostMutation,
-  useListDocumentSourcesKnowledgeFlowV1DocumentsSourcesGetQuery,
-  useLazyListDocumentSourcesKnowledgeFlowV1DocumentsSourcesGetQuery,
-  useListPullDocumentsKnowledgeFlowV1PullDocumentsGetQuery,
-  useLazyListPullDocumentsKnowledgeFlowV1PullDocumentsGetQuery,
   useGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery,
   useLazyGetMarkdownPreviewKnowledgeFlowV1MarkdownDocumentUidGetQuery,
   useDownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdGetQuery,

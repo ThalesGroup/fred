@@ -32,6 +32,12 @@ class TagAlreadyExistsError(Exception):
     pass
 
 
+class TagDeserializationError(Exception):
+    """Raised when a stored tag cannot be deserialized."""
+
+    pass
+
+
 class BaseTagStore(ABC):
     """
     Abstract base class for storing and retrieving tags, user-scoped.

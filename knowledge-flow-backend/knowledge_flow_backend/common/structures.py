@@ -158,7 +158,27 @@ class ChromaVectorStorageConfig(BaseModel):
     distance: Literal["cosine", "l2", "ip"] = Field("cosine", description="Vector space (affects HNSW metric)")
 
 
-VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchVectorIndexConfig, ChromaVectorStorageConfig, WeaviateVectorStorage], Field(discriminator="type")]
+class PgVectorStorageConfig(BaseModel):
+    """
+    PostgreSQL + pgvector backend.
+    - Uses shared `storage.postgres` connection settings.
+    - Stores vectors in the default pgvector table under a collection name.
+    """
+
+    type: Literal["pgvector"]
+    collection_name: str = Field("fred_chunks", description="Logical collection name")
+
+
+VectorStorageConfig = Annotated[
+    Union[
+        InMemoryVectorStorage,
+        OpenSearchVectorIndexConfig,
+        ChromaVectorStorageConfig,
+        WeaviateVectorStorage,
+        PgVectorStorageConfig,
+    ],
+    Field(discriminator="type"),
+]
 
 
 class ProcessingConfig(BaseModel):
@@ -364,12 +384,11 @@ DocumentSourceConfig = Annotated[Union[PushSourceConfig, PullSourceConfig], Fiel
 
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
-    opensearch: OpenSearchStoreConfig
+    opensearch: Optional[OpenSearchStoreConfig] = Field(default=None, description="Optional OpenSearch store")
     resource_store: StoreConfig
     tag_store: StoreConfig
     kpi_store: StoreConfig
     metadata_store: StoreConfig
-    catalog_store: StoreConfig
     tabular_stores: Optional[Dict[str, StoreConfig]] = Field(default=None, description="Optional tabular store")
     vector_store: VectorStorageConfig
     log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")

@@ -15,11 +15,10 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import BinaryIO, List
+from typing import BinaryIO
 
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.common.structures import DocumentSourceConfig
-from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
 
 
 class BaseContentLoader(ABC):
@@ -41,20 +40,6 @@ class BaseContentLoader(ABC):
 
     def fetch_by_relative_path(self, relative_path: str, destination_dir: Path) -> Path:
         raise NotImplementedError("This loader does not support direct fetch by relative path.")
-
-    @abstractmethod
-    def scan(self) -> List[PullFileEntry]:
-        """List remote files from a pull source."""
-        pass
-
-    @abstractmethod
-    def fetch_from_pull_entry(self, entry: PullFileEntry, destination_dir: Path) -> Path:
-        """
-        Fetch a file (or folder) from the remote source and store it locally.
-
-        Returns the path to the downloaded file or folder.
-        """
-        pass
 
     @abstractmethod
     def fetch_from_metadata(self, metadata: DocumentMetadata, destination_dir: Path) -> Path:

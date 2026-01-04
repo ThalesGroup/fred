@@ -24,8 +24,11 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingGraph, ProcessingSummary
 from knowledge_flow_backend.common.utils import log_exception
 from knowledge_flow_backend.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError, StoreAuditFixResponse, StoreAuditReport
-from knowledge_flow_backend.features.pull.controller import PullDocumentsResponse
-from knowledge_flow_backend.features.pull.service import PullDocumentService
+
+
+class BrowseDocumentsResponse(BaseModel):
+    total: int
+    documents: List[DocumentMetadata]
 
 
 class SortOption(BaseModel):
@@ -39,7 +42,6 @@ lock = Lock()
 
 
 class BrowseDocumentsRequest(BaseModel):
-    source_tag: str = Field(..., description="Tag of the document source to browse (pull or push)")
     filters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Optional metadata filters")
     offset: int = Field(0, ge=0)
     limit: int = Field(50, gt=0, le=500)
@@ -99,11 +101,10 @@ class MetadataController:
     - All business exceptions are wrapped and exposed as HTTP errors only in the controller.
     """
 
-    def __init__(self, router: APIRouter, pull_document_service: PullDocumentService):
+    def __init__(self, router: APIRouter):
         self.context = ApplicationContext.get_instance()
         self.service = MetadataService()
         self.content_store = ApplicationContext.get_instance().get_content_store()
-        self.pull_document_service = pull_document_service
 
         # ---- Local schemas for responses ----
         class VectorChunk(BaseModel):
@@ -204,7 +205,7 @@ class MetadataController:
             "/documents/browse",
             tags=["Documents"],
             summary="Unified endpoint to browse documents from any source (push or pull)",
-            response_model=PullDocumentsResponse,
+            response_model=BrowseDocumentsResponse,
             description="""
             Returns a paginated list of documents from any configured source.
 
@@ -216,38 +217,24 @@ class MetadataController:
             """,
         )
         async def browse_documents(req: BrowseDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
-            config = self.context.get_config().document_sources.get(req.source_tag)
-            if not config:
-                raise HTTPException(status_code=404, detail=f"Source tag '{req.source_tag}' not found")
+            filters = req.filters or {}
+            docs = await self.service.get_documents_metadata(user, filters)
+            sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]
 
-            if config.type == "push":
-                filters = req.filters or {}
-                filters["source"] = {"source_tag": req.source_tag}
-                docs = await self.service.get_documents_metadata(user, filters)
-                sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]
+            for sort in reversed(sort_by):  # Apply last sort first for correct multi-field sorting
+                docs.sort(
+                    key=lambda d: getattr(d, sort.field, "") or "",  # fallback to empty string
+                    reverse=(sort.direction == "desc"),
+                )
 
-                for sort in reversed(sort_by):  # Apply last sort first for correct multi-field sorting
-                    docs.sort(
-                        key=lambda d: getattr(d, sort.field, "") or "",  # fallback to empty string
-                        reverse=(sort.direction == "desc"),
-                    )
-
-                paginated = docs[req.offset : req.offset + req.limit]
-                return PullDocumentsResponse(documents=paginated, total=len(docs))
-
-            elif config.type == "pull":
-                docs, total = self.pull_document_service.list_pull_documents(user, source_tag=req.source_tag, offset=req.offset, limit=req.limit)
-                # You could apply extra filtering here if needed
-                return PullDocumentsResponse(documents=docs, total=total)
-
-            else:
-                raise HTTPException(status_code=400, detail=f"Unsupported source type '{config.type}'")
+            paginated = docs[req.offset : req.offset + req.limit]
+            return BrowseDocumentsResponse(documents=paginated, total=len(docs))
 
         @router.post(
             "/documents/metadata/browse",
             tags=["Documents"],
             summary="Paginated documents by library tag",
-            response_model=PullDocumentsResponse,
+            response_model=BrowseDocumentsResponse,
             description="Returns documents for a library tag with pagination support.",
         )
         async def browse_documents_by_tag(req: BrowseDocumentsByTagRequest, user: KeycloakUser = Depends(get_current_user)):
@@ -260,7 +247,7 @@ class MetadataController:
                 len(docs),
                 total,
             )
-            return PullDocumentsResponse(documents=docs, total=total)
+            return BrowseDocumentsResponse(documents=docs, total=total)
 
         @router.get(
             "/documents/{document_uid}/vectors",
