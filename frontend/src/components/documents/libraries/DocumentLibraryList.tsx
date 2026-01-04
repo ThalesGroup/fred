@@ -165,17 +165,26 @@ export default function DocumentLibraryList() {
     const node = findNode(tree, selectedFolder);
     const tagId = node?.tagsHere?.[0]?.id;
     setCurrentTagId(tagId || null);
-    if (tagId) {
-      const cachedDocs = perTagDocs[tagId] || [];
-      const cachedTotal = perTagTotals[tagId];
-      setAllDocuments(cachedDocs);
-      setTotalDocuments(cachedTotal ?? cachedDocs.length);
-      setNextOffset(cachedDocs.length);
-      if (cachedDocs.length === 0) void loadPage(tagId, 0, false, true);
-    } else {
+    if (!tagId) {
       setAllDocuments([]);
       setTotalDocuments(0);
       setNextOffset(0);
+      return;
+    }
+
+    const cachedDocs = perTagDocs[tagId] || [];
+    const cachedTotal = perTagTotals[tagId];
+
+    setAllDocuments(cachedDocs);
+    setTotalDocuments(cachedTotal ?? cachedDocs.length);
+    setNextOffset(cachedDocs.length);
+
+    // Only fetch if we have never fetched this tag before (total undefined),
+    // or if we have docs cached but the total suggests more pages.
+    const needsInitialFetch = cachedTotal === undefined;
+    const moreExpected = cachedTotal !== undefined && cachedDocs.length < cachedTotal;
+    if (needsInitialFetch || moreExpected) {
+      void loadPage(tagId, cachedDocs.length, false, true);
     }
   }, [tree, selectedFolder, perTagDocs, perTagTotals, loadPage]);
 

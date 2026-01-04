@@ -33,7 +33,9 @@ logger = logging.getLogger(__name__)  # Logger definition added
 
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
-    opensearch: OpenSearchStoreConfig
+    opensearch: Optional[OpenSearchStoreConfig] = Field(
+        default=None, description="Optional OpenSearch store"
+    )
     agent_store: StoreConfig
     mcp_servers_store: Optional[StoreConfig] = Field(
         default=None,

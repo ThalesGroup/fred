@@ -85,7 +85,6 @@ class MetadataService:
         context = ApplicationContext.get_instance()
         self.config = context.get_config()
         self.metadata_store = context.get_metadata_store()
-        self.catalog_store = context.get_catalog_store()
         self.csv_input_store = None
         self.vector_store = None
         self.content_store = context.get_content_store()
