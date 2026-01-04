@@ -14,11 +14,11 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import uuid
-import inspect
-from datetime import datetime, date, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
 try:
@@ -29,6 +29,7 @@ except Exception:  # pragma: no cover - fallback for environments without langch
 from langchain_community.vectorstores.pgvector import PGVector as LegacyPGVector
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
+from sqlalchemy import create_engine, text
 
 from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
@@ -36,7 +37,6 @@ from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     BaseVectorStore,
     SearchFilter,
 )
-from sqlalchemy import create_engine, text
 
 logger = logging.getLogger(__name__)
 

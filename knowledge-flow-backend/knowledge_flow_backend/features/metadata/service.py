@@ -28,11 +28,11 @@ from knowledge_flow_backend.common.document_structures import (
     ProcessingStatus,
     ProcessingSummary,
 )
-from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.common.structures import (
     OpenSearchVectorIndexConfig,
     PgVectorStorageConfig,
 )
+from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import MetadataDeserializationError
 
 logger = logging.getLogger(__name__)
