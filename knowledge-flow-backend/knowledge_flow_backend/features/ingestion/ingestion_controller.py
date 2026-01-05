@@ -39,7 +39,10 @@ from knowledge_flow_backend.core.processors.output.base_output_processor import 
 from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 from knowledge_flow_backend.features.scheduler.activities import input_process, output_process
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
-from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
+from knowledge_flow_backend.core.stores.vector.base_vector_store import (
+    BaseVectorStore,
+    CHUNK_ID_FIELD,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -728,8 +731,10 @@ class IngestionController:
 
             # Build a single LC document with scoped metadata
             document_uid = uuid.uuid4().hex
+            chunk_uid = uuid.uuid4().hex
             doc_meta = {
                 "document_uid": document_uid,
+                CHUNK_ID_FIELD: chunk_uid,
                 "file_name": filename,
                 "user_id": user.uid,
                 "session_id": session_id,

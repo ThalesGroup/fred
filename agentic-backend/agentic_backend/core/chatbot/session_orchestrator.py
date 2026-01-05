@@ -50,10 +50,7 @@ from agentic_backend.common.kf_lite_markdown_client import KfLiteMarkdownClient
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
-from agentic_backend.core.agents.runtime_context import (
-    RuntimeContext,
-    set_attachments_markdown,
-)
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.chatbot.chat_schema import (
     AttachmentRef,
     Channel,
@@ -68,9 +65,6 @@ from agentic_backend.core.chatbot.chat_schema import (
     ToolResultPart,
 )
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
-from agentic_backend.core.chatbot.session_in_memory_attachements import (
-    SessionInMemoryAttachments,
-)
 from agentic_backend.core.chatbot.stream_transcoder import StreamTranscoder
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.session.attachement_processing import AttachementProcessing
@@ -116,12 +110,6 @@ class SessionOrchestrator:
         self.session_store = session_store
         self.attachments_store = attachments_store
         self.agent_factory = agent_factory
-        self.attachments_memory_store = SessionInMemoryAttachments(1000, 4)
-        logger.info(
-            "[SESSIONS] Initialized attachments memory store max_sessions=%d max_per_session=%d",
-            1000,
-            4,
-        )
         if self.attachments_store:
             logger.info(
                 "[SESSIONS] Attachment persistence enabled via %s",
@@ -134,26 +122,6 @@ class SessionOrchestrator:
         self.restore_max_exchanges = configuration.ai.restore_max_exchanges
         # Stateless worker that knows how to turn LangGraph events into ChatMessage[]
         self.transcoder = StreamTranscoder()
-
-    def _hydrate_attachments_from_store(self, session_id: str) -> None:
-        """
-        If persistence is enabled, warm up the in-memory cache for a session.
-        """
-        if self.attachments_store is None:
-            return
-        if self.attachments_memory_store.list_ids(session_id):
-            return
-        records = self.attachments_store.list_for_session(session_id)
-        for rec in records:
-            self.attachments_memory_store.put(
-                session_id=session_id,
-                attachment_id=rec.attachment_id,
-                name=rec.name,
-                summary_md=rec.summary_md,
-                mime=rec.mime,
-                size_bytes=rec.size_bytes,
-                document_uid=rec.document_uid,
-            )
 
     # ---------------- Public API (used by WS layer) ----------------
 
@@ -217,15 +185,6 @@ class SessionOrchestrator:
             runtime_context=runtime_context,
             session_id=session.id,
         )
-        # Warm up attachments cache if persistence is enabled
-        self._hydrate_attachments_from_store(session.id)
-        # 3) Prepare optional attachments context (lite markdown) and make it available via runtime_context
-        # this corresponds to the attached files that the user added to his conversation. These files are transformed to lite markdown format
-        # in turn added to the runtime context so that the agent can use them during its reasoning
-        attachments_context = (
-            self.attachments_memory_store.get_session_attachments_markdown(session.id)
-        )
-        set_attachments_markdown(runtime_context, attachments_context)
 
         # 3) Rebuild minimal LangChain history (user/assistant/system only),
         # This method will only restore history if the agent is not cached.
@@ -256,9 +215,7 @@ class SessionOrchestrator:
         all_msgs: List[ChatMessage] = [user_msg]
         await self._emit(callback, user_msg)
 
-        # 3) Prepare optional attachments context (lite markdown) and make it available via runtime_context
-
-        # 4) Stream agent responses via the transcoder
+        # Stream agent responses via the transcoder
         saw_final_assistant = False
         agent_msgs: List[ChatMessage] = []
         try:
@@ -345,18 +302,20 @@ class SessionOrchestrator:
                 session.id, user, Action.READ
             ):
                 continue
-            self._hydrate_attachments_from_store(session.id)
-            files_names = self.attachments_memory_store.get_session_attachment_names(
-                session.id
-            )
-            id_name_pairs = (
-                self.attachments_memory_store.get_session_attachment_id_name_pairs(
-                    session.id
-                )
-            )
-            attachments = [
-                AttachmentRef(id=att_id, name=name) for att_id, name in id_name_pairs
-            ]
+            files_names: list[str] = []
+            attachments: list[AttachmentRef] = []
+            if self.attachments_store:
+                try:
+                    records = self.attachments_store.list_for_session(session.id)
+                    files_names = [r.name for r in records]
+                    attachments = [
+                        AttachmentRef(id=r.attachment_id, name=r.name) for r in records
+                    ]
+                except Exception:
+                    logger.exception(
+                        "[SESSIONS] Failed to load attachments for session %s",
+                        session.id,
+                    )
             enriched.append(
                 SessionWithFiles(
                     **session.model_dump(),
@@ -392,7 +351,6 @@ class SessionOrchestrator:
                 )
         await self.agent_factory.teardown_session_agents(session_id)
         self.session_store.delete(session_id)
-        self.attachments_memory_store.clear_session(session_id)
         if self.attachments_store:
             self.attachments_store.delete_for_session(session_id)
         # Remote vector cleanup
@@ -425,31 +383,23 @@ class SessionOrchestrator:
         access_token: Optional[str] = None,
     ) -> None:
         """
-        Delete an in-memory attachment from a session.
+        Delete an attachment from a session (persistence + vectors).
         """
         self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
         doc_uid: Optional[str] = None
-        att = self.attachments_memory_store.get(session_id, attachment_id)
-        if att:
-            doc_uid = att.document_uid
-        self.attachments_memory_store.delete(
-            session_id=session_id, attachment_id=attachment_id
-        )
         if self.attachments_store:
-            self.attachments_store.delete(
-                session_id=session_id, attachment_id=attachment_id
-            )
-        if not doc_uid and self.attachments_store:
             try:
-                # fallback: reload from persistence
                 records = self.attachments_store.list_for_session(session_id)
                 for rec in records:
                     if rec.attachment_id == attachment_id:
                         doc_uid = rec.document_uid
                         break
+                self.attachments_store.delete(
+                    session_id=session_id, attachment_id=attachment_id
+                )
             except Exception:
                 logger.exception(
-                    "[SESSIONS][ATTACH] Failed to resolve document_uid for attachment %s",
+                    "[SESSIONS][ATTACH] Failed to delete attachment record %s",
                     attachment_id,
                 )
         if doc_uid and access_token:
@@ -488,8 +438,7 @@ class SessionOrchestrator:
         """
         Fred rationale:
         - Zero temp-files: we stream the uploaded content to Knowledge Flow 'lite/markdown'.
-        - We store ONLY the compact Markdown summary in RAM (SessionInMemoryAttachments).
-        - This powers 'retrieval implicite' in subsequent turns, exactly as designed.
+        - Store compact markdown + vectors via Knowledge Flow; no in-memory cache is used.
         """
         supported_suffixes = {
             ".pdf",
@@ -614,16 +563,7 @@ class SessionOrchestrator:
                 file.filename,
             )
 
-        # 4) Put into in-RAM session cache for implicit retrieval
-        self.attachments_memory_store.put(
-            session_id=session.id,
-            attachment_id=attachment_id,
-            name=file.filename,
-            summary_md=summary_md,
-            mime=file.content_type,
-            size_bytes=len(content),
-            document_uid=document_uid,
-        )
+        # 4) Persist metadata for UI if configured
         if self.attachments_store:
             now = _utcnow_dt()
             try:
@@ -702,14 +642,16 @@ class SessionOrchestrator:
         # Attachments across these sessions
         attachments_total = 0
         attachments_sessions = 0
-        for sid in session_ids:
-            ids = self.attachments_memory_store.list_ids(sid)
-            if ids:
-                attachments_sessions += 1
-                attachments_total += len(ids)
-
-        att_stats = self.attachments_memory_store.stats()
-        max_att = int(att_stats.get("max_attachments_per_session", 0))
+        if self.attachments_store:
+            try:
+                for sid in session_ids:
+                    records = self.attachments_store.list_for_session(sid)
+                    if records:
+                        attachments_sessions += 1
+                        attachments_total += len(records)
+            except Exception:
+                logger.exception("[SESSIONS] Failed to compute attachment stats")
+        max_att = 0
 
         return ChatbotRuntimeSummary(
             sessions_total=sessions_total,

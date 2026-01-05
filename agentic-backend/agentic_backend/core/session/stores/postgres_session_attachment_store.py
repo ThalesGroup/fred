@@ -29,6 +29,7 @@ from sqlalchemy import (
     Text,
     select,
     inspect,
+    text,
 )
 from sqlalchemy.engine import Engine
 

@@ -76,15 +76,15 @@ from agentic_backend.core.mcp.store.postgres_mcp_server_store import (
 )
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.monitoring.postgres_history_store import PostgresHistoryStore
-from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
 )
-from agentic_backend.core.session.stores.postgres_session_store import (
-    PostgresSessionStore,
-)
+from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 from agentic_backend.core.session.stores.postgres_session_attachment_store import (
     PostgresSessionAttachmentStore,
+)
+from agentic_backend.core.session.stores.postgres_session_store import (
+    PostgresSessionStore,
 )
 
 logger = logging.getLogger(__name__)

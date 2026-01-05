@@ -365,7 +365,9 @@ class Rico(AgentFlow):
             )
 
             if not runtime_context or not runtime_context.session_id:
-                raise RuntimeError("Runtime context missing session_id; required for scoped retrieval.")
+                raise RuntimeError(
+                    "Runtime context missing session_id; required for scoped retrieval."
+                )
 
             # 2) Vector search
             hits: List[VectorSearchHit] = self.search_client.search(

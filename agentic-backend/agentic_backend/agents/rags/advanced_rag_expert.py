@@ -320,7 +320,9 @@ class AdvancedRico(AgentFlow):
         # Prepare search context
         runtime_context = self.get_runtime_context()
         if not runtime_context or not runtime_context.session_id:
-            raise RuntimeError("Runtime context missing session_id; required for scoped retrieval.")
+            raise RuntimeError(
+                "Runtime context missing session_id; required for scoped retrieval."
+            )
         document_library_tags_ids = get_document_library_tags_ids(runtime_context)
         search_policy = get_search_policy(runtime_context)
 
