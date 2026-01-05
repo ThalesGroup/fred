@@ -104,10 +104,9 @@ interface DocumentLibraryTreeProps {
   documentsByTagId: Record<string, DocumentMetadata[]>;
   selectedFolderTotal?: number;
   perTagTotals?: Record<string, number>;
-  hasMore?: boolean;
-  onLoadMore?: () => void;
-  onLoadAll?: () => void;
-  isLoadingMore?: boolean;
+  loadingTagIds?: Record<string, boolean>;
+  onLoadMore?: (tagId: string) => void;
+  onLoadAll?: (tagId: string) => void;
   canDeleteDocument?: boolean;
   canDeleteFolder?: boolean;
   ownerNamesById?: Record<string, string>;
@@ -133,10 +132,9 @@ export function DocumentLibraryTree({
   documentsByTagId,
   selectedFolderTotal,
   perTagTotals,
-  hasMore = false,
+  loadingTagIds,
   onLoadMore,
   onLoadAll,
-  isLoadingMore = false,
   canDeleteDocument = true,
   canDeleteFolder = true,
   ownerNamesById,
@@ -212,6 +210,16 @@ export function DocumentLibraryTree({
       const tagIdsHere = (c.tagsHere ?? []).map((t) => t.id).filter(Boolean);
       const directDocs = getDocsForTags(tagIdsHere, documentsByTagId);
       const folderTag = getPrimaryTag(c);
+      const tagId = folderTag?.id;
+      const loadedForTag = tagId ? documentsByTagId[tagId]?.length ?? 0 : 0;
+      const totalForTagLoad =
+        tagId && isSelected && selectedFolderTotal !== undefined
+          ? selectedFolderTotal
+          : tagId
+            ? perTagTotals?.[tagId]
+            : undefined;
+      const hasMoreForFolder = Boolean(tagId && totalForTagLoad !== undefined && loadedForTag < totalForTagLoad);
+      const isLoadingHere = Boolean(tagId && loadingTagIds?.[tagId]);
 
       // Folder tri-state against THIS folder’s tag.
       const subtreeDocs = docsInSubtree(c, documentsByTagId, getChildren);
@@ -224,7 +232,7 @@ export function DocumentLibraryTree({
         isSelected && selectedFolderTotal !== undefined
           ? selectedFolderTotal
           : aggregatedTotal ?? cachedTotal ?? new Set(subtreeDocs.map((d) => d.identity.document_uid)).size;
-      const totalForTag = folderTag
+      const selectionTotalForTag = folderTag
         ? isSelected && selectedFolderTotal !== undefined
           ? selectedFolderTotal
           : cachedTotal ?? eligibleDocs.length
@@ -233,8 +241,8 @@ export function DocumentLibraryTree({
         ? eligibleDocs.filter((d) => selectedDocs[d.identity.document_uid]?.id === folderTag.id).length
         : 0;
 
-      const folderChecked = totalForTag > 0 && selectedForTag === totalForTag;
-      const folderIndeterminate = selectedForTag > 0 && selectedForTag < totalForTag;
+      const folderChecked = selectionTotalForTag > 0 && selectedForTag === selectionTotalForTag;
+      const folderIndeterminate = selectedForTag > 0 && selectedForTag < selectionTotalForTag;
 
       const canBeDeleted = !!folderTag && !!onDeleteFolder && canDeleteFolder;
       const ownerName = folderTag ? ownerNamesById?.[folderTag.owner_id] : undefined;
@@ -420,16 +428,16 @@ export function DocumentLibraryTree({
         />
       );
     })}
-          {isSelected && hasMore && (
+          {folderTag && hasMoreForFolder && (
             <Box sx={{ width: "100%", pl: 5, pr: 0.5, pb: 1, display: "flex", flexDirection: "column", gap: 1 }}>
-              {!isLoadingMore && (
+              {!isLoadingHere && (
                 <>
                   <Button
                     size="small"
                     variant="contained"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onLoadMore?.();
+                      onLoadMore?.(folderTag.id);
                     }}
                     sx={{
                       width: "100%",
@@ -450,7 +458,7 @@ export function DocumentLibraryTree({
                     variant="text"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onLoadAll?.();
+                      onLoadAll?.(folderTag.id);
                     }}
                     sx={{
                       width: "100%",
@@ -464,7 +472,7 @@ export function DocumentLibraryTree({
                 </>
               )}
 
-              {isLoadingMore ? (
+              {isLoadingHere ? (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
                   {Array.from({ length: 3 }).map((_, idx) => (
                     <Box key={idx} sx={{ display: "flex", alignItems: "center", gap: 1, pl: 1.25, pr: 0.5 }}>

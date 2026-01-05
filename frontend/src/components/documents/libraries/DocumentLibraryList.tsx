@@ -50,6 +50,7 @@ export default function DocumentLibraryList() {
   /* ---------------- State ---------------- */
   const [expanded, setExpanded] = useLocalStorageState<string[]>("DocumentLibraryList.expanded", []);
   const [selectedFolder, setSelectedFolder] = React.useState<string | null>(null);
+  const [forceRoot, setForceRoot] = React.useState(false);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = React.useState(false);
   const [openUploadDrawer, setOpenUploadDrawer] = React.useState(false);
   const [uploadTargetTagId, setUploadTargetTagId] = React.useState<string | null>(null);
@@ -113,13 +114,23 @@ export default function DocumentLibraryList() {
   const [currentTagId, setCurrentTagId] = React.useState<string | null>(null);
   const [allDocuments, setAllDocuments] = React.useState<DocumentMetadata[]>([]);
   const [totalDocuments, setTotalDocuments] = React.useState<number>(0);
-  const [isLoadingPage, setIsLoadingPage] = React.useState(false);
   const [nextOffset, setNextOffset] = React.useState(0);
   const [perTagDocs, setPerTagDocs] = React.useState<Record<string, DocumentMetadata[]>>({});
   const [perTagTotals, setPerTagTotals] = React.useState<Record<string, number>>({});
+  const [loadingTags, setLoadingTags] = React.useState<Record<string, boolean>>({});
   const prefetchedTagsRef = React.useRef<Set<string>>(new Set());
   const prefetchingTagsRef = React.useRef<Set<string>>(new Set());
+  const currentTagIdRef = React.useRef<string | null>(null);
   const documentsByTagId = React.useMemo<Record<string, DocumentMetadata[]>>(() => perTagDocs, [perTagDocs]);
+
+  const setTagLoading = React.useCallback((tagId: string, loading: boolean) => {
+    setLoadingTags((prev) => {
+      const next = { ...prev };
+      if (loading) next[tagId] = true;
+      else delete next[tagId];
+      return next;
+    });
+  }, []);
 
   const loadPage = React.useCallback(
     async (
@@ -129,7 +140,7 @@ export default function DocumentLibraryList() {
       applyToCurrent: boolean = true,
       limit: number = PAGE_SIZE,
     ) => {
-      if (applyToCurrent) setIsLoadingPage(true);
+      setTagLoading(tagId, true);
       try {
         const res = await browseDocumentsByTag({
           browseDocumentsByTagRequest: {
@@ -139,24 +150,31 @@ export default function DocumentLibraryList() {
           },
         }).unwrap();
         const docs = res.documents || [];
+        let computedTotalForTag: number | undefined = res.total ?? undefined;
 
         setPerTagDocs((prev) => {
-            const existing = prev[tagId] || [];
-            const merged = append ? [...existing, ...docs] : docs;
-            return { ...prev, [tagId]: merged };
-          });
-        setPerTagTotals((prev) => ({ ...prev, [tagId]: res.total || docs.length }));
+          const existing = prev[tagId] || [];
+          const merged = append ? [...existing, ...docs] : docs;
+          return { ...prev, [tagId]: merged };
+        });
+        setPerTagTotals((prev) => {
+          const prevTotal = prev[tagId];
+          const observedTotal = res.total ?? prevTotal ?? docs.length;
+          const inferredTotal = Math.max(observedTotal, offset + docs.length);
+          computedTotalForTag = inferredTotal;
+          return { ...prev, [tagId]: inferredTotal };
+        });
 
-        if (applyToCurrent && tagId === currentTagId) {
+        if (applyToCurrent && currentTagIdRef.current === tagId) {
           setAllDocuments((prev) => (append ? [...prev, ...docs] : docs));
-          setTotalDocuments(res.total || docs.length);
+          setTotalDocuments(computedTotalForTag ?? docs.length);
           setNextOffset(offset + docs.length);
         }
       } finally {
-        if (applyToCurrent) setIsLoadingPage(false);
+        setTagLoading(tagId, false);
       }
     },
-    [browseDocumentsByTag, currentTagId],
+    [browseDocumentsByTag, setTagLoading],
   );
 
   // Load first page when folder changes
@@ -165,6 +183,7 @@ export default function DocumentLibraryList() {
     const node = findNode(tree, selectedFolder);
     const tagId = node?.tagsHere?.[0]?.id;
     setCurrentTagId(tagId || null);
+    currentTagIdRef.current = tagId || null;
     if (!tagId) {
       setAllDocuments([]);
       setTotalDocuments(0);
@@ -179,25 +198,33 @@ export default function DocumentLibraryList() {
     setTotalDocuments(cachedTotal ?? cachedDocs.length);
     setNextOffset(cachedDocs.length);
 
-    // Only fetch if we have never fetched this tag before (total undefined),
-    // or if we have docs cached but the total suggests more pages.
-    const needsInitialFetch = cachedTotal === undefined;
-    const moreExpected = cachedTotal !== undefined && cachedDocs.length < cachedTotal;
-    if (needsInitialFetch || moreExpected) {
+    // Only fetch if we have never fetched this tag before (total undefined).
+    if (cachedTotal === undefined) {
       void loadPage(tagId, cachedDocs.length, false, true);
     }
-  }, [tree, selectedFolder, perTagDocs, perTagTotals, loadPage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tree, selectedFolder, loadPage]);
 
-  const loadMore = React.useCallback(() => {
-    if (!currentTagId) return;
-    void loadPage(currentTagId, nextOffset, true);
-  }, [currentTagId, loadPage, nextOffset]);
+  const loadMore = React.useCallback(
+    (tagId: string) => {
+      const offset = tagId === currentTagId ? nextOffset : perTagDocs[tagId]?.length ?? 0;
+      const applyToCurrent = tagId === currentTagId;
+      void loadPage(tagId, offset, true, applyToCurrent);
+    },
+    [currentTagId, loadPage, nextOffset, perTagDocs],
+  );
 
-  const loadAll = React.useCallback(() => {
-    if (!currentTagId) return;
-    const remaining = Math.max(totalDocuments - nextOffset, PAGE_SIZE);
-    void loadPage(currentTagId, nextOffset, true, true, remaining);
-  }, [currentTagId, loadPage, nextOffset, totalDocuments]);
+  const loadAll = React.useCallback(
+    (tagId: string) => {
+      const offset = tagId === currentTagId ? nextOffset : perTagDocs[tagId]?.length ?? 0;
+      const total = perTagTotals[tagId] ?? (tagId === currentTagId ? totalDocuments : undefined);
+      const remaining = total !== undefined ? Math.max(total - offset, 0) : 0;
+      if (remaining <= 0) return;
+      const applyToCurrent = tagId === currentTagId;
+      void loadPage(tagId, offset, true, applyToCurrent, remaining);
+    },
+    [currentTagId, loadPage, nextOffset, perTagDocs, perTagTotals, totalDocuments],
+  );
 
   // Prefetch first page for each tag to populate counters (cap to avoid overload)
   React.useEffect(() => {
@@ -231,7 +258,7 @@ export default function DocumentLibraryList() {
       }
     };
     void run();
-  }, [tags, perTagTotals, loadPage]);
+  }, [libraryTags, perTagTotals, loadPage]);
 
   /* ---------------- Expand/collapse helpers ---------------- */
   const setAllExpanded = (expand: boolean) => {
@@ -247,12 +274,12 @@ export default function DocumentLibraryList() {
     setExpanded(expand ? ids : []);
   };
 
-  // Auto-select first folder when tree loads to avoid empty initial view
+  // Auto-select first folder when tree loads to avoid empty initial view, unless user forced root
   React.useEffect(() => {
-    if (selectedFolder || !tree) return;
+    if (selectedFolder || !tree || forceRoot) return;
     const first = getChildren(tree)[0];
     if (first) setSelectedFolder(first.full);
-  }, [selectedFolder, tree, getChildren]);
+  }, [selectedFolder, tree, getChildren, forceRoot]);
 
   const handleOpenPipelineDrawer = () => {
     if (!tree || !selectedFolder) return;
@@ -296,7 +323,6 @@ export default function DocumentLibraryList() {
     if (!q) return allDocuments;
     return allDocuments.filter((d) => matchesDocByName(d, q));
   }, [allDocuments, query]);
-  const hasMore = React.useMemo(() => allDocuments.length < totalDocuments, [allDocuments.length, totalDocuments]);
 
   // Auto-expand branches that contain matches (based on filteredDocs)
   React.useEffect(() => {
@@ -378,25 +404,39 @@ export default function DocumentLibraryList() {
       // Pass the state reset function as the onSuccess callback
       confirmDeleteFolder(tag, () => {
         // This runs only after the user confirms AND the deletion is successful
+        setForceRoot(true);
         setSelectedFolder(null);
       });
     },
     [confirmDeleteFolder, setSelectedFolder],
   );
+  const handleSelectFolder = React.useCallback(
+    (folder: string | null) => {
+      setForceRoot(folder === null);
+      setSelectedFolder(folder);
+    },
+    [setSelectedFolder],
+  );
+
   return (
-    <Box display="flex" flexDirection="column" gap={2}>
+    <Box
+      display="flex"
+      flexDirection="column"
+      gap={2}
+      sx={{ height: "calc(100vh - 120px)", minHeight: 0 }}
+    >
       {/* Top toolbar */}
-        <Box display="flex" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
+      <Box display="flex" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
         <Breadcrumbs>
           <Chip
             label={t("documentLibrariesList.documents")}
             icon={<FolderOutlinedIcon />}
-            onClick={() => setSelectedFolder(undefined)}
+            onClick={() => handleSelectFolder(null)}
             clickable
             sx={{ fontWeight: 500 }}
           />
           {selectedFolder?.split("/").map((c, i, arr) => (
-            <Link key={i} component="button" onClick={() => setSelectedFolder(arr.slice(0, i + 1).join("/"))}>
+            <Link key={i} component="button" onClick={() => handleSelectFolder(arr.slice(0, i + 1).join("/"))}>
               {c}
             </Link>
           ))}
@@ -484,6 +524,9 @@ export default function DocumentLibraryList() {
             borderRadius: 3,
             display: "flex",
             flexDirection: "column",
+            flex: 1,
+            minHeight: 0,
+            overflow: "hidden",
           }}
         >
           {/* Tree header */}
@@ -531,7 +574,7 @@ export default function DocumentLibraryList() {
               expanded={expanded}
               setExpanded={setExpanded}
               selectedFolder={selectedFolder}
-              setSelectedFolder={setSelectedFolder}
+              setSelectedFolder={handleSelectFolder}
               getChildren={getChildren}
               documents={filteredDocs}
               onPreview={preview}
@@ -544,16 +587,15 @@ export default function DocumentLibraryList() {
               setSelectedDocs={setSelectedDocs}
               onDeleteFolder={handleDeleteFolder}
               documentsByTagId={documentsByTagId}
-            selectedFolderTotal={totalDocuments}
-            perTagTotals={perTagTotals}
-            hasMore={hasMore}
-            onLoadMore={loadMore}
-            onLoadAll={loadAll}
-            isLoadingMore={isLoadingPage}
-            canDeleteDocument={canDeleteDocument}
-            canDeleteFolder={canDeleteFolder}
-            ownerNamesById={ownerNamesById}
-          />
+              selectedFolderTotal={totalDocuments}
+              perTagTotals={perTagTotals}
+              loadingTagIds={loadingTags}
+              onLoadMore={loadMore}
+              onLoadAll={loadAll}
+              canDeleteDocument={canDeleteDocument}
+              canDeleteFolder={canDeleteFolder}
+              ownerNamesById={ownerNamesById}
+            />
           </Box>
         </Card>
       )}
