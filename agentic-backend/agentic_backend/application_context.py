@@ -462,7 +462,7 @@ class ApplicationContext:
             return self._session_attachment_store_instance
 
         logger.info(
-            "[SESSIONS] Attachment persistence is disabled for backend=%s; falling back to in-memory cache only.",
+            "[SESSIONS] Attachment persistence is disabled for backend=%s.",
             store_config.type,
         )
         self._session_attachment_store_instance = None

@@ -431,7 +431,7 @@ class SessionOrchestrator:
         access_token: str,
         session_id: Optional[str],
         file: UploadFile,
-        max_chars: int = 12_000,
+        max_chars: int = 30_000,
         include_tables: bool = True,
         add_page_headings: bool = False,
     ) -> dict:
@@ -440,6 +440,17 @@ class SessionOrchestrator:
         - Zero temp-files: we stream the uploaded content to Knowledge Flow 'lite/markdown'.
         - Store compact markdown + vectors via Knowledge Flow; no in-memory cache is used.
         """
+        if not self.attachments_store:
+            logger.error(
+                "[SESSIONS][ATTACH] Attachment uploads disabled: no attachments_store configured."
+            )
+            raise HTTPException(
+                status_code=501,
+                detail={
+                    "code": "attachments_disabled",
+                    "message": "Attachment uploads are disabled (no attachment store configured).",
+                },
+            )
         supported_suffixes = {
             ".pdf",
             ".docx",
