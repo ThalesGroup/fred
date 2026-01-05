@@ -325,6 +325,16 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    lightweightIngestKnowledgeFlowV1LiteIngestPost: build.mutation<
+      LightweightIngestKnowledgeFlowV1LiteIngestPostApiResponse,
+      LightweightIngestKnowledgeFlowV1LiteIngestPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/lite/ingest`,
+        method: "POST",
+        body: queryArg.bodyLightweightIngestKnowledgeFlowV1LiteIngestPost,
+      }),
+    }),
     listAllTagsKnowledgeFlowV1TagsGet: build.query<
       ListAllTagsKnowledgeFlowV1TagsGetApiResponse,
       ListAllTagsKnowledgeFlowV1TagsGetApiArg
@@ -952,6 +962,10 @@ export type LightweightMarkdownKnowledgeFlowV1LiteMarkdownPostApiArg = {
   format?: string;
   bodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost: BodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost;
 };
+export type LightweightIngestKnowledgeFlowV1LiteIngestPostApiResponse = /** status 200 Successful Response */ any;
+export type LightweightIngestKnowledgeFlowV1LiteIngestPostApiArg = {
+  bodyLightweightIngestKnowledgeFlowV1LiteIngestPost: BodyLightweightIngestKnowledgeFlowV1LiteIngestPost;
+};
 export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithItemsId[];
 export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
   /** Filter by tag type */
@@ -1576,6 +1590,15 @@ export type BodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost = {
   /** JSON string of LiteMarkdownOptions */
   options_json?: string | null;
 };
+export type BodyLightweightIngestKnowledgeFlowV1LiteIngestPost = {
+  file: Blob;
+  /** JSON string of LiteMarkdownOptions */
+  options_json?: string | null;
+  /** Optional chat session id for scoping */
+  session_id?: string | null;
+  /** Logical scope label, default 'session' */
+  scope?: string;
+};
 export type TagType = "document" | "prompt" | "template" | "chat-context";
 export type TagWithItemsId = {
   id: string;
@@ -2082,6 +2105,7 @@ export const {
   useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
   useLightweightMarkdownKnowledgeFlowV1LiteMarkdownPostMutation,
+  useLightweightIngestKnowledgeFlowV1LiteIngestPostMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,

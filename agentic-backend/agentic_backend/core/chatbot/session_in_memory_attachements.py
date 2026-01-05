@@ -39,6 +39,7 @@ class AttachmentData:
     mime: Optional[str]
     size_bytes: Optional[int]
     summary_md: str
+    document_uid: Optional[str] = None
 
 
 class SessionInMemoryAttachments:
@@ -73,6 +74,7 @@ class SessionInMemoryAttachments:
         summary_md: str,
         mime: Optional[str] = None,
         size_bytes: Optional[int] = None,
+        document_uid: Optional[str] = None,
     ) -> None:
         """
         Store or replace a Markdown summary for an attachment.
@@ -83,7 +85,9 @@ class SessionInMemoryAttachments:
         if len(bucket) >= self._max_att_per_session and attachment_id not in bucket:
             oldest_key = next(iter(bucket))
             bucket.pop(oldest_key, None)
-        bucket[attachment_id] = AttachmentData(name, mime, size_bytes, summary_md)
+        bucket[attachment_id] = AttachmentData(
+            name, mime, size_bytes, summary_md, document_uid
+        )
         self._sessions.set(session_id, bucket)
 
     def get(self, session_id: str, attachment_id: str) -> Optional[AttachmentData]:

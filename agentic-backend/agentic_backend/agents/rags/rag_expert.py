@@ -364,12 +364,17 @@ class Rico(AgentFlow):
                 rag_scope,
             )
 
+            if not runtime_context or not runtime_context.session_id:
+                raise RuntimeError("Runtime context missing session_id; required for scoped retrieval.")
+
             # 2) Vector search
             hits: List[VectorSearchHit] = self.search_client.search(
                 question=augmented_question,
                 top_k=top_k,
                 document_library_tags_ids=doc_tag_ids,
                 search_policy=search_policy,
+                session_id=runtime_context.session_id,
+                include_session_scope=True,
             )
             logger.debug("[AGENT] vector search returned %d hit(s)", len(hits))
             if hits:

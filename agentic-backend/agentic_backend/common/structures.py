@@ -42,6 +42,10 @@ class StorageConfig(BaseModel):
         description="Optional override for MCP servers store (defaults to agent_store backend).",
     )
     session_store: StoreConfig
+    attachments_store: Optional[StoreConfig] = Field(
+        default=None,
+        description="Optional override for session attachments persistence (defaults to session_store backend).",
+    )
     history_store: StoreConfig
     feedback_store: StoreConfig
     kpi_store: StoreConfig

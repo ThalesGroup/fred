@@ -176,9 +176,32 @@ class PgVectorStoreAdapter(BaseVectorStore):
         return returned
 
     def delete_vectors_for_document(self, *, document_uid: str) -> None:
+        """
+        Remove all vectors for a logical document in this collection.
+        Uses explicit SQL for observability and correctness.
+        """
         try:
-            self._vs.delete(filter={"document_uid": document_uid})
-            logger.info("[VECTOR][PGVECTOR] deleted vectors for document_uid=%s", document_uid)
+            with self._engine.begin() as conn:
+                res = conn.execute(
+                    text(
+                        """
+                        DELETE FROM langchain_pg_embedding e
+                        USING langchain_pg_collection c
+                        WHERE e.collection_id = c.uuid
+                          AND c.name = :collection
+                          AND e.cmetadata ? 'document_uid'
+                          AND e.cmetadata ->> 'document_uid' = :doc_uid
+                        """
+                    ),
+                    {"collection": self.collection_name, "doc_uid": document_uid},
+                )
+                deleted = res.rowcount or 0
+                logger.info(
+                    "[VECTOR][PGVECTOR] deleted vectors for document_uid=%s collection=%s deleted=%d",
+                    document_uid,
+                    self.collection_name,
+                    deleted,
+                )
         except Exception:
             logger.exception(
                 "[VECTOR][PGVECTOR] failed to delete vectors for document_uid=%s",
@@ -327,6 +350,13 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 filt["tag_ids"] = list(search_filter.tag_ids)
 
         filter_arg = filt or None
+        logger.info(
+            "[VECTOR][PGVECTOR][ANN] query=%r k=%d collection=%s filter=%s",
+            query,
+            k,
+            self.collection_name,
+            filter_arg,
+        )
         try:
             hits = self._vs.similarity_search_with_relevance_scores(query, k=k, filter=filter_arg)
         except Exception:
@@ -342,6 +372,11 @@ class PgVectorStoreAdapter(BaseVectorStore):
             if not doc or doc.metadata.get(CHUNK_ID_FIELD) is None:
                 continue
             results.append(AnnHit(document=doc, score=score))
+        logger.info(
+            "[VECTOR][PGVECTOR][ANN] returned=%d top_score=%.4f",
+            len(results),
+            float(results[0].score) if results else 0.0,
+        )
         return results
 
     def _create_store(self, connection_string: str, collection_name: str):

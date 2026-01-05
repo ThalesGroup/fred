@@ -220,6 +220,10 @@ storage:
     type: "postgres"
     table: history
 
+  attachments_store:
+    type: "postgres"
+    table: session_attachments
+
   kpi_store:
     type: "log"
     level: "INFO"

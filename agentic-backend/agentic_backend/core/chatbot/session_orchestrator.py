@@ -74,6 +74,10 @@ from agentic_backend.core.chatbot.session_in_memory_attachements import (
 from agentic_backend.core.chatbot.stream_transcoder import StreamTranscoder
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.session.attachement_processing import AttachementProcessing
+from agentic_backend.core.session.stores.base_session_attachment_store import (
+    BaseSessionAttachmentStore,
+    SessionAttachmentRecord,
+)
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 
 logger = logging.getLogger(__name__)
@@ -104,11 +108,13 @@ class SessionOrchestrator:
         self,
         configuration: Configuration,
         session_store: BaseSessionStore,
+        attachments_store: Optional[BaseSessionAttachmentStore],
         agent_factory: BaseAgentFactory,
         history_store: BaseHistoryStore,
         kpi: BaseKPIWriter,
     ):
         self.session_store = session_store
+        self.attachments_store = attachments_store
         self.agent_factory = agent_factory
         self.attachments_memory_store = SessionInMemoryAttachments(1000, 4)
         logger.info(
@@ -116,6 +122,11 @@ class SessionOrchestrator:
             1000,
             4,
         )
+        if self.attachments_store:
+            logger.info(
+                "[SESSIONS] Attachment persistence enabled via %s",
+                type(self.attachments_store).__name__,
+            )
         # Side services
         self.history_store = history_store
         self.kpi: BaseKPIWriter = kpi
@@ -123,6 +134,26 @@ class SessionOrchestrator:
         self.restore_max_exchanges = configuration.ai.restore_max_exchanges
         # Stateless worker that knows how to turn LangGraph events into ChatMessage[]
         self.transcoder = StreamTranscoder()
+
+    def _hydrate_attachments_from_store(self, session_id: str) -> None:
+        """
+        If persistence is enabled, warm up the in-memory cache for a session.
+        """
+        if self.attachments_store is None:
+            return
+        if self.attachments_memory_store.list_ids(session_id):
+            return
+        records = self.attachments_store.list_for_session(session_id)
+        for rec in records:
+            self.attachments_memory_store.put(
+                session_id=session_id,
+                attachment_id=rec.attachment_id,
+                name=rec.name,
+                summary_md=rec.summary_md,
+                mime=rec.mime,
+                size_bytes=rec.size_bytes,
+                document_uid=rec.document_uid,
+            )
 
     # ---------------- Public API (used by WS layer) ----------------
 
@@ -177,12 +208,17 @@ class SessionOrchestrator:
         session = self._get_or_create_session(
             user_id=user.uid, query=message, session_id=session_id
         )
+        # Propagate effective session_id into runtime context so downstream calls
+        # (vector search, attachments) can scope to the correct conversation.
+        runtime_context.session_id = session.id
         # 2) Check if an agent instance can be created/initialized/reused
         agent, is_cached = await self.agent_factory.create_and_init(
             agent_name=agent_name,
             runtime_context=runtime_context,
             session_id=session.id,
         )
+        # Warm up attachments cache if persistence is enabled
+        self._hydrate_attachments_from_store(session.id)
         # 3) Prepare optional attachments context (lite markdown) and make it available via runtime_context
         # this corresponds to the attached files that the user added to his conversation. These files are transformed to lite markdown format
         # in turn added to the runtime context so that the agent can use them during its reasoning
@@ -309,6 +345,7 @@ class SessionOrchestrator:
                 session.id, user, Action.READ
             ):
                 continue
+            self._hydrate_attachments_from_store(session.id)
             files_names = self.attachments_memory_store.get_session_attachment_names(
                 session.id
             )
@@ -337,11 +374,43 @@ class SessionOrchestrator:
         return self.history_store.get(session_id) or []
 
     @authorize(action=Action.DELETE, resource=Resource.SESSIONS)
-    async def delete_session(self, session_id: str, user: KeycloakUser) -> None:
+    async def delete_session(
+        self, session_id: str, user: KeycloakUser, access_token: Optional[str] = None
+    ) -> None:
         self._authorize_user_action_on_session(session_id, user, Action.DELETE)
+        # Collect doc_uids before clearing
+        doc_uids: set[str] = set()
+        if self.attachments_store:
+            try:
+                for rec in self.attachments_store.list_for_session(session_id):
+                    if rec.document_uid:
+                        doc_uids.add(rec.document_uid)
+            except Exception:
+                logger.exception(
+                    "[SESSIONS] Failed to collect attachment doc_uids before delete for session %s",
+                    session_id,
+                )
         await self.agent_factory.teardown_session_agents(session_id)
         self.session_store.delete(session_id)
         self.attachments_memory_store.clear_session(session_id)
+        if self.attachments_store:
+            self.attachments_store.delete_for_session(session_id)
+        # Remote vector cleanup
+        if doc_uids and access_token:
+            client = KfLiteMarkdownClient(access_token=access_token)
+            for doc_uid in doc_uids:
+                try:
+                    client.delete_ingested_vectors(doc_uid)
+                    logger.info(
+                        "[SESSIONS][ATTACH] Deleted vectors for doc_uid=%s (session cleanup)",
+                        doc_uid,
+                    )
+                except Exception:
+                    logger.warning(
+                        "[SESSIONS][ATTACH] Failed to delete vectors for doc_uid=%s during session cleanup",
+                        doc_uid,
+                        exc_info=True,
+                    )
         logger.info("[SESSIONS] Deleted session %s", session_id)
 
     # ---------------- File uploads (kept for backward compatibility) ----------------
@@ -353,14 +422,50 @@ class SessionOrchestrator:
         user: KeycloakUser,
         session_id: str,
         attachment_id: str,
+        access_token: Optional[str] = None,
     ) -> None:
         """
         Delete an in-memory attachment from a session.
         """
         self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
+        doc_uid: Optional[str] = None
+        att = self.attachments_memory_store.get(session_id, attachment_id)
+        if att:
+            doc_uid = att.document_uid
         self.attachments_memory_store.delete(
             session_id=session_id, attachment_id=attachment_id
         )
+        if self.attachments_store:
+            self.attachments_store.delete(
+                session_id=session_id, attachment_id=attachment_id
+            )
+        if not doc_uid and self.attachments_store:
+            try:
+                # fallback: reload from persistence
+                records = self.attachments_store.list_for_session(session_id)
+                for rec in records:
+                    if rec.attachment_id == attachment_id:
+                        doc_uid = rec.document_uid
+                        break
+            except Exception:
+                logger.exception(
+                    "[SESSIONS][ATTACH] Failed to resolve document_uid for attachment %s",
+                    attachment_id,
+                )
+        if doc_uid and access_token:
+            try:
+                client = KfLiteMarkdownClient(access_token=access_token)
+                client.delete_ingested_vectors(doc_uid)
+                logger.info(
+                    "[SESSIONS][ATTACH] Deleted vectors for doc_uid=%s (attachment removal)",
+                    doc_uid,
+                )
+            except Exception:
+                logger.warning(
+                    "[SESSIONS][ATTACH] Failed to delete vectors for doc_uid=%s",
+                    doc_uid,
+                    exc_info=True,
+                )
         logger.info(
             "[SESSIONS] Deleted attachment %s from session %s",
             attachment_id,
@@ -376,7 +481,7 @@ class SessionOrchestrator:
         access_token: str,
         session_id: Optional[str],
         file: UploadFile,
-        max_chars: int = 30_000,
+        max_chars: int = 12_000,
         include_tables: bool = True,
         add_page_headings: bool = False,
     ) -> dict:
@@ -441,6 +546,15 @@ class SessionOrchestrator:
                 include_tables=include_tables,
                 add_page_headings=add_page_headings,
             )
+            summary_md = (summary_md or "").strip()
+            if not summary_md:
+                summary_md = "_(No summary returned by Knowledge Flow)_"
+            logger.info(
+                "[SESSIONS][ATTACH] Received summary for %s bytes=%d chars=%d",
+                file.filename,
+                len(content),
+                len(summary_md),
+            )
         except HTTPError as exc:  # Upstream format or processing failure
             status = exc.response.status_code if exc.response is not None else 502
             upstream_detail = (
@@ -467,6 +581,39 @@ class SessionOrchestrator:
         # 3) Create a stable attachment_id (UUID v4 is fine here)
         attachment_id = str(uuid.uuid4())
 
+        # 3b) Ingest into vector store with session/user scoping
+        document_uid: Optional[str] = None
+        try:
+            ingest_resp = client.ingest_markdown_from_bytes(
+                filename=file.filename,
+                content=content,
+                session_id=session.id,
+                scope="session",
+                options={
+                    "max_chars": max_chars,
+                    "include_tables": include_tables,
+                    "add_page_headings": add_page_headings,
+                },
+            )
+            document_uid = ingest_resp.get("document_uid")
+            logger.info(
+                "[SESSIONS][ATTACH] Ingested vectors doc_uid=%s chunks=%s",
+                document_uid,
+                ingest_resp.get("chunks"),
+            )
+        except HTTPError as exc:
+            logger.error(
+                "[SESSIONS][ATTACH] Vector ingest failed for %s (user=%s): %s",
+                file.filename,
+                user.uid,
+                exc.response.text if exc.response is not None else str(exc),
+            )
+        except Exception:
+            logger.exception(
+                "[SESSIONS][ATTACH] Unexpected error during vector ingest for %s",
+                file.filename,
+            )
+
         # 4) Put into in-RAM session cache for implicit retrieval
         self.attachments_memory_store.put(
             session_id=session.id,
@@ -475,7 +622,36 @@ class SessionOrchestrator:
             summary_md=summary_md,
             mime=file.content_type,
             size_bytes=len(content),
+            document_uid=document_uid,
         )
+        if self.attachments_store:
+            now = _utcnow_dt()
+            try:
+                self.attachments_store.save(
+                    SessionAttachmentRecord(
+                        session_id=session.id,
+                        attachment_id=attachment_id,
+                        name=file.filename,
+                        summary_md=summary_md,
+                        mime=file.content_type,
+                        size_bytes=len(content),
+                        document_uid=document_uid,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+                logger.info(
+                    "[SESSIONS][ATTACH] Persisted summary for session=%s attachment=%s chars=%d",
+                    session.id,
+                    attachment_id,
+                    len(summary_md),
+                )
+            except Exception:
+                logger.exception(
+                    "[SESSIONS][ATTACH] Failed to persist attachment summary for session=%s attachment=%s",
+                    session.id,
+                    attachment_id,
+                )
 
         # 5) Return a minimal DTO for the UI
         return {

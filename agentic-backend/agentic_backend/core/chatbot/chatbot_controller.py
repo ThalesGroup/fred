@@ -470,9 +470,12 @@ def get_session_history(
 async def delete_session(
     session_id: str,
     user: KeycloakUser = Depends(get_current_user),
+    access_token: str = Security(oauth2_scheme),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> bool:
-    await session_orchestrator.delete_session(session_id, user)
+    await session_orchestrator.delete_session(
+        session_id, user, access_token=access_token
+    )
     return True
 
 
@@ -502,8 +505,12 @@ async def delete_file(
     session_id: str,
     attachment_id: str,
     user: KeycloakUser = Depends(get_current_user),
+    access_token: str = Security(oauth2_scheme),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> None:
     await session_orchestrator.delete_attachment(
-        user=user, session_id=session_id, attachment_id=attachment_id
+        user=user,
+        session_id=session_id,
+        attachment_id=attachment_id,
+        access_token=access_token,
     )

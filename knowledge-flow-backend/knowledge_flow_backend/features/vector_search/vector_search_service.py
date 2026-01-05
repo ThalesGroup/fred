@@ -150,7 +150,14 @@ class VectorSearchService:
 
     # ---------- private strategies -------------------------------------------
 
-    async def _semantic(self, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str]) -> List[VectorSearchHit]:
+    async def _semantic(
+        self,
+        question: str,
+        user: KeycloakUser,
+        k: int,
+        library_tags_ids: List[str],
+        metadata_terms_extra: Optional[dict[str, Any]] = None,
+    ) -> List[VectorSearchHit]:
         """
         Perform a semantic search using the ANN (Approximate Nearest Neighbors) strategy.
         This strategy relies purely on vector similarity.
@@ -166,6 +173,8 @@ class VectorSearchService:
             List[VectorSearchHit]: A list of VectorSearchHit objects containing the search results.
         """
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
+        if metadata_terms_extra:
+            metadata_terms.update(metadata_terms_extra)
 
         sf = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
 
@@ -243,7 +252,15 @@ class VectorSearchService:
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def search(
-        self, *, question: str, user: KeycloakUser, top_k: int = 10, document_library_tags_ids: Optional[List[str]] = None, policy_name: Optional[SearchPolicyName] = None
+        self,
+        *,
+        question: str,
+        user: KeycloakUser,
+        top_k: int = 10,
+        document_library_tags_ids: Optional[List[str]] = None,
+        policy_name: Optional[SearchPolicyName] = None,
+        session_id: Optional[str] = None,
+        include_session_scope: bool = True,
     ) -> List[VectorSearchHit]:
         """
         Args:
@@ -265,16 +282,66 @@ class VectorSearchService:
                 document_library_tags_ids = await self._all_document_library_tags_ids(user)
 
             policy_key = policy_name or SearchPolicyName.hybrid
-            if policy_key == SearchPolicyName.strict:
-                logger.info("[VECTOR][SEARCH] Using strict search policy")
-                return await self._strict(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+            corpus_hits: List[VectorSearchHit] = []
+            attachment_hits: List[VectorSearchHit] = []
 
+            # Attachment/session-scope query (semantic vector only), optional
+            if include_session_scope and session_id:
+                logger.info(
+                    "[VECTOR][SEARCH][ATTACH] session=%s user=%s policy=%s question=%r top_k=%d",
+                    session_id,
+                    user.uid,
+                    policy_key,
+                    question,
+                    top_k,
+                )
+                attachment_hits = await self._semantic(
+                    question=question,
+                    user=user,
+                    k=top_k,
+                    library_tags_ids=[],  # no tag filter for attachments
+                    metadata_terms_extra={
+                        "user_id": [user.uid],
+                        "session_id": [session_id],
+                        "scope": ["session"],
+                    },
+                )
+
+            # Corpus/library query
+            if policy_key == SearchPolicyName.strict:
+                logger.info(
+                    "[VECTOR][SEARCH][CORPUS] policy=strict tags=%s question=%r top_k=%d",
+                    document_library_tags_ids,
+                    question,
+                    top_k,
+                )
+                corpus_hits = await self._strict(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
             elif policy_key == SearchPolicyName.hybrid:
-                logger.info("[VECTOR][SEARCH] Using hybrid search policy")
-                return await self._hybrid(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+                logger.info(
+                    "[VECTOR][SEARCH][CORPUS] policy=hybrid tags=%s question=%r top_k=%d",
+                    document_library_tags_ids,
+                    question,
+                    top_k,
+                )
+                corpus_hits = await self._hybrid(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
             else:
-                logger.info("[VECTOR][SEARCH] Using semantic search policy (legacy)")
-                return await self._semantic(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+                logger.info(
+                    "[VECTOR][SEARCH][CORPUS] policy=semantic tags=%s question=%r top_k=%d",
+                    document_library_tags_ids,
+                    question,
+                    top_k,
+                )
+                corpus_hits = await self._semantic(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+
+            # Merge: prefer attachments first, then corpus to fill top_k
+            merged = (attachment_hits + corpus_hits)[:top_k]
+            logger.info(
+                "[VECTOR][SEARCH] merged results attachment=%d corpus=%d returned=%d",
+                len(attachment_hits),
+                len(corpus_hits),
+                len(merged),
+            )
+            return merged
 
         except TypeError as e:
             logger.error("[VECTOR][SEARCH]: %s", str(e))
