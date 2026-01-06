@@ -12,6 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/**
+ * UserInput
+ * ---------
+ * - Manages per-session input context (libraries/prompts/templates/policies/rag scope/deep search/agent).
+ * - Hydrates from backend session prefs, applies once per session, and persists only when state differs from last sent.
+ * - No local “dirty” caches; one PUT per change, followed by a refetch to keep UI consistent with backend.
+ * - Receives initial defaults from parent (for draft/no-session) but owns server-side prefs for active sessions.
+ */
+
 import AddIcon from "@mui/icons-material/Add";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import StopIcon from "@mui/icons-material/Stop";
@@ -165,6 +174,7 @@ export default function UserInput({
     semantic: t("search.semantic", "Semantic"),
     strict: t("search.strict", "Strict"),
   };
+  const defaultAgent = useMemo(() => (agents && agents.length > 0 ? agents[0] : undefined), [agents]);
 
   // User-facing setters
   const setLibs = (next: React.SetStateAction<string[]>) => {
@@ -239,6 +249,7 @@ export default function UserInput({
   const [hydratedSessionId, setHydratedSessionId] = useState<string | undefined>(undefined);
   const prevSessionIdRef = useRef<string | undefined>(undefined);
   const lastSentJson = useRef<string>("");
+  const forcePersistRef = useRef<boolean>(false);
 
   // 1. Master Effect: Handle Session Switching & Hydration
   useEffect(() => {
@@ -265,15 +276,21 @@ export default function UserInput({
     // Apply server prefs once per session
     if (currentId && hydratedSessionId !== currentId && serverPrefs) {
       const p = (serverPrefs as PersistedCtx & { agent_name?: string }) || {};
-      setSelectedDocumentLibrariesIdsState(p.documentLibraryIds ?? initialDocumentLibraryIds ?? []);
-      setSelectedPromptResourceIdsState(p.promptResourceIds ?? initialPromptResourceIds ?? []);
-      setSelectedTemplateResourceIdsState(p.templateResourceIds ?? initialTemplateResourceIds ?? []);
-      setSelectedSearchPolicyNameState(p.searchPolicy ?? initialSearchPolicy);
-      setSearchRagScopeState(p.searchRagScope ?? initialSearchRagScope ?? defaultRagScope);
-      setDeepSearchEnabledState(p.deepSearch ?? initialDeepSearch ?? false);
-      if (p.agent_name && p.agent_name !== currentAgent?.name) {
-        const found = agents.find((a) => a.name === p.agent_name);
-        if (found) onSelectNewAgent(found);
+      const isEmptyPrefs = Object.keys(p || {}).length === 0;
+      setSelectedDocumentLibrariesIdsState(
+        p.documentLibraryIds ?? initialDocumentLibraryIds ?? selectedDocumentLibrariesIds,
+      );
+      setSelectedPromptResourceIdsState(p.promptResourceIds ?? initialPromptResourceIds ?? selectedPromptResourceIds);
+      setSelectedTemplateResourceIdsState(p.templateResourceIds ?? initialTemplateResourceIds ?? selectedTemplateResourceIds);
+      setSelectedSearchPolicyNameState(p.searchPolicy ?? selectedSearchPolicyName);
+      setSearchRagScopeState(p.searchRagScope ?? searchRagScope);
+      setDeepSearchEnabledState(p.deepSearch ?? deepSearchEnabled);
+      const desiredAgentName = p.agent_name ?? currentAgent?.name ?? defaultAgent?.name;
+      if (desiredAgentName) {
+        const found = agents.find((a) => a.name === desiredAgentName) ?? defaultAgent;
+        if (found && found.name !== currentAgent?.name) {
+          onSelectNewAgent(found);
+        }
       }
       const json = serializePrefs({
         documentLibraryIds: p.documentLibraryIds ?? initialDocumentLibraryIds ?? [],
@@ -282,9 +299,10 @@ export default function UserInput({
         searchPolicy: p.searchPolicy ?? initialSearchPolicy,
         searchRagScope: p.searchRagScope ?? initialSearchRagScope ?? defaultRagScope,
         deepSearch: p.deepSearch ?? initialDeepSearch ?? false,
-        agent_name: p.agent_name ?? currentAgent?.name,
+        agent_name: p.agent_name ?? currentAgent?.name ?? defaultAgent?.name,
       });
-      lastSentJson.current = json;
+      forcePersistRef.current = isEmptyPrefs;
+      lastSentJson.current = isEmptyPrefs ? "" : json;
       setHydratedSessionId(currentId);
       console.log("[PREFS] applied server prefs", { currentId, prefs: p });
     }
@@ -316,13 +334,14 @@ export default function UserInput({
       searchPolicy: selectedSearchPolicyName,
       searchRagScope: supportsRagScopeSelection ? searchRagScope : undefined,
       deepSearch: supportsDeepSearchSelection ? deepSearchEnabled : undefined,
-      agent_name: currentAgent?.name,
+      agent_name: currentAgent?.name ?? defaultAgent?.name,
     };
 
     const serialized = serializePrefs(prefs);
-    if (serialized === lastSentJson.current) return;
+    if (serialized === lastSentJson.current && !forcePersistRef.current) return;
 
     lastSentJson.current = serialized;
+    forcePersistRef.current = false;
     console.log("[PREFS] persisting to backend", { session: attachmentSessionId, prefs });
     persistPrefs({
       sessionId: attachmentSessionId,
