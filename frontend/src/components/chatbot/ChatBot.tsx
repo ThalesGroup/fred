@@ -22,7 +22,7 @@
  */
 
 import { Box, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
@@ -354,7 +354,6 @@ const ChatBot = ({
     const id = currentChatBotSession?.id;
 
     if (!id) {
-      // Brand new draft session: clear messages and show welcome.
       messagesRef.current = [];
       setAllMessages([]);
       setIsHistoryLoading(false);
@@ -367,20 +366,18 @@ const ChatBot = ({
       const sortedExisting = sortMessages(existingForSession);
       messagesRef.current = sortedExisting;
       setAllMessages(sortedExisting);
+    } else {
+      // No cache for this session: clear messages to avoid showing previous session's conversation
+      messagesRef.current = [];
+      setAllMessages([]);
     }
+
     fetchHistory({ sessionId: id })
       .unwrap()
       .then((serverMessages) => {
-        console.group(`[CHATBOT] Loaded messages for session: ${id}`);
-        console.debug(`Total: ${serverMessages.length}`);
-        for (const msg of serverMessages) console.log(msg);
-        console.groupEnd();
-
         const sorted = sortMessages(serverMessages);
         messagesRef.current = sorted;
-        setAllMessages(sorted); // layout effect will scroll
-        // NEW — If this is the first time we "see" this id, bind draft now.
-        console.debug("[CHATBOT] Binding draft agent to session id from history load:", id);
+        setAllMessages(sorted);
         onBindDraftAgentToSessionId?.(id);
         setIsHistoryLoading(false);
       })
@@ -426,20 +423,20 @@ const ChatBot = ({
         : initialCtx;
 
   const initialDocumentLibraryIds = isDraft
-    ? userInputContext?.documentLibraryIds ?? initialCtx.documentLibraryIds
+    ? (userInputContext?.documentLibraryIds ?? initialCtx.documentLibraryIds)
     : basePrefs.documentLibraryIds;
   const initialPromptResourceIds = isDraft
-    ? userInputContext?.promptResourceIds ?? initialCtx.promptResourceIds
+    ? (userInputContext?.promptResourceIds ?? initialCtx.promptResourceIds)
     : basePrefs.promptResourceIds;
   const initialTemplateResourceIds = isDraft
-    ? userInputContext?.templateResourceIds ?? initialCtx.templateResourceIds
+    ? (userInputContext?.templateResourceIds ?? initialCtx.templateResourceIds)
     : basePrefs.templateResourceIds;
   const initialSearchPolicy = isDraft
-    ? userInputContext?.searchPolicy ?? initialCtx.searchPolicy ?? "semantic"
-    : basePrefs.searchPolicy ?? "semantic";
+    ? (userInputContext?.searchPolicy ?? initialCtx.searchPolicy ?? "semantic")
+    : (basePrefs.searchPolicy ?? "semantic");
   const initialSearchRagScope = isDraft
-    ? userInputContext?.searchRagScope ?? initialCtx.searchRagScope ?? undefined
-    : basePrefs.searchRagScope ?? undefined;
+    ? (userInputContext?.searchRagScope ?? initialCtx.searchRagScope ?? undefined)
+    : (basePrefs.searchRagScope ?? undefined);
   const initialDeepSearch = isDraft
     ? typeof userInputContext?.deepSearch === "boolean"
       ? userInputContext.deepSearch
