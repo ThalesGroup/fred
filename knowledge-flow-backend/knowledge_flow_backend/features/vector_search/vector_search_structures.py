@@ -72,6 +72,14 @@ class SearchRequest(BaseModel):
         default=None,
         description="Optional search policy preset. If omitted, defaults to 'hybrid'.",
     )
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Optional chat session id to include session-scoped attachments (user/session filtered).",
+    )
+    include_session_scope: bool = Field(
+        default=True,
+        description="If true and session_id is provided, also search session-scoped attachment vectors (filtered by user/session).",
+    )
 
 
 class RerankRequest(BaseModel):

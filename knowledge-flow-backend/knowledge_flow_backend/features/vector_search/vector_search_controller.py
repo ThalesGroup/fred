@@ -67,7 +67,13 @@ class VectorSearchController:
         ) -> List[VectorSearchHit]:
             try:
                 hits = await self.service.search(
-                    question=request.question, user=user, top_k=request.top_k, document_library_tags_ids=request.document_library_tags_ids, policy_name=request.search_policy
+                    question=request.question,
+                    user=user,
+                    top_k=request.top_k,
+                    document_library_tags_ids=request.document_library_tags_ids,
+                    policy_name=request.search_policy,
+                    session_id=request.session_id,
+                    include_session_scope=request.include_session_scope,
                 )
                 return hits
             except Exception as e:

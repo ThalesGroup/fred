@@ -222,6 +222,10 @@ storage:
     type: "opensearch"
     index: session-index
 
+  attachments_store:
+    type: "postgres"
+    table: session_attachments
+
   history_store:
     type: "opensearch"
     index: history-index

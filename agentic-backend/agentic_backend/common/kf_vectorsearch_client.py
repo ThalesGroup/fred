@@ -49,6 +49,8 @@ class VectorSearchClient(KfBaseClient):
         top_k: int = 10,
         document_library_tags_ids: Optional[Sequence[str]] = None,
         search_policy: Optional[str] = None,
+        session_id: Optional[str] = None,
+        include_session_scope: bool = True,
     ) -> List[VectorSearchHit]:
         """
         Perform a vector search against the Knowledge Flow backend. This method
@@ -68,6 +70,9 @@ class VectorSearchClient(KfBaseClient):
             payload["document_library_tags_ids"] = list(document_library_tags_ids)
         if search_policy:
             payload["search_policy"] = search_policy
+        if session_id:
+            payload["session_id"] = session_id
+            payload["include_session_scope"] = include_session_scope
 
         # Use the base class's request method, passing the required access_token.
         # This will handle token refresh if needed. The required refresh token

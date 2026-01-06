@@ -76,7 +76,13 @@ from agentic_backend.core.mcp.store.postgres_mcp_server_store import (
 )
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.monitoring.postgres_history_store import PostgresHistoryStore
+from agentic_backend.core.session.stores.base_session_attachment_store import (
+    BaseSessionAttachmentStore,
+)
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
+from agentic_backend.core.session.stores.postgres_session_attachment_store import (
+    PostgresSessionAttachmentStore,
+)
 from agentic_backend.core.session.stores.postgres_session_store import (
     PostgresSessionStore,
 )
@@ -135,6 +141,10 @@ def get_configuration() -> Configuration:
 
 def get_session_store() -> BaseSessionStore:
     return get_app_context().get_session_store()
+
+
+def get_session_attachment_store() -> Optional[BaseSessionAttachmentStore]:
+    return get_app_context().get_session_attachment_store()
 
 
 def get_mcp_configuration() -> McpConfiguration:
@@ -276,6 +286,7 @@ class ApplicationContext:
     _mcp_server_store_instance: Optional[BaseMcpServerStore] = None
     _mcp_server_manager: Optional[McpServerManager] = None
     _session_store_instance: Optional[BaseSessionStore] = None
+    _session_attachment_store_instance: Optional[BaseSessionAttachmentStore] = None
     _history_store_instance: Optional[BaseHistoryStore] = None
     _kpi_store_instance: Optional[BaseKPIStore] = None
     _log_store_instance: Optional[BaseLogStore] = None
@@ -424,6 +435,38 @@ class ApplicationContext:
             )
         else:
             raise ValueError("Unsupported sessions storage backend")
+
+    def get_session_attachment_store(self) -> Optional[BaseSessionAttachmentStore]:
+        """
+        Optional persistence for session attachment summaries.
+        Defaults to the same backend as the session store when compatible.
+        """
+        if self._session_attachment_store_instance is not None:
+            return self._session_attachment_store_instance
+
+        storage_cfg = get_configuration().storage
+        store_config = storage_cfg.attachments_store or storage_cfg.session_store
+
+        if isinstance(store_config, PostgresTableConfig):
+            engine = create_engine_from_config(storage_cfg.postgres)
+            table_name = (
+                store_config.table
+                if storage_cfg.attachments_store is not None
+                else f"{store_config.table}_attachments"
+            )
+            self._session_attachment_store_instance = PostgresSessionAttachmentStore(
+                engine=engine,
+                table_name=table_name,
+                prefix=store_config.prefix or "",
+            )
+            return self._session_attachment_store_instance
+
+        logger.info(
+            "[SESSIONS] Attachment persistence is disabled for backend=%s.",
+            store_config.type,
+        )
+        self._session_attachment_store_instance = None
+        return None
 
     def get_log_store(self) -> BaseLogStore:
         """

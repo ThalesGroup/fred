@@ -143,6 +143,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/chatbot/session/${queryArg.sessionId}/history` }),
     }),
+    getSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGet: build.query<
+      GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiResponse,
+      GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/chatbot/session/${queryArg.sessionId}/preferences` }),
+    }),
+    updateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPut: build.mutation<
+      UpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutApiResponse,
+      UpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/session/${queryArg.sessionId}/preferences`,
+        method: "PUT",
+        body: queryArg.sessionPreferencesPayload,
+      }),
+    }),
     deleteSessionAgenticV1ChatbotSessionSessionIdDelete: build.mutation<
       DeleteSessionAgenticV1ChatbotSessionSessionIdDeleteApiResponse,
       DeleteSessionAgenticV1ChatbotSessionSessionIdDeleteApiArg
@@ -309,6 +325,21 @@ export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiRespon
   /** status 200 Successful Response */ ChatMessage2[];
 export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiArg = {
   sessionId: string;
+};
+export type GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiArg = {
+  sessionId: string;
+};
+export type UpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type UpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutApiArg = {
+  sessionId: string;
+  sessionPreferencesPayload: SessionPreferencesPayload;
 };
 export type DeleteSessionAgenticV1ChatbotSessionSessionIdDeleteApiResponse =
   /** status 200 Successful Response */ boolean;
@@ -611,6 +642,7 @@ export type VectorSearchHit = {
 };
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "cancelled" | "other";
 export type RuntimeContext = {
+  session_id?: string | null;
   selected_document_libraries_ids?: string[] | null;
   selected_chat_context_ids?: string[] | null;
   search_policy?: string | null;
@@ -681,8 +713,12 @@ export type StreamEvent = {
 export type SessionSchema = {
   id: string;
   user_id: string;
+  agent_name?: string | null;
   title: string;
   updated_at: string;
+  preferences?: {
+    [key: string]: any;
+  } | null;
 };
 export type FinalEvent = {
   type?: "final";
@@ -701,8 +737,12 @@ export type AttachmentRef = {
 export type SessionWithFiles = {
   id: string;
   user_id: string;
+  agent_name?: string | null;
   title: string;
   updated_at: string;
+  preferences?: {
+    [key: string]: any;
+  } | null;
   file_names?: string[];
   attachments?: AttachmentRef[];
 };
@@ -854,6 +894,11 @@ export type ChatMessage2 = {
   )[];
   metadata?: ChatMetadata;
 };
+export type SessionPreferencesPayload = {
+  preferences?: {
+    [key: string]: any;
+  };
+};
 export type BodyUploadFileAgenticV1ChatbotUploadPost = {
   session_id: string;
   file: Blob;
@@ -941,6 +986,9 @@ export const {
   useLazyGetSessionsAgenticV1ChatbotSessionsGetQuery,
   useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
+  useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
+  useLazyGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
+  useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
   useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation,

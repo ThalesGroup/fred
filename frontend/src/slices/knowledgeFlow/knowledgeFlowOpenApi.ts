@@ -325,6 +325,28 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    lightweightIngestKnowledgeFlowV1LiteIngestPost: build.mutation<
+      LightweightIngestKnowledgeFlowV1LiteIngestPostApiResponse,
+      LightweightIngestKnowledgeFlowV1LiteIngestPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/lite/ingest`,
+        method: "POST",
+        body: queryArg.bodyLightweightIngestKnowledgeFlowV1LiteIngestPost,
+      }),
+    }),
+    deleteLiteIngestKnowledgeFlowV1LiteIngestDocumentUidDelete: build.mutation<
+      DeleteLiteIngestKnowledgeFlowV1LiteIngestDocumentUidDeleteApiResponse,
+      DeleteLiteIngestKnowledgeFlowV1LiteIngestDocumentUidDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/lite/ingest/${queryArg.documentUid}`,
+        method: "DELETE",
+        params: {
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
     listAllTagsKnowledgeFlowV1TagsGet: build.query<
       ListAllTagsKnowledgeFlowV1TagsGetApiResponse,
       ListAllTagsKnowledgeFlowV1TagsGetApiArg
@@ -952,6 +974,17 @@ export type LightweightMarkdownKnowledgeFlowV1LiteMarkdownPostApiArg = {
   format?: string;
   bodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost: BodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost;
 };
+export type LightweightIngestKnowledgeFlowV1LiteIngestPostApiResponse = /** status 200 Successful Response */ any;
+export type LightweightIngestKnowledgeFlowV1LiteIngestPostApiArg = {
+  bodyLightweightIngestKnowledgeFlowV1LiteIngestPost: BodyLightweightIngestKnowledgeFlowV1LiteIngestPost;
+};
+export type DeleteLiteIngestKnowledgeFlowV1LiteIngestDocumentUidDeleteApiResponse =
+  /** status 200 Successful Response */ any;
+export type DeleteLiteIngestKnowledgeFlowV1LiteIngestDocumentUidDeleteApiArg = {
+  documentUid: string;
+  /** Optional session_id for scoped cleanup */
+  sessionId?: string | null;
+};
 export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithItemsId[];
 export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
   /** Filter by tag type */
@@ -1576,6 +1609,15 @@ export type BodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost = {
   /** JSON string of LiteMarkdownOptions */
   options_json?: string | null;
 };
+export type BodyLightweightIngestKnowledgeFlowV1LiteIngestPost = {
+  file: Blob;
+  /** JSON string of LiteMarkdownOptions */
+  options_json?: string | null;
+  /** Optional chat session id for scoping */
+  session_id?: string | null;
+  /** Logical scope label, default 'session' */
+  scope?: string;
+};
 export type TagType = "document" | "prompt" | "template" | "chat-context";
 export type TagWithItemsId = {
   id: string;
@@ -1697,6 +1739,10 @@ export type SearchRequest = {
   document_library_tags_ids?: string[] | null;
   /** Optional search policy preset. If omitted, defaults to 'hybrid'. */
   search_policy?: SearchPolicyName | null;
+  /** Optional chat session id to include session-scoped attachments (user/session filtered). */
+  session_id?: string | null;
+  /** If true and session_id is provided, also search session-scoped attachment vectors (filtered by user/session). */
+  include_session_scope?: boolean;
 };
 export type RerankRequest = {
   question: string;
@@ -2082,6 +2128,8 @@ export const {
   useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
   useLightweightMarkdownKnowledgeFlowV1LiteMarkdownPostMutation,
+  useLightweightIngestKnowledgeFlowV1LiteIngestPostMutation,
+  useDeleteLiteIngestKnowledgeFlowV1LiteIngestDocumentUidDeleteMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,

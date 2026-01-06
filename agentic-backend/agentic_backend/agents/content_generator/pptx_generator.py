@@ -413,11 +413,18 @@ class Sloan(AgentFlow):
             search_policy = get_search_policy(self.get_runtime_context())
             top_k = self.get_tuned_int("rag.top_k", default=6)
 
+            runtime_ctx = self.get_runtime_context()
+            if not runtime_ctx or not runtime_ctx.session_id:
+                raise RuntimeError(
+                    "Runtime context missing session_id; required for scoped retrieval."
+                )
             hits: List[VectorSearchHit] = self.search_client.search(
                 question=question,
                 top_k=top_k,
                 document_library_tags_ids=doc_tag_ids,
                 search_policy=search_policy,
+                session_id=runtime_ctx.session_id,
+                include_session_scope=True,
             )
 
             if not hits:

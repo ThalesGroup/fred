@@ -67,6 +67,7 @@ def _mk_orchestrator(minimal_generalist_config: Configuration):
     orch = SessionOrchestrator(
         configuration=minimal_generalist_config,
         session_store=session_store,
+        attachments_store=None,
         agent_factory=NoOpAgentFactory(),
         history_store=NoOpHistoryStore(),
         kpi=NoOpKPIWriter(),
@@ -582,6 +583,7 @@ def test_sample_from_prompt_checks(minimal_generalist_config, app_context, monke
     orch = SessionOrchestrator(
         configuration=minimal_generalist_config,
         session_store=session_store,
+        attachments_store=None,
         agent_factory=NoOpAgentFactory(),
         history_store=NoOpHistoryStore(),
         kpi=NoOpKPIWriter(),

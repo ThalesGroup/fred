@@ -12,13 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/**
+ * ChatBot
+ * -------
+ * - Owns the conversation view (welcome vs. messages) and message history loading.
+ * - Uses `useInitialChatInputContext` to supply draft (pre-session) defaults to the input area.
+ * - Delegates per-session preference hydration/persistence to `UserInput`.
+ * - Avoids flicker on session switch by keeping messages while history loads; welcome shows only when truly empty.
+ */
+
 import { Box, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
 import { getConfig } from "../../common/config.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
+import { useInitialChatInputContext } from "../../hooks/useInitialChatInputContext.ts";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import {
   ChatAskInput,
@@ -139,6 +149,9 @@ const ChatBot = ({
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState<boolean>(false);
+  const seedPrefsRef = useRef<any>(null);
+  const seedSessionIdRef = useRef<string | null>(null);
 
   // keep state + ref in sync
   const setAllMessages = (msgs: ChatMessage[]) => {
@@ -147,6 +160,7 @@ const ChatBot = ({
   };
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
+  const defaultAgent = useMemo(() => (agents && agents.length > 0 ? agents[0] : undefined), [agents]);
   const stopStreaming = () => {
     const socket = webSocketRef.current;
     if (!socket) {
@@ -213,7 +227,7 @@ const ChatBot = ({
       wsTokenRef.current = token || null; // mémo pour détection simple de changement
 
       socket.onopen = () => {
-        console.log("[✅ ChatBot] WebSocket connected");
+        console.log("[CHATBOT] WebSocket connected");
         webSocketRef.current = socket;
         setWebSocket(socket);
         resolve(socket);
@@ -248,7 +262,7 @@ const ChatBot = ({
               const finalKeys = new Set(finalEvent.messages.map((m) => keyOf(m)));
               const missing = [...finalKeys].filter((k) => !streamedKeys.has(k));
               const unexpected = [...streamedKeys].filter((k) => !finalKeys.has(k));
-              console.log("[FINAL EVENT SUMMARY]", { missing, unexpected });
+              console.debug("[CHATBOT] Final event summary", { missing, unexpected });
 
               // Merge authoritative finals (includes citations/metadata)
               messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
@@ -256,7 +270,7 @@ const ChatBot = ({
 
               const sid = finalEvent.session.id;
               if (sid) {
-                console.log("[🔗 ChatBot] Binding draft agent to session id from final event:", sid);
+                console.debug("[CHATBOT] Binding draft agent to session id from final event:", sid);
                 onBindDraftAgentToSessionId?.(sid);
               }
               // Accept session update if backend created/switched it
@@ -342,15 +356,18 @@ const ChatBot = ({
     if (!id) {
       messagesRef.current = [];
       setAllMessages([]);
+      setIsHistoryLoading(false);
       return;
     }
 
+    setIsHistoryLoading(true);
     const existingForSession = messagesRef.current.filter((msg) => msg.session_id === id);
     if (existingForSession.length > 0) {
       const sortedExisting = sortMessages(existingForSession);
       messagesRef.current = sortedExisting;
       setAllMessages(sortedExisting);
-    } else if (messagesRef.current.length > 0) {
+    } else {
+      // No cache for this session: clear messages to avoid showing previous session's conversation
       messagesRef.current = [];
       setAllMessages([]);
     }
@@ -358,115 +375,111 @@ const ChatBot = ({
     fetchHistory({ sessionId: id })
       .unwrap()
       .then((serverMessages) => {
-        console.group(`[📥 ChatBot] Loaded messages for session: ${id}`);
-        console.log(`Total: ${serverMessages.length}`);
-        for (const msg of serverMessages) console.log(msg);
-        console.groupEnd();
-
         const sorted = sortMessages(serverMessages);
         messagesRef.current = sorted;
-        setAllMessages(sorted); // layout effect will scroll
-        // NEW — If this is the first time we "see" this id, bind draft now.
-        console.log("[🔗 ChatBot] Binding draft agent to session id from history load:", id);
+        setAllMessages(sorted);
         onBindDraftAgentToSessionId?.(id);
+        setIsHistoryLoading(false);
       })
       .catch((e) => {
-        console.error("[❌ ChatBot] Failed to load messages:", e);
+        console.error("[CHATBOT] Failed to load messages:", e);
+        setAllMessages([]);
+        setIsHistoryLoading(false);
       });
   }, [currentChatBotSession?.id, fetchHistory]);
 
-  // Chat knowledge persistance
-  const storageKey = useMemo(() => {
-    const uid = KeyCloakService.GetUserId?.() || "anon";
-    const agent = currentAgent?.name || "default";
-    return `chatctx:${uid}:${agent}`;
-  }, [currentAgent?.name]);
-
-  // Init values (réhydratation)
-  const [initialCtx, setInitialCtx] = useState<{
-    documentLibraryIds: string[];
-    promptResourceIds: string[];
-    templateResourceIds: string[];
-    searchRagScope?: "corpus_only" | "hybrid" | "general_only";
-    deepSearch?: boolean;
-  }>({
-    documentLibraryIds: [],
-    promptResourceIds: [],
-    templateResourceIds: [],
-    searchRagScope: undefined,
-    deepSearch: undefined,
-  });
-
-  // load from local storage
-  // Load defaults for a brand-new convo (no session yet). These act as initial* props for UserInput.
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setInitialCtx({
-          documentLibraryIds: parsed.documentLibraryIds ?? [],
-          promptResourceIds: parsed.promptResourceIds ?? [],
-          templateResourceIds: parsed.templateResourceIds ?? [],
-          searchRagScope: parsed.searchRagScope,
-          deepSearch: parsed.deepSearch,
-        });
-      } else {
-        setInitialCtx({
-          documentLibraryIds: [],
-          promptResourceIds: [],
-          templateResourceIds: [],
-          searchRagScope: undefined,
-          deepSearch: undefined,
-        });
-      }
-    } catch (e) {
-      console.warn("Local context load failed:", e);
-    }
-  }, [storageKey]);
-
   const [userInputContext, setUserInputContext] = useState<any>(null);
-  const initialDocumentLibraryIds =
-    userInputContext?.documentLibraryIds ?? initialCtx.documentLibraryIds;
-  const initialPromptResourceIds =
-    userInputContext?.promptResourceIds ?? initialCtx.promptResourceIds;
-  const initialTemplateResourceIds =
-    userInputContext?.templateResourceIds ?? initialCtx.templateResourceIds;
-  const initialSearchPolicy =
-    userInputContext?.searchPolicy ?? "semantic";
-  const initialSearchRagScope =
-    userInputContext?.searchRagScope ?? initialCtx.searchRagScope ?? undefined;
-  const initialDeepSearch =
-    typeof userInputContext?.deepSearch === "boolean" ? userInputContext.deepSearch : initialCtx.deepSearch;
+  const handleDraftContextChange = useCallback(
+    (ctx: any) => {
+      // Only track draft context when there is no active session.
+      if (!currentChatBotSession?.id) {
+        setUserInputContext(ctx);
+      }
+    },
+    [currentChatBotSession?.id],
+  );
 
-  // IMPORTANT:
-  // Save per-agent defaults *only before a session exists* (pre-session seeding).
-  // Once a session exists, UserInput persists per-session selections itself.
+  // Draft defaults (pre-session) are handled by a shared hook; once a session exists, per-session prefs come from UserInput.
+  const { prefs: initialCtx, resetToDefaults } = useInitialChatInputContext(
+    currentAgent?.name || "default",
+    currentChatBotSession?.id,
+  );
+
+  const lastSessionIdRef = useRef<string | undefined>(undefined);
+  const isDraft = !currentChatBotSession?.id;
+  const isFreshSessionFromDraft = !!currentChatBotSession?.id && !lastSessionIdRef.current;
+  const isSeededSession =
+    !!currentChatBotSession?.id && seedSessionIdRef.current === currentChatBotSession.id && seedPrefsRef.current;
+
+  // Decide which baseline prefs to pass:
+  // - Draft/welcome: use current draft selections if any, else stored defaults.
+  // - Newly created session (from draft): seed with draft selections.
+  // - Other sessions: use stored defaults; per-session prefs hydrate in UserInput.
+  const basePrefs =
+    isDraft || isFreshSessionFromDraft
+      ? userInputContext || initialCtx
+      : isSeededSession
+        ? seedPrefsRef.current || initialCtx
+        : initialCtx;
+
+  const initialDocumentLibraryIds = isDraft
+    ? (userInputContext?.documentLibraryIds ?? initialCtx.documentLibraryIds)
+    : basePrefs.documentLibraryIds;
+  const initialPromptResourceIds = isDraft
+    ? (userInputContext?.promptResourceIds ?? initialCtx.promptResourceIds)
+    : basePrefs.promptResourceIds;
+  const initialTemplateResourceIds = isDraft
+    ? (userInputContext?.templateResourceIds ?? initialCtx.templateResourceIds)
+    : basePrefs.templateResourceIds;
+  const initialSearchPolicy = isDraft
+    ? (userInputContext?.searchPolicy ?? initialCtx.searchPolicy ?? "semantic")
+    : (basePrefs.searchPolicy ?? "semantic");
+  const initialSearchRagScope = isDraft
+    ? (userInputContext?.searchRagScope ?? initialCtx.searchRagScope ?? undefined)
+    : (basePrefs.searchRagScope ?? undefined);
+  const initialDeepSearch = isDraft
+    ? typeof userInputContext?.deepSearch === "boolean"
+      ? userInputContext.deepSearch
+      : initialCtx.deepSearch
+    : basePrefs.deepSearch;
+
+  // Track session transitions: seed prefs when creating a session from draft; reset draft on return to welcome; clear seed when switching.
   useEffect(() => {
-    if (!userInputContext) return;
-    const sessionId = pendingSessionIdRef.current || currentChatBotSession?.id;
-    if (sessionId) return; // session exists -> do NOT save per-agent defaults here
+    const prev = lastSessionIdRef.current;
+    const curr = currentChatBotSession?.id;
 
-    try {
-      const payload = {
-        documentLibraryIds: userInputContext.documentLibraryIds ?? [],
-        promptResourceIds: userInputContext.promptResourceIds ?? [],
-        templateResourceIds: userInputContext.templateResourceIds ?? [],
-        searchRagScope: userInputContext.searchRagScope,
-        deepSearch: userInputContext.deepSearch,
-      };
-      localStorage.setItem(storageKey, JSON.stringify(payload));
-    } catch (e) {
-      console.warn("Local context save failed:", e);
+    // Draft -> first session: capture draft prefs to seed this session, then clear draft context.
+    if (!prev && curr) {
+      seedPrefsRef.current = userInputContext || initialCtx;
+      seedSessionIdRef.current = curr;
+      setUserInputContext(null);
     }
+
+    if (prev && !curr) {
+      // Returning to welcome: reset draft prefs and agent to deterministic default.
+      resetToDefaults();
+      if (defaultAgent && currentAgent?.name !== defaultAgent.name) {
+        onSelectNewAgent(defaultAgent);
+      }
+      seedPrefsRef.current = null;
+      seedSessionIdRef.current = null;
+      setUserInputContext(null);
+    } else if (prev && curr && prev !== curr) {
+      // Switching between existing sessions: clear transient draft/seed context to avoid bleed.
+      seedPrefsRef.current = null;
+      seedSessionIdRef.current = null;
+      setUserInputContext(null);
+    }
+
+    lastSessionIdRef.current = curr;
   }, [
-    userInputContext?.documentLibraryIds,
-    userInputContext?.promptResourceIds,
-    userInputContext?.templateResourceIds,
-    userInputContext?.searchRagScope,
-    userInputContext?.deepSearch,
-    storageKey,
-    currentChatBotSession?.id, // guard: only save when undefined
+    currentChatBotSession?.id,
+    defaultAgent,
+    currentAgent?.name,
+    onSelectNewAgent,
+    resetToDefaults,
+    userInputContext,
+    initialCtx,
   ]);
 
   // Handle user input (text/audio)
@@ -542,7 +555,7 @@ const ChatBot = ({
             : typeof detail === "object" && detail
               ? detail.message || detail.upstream || detail.code || JSON.stringify(detail)
               : (err as Error)?.message || "Unknown error";
-        console.error("❌ File upload failed:", err);
+        console.error("[CHATBOT] File upload failed:", err);
         showError({ summary: "File Upload Error", detail: `Failed to upload ${file.name}: ${errMsg}` });
       } finally {
         setUploadingFiles((prev) => prev.filter((n) => n !== file.name));
@@ -556,7 +569,7 @@ const ChatBot = ({
    * The server streams the authoritative user message first.
    */
   const queryChatBot = async (input: string, agent?: AnyAgent, runtimeContext?: RuntimeContext) => {
-    console.log(`[📤 ChatBot] Sending message: ${input}`);
+    console.debug(`[CHATBOT] Sending message: ${input}`);
     // Get tokens for backend use. This proacively allows the backend to perform
     // user-authenticated operations (e.g., vector search) on behalf of the user.
     // The backend is then responsible for refreshing tokens as needed. Which will rarely be needed
@@ -583,12 +596,12 @@ const ChatBot = ({
       if (socket && socket.readyState === WebSocket.OPEN) {
         setWaitResponse(true);
         socket.send(JSON.stringify(event));
-        console.log("[📤 ChatBot] Sent message:", event);
+        console.debug("[CHATBOT] Sent message:", event);
       } else {
         throw new Error("WebSocket not open");
       }
     } catch (err) {
-      console.error("[❌ ChatBot] Failed to send message:", err);
+      console.error("[CHATBOT] Failed to send message:", err);
       showError({ summary: "Connection Error", detail: "Could not send your message — connection failed." });
       setWaitResponse(false);
     }
@@ -599,7 +612,6 @@ const ChatBot = ({
     if (!currentChatBotSession && isCreatingNewConversation) {
       setAllMessages([]);
     }
-    console.log("isCreatingNewConversation", isCreatingNewConversation);
   }, [isCreatingNewConversation, currentChatBotSession]);
 
   const outputTokenCounts: number =
@@ -613,7 +625,7 @@ const ChatBot = ({
       : 0;
   // After your state declarations
   const effectiveSessionId = pendingSessionIdRef.current || currentChatBotSession?.id || undefined;
-  const showWelcome = !waitResponse && (isCreatingNewConversation || messages.length === 0);
+  const showWelcome = !waitResponse && !isHistoryLoading && (!currentChatBotSession?.id || messages.length === 0);
 
   const hasContext =
     !!userInputContext &&
@@ -696,7 +708,7 @@ const ChatBot = ({
                 isWaiting={waitResponse}
                 onSend={handleSend}
                 onStop={stopStreaming}
-                onContextChange={setUserInputContext}
+                onContextChange={handleDraftContextChange}
                 sessionId={currentChatBotSession?.id}
                 effectiveSessionId={effectiveSessionId}
                 uploadingFiles={uploadingFiles}
@@ -757,7 +769,7 @@ const ChatBot = ({
                 isWaiting={waitResponse}
                 onSend={handleSend}
                 onStop={stopStreaming}
-                onContextChange={setUserInputContext}
+                onContextChange={handleDraftContextChange}
                 sessionId={currentChatBotSession?.id}
                 effectiveSessionId={effectiveSessionId}
                 uploadingFiles={uploadingFiles}
