@@ -462,6 +462,39 @@ def get_session_history(
     return session_orchestrator.get_session_history(session_id, user)
 
 
+class SessionPreferencesPayload(BaseModel):
+    preferences: dict = {}
+
+
+@router.get(
+    "/chatbot/session/{session_id}/preferences",
+    response_model=dict,
+    tags=["Chatbot"],
+)
+def get_session_preferences(
+    session_id: str,
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+    user: KeycloakUser = Depends(get_current_user),
+):
+    return session_orchestrator.get_session_preferences(session_id, user)
+
+
+@router.put(
+    "/chatbot/session/{session_id}/preferences",
+    response_model=dict,
+    tags=["Chatbot"],
+)
+def update_session_preferences(
+    session_id: str,
+    payload: SessionPreferencesPayload,
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+    user: KeycloakUser = Depends(get_current_user),
+):
+    return session_orchestrator.update_session_preferences(
+        session_id, user, payload.preferences
+    )
+
+
 @router.delete(
     "/chatbot/session/{session_id}",
     description="Delete a chatbot session.",

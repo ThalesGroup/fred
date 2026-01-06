@@ -21,7 +21,7 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Awaitable, Callable, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
@@ -331,6 +331,60 @@ class SessionOrchestrator:
     ) -> List[ChatMessage]:
         self._authorize_user_action_on_session(session_id, user, Action.READ)
         return self.history_store.get(session_id) or []
+
+    @authorize(action=Action.READ, resource=Resource.SESSIONS)
+    def get_session_preferences(
+        self, session_id: str, user: KeycloakUser
+    ) -> Dict[str, Any]:
+        """Return stored per-session preferences, if any."""
+        self._authorize_user_action_on_session(session_id, user, Action.READ)
+        session = self.session_store.get(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "session_not_found",
+                    "message": f"Session {session_id} not found.",
+                },
+            )
+        logger.info(
+            "[SESSIONS][PREFS] Retrieved preferences for session=%s user=%s prefs=%s",
+            session_id,
+            user.uid,
+            session.preferences,
+        )
+        return session.preferences or {}
+
+    @authorize(action=Action.UPDATE, resource=Resource.SESSIONS)
+    def update_session_preferences(
+        self, session_id: str, user: KeycloakUser, preferences: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Replace the stored preferences blob for a session."""
+        self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
+        session = self.session_store.get(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "session_not_found",
+                    "message": f"Session {session_id} not found.",
+                },
+            )
+        session.preferences = preferences or {}
+        session.updated_at = _utcnow_dt()
+        self.session_store.save(session)
+        try:
+            prefs_str = json.dumps(session.preferences, default=str)
+        except Exception:
+            prefs_str = str(session.preferences)
+        logger.info(
+            "[SESSIONS][PREFS] Persisted preferences for session=%s user=%s keys=%s values=%s",
+            session_id,
+            user.uid,
+            ",".join(sorted(session.preferences.keys())),
+            prefs_str,
+        )
+        return session.preferences
 
     @authorize(action=Action.DELETE, resource=Resource.SESSIONS)
     async def delete_session(
@@ -973,7 +1027,11 @@ class SessionOrchestrator:
             .content
         )
         session = SessionSchema(
-            id=new_session_id, user_id=user_id, title=title, updated_at=_utcnow_dt()
+            id=new_session_id,
+            user_id=user_id,
+            title=title,
+            updated_at=_utcnow_dt(),
+            preferences=None,
         )
         self.session_store.save(session)
         logger.info(

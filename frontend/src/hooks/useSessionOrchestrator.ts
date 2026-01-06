@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AnyAgent } from "../common/agent";
 import type { SessionSchema } from "../slices/agentic/agenticOpenApi";
 import { useSessionAgent } from "./usePrefs";
-import { AnyAgent } from "../common/agent";
 
 /**
  * Thin, predictable orchestrator over:
@@ -34,7 +34,7 @@ export function useSessionOrchestrator(params: {
   // Local mirror so we can upsert/delete without fighting server pagination/timing.
   const [sessions, setSessions] = useState<SessionSchema[]>([]);
   useEffect(() => {
-    console.log(
+    console.debug(
       "Orchestrator: useEffect triggered by sessionsFromServer change. New count:",
       sessionsFromServer?.length,
     );

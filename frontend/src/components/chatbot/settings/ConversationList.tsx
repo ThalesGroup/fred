@@ -120,7 +120,7 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
       title: t("settings.confirmDeleteAllTitle", "Delete all conversations?"),
       message: t(
         "settings.confirmDeleteAllMessage",
-        "This action will permanently delete all conversations. Do you want to continue?"
+        "This action will permanently delete all conversations. Do you want to continue?",
       ),
       onConfirm: onDeleteAllSessions,
     });
@@ -245,112 +245,110 @@ export const ConversationList: React.FC<ConversationListProps> = (props) => {
           </ListItem>
 
           {/* Sessions */}
-          {[...sessions]
-            .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-            .map((session) => {
-              const isSelected = session.id === currentSession?.id;
-              const isSessionEditing = session.id === editingSessionId;
+          {sessions.map((session) => {
+            const isSelected = session.id === currentSession?.id;
+            const isSessionEditing = session.id === editingSessionId;
 
-              return (
-                <ListItem
-                  key={session.id}
-                  disablePadding
-                  sx={{
-                    mb: 0.8,
-                    borderRadius: "8px",
-                    backgroundColor: isSelected ? activeItemBgColor : "transparent",
-                    transition: "all 0.2s",
-                    position: "relative",
-                    height: 44,
-                    "&:hover": { backgroundColor: isSelected ? activeItemBgColor : hoverColor },
-                  }}
-                >
-                  {isSessionEditing ? (
-                    <ClickAwayListener onClickAway={handleClickAway}>
-                      <Box
-                        sx={{ display: "flex", width: "100%", alignItems: "center", px: 1 }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <TextField
-                          autoFocus
-                          value={editText}
-                          onChange={(e) => setEditText(e.target.value)}
-                          onKeyDown={handleEditKeyDown}
-                          size="small"
-                          fullWidth
-                          variant="outlined"
-                          sx={{ "& .MuiOutlinedInput-root": { borderRadius: "6px", fontSize: "0.9rem" } }}
-                          slotProps={{
-                            input: {
-                              endAdornment: (
-                                <InputAdornment position="end">
-                                  <Button size="small" onClick={handleSaveButtonClick}>
-                                    OK
-                                  </Button>
-                                </InputAdornment>
-                              ),
-                            },
-                          }}
-                        />
-                      </Box>
-                    </ClickAwayListener>
-                  ) : (
+            return (
+              <ListItem
+                key={session.id}
+                disablePadding
+                sx={{
+                  mb: 0.8,
+                  borderRadius: "8px",
+                  backgroundColor: isSelected ? activeItemBgColor : "transparent",
+                  transition: "all 0.2s",
+                  position: "relative",
+                  height: 44,
+                  "&:hover": { backgroundColor: isSelected ? activeItemBgColor : hoverColor },
+                }}
+              >
+                {isSessionEditing ? (
+                  <ClickAwayListener onClickAway={handleClickAway}>
+                    <Box
+                      sx={{ display: "flex", width: "100%", alignItems: "center", px: 1 }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <TextField
+                        autoFocus
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        onKeyDown={handleEditKeyDown}
+                        size="small"
+                        fullWidth
+                        variant="outlined"
+                        sx={{ "& .MuiOutlinedInput-root": { borderRadius: "6px", fontSize: "0.9rem" } }}
+                        slotProps={{
+                          input: {
+                            endAdornment: (
+                              <InputAdornment position="end">
+                                <Button size="small" onClick={handleSaveButtonClick}>
+                                  OK
+                                </Button>
+                              </InputAdornment>
+                            ),
+                          },
+                        }}
+                      />
+                    </Box>
+                  </ClickAwayListener>
+                ) : (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      width: "100%",
+                      justifyContent: "space-between",
+                      padding: "0 12px",
+                      borderRadius: "8px",
+                      height: "100%",
+                      cursor: "pointer",
+                      color: isSelected ? activeItemTextColor : "text.secondary",
+                      "&:hover": { backgroundColor: hoverColor },
+                    }}
+                    onClick={() => onSelectSession(session)}
+                  >
                     <Box
                       sx={{
                         display: "flex",
-                        alignItems: "center",
-                        width: "100%",
-                        justifyContent: "space-between",
-                        padding: "0 12px",
-                        borderRadius: "8px",
-                        height: "100%",
-                        cursor: "pointer",
-                        color: isSelected ? activeItemTextColor : "text.secondary",
-                        "&:hover": { backgroundColor: hoverColor },
+                        flexDirection: "column",
+                        flexGrow: 1,
+                        overflow: "hidden",
+                        textAlign: "left",
                       }}
-                      onClick={() => onSelectSession(session)}
                     >
-                      <Box
+                      <Typography
+                        variant="body2"
+                        sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "85%" }}
+                      >
+                        {session.title}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: "text.disabled" }}>
+                        {new Date(session.updated_at).toLocaleDateString()}
+                      </Typography>
+                    </Box>
+                    <Tooltip title={t("settings.delete")}>
+                      <IconButton
+                        size="small"
                         sx={{
-                          display: "flex",
-                          flexDirection: "column",
-                          flexGrow: 1,
-                          overflow: "hidden",
-                          textAlign: "left",
+                          p: 0,
+                          color: "inherit",
+                          opacity: 0.7,
+                          "&:hover": { opacity: 1, backgroundColor: "transparent" },
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteSession(session);
                         }}
                       >
-                        <Typography
-                          variant="body2"
-                          sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "85%" }}
-                        >
-                          {session.title}
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: "text.disabled" }}>
-                          {new Date(session.updated_at).toLocaleDateString()}
-                        </Typography>
-                      </Box>
-                      <Tooltip title={t("settings.delete")}>
-                        <IconButton
-                          size="small"
-                          sx={{
-                            p: 0,
-                            color: "inherit",
-                            opacity: 0.7,
-                            "&:hover": { opacity: 1, backgroundColor: "transparent" },
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteSession(session);
-                          }}
-                        >
-                          <DeleteOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  )}
-                </ListItem>
-              );
-            })}
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                )}
+              </ListItem>
+            );
+          })}
 
           {sessions.length === 0 && (
             <Box sx={{ p: 2, textAlign: "center", color: "text.disabled" }}>

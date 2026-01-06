@@ -139,6 +139,7 @@ const ChatBot = ({
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState<boolean>(false);
 
   // keep state + ref in sync
   const setAllMessages = (msgs: ChatMessage[]) => {
@@ -213,7 +214,7 @@ const ChatBot = ({
       wsTokenRef.current = token || null; // mémo pour détection simple de changement
 
       socket.onopen = () => {
-        console.log("[✅ ChatBot] WebSocket connected");
+        console.log("[CHATBOT] WebSocket connected");
         webSocketRef.current = socket;
         setWebSocket(socket);
         resolve(socket);
@@ -248,7 +249,7 @@ const ChatBot = ({
               const finalKeys = new Set(finalEvent.messages.map((m) => keyOf(m)));
               const missing = [...finalKeys].filter((k) => !streamedKeys.has(k));
               const unexpected = [...streamedKeys].filter((k) => !finalKeys.has(k));
-              console.log("[FINAL EVENT SUMMARY]", { missing, unexpected });
+              console.debug("[CHATBOT] Final event summary", { missing, unexpected });
 
               // Merge authoritative finals (includes citations/metadata)
               messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
@@ -256,7 +257,7 @@ const ChatBot = ({
 
               const sid = finalEvent.session.id;
               if (sid) {
-                console.log("[🔗 ChatBot] Binding draft agent to session id from final event:", sid);
+                console.debug("[CHATBOT] Binding draft agent to session id from final event:", sid);
                 onBindDraftAgentToSessionId?.(sid);
               }
               // Accept session update if backend created/switched it
@@ -340,26 +341,25 @@ const ChatBot = ({
     const id = currentChatBotSession?.id;
 
     if (!id) {
+      // Brand new draft session: clear messages and show welcome.
       messagesRef.current = [];
       setAllMessages([]);
+      setIsHistoryLoading(false);
       return;
     }
 
+    setIsHistoryLoading(true);
     const existingForSession = messagesRef.current.filter((msg) => msg.session_id === id);
     if (existingForSession.length > 0) {
       const sortedExisting = sortMessages(existingForSession);
       messagesRef.current = sortedExisting;
       setAllMessages(sortedExisting);
-    } else if (messagesRef.current.length > 0) {
-      messagesRef.current = [];
-      setAllMessages([]);
     }
-
     fetchHistory({ sessionId: id })
       .unwrap()
       .then((serverMessages) => {
-        console.group(`[📥 ChatBot] Loaded messages for session: ${id}`);
-        console.log(`Total: ${serverMessages.length}`);
+        console.group(`[CHATBOT] Loaded messages for session: ${id}`);
+        console.debug(`Total: ${serverMessages.length}`);
         for (const msg of serverMessages) console.log(msg);
         console.groupEnd();
 
@@ -367,11 +367,14 @@ const ChatBot = ({
         messagesRef.current = sorted;
         setAllMessages(sorted); // layout effect will scroll
         // NEW — If this is the first time we "see" this id, bind draft now.
-        console.log("[🔗 ChatBot] Binding draft agent to session id from history load:", id);
+        console.debug("[CHATBOT] Binding draft agent to session id from history load:", id);
         onBindDraftAgentToSessionId?.(id);
+        setIsHistoryLoading(false);
       })
       .catch((e) => {
-        console.error("[❌ ChatBot] Failed to load messages:", e);
+        console.error("[CHATBOT] Failed to load messages:", e);
+        setAllMessages([]);
+        setIsHistoryLoading(false);
       });
   }, [currentChatBotSession?.id, fetchHistory]);
 
@@ -426,18 +429,24 @@ const ChatBot = ({
   }, [storageKey]);
 
   const [userInputContext, setUserInputContext] = useState<any>(null);
+  // Reset per-session context when switching sessions to avoid leaking defaults/new-session welcome state
+  useEffect(() => {
+    setUserInputContext(null);
+  }, [currentChatBotSession?.id]);
+
   const initialDocumentLibraryIds =
     userInputContext?.documentLibraryIds ?? initialCtx.documentLibraryIds;
   const initialPromptResourceIds =
     userInputContext?.promptResourceIds ?? initialCtx.promptResourceIds;
   const initialTemplateResourceIds =
     userInputContext?.templateResourceIds ?? initialCtx.templateResourceIds;
-  const initialSearchPolicy =
-    userInputContext?.searchPolicy ?? "semantic";
+  const initialSearchPolicy = userInputContext?.searchPolicy ?? "semantic";
   const initialSearchRagScope =
     userInputContext?.searchRagScope ?? initialCtx.searchRagScope ?? undefined;
   const initialDeepSearch =
-    typeof userInputContext?.deepSearch === "boolean" ? userInputContext.deepSearch : initialCtx.deepSearch;
+    typeof userInputContext?.deepSearch === "boolean"
+      ? userInputContext.deepSearch
+      : initialCtx.deepSearch;
 
   // IMPORTANT:
   // Save per-agent defaults *only before a session exists* (pre-session seeding).
@@ -542,7 +551,7 @@ const ChatBot = ({
             : typeof detail === "object" && detail
               ? detail.message || detail.upstream || detail.code || JSON.stringify(detail)
               : (err as Error)?.message || "Unknown error";
-        console.error("❌ File upload failed:", err);
+        console.error("[CHATBOT] File upload failed:", err);
         showError({ summary: "File Upload Error", detail: `Failed to upload ${file.name}: ${errMsg}` });
       } finally {
         setUploadingFiles((prev) => prev.filter((n) => n !== file.name));
@@ -556,7 +565,7 @@ const ChatBot = ({
    * The server streams the authoritative user message first.
    */
   const queryChatBot = async (input: string, agent?: AnyAgent, runtimeContext?: RuntimeContext) => {
-    console.log(`[📤 ChatBot] Sending message: ${input}`);
+    console.debug(`[CHATBOT] Sending message: ${input}`);
     // Get tokens for backend use. This proacively allows the backend to perform
     // user-authenticated operations (e.g., vector search) on behalf of the user.
     // The backend is then responsible for refreshing tokens as needed. Which will rarely be needed
@@ -583,12 +592,12 @@ const ChatBot = ({
       if (socket && socket.readyState === WebSocket.OPEN) {
         setWaitResponse(true);
         socket.send(JSON.stringify(event));
-        console.log("[📤 ChatBot] Sent message:", event);
+        console.debug("[CHATBOT] Sent message:", event);
       } else {
         throw new Error("WebSocket not open");
       }
     } catch (err) {
-      console.error("[❌ ChatBot] Failed to send message:", err);
+      console.error("[CHATBOT] Failed to send message:", err);
       showError({ summary: "Connection Error", detail: "Could not send your message — connection failed." });
       setWaitResponse(false);
     }
@@ -599,7 +608,6 @@ const ChatBot = ({
     if (!currentChatBotSession && isCreatingNewConversation) {
       setAllMessages([]);
     }
-    console.log("isCreatingNewConversation", isCreatingNewConversation);
   }, [isCreatingNewConversation, currentChatBotSession]);
 
   const outputTokenCounts: number =
@@ -613,7 +621,10 @@ const ChatBot = ({
       : 0;
   // After your state declarations
   const effectiveSessionId = pendingSessionIdRef.current || currentChatBotSession?.id || undefined;
-  const showWelcome = !waitResponse && (isCreatingNewConversation || messages.length === 0);
+  const showWelcome =
+    !waitResponse &&
+    !isHistoryLoading &&
+    (!currentChatBotSession?.id || messages.length === 0);
 
   const hasContext =
     !!userInputContext &&
