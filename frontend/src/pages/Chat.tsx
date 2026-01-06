@@ -44,7 +44,11 @@ export default function Chat() {
     isLoading: flowsLoading,
     isError: flowsError,
     error: flowsErrObj,
-  } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
+  } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+  });
 
   const agentsFromServer = useMemo<AnyAgent[]>(() => normalizeAgenticFlows(rawAgentsFromServer), [rawAgentsFromServer]);
 
