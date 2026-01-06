@@ -27,8 +27,8 @@ from sqlalchemy import (
     String,
     Table,
     Text,
-    select,
     inspect,
+    select,
     text,
 )
 from sqlalchemy.engine import Engine
