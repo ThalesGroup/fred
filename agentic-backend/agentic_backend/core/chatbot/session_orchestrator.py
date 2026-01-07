@@ -189,6 +189,8 @@ class SessionOrchestrator:
         session = self._get_or_create_session(
             user_id=user.uid, query=message, session_id=session_id
         )
+        # If this session was created with a placeholder title, refresh it now from the first prompt.
+        self._maybe_refresh_title_from_prompt(session=session, prompt=message)
         # Propagate effective session_id into runtime context so downstream calls
         # (vector search, attachments) can scope to the correct conversation.
         runtime_context.session_id = session.id
@@ -338,6 +340,46 @@ class SessionOrchestrator:
             )
         return enriched
 
+    @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
+    def create_empty_session(
+        self, user: KeycloakUser, agent_name: Optional[str] = None, title: Optional[str] = None
+    ) -> SessionSchema:
+        """Explicitly create a new empty session (used by the UI before first upload/message)."""
+        prefs: Optional[Dict[str, Any]] = {"agent_name": agent_name} if agent_name else None
+        session = SessionSchema(
+            id=secrets.token_urlsafe(8),
+            user_id=user.uid,
+            agent_name=agent_name,
+            title=title or "New conversation",
+            updated_at=_utcnow_dt(),
+            preferences=prefs,
+        )
+        self.session_store.save(session)
+        logger.info("[SESSIONS] Created empty session %s for user %s", session.id, user.uid)
+        return session
+
+    def _maybe_refresh_title_from_prompt(
+        self, *, session: SessionSchema, prompt: str
+    ) -> None:
+        """
+        If a session was created with a placeholder title (e.g., via create_empty_session),
+        generate a better one from the user's first question.
+        """
+        try:
+            if session.title and session.title.strip().lower() != "new conversation":
+                return
+            new_title: str = (
+                get_default_model()
+                .invoke(
+                    "Give a short, clear title for this conversation based on the user's question. "
+                    "Return a few keywords only. Question: " + prompt
+                )
+                .content
+            )
+            session.title = new_title
+        except Exception:
+            logger.debug("[SESSIONS] Failed to refresh session title", exc_info=True)
+
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
     def get_session_history(
         self, session_id: str, user: KeycloakUser
@@ -366,7 +408,11 @@ class SessionOrchestrator:
             user.uid,
             session.preferences,
         )
-        return session.preferences or {}
+        prefs = session.preferences or {}
+        # If the session was created with a chosen agent, surface it as a default pref.
+        if "agent_name" not in prefs and session.agent_name:
+            prefs = {**prefs, "agent_name": session.agent_name}
+        return prefs
 
     @authorize(action=Action.UPDATE, resource=Resource.SESSIONS)
     def update_session_preferences(
@@ -793,6 +839,7 @@ class SessionOrchestrator:
             "mime": file.content_type,
             "size_bytes": len(content),
             "preview_chars": min(len(summary_md), 300),  # hint for UI
+            "session": session.model_dump(),
         }
 
     # ---------------- Metrics passthrough ----------------
@@ -1221,16 +1268,20 @@ def _preview(content: str, limit: int = 90) -> str:
     return s if len(s) <= limit else s[: limit - 3] + "..."
 
 
-def _safe(v):
+def _safe(v) -> str:
     if isinstance(v, (list, tuple, set)):
         return (
             "["
-            + ", ".join(map(_safe, list(v)[:5]))
+            + ", ".join([_safe(item) for item in list(v)[:5]])
             + ("]" if len(v) <= 5 else ", ...]")
         )
     if isinstance(v, dict):
         keys = list(v.keys())[:5]
-        return "{keys=" + ",".join(keys) + ("}" if len(v) <= 5 else ",...}")
+        return (
+            "{keys="
+            + ",".join(str(k) for k in keys)
+            + ("}" if len(v) <= 5 else ",...}")
+        )
     if isinstance(v, str):
         v = v.replace("\n", " ")
         return f"'{v[:60]}...'" if len(v) > 63 else f"'{v}'"

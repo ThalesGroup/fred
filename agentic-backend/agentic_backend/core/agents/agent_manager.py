@@ -19,7 +19,12 @@ from agentic_backend.application_context import (
     get_mcp_configuration,
     get_mcp_server_manager,
 )
-from agentic_backend.common.structures import AgentSettings, Configuration, Leader
+from agentic_backend.common.structures import (
+    AgentChatOptions,
+    AgentSettings,
+    Configuration,
+    Leader,
+)
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_spec import (
@@ -83,7 +88,33 @@ class AgentManager:
         return self.agent_settings.get(name)
 
     def get_agentic_flows(self) -> List[AgentSettings]:
-        return list(self.agent_settings.values())
+        flows: List[AgentSettings] = []
+        for settings in self.agent_settings.values():
+            # Normalize chat options to explicit boolean defaults (all False unless opted-in)
+            try:
+                settings.chat_options = AgentChatOptions(
+                    **(settings.chat_options.model_dump(exclude_none=True) if settings.chat_options else {})
+                )
+            except Exception:
+                logger.debug("[AGENTS] Failed to normalize chat options for %s", settings.name, exc_info=True)
+            flows.append(settings)
+        return flows
+
+    @staticmethod
+    def _chat_options_from_tuning(tuning: AgentTuning) -> AgentChatOptions:
+        """
+        Extract chat option booleans from tuning.fields (keys starting with chat_options.).
+        """
+        if not tuning or not tuning.fields:
+            return AgentChatOptions()
+        overrides: Dict[str, bool] = {}
+        for f in tuning.fields:
+            if not f.key or not f.key.startswith("chat_options."):
+                continue
+            key = f.key.split(".", 1)[1]
+            if isinstance(f.default, bool):
+                overrides[key] = f.default
+        return AgentChatOptions(**overrides)
 
     def get_mcp_servers_configuration(self) -> List[MCPServerConfiguration]:
         try:
@@ -156,6 +187,11 @@ class AgentManager:
         if not tunings:
             return False
         logger.info("[AGENTS] agent=%s new_tuning=%s", name, tunings.dump())
+        # Sync chat_options with tuning fields (chat_options.*) to keep UI toggles consistent.
+        try:
+            new_settings.chat_options = self._chat_options_from_tuning(tunings)
+        except Exception:
+            logger.debug("[AGENTS] Failed to sync chat_options from tuning for %s", name, exc_info=True)
         # 1) Persist source of truth (DB)
         try:
             self.store.save(

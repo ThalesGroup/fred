@@ -137,6 +137,16 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/agentic/v1/chatbot/sessions` }),
     }),
+    createSessionAgenticV1ChatbotSessionPost: build.mutation<
+      CreateSessionAgenticV1ChatbotSessionPostApiResponse,
+      CreateSessionAgenticV1ChatbotSessionPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/session`,
+        method: "POST",
+        body: queryArg.createSessionPayload,
+      }),
+    }),
     getSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGet: build.query<
       GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiResponse,
       GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiArg
@@ -332,6 +342,10 @@ export type GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiArg = void;
 export type GetSessionsAgenticV1ChatbotSessionsGetApiResponse =
   /** status 200 Successful Response */ SessionWithFiles[];
 export type GetSessionsAgenticV1ChatbotSessionsGetApiArg = void;
+export type CreateSessionAgenticV1ChatbotSessionPostApiResponse = /** status 200 Successful Response */ SessionSchema;
+export type CreateSessionAgenticV1ChatbotSessionPostApiArg = {
+  createSessionPayload: CreateSessionPayload;
+};
 export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiResponse =
   /** status 200 Successful Response */ ChatMessage2[];
 export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiArg = {
@@ -881,6 +895,10 @@ export type Leader2 = {
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];
 };
+export type CreateSessionPayload = {
+  agent_name?: string | null;
+  title?: string | null;
+};
 export type ChatMessage2 = {
   session_id: string;
   exchange_id: string;
@@ -1003,6 +1021,7 @@ export const {
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
   useLazyGetSessionsAgenticV1ChatbotSessionsGetQuery,
+  useCreateSessionAgenticV1ChatbotSessionPostMutation,
   useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
