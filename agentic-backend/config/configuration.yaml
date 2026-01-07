@@ -193,11 +193,6 @@ mcp:
       url: "http://localhost:8111/knowledge-flow/v1/mcp-neo4j"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-knowledge-flow-mcp-text"
-      transport: "streamable_http"
-      url: "http://localhost:8111/knowledge-flow/v1/mcp-text"
-      sse_read_timeout: 2000
-      auth_mode: "user_token"
 
 storage:
   postgres:
