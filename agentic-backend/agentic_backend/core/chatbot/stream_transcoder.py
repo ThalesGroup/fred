@@ -17,12 +17,14 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Awaitable, Callable, List, Optional, cast
 
 from fred_core import KeycloakUser
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
+from langfuse.langchain import CallbackHandler
 from langgraph.graph import MessagesState
 
 from agentic_backend.core.agents.agent_flow import AgentFlow
@@ -133,18 +135,21 @@ class StreamTranscoder:
                 "access_token": runtime_context.access_token,
                 "refresh_token": runtime_context.refresh_token,
             },
-            "recursion_limit": 40,
+            "recursion_limit": 100,
         }
+
+        # If Langfuse is configured, add the callback handler
+        if os.getenv("LANGFUSE_SECRET_KEY") and os.getenv("LANGFUSE_PUBLIC_KEY"):
+            logger.info("Langfuse credentials found.")
+            langfuse_handler = CallbackHandler()
+            config["callbacks"] = [langfuse_handler]
 
         out: List[ChatMessage] = []
         seq = start_seq
         final_sent = False
         msgs_any: list[AnyMessage] = [cast(AnyMessage, m) for m in input_messages]
         state: MessagesState = {"messages": msgs_any}
-        async for event in agent.astream_updates(
-            state=state,
-            config=config,
-        ):
+        async for event in agent.astream_updates(state=state, config=config):
             # `event` looks like: {'node_name': {'messages': [...]}} or {'end': None}
             key = next(iter(event))
             payload = event[key]
