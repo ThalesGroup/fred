@@ -80,6 +80,9 @@ from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
 )
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
+from agentic_backend.core.session.stores.opensearch_session_attachment_store import (
+    OpensearchSessionAttachmentStore,
+)
 from agentic_backend.core.session.stores.postgres_session_attachment_store import (
     PostgresSessionAttachmentStore,
 )
@@ -458,6 +461,27 @@ class ApplicationContext:
                 engine=engine,
                 table_name=table_name,
                 prefix=store_config.prefix or "",
+            )
+            return self._session_attachment_store_instance
+
+        if isinstance(store_config, OpenSearchIndexConfig):
+            opensearch_config = storage_cfg.opensearch
+            if opensearch_config is None:
+                raise ValueError(
+                    "OpenSearch configuration is required for attachments store but not provided"
+                )
+            password = opensearch_config.password
+            if not password:
+                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
+            self._session_attachment_store_instance = (
+                OpensearchSessionAttachmentStore(
+                    host=opensearch_config.host,
+                    username=opensearch_config.username,
+                    password=password,
+                    secure=opensearch_config.secure,
+                    verify_certs=opensearch_config.verify_certs,
+                    index=store_config.index,
+                )
             )
             return self._session_attachment_store_instance
 

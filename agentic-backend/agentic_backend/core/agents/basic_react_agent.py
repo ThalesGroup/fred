@@ -5,6 +5,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
+from agentic_backend.common.structures import AgentChatOptions
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.runtime_context import RuntimeContext
@@ -39,6 +40,51 @@ BASIC_REACT_TUNING = AgentTuning(
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
+        FieldSpec(
+            key="chat_options.attach_files",
+            type="boolean",
+            title="Allow file attachments",
+            description="Show file upload/attachment controls for this agent.",
+            required=False,
+            default=True,
+            ui=UIHints(group="Chat options"),
+        ),
+        FieldSpec(
+            key="chat_options.libraries_selection",
+            type="boolean",
+            title="Document libraries picker",
+            description="Let users select document libraries/knowledge sources for this agent.",
+            required=False,
+            default=True,
+            ui=UIHints(group="Chat options"),
+        ),
+        FieldSpec(
+            key="chat_options.search_policy_selection",
+            type="boolean",
+            title="Search policy selector",
+            description="Expose the search policy toggle (hybrid/semantic/strict).",
+            required=False,
+            default=True,
+            ui=UIHints(group="Chat options"),
+        ),
+        FieldSpec(
+            key="chat_options.search_rag_scoping",
+            type="boolean",
+            title="RAG scope selector",
+            description="Expose the RAG scope control (documents-only vs hybrid vs knowledge).",
+            required=False,
+            default=True,
+            ui=UIHints(group="Chat options"),
+        ),
+        FieldSpec(
+            key="chat_options.deep_search_delegate",
+            type="boolean",
+            title="Deep search delegate toggle",
+            description="Allow delegation to a senior agent for deep search.",
+            required=False,
+            default=True,
+            ui=UIHints(group="Chat options"),
+        ),
     ],
 )
 
@@ -47,6 +93,13 @@ class BasicReActAgent(AgentFlow):
     """Simple ReAct agent used for dynamic UI-created agents."""
 
     tuning = BASIC_REACT_TUNING
+    default_chat_options = AgentChatOptions(
+        search_policy_selection=False,
+        libraries_selection=False,
+        search_rag_scoping=False,
+        deep_search_delegate=False,
+        attach_files=False,
+    )
 
     async def async_init(self, runtime_context: RuntimeContext):
         await super().async_init(runtime_context=runtime_context)
