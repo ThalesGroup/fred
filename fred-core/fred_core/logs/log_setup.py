@@ -124,6 +124,21 @@ class TaskNameFilter(logging.Filter):
         return True
 
 
+class UvicornAccessProbeFilter(logging.Filter):
+    def __init__(self, probe_paths: tuple[str, ...]) -> None:
+        super().__init__()
+        self._probe_paths = probe_paths
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        path = None
+        if isinstance(record.args, tuple) and len(record.args) >= 3:
+            path = record.args[2]
+        if isinstance(path, str) and any(path.endswith(p) for p in self._probe_paths):
+            record.levelno = logging.DEBUG
+            record.levelname = "DEBUG"
+        return True
+
+
 def log_setup(
     *,
     service_name: str,
@@ -194,6 +209,7 @@ def log_setup(
             lg.handlers.clear()  # remove uvicorn’s own console handlers
             # Access logs are particularly chatty; keep only warnings+
             if name == "uvicorn.access":
+                lg.addFilter(UvicornAccessProbeFilter(("/healthz", "/ready")))
                 lg.setLevel(logging.WARNING)
             else:
                 lg.setLevel(log_level.upper())
