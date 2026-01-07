@@ -18,7 +18,7 @@ import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fred_core import validate_index_mapping
+from fred_core import ThreadSafeLRUCache, validate_index_mapping
 from opensearchpy import NotFoundError, OpenSearch, RequestsHttpConnection
 
 from agentic_backend.core.session.stores.base_session_attachment_store import (
@@ -88,6 +88,9 @@ class OpensearchSessionAttachmentStore(BaseSessionAttachmentStore):
             verify_certs=verify_certs,
             connection_class=RequestsHttpConnection,
         )
+        self._cache: ThreadSafeLRUCache[str, List[SessionAttachmentRecord]] = (
+            ThreadSafeLRUCache(max_size=1000)
+        )
         self.index = index
         if not self.client.indices.exists(index=index):
             self.client.indices.create(index=index, body=MAPPING)
@@ -116,8 +119,35 @@ class OpensearchSessionAttachmentStore(BaseSessionAttachmentStore):
             id=_doc_id(record.session_id, record.attachment_id),
             body=body,
         )
+        # Update cache for this session_id
+        try:
+            cached = self._cache.get(record.session_id)
+            if cached is not None:
+                # Replace or append
+                next_records: List[SessionAttachmentRecord] = []
+                replaced = False
+                for existing in cached:
+                    if existing.attachment_id == record.attachment_id:
+                        next_records.append(record)
+                        replaced = True
+                    else:
+                        next_records.append(existing)
+                if not replaced:
+                    next_records.append(record)
+                self._cache.set(record.session_id, next_records)
+        except Exception:
+            logger.debug(
+                "[SESSION][OS] Failed to refresh cache for session %s",
+                record.session_id,
+                exc_info=True,
+            )
 
     def list_for_session(self, session_id: str) -> List[SessionAttachmentRecord]:
+        cached = self._cache.get(session_id)
+        if cached is not None:
+            logger.debug("[SESSION][OS] cache hit for session %s", session_id)
+            return cached
+
         query = {"query": {"term": {"session_id": {"value": session_id}}}}
         response = self.client.search(
             index=self.index,
@@ -140,11 +170,21 @@ class OpensearchSessionAttachmentStore(BaseSessionAttachmentStore):
                     updated_at=_parse_dt(src.get("updated_at")),
                 )
             )
+        self._cache.set(session_id, records)
         return records
 
     def delete(self, session_id: str, attachment_id: str) -> None:
         try:
-            self.client.delete(index=self.index, id=_doc_id(session_id, attachment_id))
+            self.client.delete(
+                index=self.index,
+                id=_doc_id(session_id, attachment_id),
+            )
+            cached = self._cache.get(session_id)
+            if cached is not None:
+                self._cache.set(
+                    session_id,
+                    [r for r in cached if r.attachment_id != attachment_id],
+                )
         except Exception:
             logger.exception(
                 "[SESSION][OS] Failed to delete attachment %s for session %s",
@@ -160,6 +200,7 @@ class OpensearchSessionAttachmentStore(BaseSessionAttachmentStore):
                 body=query,
                 params={"refresh": True},
             )
+            self._cache.delete(session_id)
         except NotFoundError:
             logger.debug(
                 "[SESSION][OS] No attachments to delete for session %s", session_id

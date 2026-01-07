@@ -464,6 +464,17 @@ class ApplicationContext:
             )
             return self._session_attachment_store_instance
 
+        if isinstance(store_config, DuckdbStoreConfig):
+            from agentic_backend.core.session.stores.duckdb_session_attachment_store import (
+                DuckdbSessionAttachmentStore,
+            )
+
+            db_path = Path(store_config.duckdb_path).expanduser()
+            self._session_attachment_store_instance = DuckdbSessionAttachmentStore(
+                db_path=db_path
+            )
+            return self._session_attachment_store_instance
+
         if isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = storage_cfg.opensearch
             if opensearch_config is None:
@@ -473,15 +484,13 @@ class ApplicationContext:
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
-            self._session_attachment_store_instance = (
-                OpensearchSessionAttachmentStore(
-                    host=opensearch_config.host,
-                    username=opensearch_config.username,
-                    password=password,
-                    secure=opensearch_config.secure,
-                    verify_certs=opensearch_config.verify_certs,
-                    index=store_config.index,
-                )
+            self._session_attachment_store_instance = OpensearchSessionAttachmentStore(
+                host=opensearch_config.host,
+                username=opensearch_config.username,
+                password=password,
+                secure=opensearch_config.secure,
+                verify_certs=opensearch_config.verify_certs,
+                index=store_config.index,
             )
             return self._session_attachment_store_instance
 

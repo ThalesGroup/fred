@@ -237,7 +237,12 @@ export const UserInputAttachments: React.FC<UserInputAttachmentsProps> = ({
                       }}
                     >
                       <CircularProgress size={18} />
-                      <Typography variant="body2">{t("chatbot.uploadingFile")}</Typography>
+                      <Typography variant="body2">
+                        {t("chatbot.uploadingFile", {
+                          defaultValue: "Uploading {{name}}...",
+                          name,
+                        })}
+                      </Typography>
                     </Box>
                   ))}
                 </Stack>
