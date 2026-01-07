@@ -1,3 +1,11 @@
+- **v1.1.1** — 2026-01-07
+
+  - **Summary**
+    - This release completes the support for per conversation attachements, and improve the capabilities of dynamic agents.
+  - **Features**
+    - Dynamic agent can now leverage the chat options to benefit from depp searchn attachements library scoping (#941)
+    - New duckdb and opensearch connectors to manage per conversation attachments (#941)
+
 - **v1.1.0** — 2026-01-04
   - **Summary**
     - New PostgreSQL/pgvector option so Fred can run fully without OpenSearch, plus in-UI Mermaid rendering for agent replies.
