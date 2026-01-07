@@ -2,7 +2,9 @@
   "common": {
     "add": "Add",
     "noneSelected": "None selected",
+    "expand": "Expand",
     "close": "Close",
+    "collapse": "Collapse",
     "remove": "Remove",
     "loading": "Loading…",
     "beta": "Beta",
@@ -11,7 +13,12 @@
     "refresh": "Refresh",
     "cancel": "Cancel",
     "save": "Save",
-    "invalidUrl": "Invalid URL"
+    "invalidUrl": "Invalid URL",
+    "preview": "Preview",
+    "uploading": "Uploading...",
+    "dropHere": "Drop files here or click to browse",
+    "loadingPreview": "Loading preview...",
+    "loadingPreviewError": "Unable to load preview."
   },
   "dataHub": {
     "title": "Data Hub - Document Lineage",
@@ -108,6 +115,7 @@
     "optimize": "Optimize",
     "chat": "Chat",
     "monitoring": "Admin",
+    "laboratory": "Laboratory",
     "knowledge": "Resources",
     "mcp": "MCP Servers",
     "agent": "Agents",
@@ -122,6 +130,7 @@
       "optimize": "Check the optimization gains on the selected cluster",
       "chat": "Chat with the AI assistant team",
       "monitoring": "Monitor the backend AI calls",
+      "laboratory": "Explore validation and laboratory features and tools",
       "knowledge": "Consult the content of your libraries",
       "mcp": "Manage MCP servers",
       "agent": "View agents",
@@ -467,7 +476,9 @@
     "attachments": {
       "betaNotice": "File attachments are in beta. Supported formats: PDF, DOCX, CSV. Please provide feedback to help us improve this feature.",
       "supportedFormats": "Supported files: PDF, DOCX, CSV",
-      "count": "{{count}} attached"
+      "count": "{{count}} attached",
+      "drawerTitle": "Manage Attachments",
+      "noAttachments": "No attachments yet"
     },
     "uploadingFile": "Uploading {{name}}...",
     "searchToggle": "Toggle retrieval: on searches documents, off skips RAG",

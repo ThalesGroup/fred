@@ -24,6 +24,7 @@ import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import ScienceIcon from "@mui/icons-material/Science";
 import ShieldIcon from "@mui/icons-material/Shield";
 import {
   Avatar,
@@ -90,6 +91,43 @@ export default function SideBar({ darkMode, onThemeChange }) {
       canBeDisabled: false,
       tooltip: t("sidebar.tooltip.chat"),
     },
+    ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime || canUpdateTag
+      ? [
+          {
+            key: "laboratory",
+            label: t("sidebar.laboratory"),
+            icon: <ScienceIcon />,
+            canBeDisabled: false,
+            tooltip: t("sidebar.tooltip.laboratory"),
+            children: [
+              ...(canReadRuntime
+                ? [
+                    {
+                      key: "monitoring-graph",
+                      label: t("sidebar.monitoring_graph", "Graph Hub"),
+                      icon: <MonitorHeartIcon />,
+                      url: `/monitoring/graph`,
+                      canBeDisabled: false,
+                      tooltip: t("sidebar.tooltip.monitoring_graph", "Knowledge graph view"),
+                    },
+                  ]
+                : []),
+              ...(canReadRuntime
+                ? [
+                    {
+                      key: "monitoring-processors",
+                      label: t("sidebar.monitoring_processors", "Processors"),
+                      icon: <MonitorHeartIcon />,
+                      url: `/monitoring/processors`,
+                      canBeDisabled: false,
+                      tooltip: t("sidebar.tooltip.monitoring_processors"),
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]
+      : []),
 
     // Only show monitoring if user has permission
     ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime || canUpdateTag
@@ -134,30 +172,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
                       url: `/monitoring/data`,
                       canBeDisabled: false,
                       tooltip: t("sidebar.tooltip.monitoring_data", "Data lineage view"),
-                    },
-                  ]
-                : []),
-              ...(canReadRuntime
-                ? [
-                    {
-                      key: "monitoring-graph",
-                      label: t("sidebar.monitoring_graph", "Graph Hub"),
-                      icon: <MonitorHeartIcon />,
-                      url: `/monitoring/graph`,
-                      canBeDisabled: false,
-                      tooltip: t("sidebar.tooltip.monitoring_graph", "Knowledge graph view"),
-                    },
-                  ]
-                : []),
-              ...(canReadRuntime
-                ? [
-                    {
-                      key: "monitoring-processors",
-                      label: t("sidebar.monitoring_processors", "Processors"),
-                      icon: <MonitorHeartIcon />,
-                      url: `/monitoring/processors`,
-                      canBeDisabled: false,
-                      tooltip: t("sidebar.tooltip.monitoring_processors"),
                     },
                   ]
                 : []),

@@ -183,6 +183,30 @@ class VectorSearchService:
         except Exception as e:
             logger.error("[VECTOR][SEARCH][ANN] Unexpected error during search: %s", str(e))
             raise
+        if not ann_hits:
+            logger.warning(
+                "[VECTOR][SEARCH][ANN] no hits returned; tags=%s metadata_terms=%s question_len=%d",
+                library_tags_ids,
+                metadata_terms,
+                len(question),
+            )
+        else:
+            sample = [
+                {
+                    "score": h.score,
+                    "uid": h.document.metadata.get("document_uid"),
+                    "chunk": h.document.metadata.get("chunk_id"),
+                    "session": h.document.metadata.get("session_id"),
+                    "tag_ids": h.document.metadata.get("tag_ids"),
+                    "scope": h.document.metadata.get("scope"),
+                }
+                for h in ann_hits[:3]
+            ]
+            logger.info(
+                "[VECTOR][SEARCH][ANN] got %d hits (sample: %s)",
+                len(ann_hits),
+                sample,
+            )
 
         return await asyncio.gather(*[self._to_hit(h.document, h.score, rank, user) for rank, h in enumerate(ann_hits, start=1)])
 
@@ -278,8 +302,7 @@ class VectorSearchService:
             Exception: For any other unexpected errors during the search process.
         """
         try:
-            if not document_library_tags_ids or document_library_tags_ids == []:
-                document_library_tags_ids = await self._all_document_library_tags_ids(user)
+            original_tag_ids = document_library_tags_ids or []
 
             policy_key = policy_name or SearchPolicyName.hybrid
             corpus_hits: List[VectorSearchHit] = []
@@ -307,31 +330,41 @@ class VectorSearchService:
                     },
                 )
 
+            # Resolve library tags only if the caller provided some; otherwise stay empty so
+            # we can short-circuit when attachments already cover the request.
+            document_library_tags_ids = original_tag_ids
+            if not document_library_tags_ids:
+                document_library_tags_ids = await self._all_document_library_tags_ids(user)
+
             # Corpus/library query
-            if policy_key == SearchPolicyName.strict:
-                logger.info(
-                    "[VECTOR][SEARCH][CORPUS] policy=strict tags=%s question=%r top_k=%d",
-                    document_library_tags_ids,
-                    question,
-                    top_k,
-                )
-                corpus_hits = await self._strict(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
-            elif policy_key == SearchPolicyName.hybrid:
-                logger.info(
-                    "[VECTOR][SEARCH][CORPUS] policy=hybrid tags=%s question=%r top_k=%d",
-                    document_library_tags_ids,
-                    question,
-                    top_k,
-                )
-                corpus_hits = await self._hybrid(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+            should_search_corpus = not attachment_hits or bool(original_tag_ids)
+            if should_search_corpus:
+                if policy_key == SearchPolicyName.strict:
+                    logger.info(
+                        "[VECTOR][SEARCH][CORPUS] policy=strict tags=%s question=%r top_k=%d",
+                        document_library_tags_ids,
+                        question,
+                        top_k,
+                    )
+                    corpus_hits = await self._strict(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+                elif policy_key == SearchPolicyName.hybrid:
+                    logger.info(
+                        "[VECTOR][SEARCH][CORPUS] policy=hybrid tags=%s question=%r top_k=%d",
+                        document_library_tags_ids,
+                        question,
+                        top_k,
+                    )
+                    corpus_hits = await self._hybrid(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+                else:
+                    logger.info(
+                        "[VECTOR][SEARCH][CORPUS] policy=semantic tags=%s question=%r top_k=%d",
+                        document_library_tags_ids,
+                        question,
+                        top_k,
+                    )
+                    corpus_hits = await self._semantic(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
             else:
-                logger.info(
-                    "[VECTOR][SEARCH][CORPUS] policy=semantic tags=%s question=%r top_k=%d",
-                    document_library_tags_ids,
-                    question,
-                    top_k,
-                )
-                corpus_hits = await self._semantic(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+                logger.info("[VECTOR][SEARCH][CORPUS] skipped (attachments present and no library tags provided)")
 
             # Merge: prefer attachments first, then corpus to fill top_k
             merged = (attachment_hits + corpus_hits)[:top_k]

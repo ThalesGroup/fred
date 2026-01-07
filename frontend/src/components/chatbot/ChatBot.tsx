@@ -69,6 +69,9 @@ export interface ChatBotProps {
   isCreatingNewConversation: boolean;
   runtimeContext?: RuntimeContext;
   onBindDraftAgentToSessionId?: (sessionId: string) => void;
+  attachmentsPanelOpen?: boolean;
+  onAttachmentsPanelOpenChange?: (open: boolean) => void;
+  onAttachmentCountChange?: (count: number) => void;
 }
 
 const ChatBot = ({
@@ -80,6 +83,9 @@ const ChatBot = ({
   isCreatingNewConversation,
   runtimeContext: baseRuntimeContext,
   onBindDraftAgentToSessionId,
+  attachmentsPanelOpen,
+  onAttachmentsPanelOpenChange,
+  onAttachmentCountChange,
 }: ChatBotProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -656,7 +662,12 @@ const ChatBot = ({
         flexDirection="column"
         alignItems="center"
         paddingBottom={1}
-        sx={{ minHeight: 0, overflow: "hidden" }}
+        sx={{
+          minHeight: 0,
+          overflow: "hidden",
+          pr: attachmentsPanelOpen ? { xs: "min(92vw, 320px)", sm: "340px" } : 0,
+          transition: (t) => t.transitions.create("padding-right"),
+        }}
       >
         {/* Conversation start: new conversation without message */}
         {showWelcome && (
@@ -723,6 +734,9 @@ const ChatBot = ({
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}
+                attachmentsPanelOpen={attachmentsPanelOpen}
+                onAttachmentsPanelOpenChange={onAttachmentsPanelOpenChange}
+                onAttachmentCountChange={onAttachmentCountChange}
               />
             </Box>
           </Box>
@@ -784,6 +798,9 @@ const ChatBot = ({
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}
+                attachmentsPanelOpen={attachmentsPanelOpen}
+                onAttachmentsPanelOpenChange={onAttachmentsPanelOpenChange}
+                onAttachmentCountChange={onAttachmentCountChange}
               />
             </Grid2>
 
