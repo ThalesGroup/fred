@@ -93,7 +93,7 @@ ai:
       chat_options:
         search_policy_selection: false
         libraries_selection: false
-        attach_files: true
+        attach_files: false
     - name: "Sammy"
       type: "agent"
       class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"

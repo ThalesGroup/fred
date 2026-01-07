@@ -231,11 +231,14 @@ export default function UserInput({
     refetchOnFocus: false,
     refetchOnReconnect: true,
   });
-  useEffect(() => {
-    if (sessionId) refetchSessions();
-  }, [attachmentsRefreshTick, sessionId, refetchSessions]);
   type AttachmentRef = { id: string; name: string };
   const attachmentSessionId = effectiveSessionId || sessionId;
+  useEffect(() => {
+    if (attachmentSessionId) {
+      console.log("XXXXXX attachments refetch", { sessionId: attachmentSessionId, tick: attachmentsRefreshTick });
+      refetchSessions();
+    }
+  }, [attachmentsRefreshTick, attachmentSessionId, refetchSessions]);
   const sessionAttachments: AttachmentRef[] = useMemo(() => {
     if (!attachmentSessionId) return [];
     const s = (sessions as any[]).find((x) => x?.id === attachmentSessionId) as any | undefined;
@@ -254,6 +257,7 @@ export default function UserInput({
     }
   }, [hasAttachedFiles]);
   useEffect(() => {
+    console.log("XXXXXX attachment count", { sessionId: attachmentSessionId, count: attachmentCount });
     onAttachmentCountChange?.(attachmentCount);
   }, [attachmentCount, onAttachmentCountChange]);
 

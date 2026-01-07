@@ -78,15 +78,16 @@ export function useSessionAgent(sessionId: string | null) {
   // Which agent should be active for this session?
   const agentId = useMemo<string | null>(() => {
     if (sessionId && metaMap[sessionId]?.agentId) return metaMap[sessionId].agentId;
+    // Fallback to draft-mapped agent if we just created a session from draft before hydration
+    if (!sessionId && metaMap["draft"]?.agentId) return metaMap["draft"].agentId;
     return lastAgent;
   }, [sessionId, metaMap, lastAgent]);
 
   const setAgentForSession = useCallback(
     (nextAgentId: string) => {
-      if (sessionId) {
-        const next = updateMap<SessionPrefs>(K_SESSION, sessionId, { agentId: nextAgentId });
-        setMetaMap(next);
-      }
+      const key = sessionId || "draft";
+      const next = updateMap<SessionPrefs>(K_SESSION, key, { agentId: nextAgentId });
+      setMetaMap(next);
       setLastAgent(nextAgentId);
       save<string | null>(K_LAST_AGENT, nextAgentId);
     },

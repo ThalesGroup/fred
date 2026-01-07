@@ -37,6 +37,8 @@ import {
   RuntimeContext,
   SessionSchema,
   StreamEvent,
+  useCreateSessionAgenticV1ChatbotSessionPostMutation,
+  useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation,
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
 } from "../../slices/agentic/agenticOpenApi.ts";
@@ -150,6 +152,8 @@ const ChatBot = ({
   // Lazy messages fetcher
   const [fetchHistory] = useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery();
   const [uploadChatFile] = useUploadFileAgenticV1ChatbotUploadPostMutation();
+  const [createSession] = useCreateSessionAgenticV1ChatbotSessionPostMutation();
+  const [persistSessionPrefs] = useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation();
   // Local tick to signal attachments list to refresh after successful uploads
   const [attachmentsRefreshTick, setAttachmentsRefreshTick] = useState<number>(0);
 
@@ -208,6 +212,11 @@ const ChatBot = ({
       pendingSessionIdRef.current = null;
     }
   }, [currentChatBotSession?.id]);
+
+  // When switching sessions, immediately reset attachment badge to avoid stale counts.
+  useEffect(() => {
+    onAttachmentCountChange?.(0);
+  }, [currentChatBotSession?.id, onAttachmentCountChange]);
 
   const setupWebSocket = async (): Promise<WebSocket | null> => {
     const current = webSocketRef.current;
@@ -527,16 +536,82 @@ const ChatBot = ({
     }
   };
 
+  const ensureSessionId = useCallback(async (): Promise<string> => {
+    const existing = pendingSessionIdRef.current || currentChatBotSession?.id;
+    if (existing) return existing;
+    try {
+      const session = await createSession({
+        createSessionPayload: { agent_name: currentAgent?.name },
+      }).unwrap();
+      // Seed backend preferences with current draft context so selections are preserved.
+      const prefPayload: Record<string, any> = {
+        documentLibraryIds: basePrefs?.documentLibraryIds ?? [],
+        promptResourceIds: basePrefs?.promptResourceIds ?? [],
+        templateResourceIds: basePrefs?.templateResourceIds ?? [],
+        searchPolicy: basePrefs?.searchPolicy ?? "semantic",
+        searchRagScope: basePrefs?.searchRagScope,
+        deepSearch: typeof basePrefs?.deepSearch === "boolean" ? basePrefs.deepSearch : undefined,
+        agent_name: currentAgent?.name,
+      };
+      try {
+        await persistSessionPrefs({
+          sessionId: session.id,
+          sessionPreferencesPayload: { preferences: prefPayload },
+        }).unwrap();
+      } catch (prefErr) {
+        console.warn("[CHATBOT] Failed to seed session prefs on create", prefErr);
+      }
+      pendingSessionIdRef.current = session.id;
+      onBindDraftAgentToSessionId?.(session.id);
+      onUpdateOrAddSession(session);
+      return session.id;
+    } catch (err: any) {
+      const detail = err?.data?.detail ?? err?.data ?? err?.error;
+      const errMsg =
+        typeof detail === "string"
+          ? detail
+          : typeof detail === "object" && detail
+            ? detail.message || detail.upstream || detail.code || JSON.stringify(detail)
+            : (err as Error)?.message || "Unknown error";
+      showError({ summary: "Session creation failed", detail: errMsg });
+      throw err;
+    }
+  }, [
+    basePrefs?.deepSearch,
+    basePrefs?.documentLibraryIds,
+    basePrefs?.promptResourceIds,
+    basePrefs?.searchPolicy,
+    basePrefs?.searchRagScope,
+    basePrefs?.templateResourceIds,
+    createSession,
+    currentAgent?.name,
+    currentChatBotSession?.id,
+    onBindDraftAgentToSessionId,
+    onUpdateOrAddSession,
+    persistSessionPrefs,
+    showError,
+  ]);
+
   // Upload files immediately when user selects them (sequential to preserve session binding)
   const handleFilesSelected = async (files: File[]) => {
     if (!files?.length) return;
     const sessionId = currentChatBotSession?.id;
     const agentName = currentAgent.name;
+    let baseSessionId = pendingSessionIdRef.current || sessionId;
+
+    if (!baseSessionId) {
+      try {
+        baseSessionId = await ensureSessionId();
+      } catch {
+        return;
+      }
+    }
 
     for (const file of files) {
       setUploadingFiles((prev) => [...prev, file.name]);
       const formData = new FormData();
-      const effectiveSessionId = pendingSessionIdRef.current || sessionId || "";
+      const effectiveSessionId = pendingSessionIdRef.current || baseSessionId || "";
+      console.log("XXXXXX upload start", { file: file.name, sessionId: effectiveSessionId, agent: agentName });
       formData.append("session_id", effectiveSessionId);
       formData.append("agent_name", agentName);
       formData.append("file", file);
@@ -546,10 +621,15 @@ const ChatBot = ({
           bodyUploadFileAgenticV1ChatbotUploadPost: formData as any,
         }).unwrap();
         const sid = (res as any)?.session_id as string | undefined;
+        const returnedSession = (res as any)?.session as SessionSchema | undefined;
         if (!sessionId && sid && pendingSessionIdRef.current !== sid) {
           onBindDraftAgentToSessionId?.(sid);
           pendingSessionIdRef.current = sid;
+          if (returnedSession) {
+            onUpdateOrAddSession(returnedSession);
+          }
         }
+        console.log("XXXXXX upload done", { file: file.name, sessionId: sid || effectiveSessionId, agent: agentName });
         console.log("✅ Uploaded file:", file.name);
         // Refresh attachments view in the popover
         setAttachmentsRefreshTick((x) => x + 1);
@@ -576,6 +656,15 @@ const ChatBot = ({
    */
   const queryChatBot = async (input: string, agent?: AnyAgent, runtimeContext?: RuntimeContext) => {
     console.debug(`[CHATBOT] Sending message: ${input}`);
+    let sessionId = pendingSessionIdRef.current || currentChatBotSession?.id;
+    if (!sessionId) {
+      try {
+        sessionId = await ensureSessionId();
+      } catch {
+        return;
+      }
+    }
+    console.log("XXXXXX send", { sessionId, agent: agent ? agent.name : currentAgent.name });
     // Get tokens for backend use. This proacively allows the backend to perform
     // user-authenticated operations (e.g., vector search) on behalf of the user.
     // The backend is then responsible for refreshing tokens as needed. Which will rarely be needed
@@ -585,7 +674,7 @@ const ChatBot = ({
     const eventBase: ChatAskInput = {
       message: input,
       agent_name: agent ? agent.name : currentAgent.name,
-      session_id: pendingSessionIdRef.current || currentChatBotSession?.id,
+      session_id: sessionId,
       runtime_context: runtimeContext,
       access_token: accessToken || undefined, // Now the backend can read the active token
       refresh_token: refreshToken || undefined, // Now the backend can save and use the refresh token
@@ -640,6 +729,7 @@ const ChatBot = ({
       (userInputContext?.documentLibraryIds?.length ?? 0) > 0 ||
       (userInputContext?.promptResourceIds?.length ?? 0) > 0 ||
       (userInputContext?.templateResourceIds?.length ?? 0) > 0);
+  const agentSupportsAttachments = currentAgent?.chat_options?.attach_files === true;
 
   useEffect(() => {
     if (!showWelcome) return;
@@ -723,7 +813,7 @@ const ChatBot = ({
                 sessionId={currentChatBotSession?.id}
                 effectiveSessionId={effectiveSessionId}
                 uploadingFiles={uploadingFiles}
-                onFilesSelected={handleFilesSelected}
+                onFilesSelected={agentSupportsAttachments ? handleFilesSelected : undefined}
                 attachmentsRefreshTick={attachmentsRefreshTick}
                 initialDocumentLibraryIds={initialDocumentLibraryIds}
                 initialPromptResourceIds={initialPromptResourceIds}
@@ -734,9 +824,11 @@ const ChatBot = ({
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}
-                attachmentsPanelOpen={attachmentsPanelOpen}
-                onAttachmentsPanelOpenChange={onAttachmentsPanelOpenChange}
-                onAttachmentCountChange={onAttachmentCountChange}
+                attachmentsPanelOpen={agentSupportsAttachments ? attachmentsPanelOpen : false}
+                onAttachmentsPanelOpenChange={
+                  agentSupportsAttachments ? onAttachmentsPanelOpenChange : undefined
+                }
+                onAttachmentCountChange={agentSupportsAttachments ? onAttachmentCountChange : undefined}
               />
             </Box>
           </Box>
@@ -787,7 +879,7 @@ const ChatBot = ({
                 sessionId={currentChatBotSession?.id}
                 effectiveSessionId={effectiveSessionId}
                 uploadingFiles={uploadingFiles}
-                onFilesSelected={handleFilesSelected}
+                onFilesSelected={agentSupportsAttachments ? handleFilesSelected : undefined}
                 attachmentsRefreshTick={attachmentsRefreshTick}
                 initialDocumentLibraryIds={initialDocumentLibraryIds}
                 initialPromptResourceIds={initialPromptResourceIds}
@@ -798,9 +890,11 @@ const ChatBot = ({
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}
-                attachmentsPanelOpen={attachmentsPanelOpen}
-                onAttachmentsPanelOpenChange={onAttachmentsPanelOpenChange}
-                onAttachmentCountChange={onAttachmentCountChange}
+                attachmentsPanelOpen={agentSupportsAttachments ? attachmentsPanelOpen : false}
+                onAttachmentsPanelOpenChange={
+                  agentSupportsAttachments ? onAttachmentsPanelOpenChange : undefined
+                }
+                onAttachmentCountChange={agentSupportsAttachments ? onAttachmentCountChange : undefined}
               />
             </Grid2>
 

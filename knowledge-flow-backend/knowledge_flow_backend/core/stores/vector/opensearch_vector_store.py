@@ -906,12 +906,28 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                     elif want_false:
                         filters.append(_retrievable_clause(False))
                 else:
-                    logger.debug(
-                        "[VECTOR][OPENSEARCH][FILTER] adding terms filter: field=%s values=%s",
-                        meta_field,
-                        values_list,
-                    )
-                    filters.append({"terms": {meta_field: values_list}})
+                    include_values: List[Any] = []
+                    exclude_values: List[Any] = []
+                    for v in values_list:
+                        if isinstance(v, str) and v.startswith("!"):
+                            if v[1:]:
+                                exclude_values.append(v[1:])
+                        else:
+                            include_values.append(v)
+                    if include_values:
+                        logger.debug(
+                            "[VECTOR][OPENSEARCH][FILTER] adding terms filter: field=%s values=%s",
+                            meta_field,
+                            include_values,
+                        )
+                        filters.append({"terms": {meta_field: include_values}})
+                    if exclude_values:
+                        logger.debug(
+                            "[VECTOR][OPENSEARCH][FILTER] adding must_not terms: field=%s values=%s",
+                            meta_field,
+                            exclude_values,
+                        )
+                        filters.append({"bool": {"must_not": {"terms": {meta_field: exclude_values}}}})
         if filters:
             logger.debug("[VECTOR][OPENSEARCH][FILTER] final filter list=%s", filters)
         return filters or None

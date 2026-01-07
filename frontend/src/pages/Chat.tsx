@@ -16,7 +16,7 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 
 import { Badge, Box, CircularProgress, Grid2, IconButton, Paper, Typography } from "@mui/material";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
@@ -96,6 +96,15 @@ export default function Chat() {
   const isPanelOpen = panelContentType !== null;
   const [attachmentsPanelOpen, setAttachmentsPanelOpen] = useState<boolean>(false);
   const [attachmentBadgeCount, setAttachmentBadgeCount] = useState<number>(0);
+  const lastAttachmentSessionRef = useRef<string | null>(null);
+
+  const handleAttachmentBadgeUpdate = useCallback(
+    (count: number) => {
+      console.log("XXXXXX attachment badge update", { sessionId: currentSession?.id, count });
+      setAttachmentBadgeCount(count);
+    },
+    [currentSession?.id],
+  );
 
   const openPanel = (type: PanelContentType) => {
     setPanelContentType(panelContentType === type ? null : type);
@@ -257,6 +266,38 @@ export default function Chat() {
     display: "flex",
   };
 
+  const serverAttachmentCount = useMemo(() => {
+    if (!currentSession) return 0;
+    const att = (currentSession as any).attachments;
+    if (Array.isArray(att)) return att.length;
+    const fileNames = (currentSession as any).file_names;
+    if (Array.isArray(fileNames)) return fileNames.length;
+    const count = (currentSession as any).attachments_count;
+    return typeof count === "number" ? count : 0;
+  }, [currentSession]);
+
+  const supportsAttachments = currentAgent?.chat_options?.attach_files === true;
+  useEffect(() => {
+    if (!currentSession?.id || !supportsAttachments) {
+      lastAttachmentSessionRef.current = currentSession?.id ?? null;
+      setAttachmentBadgeCount(0);
+      return;
+    }
+    console.log("XXXXXX server attachment snapshot", {
+      sessionId: currentSession.id,
+      serverAttachmentCount,
+    });
+    setAttachmentBadgeCount((prev) => {
+      const isNewSession = lastAttachmentSessionRef.current !== currentSession.id;
+      lastAttachmentSessionRef.current = currentSession.id;
+      if (isNewSession) {
+        return serverAttachmentCount ?? 0;
+      }
+      return Math.max(prev, serverAttachmentCount ?? 0);
+    });
+  }, [currentSession?.id, serverAttachmentCount, supportsAttachments]);
+  console.log("XXXXXX current agent", { name: currentAgent?.name, supportsAttachments });
+
   return (
     <Box ref={containerRef} sx={{ height: "100vh", position: "relative", overflow: "hidden" }}>
       {/* Panel toggle buttons */}
@@ -269,22 +310,24 @@ export default function Chat() {
           <ChatIcon />
         </IconButton>
       </Box>
-      <Box sx={attachmentButtonContainerSx}>
-        <IconButton
-          color={attachmentsPanelOpen ? "primary" : "default"}
-          onClick={() => setAttachmentsPanelOpen((v) => !v)}
-          title={t("chatbot.attachments.drawerTitle", "Attachments")}
-        >
-          <Badge
-            color="primary"
-            badgeContent={attachmentBadgeCount > 0 ? attachmentBadgeCount : undefined}
-            overlap="circular"
-            anchorOrigin={{ vertical: "top", horizontal: "right" }}
+      {supportsAttachments && (
+        <Box sx={attachmentButtonContainerSx}>
+          <IconButton
+            color={attachmentsPanelOpen ? "primary" : "default"}
+            onClick={() => setAttachmentsPanelOpen((v) => !v)}
+            title={t("chatbot.attachments.drawerTitle", "Attachments")}
           >
-            <FolderOpenIcon />
-          </Badge>
-        </IconButton>
-      </Box>
+            <Badge
+              color="primary"
+              badgeContent={attachmentBadgeCount > 0 ? attachmentBadgeCount : undefined}
+              overlap="circular"
+              anchorOrigin={{ vertical: "top", horizontal: "right" }}
+            >
+              <FolderOpenIcon />
+            </Badge>
+          </IconButton>
+        </Box>
+      )}
 
       <Box
         sx={{
@@ -360,9 +403,9 @@ export default function Chat() {
               selected_chat_context_ids: selectedChatContextIds.length ? selectedChatContextIds : undefined,
             }}
             onBindDraftAgentToSessionId={bindDraftAgentToSessionId}
-            attachmentsPanelOpen={attachmentsPanelOpen}
-            onAttachmentsPanelOpenChange={setAttachmentsPanelOpen}
-            onAttachmentCountChange={setAttachmentBadgeCount}
+            attachmentsPanelOpen={supportsAttachments ? attachmentsPanelOpen : false}
+            onAttachmentsPanelOpenChange={supportsAttachments ? setAttachmentsPanelOpen : undefined}
+            onAttachmentCountChange={supportsAttachments ? handleAttachmentBadgeUpdate : undefined}
           />
         </Grid2>
       </Box>

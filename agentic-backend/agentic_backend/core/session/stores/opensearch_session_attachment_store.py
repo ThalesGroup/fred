@@ -198,11 +198,12 @@ class OpensearchSessionAttachmentStore(BaseSessionAttachmentStore):
             self.client.delete_by_query(
                 index=self.index,
                 body=query,
-                params={"refresh": True},
+                # OpenSearch expects lowercase true/false strings for query params
+                params={"refresh": "true"},
             )
             self._cache.delete(session_id)
         except NotFoundError:
-            logger.debug(
+            logger.warning(
                 "[SESSION][OS] No attachments to delete for session %s", session_id
             )
         except Exception:
