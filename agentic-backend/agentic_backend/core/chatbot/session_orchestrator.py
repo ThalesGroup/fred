@@ -342,10 +342,15 @@ class SessionOrchestrator:
 
     @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
     def create_empty_session(
-        self, user: KeycloakUser, agent_name: Optional[str] = None, title: Optional[str] = None
+        self,
+        user: KeycloakUser,
+        agent_name: Optional[str] = None,
+        title: Optional[str] = None,
     ) -> SessionSchema:
         """Explicitly create a new empty session (used by the UI before first upload/message)."""
-        prefs: Optional[Dict[str, Any]] = {"agent_name": agent_name} if agent_name else None
+        prefs: Optional[Dict[str, Any]] = (
+            {"agent_name": agent_name} if agent_name else None
+        )
         session = SessionSchema(
             id=secrets.token_urlsafe(8),
             user_id=user.uid,
@@ -355,7 +360,9 @@ class SessionOrchestrator:
             preferences=prefs,
         )
         self.session_store.save(session)
-        logger.info("[SESSIONS] Created empty session %s for user %s", session.id, user.uid)
+        logger.info(
+            "[SESSIONS] Created empty session %s for user %s", session.id, user.uid
+        )
         return session
 
     def _maybe_refresh_title_from_prompt(

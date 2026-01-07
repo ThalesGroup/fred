@@ -100,7 +100,6 @@ export default function Chat() {
 
   const handleAttachmentBadgeUpdate = useCallback(
     (count: number) => {
-      console.log("XXXXXX attachment badge update", { sessionId: currentSession?.id, count });
       setAttachmentBadgeCount(count);
     },
     [currentSession?.id],
@@ -149,6 +148,66 @@ export default function Chat() {
       setTimeout(() => refetchSessions(), 1000);
     }
   };
+
+  const buttonContainerSx = {
+    position: "absolute",
+    top: 12,
+    zIndex: 10,
+    display: "flex",
+    alignItems: "center",
+    gap: 1,
+    transition: (t) => t.transitions.create("left"), // Add transition for smooth movement
+
+    // Conditional left position to move the buttons when the panel is open
+    left: isPanelOpen
+      ? {
+          xs: `calc(${PANEL_W.xs}px + 12px)`,
+          sm: `calc(${PANEL_W.sm}px + 12px)`,
+          md: `calc(${PANEL_W.md}px + 12px)`,
+        }
+      : 12, // Original position when closed
+  };
+
+  const attachmentButtonContainerSx = {
+    position: "absolute",
+    top: 12,
+    right: attachmentsPanelOpen
+      ? {
+          xs: ATTACH_PANEL_W.xs + 12,
+          sm: ATTACH_PANEL_W.sm + 12,
+          md: ATTACH_PANEL_W.sm + 12,
+        }
+      : 12,
+    zIndex: 10,
+    display: "flex",
+  };
+
+  const serverAttachmentCount = useMemo(() => {
+    if (!currentSession) return 0;
+    const att = (currentSession as any).attachments;
+    if (Array.isArray(att)) return att.length;
+    const fileNames = (currentSession as any).file_names;
+    if (Array.isArray(fileNames)) return fileNames.length;
+    const count = (currentSession as any).attachments_count;
+    return typeof count === "number" ? count : 0;
+  }, [currentSession]);
+
+  const supportsAttachments = currentAgent?.chat_options?.attach_files === true;
+  useEffect(() => {
+    if (!currentSession?.id || !supportsAttachments) {
+      lastAttachmentSessionRef.current = currentSession?.id ?? null;
+      setAttachmentBadgeCount(0);
+      return;
+    }
+    setAttachmentBadgeCount((prev) => {
+      const isNewSession = lastAttachmentSessionRef.current !== currentSession.id;
+      lastAttachmentSessionRef.current = currentSession.id;
+      if (isNewSession) {
+        return serverAttachmentCount ?? 0;
+      }
+      return Math.max(prev, serverAttachmentCount ?? 0);
+    });
+  }, [currentSession?.id, serverAttachmentCount, supportsAttachments]);
 
   if (flowsLoading || sessionsLoading) {
     return (
@@ -232,71 +291,6 @@ export default function Chat() {
         return null;
     }
   };
-
-  const buttonContainerSx = {
-    position: "absolute",
-    top: 12,
-    zIndex: 10,
-    display: "flex",
-    alignItems: "center",
-    gap: 1,
-    transition: (t) => t.transitions.create("left"), // Add transition for smooth movement
-
-    // Conditional left position to move the buttons when the panel is open
-    left: isPanelOpen
-      ? {
-          xs: `calc(${PANEL_W.xs}px + 12px)`,
-          sm: `calc(${PANEL_W.sm}px + 12px)`,
-          md: `calc(${PANEL_W.md}px + 12px)`,
-        }
-      : 12, // Original position when closed
-  };
-
-  const attachmentButtonContainerSx = {
-    position: "absolute",
-    top: 12,
-    right: attachmentsPanelOpen
-      ? {
-          xs: ATTACH_PANEL_W.xs + 12,
-          sm: ATTACH_PANEL_W.sm + 12,
-          md: ATTACH_PANEL_W.sm + 12,
-        }
-      : 12,
-    zIndex: 10,
-    display: "flex",
-  };
-
-  const serverAttachmentCount = useMemo(() => {
-    if (!currentSession) return 0;
-    const att = (currentSession as any).attachments;
-    if (Array.isArray(att)) return att.length;
-    const fileNames = (currentSession as any).file_names;
-    if (Array.isArray(fileNames)) return fileNames.length;
-    const count = (currentSession as any).attachments_count;
-    return typeof count === "number" ? count : 0;
-  }, [currentSession]);
-
-  const supportsAttachments = currentAgent?.chat_options?.attach_files === true;
-  useEffect(() => {
-    if (!currentSession?.id || !supportsAttachments) {
-      lastAttachmentSessionRef.current = currentSession?.id ?? null;
-      setAttachmentBadgeCount(0);
-      return;
-    }
-    console.log("XXXXXX server attachment snapshot", {
-      sessionId: currentSession.id,
-      serverAttachmentCount,
-    });
-    setAttachmentBadgeCount((prev) => {
-      const isNewSession = lastAttachmentSessionRef.current !== currentSession.id;
-      lastAttachmentSessionRef.current = currentSession.id;
-      if (isNewSession) {
-        return serverAttachmentCount ?? 0;
-      }
-      return Math.max(prev, serverAttachmentCount ?? 0);
-    });
-  }, [currentSession?.id, serverAttachmentCount, supportsAttachments]);
-  console.log("XXXXXX current agent", { name: currentAgent?.name, supportsAttachments });
 
   return (
     <Box ref={containerRef} sx={{ height: "100vh", position: "relative", overflow: "hidden" }}>

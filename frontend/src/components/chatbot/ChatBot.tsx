@@ -38,8 +38,8 @@ import {
   SessionSchema,
   StreamEvent,
   useCreateSessionAgenticV1ChatbotSessionPostMutation,
-  useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation,
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
+  useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
 } from "../../slices/agentic/agenticOpenApi.ts";
 import {
@@ -611,7 +611,6 @@ const ChatBot = ({
       setUploadingFiles((prev) => [...prev, file.name]);
       const formData = new FormData();
       const effectiveSessionId = pendingSessionIdRef.current || baseSessionId || "";
-      console.log("XXXXXX upload start", { file: file.name, sessionId: effectiveSessionId, agent: agentName });
       formData.append("session_id", effectiveSessionId);
       formData.append("agent_name", agentName);
       formData.append("file", file);
@@ -629,7 +628,6 @@ const ChatBot = ({
             onUpdateOrAddSession(returnedSession);
           }
         }
-        console.log("XXXXXX upload done", { file: file.name, sessionId: sid || effectiveSessionId, agent: agentName });
         console.log("✅ Uploaded file:", file.name);
         // Refresh attachments view in the popover
         setAttachmentsRefreshTick((x) => x + 1);
@@ -664,7 +662,6 @@ const ChatBot = ({
         return;
       }
     }
-    console.log("XXXXXX send", { sessionId, agent: agent ? agent.name : currentAgent.name });
     // Get tokens for backend use. This proacively allows the backend to perform
     // user-authenticated operations (e.g., vector search) on behalf of the user.
     // The backend is then responsible for refreshing tokens as needed. Which will rarely be needed
@@ -825,9 +822,7 @@ const ChatBot = ({
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}
                 attachmentsPanelOpen={agentSupportsAttachments ? attachmentsPanelOpen : false}
-                onAttachmentsPanelOpenChange={
-                  agentSupportsAttachments ? onAttachmentsPanelOpenChange : undefined
-                }
+                onAttachmentsPanelOpenChange={agentSupportsAttachments ? onAttachmentsPanelOpenChange : undefined}
                 onAttachmentCountChange={agentSupportsAttachments ? onAttachmentCountChange : undefined}
               />
             </Box>
@@ -891,9 +886,7 @@ const ChatBot = ({
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}
                 attachmentsPanelOpen={agentSupportsAttachments ? attachmentsPanelOpen : false}
-                onAttachmentsPanelOpenChange={
-                  agentSupportsAttachments ? onAttachmentsPanelOpenChange : undefined
-                }
+                onAttachmentsPanelOpenChange={agentSupportsAttachments ? onAttachmentsPanelOpenChange : undefined}
                 onAttachmentCountChange={agentSupportsAttachments ? onAttachmentCountChange : undefined}
               />
             </Grid2>

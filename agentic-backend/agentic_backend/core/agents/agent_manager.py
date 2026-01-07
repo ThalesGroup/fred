@@ -93,10 +93,18 @@ class AgentManager:
             # Normalize chat options to explicit boolean defaults (all False unless opted-in)
             try:
                 settings.chat_options = AgentChatOptions(
-                    **(settings.chat_options.model_dump(exclude_none=True) if settings.chat_options else {})
+                    **(
+                        settings.chat_options.model_dump(exclude_none=True)
+                        if settings.chat_options
+                        else {}
+                    )
                 )
             except Exception:
-                logger.debug("[AGENTS] Failed to normalize chat options for %s", settings.name, exc_info=True)
+                logger.debug(
+                    "[AGENTS] Failed to normalize chat options for %s",
+                    settings.name,
+                    exc_info=True,
+                )
             flows.append(settings)
         return flows
 
@@ -191,7 +199,11 @@ class AgentManager:
         try:
             new_settings.chat_options = self._chat_options_from_tuning(tunings)
         except Exception:
-            logger.debug("[AGENTS] Failed to sync chat_options from tuning for %s", name, exc_info=True)
+            logger.debug(
+                "[AGENTS] Failed to sync chat_options from tuning for %s",
+                name,
+                exc_info=True,
+            )
         # 1) Persist source of truth (DB)
         try:
             self.store.save(
