@@ -1,9 +1,12 @@
 - **v1.1.0** — 2026-01-04
   - **Summary**
     - New PostgreSQL/pgvector option so Fred can run fully without OpenSearch, plus in-UI Mermaid rendering for agent replies.
+    - This version provides full support of per conversation attachments. Attached files are vectorized using lite markdown processors.
+    - The Rico agent expose now a first deep search capability that leverage the Rico Senior document agent.
   - **Features**
     - Add a Postgres-first deployment path (metadata + vectors) across knowledge-flow and agentic backends (#933)
     - Surface vector backend details (pgvector or OpenSearch) in the admin views (#933)
+    - Rag support for per conversation attachements files
   - **Bug fixes**
     - Fix Mermaid diagrams rendering in chat by generating safe SVG previews and stabilizing layout (#933)
   - **Impact**
