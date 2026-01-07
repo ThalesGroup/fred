@@ -208,6 +208,9 @@ storage:
   history_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/history.duckdb"
+  attachments_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/agentic/session_attachments.duckdb"
   kpi_store:
     type: "log"
     level: "INFO"
