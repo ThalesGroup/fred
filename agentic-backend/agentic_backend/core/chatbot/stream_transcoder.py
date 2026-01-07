@@ -17,6 +17,7 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Awaitable, Callable, List, Optional, cast
 
@@ -127,18 +128,30 @@ class StreamTranscoder:
         user_context: KeycloakUser,
         runtime_context: RuntimeContext,
     ) -> List[ChatMessage]:
-        langfuse_handler = CallbackHandler()
+        if os.getenv("LANGFUSE_SECRET_KEY") and os.getenv("LANGFUSE_PUBLIC_KEY"):
+            logger.info("Langfuse credentials found.")
+            langfuse_handler = CallbackHandler()
+            config: RunnableConfig = {
+                "configurable": {
+                    "thread_id": session_id,
+                    "user_id": user_context.uid,
+                    "access_token": runtime_context.access_token,
+                    "refresh_token": runtime_context.refresh_token,
+                },
+                "recursion_limit": 100,
+                "callbacks": [langfuse_handler],
+            }
 
-        config: RunnableConfig = {
-            "configurable": {
-                "thread_id": session_id,
-                "user_id": user_context.uid,
-                "access_token": runtime_context.access_token,
-                "refresh_token": runtime_context.refresh_token,
-            },
-            "recursion_limit": 100,
-            "callbacks": [langfuse_handler],
-        }
+        else:
+            config: RunnableConfig = {
+                "configurable": {
+                    "thread_id": session_id,
+                    "user_id": user_context.uid,
+                    "access_token": runtime_context.access_token,
+                    "refresh_token": runtime_context.refresh_token,
+                },
+                "recursion_limit": 100,
+            }
 
         out: List[ChatMessage] = []
         seq = start_seq
