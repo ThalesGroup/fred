@@ -478,7 +478,7 @@ Open <http://localhost:5173> in your browser.
 For production deployments (Kubernetes, VMs, on-prem or cloud), refer to:
 
 - [`docs/DEPLOYMENT_GUIDE.md`](./docs/DEPLOYMENT_GUIDE.md) – high-level deployment guide (components, configuration, external dependencies).
-- [`docs/DEPLOYMENT_GUIDE_OPENSEARCH.md`](./docs/DEPLOYMENT_GUIDE_OPENSEARCH.md) – **mandatory** OpenSearch requirements for vector search.
+- [`docs/DEPLOYMENT_GUIDE_OPENSEARCH.md`](./docs/DEPLOYMENT_GUIDE_OPENSEARCH.md) – OpenSearch-specific requirements. Use this only if you choose OpenSearch over the new PostgreSQL/pgvector option.
 
 The rest of this `README.md` focuses on local developer setup and model configuration.
 
@@ -520,7 +520,7 @@ See `agentic-backend/config/configuration.yaml` (section `ai:`) and `knowledge-f
 ### Advanced Integrations
 
 - Enable Keycloak or another OIDC provider for authentication
-- Persist metrics and files in OpenSearch and MinIO
+- Persist metrics and files in PostgreSQL/pgvector (no OpenSearch required) **or** OpenSearch + MinIO
 
 ## Core Architecture and Licensing Clarity
 
@@ -528,6 +528,11 @@ The three components just described form the _entirety of the Fred platform_. Th
 require any external dependencies such as MinIO, OpenSearch, or Weaviate.
 
 Instead, Fred is designed with a modular architecture that allows optional integration with these technologies. By default, a minimal Fred deployment can use just the local filesystem for all storage needs.
+
+For persistent deployments you now have two options:
+
+- **PostgreSQL-only**: metadata + vectors stored in PostgreSQL via `pgvector`. No OpenSearch dependency.
+- **OpenSearch + object storage**: production-grade vector search with OpenSearch and MinIO/S3 for raw files.
 
 ## Documentation
 

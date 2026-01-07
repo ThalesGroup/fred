@@ -1,4 +1,17 @@
 # app/core/stores/metadata/opensearch_metadata_store.py
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import logging
 from typing import Any, Dict, List, Optional
@@ -37,6 +50,8 @@ METADATA_INDEX_MAPPING = {
             # identity
             "document_uid": {"type": "keyword"},
             "document_name": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "canonical_name": {"type": "keyword"},
+            "version": {"type": "integer"},
             "title": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
             "author": {"type": "keyword"},
             "created": {"type": "date"},
@@ -189,6 +204,8 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             # identity
             "document_uid": md.identity.document_uid,
             "document_name": md.identity.document_name,
+            "canonical_name": md.identity.canonical_name,
+            "version": md.identity.version,
             "title": md.identity.title,
             "author": md.identity.author,
             "created": md.identity.created,
@@ -250,6 +267,8 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             identity = Identity(
                 document_uid=src["document_uid"],
                 document_name=src["document_name"],
+                canonical_name=src.get("canonical_name"),
+                version=src.get("version", 0) or 0,
                 title=src.get("title"),
                 author=src.get("author"),
                 created=src.get("created"),
@@ -406,6 +425,38 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             return [self._deserialize(hit["_source"]) for hit in hits]
         except Exception as e:
             logger.error(f"Deserialization failed for results tagged '{tag_id}': {e}")
+            raise MetadataDeserializationError from e
+
+    def browse_metadata_in_tag(self, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[List[DocumentMetadata], int]:
+        if not tag_id:
+            raise ValueError("Tag ID must be provided.")
+        try:
+            logger.debug(
+                "[PAGINATION] browse_metadata_in_tag(tag_id=%s, offset=%s, limit=%s)",
+                tag_id,
+                offset,
+                limit,
+            )
+            query = {"query": {"term": {"tag_ids": tag_id}}}
+            # Note: some OpenSearch deployments expect track_total_hits as a string.
+            params = {"from": offset, "size": limit, "track_total_hits": "true"}
+            resp = self.client.search(index=self.metadata_index_name, body=query, params=params)
+            hits = resp["hits"]["hits"]
+            total_hits = resp["hits"]["total"]["value"] if isinstance(resp["hits"]["total"], dict) else resp["hits"]["total"]
+            logger.debug(
+                "[PAGINATION] browse_metadata_in_tag result: returned=%s total=%s",
+                len(hits),
+                total_hits,
+            )
+        except Exception as e:
+            logger.error(f"OpenSearch paginated query failed for tag '{tag_id}': {e}")
+            raise
+
+        try:
+            docs = [self._deserialize(hit["_source"]) for hit in hits]
+            return docs, int(total_hits)
+        except Exception as e:
+            logger.error(f"Deserialization failed for paginated results tagged '{tag_id}': {e}")
             raise MetadataDeserializationError from e
 
     # ---------- writes ----------

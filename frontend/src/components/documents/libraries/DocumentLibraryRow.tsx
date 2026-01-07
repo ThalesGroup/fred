@@ -18,7 +18,7 @@ import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import SearchIcon from "@mui/icons-material/Search";
 import SearchOffIcon from "@mui/icons-material/SearchOff";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
-import { Box, IconButton, Tooltip, Typography } from "@mui/material";
+import { Box, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
 
@@ -26,6 +26,7 @@ import { usePermissions } from "../../../security/usePermissions";
 import { type DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 import { getDocumentIcon } from "../common/DocumentIcon";
+import { DocumentVersionChip, extractDocumentVersion } from "../common/DocumentVersionChip";
 
 import KeywordsPreview from "./KeywordsPreview";
 import SummaryPreview from "./SummaryPreview";
@@ -35,6 +36,7 @@ export type DocumentRowCompactProps = {
   onPreview?: (doc: DocumentMetadata) => void;
   onPdfPreview?: (doc: DocumentMetadata) => void;
   onDownload?: (doc: DocumentMetadata) => void;
+  isDownloading?: boolean;
   onRemoveFromLibrary?: (doc: DocumentMetadata) => void;
   onToggleRetrievable?: (doc: DocumentMetadata) => void;
 };
@@ -44,6 +46,7 @@ export function DocumentRowCompact({
   onPreview,
   onPdfPreview,
   onDownload,
+  isDownloading = false,
   onRemoveFromLibrary,
   onToggleRetrievable,
 }: DocumentRowCompactProps) {
@@ -54,6 +57,7 @@ export function DocumentRowCompact({
 
   const formatDate = (date?: string) => (date ? dayjs(date).format("DD/MM/YYYY") : "-");
   const isPdf = doc.identity.document_name.toLowerCase().endsWith(".pdf");
+  const version = extractDocumentVersion(doc);
 
   return (
     <Box
@@ -81,6 +85,7 @@ export function DocumentRowCompact({
         >
           {doc.identity.document_name || doc.identity.document_uid}
         </Typography>
+        <DocumentVersionChip version={version} />
       </Box>
       {/* 2) Summary (peek + dialog). Rationale: keep doc “why” close to the name. */}
       <Box sx={{ justifySelf: "start" }}>
@@ -202,9 +207,11 @@ export function DocumentRowCompact({
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, justifySelf: "end" }}>
         {onDownload && (
           <Tooltip title={t("documentLibrary.download")}>
-            <IconButton size="small" onClick={() => onDownload(doc)}>
-              <DownloadIcon fontSize="inherit" />
-            </IconButton>
+            <span>
+              <IconButton size="small" onClick={() => onDownload(doc)} disabled={isDownloading}>
+                {isDownloading ? <CircularProgress size={16} thickness={5} /> : <DownloadIcon fontSize="inherit" />}
+              </IconButton>
+            </span>
           </Tooltip>
         )}
         {onRemoveFromLibrary && (

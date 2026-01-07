@@ -15,22 +15,22 @@
 import logging
 from typing import List, Literal, Union
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from fred_core import KeycloakUser, VectorSearchHit, get_current_user
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
-from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicy, SearchPolicyName, SearchRequest
+from knowledge_flow_backend.features.vector_search.vector_search_structures import RerankRequest, SearchPolicyName, SearchRequest
 
 logger = logging.getLogger(__name__)
 
 # ---------------- Echo types for UI OpenAPI ----------------
 
-EchoPayload = Union[SearchPolicy, SearchPolicyName]
+EchoPayload = Union[SearchPolicyName]
 
 
 class EchoEnvelope(BaseModel):
-    kind: Literal["SearchPolicy", "SearchPolicyName"]
+    kind: Literal["SearchPolicyName"]
     payload: EchoPayload = Field(..., description="Schema payload being echoed")
 
 
@@ -59,20 +59,25 @@ class VectorSearchController:
             description="Returns ranked VectorSearchHit objects for the query.",
             response_model=list[VectorSearchHit],
             operation_id="search_documents_using_vectorization",
+            responses={status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Internal server error", "content": {"application/json": {"example": {"detail": "An error occurred during search"}}}}},
         )
         async def vector_search(
             request: SearchRequest,
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
-            hits = await self.service.search(
-                question=request.question,
-                user=user,
-                top_k=request.top_k,
-                document_library_tags_ids=request.document_library_tags_ids,
-                policy_name=request.search_policy,
-            )
-            # hits is expected to be List[VectorSearchHit]
-            return hits
+            try:
+                hits = await self.service.search(
+                    question=request.question,
+                    user=user,
+                    top_k=request.top_k,
+                    document_library_tags_ids=request.document_library_tags_ids,
+                    policy_name=request.search_policy,
+                    session_id=request.session_id,
+                    include_session_scope=request.include_session_scope,
+                )
+                return hits
+            except Exception as e:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
         @router.post(
             "/vector/test",
@@ -91,3 +96,19 @@ class VectorSearchController:
             dummy_hit = VectorSearchHit(content="This is a test document chunk.", uid="test-doc-001", title="Dummy Test Document", score=0.99, rank=1, type="test")
 
             return [dummy_hit]
+
+        @router.post(
+            "/vector/rerank",
+            tags=["Vector Search"],
+            summary="Sort documents according to their relevance",
+            description="Returns a list of VectorSearchHit sorted by relevance",
+            response_model=List[VectorSearchHit],
+            operation_id="rerank_documents",
+            status_code=status.HTTP_200_OK,
+        )
+        async def rerank(
+            request: RerankRequest,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> List[VectorSearchHit]:
+            documents = self.service.rerank_documents(question=request.question, documents=request.documents, top_r=request.top_r)
+            return documents

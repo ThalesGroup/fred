@@ -19,6 +19,7 @@ applications:
     applicationName: agentic-backend
     deployment:
       enabled: true
+    replicaCount: 1
     statefulset:
       enabled: false
     job:
@@ -28,7 +29,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/agentic-backend
-      tag: "v1.0.1"
+      tag: "v1.0.10"
       pullPolicy: IfNotPresent
     command:
       enabled: true
@@ -184,6 +185,21 @@ applications:
         # that allow users to create/update agents at runtime and change
         # their configuration without redeploying the application.
         use_static_config_only: false
+        # Number of past exchanges to restore when initializing an agent session
+        # This setting is used to limit the amount of historical context
+        # that is loaded into the agent at the beginning of a session. It typically occur after a restart of the application
+        # or when an agent session is re-initialized for any reason.
+        agentic_restore_max_exchanges: 20
+
+        # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
+        max_concurrent_agents: 128
+        
+        # Maximum number of files a user can attach across all sessions
+        max_attached_files_per_user: 20
+  
+        # Maximum size (in MB) for each attached file
+        max_attached_file_size_mb: 50
+
         # Base URL for the Knowledge Flow service
         knowledge_flow_url: "http://knowledge-flow-backend:8111/knowledge-flow/v1"
         # Timeout settings for the client
@@ -199,6 +215,21 @@ applications:
             temperature: 0.0
             max_retries: 2
             request_timeout: 30
+        default_language_model:
+          # Required in .env:
+          # - OPENAI_API_KEY
+          provider: "openai"
+          name: "gpt-4o"
+          settings:
+            temperature: 0.0
+            max_retries: 2
+            request_timeout: 30
+        crossencoder_model:
+          name: cross-encoder/ms-marco-MiniLM-L-12-v2
+          settings:
+            online: false
+            local_path: /app/models
+
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the chat model
         agents:
@@ -210,6 +241,10 @@ applications:
             type: "agent"
             class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
             enabled: true
+            chat_options:
+              search_policy_selection: false
+              libraries_selection: false
+              attach_files: true
           - name: "Tessa"
             type: "agent"
             class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
@@ -218,6 +253,11 @@ applications:
             type: "agent"
             class_path: "agentic_backend.agents.rags.rag_expert.Rico"
             enabled: true
+            chat_options:
+              search_policy_selection: true
+              libraries_selection: true
+              search_rag_scoping: true
+              attach_files: true
           - name: "Rico Senior"
             type: "agent"
             role: "Advanced Document Retrieval Expert"
@@ -225,17 +265,24 @@ applications:
             enabled: false
       mcp:
         servers:
-          - name: "mcp-knowledge-flow-mcp-tabular"
+          - id: "mcp-knowledge-flow-mcp-tabular"
+            name: "mcp.servers.tabular.name"
+            description: "mcp.servers.tabular.description"
             transport: "streamable_http"
             url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
             sse_read_timeout: 2000
             auth_mode: "user_token"
-          - name: "mcp-knowledge-flow-opensearch-ops"
+          - id: "mcp-knowledge-flow-opensearch-ops"
+            name: "mcp.servers.search_opensearch.name"
+            description: "mcp.servers.search_opensearch.description"
             transport: "streamable_http"
             url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops"
             sse_read_timeout: 2000
             auth_mode: "user_token"
-          - name: "mcp-kubernetes-server"
+          - id: "mcp-kubernetes-server"
+            name: "mcp.servers.kubernetes.name"
+            description: "mcp.servers.kubernetes.description"
+            enabled: false
             transport: "streamable_http"
             url: "http://mcp-kubernetes-server:8081/mcp"
             sse_read_timeout: 2000
@@ -259,6 +306,10 @@ applications:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/agent.duckdb"
 
+        mcp_servers_store:
+          type: "duckdb"
+          duckdb_path: "/home/fred-user/.fred/agentic/mcp_servers.duckdb"
+
         session_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/session.duckdb"
@@ -276,12 +327,15 @@ applications:
       KEYCLOAK_AGENTIC_CLIENT_SECRET: ""
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
-
+      M2M_CLIENT_SECRET: ""
+      OPENFGA_API_TOKEN: ""
+  
   frontend:
     enabled: true
     applicationName: frontend
     deployment:
       enabled: true
+    replicaCount: 1
     statefulset:
       enabled: false
     job:
@@ -291,7 +345,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/frontend
-      tag: "v1.0.1"
+      tag: "v1.0.10"
       pullPolicy: IfNotPresent
     command:
       enabled: false
@@ -391,12 +445,14 @@ applications:
         backend_url_api: "http://fred.dev.fred.thalesgroup.com"
         backend_url_knowledge: "https://fred.dev.fred.thalesgroup.com"
         websocket_url: "ws://fred.dev.fred.thalesgroup.com/fred/chatbot/query"
+        frontend_basename : "/"
 
   knowledge-flow-backend:
     enabled: true
     applicationName: knowledge-flow-backend
     deployment:
       enabled: true
+    replicaCount: 1
     statefulset:
       enabled: false
     job:
@@ -406,7 +462,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
-      tag: "v1.0.1"
+      tag: "v1.0.10"
     command:
       enabled: true
       data:
@@ -645,11 +701,21 @@ applications:
         text_enabled: true
         templates_enabled: true
         resources_enabled: true
+        filesystem_enabled: false
         opensearch_ops_enabled: false
         neo4j_enabled: false
+
+      filesystem:
+        type: local
+        # type: minio
+        # endpoint: http://localhost:9000
+        # access_key: admin
+        # bucket_name: filesystem
+        # secure: false
 
     dotenv:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
+      OPENFGA_API_TOKEN: ""

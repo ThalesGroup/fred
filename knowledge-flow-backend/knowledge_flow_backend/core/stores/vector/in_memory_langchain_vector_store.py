@@ -157,6 +157,25 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
         except Exception:
             logger.exception("❌ Failed to delete vectors for document_uid=%s", document_uid)
 
+    def get_document_chunk_count(self, *, document_uid: str) -> int:
+        try:
+            return sum(1 for rec in self.vectorstore.store.values() if (rec.get("metadata") or {}).get("document_uid") == document_uid)
+        except Exception:
+            logger.exception("❌ Failed to count chunks for document_uid=%s in memory store", document_uid)
+            return 0
+
+    def list_document_uids(self) -> List[str]:
+        try:
+            doc_uids: set[str] = set()
+            for rec in self.vectorstore.store.values():
+                uid = (rec.get("metadata") or {}).get("document_uid")
+                if isinstance(uid, str) and uid:
+                    doc_uids.add(uid)
+            return sorted(doc_uids)
+        except Exception:
+            logger.warning("❌ Failed to list document_uids from in-memory store", exc_info=True)
+            return []
+
     def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:
         """
         Dev-only: toggle retrievable flag on existing in-memory chunks without deleting them.
@@ -215,3 +234,95 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
             hits.append(AnnHit(document=doc, score=float(score)))
 
         return hits
+
+    # ---- Introspection / Diagnostics ----
+    def get_vectors_for_document(self, document_uid: str, with_document: bool = True) -> List[Dict[str, Any]]:
+        """
+        Return all embeddings for the given document along with their chunk ids.
+
+        Return format: [{"chunk_uid": str, "vector": list[float]}, ...]
+        """
+        try:
+            out: List[Dict[str, Any]] = []
+            # InMemoryVectorStore keeps a dict with records containing "embedding" if computed
+            # and the original "metadata". We filter by metadata.document_uid.
+            for key, rec in self.vectorstore.store.items():
+                md = rec.get("metadata") or {}
+                if md.get("document_uid") != document_uid:
+                    continue
+                vec = rec.get("embedding")
+                if vec is None:
+                    # The InMemory implementation may not expose the vector depending on the version.
+                    # Skip entries without a vector to stay robust.
+                    continue
+                cid = md.get(CHUNK_ID_FIELD) or key
+                entry = {"chunk_uid": cid, "vector": vec}
+                if with_document:
+                    entry["text"] = rec.get("text", "")
+                out.append(entry)
+            logger.info("🔎 [InMemory] Retrieved %d vectors for document_uid=%s", len(out), document_uid)
+            return out
+        except Exception:
+            logger.exception("❌ [InMemory] Failed to fetch vectors for document_uid=%s", document_uid)
+            return []
+
+    def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
+        """
+        Return all chunks (text + metadata) for the given document.
+
+        Return format: [{"chunk_uid": str, "text": str, "metadata": dict}, ...]
+        """
+        try:
+            out: List[Dict[str, Any]] = []
+            for key, rec in self.vectorstore.store.items():
+                md = rec.get("metadata") or {}
+                if md.get("document_uid") != document_uid:
+                    continue
+                text = rec.get("text", "")
+                cid = md.get(CHUNK_ID_FIELD) or key
+                out.append({"chunk_uid": cid, "text": text, "metadata": md})
+            logger.info("📄 [InMemory] Retrieved %d chunks for document_uid=%s", len(out), document_uid)
+            return out
+        except Exception:
+            logger.exception("❌ [InMemory] Failed to fetch chunks for document_uid=%s", document_uid)
+            return []
+
+    def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
+        """
+        Return a single chunk (text + metadata) identified by chunk_uid within a document.
+
+        Structure: { "chunk_uid": str, "text": str, "metadata": dict }
+        """
+        try:
+            for key, rec in self.vectorstore.store.items():
+                md = rec.get("metadata") or {}
+                if md.get("document_uid") != document_uid:
+                    continue
+                cid = md.get(CHUNK_ID_FIELD) or key
+                if cid == chunk_uid:
+                    return {"chunk_uid": cid, "text": rec.get("text", ""), "metadata": md}
+            logger.warning("🔎 [InMemory] Chunk not found: chunk_uid=%s document_uid=%s", chunk_uid, document_uid)
+            return {"chunk_uid": chunk_uid}
+        except Exception:
+            logger.exception("❌ [InMemory] Failed to fetch chunk chunk_uid=%s for document_uid=%s", chunk_uid, document_uid)
+            return {"chunk_uid": chunk_uid}
+
+    def delete_chunk(self, document_uid: str, chunk_uid: str) -> None:
+        """Delete a single chunk from the in-memory store."""
+        try:
+            to_delete_key = None
+            for key, rec in self.vectorstore.store.items():
+                md = rec.get("metadata") or {}
+                if md.get("document_uid") != document_uid:
+                    continue
+                cid = md.get(CHUNK_ID_FIELD) or key
+                if cid == chunk_uid:
+                    to_delete_key = key
+                    break
+            if to_delete_key is not None:
+                del self.vectorstore.store[to_delete_key]
+                logger.info("🗑️  [InMemory] Deleted chunk chunk_uid=%s document_uid=%s", chunk_uid, document_uid)
+            else:
+                logger.warning("🗑️  [InMemory] Chunk to delete not found: chunk_uid=%s document_uid=%s", chunk_uid, document_uid)
+        except Exception:
+            logger.exception("❌ [InMemory] Failed to delete chunk chunk_uid=%s for document_uid=%s", chunk_uid, document_uid)

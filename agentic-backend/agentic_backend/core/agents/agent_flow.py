@@ -681,6 +681,46 @@ class AgentFlow:
             base += ("\n\n" if base else "") + ctx.attachments_markdown.strip()
         return base
 
+    def get_recent_history(
+        self,
+        messages: Sequence[AnyMessage],
+        *,
+        max_messages: int = 0,
+        include_system: bool = False,
+        include_tool: bool = False,
+        drop_last: bool = True,
+    ) -> list[AnyMessage]:
+        """
+        Return a slice of recent messages for prompt memory.
+
+        Defaults:
+        - Drop the last message (usually the current user question that you rephrase).
+        - Exclude system/tool messages to avoid duplicating policy or tool chatter unless opted in.
+        """
+        if max_messages <= 0:
+            return []
+
+        msgs = list(messages)
+        if drop_last and msgs:
+            msgs = msgs[:-1]
+
+        selected: list[AnyMessage] = []
+        for m in reversed(msgs):
+            if isinstance(m, SystemMessage) and not include_system:
+                continue
+            if isinstance(m, ToolMessage) and not include_tool:
+                continue
+            if not include_tool and isinstance(m, AIMessage):
+                tool_calls = getattr(m, "tool_calls", None)
+                if tool_calls:
+                    continue
+            selected.append(m)
+            if len(selected) >= max_messages:
+                break
+
+        selected.reverse()
+        return selected
+
     def render(self, template: str, **tokens) -> str:
         """
         Safe `{token}` substitution for prompt templates.

@@ -1,10 +1,23 @@
-// src/pages/AgentHub.tsx
 // Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 import Editor from "@monaco-editor/react";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import FilterListIcon from "@mui/icons-material/FilterList";
+import CloudQueueIcon from "@mui/icons-material/CloudQueue";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import StarIcon from "@mui/icons-material/Star";
 
@@ -40,16 +53,16 @@ import { CrewEditor } from "../components/agentHub/CrewEditor";
 // OpenAPI
 import {
   Leader,
-  McpServerConfiguration,
   useDeleteAgentAgenticV1AgentsNameDeleteMutation,
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
-  useListMcpServersAgenticV1AgentsMcpServersGetQuery,
+  useRestoreAgentsAgenticV1AgentsRestorePostMutation,
 } from "../slices/agentic/agenticOpenApi";
 
 // UI union facade
 import { AnyAgent, isLeader } from "../common/agent";
 import { AgentAssetManagerDrawer } from "../components/agentHub/AgentAssetManagerDrawer";
 import { CreateAgentModal } from "../components/agentHub/CreateAgentModal";
+import { A2aCardDialog } from "../components/agentHub/A2aCardDialog";
 import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
 import { useToast } from "../components/ToastProvider";
 import { useAgentUpdater } from "../hooks/useAgentUpdater";
@@ -94,14 +107,15 @@ const ActionButton = ({
 export const AgentHub = () => {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { showError } = useToast();
+  const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const [agents, setAgents] = useState<AnyAgent[]>([]);
   const [tabValue, setTabValue] = useState(0);
   const [showElements, setShowElements] = useState(false);
   const [favoriteAgents, setFavoriteAgents] = useState<string[]>([]);
   const [categories, setCategories] = useState<AgentCategory[]>([{ name: "all" }, { name: "favorites" }]);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createModalType, setCreateModalType] = useState<"basic" | "a2a_proxy">("basic");
 
   // drawers / selection
   const [selected, setSelected] = useState<AnyAgent | null>(null);
@@ -109,15 +123,27 @@ export const AgentHub = () => {
   const [crewOpen, setCrewOpen] = useState(false);
   const [triggerDeleteAgent] = useDeleteAgentAgenticV1AgentsNameDeleteMutation();
 
-  const handleOpenCreateAgent = () => setIsCreateModalOpen(true);
-  const handleCloseCreateAgent = () => setIsCreateModalOpen(false);
+  const handleOpenCreateAgent = () => {
+    setCreateModalType("basic");
+    setCreateModalOpen(true);
+  };
+  const handleOpenRegisterA2AAgent = () => {
+    setCreateModalType("a2a_proxy");
+    setCreateModalOpen(true);
+  };
+  const handleCloseCreateAgent = () => setCreateModalOpen(false);
 
   const [assetManagerOpen, setAssetManagerOpen] = useState(false);
   const [agentForAssetManagement, setAgentForAssetManagement] = useState<AnyAgent | null>(null);
+  const [a2aCardView, setA2aCardView] = useState<{ open: boolean; card: any | null; agentName: string | null }>({
+    open: false,
+    card: null,
+    agentName: null,
+  });
 
   const [triggerGetFlows, { isFetching }] = useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
-  const { data: mcpServersData, isFetching: isFetchingMcpServers } =
-    useListMcpServersAgenticV1AgentsMcpServersGetQuery();
+  const [restoreAgents, { isLoading: isRestoring }] = useRestoreAgentsAgenticV1AgentsRestorePostMutation();
+
   const { updateEnabled } = useAgentUpdater();
   const [triggerGetSource] = useLazyGetRuntimeSourceTextQuery();
 
@@ -171,6 +197,18 @@ export const AgentHub = () => {
     }
   };
 
+  const handleViewA2ACard = (agent: AnyAgent) => {
+    const card = (agent as any)?.metadata?.a2a_card;
+    if (!card) {
+      showError({
+        summary: t("agentHub.noA2ACardSummary"),
+        detail: t("agentHub.noA2ACardDetail"),
+      });
+      return;
+    }
+    setA2aCardView({ open: true, card, agentName: agent.name });
+  };
+
   const fetchAgents = async () => {
     try {
       const flows = (await triggerGetFlows().unwrap()) as unknown as AnyAgent[];
@@ -194,26 +232,25 @@ export const AgentHub = () => {
 
   const handleTabChange = (_event: SyntheticEvent, newValue: number) => setTabValue(newValue);
 
-  const knownMcpServers = useMemo<McpServerConfiguration[]>(() => {
-    if (!mcpServersData) return [];
-
-    const ensureArray = Array.isArray(mcpServersData)
-      ? mcpServersData
-      : Array.isArray((mcpServersData as { items?: unknown }).items)
-        ? ((mcpServersData as { items?: unknown }).items as unknown[])
-        : [];
-
-    return ensureArray
-      .filter((server): server is McpServerConfiguration => {
-        if (!server || typeof server !== "object") return false;
-        const name = (server as { name?: unknown }).name;
-        return typeof name === "string" && name.trim().length > 0;
-      })
-      .map((server) => ({
-        ...(server as McpServerConfiguration),
-        name: ((server as { name: string }).name || "").trim(),
-      }));
-  }, [mcpServersData]);
+  const handleRestore = () => {
+    showConfirmationDialog({
+      title: t("agentHub.confirmRestoreTitle") || "Restore agents from configuration?",
+      message:
+        t("agentHub.confirmRestoreMessage") ||
+        "This will overwrite any tuned settings you saved in the UI with the YAML configuration. This action cannot be undone.",
+      onConfirm: async () => {
+        try {
+          // Explicitly request overwrite to avoid sending undefined (FastAPI rejects "undefined" for booleans)
+          await restoreAgents({ forceOverwrite: true }).unwrap();
+          showSuccess({ summary: t("agentHub.toasts.restored") });
+          fetchAgents();
+        } catch (error: any) {
+          const detail = error?.data?.detail || error?.data || error?.message || "Unknown error";
+          showError({ summary: t("agentHub.toasts.error"), detail });
+        }
+      },
+    });
+  };
 
   const filteredAgents = useMemo(() => {
     if (tabValue === 0) return agents;
@@ -241,7 +278,8 @@ export const AgentHub = () => {
   };
 
   const handleToggleEnabled = async (agent: AnyAgent) => {
-    await updateEnabled(agent, !agent.enabled);
+    const isEnabled = agent.enabled !== false;
+    await updateEnabled(agent, !isEnabled);
     fetchAgents();
   };
 
@@ -341,6 +379,7 @@ export const AgentHub = () => {
               >
                 {categories.map((category, index) => {
                   const isFav = category.name === "favorites";
+                  const label = category.isTag ? category.name : t(`agentHub.categories.${category.name}`);
                   const count = isFav
                     ? favoriteAgents.length
                     : agents.filter((a) => a.tuning.tags?.includes(category.name)).length;
@@ -353,7 +392,7 @@ export const AgentHub = () => {
                           {isFav && <StarIcon fontSize="small" sx={{ mr: 0.5, color: "warning.main" }} />}
                           <LocalOfferIcon fontSize="small" sx={{ mr: 0.5, color: "text.secondary" }} />
                           <Typography variant="body2" sx={{ textTransform: "capitalize" }}>
-                            {t(`agentHub.categories.${category.name}`, category.name)}
+                            {label}
                           </Typography>
                           <Chip
                             size="small"
@@ -411,11 +450,25 @@ export const AgentHub = () => {
                       <ActionButton icon={<SearchIcon />}>{t("agentHub.search")}</ActionButton>
                       <ActionButton icon={<FilterListIcon />}>{t("agentHub.filter")}</ActionButton>
                       <ActionButton
+                        icon={<RefreshIcon />}
+                        onClick={canEditAgents ? handleRestore : undefined}
+                        disabled={!canEditAgents || isRestoring}
+                      >
+                        {t("agentHub.restoreButton")}
+                      </ActionButton>
+                      <ActionButton
                         icon={<AddIcon />}
                         onClick={canCreateAgents ? handleOpenCreateAgent : undefined}
                         disabled={!canCreateAgents}
                       >
                         {t("agentHub.create")}
+                      </ActionButton>
+                      <ActionButton
+                        icon={<CloudQueueIcon />}
+                        onClick={canCreateAgents ? handleOpenRegisterA2AAgent : undefined}
+                        disabled={!canCreateAgents}
+                      >
+                        {t("agentHub.registerA2A")}
                       </ActionButton>
                     </Box>
                   </Box>
@@ -437,6 +490,7 @@ export const AgentHub = () => {
                                 onDelete={canDeleteAgents ? handleDeleteAgent : undefined}
                                 onManageAssets={canEditAgents ? handleManageAssets : undefined}
                                 onInspectCode={handleInspectCode}
+                                onViewA2ACard={handleViewA2ACard}
                               />
                             </Box>
                           </Fade>
@@ -473,30 +527,31 @@ export const AgentHub = () => {
                   )}
 
                   {/* Create modal (optional) */}
-                  {isCreateModalOpen && (
+                  {createModalOpen && (
                     <CreateAgentModal
-                      open={isCreateModalOpen}
+                      open={createModalOpen}
                       onClose={handleCloseCreateAgent}
                       onCreated={() => {
                         handleCloseCreateAgent();
                         fetchAgents();
                       }}
+                      initialType={createModalType}
+                      disableTypeToggle
                     />
                   )}
+
+                  <A2aCardDialog
+                    open={a2aCardView.open}
+                    onClose={() => setA2aCardView({ open: false, card: null, agentName: null })}
+                    card={a2aCardView.card}
+                  />
                 </>
               )}
             </CardContent>
           </Card>
         </Fade>
         {/* Drawers / Modals */}
-        <AgentEditDrawer
-          open={editOpen}
-          agent={selected}
-          onClose={() => setEditOpen(false)}
-          onSaved={fetchAgents}
-          knownMcpServers={knownMcpServers}
-          isLoadingKnownMcpServers={isFetchingMcpServers}
-        />
+        <AgentEditDrawer open={editOpen} agent={selected} onClose={() => setEditOpen(false)} onSaved={fetchAgents} />
         <CrewEditor
           open={crewOpen}
           leader={selected && isLeader(selected) ? (selected as Leader & { type: "leader" }) : null}

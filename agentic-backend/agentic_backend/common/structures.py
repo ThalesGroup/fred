@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Annotated, Dict, List, Literal, Optional, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from fred_core import (
     LogStorageConfig,
@@ -33,9 +33,19 @@ logger = logging.getLogger(__name__)  # Logger definition added
 
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
-    opensearch: OpenSearchStoreConfig
+    opensearch: Optional[OpenSearchStoreConfig] = Field(
+        default=None, description="Optional OpenSearch store"
+    )
     agent_store: StoreConfig
+    mcp_servers_store: Optional[StoreConfig] = Field(
+        default=None,
+        description="Optional override for MCP servers store (defaults to agent_store backend).",
+    )
     session_store: StoreConfig
+    attachments_store: Optional[StoreConfig] = Field(
+        default=None,
+        description="Optional override for session attachments persistence (defaults to session_store backend).",
+    )
     history_store: StoreConfig
     feedback_store: StoreConfig
     kpi_store: StoreConfig
@@ -93,6 +103,18 @@ class AgentChatOptions(BaseModel):
             "Allow attaching local files (e.g., PDFs, images, text) to the message and show existing attachments."
         ),
     )
+    search_rag_scoping: bool = Field(
+        default=False,
+        description=(
+            "Expose a selector to decide how the agent should use the corpus: documents only, hybrid, or general knowledge only."
+        ),
+    )
+    deep_search_delegate: bool = Field(
+        default=False,
+        description=(
+            "Expose a toggle to delegate RAG retrieval to a senior agent (deep search) when available."
+        ),
+    )
 
 
 # ---------------- Base: shared identity + UX + tuning ----------------
@@ -111,6 +133,10 @@ class BaseAgent(BaseModel):
     class_path: Optional[str] = None  # None → dynamic/UI agent
     tuning: Optional[AgentTuning] = None
     chat_options: AgentChatOptions = AgentChatOptions()
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional arbitrary metadata for integrations (e.g., A2A proxy config).",
+    )
     # Added for backward compatibility with older YAML files
     mcp_servers: List[MCPServerConfiguration] = Field(
         default_factory=list,
@@ -187,6 +213,14 @@ class AIConfig(BaseModel):
         128,
         description="Maximum number of agents that can be cached in memory for faster access.",
     )
+    max_attached_files_per_user: int = Field(
+        20,
+        description="Maximum number of files a user can attach across all sessions.",
+    )
+    max_attached_file_size_mb: int = Field(
+        50,
+        description="Maximum size (in MB) for each attached file.",
+    )
     default_chat_model: ModelConfiguration = Field(
         ...,
         description="Default chat model configuration for all agents and services.",
@@ -209,6 +243,10 @@ class Properties(BaseModel):
     logoName: str = "fred"
     logoNameDark: str = "fred-dark"
     siteDisplayName: str = "Fred"
+    releaseBrand: Optional[str] = Field(
+        default="fred",
+        description="Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'.",
+    )
 
 
 class FrontendSettings(BaseModel):
@@ -232,13 +270,13 @@ class McpConfiguration(BaseModel):
         description="List of MCP servers defined for this environment.",
     )
 
-    def get_server(self, name: str) -> Optional[MCPServerConfiguration]:
+    def get_server(self, id: str) -> Optional[MCPServerConfiguration]:
         """
         Retrieve an MCP server by logical name.
         Returns None if not found or disabled.
         """
         for s in self.servers:
-            if s.name == name and s.enabled:
+            if s.id == id and s.enabled:
                 return s
         return None
 
@@ -248,7 +286,7 @@ class McpConfiguration(BaseModel):
         - Useful for fast lookup and resolver integration.
         - Used by RuntimeContext → MCPRuntime to resolve URLs dynamically.
         """
-        return {s.name: s for s in self.servers if s.enabled}
+        return {s.id: s for s in self.servers if s.enabled}
 
 
 class Configuration(BaseModel):

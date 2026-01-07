@@ -13,8 +13,10 @@
 # limitations under the License.
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, RebacReference, Relation, RelationType, Resource, TagPermission, authorize
+from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import (
@@ -25,6 +27,10 @@ from knowledge_flow_backend.common.document_structures import (
     ProcessingStage,
     ProcessingStatus,
     ProcessingSummary,
+)
+from knowledge_flow_backend.common.structures import (
+    OpenSearchVectorIndexConfig,
+    PgVectorStorageConfig,
 )
 from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import MetadataDeserializationError
@@ -46,6 +52,34 @@ class InvalidMetadataRequest(Exception):
     pass
 
 
+class StoreAuditFinding(BaseModel):
+    document_uid: str
+    document_name: str | None = None
+    source_tag: str | None = None
+    present_in_metadata: bool
+    present_in_vector_store: bool
+    present_in_content_store: bool
+    vector_chunks: int | None = Field(default=None, description="Number of chunks in vector store (when available)")
+    issues: list[str] = Field(default_factory=list)
+
+
+class StoreAuditReport(BaseModel):
+    has_anomalies: bool
+    total_seen: int
+    metadata_count: int
+    vector_count: int
+    content_count: int
+    anomalies: list[StoreAuditFinding] = Field(default_factory=list)
+
+
+class StoreAuditFixResponse(BaseModel):
+    before: StoreAuditReport
+    after: StoreAuditReport
+    deleted_metadata: list[str] = Field(default_factory=list)
+    deleted_vectors: list[str] = Field(default_factory=list)
+    deleted_content: list[str] = Field(default_factory=list)
+
+
 class MetadataService:
     """
     Service for managing metadata operations.
@@ -55,9 +89,9 @@ class MetadataService:
         context = ApplicationContext.get_instance()
         self.config = context.get_config()
         self.metadata_store = context.get_metadata_store()
-        self.catalog_store = context.get_catalog_store()
         self.csv_input_store = None
         self.vector_store = None
+        self.content_store = context.get_content_store()
         self.rebac = context.get_rebac_engine()
 
     @authorize(Action.READ, Resource.DOCUMENTS)
@@ -122,6 +156,182 @@ class MetadataService:
         return metadata
 
     @authorize(Action.READ, Resource.DOCUMENTS)
+    async def get_document_vectors(self, user: KeycloakUser, document_uid: str) -> list[dict]:
+        """
+        Return the list of vectors associated with the document's chunks.
+
+        Each item contains at minimum:
+          - chunk_uid: unique identifier of the chunk
+          - vector: the list of floats representing the embedding
+        """
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+
+        # Specific permission on the document
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
+
+        # Ensure the document exists (and raise 404 otherwise)
+        _ = await self.get_document_metadata(user, document_uid)
+
+        # Initialize the vector store on demand
+        if self.vector_store is None:
+            self.vector_store = ApplicationContext.get_instance().get_vector_store()
+
+        store = self.vector_store
+        if store is None:
+            logger.warning("[MetadataService] No vector store available to retrieve vectors")
+            return []
+
+        # Optional method on Chroma store side
+        if hasattr(store, "get_vectors_for_document"):
+            try:
+                return store.get_vectors_for_document(document_uid)  # type: ignore[attr-defined]
+            except Exception as e:
+                logger.error(f"[MetadataService] Error retrieving vectors: {e}")
+                return []
+
+        logger.info("[MetadataService] The vector store does not support retrieving vectors by document")
+        return []
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def get_document_chunks(self, user: KeycloakUser, document_uid: str) -> list[dict]:
+        """
+        Return the list of chunks associated with the document.
+
+        Each item contains at minimum:
+          - chunk_uid: unique identifier of the chunk
+          - text: the text content of the chunk
+          - metadata: the metadata of the chunk
+        """
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+
+        # Specific permission on the document
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
+
+        # Ensure the document exists (and raise 404 otherwise)
+        _ = await self.get_document_metadata(user, document_uid)
+
+        # Initialize the vector store on demand
+        if self.vector_store is None:
+            self.vector_store = ApplicationContext.get_instance().get_vector_store()
+
+        store = self.vector_store
+        if store is None:
+            logger.warning("[MetadataService] No vector store available to retrieve chunks")
+            return []
+
+        # Optional method on Chroma store side
+        if hasattr(store, "get_chunks_for_document"):
+            try:
+                return store.get_chunks_for_document(document_uid)  # type: ignore[attr-defined]
+            except Exception as e:
+                logger.error(f"[MetadataService] Error retrieving chunks: {e}")
+                return []
+
+        logger.info("[MetadataService] The vector store does not support retrieving chunks by document")
+        return []
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def browse_documents_in_tag(self, user: KeycloakUser, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[list[DocumentMetadata], int]:
+        """
+        Paginated fetch of documents in a given tag.
+        """
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+
+        docs, total = self.metadata_store.browse_metadata_in_tag(tag_id, offset=offset, limit=limit)
+        logger.debug(
+            "[PAGINATION] browse_documents_in_tag tag=%s offset=%s limit=%s -> fetched=%s total=%s",
+            tag_id,
+            offset,
+            limit,
+            len(docs),
+            total,
+        )
+
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            return docs, total
+
+        authorized_doc_ids = {d.id for d in authorized_doc_ref}
+        filtered = [d for d in docs if d.identity.document_uid in authorized_doc_ids]
+
+        # Total reflects store count; computing an authorized-only total would require
+        # scanning all authorized documents. We keep store total to preserve pagination hints.
+        return filtered, total
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def get_chunk(self, user: KeycloakUser, document_uid: str, chunk_uid: str) -> dict:
+        """
+        Return chunk.
+
+        item contains at minimum:
+          - chunk_uid: unique identifier of the chunk
+          - text: the text content of the chunk
+          - metadata: the metadata of the chunk
+        """
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+
+        if not chunk_uid:
+            raise InvalidMetadataRequest("Chunk UID cannot be empty")
+
+        # Specific permission on the document
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
+
+        # Initialize the vector store on demand
+        if self.vector_store is None:
+            self.vector_store = ApplicationContext.get_instance().get_vector_store()
+
+        store = self.vector_store
+        if store is None:
+            logger.warning("[MetadataService] No vector store available to retrieve chunk")
+            return {"chunk_uid": chunk_uid}
+
+        # Optional method on Chroma store side
+        if hasattr(store, "get_chunk"):
+            try:
+                return store.get_chunk(document_uid=document_uid, chunk_uid=chunk_uid)  # type: ignore[attr-defined]
+            except Exception as e:
+                logger.error(f"[MetadataService] Error retrieving chunk: {e}")
+                return {"chunk_uid": chunk_uid}
+
+        logger.info("[MetadataService] The vector store does not support retrieving chunk")
+        return {"chunk_uid": chunk_uid}
+
+    @authorize(Action.DELETE, Resource.DOCUMENTS)
+    async def delete_chunk(self, user: KeycloakUser, document_uid: str, chunk_uid: str) -> None:
+        """
+        Delete chunk.
+        """
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+
+        if not chunk_uid:
+            raise InvalidMetadataRequest("Chunk UID cannot be empty")
+
+        # Specific permission on the document
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.DELETE, document_uid)
+
+        # Initialize the vector store on demand
+        if self.vector_store is None:
+            self.vector_store = ApplicationContext.get_instance().get_vector_store()
+
+        store = self.vector_store
+        if store is None:
+            logger.warning("[MetadataService] No vector store available to delete chunk")
+            return None
+
+        # Optional method on Chroma store side
+        if hasattr(store, "delete_chunk"):
+            try:
+                return store.delete_chunk(document_uid=document_uid, chunk_uid=chunk_uid)  # type: ignore[attr-defined]
+            except Exception as e:
+                logger.error(f"[MetadataService] Error deleting chunk: {e}")
+                return None
+
+        logger.info("[MetadataService] The vector store does not support retrieving chunk")
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_processing_graph(self, user: KeycloakUser) -> ProcessingGraph:
         """
         Build a lightweight processing graph for all documents visible to the user.
@@ -176,6 +386,24 @@ class MetadataService:
             except Exception as e:
                 logger.warning(f"[GRAPH] Failed to list tables from tabular store: {e}")
 
+        # Vector backend info (for UI diagnostics)
+        vector_backend: str | None = None
+        vector_detail: str | None = None
+        embedding_model_name: str | None = getattr(self.config.embedding_model, "name", None)
+        try:
+            vs_cfg = self.config.storage.vector_store
+            if isinstance(vs_cfg, OpenSearchVectorIndexConfig):
+                vector_backend = "opensearch"
+                vector_detail = f"index={vs_cfg.index}"
+            elif isinstance(vs_cfg, PgVectorStorageConfig):
+                vector_backend = "pgvector"
+                vector_detail = f"collection={vs_cfg.collection_name}"
+            else:
+                vector_backend = type(vs_cfg).__name__
+                vector_detail = None
+        except Exception as e:
+            logger.debug("[GRAPH] Unable to resolve vector backend info: %s", e)
+
         for metadata in visible_docs:
             doc_uid = metadata.document_uid
             doc_node_id = f"doc:{doc_uid}"
@@ -188,6 +416,7 @@ class MetadataService:
                     document_uid=doc_uid,
                     file_type=metadata.file.file_type,
                     source_tag=metadata.source.source_tag,
+                    version=getattr(metadata.identity, "version", 0),
                 )
             )
 
@@ -211,6 +440,9 @@ class MetadataService:
                         label=f"Vectors for {metadata.document_name}",
                         document_uid=doc_uid,
                         vector_count=vector_count,
+                        backend=vector_backend,
+                        backend_detail=vector_detail,
+                        embedding_model=embedding_model_name,
                     )
                 )
                 edges.append(
@@ -384,6 +616,31 @@ class MetadataService:
                     except Exception as e:
                         logger.warning(f"Could not delete SQL table '{table_name}': {e}")
 
+                # Promote an alternate version (version=1) to base if present
+                if getattr(metadata.identity, "version", 0) == 0:
+                    try:
+                        promoted = self._promote_alternate_version(
+                            canonical_name=metadata.identity.canonical_name or metadata.document_name,
+                            source_tag=metadata.source.source_tag,
+                            removed_tag_id=tag_id_to_remove,
+                            actor=user.uid,
+                        )
+                        if promoted:
+                            logger.info(
+                                "[METADATA] Promoted draft version '%s' to base for canonical '%s' after removing '%s'.",
+                                promoted.identity.document_uid,
+                                promoted.identity.canonical_name,
+                                tag_id_to_remove,
+                            )
+                    except Exception as e:
+                        logger.warning("Failed to promote alternate version for '%s': %s", metadata.document_name, e)
+                if self.content_store is not None:
+                    try:
+                        self.content_store.delete_content(metadata.document_uid)
+                        logger.info(f"[CONTENT] Deleted content for document '{metadata.document_name}'")
+                    except Exception as e:
+                        logger.warning(f"[CONTENT] Could not delete content for '{metadata.document_name}': {e}")
+
                 self.metadata_store.delete_metadata(metadata.document_uid)
                 # TODO: remove all rebac relations for this document
 
@@ -522,5 +779,192 @@ class MetadataService:
         """
         await self.rebac.delete_relation(self._get_tag_as_parent_relation(tag_id, document_uid))
 
+    def _promote_alternate_version(self, canonical_name: str, source_tag: str | None, removed_tag_id: str, actor: str) -> DocumentMetadata | None:
+        """
+        Find a version=1 sibling with the same canonical_name and tag, promote it to version=0, and save.
+        """
+        filters: dict[str, Any] = {"canonical_name": canonical_name}
+        if removed_tag_id:
+            filters.setdefault("tags", {})["tag_ids"] = [removed_tag_id]
+        if source_tag:
+            filters.setdefault("source", {})["source_tag"] = source_tag
+
+        siblings = self.metadata_store.get_all_metadata(filters)
+        candidate = next((d for d in siblings if getattr(d.identity, "version", 0) == 1), None)
+        if not candidate:
+            return None
+
+        candidate.identity.version = 0
+        candidate.identity.document_name = candidate.identity.canonical_name or candidate.identity.document_name
+        candidate.identity.modified = datetime.now(timezone.utc)
+        candidate.identity.last_modified_by = actor
+        self.metadata_store.save_metadata(candidate)
+        return candidate
+
     def _get_tag_as_parent_relation(self, tag_id: str, document_uid: str) -> Relation:
         return Relation(subject=RebacReference(Resource.TAGS, tag_id), relation=RelationType.PARENT, resource=RebacReference(Resource.DOCUMENTS, document_uid))
+
+    # ------------------------------------------------------------------
+    # Store consistency audit (metadata/content/vector)
+    # ------------------------------------------------------------------
+
+    def _ensure_vector_store(self):
+        if self.vector_store is None:
+            try:
+                self.vector_store = ApplicationContext.get_instance().get_vector_store()
+            except Exception as e:
+                logger.warning("[AUDIT] Could not initialize vector store: %s", e)
+                return None
+        return self.vector_store
+
+    def _list_vector_document_uids(self) -> set[str]:
+        store = self._ensure_vector_store()
+        if store is None:
+            return set()
+
+        try:
+            if hasattr(store, "list_document_uids"):
+                return set(store.list_document_uids())  # type: ignore[attr-defined]
+        except Exception as e:
+            logger.warning("[AUDIT] Failed to list vector document_uids: %s", e)
+        return set()
+
+    def _list_content_document_uids(self) -> set[str]:
+        if self.content_store is None:
+            return set()
+
+        try:
+            if hasattr(self.content_store, "list_document_uids"):
+                return set(self.content_store.list_document_uids())  # type: ignore[attr-defined]
+        except Exception as e:
+            logger.warning("[AUDIT] Failed to list content document_uids: %s", e)
+        return set()
+
+    def _get_vector_chunk_count(self, document_uid: str) -> int | None:
+        store = self._ensure_vector_store()
+        if store is None or not hasattr(store, "get_document_chunk_count"):
+            return None
+
+        try:
+            return int(store.get_document_chunk_count(document_uid=document_uid))  # type: ignore[attr-defined]
+        except Exception as e:
+            logger.warning("[AUDIT] Failed to count vectors for %s: %s", document_uid, e)
+            return None
+
+    @authorize(Action.UPDATE, Resource.DOCUMENTS)
+    async def audit_stores(self, user: KeycloakUser) -> StoreAuditReport:
+        """
+        Scan metadata, content, and vector stores to surface orphan or partial data.
+        """
+        try:
+            docs = self.metadata_store.get_all_metadata({})
+        except MetadataDeserializationError as e:
+            logger.error(f"[AUDIT] Deserialization error while building audit report: {e}")
+            raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
+        except Exception as e:
+            logger.error(f"[AUDIT] Failed to retrieve metadata for audit: {e}")
+            raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
+
+        metadata_map = {md.document_uid: md for md in docs}
+        metadata_ids = set(metadata_map.keys())
+        vector_ids = self._list_vector_document_uids()
+        content_ids = self._list_content_document_uids()
+        all_ids = sorted(metadata_ids | vector_ids | content_ids)
+
+        anomalies: list[StoreAuditFinding] = []
+        for doc_uid in all_ids:
+            md = metadata_map.get(doc_uid)
+            in_metadata = md is not None
+            in_vector = doc_uid in vector_ids
+            in_content = doc_uid in content_ids
+            issues: list[str] = []
+
+            if not in_metadata:
+                if in_vector:
+                    issues.append("orphan_vectors")
+                if in_content:
+                    issues.append("orphan_content")
+            else:
+                raw_ready = md.processing.stages.get(ProcessingStage.RAW_AVAILABLE) == ProcessingStatus.DONE
+                if raw_ready and not in_content:
+                    issues.append("missing_content")
+
+                vec_done = md.processing.stages.get(ProcessingStage.VECTORIZED) == ProcessingStatus.DONE
+                if vec_done and not in_vector:
+                    issues.append("missing_vectors")
+
+            vector_chunks = self._get_vector_chunk_count(doc_uid) if in_vector else None
+
+            if issues:
+                anomalies.append(
+                    StoreAuditFinding(
+                        document_uid=doc_uid,
+                        document_name=md.document_name if md else None,
+                        source_tag=md.source_tag if md else None,
+                        present_in_metadata=in_metadata,
+                        present_in_vector_store=in_vector,
+                        present_in_content_store=in_content,
+                        vector_chunks=vector_chunks,
+                        issues=issues,
+                    )
+                )
+
+        return StoreAuditReport(
+            has_anomalies=bool(anomalies),
+            total_seen=len(all_ids),
+            metadata_count=len(metadata_ids),
+            vector_count=len(vector_ids),
+            content_count=len(content_ids),
+            anomalies=anomalies,
+        )
+
+    @authorize(Action.UPDATE, Resource.DOCUMENTS)
+    async def fix_store_anomalies(self, user: KeycloakUser) -> StoreAuditFixResponse:
+        """
+        Run the audit and delete orphan/partial data from all stores.
+        """
+        before = await self.audit_stores(user)
+        deleted_metadata: list[str] = []
+        deleted_vectors: list[str] = []
+        deleted_content: list[str] = []
+
+        vector_store = self._ensure_vector_store()
+        content_store = self.content_store
+
+        for finding in before.anomalies:
+            issues = set(finding.issues)
+            doc_uid = finding.document_uid
+
+            remove_vectors = "orphan_vectors" in issues or "missing_content" in issues or "missing_vectors" in issues
+            remove_content = "orphan_content" in issues or "missing_content" in issues or "missing_vectors" in issues
+            remove_metadata = finding.present_in_metadata and ("missing_content" in issues or "missing_vectors" in issues)
+
+            if remove_vectors and vector_store is not None and finding.present_in_vector_store:
+                try:
+                    vector_store.delete_vectors_for_document(document_uid=doc_uid)
+                    deleted_vectors.append(doc_uid)
+                except Exception as e:
+                    logger.warning("[AUDIT] Failed to delete vectors for %s: %s", doc_uid, e)
+
+            if remove_content and content_store is not None and finding.present_in_content_store:
+                try:
+                    content_store.delete_content(doc_uid)
+                    deleted_content.append(doc_uid)
+                except Exception as e:
+                    logger.warning("[AUDIT] Failed to delete content for %s: %s", doc_uid, e)
+
+            if remove_metadata:
+                try:
+                    self.metadata_store.delete_metadata(doc_uid)
+                    deleted_metadata.append(doc_uid)
+                except Exception as e:
+                    logger.warning("[AUDIT] Failed to delete metadata for %s: %s", doc_uid, e)
+
+        after = await self.audit_stores(user)
+        return StoreAuditFixResponse(
+            before=before,
+            after=after,
+            deleted_metadata=deleted_metadata,
+            deleted_vectors=deleted_vectors,
+            deleted_content=deleted_content,
+        )

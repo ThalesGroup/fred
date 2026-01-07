@@ -18,10 +18,14 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import GroupIcon from "@mui/icons-material/Group";
+import HubIcon from "@mui/icons-material/Hub";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import ScienceIcon from "@mui/icons-material/Science";
+import ShieldIcon from "@mui/icons-material/Shield";
 import {
   Avatar,
   Box,
@@ -76,6 +80,7 @@ export default function SideBar({ darkMode, onThemeChange }) {
   const canReadOpenSearch = can("opensearch", "create");
   const canReadLogs = can("logs", "create");
   const canReadRuntime = can("kpi", "create");
+  const canUpdateTag = can("tag", "update");
 
   const menuItems: MenuItemCfg[] = [
     {
@@ -86,9 +91,46 @@ export default function SideBar({ darkMode, onThemeChange }) {
       canBeDisabled: false,
       tooltip: t("sidebar.tooltip.chat"),
     },
+    ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime || canUpdateTag
+      ? [
+          {
+            key: "laboratory",
+            label: t("sidebar.laboratory"),
+            icon: <ScienceIcon />,
+            canBeDisabled: false,
+            tooltip: t("sidebar.tooltip.laboratory"),
+            children: [
+              ...(canReadRuntime
+                ? [
+                    {
+                      key: "monitoring-graph",
+                      label: t("sidebar.monitoring_graph", "Graph Hub"),
+                      icon: <MonitorHeartIcon />,
+                      url: `/monitoring/graph`,
+                      canBeDisabled: false,
+                      tooltip: t("sidebar.tooltip.monitoring_graph", "Knowledge graph view"),
+                    },
+                  ]
+                : []),
+              ...(canReadRuntime
+                ? [
+                    {
+                      key: "monitoring-processors",
+                      label: t("sidebar.monitoring_processors", "Processors"),
+                      icon: <MonitorHeartIcon />,
+                      url: `/monitoring/processors`,
+                      canBeDisabled: false,
+                      tooltip: t("sidebar.tooltip.monitoring_processors"),
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]
+      : []),
 
     // Only show monitoring if user has permission
-    ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime
+    ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime || canUpdateTag
       ? [
           {
             key: "monitoring",
@@ -133,18 +175,6 @@ export default function SideBar({ darkMode, onThemeChange }) {
                     },
                   ]
                 : []),
-              ...(canReadRuntime
-                ? [
-                    {
-                      key: "monitoring-processors",
-                      label: t("sidebar.monitoring_processors", "Processors"),
-                      icon: <MonitorHeartIcon />,
-                      url: `/monitoring/processors`,
-                      canBeDisabled: false,
-                      tooltip: t("sidebar.tooltip.monitoring_processors", "Processor bench"),
-                    },
-                  ]
-                : []),
               ...(canReadOpenSearch || canReadLogs
                 ? [
                     {
@@ -153,7 +183,19 @@ export default function SideBar({ darkMode, onThemeChange }) {
                       icon: <MenuBookIcon />,
                       url: `/monitoring/logs`,
                       canBeDisabled: false,
-                      tooltip: t("sidebar.tooltip.monitoring_logs") || "Log Console",
+                      tooltip: t("sidebar.tooltip.monitoring_logs"),
+                    },
+                  ]
+                : []),
+              ...(canUpdateTag
+                ? [
+                    {
+                      key: "monitoring-rebac-backfill",
+                      label: t("sidebar.migration"),
+                      icon: <ShieldIcon />,
+                      url: `/monitoring/rebac-backfill`,
+                      canBeDisabled: false,
+                      tooltip: t("sidebar.tooltip.migration", "Rebuild ReBAC relations"),
                     },
                   ]
                 : []),
@@ -168,6 +210,14 @@ export default function SideBar({ darkMode, onThemeChange }) {
       url: `/knowledge`,
       canBeDisabled: false,
       tooltip: t("sidebar.tooltip.knowledge"),
+    },
+    {
+      key: "mcp",
+      label: t("sidebar.mcp"),
+      icon: <HubIcon />,
+      url: `/mcpHub`,
+      canBeDisabled: false,
+      tooltip: t("sidebar.tooltip.mcp"),
     },
     {
       key: "agent",
@@ -461,29 +511,48 @@ export default function SideBar({ darkMode, onThemeChange }) {
         </Box>
 
         {!isSidebarSmall && (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              py: 1,
-              px: 2,
-              mt: 1,
-              width: "90%",
-              borderRadius: 1,
-            }}
-          >
-            <Typography variant="caption" color="text.secondary">
-              Website
-            </Typography>
-            <IconButton
-              color="inherit"
-              size="small"
-              onClick={() => window.open("https://fredk8.dev", "_blank", "noopener,noreferrer")}
-              sx={{ p: 0.3 }}
+          <Box sx={{ width: "90%", display: "flex", flexDirection: "column", gap: 0.5, mt: 1 }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                py: 1,
+                px: 2,
+                borderRadius: 1,
+                cursor: "pointer",
+                "&:hover": { backgroundColor: hoverColor },
+              }}
+              onClick={() => navigate("/release-notes")}
             >
-              <OpenInNewIcon sx={{ fontSize: "0.8rem", color: "text.secondary" }} />
-            </IconButton>
+              <Typography variant="caption" color="text.secondary">
+                {t("sidebar.release_notes", "Release notes")}
+              </Typography>
+              <IconButton color="inherit" size="small" sx={{ p: 0.3 }}>
+                <InfoOutlinedIcon sx={{ fontSize: "0.95rem", color: "text.secondary" }} />
+              </IconButton>
+            </Box>
+
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                py: 1,
+                px: 2,
+                borderRadius: 1,
+                cursor: "pointer",
+                "&:hover": { backgroundColor: hoverColor },
+              }}
+              onClick={() => window.open("https://fredk8.dev", "_blank", "noopener,noreferrer")}
+            >
+              <Typography variant="caption" color="text.secondary">
+                Website
+              </Typography>
+              <IconButton color="inherit" size="small" sx={{ p: 0.3 }}>
+                <OpenInNewIcon sx={{ fontSize: "0.8rem", color: "text.secondary" }} />
+              </IconButton>
+            </Box>
           </Box>
         )}
       </Box>

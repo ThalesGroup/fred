@@ -24,7 +24,7 @@ security:
     enabled: true
     client_id: "agentic"
     realm_url: "http://app-keycloak:8080/realms/app"
-    secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET
+    secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET # pragma: allowlist secret (env var name only)
   user:
     enabled: true
     client_id: "app"
@@ -32,7 +32,7 @@ security:
   authorized_origins:
     - "http://localhost:5173"
   rebac:
-    enabled: false
+    enabled: true
     type: openfga
     api_url: "http://localhost:9080"
 
@@ -63,6 +63,12 @@ ai:
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
   max_concurrent_agents: 128
 
+  # Maximum number of files a user can attach across all sessions
+  max_attached_files_per_user: 20
+
+  # Maximum size (in MB) for each attached file
+  max_attached_file_size_mb: 50
+
   # Base URL for the Knowledge Flow service
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
 
@@ -89,7 +95,7 @@ ai:
     #   azure_ad_client_id: "your-client-id"
     #   azure_ad_client_scope: "api://your-client-id/.default"
     provider: "openai"
-    name: "gpt-4o"
+    name: "gpt-5.1"
     settings:
       temperature: 0.0
       max_retries: 2
@@ -101,7 +107,7 @@ ai:
     # Required in .env:
     # - OPENAI_API_KEY
     provider: "openai"
-    name: "gpt-4o"
+    name: "gpt-5.1"
     settings:
       temperature: 0.0
       max_retries: 2
@@ -110,10 +116,6 @@ ai:
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:
-    - name: "Appollo"
-      type: "leader"
-      class_path: "agentic_backend.academy.06_simple_leader.mini_llm_orchestrator.MiniLLMOrchestrator"
-      enabled: true
     - name: "Georges"
       type: "agent"
       class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
@@ -130,7 +132,18 @@ ai:
       chat_options:
         search_policy_selection: true
         libraries_selection: true
+        search_rag_scoping: true
+        deep_search_delegate: true
+        attach_files: true
+      metadata:
+        # Deep-search delegation target
+        deep_search_delegate_to: "Rico Senior"
+    - name: "Rico Senior"
+      type: "agent"
+      class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
       enabled: true
+      metadata:
+        deep_search_hidden_in_ui: true
     - name: "Tessa"
       type: "agent"
       class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
@@ -140,26 +153,50 @@ ai:
       class_path: "agentic_backend.agents.knowledge_extractor.agentic_test.template_expert.TemplateExpert"
 mcp:
   servers:
-    - name: "mcp-knowledge-flow-mcp-tabular"
+    - id: "mcp-knowledge-flow-mcp-text"
+      name: "mcp.servers.search_documents.name"
+      description: "mcp.servers.search_documents.description"
+      transport: "streamable_http"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-text"
+      sse_read_timeout: 2000
+      auth_mode: "user_token"
+    - id: "mcp-knowledge-flow-mcp-tabular"
+      name: "mcp.servers.tabular.name"
+      description: "mcp.servers.tabular.description"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-tabular"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-knowledge-flow-opensearch-ops"
+    - id: "mcp-knowledge-flow-opensearch-ops"
+      name: "mcp.servers.search_opensearch.name"
+      description: "mcp.servers.search_opensearch.description"
       transport: "streamable_http"
       url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-kubernetes-server"
+    - id: "mcp-kubernetes-server"
+      name: "mcp.servers.kubernetes.name"
+      description: "mcp.servers.kubernetes.description"
+      enabled: false
       transport: "streamable_http"
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - name: "mcp-atlassian-jira-server"
+    - id: "mcp-fs"
+      name: "mcp.servers.filesystem.name"
+      description: "mcp.servers.filesystem.description"
+      enabled: true
       transport: "streamable_http"
-      url: "http://localhost:8885/mcp"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-filesystem"
       sse_read_timeout: 2000
-      auth_mode: "no_token"
+      auth_mode: "user_token"
+    - id: "mcp-neo4j-graph-db"
+      name: "mcp.servers.neo4j.name"
+      description: "mcp.servers.neo4j.description"
+      transport: "streamable_http"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-neo4j"
+      sse_read_timeout: 2000
+      auth_mode: "user_token"
 
 storage:
   postgres:
@@ -182,9 +219,17 @@ storage:
     type: "opensearch"
     index: agent-index
 
+  mcp_servers_store:
+    type: "opensearch"
+    index: mcp-servers-index
+
   session_store:
     type: "opensearch"
     index: session-index
+
+  attachments_store:
+    type: "postgres"
+    table: session_attachments
 
   history_store:
     type: "opensearch"

@@ -43,6 +43,7 @@ class DuckDBAgentStore(BaseAgentStore):
     def __init__(self, db_path: Path):
         # Keep same helper + prefix style as your other stores
         self.store = DuckDBTableStore(prefix="agents_", db_path=db_path)
+        self._seed_marker_id = "__static_seeded__"
         self._ensure_schema()
 
     # ------------------------- schema -------------------------
@@ -83,6 +84,9 @@ class DuckDBAgentStore(BaseAgentStore):
         scope_id: Optional[str] = None,
     ) -> None:
         doc_id = self._doc_id(settings.name, scope, scope_id)
+        if doc_id == self._seed_marker_id:
+            # Avoid collisions with the seed marker
+            raise ValueError("Invalid agent name: reserved for seed marker")
 
         # Serialize AgentSettings to dict → ensure tuning is included (if provided separately)
         payload = AgentSettingsAdapter.dump_python(
@@ -138,17 +142,19 @@ class DuckDBAgentStore(BaseAgentStore):
         with self.store._connect() as conn:
             if scope_id is None:
                 rows = conn.execute(
-                    f"SELECT payload_json FROM {self.TABLE} WHERE scope = ? AND scope_id IS NULL",
+                    f"SELECT payload_json, doc_id FROM {self.TABLE} WHERE scope = ? AND scope_id IS NULL",
                     (scope,),
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    f"SELECT payload_json FROM {self.TABLE} WHERE scope = ? AND scope_id = ?",
+                    f"SELECT payload_json, doc_id FROM {self.TABLE} WHERE scope = ? AND scope_id = ?",
                     (scope, scope_id),
                 ).fetchall()
 
         out: List[AgentSettings] = []
-        for (payload_json,) in rows:
+        for payload_json, doc_id in rows:
+            if doc_id == self._seed_marker_id:
+                continue
             try:
                 payload = json.loads(payload_json) if payload_json else {}
                 out.append(AgentSettingsAdapter.validate_python(payload))
@@ -168,6 +174,8 @@ class DuckDBAgentStore(BaseAgentStore):
         scope_id: Optional[str] = None,
     ) -> Optional[AgentSettings]:
         doc_id = self._doc_id(name, scope, scope_id)
+        if doc_id == self._seed_marker_id:
+            return None
         with self.store._connect() as conn:
             row = conn.execute(
                 f"SELECT payload_json FROM {self.TABLE} WHERE doc_id = ?",
@@ -193,9 +201,28 @@ class DuckDBAgentStore(BaseAgentStore):
         scope_id: Optional[str] = None,
     ) -> None:
         doc_id = self._doc_id(name, scope, scope_id)
+        if doc_id == self._seed_marker_id:
+            return
         with self.store._connect() as conn:
             conn.execute(
                 f"DELETE FROM {self.TABLE} WHERE doc_id = ?",
                 (doc_id,),
             )
         logger.info("[STORE][DUCKDB][AGENTS] Deleted agent '%s' (ID: %s)", name, doc_id)
+
+    # ----------------------- seed marker helpers ------------------------
+
+    def static_seeded(self) -> bool:
+        with self.store._connect() as conn:
+            row = conn.execute(
+                f"SELECT 1 FROM {self.TABLE} WHERE doc_id = ? LIMIT 1",
+                (self._seed_marker_id,),
+            ).fetchone()
+        return bool(row)
+
+    def mark_static_seeded(self) -> None:
+        with self.store._connect() as conn:
+            conn.execute(
+                f"INSERT OR IGNORE INTO {self.TABLE} (doc_id, name, scope, scope_id, payload_json) VALUES (?, ?, ?, ?, ?)",
+                (self._seed_marker_id, self._seed_marker_id, SCOPE_GLOBAL, None, "{}"),
+            )

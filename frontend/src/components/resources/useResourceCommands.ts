@@ -162,9 +162,21 @@ export function useResourceCommands(kind: ResourceKind, { refetchTags, refetchRe
           detail: t("resourceLibrary.removeDetail", { typeOne: kind }) || "Resource removed from the library.",
         });
       } catch (e: any) {
+        const status = e?.status ?? e?.originalStatus ?? e?.data?.status_code;
+        const isForbidden = status === 403;
+
         showError?.({
-          summary: t("validation.error") || "Error",
-          detail: e?.data?.detail || e?.message || "Failed to remove from library.",
+          summary:
+            (isForbidden && (t("resourceLibrary.removeForbiddenSummary") || "Not allowed")) ||
+            t("validation.error") ||
+            "Error",
+          detail:
+            (isForbidden &&
+              (t("resourceLibrary.removeForbiddenDetail", { folder: tag.name }) ||
+                "You do not have permission to remove items from this library.")) ||
+            e?.data?.detail ||
+            e?.message ||
+            "Failed to remove from library.",
         });
       }
     },

@@ -33,15 +33,22 @@ from agentic_backend.core.agents.agent_manager import (
     AgentManager,
     AgentUpdatesDisabled,
 )
-from agentic_backend.core.agents.agent_service import (
-    AgentService,
-)
+from agentic_backend.core.agents.agent_service import AgentService
+from agentic_backend.core.agents.agent_spec import MCPServerConfiguration
+from agentic_backend.core.mcp.mcp_server_manager import McpServerManager
 from agentic_backend.core.runtime_source import get_runtime_source_registry
 
 
 def get_agent_manager(request: Request) -> AgentManager:
     """Dependency function to retrieve AgentManager from app.state."""
     return request.app.state.agent_manager
+
+
+def get_mcp_manager(request: Request) -> McpServerManager:
+    manager: McpServerManager | None = getattr(request.app.state, "mcp_manager", None)
+    if manager is None:
+        raise HTTPException(status_code=500, detail="MCP manager not initialized")
+    return manager
 
 
 def handle_exception(e: Exception) -> HTTPException | Exception:
@@ -92,6 +99,9 @@ router = APIRouter(tags=["Agents"])
 
 class CreateAgentRequest(BaseModel):
     name: str
+    type: str = "basic"
+    a2a_base_url: str | None = None
+    a2a_token: str | None = None
 
 
 @router.post(
@@ -105,7 +115,13 @@ async def create_agent(
 ):
     try:
         service = AgentService(agent_manager=agent_manager)
-        await service.create_agent(user, request.name)
+        await service.create_agent(
+            user,
+            request.name,
+            agent_type=request.type,
+            a2a_base_url=request.a2a_base_url,
+            a2a_token=request.a2a_token,
+        )
     except Exception as e:
         log_exception(e)
         raise handle_exception(e)
@@ -146,16 +162,35 @@ async def delete_agent(
         raise handle_exception(e)
 
 
-@router.get(
-    "/agents/mcp-servers",
-    summary="List MCP servers known to all agents",
+@router.post(
+    "/agents/restore",
+    summary="Restore static agents from configuration",
+    response_model=None,
 )
-async def list_mcp_servers(
+async def restore_agents(
+    force_overwrite: bool = True,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
 ):
     try:
-        return agent_manager.get_mcp_servers_configuration()
+        service = AgentService(agent_manager=agent_manager)
+        await service.restore_static_agents(user=user, force_overwrite=force_overwrite)
+    except Exception as e:
+        log_exception(e)
+        raise handle_exception(e)
+
+
+@router.get(
+    "/agents/mcp-servers",
+    summary="List MCP servers known to all agents",
+    response_model=list[MCPServerConfiguration],
+)
+async def list_mcp_servers(
+    user: KeycloakUser = Depends(get_current_user),
+    mcp_manager: McpServerManager = Depends(get_mcp_manager),
+):
+    try:
+        return mcp_manager.list_servers()
     except Exception as e:
         log_exception(e)
         raise handle_exception(e)

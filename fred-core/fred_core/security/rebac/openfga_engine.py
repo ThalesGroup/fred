@@ -14,7 +14,13 @@ from openfga_sdk.client.models.check_request import ClientCheckRequest
 from openfga_sdk.client.models.list_objects_request import ClientListObjectsRequest
 from openfga_sdk.client.models.list_users_request import ClientListUsersRequest
 from openfga_sdk.client.models.tuple import ClientTuple
-from openfga_sdk.client.models.write_request import ClientWriteRequest
+from openfga_sdk.client.models.write_conflict_opts import (
+    ClientWriteRequestOnDuplicateWrites,
+    ConflictOptions,
+)
+from openfga_sdk.client.models.write_request import (
+    ClientWriteRequest,
+)
 from openfga_sdk.credentials import CredentialConfiguration, Credentials
 from openfga_sdk.models.consistency_preference import ConsistencyPreference
 from openfga_sdk.models.create_store_request import CreateStoreRequest
@@ -353,6 +359,11 @@ class OpenFgaRebacEngine(RebacEngine):
             filtered_options.setdefault(
                 "authorization_model_id", self._authorization_model_id
             )
+
+        filtered_options["conflict"] = ConflictOptions(
+            on_duplicate_writes=ClientWriteRequestOnDuplicateWrites.IGNORE,
+        )
+
         return filtered_options
 
     @staticmethod

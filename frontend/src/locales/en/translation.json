@@ -2,13 +2,23 @@
   "common": {
     "add": "Add",
     "noneSelected": "None selected",
+    "expand": "Expand",
     "close": "Close",
+    "collapse": "Collapse",
     "remove": "Remove",
     "loading": "Loading…",
     "beta": "Beta",
     "retry": "Retry",
     "error": "Error",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "cancel": "Cancel",
+    "save": "Save",
+    "invalidUrl": "Invalid URL",
+    "preview": "Preview",
+    "uploading": "Uploading...",
+    "dropHere": "Drop files here or click to browse",
+    "loadingPreview": "Loading preview...",
+    "loadingPreviewError": "Unable to load preview."
   },
   "dataHub": {
     "title": "Data Hub - Document Lineage",
@@ -39,6 +49,38 @@
     "hideSection": "Hide",
     "showSection": "Show"
   },
+  "graphHub": {
+    "panelTitle": "Actions",
+    "trainModelSection": "Train Model",
+    "selectLibrary": "Reference Library",
+    "showGraphSection": "Show Graph",
+    "selectLibraries": "Libraries",
+    "selectTag": "Select library",
+    "tag": "Library",
+    "umapError": "Error with projection",
+    "modelNotFoundError": "Model not found",
+    "modelNotFoundDetail": "The UMAP model has not been trained yet. Please train the model first.",
+    "training": "Training...",
+    "trainModel": "Train model",
+    "refreshGraph": "Show graph",
+    "deletionError": "Error deleting chunks",
+    "deletionErrorDetail": "{{failed}} out of {{total}} chunks could not be deleted",
+    "selection": {
+      "title": "Selection"
+    },
+    "deleteSelection": "Delete selection"
+  },
+  "graph3DView": {
+    "toggleLinks": "Show/hide links",
+    "colorMode": {
+      "title": "Coloring mode",
+      "none": "No coloring",
+      "3d": "3D coloring",
+      "vector": "Vector coloring",
+      "distance": "Distance coloring"
+    },
+    "testPromptPlaceholder": "Enter a test prompt..."
+  },
   "resource": {
     "kind": {
       "prompt": {
@@ -66,25 +108,33 @@
     "deleted": "Deleted"
   },
   "sidebar": {
+    "migration": "Migration",
     "cluster": "Cluster",
     "facts": "Facts",
     "audit": "Audit",
     "optimize": "Optimize",
     "chat": "Chat",
-    "monitoring": "Monitoring",
+    "monitoring": "Admin",
+    "laboratory": "Laboratory",
     "knowledge": "Resources",
+    "mcp": "MCP Servers",
     "agent": "Agents",
+    "release_notes": "Release Notes",
     "workspaces": "Workspaces",
     "account": "Profile",
     "tooltip": {
+      "migration": "Check or run migration actions after an update",
       "cluster": "Explain the cluster",
       "facts": "Checkout the business and usage facts associated with the cluster",
       "audit": "View a complete eco-score audit of the selected cluster",
       "optimize": "Check the optimization gains on the selected cluster",
       "chat": "Chat with the AI assistant team",
       "monitoring": "Monitor the backend AI calls",
+      "laboratory": "Explore validation and laboratory features and tools",
       "knowledge": "Consult the content of your libraries",
+      "mcp": "Manage MCP servers",
       "agent": "View agents",
+      "release_notes": "View the latest release notes",
       "workspaces": "View Workspace",
       "account": "View your account",
       "selectCluster": "Please select a cluster first",
@@ -92,7 +142,8 @@
       "monitoring_logs": "Log Console",
       "monitoring_runtime": "Runtime summary",
       "monitoring_processors": "Processor bench",
-      "monitoring_data": "Data monitoring"
+      "monitoring_data": "Data monitoring",
+      "monitoring_graph": "Knowledge Graph monitoring"
     },
     "theme": {
       "light": "light",
@@ -106,7 +157,30 @@
     "monitoring_logs": "Logs",
     "monitoring_runtime": "Runtime",
     "monitoring_processors": "Processors",
-    "monitoring_data": "Data"
+    "monitoring_data": "Data",
+    "monitoring_graph": "Graph"
+  },
+  "chat": {
+    "common": {
+      "unknown": "Unknown"
+    },
+    "feedback": {
+      "error": "Feedback error",
+      "submitted": "Feedback submitted",
+      "thanks": "Thanks for your feedback."
+    },
+    "labels": {
+      "task": "Task",
+      "node": "Node"
+    },
+    "message": {
+      "waiting": "Waiting for response...",
+      "toolResult": "Tool result"
+    },
+    "actions": {
+      "copyMessage": "Copy message",
+      "openFeedback": "Open feedback"
+    }
   },
   "runtime": {
     "title": "Runtime Summary",
@@ -146,7 +220,7 @@
   },
   "procbench": {
     "title": "Document Processor Bench",
-    "description": "Upload a document (pdf, pptx, docx, xlsx) and compare extraction quality and speed across processors.",
+    "description": "Upload a document (pdf, docx, pptx, csv, txt, md, xlsm, jsonl) and compare extraction quality and speed across processors.",
     "uploadTitle": "Upload a document",
     "uploadSubtitle": "Supported: PDF, DOCX, PPTX, Markdown, Text",
     "browse": "Browse",
@@ -249,6 +323,7 @@
     "agents": "Agents",
     "search": "Search",
     "filter": "Filter",
+    "restoreButton": "Restore from configuration",
     "create": "Create",
     "createAgent": "Create new agent",
     "noAgents": "No agents found",
@@ -263,8 +338,14 @@
       "nickname": "Nickname",
       "description": "Description",
       "role": "Role",
+      "agentType": "Agent Type",
       "base_prompt": "Base Prompt",
       "agent_type": "Agent Type",
+      "a2aProxyToggle": "A2A Proxy",
+      "a2aBaseUrl": "A2A Base URL",
+      "a2aBaseUrlRequired": "A2A base URL is required for an A2A agent.",
+      "a2aToken": "A2A Token (optional)",
+      "optional": "Optional",
       "icon": "Icon",
       "tags": "Tags",
       "custom_tag": "Add custom tag",
@@ -275,6 +356,9 @@
         "name": "Name",
         "url": "URL",
         "transport": "Transport",
+        "transport_http": "streamable_http",
+        "transport_local": "stdio",
+        "command": "Command",
         "timeout": "Timeout"
       }
     },
@@ -291,9 +375,97 @@
     "success": {
       "summary": "Agent created",
       "detail": "The agent has been successfully created."
-    }
+    },
+    "toasts": {
+      "restored": "Static agents restored from configuration",
+      "error": "Operation failed"
+    },
+    "toolsSelection": {
+      "title": "Tools"
+    },
+    "confirmRestoreTitle": "Overwrite agents with configuration?",
+    "confirmRestoreMessage": "This will replace all tuned settings saved in the UI with the YAML configuration. You will lose any custom changes. This cannot be undone.",
+    "registerA2A": "Register",
+    "noA2ACardSummary": "No A2A card stored",
+    "noA2ACardDetail": "This agent does not have a stored A2A agent card yet.",
+    "a2aCardTitle": "A2A Agent Card",
+    "a2aCapabilities": "Capabilities",
+    "a2aStreaming": "Streaming",
+    "a2aPush": "Push notifications",
+    "a2aHistory": "State history",
+    "a2aSkills": "Skills",
+    "a2aExamples": "Examples"
+  },
+  "mcpHub": {
+    "title": "MCP Servers",
+    "subtitle": "Register and edit MCP servers available to agents.",
+    "restoreButton": "Restore from configuration",
+    "addButton": "Add MCP server",
+    "addTitle": "New MCP server",
+    "editTitle": "Edit MCP server",
+    "emptyTitle": "No MCP servers yet",
+    "emptyHint": "Create a server entry to let agents connect to it.",
+    "countLabel": "servers",
+    "search": "Search",
+    "filter": "Filter",
+    "confirmDeleteTitle": "Delete MCP server?",
+    "confirmDeleteMessage": "Delete MCP server {{id}}? This action cannot be undone.",
+    "fields": {
+      "id": "Identifier",
+      "name": "Display name (i18n key)",
+      "description": "Description (i18n key)",
+      "transport": "Transport",
+      "url": "Server URL",
+      "command": "Command",
+      "args": "Arguments",
+      "env": "Environment variables",
+      "enabled": "Enabled",
+      "timeout": "SSE timeout (s)",
+      "auth_mode": "Auth mode"
+    },
+    "helpers": {
+      "args": "Space or comma separated arguments",
+      "env": "One KEY=VALUE per line"
+    },
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "transport": {
+      "stdio": "stdio",
+      "streamable_http": "streamable_http",
+      "sse": "Server-sent events",
+      "websocket": "WebSocket"
+    },
+    "auth": {
+      "user_token": "User token",
+      "no_token": "No token",
+      "user_token_hint": "Forward the authenticated user's bearer token",
+      "present": "Auth configured",
+      "none": "No auth"
+    },
+    "toasts": {
+      "created": "MCP server created",
+      "updated": "MCP server updated",
+      "deleted": "MCP server deleted",
+      "enabled": "MCP server enabled",
+      "disabled": "MCP server disabled",
+      "restored": "Static MCP servers restored from configuration",
+      "error": "Operation failed"
+    },
+    "confirmRestoreTitle": "Overwrite MCP servers with configuration?",
+    "confirmRestoreMessage": "This will replace all MCP server changes saved in the UI with the YAML configuration. You will lose those changes. This cannot be undone."
   },
   "chatbot": {
+    "ragScope": {
+      "tooltipCorpus": "Use only the selected document libraries to answer",
+      "tooltipHybrid": "Use both the selected document libraries and the model general knowledge to answer",
+      "tooltipGeneral": "Use only the model general knowledge to answer"
+    },
+    "deepSearch": {
+      "label": "Deep Search",
+      "tooltip": "Delegate RAG retrieval to Rico Senior"
+    },
     "menu": {
       "addToSetup": "Add to conversation setup"
     },
@@ -302,10 +474,14 @@
     },
     "attachFiles": "Attach files",
     "attachments": {
-      "betaNotice": "File attachments are in beta. Only CSV, docx and pdf files are supported. Please provide feedback to help us improve this feature.",
-      "count": "{{count}} attached"
+      "betaNotice": "File attachments are in beta. Supported formats: PDF, DOCX, CSV. Please provide feedback to help us improve this feature.",
+      "supportedFormats": "Supported files: PDF, DOCX, CSV",
+      "count": "{{count}} attached",
+      "drawerTitle": "Manage Attachments",
+      "noAttachments": "No attachments yet"
     },
     "uploadingFile": "Uploading {{name}}...",
+    "searchToggle": "Toggle retrieval: on searches documents, off skips RAG",
     "recordAudio": "Record audio",
     "sendMessage": "Send message",
     "stopResponse": "Stop response",
@@ -315,6 +491,8 @@
     "searchDocumentLibraries": "Search document libraries...",
     "searchPromptLibraries": "Search prompt libraries...",
     "searchChatContextLibraries": "Search chat context libraries...",
+    "welcomeUser": "Hello {{username}}",
+    "welcomeFallback": "Hello there",
     "startNew": "Start a new conversation with {{name}}",
     "tooltip": {
       "tokenUsage": "This conversation has used {{input}} prompt tokens and {{output}} response tokens",
@@ -385,7 +563,9 @@
     "favorite": "Add the agent to your favorites",
     "unfavorite": "Remove the agent from your favorites",
     "manageAssets": "Manage Assets",
-    "manageCrew": "Manage Crew"
+    "manageCrew": "Manage Crew",
+    "inspectCode": "Inspect source code",
+    "viewA2ACard": "View A2A card"
   },
   "dialogs": {
     "create": {
@@ -445,8 +625,13 @@
       "templates": "Templates",
       "prompts": "Prompts",
       "documents": "Documents",
+      "userAssets": "My Files",
       "operations": "Operations",
       "chatContexts": "Chat contexts"
+    },
+    "userAssets": {
+      "title": "My Files",
+      "subtitle": "Files generated by you or your agents, scoped to your account."
     }
   },
   "documentLibrary": {
@@ -462,6 +647,8 @@
     "uploadDrawerTitle": "Upload a document",
     "dropFiles": "Drop your files here",
     "maxSize": "or click to select (max 200Mb per file)",
+    "supportedFormats": "Supported files: PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL",
+    "uploadDrawerTooltip": "Drag & drop or select files (max 200Mb per file). Supported: PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL.",
     "searchPlaceholder": "Search a document",
     "clearSearch": "Clear search",
     "documents": "{{count}} document(s)",
@@ -471,12 +658,23 @@
     "cancel": "Cancel",
     "save": "Save",
     "saving": "Saving...",
+    "bulkUploadModalTitle": "Document ingestion progress",
+    "bulkUploadProgressSummary": "{{processed}} / {{total}} documents processed",
+    "bulkUploadDetailsLabel": "Per-document detail",
+    "bulkUploadShowDetails": "Show detail",
+    "bulkUploadHideDetails": "Hide detail",
+    "bulkUploadCompletedSummary": "Completed: {{processed}} / {{total}} documents",
+    "bulkUploadErrorsTitle": "Errored documents",
+    "bulkUploadUnknownError": "Unknown error",
+    "bulkUploadNoErrors": "No errors detected",
     "documentsView": "Documents",
     "removeSuccess": "Documents Removed",
     "removedDocuments": "{{count}} document(s) removed from library",
     "removeError": "Remove Failed",
     "removeErrorGeneric": "Failed to remove documents from library",
     "removeFromLibrary": "Remove from library",
+    "removeForbiddenSummary": "Not allowed",
+    "removeForbiddenDetail": "Only library owners can remove items from the \"{{folder}}\" library.",
     "emptyLibraryTitle": "No documents in this library",
     "emptyLibraryDescription": "This library is empty. Add your first documents to make them available to your AI assistants.",
     "uploadFirstDocument": "Add your first document",
@@ -490,11 +688,15 @@
     "confirmBulkRemoveMessage": "Remove {{count}} document(s) from their libraries?",
     "bulkRemoveFromLibrary": "Remove from library",
     "removedOneDocument": "Document removed from library.",
+    "removedManyDocuments": "Documents removed from library.",
     "confirmDeleteFolderTitle": "Delete folder?",
     "confirmDeleteFolderMessage": "Delete empty folder « {{name}} »?",
     "folderDeleted": "Folder deleted",
     "deleteFolder": "Delete folder",
     "download": "Download",
+    "downloadStarting": "Getting ready to start downloading...",
+    "loadMore": "Load more",
+    "loadAll": "Load all",
     "pipeline": {
       "title": "Configure Processing Pipeline",
       "description": "Choose the chain of processors to apply for each file type in this library.",
@@ -531,13 +733,20 @@
       "close": "Close",
       "addLibraryProcessor": "Add library processor",
       "noLibraryProcessorAvailable": "No library processors available."
-    }
+    },
+    "configurePipeline": "Configure processing pipeline",
+    "viewOriginalPdf": "View Original PDF",
+    "makeExcluded": "Make excluded",
+    "makeSearchable": "Make searchable",
+    "searchOn": "Search on",
+    "searchOff": "Search off"
   },
   "documentLibraryShareDialog": {
     "subtitle": "Add users or groups and manage access permissions for this library.",
     "addAccessTab": "Add access",
     "currentAccessTab": "Current access",
     "shareError": "We couldn't apply sharing settings. Please try again.",
+    "shareForbidden": "You do not have permission to share the \"{{name}}\" library.",
     "shareButton": "Share",
     "searchPlaceholder": "Search users or groups…",
     "usersToggle": "Users",
@@ -580,6 +789,10 @@
     "expandAll": "Expand all",
     "folderDeleteSuccess": "Folder deleted",
     "folderDeleteDetail": "The folder « {{name}} » has been deleted.",
+    "folderDeleteForbiddenSummary": "Not allowed",
+    "folderDeleteForbiddenDetail": "Only a library owner can delete the « {{name}} » library.",
+    "removeForbiddenSummary": "Not allowed",
+    "removeForbiddenDetail": "Only library owners can remove items from the « {{folder}} » library.",
     "searchPlaceholder": "Search a {{typeOne}}",
     "importDrawerTitle": "Import {{typeOne}}",
     "dropFiles": "Drop your {{typePlural}} here",
@@ -602,7 +815,8 @@
     "shareFolder": "Share folder",
     "shareFolderWithName": "Share \"{{name}}\"",
     "deleteFolder": "Delete folder",
-    "deleteFolderDisabled": "A library should be empty to be deleted"
+    "deleteFolderDisabled": "A library should be empty to be deleted",
+    "ownerTooltip": "Owner: {{name}}"
   },
   "documentTable": {
     "selectedCount": "{{count}} selected",
@@ -743,5 +957,73 @@
   },
   "agentSelector": {
     "sendTo": "Send to"
+  },
+  "mcp": {
+    "servers": {
+      "search_documents": {
+        "name": "Search in documents",
+        "description": "Allow your agent to perform semantic search in documents uploaded to Fred (RAG)"
+      },
+      "tabular": {
+        "name": "Tabular data access",
+        "description": "Allow your agent to query tabular data sources (spreadsheets, csv...)"
+      },
+      "filesystem": {
+        "name": "Filesystem access",
+        "description": "Allow your agent to access a filesystem (local or Minio)"
+      },
+      "search_opensearch": {
+        "name": "Search in opensearch",
+        "description": "Allow your agent to search in opensearch indices"
+      },
+      "kubernetes": {
+        "name": "Kubernetes access",
+        "description": "Allow your agent to interact with Kubernetes clusters"
+      },
+      "jira": {
+        "name": "Jira access",
+        "description": "Allow your agent to interact with Jira"
+      },
+      "neo4j": {
+        "name": "Neo4j access",
+        "description": "Allow your agent to interact with Neo4j graph databases"
+      },
+      "local_stdio": {
+        "name": "Local stdio MCP",
+        "description": "Run a local MCP server over stdio (process-based tools)"
+      }
+    }
+  },
+  "rebac": {
+    "backfill": {
+      "title": "ReBAC Backfill",
+      "subtitle": "Rebuild owner and tag-to-document relations after enabling ReBAC.",
+      "description": "Use this once after turning on ReBAC in an existing deployment to restore access to libraries and their documents.",
+      "run": "Run backfill",
+      "running": "Running...",
+      "success": {
+        "title": "ReBAC relations rebuilt",
+        "detail": "{{owners}} owner relations and {{parents}} tag→doc relations created."
+      },
+      "disabled": {
+        "title": "ReBAC disabled",
+        "detail": "ReBAC is turned off; nothing to backfill."
+      },
+      "error": {
+        "title": "Backfill failed"
+      },
+      "stats": {
+        "tags": "Tags processed",
+        "docs": "Documents scanned",
+        "ownerRelations": "Owner relations created",
+        "parentRelations": "Tag→doc relations created"
+      }
+    }
+  },
+  "app": {
+    "loading": {
+      "router": "Fred is starting...",
+      "ui": "Fred is getting the UI ready..."
+    }
   }
 }

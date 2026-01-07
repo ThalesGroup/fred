@@ -16,9 +16,10 @@ import importlib
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Optional, Type, Union
+from typing import Any, Dict, Optional, Type, Union
 
 from fred_core import (
+    BaseFilesystem,
     BaseKPIStore,
     BaseKPIWriter,
     BaseLogStore,
@@ -26,13 +27,16 @@ from fred_core import (
     InMemoryLogStorageConfig,
     KpiLogStore,
     KPIWriter,
+    LocalFilesystem,
     LogStoreConfig,
+    MinioFilesystem,
     ModelConfiguration,
     ModelProvider,
     OpenFgaRebacConfig,
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
     OpenSearchLogStore,
+    PostgresTableConfig,
     RamLogStore,
     RebacEngine,
     SQLStorageConfig,
@@ -43,29 +47,32 @@ from fred_core import (
     rebac_factory,
     split_realm_url,
 )
+from fred_core.sql import create_engine_from_config
 from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
+from sentence_transformers import CrossEncoder
 
+# from fred_core.filesystem.local_filesystem import LocalFilesystem
+# from fred_core.filesystem.minio_filesystem import MinioFilesystem
 from knowledge_flow_backend.common.structures import (
     ChromaVectorStorageConfig,
     Configuration,
     FileSystemPullSource,
     InMemoryVectorStorage,
     LocalContentStorageConfig,
+    LocalFilesystemConfig,
+    MinioFilesystemConfig,
     MinioPullSource,
     MinioStorageConfig,
     OpenSearchVectorIndexConfig,
+    PgVectorStorageConfig,
     WeaviateVectorStorage,
 )
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
 from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 from knowledge_flow_backend.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
-from knowledge_flow_backend.core.stores.catalog.base_catalog_store import BaseCatalogStore
-from knowledge_flow_backend.core.stores.catalog.duckdb_catalog_store import DuckdbCatalogStore
-from knowledge_flow_backend.core.stores.catalog.opensearch_catalog_store import OpenSearchCatalogStore
-from knowledge_flow_backend.core.stores.catalog.sql_catalog_store import SQLCatalogStore
 from knowledge_flow_backend.core.stores.content.base_content_loader import BaseContentLoader
 from knowledge_flow_backend.core.stores.content.base_content_store import BaseContentStore
 from knowledge_flow_backend.core.stores.content.filesystem_content_loader import FileSystemContentLoader
@@ -78,16 +85,20 @@ from knowledge_flow_backend.core.stores.files.minio_file_store import MinioFileS
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from knowledge_flow_backend.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
 from knowledge_flow_backend.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
+from knowledge_flow_backend.core.stores.metadata.postgres_metadata_store import PostgresMetadataStore
 from knowledge_flow_backend.core.stores.resources.base_resource_store import BaseResourceStore
 from knowledge_flow_backend.core.stores.resources.duckdb_resource_store import DuckdbResourceStore
 from knowledge_flow_backend.core.stores.resources.opensearch_resource_store import OpenSearchResourceStore
+from knowledge_flow_backend.core.stores.resources.postgres_resource_store import PostgresResourceStore
 from knowledge_flow_backend.core.stores.tags.base_tag_store import BaseTagStore
 from knowledge_flow_backend.core.stores.tags.duckdb_tag_store import DuckdbTagStore
-from knowledge_flow_backend.core.stores.tags.opensearch_tags_store import OpenSearchTagStore
+from knowledge_flow_backend.core.stores.tags.opensearch_tag_store import OpenSearchTagStore
+from knowledge_flow_backend.core.stores.tags.postgres_tag_store import PostgresTagStore
 from knowledge_flow_backend.core.stores.vector.base_text_splitter import BaseTextSplitter
 from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
 from knowledge_flow_backend.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
+from knowledge_flow_backend.core.stores.vector.pgvector_store import PgVectorStoreAdapter
 
 # Union of supported processor base classes
 BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
@@ -165,6 +176,10 @@ def get_app_context() -> "ApplicationContext":
     return ApplicationContext._instance
 
 
+def get_filesystem() -> BaseFilesystem:
+    return get_app_context().get_filesystem()
+
+
 def validate_input_processor_config(config: Configuration):
     """Ensure all input processor classes can be imported and subclass BaseProcessor."""
     for entry in config.input_processors:
@@ -234,11 +249,11 @@ class ApplicationContext:
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
     _tabular_stores: Optional[Dict[str, StoreInfo]] = None
-    _catalog_store_instance: Optional[BaseCatalogStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
     _kpi_writer: Optional[KPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
     _neo4j_driver: Optional[Driver] = None
+    _filesystem_instance: Optional[BaseFilesystem] = None
 
     def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
@@ -413,6 +428,8 @@ class ApplicationContext:
         config = ApplicationContext.get_instance().get_config().storage.log_store
         if isinstance(config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if not opensearch_config:
+                raise ValueError("Missing OpenSearch configuration")
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
@@ -496,6 +513,60 @@ class ApplicationContext:
             raise ValueError("Vision model configuration is missing.")
         return get_model(self.configuration.vision_model)
 
+    def get_crossencoder_model(self) -> CrossEncoder:
+        """
+        Retrieve the cross-encoder model based on the application configuration.
+        If no cross-encoder model is configured, a default model is used.
+        If the model is configured for offline use, it will be loaded from a local path.
+        Otherwise, it will be loaded from the Hugging Face model hub.
+
+        Returns:
+            CrossEncoder: An instance of the cross-encoder model.
+        Raises:
+            ValueError: If the model name is required but not provided in offline mode,
+                        or if the model configuration is missing.
+        """
+        # A default model is loaded if none is specified in the configuration.
+        if not self.configuration.crossencoder_model:
+            self.configuration.crossencoder_model = ModelConfiguration(provider=None, name="cross-encoder/ms-marco-MiniLM-L-12-v2")
+            try:
+                self.configuration.crossencoder_model = ModelConfiguration(provider=None, name="cross-encoder/ms-marco-MiniLM-L-12-v2")
+                return CrossEncoder(model_name_or_path="cross-encoder/ms-marco-MiniLM-L-12-v2", cache_folder=None)
+            except Exception as e:
+                logging.error(f"[CROSSENCODER][OFFLINE] The configuration is missing : Error: {e}")
+                logging.error("[CROSSENCODER][OFFLINE] Loading a default model : cross-encoder/ms-marco-MiniLM-L-12-v2")
+                return CrossEncoder(
+                    model_name_or_path="cross-encoder/ms-marco-MiniLM-L-12-v2",
+                    cache_folder="/app/models",
+                    local_files_only=True,
+                )
+
+        model_config = self.configuration.crossencoder_model
+        settings: Dict[str, Any] = model_config.settings or {}
+
+        # Offline mode
+        if not settings.get("online", True):
+            if not model_config.name:
+                raise ValueError("The name of the cross-encoder model is required for offline mode.")
+            if not settings.get("local_path"):
+                raise ValueError("A path to the local cross-encoder model is required for offline mode.")
+
+            local_path: str = settings.get("local_path", "")
+
+            logging.info(f"[CROSSENCODER][OFFLINE] Cache folder exists: {settings.get('local_path')}")
+            logging.info(f"[CROSSENCODER][OFFLINE] Cache folder content: {os.listdir(local_path) if os.path.exists(local_path) else 'NOT FOUND'}")
+
+            return CrossEncoder(
+                model_name_or_path=model_config.name,
+                cache_folder=settings.get("local_path"),
+                local_files_only=True,
+            )
+
+        if not model_config.name:
+            raise ValueError("The name of the cross-encoder model is required.")
+
+        return CrossEncoder(model_name_or_path=model_config.name, cache_folder=None)
+
     def get_vector_store(self) -> BaseVectorStore:
         """
         Vector Store Factory
@@ -515,6 +586,8 @@ class ApplicationContext:
 
         if isinstance(store, OpenSearchVectorIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if not opensearch_config:
+                raise ValueError("Missing OpenSearch configuration")
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
@@ -549,6 +622,18 @@ class ApplicationContext:
             )
         elif isinstance(store, InMemoryVectorStorage):
             self._vector_store_instance = InMemoryLangchainVectorStore(embedding_model=embedding_model, embedding_model_name=embedding_model_name)
+        elif isinstance(store, PgVectorStorageConfig):
+            pg = get_configuration().storage.postgres
+            self._vector_store_instance = PgVectorStoreAdapter(
+                embedding_model=embedding_model,
+                embedding_model_name=embedding_model_name,
+                connection_string=pg.dsn(),
+                collection_name=store.collection_name,
+            )
+            logger.info(
+                "[VECTOR][PGVECTOR] Using postgres collection=%s (default table)",
+                store.collection_name,
+            )
         else:
             raise ValueError("Unsupported vector store backend")
         return self._vector_store_instance
@@ -561,8 +646,18 @@ class ApplicationContext:
         if isinstance(store_config, DuckdbStoreConfig):
             db_path = Path(store_config.duckdb_path).expanduser()
             self._metadata_store_instance = DuckdbMetadataStore(db_path)
+        elif isinstance(store_config, PostgresTableConfig):
+            postgres_config = get_configuration().storage.postgres
+            engine = create_engine_from_config(postgres_config)
+            self._metadata_store_instance = PostgresMetadataStore(
+                engine=engine,
+                table_name=store_config.table,
+                prefix=store_config.prefix or "",
+            )
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if not opensearch_config:
+                raise ValueError("Missing OpenSearch configuration")
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
@@ -583,6 +678,9 @@ class ApplicationContext:
             return self._opensearch_client
 
         opensearch_config = get_configuration().storage.opensearch
+        if not opensearch_config:
+            raise ValueError("Missing OpenSearch configuration")
+
         self._opensearch_client = OpenSearch(
             opensearch_config.host,
             http_auth=(opensearch_config.username, opensearch_config.password),
@@ -635,6 +733,8 @@ class ApplicationContext:
         store_config = get_configuration().storage.kpi_store
         if isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if not opensearch_config:
+                raise ValueError("Missing OpenSearch configuration")
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
@@ -660,8 +760,18 @@ class ApplicationContext:
         if isinstance(store_config, DuckdbStoreConfig):
             db_path = Path(store_config.duckdb_path).expanduser()
             self._tag_store_instance = DuckdbTagStore(db_path)
+        elif isinstance(store_config, PostgresTableConfig):
+            pg = get_configuration().storage.postgres
+            engine = create_engine_from_config(pg)
+            self._tag_store_instance = PostgresTagStore(
+                engine=engine,
+                table_name=store_config.table,
+                prefix=store_config.prefix or "",
+            )
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if not opensearch_config:
+                raise ValueError("Missing OpenSearch configuration")
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
@@ -685,8 +795,18 @@ class ApplicationContext:
         if isinstance(store_config, DuckdbStoreConfig):
             db_path = Path(store_config.duckdb_path).expanduser()
             self._resource_store_instance = DuckdbResourceStore(db_path)
+        elif isinstance(store_config, PostgresTableConfig):
+            pg = get_configuration().storage.postgres
+            engine = create_engine_from_config(pg)
+            self._resource_store_instance = PostgresResourceStore(
+                engine=engine,
+                table_name=store_config.table,
+                prefix=store_config.prefix or "",
+            )
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if not opensearch_config:
+                raise ValueError("Missing OpenSearch configuration")
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
@@ -744,38 +864,6 @@ class ApplicationContext:
                 return store_info.store
         raise ValueError("No tabular_stores with mode 'read_and_write' found. Please check the knowledge flow configuration.")
 
-    def get_catalog_store(self) -> BaseCatalogStore:
-        """
-        Return the store used to save a local view of pull files, i.e. files not yet processed.
-        Currently supports only DuckDB.
-        """
-        if self._catalog_store_instance is not None:
-            return self._catalog_store_instance
-
-        store_config = get_configuration().storage.catalog_store
-        if isinstance(store_config, DuckdbStoreConfig):
-            db_path = Path(store_config.duckdb_path).expanduser()
-            self._catalog_store_instance = DuckdbCatalogStore(db_path)
-        elif isinstance(store_config, SQLStorageConfig):
-            db_path = Path(store_config.path or "").expanduser()
-            self._catalog_store_instance = SQLCatalogStore(driver=store_config.driver, db_path=db_path)
-        elif isinstance(store_config, OpenSearchIndexConfig):
-            opensearch_config = get_configuration().storage.opensearch
-            password = opensearch_config.password
-            if not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
-            self._catalog_store_instance = OpenSearchCatalogStore(
-                host=opensearch_config.host,
-                username=opensearch_config.username,
-                password=password,
-                secure=opensearch_config.secure,
-                verify_certs=opensearch_config.verify_certs,
-                index=store_config.index,
-            )
-        else:
-            raise ValueError("Unsupported sessions storage backend")
-        return self._catalog_store_instance
-
     def get_content_loader(self, source: str) -> BaseContentLoader:
         """
         Factory method to create a document loader instance based on configuration.
@@ -817,6 +905,36 @@ class ApplicationContext:
             return MinioContentLoader(source_config, source_tag)
         else:
             raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
+
+    def get_filesystem(self):
+        """
+        Factory function to create the filesystem backend based on configuration.
+
+        Returns:
+            Filesystem: Instance of the configured filesystem backend.
+        """
+        if self._filesystem_instance is not None:
+            return self._filesystem_instance
+
+        fs_cfg = self.configuration.filesystem
+
+        if isinstance(fs_cfg, LocalFilesystemConfig):
+            instance = LocalFilesystem(root=fs_cfg.root)
+
+        elif isinstance(fs_cfg, MinioFilesystemConfig):
+            instance = MinioFilesystem(
+                endpoint=fs_cfg.endpoint,
+                access_key=fs_cfg.access_key,
+                secret_key=fs_cfg.secret_key,
+                bucket_name=fs_cfg.bucket_name,  # type: ignore
+                secure=bool(fs_cfg.secure),
+            )
+
+        else:
+            raise ValueError(f"Unsupported filesystem type '{fs_cfg.type}'")
+
+        self._filesystem_instance = instance
+        return instance
 
     def is_summary_generation_enabled(self) -> bool:
         """
@@ -898,17 +1016,31 @@ class ApplicationContext:
         logger.info(f"  📚 Vector store backend: {vector_type}")
         try:
             store = self.configuration.storage.vector_store
-            s = self.configuration.storage.opensearch
+
             if isinstance(store, OpenSearchIndexConfig):
+                s = self.configuration.storage.opensearch
+                if not s:
+                    logger.error("     ❌ Missing OpenSearch configuration (required for OpenSearch-backed vector store)")
+                    raise RuntimeError("OpenSearch configuration is required for OpenSearch vector store")
+                _require_env("OPENSEARCH_PASSWORD")
                 logger.info(f"     ↳ Host: {s.host}")
                 logger.info(f"     ↳ Vector Index: {store.index}")
                 logger.info(f"     ↳ Secure (TLS): {s.secure}")
                 logger.info(f"     ↳ Verify Certs: {s.verify_certs}")
                 logger.info(f"     ↳ Username: {s.username}")
                 self._log_sensitive("OPENSEARCH_PASSWORD", os.getenv("OPENSEARCH_PASSWORD"))
-            elif isinstance(s, WeaviateVectorStorage):
-                logger.info(f"     ↳ Host: {s.host}")
-                logger.info(f"     ↳ Index Name: {s.index_name}")
+            elif isinstance(store, PgVectorStorageConfig):
+                pg = self.configuration.storage.postgres
+                _require_env("POSTGRES_PASSWORD")
+                logger.info("     ↳ Backend: pgvector")
+                logger.info("     ↳ Host: %s  Port: %s  DB: %s", pg.host, pg.port, pg.database)
+                logger.info("     ↳ Collection: %s", store.collection_name)
+                logger.info("     ↳ Username: %s", pg.username)
+                self._log_sensitive("POSTGRES_PASSWORD", os.getenv("POSTGRES_PASSWORD"))
+            elif isinstance(store, WeaviateVectorStorage):
+                _require_env("WEAVIATE_API_KEY")
+                logger.info(f"     ↳ Host: {store.host}")
+                logger.info(f"     ↳ Index Name: {store.index_name}")
                 self._log_sensitive("WEAVIATE_API_KEY", os.getenv("WEAVIATE_API_KEY"))
             elif vector_type == "in_memory":
                 logger.info("     ↳ In-memory vector store (no host/index)")
@@ -925,6 +1057,9 @@ class ApplicationContext:
 
                 elif isinstance(store_cfg, OpenSearchIndexConfig):
                     os_cfg = self.configuration.storage.opensearch
+                    if not os_cfg:
+                        raise ValueError("Missing OpenSearch configuration")
+                    _require_env("OPENSEARCH_PASSWORD")
                     logger.info(
                         "     • %-14s OpenSearch host=%s index=%s secure=%s verify=%s",
                         label,
@@ -937,6 +1072,12 @@ class ApplicationContext:
                     logger.info("     • %-14s SQLStorage  database=%s  host=%s", label, store_cfg.database or "unset", store_cfg.host or "unset")
                 elif isinstance(store_cfg, ChromaVectorStorageConfig):
                     logger.info("     • %-14s ChromaDB  database=%s  host=%s  distance=%s", label, store_cfg.local_path or "unset", store_cfg.collection_name or "unset", store_cfg.distance or "unset")
+                elif isinstance(store_cfg, PgVectorStorageConfig):
+                    logger.info(
+                        "     • %-14s pgvector  collection=%s",
+                        label,
+                        store_cfg.collection_name,
+                    )
                 elif isinstance(store_cfg, LogStoreConfig):
                     # No-op KPI / log-only store
                     logger.info(
@@ -949,13 +1090,28 @@ class ApplicationContext:
 
             _describe("tag_store", st.tag_store)
             _describe("kpi_store", st.kpi_store)
-            _describe("catalog_store", st.catalog_store)
             _describe("metadata_store", st.metadata_store)
             _describe("vector_store", st.vector_store)
             _describe("resource_store", st.resource_store)
 
         except Exception:
             logger.warning("  ⚠️ Failed to read storage section (some variables may be missing).")
+
+        # Filesystem
+        logger.info("  📁 Agent filesystem:")
+        fs = self.configuration.filesystem
+        logger.info("     • %-14s %s", "filesystem", type(fs).__name__)
+        if isinstance(fs, LocalFilesystemConfig):
+            logger.info("        backend=local  root=%s", fs.root)
+        elif isinstance(fs, MinioFilesystemConfig):
+            logger.info(
+                "        backend=minio  endpoint=%s  access_key=%s  secret_key=%s",
+                fs.endpoint,
+                fs.access_key,
+                _mask(fs.secret_key),
+            )
+        else:
+            logger.info("        backend=<unknown>")
 
         logger.info(f"  📁 Content storage backend: {self.configuration.content_storage.type}")
         if isinstance(self.configuration.content_storage, MinioStorageConfig):

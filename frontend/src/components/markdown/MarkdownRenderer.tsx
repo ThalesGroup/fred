@@ -17,7 +17,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 // import DownloadIcon from "@mui/icons-material/Download"; // REMOVED: Mermaid Download
 import { Box, IconButton, Typography, useTheme } from "@mui/material";
 import "katex/dist/katex.min.css";
-// import mermaid from "mermaid"; // REMOVED: Mermaid Import
+import Mermaid from "./Mermaid.tsx";
 import { createElement, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -30,6 +30,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import type { PluggableList } from "unified";
 import { visit } from "unist-util-visit";
+import { useLazyDownloadMarkdownMediaBlobQuery } from "../../slices/knowledgeFlow/knowledgeFlowApi.blob";
 import { getMarkdownComponents } from "./GetMarkdownComponents";
 
 // --- NEW CITATION INTERFACES ---
@@ -50,7 +51,100 @@ export interface MarkdownRendererProps {
   components?: Components;
   /** Optional citation behavior; if omitted, renderer ignores [n] */
   citations?: CitationHooks; // <-- ADDED PROP
+  /** If provided, relative media paths like media/image.png will be resolved against this document */
+  documentUidForMedia?: string;
 }
+
+const MARKDOWN_MEDIA_PATH_REGEX = /\/knowledge-flow\/v1\/markdown\/([^/]+)\/media\/([^/?#]+)/;
+
+type MediaInfo = {
+  documentUid: string;
+  mediaId: string;
+  fallbackSrc: string;
+};
+
+// Try to pull document/media ids out of the markdown image src so we can fetch with auth.
+const extractMediaInfo = (src?: string, fallbackDocumentUid?: string): MediaInfo | null => {
+  if (!src) return null;
+  // Prefer the URL pathname if src is absolute; otherwise keep the raw string to test patterns.
+  let path = src;
+  try {
+    path = new URL(src, window.location.origin).pathname;
+  } catch {
+    // Ignore parsing errors for relative paths.
+  }
+
+  const match = MARKDOWN_MEDIA_PATH_REGEX.exec(path);
+  if (match) {
+    return {
+      documentUid: match[1],
+      mediaId: match[2],
+      fallbackSrc: src,
+    };
+  }
+
+  const relativeMedia = path.match(/(?:^|\/)media\/([^/]+)$/);
+  if (relativeMedia && fallbackDocumentUid) {
+    const mediaId = relativeMedia[1];
+    const fallbackSrc = `/knowledge-flow/v1/markdown/${fallbackDocumentUid}/media/${mediaId}`;
+    return { documentUid: fallbackDocumentUid, mediaId, fallbackSrc };
+  }
+
+  return null;
+};
+
+type AuthenticatedImageProps = JSX.IntrinsicElements["img"] & { documentUidForMedia?: string };
+
+const AuthenticatedMarkdownImage: React.FC<AuthenticatedImageProps> = ({
+  documentUidForMedia,
+  src,
+  ...rest
+}) => {
+  const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(() => (src?.startsWith("data:") ? src : undefined));
+  const [fetchMedia] = useLazyDownloadMarkdownMediaBlobQuery();
+
+  useEffect(() => {
+    // Data URLs are already self-contained.
+    if (!src || src.startsWith("data:")) {
+      setResolvedSrc(src);
+      return;
+    }
+
+    const mediaInfo = extractMediaInfo(src, documentUidForMedia);
+    if (!mediaInfo) {
+      setResolvedSrc(src);
+      return;
+    }
+
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    const request = fetchMedia({ documentUid: mediaInfo.documentUid, mediaId: mediaInfo.mediaId });
+
+    request
+      .unwrap()
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setResolvedSrc(objectUrl);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn("Failed to fetch protected markdown media", err);
+        setResolvedSrc(mediaInfo.fallbackSrc);
+      });
+
+    return () => {
+      cancelled = true;
+      request.abort();
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [documentUidForMedia, fetchMedia, src]);
+
+  return <img src={resolvedSrc} {...rest} loading="lazy" />;
+};
 // ... [replaceStageDirectionsWithEmoji remains the same]
 function replaceStageDirectionsWithEmoji(text: string): string {
   return text
@@ -231,14 +325,15 @@ const CustomCodeComponent: Components["code"] = ({ className, children, ...props
   const lang = match?.[1];
   const codeContent = String(children);
 
-  // 1. Handle Mermaid Diagrams (REMOVED)
-  // if (lang === "mermaid") {
-  //   return (
-  //     <CodeBlockContainer codeContent={codeContent} language={lang} isMermaid={true}>
-  //       <MermaidDiagram value={codeContent} />
-  //     </CodeBlockContainer>
-  //   );
-  // }
+  // 1. Handle Mermaid Diagrams
+  if (lang === "mermaid") {
+    const diagramCode = codeContent.trim();
+    return (
+      <CodeBlockContainer codeContent={diagramCode} language="mermaid">
+        <Mermaid code={diagramCode} />
+      </CodeBlockContainer>
+    );
+  }
 
   // 2. Handle Fenced Code Blocks (Syntax Highlighting)
   if (lang) {
@@ -390,6 +485,7 @@ export default function MarkdownRenderer({
   enableEmojiSubstitution = false,
   remarkPlugins = [],
   citations, // <-- DESTUCTURE CITATIONS PROP
+  documentUidForMedia,
   ...props
 }: MarkdownRendererProps) {
   const theme = useTheme();
@@ -411,6 +507,9 @@ export default function MarkdownRenderer({
   const finalComponents: Components = {
     ...baseComponents,
     code: CustomCodeComponent,
+    img: ({ node, ...imageProps }) => (
+      <AuthenticatedMarkdownImage {...imageProps} documentUidForMedia={documentUidForMedia} />
+    ),
     ...(props.components || {}),
   };
 

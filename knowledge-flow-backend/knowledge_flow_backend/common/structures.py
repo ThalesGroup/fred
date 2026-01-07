@@ -158,7 +158,27 @@ class ChromaVectorStorageConfig(BaseModel):
     distance: Literal["cosine", "l2", "ip"] = Field("cosine", description="Vector space (affects HNSW metric)")
 
 
-VectorStorageConfig = Annotated[Union[InMemoryVectorStorage, OpenSearchVectorIndexConfig, ChromaVectorStorageConfig, WeaviateVectorStorage], Field(discriminator="type")]
+class PgVectorStorageConfig(BaseModel):
+    """
+    PostgreSQL + pgvector backend.
+    - Uses shared `storage.postgres` connection settings.
+    - Stores vectors in the default pgvector table under a collection name.
+    """
+
+    type: Literal["pgvector"]
+    collection_name: str = Field("fred_chunks", description="Logical collection name")
+
+
+VectorStorageConfig = Annotated[
+    Union[
+        InMemoryVectorStorage,
+        OpenSearchVectorIndexConfig,
+        ChromaVectorStorageConfig,
+        WeaviateVectorStorage,
+        PgVectorStorageConfig,
+    ],
+    Field(discriminator="type"),
+]
 
 
 class ProcessingConfig(BaseModel):
@@ -212,6 +232,10 @@ class MCPConfig(BaseModel):
     neo4j_enabled: bool = Field(
         default=False,
         description="Expose Neo4j graph exploration endpoints and the corresponding MCP server.",
+    )
+    filesystem_enabled: bool = Field(
+        default=False,
+        description="Expose agent filesystem utils endpoints and the corresponding MCP server.",
     )
 
 
@@ -360,15 +384,42 @@ DocumentSourceConfig = Annotated[Union[PushSourceConfig, PullSourceConfig], Fiel
 
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
-    opensearch: OpenSearchStoreConfig
+    opensearch: Optional[OpenSearchStoreConfig] = Field(default=None, description="Optional OpenSearch store")
     resource_store: StoreConfig
     tag_store: StoreConfig
     kpi_store: StoreConfig
     metadata_store: StoreConfig
-    catalog_store: StoreConfig
     tabular_stores: Optional[Dict[str, StoreConfig]] = Field(default=None, description="Optional tabular store")
     vector_store: VectorStorageConfig
     log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")
+
+
+# ---------- Agent filesystem config, used for listing, reading, creating & deleting files.  ---------- #
+
+
+class LocalFilesystemConfig(BaseModel):
+    type: Literal["local"] = "local"
+    root: str = Field("~/.fred/knowledge-flow/filesystem/", description="Local filesystem root directory.")
+
+
+class MinioFilesystemConfig(BaseModel):
+    type: Literal["minio"] = "minio"
+    endpoint: str = Field(..., description="MinIO or S3 compatible endpoint.")
+    access_key: str = Field(..., description="MinIO access key.")
+    secret_key: str = Field(..., description="MinIO secret key.")
+    bucket_name: Optional[str] = Field("filesystem", description="MinIO bucket name.")
+    secure: Optional[bool] = Field(False, description="Use TLS for the MinIO client.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_secrets(cls, values: dict) -> dict:
+        values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
+        if not values.get("secret_key"):
+            raise ValueError("Missing MINIO_SECRET_KEY environment variable")
+        return values
+
+
+FilesystemConfig = Annotated[Union[LocalFilesystemConfig, MinioFilesystemConfig], Field(discriminator="type")]
 
 
 class Configuration(BaseModel):
@@ -376,6 +427,7 @@ class Configuration(BaseModel):
     chat_model: ModelConfiguration
     embedding_model: ModelConfiguration
     vision_model: Optional[ModelConfiguration] = None
+    crossencoder_model: Optional[ModelConfiguration] = None
     security: SecurityConfiguration
     input_processors: List[ProcessorConfig]
     output_processors: Optional[List[ProcessorConfig]] = None
@@ -386,3 +438,4 @@ class Configuration(BaseModel):
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
     storage: StorageConfig
     mcp: MCPConfig = Field(default_factory=MCPConfig, description="Feature toggles for MCP-only endpoints and servers.")
+    filesystem: FilesystemConfig = Field(..., description="Filesystem backend configuration.")

@@ -30,6 +30,7 @@ import {
   TagWithItemsId,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
+  useListUsersKnowledgeFlowV1UsersGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { EmptyState } from "../EmptyState";
@@ -105,6 +106,19 @@ export default function ResourceLibraryList({ kind }: Props) {
   const { can } = usePermissions();
   const canCreateTag = can("tag", "create");
   const canCreateResource = can("resource", "create");
+  const canDeleteFolder = can("tag", "delete");
+
+  // Users cache (for owner display)
+  const { data: users = [] } = useListUsersKnowledgeFlowV1UsersGetQuery();
+  const ownerNamesById = React.useMemo(() => {
+    const m: Record<string, string> = {};
+    users.forEach((u) => {
+      const fullName = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
+      const name = fullName || u.username || "";
+      if (name) m[u.id] = name;
+    });
+    return m;
+  }, [users]);
 
   /** ---------------- Data fetching ---------------- */
   // 1) Tags for this kind (prompt | template | porfile)
@@ -388,6 +402,8 @@ export default function ResourceLibraryList({ kind }: Props) {
               selectedItems={selectedItems}
               setSelectedItems={setSelectedItems}
               onDeleteFolder={handleDeleteFolder}
+              canDeleteFolder={canDeleteFolder}
+              ownerNamesById={ownerNamesById}
             />
           </Box>
         </Card>

@@ -13,12 +13,12 @@
 // limitations under the License.
 
 import type {
-  TextPart,
+  ChatMessage,
   CodePart,
   ImageUrlPart,
+  TextPart,
   ToolCallPart,
   ToolResultPart,
-  ChatMessage,
 } from "../../slices/agentic/agenticOpenApi";
 
 export type MessagePart = ChatMessage["parts"][number];
@@ -58,8 +58,6 @@ const tryPrettyJSON = (s: string): string => {
 
 // --- text/code aggregation ---
 export function toMarkdown(parts?: MessagePart[] | null, includeCode = true): string {
-  console.log("Converting message parts to Markdown");
-  console.log(parts);
   if (!parts?.length) return "";
   const out: string[] = [];
   for (const p of parts) {

@@ -243,8 +243,10 @@ class ChatMessage(BaseModel):
 class SessionSchema(BaseModel):
     id: str
     user_id: str
+    agent_name: str | None = None
     title: str
     updated_at: datetime
+    preferences: Dict[str, Any] | None = None
 
 
 class AttachmentRef(BaseModel):

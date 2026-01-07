@@ -91,3 +91,24 @@ class BaseAgentStore(ABC):
         :param scope_id: The ID of the scope (e.g., user ID).
         """
         pass
+
+    @abstractmethod
+    def static_seeded(self) -> bool:
+        """
+        True when static agents have already been seeded into the persistent store.
+        Used to avoid re-seeding deleted static agents after a restart.
+        """
+        pass
+
+    @abstractmethod
+    def mark_static_seeded(self) -> None:
+        """
+        Mark the store as having seeded static agents.
+        """
+        pass
+
+
+class AgentNotFoundError(Exception):
+    """Raised when an agent is not found."""
+
+    pass

@@ -1,3 +1,7 @@
+*.keras
+*.model
+*.umap
+**/ignore_*
 /metrics/target
 .idea/
 .vscode/*
@@ -197,7 +201,6 @@ poetry.toml
 .nfs*
 secrets/openai-api-key.sh
 
-/Makefile
 /media/
 
 # Helm dependency files

@@ -46,10 +46,10 @@ from knowledge_flow_backend.core.monitoring.monitoring_controller import (
     MonitoringController,
 )
 from knowledge_flow_backend.features.benchmark.benchmark_controller import BenchmarkController
-from knowledge_flow_backend.features.catalog.controller import CatalogController
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.asset_controller import AssetController
 from knowledge_flow_backend.features.content.content_controller import ContentController
+from knowledge_flow_backend.features.filesystem.controller import FilesystemController
 from knowledge_flow_backend.features.groups import groups_controller
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
 from knowledge_flow_backend.features.kpi import logs_controller
@@ -58,9 +58,8 @@ from knowledge_flow_backend.features.kpi.opensearch_controller import (
     OpenSearchOpsController,
 )
 from knowledge_flow_backend.features.metadata.controller import MetadataController
+from knowledge_flow_backend.features.model.controller import ModelController
 from knowledge_flow_backend.features.neo4j.neo4j_controller import Neo4jController
-from knowledge_flow_backend.features.pull.controller import PullDocumentController
-from knowledge_flow_backend.features.pull.service import PullDocumentService
 from knowledge_flow_backend.features.resources.controller import ResourceController
 from knowledge_flow_backend.features.scheduler.scheduler_controller import SchedulerController
 from knowledge_flow_backend.features.statistic.controller import StatisticController
@@ -179,11 +178,9 @@ def create_app() -> FastAPI:
 
     MonitoringController(router)
 
-    pull_document_service = PullDocumentService()
     # Register base controllers. These are the one always needed.
-    MetadataController(router, pull_document_service)
-    CatalogController(router)
-    PullDocumentController(router, pull_document_service)
+    MetadataController(router)
+    ModelController(router)
     ContentController(router)
     AssetController(router)
     IngestionController(router)
@@ -191,6 +188,7 @@ def create_app() -> FastAPI:
     VectorSearchController(router)
     KPIController(router)
     ResourceController(router)
+    FilesystemController(router)
     router.include_router(logs_controller.router)
     router.include_router(groups_controller.router)
     router.include_router(users_controller.router)
@@ -438,6 +436,28 @@ def create_app() -> FastAPI:
         mcp_resources.mount_http(mount_path=f"{mcp_prefix}/mcp-resources")
     else:
         logger.info("%s MCP Resources disabled via configuration.mcp.resources_enabled=false", LOG_PREFIX)
+
+    if configuration.mcp.filesystem_enabled:
+        mcp_fs = FastApiMCP(
+            app,
+            name="Knowledge Flow Filesystem MCP",
+            description=(
+                "Provides unified filesystem access for agents. "
+                "Exposes a virtual filesystem backed by the server's configured storage "
+                "(such as local or MinIO) and allows agents to browse directories, inspect metadata, "
+                "read and write files, delete resources, and search content using regex. "
+                "Use this MCP when an agent needs to retrieve data, persist intermediate results, "
+                "inspect logs, or navigate structured file-based resources during workflow execution."
+            ),
+            include_tags=["Filesystem"],
+            describe_all_responses=True,
+            describe_full_response_schema=True,
+            auth_config=auth_cfg,
+        )
+
+        mcp_fs.mount_http(mount_path=f"{mcp_prefix}/mcp-filesystem")
+    else:
+        logger.info("%s MCP Filesystem disabled via configuration.mcp.filesystem_enabled=false", LOG_PREFIX)
 
     return app
 

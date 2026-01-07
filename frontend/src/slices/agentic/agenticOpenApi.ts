@@ -26,6 +26,18 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/agents/${queryArg.name}`, method: "DELETE" }),
     }),
+    restoreAgentsAgenticV1AgentsRestorePost: build.mutation<
+      RestoreAgentsAgenticV1AgentsRestorePostApiResponse,
+      RestoreAgentsAgenticV1AgentsRestorePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/restore`,
+        method: "POST",
+        params: {
+          force_overwrite: queryArg.forceOverwrite,
+        },
+      }),
+    }),
     listMcpServersAgenticV1AgentsMcpServersGet: build.query<
       ListMcpServersAgenticV1AgentsMcpServersGetApiResponse,
       ListMcpServersAgenticV1AgentsMcpServersGetApiArg
@@ -60,6 +72,40 @@ const injectedRtkApi = api.injectEndpoints({
           qualname: queryArg.qualname,
         },
       }),
+    }),
+    listMcpServersAgenticV1McpServersGet: build.query<
+      ListMcpServersAgenticV1McpServersGetApiResponse,
+      ListMcpServersAgenticV1McpServersGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/mcp/servers` }),
+    }),
+    createMcpServerAgenticV1McpServersPost: build.mutation<
+      CreateMcpServerAgenticV1McpServersPostApiResponse,
+      CreateMcpServerAgenticV1McpServersPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/mcp/servers`, method: "POST", body: queryArg.saveMcpServerRequest }),
+    }),
+    updateMcpServerAgenticV1McpServersServerIdPut: build.mutation<
+      UpdateMcpServerAgenticV1McpServersServerIdPutApiResponse,
+      UpdateMcpServerAgenticV1McpServersServerIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/mcp/servers/${queryArg.serverId}`,
+        method: "PUT",
+        body: queryArg.saveMcpServerRequest,
+      }),
+    }),
+    deleteMcpServerAgenticV1McpServersServerIdDelete: build.mutation<
+      DeleteMcpServerAgenticV1McpServersServerIdDeleteApiResponse,
+      DeleteMcpServerAgenticV1McpServersServerIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/mcp/servers/${queryArg.serverId}`, method: "DELETE" }),
+    }),
+    restoreMcpServersFromConfigAgenticV1McpServersRestorePost: build.mutation<
+      RestoreMcpServersFromConfigAgenticV1McpServersRestorePostApiResponse,
+      RestoreMcpServersFromConfigAgenticV1McpServersRestorePostApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/mcp/servers/restore`, method: "POST" }),
     }),
     echoSchemaAgenticV1SchemasEchoPost: build.mutation<
       EchoSchemaAgenticV1SchemasEchoPostApiResponse,
@@ -97,6 +143,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/chatbot/session/${queryArg.sessionId}/history` }),
     }),
+    getSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGet: build.query<
+      GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiResponse,
+      GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/chatbot/session/${queryArg.sessionId}/preferences` }),
+    }),
+    updateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPut: build.mutation<
+      UpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutApiResponse,
+      UpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/session/${queryArg.sessionId}/preferences`,
+        method: "PUT",
+        body: queryArg.sessionPreferencesPayload,
+      }),
+    }),
     deleteSessionAgenticV1ChatbotSessionSessionIdDelete: build.mutation<
       DeleteSessionAgenticV1ChatbotSessionSessionIdDeleteApiResponse,
       DeleteSessionAgenticV1ChatbotSessionSessionIdDeleteApiArg
@@ -111,6 +173,17 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/agentic/v1/chatbot/upload`,
         method: "POST",
         body: queryArg.bodyUploadFileAgenticV1ChatbotUploadPost,
+      }),
+    }),
+    getFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGet: build.query<
+      GetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetApiResponse,
+      GetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/upload/${queryArg.attachmentId}/summary`,
+        params: {
+          session_id: queryArg.sessionId,
+        },
       }),
     }),
     deleteFileAgenticV1ChatbotUploadAttachmentIdDelete: build.mutation<
@@ -199,7 +272,12 @@ export type DeleteAgentAgenticV1AgentsNameDeleteApiResponse = /** status 200 Suc
 export type DeleteAgentAgenticV1AgentsNameDeleteApiArg = {
   name: string;
 };
-export type ListMcpServersAgenticV1AgentsMcpServersGetApiResponse = /** status 200 Successful Response */ any;
+export type RestoreAgentsAgenticV1AgentsRestorePostApiResponse = /** status 200 Successful Response */ any;
+export type RestoreAgentsAgenticV1AgentsRestorePostApiArg = {
+  forceOverwrite?: boolean;
+};
+export type ListMcpServersAgenticV1AgentsMcpServersGetApiResponse =
+  /** status 200 Successful Response */ McpServerConfiguration[];
 export type ListMcpServersAgenticV1AgentsMcpServersGetApiArg = void;
 export type ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiResponse = /** status 200 Successful Response */ any;
 export type ListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetApiArg = void;
@@ -214,6 +292,25 @@ export type RuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetApiArg = {
   module: string;
   qualname?: string | null;
 };
+export type ListMcpServersAgenticV1McpServersGetApiResponse =
+  /** status 200 Successful Response */ McpServerConfiguration[];
+export type ListMcpServersAgenticV1McpServersGetApiArg = void;
+export type CreateMcpServerAgenticV1McpServersPostApiResponse = /** status 200 Successful Response */ any;
+export type CreateMcpServerAgenticV1McpServersPostApiArg = {
+  saveMcpServerRequest: SaveMcpServerRequest;
+};
+export type UpdateMcpServerAgenticV1McpServersServerIdPutApiResponse = /** status 200 Successful Response */ any;
+export type UpdateMcpServerAgenticV1McpServersServerIdPutApiArg = {
+  serverId: string;
+  saveMcpServerRequest: SaveMcpServerRequest;
+};
+export type DeleteMcpServerAgenticV1McpServersServerIdDeleteApiResponse = /** status 200 Successful Response */ any;
+export type DeleteMcpServerAgenticV1McpServersServerIdDeleteApiArg = {
+  serverId: string;
+};
+export type RestoreMcpServersFromConfigAgenticV1McpServersRestorePostApiResponse =
+  /** status 200 Successful Response */ any;
+export type RestoreMcpServersFromConfigAgenticV1McpServersRestorePostApiArg = void;
 export type EchoSchemaAgenticV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ null;
 export type EchoSchemaAgenticV1SchemasEchoPostApiArg = {
   echoEnvelope: EchoEnvelope;
@@ -240,6 +337,21 @@ export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiRespon
 export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiArg = {
   sessionId: string;
 };
+export type GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiArg = {
+  sessionId: string;
+};
+export type UpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type UpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutApiArg = {
+  sessionId: string;
+  sessionPreferencesPayload: SessionPreferencesPayload;
+};
 export type DeleteSessionAgenticV1ChatbotSessionSessionIdDeleteApiResponse =
   /** status 200 Successful Response */ boolean;
 export type DeleteSessionAgenticV1ChatbotSessionSessionIdDeleteApiArg = {
@@ -250,6 +362,14 @@ export type UploadFileAgenticV1ChatbotUploadPostApiResponse = /** status 200 Suc
 };
 export type UploadFileAgenticV1ChatbotUploadPostApiArg = {
   bodyUploadFileAgenticV1ChatbotUploadPost: BodyUploadFileAgenticV1ChatbotUploadPost;
+};
+export type GetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetApiArg = {
+  attachmentId: string;
+  sessionId: string;
 };
 export type DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiResponse = /** status 200 Successful Response */ null;
 export type DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiArg = {
@@ -296,6 +416,9 @@ export type HttpValidationError = {
 };
 export type CreateAgentRequest = {
   name: string;
+  type?: string;
+  a2a_base_url?: string | null;
+  a2a_token?: string | null;
 };
 export type UiHints = {
   multiline?: boolean;
@@ -368,10 +491,18 @@ export type AgentChatOptions = {
   record_audio_files?: boolean;
   /** Allow attaching local files (e.g., PDFs, images, text) to the message and show existing attachments. */
   attach_files?: boolean;
+  /** Expose a selector to decide how the agent should use the corpus: documents only, hybrid, or general knowledge only. */
+  search_rag_scoping?: boolean;
+  /** Expose a toggle to delegate RAG retrieval to a senior agent (deep search) when available. */
+  deep_search_delegate?: boolean;
 };
 export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
+  id: string;
+  /** react-i18next key for the name of the MCP server. */
   name: string;
+  /** react-i18next key for the description of the MCP server. */
+  description?: string | null;
   /** MCP server transport. Can be sse, stdio, websocket or streamable_http */
   transport?: string | null;
   /** URL and endpoint of the MCP server */
@@ -397,6 +528,10 @@ export type Agent = {
   class_path?: string | null;
   tuning?: AgentTuning | null;
   chat_options?: AgentChatOptions;
+  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
+  metadata?: {
+    [key: string]: any;
+  } | null;
   /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
   mcp_servers?: McpServerConfiguration[];
   type?: "agent";
@@ -407,11 +542,18 @@ export type Leader = {
   class_path?: string | null;
   tuning?: AgentTuning | null;
   chat_options?: AgentChatOptions;
+  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
+  metadata?: {
+    [key: string]: any;
+  } | null;
   /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
   mcp_servers?: McpServerConfiguration[];
   type?: "leader";
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];
+};
+export type SaveMcpServerRequest = {
+  server: McpServerConfiguration;
 };
 export type Role = "user" | "assistant" | "tool" | "system";
 export type Channel =
@@ -519,6 +661,7 @@ export type VectorSearchHit = {
 };
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "cancelled" | "other";
 export type RuntimeContext = {
+  session_id?: string | null;
   selected_document_libraries_ids?: string[] | null;
   selected_chat_context_ids?: string[] | null;
   search_policy?: string | null;
@@ -526,6 +669,8 @@ export type RuntimeContext = {
   refresh_token?: string | null;
   access_token_expires_at?: number | null;
   attachments_markdown?: string | null;
+  search_rag_scope?: ("corpus_only" | "hybrid" | "general_only") | null;
+  deep_search?: boolean | null;
 };
 export type ChatMetadata = {
   model?: string | null;
@@ -587,8 +732,12 @@ export type StreamEvent = {
 export type SessionSchema = {
   id: string;
   user_id: string;
+  agent_name?: string | null;
   title: string;
   updated_at: string;
+  preferences?: {
+    [key: string]: any;
+  } | null;
 };
 export type FinalEvent = {
   type?: "final";
@@ -607,8 +756,12 @@ export type AttachmentRef = {
 export type SessionWithFiles = {
   id: string;
   user_id: string;
+  agent_name?: string | null;
   title: string;
   updated_at: string;
+  preferences?: {
+    [key: string]: any;
+  } | null;
   file_names?: string[];
   attachments?: AttachmentRef[];
 };
@@ -668,6 +821,8 @@ export type Properties = {
   logoName?: string;
   logoNameDark?: string;
   siteDisplayName?: string;
+  /** Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'. */
+  releaseBrand?: string | null;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;
@@ -683,6 +838,10 @@ export type FrontendConfigDto = {
   user_auth: UserSecurity;
   is_rebac_enabled: boolean;
 };
+export type McpServerRef2 = {
+  id: string;
+  require_tools?: string[];
+};
 export type AgentTuning2 = {
   /** The agent's mandatory role for discovery. */
   role: string;
@@ -690,7 +849,7 @@ export type AgentTuning2 = {
   description: string;
   tags?: string[];
   fields?: FieldSpec[];
-  mcp_servers?: McpServerRef[];
+  mcp_servers?: McpServerRef2[];
 };
 export type Agent2 = {
   name: string;
@@ -698,6 +857,10 @@ export type Agent2 = {
   class_path?: string | null;
   tuning?: AgentTuning2 | null;
   chat_options?: AgentChatOptions;
+  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
+  metadata?: {
+    [key: string]: any;
+  } | null;
   /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
   mcp_servers?: McpServerConfiguration[];
   type?: "agent";
@@ -708,6 +871,10 @@ export type Leader2 = {
   class_path?: string | null;
   tuning?: AgentTuning2 | null;
   chat_options?: AgentChatOptions;
+  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
+  metadata?: {
+    [key: string]: any;
+  } | null;
   /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
   mcp_servers?: McpServerConfiguration[];
   type?: "leader";
@@ -745,6 +912,11 @@ export type ChatMessage2 = {
       } & ToolResultPart)
   )[];
   metadata?: ChatMetadata;
+};
+export type SessionPreferencesPayload = {
+  preferences?: {
+    [key: string]: any;
+  };
 };
 export type BodyUploadFileAgenticV1ChatbotUploadPost = {
   session_id: string;
@@ -807,6 +979,7 @@ export const {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
   useDeleteAgentAgenticV1AgentsNameDeleteMutation,
+  useRestoreAgentsAgenticV1AgentsRestorePostMutation,
   useListMcpServersAgenticV1AgentsMcpServersGetQuery,
   useLazyListMcpServersAgenticV1AgentsMcpServersGetQuery,
   useListRuntimeSourceKeysAgenticV1AgentsSourceKeysGetQuery,
@@ -815,6 +988,12 @@ export const {
   useLazyRuntimeSourceByObjectAgenticV1AgentsSourceByObjectGetQuery,
   useRuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetQuery,
   useLazyRuntimeSourceByModuleAgenticV1AgentsSourceByModuleGetQuery,
+  useListMcpServersAgenticV1McpServersGetQuery,
+  useLazyListMcpServersAgenticV1McpServersGetQuery,
+  useCreateMcpServerAgenticV1McpServersPostMutation,
+  useUpdateMcpServerAgenticV1McpServersServerIdPutMutation,
+  useDeleteMcpServerAgenticV1McpServersServerIdDeleteMutation,
+  useRestoreMcpServersFromConfigAgenticV1McpServersRestorePostMutation,
   useEchoSchemaAgenticV1SchemasEchoPostMutation,
   useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
   useLazyGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
@@ -826,8 +1005,13 @@ export const {
   useLazyGetSessionsAgenticV1ChatbotSessionsGetQuery,
   useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
+  useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
+  useLazyGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
+  useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
+  useGetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetQuery,
+  useLazyGetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetQuery,
   useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation,
   useHealthzAgenticV1HealthzGetQuery,
   useLazyHealthzAgenticV1HealthzGetQuery,

@@ -12,7 +12,10 @@ import { BoxProps } from "@mui/material";
 import Popover from "@mui/material/Popover";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  Resource,
+  useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
+} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard";
 
 // Extend with the standard MUI prop types for styling.
@@ -31,31 +34,41 @@ export function ChatContextPickerPanel({
   const { t } = useTranslation();
 
   const [chatContextPickerAnchor, setChatContextPickerAnchor] = useState<HTMLElement | null>(null);
-  const selectedChatContextId = selectedChatContextIds[0] ?? null;
 
-  const { data: selectedChatContextResource } = useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery(
-    { resourceId: selectedChatContextId as string },
-    { skip: !selectedChatContextId },
+  const { data: chatContextResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery(
+    { kind: "chat-context" },
+    { refetchOnMountOrArgChange: true },
   );
 
-  const hasSelectedChatContext = !!selectedChatContextId;
+  const selectedChatContextResources = useMemo<Resource[]>(() => {
+    if (!selectedChatContextIds.length) return [];
+    const byId = new Map(chatContextResources.map((r) => [r.id, r]));
+    return selectedChatContextIds.map((id) => byId.get(id)).filter(Boolean) as Resource[];
+  }, [chatContextResources, selectedChatContextIds]);
 
-  const chatContextBodyPreview = useMemo(() => {
-    const c = selectedChatContextResource?.content ?? "";
-    const sep = "\n---\n";
-    const i = c.indexOf(sep);
-    const body = (i !== -1 ? c.slice(i + sep.length) : c).replace(/\r\n/g, "\n").trim();
-    if (!body) return null;
-    const oneline = body.split("\n").filter(Boolean).slice(0, 2).join(" ");
-    return oneline.length > 180 ? oneline.slice(0, 180) + "…" : oneline;
-  }, [selectedChatContextResource]);
+  const chatContextBodyPreviews = useMemo(() => {
+    const makePreview = (content: string | undefined | null) => {
+      if (!content) return null;
+      const sep = "\n---\n";
+      const i = content.indexOf(sep);
+      const body = (i !== -1 ? content.slice(i + sep.length) : content).replace(/\r\n/g, "\n").trim();
+      if (!body) return null;
+      const oneline = body.split("\n").filter(Boolean).slice(0, 2).join(" ");
+      return oneline.length > 180 ? oneline.slice(0, 180) + "…" : oneline;
+    };
+
+    return selectedChatContextResources.reduce<Record<string, string | null>>((acc, res) => {
+      acc[res.id] = makePreview(res.content);
+      return acc;
+    }, {});
+  }, [selectedChatContextResources]);
 
   const applyChatContextSelection = (ids: string[]) => {
-    // mono-sélection (dernier choisi gagne)
-    const next = ids.length > 0 ? [ids[ids.length - 1]] : [];
-    onChangeSelectedChatContextIds(next);
-    setChatContextPickerAnchor(null);
+    const uniqueIds = Array.from(new Set(ids));
+    onChangeSelectedChatContextIds(uniqueIds);
   };
+
+  const hasSelectedChatContext = selectedChatContextIds.length > 0;
 
   return (
     <Box
@@ -77,17 +90,15 @@ export function ChatContextPickerPanel({
           {t("settings.chatContext")}
         </Typography>
 
-        {!hasSelectedChatContext && (
-          <Tooltip title={t("settings.selectChatContext", "Select a chat context")}>
-            <IconButton
-              size="small"
-              onClick={(e) => setChatContextPickerAnchor(e.currentTarget)}
-              sx={{ borderRadius: 1.5 }}
-            >
-              <AddIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        )}
+        <Tooltip title={t("settings.selectChatContext", "Select a chat context")}>
+          <IconButton
+            size="small"
+            onClick={(e) => setChatContextPickerAnchor(e.currentTarget)}
+            sx={{ borderRadius: 1.5 }}
+          >
+            <AddIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
       </Box>
 
       {/* Popover de sélection/modification */}
@@ -103,80 +114,87 @@ export function ChatContextPickerPanel({
           libraryType={"chat-context"}
           selectedResourceIds={selectedChatContextIds}
           setSelectedResourceIds={applyChatContextSelection}
+          selectionMode="multiple"
         />
       </Popover>
 
       {/* Carte compacte quand un profil est sélectionné */}
-      {hasSelectedChatContext && (
-        <List dense disablePadding sx={{ mt: 1 }}>
-          <ListItem disableGutters sx={{ mb: 0 }}>
-            <ListItemButton
-              dense
-              selected
-              onClick={(e) => setChatContextPickerAnchor(e.currentTarget)}
-              sx={{
-                borderRadius: 1,
-                px: 1,
-                py: 0.75,
-                border: `1px solid ${theme.palette.primary.main}`,
-                backgroundColor: theme.palette.mode === "dark" ? "rgba(25,118,210,0.06)" : "rgba(25,118,210,0.04)",
-                "&:hover": {
-                  backgroundColor: theme.palette.mode === "dark" ? "rgba(25,118,210,0.1)" : "rgba(25,118,210,0.08)",
-                },
-                display: "flex",
-                gap: 1,
-                alignItems: "center",
-              }}
-            >
-              <Box sx={{ width: "100%", minWidth: 0 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                  {selectedChatContextResource?.name}
-                </Typography>
-
-                {Array.isArray(selectedChatContextResource?.labels) &&
-                  selectedChatContextResource!.labels.length > 0 && (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: "block" }} noWrap>
-                      {selectedChatContextResource!.labels.join(" · ")}
-                    </Typography>
-                  )}
-
-                {chatContextBodyPreview && (
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={
-                      {
-                        mt: 0.5,
-                        display: "-webkit-box",
-                        WebkitLineClamp: "2",
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "normal",
-                      } as any
-                    }
-                  >
-                    {chatContextBodyPreview}
-                  </Typography>
-                )}
-              </Box>
-
-              <Tooltip title={t("common.remove")}>
-                <IconButton
-                  size="small"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    applyChatContextSelection([]);
+      {hasSelectedChatContext ? (
+        <List dense disablePadding sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
+          {selectedChatContextResources.map((resource) => {
+            const preview = chatContextBodyPreviews[resource.id];
+            return (
+              <ListItem key={resource.id} disableGutters>
+                <ListItemButton
+                  dense
+                  selected
+                  onClick={(e) => setChatContextPickerAnchor(e.currentTarget)}
+                  sx={{
+                    borderRadius: 1,
+                    px: 1,
+                    py: 0.75,
+                    border: `1px solid ${theme.palette.primary.main}`,
+                    backgroundColor:
+                      theme.palette.mode === "dark" ? "rgba(25,118,210,0.06)" : "rgba(25,118,210,0.04)",
+                    "&:hover": {
+                      backgroundColor:
+                        theme.palette.mode === "dark" ? "rgba(25,118,210,0.1)" : "rgba(25,118,210,0.08)",
+                    },
+                    display: "flex",
+                    gap: 1,
+                    alignItems: "center",
                   }}
-                  sx={{ flexShrink: 0, opacity: 0.7 }}
                 >
-                  <DeleteOutlineIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </ListItemButton>
-          </ListItem>
+                  <Box sx={{ width: "100%", minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                      {resource.name}
+                    </Typography>
+
+                    {Array.isArray(resource.labels) && resource.labels.length > 0 && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block" }} noWrap>
+                        {resource.labels.join(" · ")}
+                      </Typography>
+                    )}
+
+                    {preview && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={
+                          {
+                            mt: 0.5,
+                            display: "-webkit-box",
+                            WebkitLineClamp: "2",
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "normal",
+                          } as any
+                        }
+                      >
+                        {preview}
+                      </Typography>
+                    )}
+                  </Box>
+
+                  <Tooltip title={t("common.remove")}>
+                    <IconButton
+                      size="small"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        applyChatContextSelection(selectedChatContextIds.filter((id) => id !== resource.id));
+                      }}
+                      sx={{ flexShrink: 0, opacity: 0.7 }}
+                    >
+                      <DeleteOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </ListItemButton>
+              </ListItem>
+            );
+          })}
         </List>
-      )}
+      ) : null}
     </Box>
   );
 }

@@ -247,6 +247,11 @@ const GetUserFullName = (): string | null => {
   return (keycloakInstance.tokenParsed as any).name || null;
 };
 
+const GetUserGivenName = (): string | null => {
+  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return "Admin";
+  return (keycloakInstance.tokenParsed as any).given_name || null;
+};
+
 const GetUserMail = (): string | null => {
   if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return "admin@mail.com";
   return (keycloakInstance.tokenParsed as any).email || null;
@@ -297,6 +302,7 @@ export const KeyCloakService = {
   GetUserName,
   GetUserId,
   GetUserFullName,
+  GetUserGivenName,
   GetUserMail,
   GetToken,
   GetRealmRoles,
