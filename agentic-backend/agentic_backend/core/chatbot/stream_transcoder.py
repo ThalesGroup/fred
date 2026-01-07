@@ -128,31 +128,21 @@ class StreamTranscoder:
         user_context: KeycloakUser,
         runtime_context: RuntimeContext,
     ) -> List[ChatMessage]:
-        config: RunnableConfig
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": session_id,
+                "user_id": user_context.uid,
+                "access_token": runtime_context.access_token,
+                "refresh_token": runtime_context.refresh_token,
+            },
+            "recursion_limit": 100,
+        }
+
+        # If Langfuse is configured, add the callback handler
         if os.getenv("LANGFUSE_SECRET_KEY") and os.getenv("LANGFUSE_PUBLIC_KEY"):
             logger.info("Langfuse credentials found.")
             langfuse_handler = CallbackHandler()
-            config = {
-                "configurable": {
-                    "thread_id": session_id,
-                    "user_id": user_context.uid,
-                    "access_token": runtime_context.access_token,
-                    "refresh_token": runtime_context.refresh_token,
-                },
-                "recursion_limit": 100,
-                "callbacks": [langfuse_handler],
-            }
-
-        else:
-            config = {
-                "configurable": {
-                    "thread_id": session_id,
-                    "user_id": user_context.uid,
-                    "access_token": runtime_context.access_token,
-                    "refresh_token": runtime_context.refresh_token,
-                },
-                "recursion_limit": 100,
-            }
+            config["callbacks"] = [langfuse_handler]
 
         out: List[ChatMessage] = []
         seq = start_seq
