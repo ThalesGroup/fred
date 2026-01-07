@@ -128,10 +128,11 @@ class StreamTranscoder:
         user_context: KeycloakUser,
         runtime_context: RuntimeContext,
     ) -> List[ChatMessage]:
+        config: RunnableConfig
         if os.getenv("LANGFUSE_SECRET_KEY") and os.getenv("LANGFUSE_PUBLIC_KEY"):
             logger.info("Langfuse credentials found.")
             langfuse_handler = CallbackHandler()
-            config: RunnableConfig = {
+            config = {
                 "configurable": {
                     "thread_id": session_id,
                     "user_id": user_context.uid,
@@ -143,7 +144,7 @@ class StreamTranscoder:
             }
 
         else:
-            config: RunnableConfig = {
+            config = {
                 "configurable": {
                     "thread_id": session_id,
                     "user_id": user_context.uid,
