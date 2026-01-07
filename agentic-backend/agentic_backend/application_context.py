@@ -442,13 +442,17 @@ class ApplicationContext:
     def get_session_attachment_store(self) -> Optional[BaseSessionAttachmentStore]:
         """
         Optional persistence for session attachment summaries.
-        Defaults to the same backend as the session store when compatible.
+        Must be explicitly configured; no implicit reuse of the session store.
         """
         if self._session_attachment_store_instance is not None:
             return self._session_attachment_store_instance
 
         storage_cfg = get_configuration().storage
-        store_config = storage_cfg.attachments_store or storage_cfg.session_store
+        store_config = storage_cfg.attachments_store
+        if store_config is None:
+            raise ValueError(
+                "attachments_store must be explicitly configured; implicit reuse of session_store is no longer supported."
+            )
 
         if isinstance(store_config, PostgresTableConfig):
             engine = create_engine_from_config(storage_cfg.postgres)

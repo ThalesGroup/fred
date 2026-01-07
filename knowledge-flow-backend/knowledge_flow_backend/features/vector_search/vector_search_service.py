@@ -362,8 +362,13 @@ class VectorSearchService:
                 )
                 corpus_hits = await self._semantic(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
 
-            # Merge: prefer attachments first, then corpus to fill top_k
-            merged = (attachment_hits + corpus_hits)[:top_k]
+            # Merge: combine then keep top_k by score so corpus can surface even when attachments exist
+            merged_candidates = attachment_hits + corpus_hits
+            merged = sorted(
+                merged_candidates,
+                key=lambda h: h.score or 0.0,
+                reverse=True,
+            )[:top_k]
             logger.info(
                 "[VECTOR][SEARCH] merged results attachment=%d corpus=%d returned=%d",
                 len(attachment_hits),

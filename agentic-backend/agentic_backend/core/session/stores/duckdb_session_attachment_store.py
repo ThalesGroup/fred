@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from fred_core.store.duckdb_store import DuckDBTableStore
 
@@ -39,6 +39,22 @@ def _to_iso_utc(dt: datetime | str | None) -> str | None:
     else:
         dt = dt.astimezone(timezone.utc)
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _parse_dt(raw: Optional[str | datetime]) -> Optional[datetime]:
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw
+    try:
+        # fromisoformat handles Z/offsets in recent Python; fallback on failure.
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except Exception:
+        try:
+            return datetime.strptime(raw, "%Y-%m-%d %H:%M:%S")
+        except Exception:
+            logger.debug("Failed to parse datetime %r; returning None", raw)
+            return None
 
 
 class DuckdbSessionAttachmentStore(BaseSessionAttachmentStore):
@@ -119,8 +135,8 @@ class DuckdbSessionAttachmentStore(BaseSessionAttachmentStore):
                     size_bytes=r[4],
                     summary_md=r[5],
                     document_uid=r[6],
-                    created_at=r[7],
-                    updated_at=r[8],
+                    created_at=_parse_dt(r[7]),
+                    updated_at=_parse_dt(r[8]),
                 )
             )
         return records
