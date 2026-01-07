@@ -231,11 +231,13 @@ export default function UserInput({
     refetchOnFocus: false,
     refetchOnReconnect: true,
   });
-  useEffect(() => {
-    if (sessionId) refetchSessions();
-  }, [attachmentsRefreshTick, sessionId, refetchSessions]);
   type AttachmentRef = { id: string; name: string };
   const attachmentSessionId = effectiveSessionId || sessionId;
+  useEffect(() => {
+    if (attachmentSessionId) {
+      refetchSessions();
+    }
+  }, [attachmentsRefreshTick, attachmentSessionId, refetchSessions]);
   const sessionAttachments: AttachmentRef[] = useMemo(() => {
     if (!attachmentSessionId) return [];
     const s = (sessions as any[]).find((x) => x?.id === attachmentSessionId) as any | undefined;
@@ -258,17 +260,15 @@ export default function UserInput({
   }, [attachmentCount, onAttachmentCountChange]);
 
   // --- Session preferences (server-side) ---
-  const {
-    data: serverPrefs,
-    refetch: refetchPrefs,
-  } = useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery(
-    attachmentSessionId ? { sessionId: attachmentSessionId } : skipToken,
-    {
-      refetchOnMountOrArgChange: true,
-      refetchOnReconnect: true,
-      refetchOnFocus: true,
-    },
-  );
+  const { data: serverPrefs, refetch: refetchPrefs } =
+    useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery(
+      attachmentSessionId ? { sessionId: attachmentSessionId } : skipToken,
+      {
+        refetchOnMountOrArgChange: true,
+        refetchOnReconnect: true,
+        refetchOnFocus: true,
+      },
+    );
   const [persistPrefs] = useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation();
 
   // --- Synchronization Logic ---
@@ -308,7 +308,9 @@ export default function UserInput({
         p.documentLibraryIds ?? initialDocumentLibraryIds ?? selectedDocumentLibrariesIds,
       );
       setSelectedPromptResourceIdsState(p.promptResourceIds ?? initialPromptResourceIds ?? selectedPromptResourceIds);
-      setSelectedTemplateResourceIdsState(p.templateResourceIds ?? initialTemplateResourceIds ?? selectedTemplateResourceIds);
+      setSelectedTemplateResourceIdsState(
+        p.templateResourceIds ?? initialTemplateResourceIds ?? selectedTemplateResourceIds,
+      );
       setSelectedSearchPolicyNameState(p.searchPolicy ?? selectedSearchPolicyName);
       setSearchRagScopeState(p.searchRagScope ?? searchRagScope);
       setDeepSearchEnabledState(p.deepSearch ?? deepSearchEnabled);
@@ -517,12 +519,7 @@ export default function UserInput({
     inputRef.current?.focus();
   };
   return (
-    <Grid2
-      container
-      sx={{ height: "100%", justifyContent: "flex-start", overflow: "hidden" }}
-      size={12}
-      display="flex"
-    >
+    <Grid2 container sx={{ height: "100%", justifyContent: "flex-start", overflow: "hidden" }} size={12} display="flex">
       <Box
         sx={{
           flex: 1,

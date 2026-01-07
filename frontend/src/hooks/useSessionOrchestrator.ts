@@ -34,11 +34,28 @@ export function useSessionOrchestrator(params: {
   // Local mirror so we can upsert/delete without fighting server pagination/timing.
   const [sessions, setSessions] = useState<SessionSchema[]>([]);
   useEffect(() => {
-    console.debug(
-      "Orchestrator: useEffect triggered by sessionsFromServer change. New count:",
-      sessionsFromServer?.length,
-    );
-    setSessions(sessionsFromServer ?? []);
+    if (!sessionsFromServer) return;
+    console.debug("Orchestrator: merge sessionsFromServer", sessionsFromServer.length);
+    setSessions((prev) => {
+      const incomingById = new Map(sessionsFromServer.map((s) => [s.id, s]));
+      const ordered: SessionSchema[] = [];
+      // Preserve existing order; update data from incoming list
+      for (const s of prev) {
+        const updated = incomingById.get(s.id);
+        if (updated) {
+          ordered.push(updated);
+          incomingById.delete(s.id);
+        }
+      }
+      // Append brand-new sessions (in server order)
+      for (const s of sessionsFromServer) {
+        if (incomingById.has(s.id)) {
+          ordered.push(s);
+          incomingById.delete(s.id);
+        }
+      }
+      return ordered;
+    });
   }, [sessionsFromServer]);
 
   // Choose initial session id:

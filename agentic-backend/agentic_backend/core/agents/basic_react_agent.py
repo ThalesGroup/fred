@@ -46,7 +46,7 @@ BASIC_REACT_TUNING = AgentTuning(
             title="Allow file attachments",
             description="Show file upload/attachment controls for this agent.",
             required=False,
-            default=True,
+            default=False,
             ui=UIHints(group="Chat options"),
         ),
         FieldSpec(
@@ -55,7 +55,7 @@ BASIC_REACT_TUNING = AgentTuning(
             title="Document libraries picker",
             description="Let users select document libraries/knowledge sources for this agent.",
             required=False,
-            default=True,
+            default=False,
             ui=UIHints(group="Chat options"),
         ),
         FieldSpec(
@@ -64,7 +64,7 @@ BASIC_REACT_TUNING = AgentTuning(
             title="Search policy selector",
             description="Expose the search policy toggle (hybrid/semantic/strict).",
             required=False,
-            default=True,
+            default=False,
             ui=UIHints(group="Chat options"),
         ),
         FieldSpec(
@@ -73,7 +73,7 @@ BASIC_REACT_TUNING = AgentTuning(
             title="RAG scope selector",
             description="Expose the RAG scope control (documents-only vs hybrid vs knowledge).",
             required=False,
-            default=True,
+            default=False,
             ui=UIHints(group="Chat options"),
         ),
         FieldSpec(
@@ -82,7 +82,7 @@ BASIC_REACT_TUNING = AgentTuning(
             title="Deep search delegate toggle",
             description="Allow delegation to a senior agent for deep search.",
             required=False,
-            default=True,
+            default=False,
             ui=UIHints(group="Chat options"),
         ),
     ],

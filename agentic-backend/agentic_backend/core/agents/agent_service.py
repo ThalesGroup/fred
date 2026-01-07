@@ -121,13 +121,8 @@ class AgentService:
                 class_path=_class_path(BasicReActAgent),
                 enabled=False,  # Start disabled until fully initialized
                 tuning=BASIC_REACT_TUNING,  # default tuning
-                chat_options=AgentChatOptions(
-                    search_policy_selection=True,
-                    libraries_selection=True,
-                    search_rag_scoping=True,
-                    deep_search_delegate=True,
-                    attach_files=True,
-                ),
+                # Start with all chat options off by default; UI can toggle them later.
+                chat_options=AgentChatOptions(),
                 mcp_servers=[],  # Empty list by default; to be configured later
             )
             self.agent_manager.create_dynamic_agent(agent_settings, BASIC_REACT_TUNING)

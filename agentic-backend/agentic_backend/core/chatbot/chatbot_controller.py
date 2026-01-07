@@ -15,11 +15,12 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Literal, Union
+from typing import List, Literal, Optional, Union
 from uuid import uuid4
 
 from fastapi import (
     APIRouter,
+    Body,
     Depends,
     File,
     Form,
@@ -118,6 +119,11 @@ class FrontendConfigDTO(BaseModel):
     frontend_settings: FrontendSettings
     user_auth: UserSecurity
     is_rebac_enabled: bool
+
+
+class CreateSessionPayload(BaseModel):
+    agent_name: Optional[str] = None
+    title: Optional[str] = None
 
 
 def get_agent_manager(request: Request) -> AgentManager:
@@ -446,6 +452,22 @@ def get_sessions(
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> list[SessionWithFiles]:
     return session_orchestrator.get_sessions(user)
+
+
+@router.post(
+    "/chatbot/session",
+    description="Create a new empty chatbot session.",
+    summary="Create chatbot session.",
+    response_model=SessionSchema,
+)
+def create_session(
+    payload: CreateSessionPayload = Body(default_factory=CreateSessionPayload),
+    user: KeycloakUser = Depends(get_current_user),
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+) -> SessionSchema:
+    return session_orchestrator.create_empty_session(
+        user=user, agent_name=payload.agent_name, title=payload.title
+    )
 
 
 @router.get(
