@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import { Box, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { Box, MenuItem, Stack, Switch, TextField, Typography } from "@mui/material";
 import { FieldSpec } from "../../slices/agentic/agenticOpenApi";
 import { PromptEditor } from "./PromptEditor";
 
@@ -57,18 +57,35 @@ export function TuningForm({ fields, onChange }: Props) {
 
               if (f.type === "boolean") {
                 return (
-                  <TextField
+                  <Stack
                     key={f.key}
-                    label={label}
-                    value={val ? "true" : "false"}
-                    onChange={(e) => onChange(idx, e.target.value === "true")}
-                    select
-                    fullWidth
-                    size="small"
+                    direction="row"
+                    alignItems="center"
+                    spacing={1}
+                    sx={{
+                      px: 1,
+                      py: 0.5,
+                      borderRadius: 1,
+                      border: (theme) => `1px solid ${theme.palette.divider}`,
+                    }}
                   >
-                    <MenuItem value="true">True</MenuItem>
-                    <MenuItem value="false">False</MenuItem>
-                  </TextField>
+                    <Switch
+                      size="small"
+                      checked={!!val}
+                      onChange={(e) => onChange(idx, e.target.checked)}
+                      inputProps={{ "aria-label": label }}
+                    />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {label}
+                      </Typography>
+                      {f.description && (
+                        <Typography variant="caption" color="text.secondary">
+                          {f.description}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Stack>
                 );
               }
 

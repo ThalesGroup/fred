@@ -336,38 +336,39 @@ class VectorSearchService:
             if not document_library_tags_ids:
                 document_library_tags_ids = await self._all_document_library_tags_ids(user)
 
-            # Corpus/library query
-            should_search_corpus = not attachment_hits or bool(original_tag_ids)
-            if should_search_corpus:
-                if policy_key == SearchPolicyName.strict:
-                    logger.info(
-                        "[VECTOR][SEARCH][CORPUS] policy=strict tags=%s question=%r top_k=%d",
-                        document_library_tags_ids,
-                        question,
-                        top_k,
-                    )
-                    corpus_hits = await self._strict(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
-                elif policy_key == SearchPolicyName.hybrid:
-                    logger.info(
-                        "[VECTOR][SEARCH][CORPUS] policy=hybrid tags=%s question=%r top_k=%d",
-                        document_library_tags_ids,
-                        question,
-                        top_k,
-                    )
-                    corpus_hits = await self._hybrid(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
-                else:
-                    logger.info(
-                        "[VECTOR][SEARCH][CORPUS] policy=semantic tags=%s question=%r top_k=%d",
-                        document_library_tags_ids,
-                        question,
-                        top_k,
-                    )
-                    corpus_hits = await self._semantic(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+            # Corpus/library query: always run (default) even when attachments exist
+            if policy_key == SearchPolicyName.strict:
+                logger.info(
+                    "[VECTOR][SEARCH][CORPUS] policy=strict tags=%s question=%r top_k=%d",
+                    document_library_tags_ids,
+                    question,
+                    top_k,
+                )
+                corpus_hits = await self._strict(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+            elif policy_key == SearchPolicyName.hybrid:
+                logger.info(
+                    "[VECTOR][SEARCH][CORPUS] policy=hybrid tags=%s question=%r top_k=%d",
+                    document_library_tags_ids,
+                    question,
+                    top_k,
+                )
+                corpus_hits = await self._hybrid(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
             else:
-                logger.info("[VECTOR][SEARCH][CORPUS] skipped (attachments present and no library tags provided)")
+                logger.info(
+                    "[VECTOR][SEARCH][CORPUS] policy=semantic tags=%s question=%r top_k=%d",
+                    document_library_tags_ids,
+                    question,
+                    top_k,
+                )
+                corpus_hits = await self._semantic(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
 
-            # Merge: prefer attachments first, then corpus to fill top_k
-            merged = (attachment_hits + corpus_hits)[:top_k]
+            # Merge: combine then keep top_k by score so corpus can surface even when attachments exist
+            merged_candidates = attachment_hits + corpus_hits
+            merged = sorted(
+                merged_candidates,
+                key=lambda h: h.score or 0.0,
+                reverse=True,
+            )[:top_k]
             logger.info(
                 "[VECTOR][SEARCH] merged results attachment=%d corpus=%d returned=%d",
                 len(attachment_hits),
