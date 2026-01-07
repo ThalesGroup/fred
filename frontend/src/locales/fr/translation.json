@@ -2,7 +2,9 @@
   "common": {
     "add": "Ajouter",
     "noneSelected": "Aucune sélection",
+    "expand": "Développer",
     "close": "Fermer",
+    "collapse": "Réduire",
     "remove": "Supprimer",
     "loading": "Chargement…",
     "beta": "Bêta",
@@ -11,7 +13,12 @@
     "refresh": "Rafraîchir",
     "cancel": "Annuler",
     "save": "Enregistrer",
-    "invalidUrl": "URL invalide"
+    "invalidUrl": "URL invalide",
+    "preview": "Aperçu",
+    "uploading": "Téléchargement en cours...",
+    "dropHere": "Déposez les fichiers ici ou cliquez pour parcourir",
+    "loadingPreview": "Aperçu en cours de chargement...",
+    "loadingPreviewError": "Impossible de charger l'aperçu."
   },
   "dataHub": {
     "title": "Hub des Données - Lignage des documents",
@@ -108,6 +115,7 @@
     "optimize": "Optimiser",
     "chat": "Discussion",
     "monitoring": "Supervision",
+    "laboratory": "Laboratoire",
     "knowledge": "Ressources",
     "mcp": "Hub MCP",
     "agent": "Hub Agent",
@@ -122,6 +130,7 @@
       "optimize": "Consulter les gains d'optimisation",
       "chat": "Discuter avec l'assistant IA",
       "monitoring": "Superviser les appels IA backend",
+      "laboratory": "Explorer les fonctionnalités et outils de validation et de laboratoire",
       "knowledge": "Consulter vos bibliothèques de documents et de prompts",
       "mcp": "Gérer les serveurs MCP",
       "agent": "Voir les agents",
@@ -467,7 +476,9 @@
     "attachments": {
       "betaNotice": "Les pièces jointes sont en version bêta. Formats pris en charge : PDF, DOCX, CSV. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
       "supportedFormats": "Formats pris en charge : PDF, DOCX, CSV",
-      "count": "{{count}} pièces jointes"
+      "count": "{{count}} pièces jointes",
+      "drawerTitle": "Gérer les pièces jointes",
+      "noAttachments": "Aucune pièce jointe pour le moment"
     },
     "uploadingFile": "Téléversement de {{name}}...",
     "searchToggle": "Recherche : activé = RAG (sources), désactivé = sans recherche",

@@ -529,6 +529,22 @@ async def upload_file(
     )
 
 
+@router.get(
+    "/chatbot/upload/{attachment_id}/summary",
+    description="Get the markdown summary generated for an uploaded file",
+    summary="Get attachment summary",
+)
+async def get_file_summary(
+    session_id: str,
+    attachment_id: str,
+    user: KeycloakUser = Depends(get_current_user),
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+) -> dict:
+    return await session_orchestrator.get_attachment_summary(
+        user=user, session_id=session_id, attachment_id=attachment_id
+    )
+
+
 @router.delete(
     "/chatbot/upload/{attachment_id}",
     description="Delete an uploaded file from a chatbot conversation",

@@ -13,9 +13,10 @@
 // limitations under the License.
 import ChatIcon from "@mui/icons-material/Chat";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 
-import { Box, CircularProgress, Grid2, IconButton, Paper, Typography } from "@mui/material";
-import { useMemo, useRef } from "react";
+import { Badge, Box, CircularProgress, Grid2, IconButton, Paper, Typography } from "@mui/material";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
@@ -32,6 +33,7 @@ import {
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
 const PANEL_W = { xs: 300, sm: 340, md: 360 };
+const ATTACH_PANEL_W = { xs: 320, sm: 340 };
 
 type PanelContentType = "conversations" | null;
 
@@ -92,6 +94,8 @@ export default function Chat() {
     "conversations",
   );
   const isPanelOpen = panelContentType !== null;
+  const [attachmentsPanelOpen, setAttachmentsPanelOpen] = useState<boolean>(false);
+  const [attachmentBadgeCount, setAttachmentBadgeCount] = useState<number>(0);
 
   const openPanel = (type: PanelContentType) => {
     setPanelContentType(panelContentType === type ? null : type);
@@ -239,6 +243,20 @@ export default function Chat() {
       : 12, // Original position when closed
   };
 
+  const attachmentButtonContainerSx = {
+    position: "absolute",
+    top: 12,
+    right: attachmentsPanelOpen
+      ? {
+          xs: ATTACH_PANEL_W.xs + 12,
+          sm: ATTACH_PANEL_W.sm + 12,
+          md: ATTACH_PANEL_W.sm + 12,
+        }
+      : 12,
+    zIndex: 10,
+    display: "flex",
+  };
+
   return (
     <Box ref={containerRef} sx={{ height: "100vh", position: "relative", overflow: "hidden" }}>
       {/* Panel toggle buttons */}
@@ -249,6 +267,22 @@ export default function Chat() {
           title={t("settings.conversations")}
         >
           <ChatIcon />
+        </IconButton>
+      </Box>
+      <Box sx={attachmentButtonContainerSx}>
+        <IconButton
+          color={attachmentsPanelOpen ? "primary" : "default"}
+          onClick={() => setAttachmentsPanelOpen((v) => !v)}
+          title={t("chatbot.attachments.drawerTitle", "Attachments")}
+        >
+          <Badge
+            color="primary"
+            badgeContent={attachmentBadgeCount > 0 ? attachmentBadgeCount : undefined}
+            overlap="circular"
+            anchorOrigin={{ vertical: "top", horizontal: "right" }}
+          >
+            <FolderOpenIcon />
+          </Badge>
         </IconButton>
       </Box>
 
@@ -326,6 +360,9 @@ export default function Chat() {
               selected_chat_context_ids: selectedChatContextIds.length ? selectedChatContextIds : undefined,
             }}
             onBindDraftAgentToSessionId={bindDraftAgentToSessionId}
+            attachmentsPanelOpen={attachmentsPanelOpen}
+            onAttachmentsPanelOpenChange={setAttachmentsPanelOpen}
+            onAttachmentCountChange={setAttachmentBadgeCount}
           />
         </Grid2>
       </Box>

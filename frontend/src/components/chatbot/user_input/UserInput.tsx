@@ -104,6 +104,9 @@ export default function UserInput({
   currentAgent,
   agents,
   onSelectNewAgent,
+  attachmentsPanelOpen: attachmentsPanelOpenProp,
+  onAttachmentsPanelOpenChange,
+  onAttachmentCountChange,
 }: {
   agentChatOptions?: AgentChatOptions;
   isWaiting: boolean;
@@ -124,6 +127,9 @@ export default function UserInput({
   currentAgent: AnyAgent;
   agents: AnyAgent[];
   onSelectNewAgent: (flow: AnyAgent) => void;
+  attachmentsPanelOpen?: boolean;
+  onAttachmentsPanelOpenChange?: (open: boolean) => void;
+  onAttachmentCountChange?: (count: number) => void;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -165,9 +171,11 @@ export default function UserInput({
   const [selectedSearchPolicyName, setSelectedSearchPolicyNameState] = useState<SearchPolicyName>(initialSearchPolicy);
   const canSend = !!userInput.trim() || !!audioBlob; // files upload immediately now
 
-  const canAttach = Object.values(agentChatOptions || {})
-    .filter((value) => typeof value === "boolean")
-    .some((v) => v);
+  const hasPopoverContent = Boolean(
+    agentChatOptions?.libraries_selection ||
+      agentChatOptions?.search_policy_selection ||
+      agentChatOptions?.record_audio_files,
+  );
 
   const searchPolicyLabels: Record<SearchPolicyName, string> = {
     hybrid: t("search.hybrid", "Hybrid"),
@@ -201,6 +209,15 @@ export default function UserInput({
   // Inline picker view inside the same popover (replaces the old Dialogs)
   // null -> root menu with sections; otherwise show the corresponding selector inline
   const [pickerView, setPickerView] = useState<null | "libraries" | "prompts" | "templates" | "search_policy">(null);
+  const [internalAttachmentsPanelOpen, setInternalAttachmentsPanelOpen] = useState<boolean>(false);
+  const attachmentsPanelOpen = attachmentsPanelOpenProp ?? internalAttachmentsPanelOpen;
+  const setAttachmentsPanelOpen = (open: boolean) => {
+    if (attachmentsPanelOpenProp === undefined) {
+      setInternalAttachmentsPanelOpen(open);
+    }
+    onAttachmentsPanelOpenChange?.(open);
+  };
+  const [uploadDialogOpen, setUploadDialogOpen] = useState<boolean>(false);
 
   // --- Fetch resource/tag names so chips can display labels instead of raw IDs
   const { data: promptResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "prompt" });
@@ -229,6 +246,16 @@ export default function UserInput({
     const names = (s && (s.file_names as string[] | undefined)) || [];
     return Array.isArray(names) ? names.map((n) => ({ id: n, name: n })) : [];
   }, [sessions, attachmentSessionId]);
+  const attachmentCount = sessionAttachments.length + (uploadingFiles?.length ?? 0);
+  const hasAttachedFiles = sessionAttachments.length > 0 || (uploadingFiles?.length ?? 0) > 0;
+  useEffect(() => {
+    if (!hasAttachedFiles) {
+      setAttachmentsPanelOpen(false);
+    }
+  }, [hasAttachedFiles]);
+  useEffect(() => {
+    onAttachmentCountChange?.(attachmentCount);
+  }, [attachmentCount, onAttachmentCountChange]);
 
   // --- Session preferences (server-side) ---
   const {
@@ -451,7 +478,11 @@ export default function UserInput({
   // Files
   const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const list = e.target.files ? Array.from(e.target.files) : [];
-    if (list.length) onFilesSelected?.(list);
+    if (list.length) {
+      onFilesSelected?.(list);
+      setUploadDialogOpen(false);
+      setAttachmentsPanelOpen(true);
+    }
     // Do not keep files as message attachments; upload starts immediately
     setFilesBlob(null);
     e.target.value = ""; // allow same files again later
@@ -485,201 +516,229 @@ export default function UserInput({
     setDisplayAudioController(true);
     inputRef.current?.focus();
   };
-
   return (
-    <Grid2 container sx={{ height: "100%", justifyContent: "flex-start", overflow: "hidden" }} size={12} display="flex">
-      {/* Attachments strip - now a dedicated component */}
+    <Grid2
+      container
+      sx={{ height: "100%", justifyContent: "flex-start", overflow: "hidden" }}
+      size={12}
+      display="flex"
+    >
+      <Box
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+          gap: 0,
+          pr: { xs: 0, md: attachmentsPanelOpen ? 1.5 : 0 },
+        }}
+      >
+        <AgentSelector
+          agents={agents}
+          currentAgent={currentAgent}
+          onSelectNewAgent={onSelectNewAgent}
+          sx={{ alignSelf: "flex-start" }}
+        />
+
+        <Grid2 container size={12} alignItems="center" sx={{ p: 0, gap: 0, backgroundColor: "transparent" }}>
+          {/* Single rounded input with the "+" inside (bottom-left) */}
+          <Box sx={{ position: "relative", width: "100%" }}>
+            {/* + anchored inside the input, bottom-left */}
+            <Box
+              sx={{
+                position: "absolute",
+                right: 8,
+                bottom: 6,
+                zIndex: 1,
+                display: "flex",
+                gap: 0.75,
+                alignItems: "center",
+              }}
+            >
+              {supportsDeepSearchSelection && (
+                <UserInputDeepSearchToggle value={deepSearchEnabled} onChange={setDeepSearch} disabled={isWaiting} />
+              )}
+              {supportsRagScopeSelection && (
+                <UserInputRagScope value={searchRagScope} onChange={setRagScope} disabled={isWaiting} />
+              )}
+              {hasPopoverContent && (
+                <Tooltip title={t("chatbot.menu.addToSetup")}>
+                  <span>
+                    <IconButton
+                      aria-label="add-to-setup"
+                      sx={{ fontSize: "1.6rem", p: "8px" }}
+                      onClick={(e) => {
+                        setPickerView(null);
+                        setPlusAnchor(e.currentTarget);
+                      }}
+                      disabled={isWaiting}
+                    >
+                      <AddIcon fontSize="inherit" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
+              {!isWaiting && (
+                <Tooltip title={t("chatbot.sendMessage", "Send message")}>
+                  <span>
+                    <IconButton
+                      aria-label="send-message"
+                      sx={{ fontSize: "1.6rem", p: "8px" }}
+                      onClick={handleSend}
+                      disabled={!canSend}
+                      color="primary"
+                    >
+                      <ArrowUpwardIcon fontSize="inherit" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
+              {isWaiting && onStop && (
+                <Tooltip title={t("chatbot.stopResponse", "Stop response")}>
+                  <span>
+                    <IconButton
+                      aria-label="stop-response"
+                      sx={{ fontSize: "1.6rem", p: "8px" }}
+                      onClick={onStop}
+                      color="error"
+                    >
+                      <StopIcon fontSize="inherit" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
+            </Box>
+
+            {/* Hidden native file input */}
+            <input type="file" style={{ display: "none" }} multiple onChange={handleFilesChange} ref={fileInputRef} />
+
+            {/* Rounded input surface */}
+            <Box
+              sx={{
+                borderRadius: 4,
+                borderTopLeftRadius: 0,
+                border: `1px solid ${theme.palette.divider}`,
+                background:
+                  theme.palette.mode === "light" ? theme.palette.common.white : theme.palette.background.default,
+                p: 0,
+                overflow: "hidden",
+              }}
+            >
+              {displayAudioRecorder ? (
+                <Box sx={{ px: "12px", pt: "6px", pb: "56px" }}>
+                  <AudioRecorder
+                    height="40px"
+                    width="100%"
+                    waveWidth={1}
+                    color={theme.palette.text.primary}
+                    isRecording={isRecording}
+                    onRecordingComplete={(blob: Blob) => {
+                      handleAudioChange(blob);
+                    }}
+                    downloadOnSavePress={false}
+                    downloadFileExtension="mp3"
+                  />
+                </Box>
+              ) : audioBlob && displayAudioController ? (
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ px: "12px", pt: "6px", pb: "56px" }}>
+                  <AudioController audioUrl={URL.createObjectURL(audioBlob)} color={theme.palette.text.primary} />
+                  <Tooltip title={t("chatbot.hideAudio")}>
+                    <IconButton aria-label="hide-audio" onClick={() => setDisplayAudioController(false)}>
+                      <VisibilityOffIcon />
+                    </IconButton>
+                  </Tooltip>
+                </Stack>
+              ) : (
+                <InputBase
+                  fullWidth
+                  multiline
+                  maxRows={12}
+                  placeholder={t("chatbot.input.placeholder")}
+                  value={userInput}
+                  onKeyDown={handleKeyDown}
+                  onChange={(event) => setUserInput(event.target.value)}
+                  inputRef={inputRef}
+                  sx={{
+                    fontSize: "1rem",
+                    maxHeight: 600,
+                    overflow: "auto",
+                    "& .MuiInputBase-input, & .MuiInputBase-inputMultiline": {
+                      paddingTop: "12px",
+                      paddingBottom: "56px",
+                      paddingRight: "16px",
+                      paddingLeft: "12px",
+                    },
+                  }}
+                />
+              )}
+            </Box>
+          </Box>
+
+          {/* Popover */}
+          {hasPopoverContent && (
+            <UserInputPopover
+              plusAnchor={plusAnchor}
+              pickerView={pickerView}
+              isRecording={isRecording}
+              selectedDocumentLibrariesIds={selectedDocumentLibrariesIds}
+              selectedPromptResourceIds={selectedPromptResourceIds}
+              selectedTemplateResourceIds={selectedTemplateResourceIds}
+              selectedSearchPolicyName={selectedSearchPolicyName}
+              libNameById={libNameById}
+              promptNameById={promptNameById}
+              templateNameById={templateNameById}
+              searchPolicyLabels={searchPolicyLabels}
+              setPickerView={setPickerView}
+              setPlusAnchor={setPlusAnchor}
+              setLibs={setLibs}
+              setPrompts={setPrompts}
+              setTemplates={setTemplates}
+              setSearchPolicy={setSearchPolicy}
+              onRemoveLib={(id) => setLibs((prev) => prev.filter((x) => x !== id))}
+              onRemovePrompt={(id) => setPrompts((prev) => prev.filter((x) => x !== id))}
+              onRemoveTemplate={(id) => setTemplates((prev) => prev.filter((x) => x !== id))}
+              onRecordAudioClick={() => {
+                handleAudioRecorderDisplay();
+                setPickerView(null);
+                setPlusAnchor(null);
+              }}
+              agentChatOptions={agentChatOptions}
+            />
+          )}
+        </Grid2>
+      </Box>
+
       <UserInputAttachments
+        sessionId={attachmentSessionId}
+        sessionAttachments={sessionAttachments}
         uploadingFileNames={uploadingFiles}
         files={null}
         audio={audioBlob}
+        open={attachmentsPanelOpen}
+        uploadDialogOpen={uploadDialogOpen}
+        onToggleOpen={(open) => setAttachmentsPanelOpen(open)}
+        onOpenUploadDialog={() => setUploadDialogOpen(true)}
+        onCloseUploadDialog={() => setUploadDialogOpen(false)}
+        onFilesDropped={(dropped) => {
+          if (dropped.length) {
+            onFilesSelected?.(dropped);
+            setUploadDialogOpen(false);
+            setAttachmentsPanelOpen(true);
+          }
+        }}
         onRemoveFile={handleRemoveFile}
         onShowAudioController={() => setDisplayAudioController(true)}
         onRemoveAudio={() => setAudioBlob(null)}
+        onAttachFileClick={() => {
+          setAttachmentsPanelOpen(true);
+          setUploadDialogOpen(true);
+          fileInputRef.current?.click();
+          requestAnimationFrame(() => inputRef.current?.focus());
+        }}
+        onRefreshSessionAttachments={() => {
+          refetchSessions();
+        }}
       />
-
-      <AgentSelector agents={agents} currentAgent={currentAgent} onSelectNewAgent={onSelectNewAgent} />
-
-      {/* Only the inner rounded input remains visible */}
-      <Grid2 container size={12} alignItems="center" sx={{ p: 0, gap: 0, backgroundColor: "transparent" }}>
-        {/* Single rounded input with the "+" inside (bottom-left) */}
-        <Box sx={{ position: "relative", width: "100%" }}>
-          {/* + anchored inside the input, bottom-left */}
-          <Box
-            sx={{
-              position: "absolute",
-              right: 8,
-              bottom: 6,
-              zIndex: 1,
-              display: "flex",
-              gap: 0.75,
-              alignItems: "center",
-            }}
-          >
-            {supportsDeepSearchSelection && (
-              <UserInputDeepSearchToggle value={deepSearchEnabled} onChange={setDeepSearch} disabled={isWaiting} />
-            )}
-            {supportsRagScopeSelection && (
-              <UserInputRagScope value={searchRagScope} onChange={setRagScope} disabled={isWaiting} />
-            )}
-            {canAttach && (
-              <Tooltip title={t("chatbot.menu.addToSetup")}>
-                <span>
-                  <IconButton
-                    aria-label="add-to-setup"
-                    sx={{ fontSize: "1.6rem", p: "8px" }}
-                    onClick={(e) => {
-                      setPickerView(null);
-                      setPlusAnchor(e.currentTarget);
-                    }}
-                    disabled={isWaiting}
-                  >
-                    <AddIcon fontSize="inherit" />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            )}
-            {!isWaiting && (
-              <Tooltip title={t("chatbot.sendMessage", "Send message")}>
-                <span>
-                  <IconButton
-                    aria-label="send-message"
-                    sx={{ fontSize: "1.6rem", p: "8px" }}
-                    onClick={handleSend}
-                    disabled={!canSend}
-                    color="primary"
-                  >
-                    <ArrowUpwardIcon fontSize="inherit" />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            )}
-            {isWaiting && onStop && (
-              <Tooltip title={t("chatbot.stopResponse", "Stop response")}>
-                <span>
-                  <IconButton
-                    aria-label="stop-response"
-                    sx={{ fontSize: "1.6rem", p: "8px" }}
-                    onClick={onStop}
-                    color="error"
-                  >
-                    <StopIcon fontSize="inherit" />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            )}
-          </Box>
-
-          {/* Hidden native file input */}
-          <input type="file" style={{ display: "none" }} multiple onChange={handleFilesChange} ref={fileInputRef} />
-
-          {/* Rounded input surface */}
-          <Box
-            sx={{
-              borderRadius: 4,
-              borderTopLeftRadius: 0,
-              border: `1px solid ${theme.palette.divider}`,
-              background:
-                theme.palette.mode === "light" ? theme.palette.common.white : theme.palette.background.default,
-              p: 0,
-              overflow: "hidden",
-            }}
-          >
-            {displayAudioRecorder ? (
-              <Box sx={{ px: "12px", pt: "6px", pb: "56px" }}>
-                <AudioRecorder
-                  height="40px"
-                  width="100%"
-                  waveWidth={1}
-                  color={theme.palette.text.primary}
-                  isRecording={isRecording}
-                  onRecordingComplete={(blob: Blob) => {
-                    handleAudioChange(blob);
-                  }}
-                  downloadOnSavePress={false}
-                  downloadFileExtension="mp3"
-                />
-              </Box>
-            ) : audioBlob && displayAudioController ? (
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ px: "12px", pt: "6px", pb: "56px" }}>
-                <AudioController audioUrl={URL.createObjectURL(audioBlob)} color={theme.palette.text.primary} />
-                <Tooltip title={t("chatbot.hideAudio")}>
-                  <IconButton aria-label="hide-audio" onClick={() => setDisplayAudioController(false)}>
-                    <VisibilityOffIcon />
-                  </IconButton>
-                </Tooltip>
-              </Stack>
-            ) : (
-              <InputBase
-                fullWidth
-                multiline
-                maxRows={12}
-                placeholder={t("chatbot.input.placeholder")}
-                value={userInput}
-                onKeyDown={handleKeyDown}
-                onChange={(event) => setUserInput(event.target.value)}
-                inputRef={inputRef}
-                sx={{
-                  fontSize: "1rem",
-                  maxHeight: 600,
-                  overflow: "auto",
-                  "& .MuiInputBase-input, & .MuiInputBase-inputMultiline": {
-                    paddingTop: "12px",
-                    paddingBottom: "56px",
-                    paddingRight: "16px",
-                    paddingLeft: "12px",
-                  },
-                }}
-              />
-            )}
-          </Box>
-          {/* Attached files are shown within the + menu popover */}
-        </Box>
-
-        {/* Popover */}
-        <UserInputPopover
-          plusAnchor={plusAnchor}
-          pickerView={pickerView}
-          isRecording={isRecording}
-          sessionId={attachmentSessionId}
-          uploadingFileNames={uploadingFiles}
-          sessionAttachments={sessionAttachments}
-          selectedDocumentLibrariesIds={selectedDocumentLibrariesIds}
-          selectedPromptResourceIds={selectedPromptResourceIds}
-          selectedTemplateResourceIds={selectedTemplateResourceIds}
-          selectedSearchPolicyName={selectedSearchPolicyName}
-          libNameById={libNameById}
-          promptNameById={promptNameById}
-          templateNameById={templateNameById}
-          searchPolicyLabels={searchPolicyLabels}
-          setPickerView={setPickerView}
-          setPlusAnchor={setPlusAnchor}
-          setLibs={setLibs}
-          setPrompts={setPrompts}
-          setTemplates={setTemplates}
-          setSearchPolicy={setSearchPolicy}
-          onRemoveLib={(id) => setLibs((prev) => prev.filter((x) => x !== id))}
-          onRemovePrompt={(id) => setPrompts((prev) => prev.filter((x) => x !== id))}
-          onRemoveTemplate={(id) => setTemplates((prev) => prev.filter((x) => x !== id))}
-          onRefreshSessionAttachments={() => {
-            // Refresh the sessions list so the attachments view updates after deletions
-            refetchSessions();
-          }}
-          onAttachFileClick={() => {
-            fileInputRef.current?.click();
-            setPickerView(null);
-            setPlusAnchor(null);
-            requestAnimationFrame(() => inputRef.current?.focus());
-          }}
-          onRecordAudioClick={() => {
-            handleAudioRecorderDisplay();
-            setPickerView(null);
-            setPlusAnchor(null);
-          }}
-          agentChatOptions={agentChatOptions}
-          filesBlob={filesBlob}
-        />
-      </Grid2>
     </Grid2>
   );
 }

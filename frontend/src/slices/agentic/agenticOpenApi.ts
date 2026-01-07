@@ -175,6 +175,17 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bodyUploadFileAgenticV1ChatbotUploadPost,
       }),
     }),
+    getFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGet: build.query<
+      GetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetApiResponse,
+      GetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/upload/${queryArg.attachmentId}/summary`,
+        params: {
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
     deleteFileAgenticV1ChatbotUploadAttachmentIdDelete: build.mutation<
       DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiResponse,
       DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiArg
@@ -351,6 +362,14 @@ export type UploadFileAgenticV1ChatbotUploadPostApiResponse = /** status 200 Suc
 };
 export type UploadFileAgenticV1ChatbotUploadPostApiArg = {
   bodyUploadFileAgenticV1ChatbotUploadPost: BodyUploadFileAgenticV1ChatbotUploadPost;
+};
+export type GetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetApiArg = {
+  attachmentId: string;
+  sessionId: string;
 };
 export type DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiResponse = /** status 200 Successful Response */ null;
 export type DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiArg = {
@@ -991,6 +1010,8 @@ export const {
   useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
+  useGetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetQuery,
+  useLazyGetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetQuery,
   useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation,
   useHealthzAgenticV1HealthzGetQuery,
   useLazyHealthzAgenticV1HealthzGetQuery,

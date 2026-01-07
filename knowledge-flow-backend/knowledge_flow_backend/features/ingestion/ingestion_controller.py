@@ -726,34 +726,57 @@ class IngestionController:
                     logger.warning(f"Failed to clean up temporary file: {raw_path}")
                     pass
 
-            if not markdown_text.strip():
-                markdown_text = "_(empty markdown extracted)_"
-
-            # Build a single LC document with scoped metadata
+            docs: list[Document] = []
             document_uid = uuid.uuid4().hex
-            chunk_uid = uuid.uuid4().hex
-            doc_meta = {
-                "document_uid": document_uid,
-                CHUNK_ID_FIELD: chunk_uid,
-                "file_name": filename,
-                "user_id": user.uid,
-                "session_id": session_id,
-                "scope": scope,
-                "retrievable": True,
-                "source": "lite_ingest",
-            }
-            doc = Document(page_content=markdown_text, metadata=doc_meta)
+
+            if result.pages:
+                # Ingest per-page to keep chunks smaller and recall higher.
+                for p in result.pages:
+                    chunk_uid = uuid.uuid4().hex
+                    doc_meta = {
+                        "document_uid": document_uid,
+                        CHUNK_ID_FIELD: chunk_uid,
+                        "file_name": filename,
+                        "document_name": filename,
+                        "title": filename,
+                        "user_id": user.uid,
+                        "session_id": session_id,
+                        "scope": scope,
+                        "retrievable": True,
+                        "source": "lite_ingest",
+                        "page": p.page_no,
+                    }
+                    docs.append(Document(page_content=p.markdown or "", metadata=doc_meta))
+            else:
+                # Single combined doc fallback
+                if not markdown_text.strip():
+                    markdown_text = "_(empty markdown extracted)_"
+                chunk_uid = uuid.uuid4().hex
+                doc_meta = {
+                    "document_uid": document_uid,
+                    CHUNK_ID_FIELD: chunk_uid,
+                    "file_name": filename,
+                    "document_name": filename,
+                    "title": filename,
+                    "user_id": user.uid,
+                    "session_id": session_id,
+                    "scope": scope,
+                    "retrievable": True,
+                    "source": "lite_ingest",
+                }
+                docs.append(Document(page_content=markdown_text, metadata=doc_meta))
 
             try:
-                ids = self.vector_store.add_documents([doc])
-                chunks = len(ids) if isinstance(ids, (list, tuple, set)) else 1
+                ids = self.vector_store.add_documents(docs)
+                chunks = len(ids) if isinstance(ids, (list, tuple, set)) else len(docs)
                 logger.info(
-                    "[LITE_MD][INGEST] Stored vectors doc_uid=%s chunks=%d user=%s session=%s scope=%s",
+                    "[LITE_MD][INGEST] Stored vectors doc_uid=%s chunks=%d user=%s session=%s scope=%s per_page=%s",
                     document_uid,
                     chunks,
                     user.uid,
                     session_id,
                     scope,
+                    bool(result.pages),
                 )
             except Exception:
                 logger.exception("[LITE_MD][INGEST] Failed to store vectors for %s", filename)
@@ -762,7 +785,7 @@ class IngestionController:
             return {
                 "document_uid": document_uid,
                 "chunks": chunks,
-                "total_chars": len(markdown_text),
+                "total_chars": result.total_chars,
                 "truncated": result.truncated,
                 "scope": scope,
             }

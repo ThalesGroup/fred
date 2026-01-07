@@ -122,6 +122,19 @@ class SessionOrchestrator:
         self.restore_max_exchanges = configuration.ai.restore_max_exchanges
         # Stateless worker that knows how to turn LangGraph events into ChatMessage[]
         self.transcoder = StreamTranscoder()
+        cfg_max_files = configuration.ai.max_attached_files_per_user
+        self.max_attached_files_per_user = (
+            20 if cfg_max_files is None else cfg_max_files
+        )
+        cfg_max_size_mb = configuration.ai.max_attached_file_size_mb
+        self.max_attached_file_size_mb = (
+            10 if cfg_max_size_mb is None else cfg_max_size_mb
+        )
+        self.max_attached_file_size_bytes = (
+            None
+            if self.max_attached_file_size_mb is None
+            else self.max_attached_file_size_mb * 1024 * 1024
+        )
 
     # ---------------- Public API (used by WS layer) ----------------
 
@@ -476,6 +489,66 @@ class SessionOrchestrator:
             session_id,
         )
 
+    @authorize(action=Action.READ, resource=Resource.MESSAGE_ATTACHMENTS)
+    async def get_attachment_summary(
+        self,
+        *,
+        user: KeycloakUser,
+        session_id: str,
+        attachment_id: str,
+    ) -> dict:
+        """
+        Return the stored markdown summary for a given attachment.
+        """
+        if not self.attachments_store:
+            raise HTTPException(
+                status_code=501,
+                detail={
+                    "code": "attachments_disabled",
+                    "message": "Attachment summaries are disabled (no attachment store configured).",
+                },
+            )
+
+        self._authorize_user_action_on_session(session_id, user, Action.READ)
+
+        try:
+            records = self.attachments_store.list_for_session(session_id)
+        except Exception:
+            logger.exception(
+                "[SESSIONS][ATTACH] Failed to list attachments for session %s",
+                session_id,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "code": "attachment_lookup_failed",
+                    "message": "Failed to load attachment summaries.",
+                },
+            )
+
+        record = next(
+            (rec for rec in records if rec.attachment_id == attachment_id), None
+        )
+        if not record:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "attachment_not_found",
+                    "message": f"Attachment {attachment_id} not found in session {session_id}.",
+                },
+            )
+
+        return {
+            "session_id": record.session_id,
+            "attachment_id": record.attachment_id,
+            "name": record.name,
+            "summary_md": record.summary_md,
+            "mime": record.mime,
+            "size_bytes": record.size_bytes,
+            "created_at": record.created_at.isoformat() if record.created_at else None,
+            "updated_at": record.updated_at.isoformat() if record.updated_at else None,
+        }
+
     @authorize(action=Action.CREATE, resource=Resource.MESSAGE_ATTACHMENTS)
     @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
     async def add_attachment_from_upload(
@@ -485,7 +558,7 @@ class SessionOrchestrator:
         access_token: str,
         session_id: Optional[str],
         file: UploadFile,
-        max_chars: int = 30_000,
+        max_chars: int = 12_000,
         include_tables: bool = True,
         add_page_headings: bool = False,
     ) -> dict:
@@ -510,6 +583,35 @@ class SessionOrchestrator:
             ".docx",
             ".csv",
         }
+        # Enforce per-user attachment count limit
+        max_files_user = self.max_attached_files_per_user
+        try:
+            if max_files_user is not None and self.attachments_store:
+                total_for_user = 0
+                # Count attachments across all sessions for this user
+                for sess in self.session_store.get_for_user(user.uid):
+                    try:
+                        total_for_user += len(
+                            self.attachments_store.list_for_session(sess.id)
+                        )
+                    except Exception:
+                        logger.warning(
+                            "[SESSIONS][ATTACH] Failed to count attachments for session %s",
+                            sess.id,
+                        )
+                        continue
+                if total_for_user >= max_files_user:
+                    raise HTTPException(
+                        status_code=400,
+                        detail={
+                            "code": "attachment_limit_reached",
+                            "message": f"Attachment limit reached ({max_files_user} files per user).",
+                        },
+                    )
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception("[SESSIONS][ATTACH] Failed to enforce attachment limit")
         if not file.filename:
             raise HTTPException(
                 status_code=400,
@@ -532,7 +634,26 @@ class SessionOrchestrator:
                     "message": f"Unsupported file type '{suffix or file.filename}'. Allowed: {', '.join(sorted(supported_suffixes))}.",
                 },
             )
-        content = await file.read()  # stays in memory
+        size_limit_bytes = self.max_attached_file_size_bytes
+        if size_limit_bytes is not None:
+            content = await file.read(size_limit_bytes + 1)
+            if len(content) > size_limit_bytes:
+                logger.warning(
+                    "[SESSIONS][ATTACH] File too large: %s bytes=%d limit=%d (user=%s)",
+                    file.filename,
+                    len(content),
+                    size_limit_bytes,
+                    user.uid,
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "code": "attachment_too_large",
+                        "message": f"Attachment exceeds limit ({self.max_attached_file_size_mb} MB).",
+                    },
+                )
+        else:
+            content = await file.read()  # stays in memory
 
         # If no session_id was provided (first interaction), create one now.
         # Use a lightweight title based on the filename to keep UX sensible.
@@ -552,6 +673,7 @@ class SessionOrchestrator:
 
         # 2) Ask KF to produce a compact Markdown (text-only) for conversational use
         try:
+            # Build a compact summary for UI while ingesting full lite markdown below.
             summary_md = client.extract_markdown_from_bytes(
                 filename=file.filename,
                 content=content,
@@ -561,6 +683,9 @@ class SessionOrchestrator:
                 add_page_headings=add_page_headings,
             )
             summary_md = (summary_md or "").strip()
+            if "\x00" in summary_md:
+                # Some PDFs may surface NUL bytes; strip them to avoid DB errors.
+                summary_md = summary_md.replace("\x00", "")
             if not summary_md:
                 summary_md = "_(No summary returned by Knowledge Flow)_"
             logger.info(
@@ -598,15 +723,17 @@ class SessionOrchestrator:
         # 3b) Ingest into vector store with session/user scoping
         document_uid: Optional[str] = None
         try:
+            # Ingest full lite markdown (per-page) for higher recall; no max_chars cap.
             ingest_resp = client.ingest_markdown_from_bytes(
                 filename=file.filename,
                 content=content,
                 session_id=session.id,
                 scope="session",
                 options={
-                    "max_chars": max_chars,
+                    "max_chars": None,
                     "include_tables": include_tables,
                     "add_page_headings": add_page_headings,
+                    "return_per_page": True,
                 },
             )
             document_uid = ingest_resp.get("document_uid")
