@@ -30,7 +30,6 @@ import ProcessorBench from "../pages/ProcessorBench";
 import ProcessorRunDetail from "../pages/ProcessorRunDetail";
 import { Profile } from "../pages/Profile";
 import RebacBackfill from "../pages/RebacBackfill";
-import ReleaseNotes from "../pages/ReleaseNotes";
 import Runtime from "../pages/Runtime";
 import { getConfig } from "./config";
 
@@ -138,10 +137,6 @@ export const routes: RouteObject[] = [
       {
         path: "tools",
         element: <McpHub />,
-      },
-      {
-        path: "release-notes",
-        element: <ReleaseNotes />,
       },
     ].filter(Boolean),
   },

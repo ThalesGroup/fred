@@ -591,7 +591,8 @@
     "description": "Gérez vos préférences utilisateur et vos profils de chat",
     "menu": {
       "account": "Compte",
-      "token": "Jeton"
+      "token": "Jeton",
+      "releaseNotes": "Notes de version"
     },
     "noUser": "Aucun utilisateur connecté",
     "login": "Se connecter",

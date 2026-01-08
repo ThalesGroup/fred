@@ -591,7 +591,8 @@
     "description": "Manage your profile settings",
     "menu": {
       "account": "Account",
-      "token": "Token"
+      "token": "Token",
+      "releaseNotes": "Release Notes"
     },
     "noUser": "No user connected",
     "login": "Login",

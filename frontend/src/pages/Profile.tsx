@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import KeyIcon from "@mui/icons-material/VpnKey";
 import {
   Box,
@@ -35,6 +36,7 @@ import InvisibleLink from "../components/InvisibleLink";
 import { ProfileCard } from "../components/profile/ProfileCard";
 import { ProfileToken } from "../components/profile/ProfileToken";
 import { KeyCloakService } from "../security/KeycloakService";
+import ReleaseNotes from "./ReleaseNotes";
 
 function getFallbackTab(): number {
   const savedTab = localStorage.getItem("last_profile_active_tab");
@@ -82,6 +84,7 @@ export function Profile() {
   const menuItems = [
     { label: t("profile.menu.account"), icon: <AccountCircleIcon fontSize="small" /> },
     { label: t("profile.menu.token"), icon: <KeyIcon fontSize="small" /> },
+    { label: t("profile.menu.releaseNotes"), icon: <InfoOutlinedIcon fontSize="small" /> },
   ];
 
   return (
@@ -190,6 +193,8 @@ export function Profile() {
               )}
 
               {activeTab === 1 && <ProfileToken tokenParsed={tokenParsed} />}
+
+              {activeTab === 2 && <ReleaseNotes />}
             </Box>
           </Box>
         ) : (
