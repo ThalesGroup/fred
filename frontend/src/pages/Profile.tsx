@@ -94,7 +94,8 @@ export function Profile() {
       <Box
         sx={{
           width: "100%",
-          maxWidth: 1280,
+          flexGrow: 1,
+          overflowY: "auto",
           mx: "auto",
           px: { xs: 2, md: 3 },
           py: { xs: 4, md: 6 },
@@ -115,7 +116,7 @@ export function Profile() {
               component="nav"
               sx={{
                 position: { md: "sticky" },
-                top: { md: 88 },
+                top: { md: 0 },
                 alignSelf: "start",
               }}
             >
@@ -194,7 +195,11 @@ export function Profile() {
 
               {activeTab === 1 && <ProfileToken tokenParsed={tokenParsed} />}
 
-              {activeTab === 2 && <ReleaseNotes />}
+              {activeTab === 2 && (
+                <Card sx={{ mx: { xs: 1.5, md: 3 } }}>
+                  <ReleaseNotes />
+                </Card>
+              )}
             </Box>
           </Box>
         ) : (
@@ -203,7 +208,6 @@ export function Profile() {
             variant="outlined"
             sx={{
               maxWidth: 760,
-              mx: "auto",
               borderRadius: 3,
               bgcolor: "transparent",
               boxShadow: "none",

@@ -12,27 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useMemo, useState } from "react";
 import { Box, Grid2 } from "@mui/material";
 import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/fr";
+import { useEffect, useMemo, useState } from "react";
 
 // Fred: global controls (single Paper at top)
 import DashboardCard from "../DashboardCard";
 
 // Fred: shared time axis utilities — single source of truth
-import { TimePrecision, getPrecisionForRange, alignDateRangeToPrecision, precisionToInterval } from "../timeAxis";
+import { TimePrecision, alignDateRangeToPrecision, getPrecisionForRange, precisionToInterval } from "../timeAxis";
 
 // Theme-driven chart styling (no time logic here)
 
 // Existing token chart (pure presentational)
-import { TokenUsageChart } from "./TokenUsageChart";
 import { useLazyGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery } from "../../../slices/agentic/agenticOpenApi";
+import { TokenUsageChart } from "./TokenUsageChart";
 
 // KPI query client
-import { FramelessTile } from "../FramelessTile";
-import { KpiStatusMini } from "./KpiStatusMini";
-import { KpiLatencyMini } from "./KpiLatencyMini";
 import {
   FilterTerm,
   KpiQuery,
@@ -41,6 +38,9 @@ import {
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import DateRangeControl from "../common/DateRangeControl";
 import { FULL_QUICK_RANGES } from "../common/dateRangeControlPresets";
+import { FramelessTile } from "../FramelessTile";
+import { KpiLatencyMini } from "./KpiLatencyMini";
+import { KpiStatusMini } from "./KpiStatusMini";
 
 /**
  *
@@ -141,7 +141,7 @@ export default function KpiDashboard() {
   const statusRows = (statusState.data as KpiQueryResult | undefined)?.rows ?? [];
 
   return (
-    <Box display="flex" flexDirection="column" gap={2} p={2}>
+    <Box display="flex" flexDirection="column" gap={2} p={2} mt={1}>
       {/* Single Paper host: global filters only */}
       <DashboardCard>
         <DateRangeControl

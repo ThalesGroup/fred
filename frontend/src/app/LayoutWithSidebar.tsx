@@ -40,7 +40,16 @@ export const LayoutWithSidebar = ({ children }: React.PropsWithChildren<{}>) => 
           }}
         >
           {/* 🌀 This is the ONLY vertical scroller in the app shell */}
-          <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
+          <Box
+            sx={{
+              flex: 1,
+              overflowY: "auto",
+              overflowX: "hidden",
+              // `display: flex` here allow to use `flex: 1` on component under the TopBar to fill the remaining space
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
             {children}
             <Outlet />
           </Box>
