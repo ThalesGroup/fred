@@ -9,8 +9,19 @@ from agentic_backend.common.structures import AgentChatOptions
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
+
+# Always append citation guidance, even if the agent has a custom system prompt.
+_CITATION_POLICY = (
+    "\n\n"
+    "Citations for document search tools:\n"
+    "- If a tool returns document search results (vector hits with title/content/rank), "
+    "cite sources with bracketed numbers like [1], [2]. Use the hit rank when available; "
+    "otherwise use list order.\n"
+    "- If multiple sources support a statement, include multiple citations (e.g., [1][3])."
+)
 
 # ---------------------------
 # Tuning spec (UI-editable)
@@ -30,12 +41,15 @@ BASIC_REACT_TUNING = AgentTuning(
             ),
             required=True,
             default=(
-                "You are an general assistant with tools. Use the available instructions and tools to solve the user's request.\n"
+                "You are a general assistant with tools. Use the available instructions and tools to solve the user's request.\n"
                 "If you have tools:\n"
                 "- ALWAYS use the tools at your disposal before providing any answer.\n"
                 "- Prefer concrete evidence from tool outputs.\n"
                 "- Be explicit about which tools you used and why.\n"
                 "- When you reference tool results, keep short inline markers (e.g., [tool_name]).\n"
+                "- When a tool returns document search results (vector hits with title/content/rank), cite sources with\n"
+                "  bracketed numbers like [1], [2]. Use the hit rank when available; otherwise use list order.\n"
+                "- If multiple sources support a statement, include multiple citations (e.g., [1][3]).\n"
                 "Current date: {today}."
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
@@ -89,6 +103,7 @@ BASIC_REACT_TUNING = AgentTuning(
 )
 
 
+@expose_runtime_source("agent.BasicReActAgent")
 class BasicReActAgent(AgentFlow):
     """Simple ReAct agent used for dynamic UI-created agents."""
 
@@ -114,9 +129,10 @@ class BasicReActAgent(AgentFlow):
         await self.mcp.aclose()
 
     def get_compiled_graph(self) -> CompiledStateGraph:
+        base_prompt = self.render(self.get_tuned_text("prompts.system") or "")
         return create_agent(
             model=get_default_chat_model(),
-            system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
+            system_prompt=f"{base_prompt}{_CITATION_POLICY}",
             tools=[*self.mcp.get_tools()],
             checkpointer=self.streaming_memory,
         )
