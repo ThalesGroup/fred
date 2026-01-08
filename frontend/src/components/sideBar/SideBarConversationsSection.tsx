@@ -32,7 +32,12 @@ export function SideBarConversationsSection({ isSidebarOpen }: ConversationsSect
     selectedAgent === allAgentOptionValue
       ? sessions
       : sessions?.filter((session) => session.agents.includes(selectedAgent));
-  // const filteredSessions = undefined;
+
+  const sortedSessions = filteredSessions?.slice().sort((a, b) => {
+    const dateA = new Date(a.updated_at).getTime();
+    const dateB = new Date(b.updated_at).getTime();
+    return dateB - dateA;
+  });
   return (
     <>
       {/* Conversation header */}
@@ -69,13 +74,11 @@ export function SideBarConversationsSection({ isSidebarOpen }: ConversationsSect
         elevation={0}
         sx={{ flexGrow: 1, overflowY: "auto", overflowX: "hidden", scrollbarWidth: "none", py: 1, px: 1 }}
       >
-        {isSidebarOpen &&
-          filteredSessions === undefined &&
-          [...Array(15)].map(() => <SideBarConversationCardSkeleton />)}
+        {isSidebarOpen && sortedSessions === undefined && [...Array(15)].map(() => <SideBarConversationCardSkeleton />)}
 
         {isSidebarOpen &&
-          filteredSessions !== undefined &&
-          filteredSessions.map((session) => (
+          sortedSessions !== undefined &&
+          sortedSessions.map((session) => (
             <SideBarConversationCard key={session.id} session={session} refetchSessions={refetchSessions} />
           ))}
       </Paper>
