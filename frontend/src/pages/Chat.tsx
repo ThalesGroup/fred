@@ -82,7 +82,6 @@ export default function Chat() {
     <Box sx={{ height: "100vh", position: "relative", overflow: "hidden" }}>
       <Grid2>
         <ChatBot
-          key={sessionId || "draft"}
           sessionId={sessionId}
           agents={enabledAgents}
           onNewSessionCreated={handleNewSessionCreated}

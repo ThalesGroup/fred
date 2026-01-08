@@ -30,6 +30,7 @@ import { getConfig } from "../../common/config.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
 import { useAgentSelector } from "../../hooks/useAgentSelector.ts";
 import { useInitialChatInputContext } from "../../hooks/useInitialChatInputContext.ts";
+import { useSessionChange } from "../../hooks/useSessionChange.ts";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import {
   ChatAskInput,
@@ -130,18 +131,30 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     [chatContextResources],
   );
 
-  // Lazy messages fetcher
-  // const [fetchHistory] = useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery();
   const { data: history } = useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery(
     { sessionId: sessionId || "" },
     { skip: !sessionId },
   );
+
+  // Clear messages when switching sessions (but not on draft→session to avoid blink when a new session is created from draft)
+  useSessionChange(sessionId, {
+    onSessionToDraft: () => {
+      messagesRef.current = [];
+      setAllMessages([]);
+    },
+    onSessionSwitch: () => {
+      messagesRef.current = [];
+      setAllMessages([]);
+    },
+  });
+
+  // Load history when available (RTK Query handles fetching)
   useEffect(() => {
-    if (history) {
+    if (history && sessionId) {
       messagesRef.current = history;
       setAllMessages(history);
     }
-  }, [history]);
+  }, [history, sessionId]);
 
   const [uploadChatFile] = useUploadFileAgenticV1ChatbotUploadPostMutation();
   // Local tick to signal attachments list to refresh after successful uploads
@@ -149,7 +162,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
-  const [isHistoryLoading, setIsHistoryLoading] = useState<boolean>(false);
   const seedPrefsRef = useRef<any>(null);
   const seedSessionIdRef = useRef<string | null>(null);
 
@@ -159,7 +171,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     setMessages(msgs);
   };
 
-  const { currentAgent, setCurrentAgent } = useAgentSelector(agents, isNewConversation, messages);
+  const { currentAgent, setCurrentAgent } = useAgentSelector(agents, isNewConversation, messages, sessionId);
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
   const defaultAgent = useMemo(() => (agents && agents.length > 0 ? agents[0] : undefined), [agents]);
@@ -331,45 +343,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       webSocketRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Component remounts when key changes, no need to track session changes
-
-  // // Fetch messages when the session changes
-  // useEffect(() => {
-  //   const id = sessionId;
-
-  //   if (!id) {
-  //     messagesRef.current = [];
-  //     setAllMessages([]);
-  //     setIsHistoryLoading(false);
-  //     return;
-  //   }
-
-  //   setIsHistoryLoading(true);
-  //   const existingForSession = messagesRef.current.filter((msg) => msg.session_id === id);
-  //   if (existingForSession.length > 0) {
-  //     const sortedExisting = sortMessages(existingForSession);
-  //     messagesRef.current = sortedExisting;
-  //     setAllMessages(sortedExisting);
-  //   } else {
-  //     // No cache for this session: clear messages to avoid showing previous session's conversation
-  //     messagesRef.current = [];
-  //     setAllMessages([]);
-  //   }
-
-  //   fetchHistory({ sessionId: id })
-  //     .unwrap()
-  //     .then((serverMessages) => {
-  //       const sorted = sortMessages(serverMessages);
-  //       messagesRef.current = sorted;
-  //       setAllMessages(sorted);
-  //       setIsHistoryLoading(false);
-  //     })
-  //     .catch((e) => {
-  //       console.error("[CHATBOT] Failed to load messages:", e);
-  //       setAllMessages([]);
-  //       setIsHistoryLoading(false);
-  //     });
-  // }, [sessionId, fetchHistory]);
+  }, []); // WebSocket is session-agnostic; persists across all conversations
 
   const [userInputContext, setUserInputContext] = useState<any>(null);
   const handleDraftContextChange = useCallback(
@@ -423,19 +397,19 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     : basePrefs.deepSearch;
 
   // Track session transitions: seed prefs when creating a session from draft; reset draft on return to welcome; clear seed when switching.
-  useEffect(() => {
-    const prev = lastSessionIdRef.current;
-    const curr = sessionId;
-
-    // Draft -> first session: capture draft prefs to seed this session, then clear draft context.
-    if (!prev && curr) {
+  useSessionChange(sessionId, {
+    onChange: (_, curr) => {
+      // Update lastSessionIdRef for isFreshSessionFromDraft calculation
+      lastSessionIdRef.current = curr;
+    },
+    onDraftToSession: (newSessionId) => {
+      // Capture draft prefs to seed this new session, then clear draft context
       seedPrefsRef.current = userInputContext || initialCtx;
-      seedSessionIdRef.current = curr;
+      seedSessionIdRef.current = newSessionId;
       setUserInputContext(null);
-    }
-
-    if (prev && !curr) {
-      // Returning to welcome: reset draft prefs and agent to deterministic default.
+    },
+    onSessionToDraft: () => {
+      // Returning to welcome: reset draft prefs and agent to deterministic default
       resetToDefaults();
       if (defaultAgent && currentAgent?.name !== defaultAgent.name) {
         // onSelectNewAgent(defaultAgent);
@@ -443,15 +417,14 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       seedPrefsRef.current = null;
       seedSessionIdRef.current = null;
       setUserInputContext(null);
-    } else if (prev && curr && prev !== curr) {
-      // Switching between existing sessions: clear transient draft/seed context to avoid bleed.
+    },
+    onSessionSwitch: () => {
+      // Switching between existing sessions: clear transient draft/seed context to avoid bleed
       seedPrefsRef.current = null;
       seedSessionIdRef.current = null;
       setUserInputContext(null);
-    }
-
-    lastSessionIdRef.current = curr;
-  }, [sessionId, defaultAgent, currentAgent?.name, resetToDefaults, userInputContext, initialCtx]);
+    },
+  });
 
   // Handle user input (text/audio)
   const handleSend = async (content: UserInputContent) => {

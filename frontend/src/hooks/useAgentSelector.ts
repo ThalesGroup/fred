@@ -2,9 +2,15 @@ import { useCallback, useMemo, useState } from "react";
 import { AnyAgent } from "../common/agent";
 import { ChatMessage } from "../slices/agentic/agenticOpenApi";
 import { useLocalStorageState } from "./useLocalStorageState";
+import { useSessionChange } from "./useSessionChange";
 
 // Simple hook to help with agent selection.
-export function useAgentSelector(agents: AnyAgent[], isNewConversation: boolean, history?: ChatMessage[]) {
+export function useAgentSelector(
+  agents: AnyAgent[],
+  isNewConversation: boolean,
+  history?: ChatMessage[],
+  sessionId?: string,
+) {
   // Track manually selected agent (overrides default logic)
   const [manuallySelectedAgentId, setManuallySelectedAgentId] = useState<string | null>(null);
 
@@ -13,6 +19,11 @@ export function useAgentSelector(agents: AnyAgent[], isNewConversation: boolean,
     "chat.lastNewConversationAgent",
     null,
   );
+
+  // Reset manual selection when session changes
+  useSessionChange(sessionId, {
+    onChange: () => setManuallySelectedAgentId(null),
+  });
 
   const currentAgent = useMemo(() => {
     // If user manually selected an agent, use that
