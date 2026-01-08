@@ -32,11 +32,16 @@ export function useAgentSelector(
       if (manualAgent) return manualAgent;
     }
 
-    // For existing sessions: use the first agent from the session's agents array
+    // For existing sessions: use the last agent from history that exists in available agents
+    // (iterate backwards to skip sub-agents that might not be in the main agents list)
     if (!isNewConversation && history?.length) {
-      const lastAgentId = history[history.length - 1].metadata?.agent_name;
-      const sessionAgent = agents.find((a) => a.name === lastAgentId);
-      if (sessionAgent) return sessionAgent;
+      for (let i = history.length - 1; i >= 0; i--) {
+        const agentName = history[i].metadata?.agent_name;
+        if (agentName) {
+          const sessionAgent = agents.find((a) => a.name === agentName);
+          if (sessionAgent) return sessionAgent;
+        }
+      }
     }
 
     // For new conversations (draft): use last agent from localStorage

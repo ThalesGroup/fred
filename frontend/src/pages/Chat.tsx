@@ -32,7 +32,9 @@ export default function Chat() {
   } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
 
   const agentsFromServer = useMemo<AnyAgent[]>(() => normalizeAgenticFlows(rawAgentsFromServer), [rawAgentsFromServer]);
-  const enabledAgents = (agentsFromServer ?? []).filter((a) => a.enabled === true);
+  const enabledAgents = (agentsFromServer ?? []).filter(
+    (a) => a.enabled === true && !a.metadata?.deep_search_hidden_in_ui,
+  );
 
   // Handle navigation when a new session is created
   const handleNewSessionCreated = (newSessionId: string) => {

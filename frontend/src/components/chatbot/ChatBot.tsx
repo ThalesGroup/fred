@@ -174,7 +174,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
   const { currentAgent, setCurrentAgent } = useAgentSelector(agents, isNewConversation, messages, sessionId);
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
-  const defaultAgent = useMemo(() => (agents && agents.length > 0 ? agents[0] : undefined), [agents]);
   const stopStreaming = () => {
     const socket = webSocketRef.current;
     if (!socket) {
@@ -411,9 +410,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     onSessionToDraft: () => {
       // Returning to welcome: reset draft prefs and agent to deterministic default
       resetToDefaults();
-      if (defaultAgent && currentAgent?.name !== defaultAgent.name) {
-        // onSelectNewAgent(defaultAgent);
-      }
       seedPrefsRef.current = null;
       seedSessionIdRef.current = null;
       setUserInputContext(null);
