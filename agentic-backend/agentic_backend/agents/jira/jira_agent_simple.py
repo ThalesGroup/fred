@@ -1,8 +1,7 @@
 import logging
-from typing import Sequence, TypedDict
 
-from langchain_core.messages import AIMessage, AnyMessage
-from langgraph.graph import END, StateGraph
+from langchain.agents import create_agent
+from langgraph.graph.state import CompiledStateGraph
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
@@ -29,45 +28,22 @@ TUNING = AgentTuning(
     tags=[],
     fields=[
         FieldSpec(
-            key="prompts.requirements",
+            key="prompts.system",
             type="prompt",
-            title="Requirements Prompt",
-            description="Prompt to create initial requirements.",
+            title="System Prompt",
+            description="You extract requirements and user stories from project documents",  # to fill a Jira board and build Zephyr tests.",
             required=True,
             default="""
-Tu es un Business Analyst expert. En te basant uniquement sur le besoin métier initial, génère une liste d'exigences formelles.
-
-Besoin Métier:
----
-{BUSINESS_NEED}
----
+Tout d'abord, tu es un Business Analyst expert. En te basant uniquement sur le besoin métier initial, génère une liste d'exigences formelles.
 
 Consignes :
 1.  **Génère des exigences fonctionnelles et non-fonctionnelles.**
 2.  **Formalisme :** Rédige des exigences claires, concises, non ambiguës et testables.
 3.  **ID Unique :** Assigne un ID unique à chaque exigence (ex: EX-FON-001 pour fonctionnelle, EX-NFON-001 pour non-fonctionnelle).
 4.  **Priorisation :** Assigne une priorité (Haute, Moyenne, Basse) à chaque exigence.
-""",
-            ui=UIHints(group="Prompts", multiline=True, markdown=True),
-        ),
-        FieldSpec(
-            key="prompts.stories",
-            type="prompt",
-            title="User Stories and Acceptation Criteria Prompt",
-            description="Prompt to create user stories and acceptation criteria.",
-            required=True,
-            default="""
-Tu es un Product Owner expert de classe mondiale. Ta mission est de transformer le besoin métier suivant en un ensemble de User Stories de haute qualité, prêtes à être intégrées dans un backlog.
 
-Besoin métier:
----
-{BUSINESS_NEED}
----
 
-Exigences techniques et fonctionnelles (Contexte additionnel à respecter):
----
-{EXIGENCES}
----
+Ensuite, tu es un Product Owner expert de classe mondiale. Ta mission est de transformer le besoin métier suivant en un ensemble de User Stories de haute qualité, prêtes à être intégrées dans un backlog.
 
 Consignes pour la génération des User Stories :
 - Pense comme un véritable Product Owner : décompose la fonctionnalité en stories atomiques, verticales et testables.
@@ -115,29 +91,16 @@ Consignes pour la génération des User Stories :
 - **Dépendances :** Ordonne les stories logiquement. **AUCUNE dépendance circulaire.**
 
 - **Questions de clarification :** Pour chaque story, ajoute 1 à 3 questions précises pour lever les ambiguïtés.
-""",
-            ui=UIHints(group="Prompts", multiline=True, markdown=True),
-        ),
-        FieldSpec(
-            key="prompts.tests",
-            type="prompt",
-            title="Tests Prompt",
-            description="Prompt to create tests for selected user stories.",
-            required=True,
-            default="""
-## Rôle
 
-Tu es un expert en tests logiciels. Ton rôle est de créer des scénarios de tests détaillés et exploitables.
 
-## Instructions principales
 
+Finalement, tu es un expert en tests logiciels. Ton rôle est de créer des scénarios de tests détaillés et exploitables.
+
+Instructions principales :
 Génère des scénarios de tests complets à partir des informations fournies dans les User Stories (US) suivantes, en suivant le format Gherkin (Etant donné que-Lorsque-Alors) et en incluant les cas nominaux, limites et d'erreur. Toutes les US fournies doivent faire l'objet d'un test.
 Tu peux également te baser sur les JDDs fournis en entrée pour les personas de chaque tests
 
-## Format de réponse attendu 📝
-
-Pour chaque scénario :
-
+Format de réponse attendu 📝 pour chaque scénario :
 1. **ID du Scénario** : Un identifiant unique (ex: SC-001, SC-LOGIN-001).
 2. **userStoryId**: L'ID de la User Story couverte par ce test.
 3. **Titre du Scénario** : Un titre concis décrivant l'objectif du test.
@@ -147,16 +110,6 @@ Pour chaque scénario :
 7. **Données de test** : Jeux de données nécessaires
 8. **Priorité** : (Haute, Moyenne, Basse) Indiquant l'importance du test.
 9. **type**: Le type de cas de test (Nominal, Limite, Erreur).
-
--------------------------------------------
-
-**--- DÉBUT DES USER STORIES À ANALYSER ---**
-{USER_STORIES}
-**--- FIN DES USER STORIES À ANALYSER ---**
-
-**--- DÉBUT DU JDD À ANALYSER ---**
-{JDD}
-**--- FIN DU JDD À ANALYSER ---**
 """,
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
@@ -209,11 +162,7 @@ Pour chaque scénario :
 )
 
 
-class State(TypedDict):
-    messages: Sequence[AnyMessage]
-
-
-@expose_runtime_source("agent.Jimmy")
+@expose_runtime_source("agent.Jim")
 class JiraAgent(AgentFlow):
     """Simple ReAct agent used for dynamic UI-created agents."""
 
@@ -231,25 +180,14 @@ class JiraAgent(AgentFlow):
         self.mcp = MCPRuntime(agent=self)
         await self.mcp.init()
 
-    def _build_graph(self) -> StateGraph:
-        builder = StateGraph(State)
+    async def aclose(self):
+        await self.mcp.aclose()
 
-        builder.add_node("requirements", self._requirements)
-        builder.add_node("stories", self._stories)
-        builder.add_node("tests", self._tests)
-
-        builder.set_entry_point("requirements")
-        builder.add_edge("requirements", "stories")
-        builder.add_edge("stories", "tests")
-        builder.add_edge("tests", END)
-
-        return builder
-
-    async def _requirements(self, state: State) -> State:
-        pass
-
-    async def _stories(self, state: State) -> State:
-        pass
-
-    async def _tests(self, state: State) -> State:
-        pass
+    def get_compiled_graph(self) -> CompiledStateGraph:
+        base_prompt = self.render(self.get_tuned_text("prompts.system") or "")
+        return create_agent(
+            model=get_default_chat_model(),
+            system_prompt=base_prompt,
+            tools=[*self.mcp.get_tools()],
+            checkpointer=self.streaming_memory,
+        )
