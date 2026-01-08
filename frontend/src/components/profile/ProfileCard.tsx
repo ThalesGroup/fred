@@ -35,6 +35,7 @@ import {
 } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { LanguageSelector } from "../LanguageSelector";
+import { ThemeModeSelector } from "../ThemeModeSelector";
 import { UserAvatar } from "./UserAvatar";
 
 interface ProfileCardProps {
@@ -200,6 +201,13 @@ export function ProfileCard({
                     </Tooltip>
                   ))}
                 </Box>
+              </Box>
+
+              <Divider />
+
+              <Box>
+                <SectionTitle>{t("profile.theme.title")}</SectionTitle>
+                <ThemeModeSelector />
               </Box>
             </Grid2>
           </Grid2>

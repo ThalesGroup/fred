@@ -606,7 +606,13 @@
       "title": "Informations du token",
       "none": "Aucun token disponible"
     },
-    "language": "Langue de l'interface"
+    "language": "Langue de l'interface",
+    "theme": {
+      "title": "Thème",
+      "light": "Clair",
+      "system": "Système",
+      "dark": "Sombre"
+    }
   },
   "knowledge": {
     "title": "Ressources",

@@ -606,7 +606,13 @@
       "title": "Token information",
       "none": "No token available"
     },
-    "language": "Interface language"
+    "language": "Interface language",
+    "theme": {
+      "title": "Theme",
+      "light": "Light",
+      "system": "System",
+      "dark": "Dark"
+    }
   },
   "knowledge": {
     "title": "Resources",
