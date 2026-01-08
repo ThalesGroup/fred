@@ -1,3 +1,11 @@
+- **v1.1.2** — 2026-01-08
+
+  - **Summary**
+    - Dynamic ReAct agents now support source citations, and agent code inspection works for all agents (#950).
+  - **Features**
+    - Add source citation support to dynamic ReAct agents (#950)
+    - Fix agent code inspection to display source for all agents (#950)
+
 - **v1.1.1** — 2026-01-07
 
   - **Summary**
