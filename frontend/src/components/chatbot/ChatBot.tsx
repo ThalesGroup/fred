@@ -28,6 +28,7 @@ import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
 import { getConfig } from "../../common/config.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
+import { useAgentSelector } from "../../hooks/useAgentSelector.ts";
 import { useInitialChatInputContext } from "../../hooks/useInitialChatInputContext.ts";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import {
@@ -35,10 +36,8 @@ import {
   ChatMessage,
   FinalEvent,
   RuntimeContext,
-  SessionSchema,
-  SessionWithFiles,
   StreamEvent,
-  useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
+  useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
 } from "../../slices/agentic/agenticOpenApi.ts";
 import {
@@ -47,7 +46,7 @@ import {
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../ToastProvider.tsx";
-import { keyOf, mergeAuthoritative, sortMessages, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
+import { keyOf, mergeAuthoritative, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import ChatKnowledge from "./ChatKnowledge.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
 import UserInput, { UserInputContent } from "./user_input/UserInput.tsx";
@@ -62,26 +61,13 @@ export interface ChatBotError {
 // }
 
 export interface ChatBotProps {
-  currentChatBotSession: SessionWithFiles | null;
-  currentAgent: AnyAgent;
+  sessionId?: string;
   agents: AnyAgent[];
-  onSelectNewAgent: (flow: AnyAgent) => void;
-  onUpdateOrAddSession: (session: SessionWithFiles | SessionSchema | Partial<SessionWithFiles>) => void;
-  onNewSessionCreated: (sessionId: string) => void;
-  isCreatingNewConversation: boolean;
   runtimeContext?: RuntimeContext;
+  onNewSessionCreated: (sessionId: string) => void;
 }
 
-const ChatBot = ({
-  currentChatBotSession,
-  currentAgent,
-  agents,
-  onSelectNewAgent,
-  onUpdateOrAddSession,
-  onNewSessionCreated,
-  isCreatingNewConversation,
-  runtimeContext: baseRuntimeContext,
-}: ChatBotProps) => {
+const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseRuntimeContext }: ChatBotProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
   const username =
@@ -94,6 +80,8 @@ const ChatBot = ({
   useEffect(() => {
     setTypedGreeting(greetingText);
   }, [greetingText]);
+
+  const isNewConversation = !sessionId;
 
   const [contextOpen, setContextOpen] = useState<boolean>(() => {
     try {
@@ -110,7 +98,7 @@ const ChatBot = ({
     } catch {}
   }, [contextOpen]);
 
-  const { showInfo, showError } = useToast();
+  const { showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   const wsTokenRef = useRef<string | null>(null);
@@ -120,7 +108,7 @@ const ChatBot = ({
   // Track files being uploaded right now to surface inline progress in the input bar
   const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
 
-  // Noms des libs / prompts / templates / chat-context
+  // Name of des libs / prompts / templates / chat-context
   const { data: docLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
   const { data: promptResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "prompt" });
   const { data: templateResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "template" });
@@ -143,7 +131,18 @@ const ChatBot = ({
   );
 
   // Lazy messages fetcher
-  const [fetchHistory] = useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery();
+  // const [fetchHistory] = useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery();
+  const { data: history } = useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery(
+    { sessionId: sessionId || "" },
+    { skip: !sessionId },
+  );
+  useEffect(() => {
+    if (history) {
+      messagesRef.current = history;
+      setAllMessages(history);
+    }
+  }, [history]);
+
   const [uploadChatFile] = useUploadFileAgenticV1ChatbotUploadPostMutation();
   // Local tick to signal attachments list to refresh after successful uploads
   const [attachmentsRefreshTick, setAttachmentsRefreshTick] = useState<number>(0);
@@ -159,6 +158,8 @@ const ChatBot = ({
     messagesRef.current = msgs;
     setMessages(msgs);
   };
+
+  const { currentAgent, setCurrentAgent } = useAgentSelector(agents, isNewConversation, messages);
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
   const defaultAgent = useMemo(() => (agents && agents.length > 0 ? agents[0] : undefined), [agents]);
@@ -195,14 +196,14 @@ const ChatBot = ({
     const el = scrollerRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages, currentChatBotSession?.id]);
+  }, [messages, sessionId]);
 
   // Clear pending session once parent propagated the real session
   useEffect(() => {
-    if (currentChatBotSession?.id && pendingSessionIdRef.current === currentChatBotSession.id) {
+    if (sessionId && pendingSessionIdRef.current === sessionId) {
       pendingSessionIdRef.current = null;
     }
-  }, [currentChatBotSession?.id]);
+  }, [sessionId]);
 
   const setupWebSocket = async (): Promise<WebSocket | null> => {
     const current = webSocketRef.current;
@@ -243,7 +244,7 @@ const ChatBot = ({
               const msg = streamed.message as ChatMessage;
 
               // Ignore streams for another session than the one being viewed
-              if (currentChatBotSession?.id && msg.session_id !== currentChatBotSession.id) {
+              if (sessionId && msg.session_id !== sessionId) {
                 console.warn("Ignoring stream for another session:", msg.session_id);
                 break;
               }
@@ -269,17 +270,9 @@ const ChatBot = ({
               messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
               setMessages(messagesRef.current);
 
-              const sessionId = finalEvent.session.id;
-
-              // Accept session update if backend created/switched it
-              if (sessionId !== currentChatBotSession?.id) {
-                // Update local sessions state immediately so navigation doesn't fail validation
-                onUpdateOrAddSession(finalEvent.session);
-
-                // If we were in draft mode and backend created a session, notify parent
-                if (isCreatingNewConversation && sessionId) {
-                  onNewSessionCreated(sessionId);
-                }
+              // If we were in draft mode and backend created a session, notify parent
+              if (isNewConversation) {
+                onNewSessionCreated(finalEvent.session.id);
               }
               setWaitResponse(false);
               break;
@@ -340,66 +333,62 @@ const ChatBot = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Component remounts when key changes, no need to track session changes
 
-  // Fetch messages when the session changes
-  useEffect(() => {
-    const id = currentChatBotSession?.id;
+  // // Fetch messages when the session changes
+  // useEffect(() => {
+  //   const id = sessionId;
 
-    if (!id) {
-      messagesRef.current = [];
-      setAllMessages([]);
-      setIsHistoryLoading(false);
-      return;
-    }
+  //   if (!id) {
+  //     messagesRef.current = [];
+  //     setAllMessages([]);
+  //     setIsHistoryLoading(false);
+  //     return;
+  //   }
 
-    setIsHistoryLoading(true);
-    const existingForSession = messagesRef.current.filter((msg) => msg.session_id === id);
-    if (existingForSession.length > 0) {
-      const sortedExisting = sortMessages(existingForSession);
-      messagesRef.current = sortedExisting;
-      setAllMessages(sortedExisting);
-    } else {
-      // No cache for this session: clear messages to avoid showing previous session's conversation
-      messagesRef.current = [];
-      setAllMessages([]);
-    }
+  //   setIsHistoryLoading(true);
+  //   const existingForSession = messagesRef.current.filter((msg) => msg.session_id === id);
+  //   if (existingForSession.length > 0) {
+  //     const sortedExisting = sortMessages(existingForSession);
+  //     messagesRef.current = sortedExisting;
+  //     setAllMessages(sortedExisting);
+  //   } else {
+  //     // No cache for this session: clear messages to avoid showing previous session's conversation
+  //     messagesRef.current = [];
+  //     setAllMessages([]);
+  //   }
 
-    fetchHistory({ sessionId: id })
-      .unwrap()
-      .then((serverMessages) => {
-        const sorted = sortMessages(serverMessages);
-        messagesRef.current = sorted;
-        setAllMessages(sorted);
-        setIsHistoryLoading(false);
-      })
-      .catch((e) => {
-        console.error("[CHATBOT] Failed to load messages:", e);
-        setAllMessages([]);
-        setIsHistoryLoading(false);
-      });
-  }, [currentChatBotSession?.id, fetchHistory]);
+  //   fetchHistory({ sessionId: id })
+  //     .unwrap()
+  //     .then((serverMessages) => {
+  //       const sorted = sortMessages(serverMessages);
+  //       messagesRef.current = sorted;
+  //       setAllMessages(sorted);
+  //       setIsHistoryLoading(false);
+  //     })
+  //     .catch((e) => {
+  //       console.error("[CHATBOT] Failed to load messages:", e);
+  //       setAllMessages([]);
+  //       setIsHistoryLoading(false);
+  //     });
+  // }, [sessionId, fetchHistory]);
 
   const [userInputContext, setUserInputContext] = useState<any>(null);
   const handleDraftContextChange = useCallback(
     (ctx: any) => {
       // Only track draft context when there is no active session.
-      if (!currentChatBotSession?.id) {
+      if (!sessionId) {
         setUserInputContext(ctx);
       }
     },
-    [currentChatBotSession?.id],
+    [sessionId],
   );
 
   // Draft defaults (pre-session) are handled by a shared hook; once a session exists, per-session prefs come from UserInput.
-  const { prefs: initialCtx, resetToDefaults } = useInitialChatInputContext(
-    currentAgent?.name || "default",
-    currentChatBotSession?.id,
-  );
+  const { prefs: initialCtx, resetToDefaults } = useInitialChatInputContext(currentAgent?.name || "default", sessionId);
 
   const lastSessionIdRef = useRef<string | undefined>(undefined);
-  const isDraft = !currentChatBotSession?.id;
-  const isFreshSessionFromDraft = !!currentChatBotSession?.id && !lastSessionIdRef.current;
-  const isSeededSession =
-    !!currentChatBotSession?.id && seedSessionIdRef.current === currentChatBotSession.id && seedPrefsRef.current;
+  const isDraft = !sessionId;
+  const isFreshSessionFromDraft = !!sessionId && !lastSessionIdRef.current;
+  const isSeededSession = !!sessionId && seedSessionIdRef.current === sessionId && seedPrefsRef.current;
 
   // Decide which baseline prefs to pass:
   // - Draft/welcome: use current draft selections if any, else stored defaults.
@@ -436,7 +425,7 @@ const ChatBot = ({
   // Track session transitions: seed prefs when creating a session from draft; reset draft on return to welcome; clear seed when switching.
   useEffect(() => {
     const prev = lastSessionIdRef.current;
-    const curr = currentChatBotSession?.id;
+    const curr = sessionId;
 
     // Draft -> first session: capture draft prefs to seed this session, then clear draft context.
     if (!prev && curr) {
@@ -449,7 +438,7 @@ const ChatBot = ({
       // Returning to welcome: reset draft prefs and agent to deterministic default.
       resetToDefaults();
       if (defaultAgent && currentAgent?.name !== defaultAgent.name) {
-        onSelectNewAgent(defaultAgent);
+        // onSelectNewAgent(defaultAgent);
       }
       seedPrefsRef.current = null;
       seedSessionIdRef.current = null;
@@ -462,15 +451,7 @@ const ChatBot = ({
     }
 
     lastSessionIdRef.current = curr;
-  }, [
-    currentChatBotSession?.id,
-    defaultAgent,
-    currentAgent?.name,
-    onSelectNewAgent,
-    resetToDefaults,
-    userInputContext,
-    initialCtx,
-  ]);
+  }, [sessionId, defaultAgent, currentAgent?.name, resetToDefaults, userInputContext, initialCtx]);
 
   // Handle user input (text/audio)
   const handleSend = async (content: UserInputContent) => {
@@ -514,7 +495,6 @@ const ChatBot = ({
   // Upload files immediately when user selects them (sequential to preserve session binding)
   const handleFilesSelected = async (files: File[]) => {
     if (!files?.length) return;
-    const sessionId = currentChatBotSession?.id;
     const agentName = currentAgent.name;
 
     for (const file of files) {
@@ -570,7 +550,7 @@ const ChatBot = ({
     const eventBase: ChatAskInput = {
       message: input,
       agent_name: agent ? agent.name : currentAgent.name,
-      session_id: pendingSessionIdRef.current || currentChatBotSession?.id,
+      session_id: pendingSessionIdRef.current || sessionId,
       runtime_context: runtimeContext,
       access_token: accessToken || undefined, // Now the backend can read the active token
       refresh_token: refreshToken || undefined, // Now the backend can save and use the refresh token
@@ -608,10 +588,9 @@ const ChatBot = ({
       ? messages.reduce((sum, msg) => sum + (msg.metadata?.token_usage?.input_tokens || 0), 0)
       : 0;
   // After your state declarations
-  const effectiveSessionId = pendingSessionIdRef.current || currentChatBotSession?.id || undefined;
+  const effectiveSessionId = pendingSessionIdRef.current || sessionId || undefined;
 
-  const showWelcome = isCreatingNewConversation && !waitResponse && messages.length === 0;
-  // const showWelcome = !waitResponse && !isHistoryLoading && (!currentChatBotSession?.id || messages.length === 0);
+  const showWelcome = isNewConversation && !waitResponse && messages.length === 0;
 
   const hasContext =
     !!userInputContext &&
@@ -694,8 +673,8 @@ const ChatBot = ({
                 isWaiting={waitResponse}
                 onSend={handleSend}
                 onStop={stopStreaming}
-                onContextChange={handleDraftContextChange}
-                sessionId={currentChatBotSession?.id}
+                onContextChange={setUserInputContext}
+                sessionId={sessionId}
                 effectiveSessionId={effectiveSessionId}
                 uploadingFiles={uploadingFiles}
                 onFilesSelected={handleFilesSelected}
@@ -708,7 +687,7 @@ const ChatBot = ({
                 initialDeepSearch={initialDeepSearch}
                 currentAgent={currentAgent}
                 agents={agents}
-                onSelectNewAgent={onSelectNewAgent}
+                onSelectNewAgent={setCurrentAgent}
               />
             </Box>
           </Box>
@@ -734,7 +713,7 @@ const ChatBot = ({
               }}
             >
               <MessagesArea
-                key={currentChatBotSession?.id}
+                key={sessionId}
                 messages={messages}
                 agents={agents}
                 currentAgent={currentAgent}
@@ -755,8 +734,8 @@ const ChatBot = ({
                 isWaiting={waitResponse}
                 onSend={handleSend}
                 onStop={stopStreaming}
-                onContextChange={handleDraftContextChange}
-                sessionId={currentChatBotSession?.id}
+                onContextChange={setUserInputContext}
+                sessionId={sessionId}
                 effectiveSessionId={effectiveSessionId}
                 uploadingFiles={uploadingFiles}
                 onFilesSelected={handleFilesSelected}
@@ -769,7 +748,7 @@ const ChatBot = ({
                 initialDeepSearch={initialDeepSearch}
                 currentAgent={currentAgent}
                 agents={agents}
-                onSelectNewAgent={onSelectNewAgent}
+                onSelectNewAgent={setCurrentAgent}
               />
             </Grid2>
 

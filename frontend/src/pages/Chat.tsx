@@ -12,16 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import { Box, CircularProgress, Grid2, Typography } from "@mui/material";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
-import { useSessionOrchestrator } from "../hooks/useSessionOrchestrator";
-import {
-  useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
-  useGetSessionsAgenticV1ChatbotSessionsGetQuery,
-} from "../slices/agentic/agenticOpenApi";
+import { useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
 export default function Chat() {
@@ -36,43 +32,7 @@ export default function Chat() {
   } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
 
   const agentsFromServer = useMemo<AnyAgent[]>(() => normalizeAgenticFlows(rawAgentsFromServer), [rawAgentsFromServer]);
-
-  const {
-    data: sessionsFromServer = [],
-    isLoading: sessionsLoading,
-    isError: sessionsError,
-    error: sessionsErrObj,
-  } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
-    refetchOnMountOrArgChange: true,
-    refetchOnFocus: true,
-    refetchOnReconnect: true,
-  });
   const enabledAgents = (agentsFromServer ?? []).filter((a) => a.enabled === true);
-
-  const {
-    sessions,
-    currentSession,
-    currentAgent,
-    isCreatingNewConversation,
-    selectAgentForCurrentSession,
-    updateOrAddSession,
-  } = useSessionOrchestrator({
-    sessionsFromServer,
-    agents: enabledAgents,
-    loading: sessionsLoading || flowsLoading,
-    sessionId, // Pass URL parameter to orchestrator
-  });
-
-  // Validate URL and handle navigation
-  useEffect(() => {
-    if (flowsLoading || sessionsLoading) return;
-
-    // If URL has invalid session ID, redirect to new chat
-    if (sessionId && !currentSession && sessions.length > 0) {
-      console.log(`Unkown session id -> redirection to /chat`);
-      navigate("/", { replace: true });
-    }
-  }, [sessionId, currentSession, sessions.length, flowsLoading, sessionsLoading, navigate]);
 
   // Handle navigation when a new session is created
   const handleNewSessionCreated = (newSessionId: string) => {
@@ -86,11 +46,7 @@ export default function Chat() {
     [],
   );
 
-  const handleSelectAgent = (agent: AnyAgent) => {
-    selectAgentForCurrentSession(agent);
-  };
-
-  if (flowsLoading || sessionsLoading) {
+  if (flowsLoading) {
     return (
       <Box sx={{ p: 3, display: "grid", placeItems: "center", height: "100vh" }}>
         <CircularProgress />
@@ -106,19 +62,6 @@ export default function Chat() {
         </Typography>
         <Typography variant="body2" sx={{ mt: 1 }}>
           {(flowsErrObj as any)?.data?.detail || "Please try again later."}
-        </Typography>
-      </Box>
-    );
-  }
-
-  if (sessionsError) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Typography variant="h6" color="error">
-          Failed to load conversations
-        </Typography>
-        <Typography variant="body2" sx={{ mt: 1 }}>
-          {(sessionsErrObj as any)?.data?.detail || "Please try again later."}
         </Typography>
       </Box>
     );
@@ -140,13 +83,9 @@ export default function Chat() {
       <Grid2>
         <ChatBot
           key={sessionId || "draft"}
-          currentChatBotSession={currentSession}
-          currentAgent={currentAgent!}
+          sessionId={sessionId}
           agents={enabledAgents}
-          onSelectNewAgent={handleSelectAgent}
-          onUpdateOrAddSession={updateOrAddSession}
           onNewSessionCreated={handleNewSessionCreated}
-          isCreatingNewConversation={isCreatingNewConversation}
           runtimeContext={{
             selected_chat_context_ids: selectedChatContextIds.length ? selectedChatContextIds : undefined,
           }}

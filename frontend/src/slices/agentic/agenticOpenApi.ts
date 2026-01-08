@@ -740,10 +740,10 @@ export type SessionWithFiles = {
   agent_name?: string | null;
   title: string;
   updated_at: string;
-  agents: string[];
   preferences?: {
     [key: string]: any;
   } | null;
+  agents: string[];
   file_names?: string[];
   attachments?: AttachmentRef[];
 };
