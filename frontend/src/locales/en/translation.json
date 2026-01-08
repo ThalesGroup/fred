@@ -612,6 +612,11 @@
       "light": "Light",
       "system": "System",
       "dark": "Dark"
+    },
+    "links": {
+      "title": "Links",
+      "website": "Website",
+      "repo": "Github repository"
     }
   },
   "knowledge": {

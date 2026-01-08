@@ -36,6 +36,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { LanguageSelector } from "../LanguageSelector";
 import { ThemeModeSelector } from "../ThemeModeSelector";
+import { ExternalLink } from "./ExternalLink";
 import { UserAvatar } from "./UserAvatar";
 
 interface ProfileCardProps {
@@ -208,6 +209,14 @@ export function ProfileCard({
               <Box>
                 <SectionTitle>{t("profile.theme.title")}</SectionTitle>
                 <ThemeModeSelector />
+              </Box>
+
+              <Divider />
+
+              <Box>
+                <SectionTitle>{t("profile.links.title")}</SectionTitle>
+                <ExternalLink href="https://fredk8.dev" label={t("profile.links.website")} />
+                <ExternalLink href="https://github.com/ThalesGroup/fred" label={t("profile.links.repo")} />
               </Box>
             </Grid2>
           </Grid2>
