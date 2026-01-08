@@ -231,17 +231,15 @@ export default function UserInput({
   }, [sessions, attachmentSessionId]);
 
   // --- Session preferences (server-side) ---
-  const {
-    data: serverPrefs,
-    refetch: refetchPrefs,
-  } = useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery(
-    attachmentSessionId ? { sessionId: attachmentSessionId } : skipToken,
-    {
-      refetchOnMountOrArgChange: true,
-      refetchOnReconnect: true,
-      refetchOnFocus: true,
-    },
-  );
+  const { data: serverPrefs, refetch: refetchPrefs } =
+    useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery(
+      attachmentSessionId ? { sessionId: attachmentSessionId } : skipToken,
+      {
+        refetchOnMountOrArgChange: true,
+        refetchOnReconnect: true,
+        refetchOnFocus: true,
+      },
+    );
   const [persistPrefs] = useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation();
 
   // --- Synchronization Logic ---
@@ -281,7 +279,9 @@ export default function UserInput({
         p.documentLibraryIds ?? initialDocumentLibraryIds ?? selectedDocumentLibrariesIds,
       );
       setSelectedPromptResourceIdsState(p.promptResourceIds ?? initialPromptResourceIds ?? selectedPromptResourceIds);
-      setSelectedTemplateResourceIdsState(p.templateResourceIds ?? initialTemplateResourceIds ?? selectedTemplateResourceIds);
+      setSelectedTemplateResourceIdsState(
+        p.templateResourceIds ?? initialTemplateResourceIds ?? selectedTemplateResourceIds,
+      );
       setSelectedSearchPolicyNameState(p.searchPolicy ?? selectedSearchPolicyName);
       setSearchRagScopeState(p.searchRagScope ?? searchRagScope);
       setDeepSearchEnabledState(p.deepSearch ?? deepSearchEnabled);
@@ -611,6 +611,7 @@ export default function UserInput({
               </Stack>
             ) : (
               <InputBase
+                autoFocus
                 fullWidth
                 multiline
                 maxRows={12}
