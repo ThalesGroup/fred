@@ -17,7 +17,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 // import DownloadIcon from "@mui/icons-material/Download"; // REMOVED: Mermaid Download
 import { Box, IconButton, Typography, useTheme } from "@mui/material";
 import "katex/dist/katex.min.css";
-// import mermaid from "mermaid"; // REMOVED: Mermaid Import
+import Mermaid from "./Mermaid.tsx";
 import { createElement, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -325,14 +325,15 @@ const CustomCodeComponent: Components["code"] = ({ className, children, ...props
   const lang = match?.[1];
   const codeContent = String(children);
 
-  // 1. Handle Mermaid Diagrams (REMOVED)
-  // if (lang === "mermaid") {
-  //   return (
-  //     <CodeBlockContainer codeContent={codeContent} language={lang} isMermaid={true}>
-  //       <MermaidDiagram value={codeContent} />
-  //     </CodeBlockContainer>
-  //   );
-  // }
+  // 1. Handle Mermaid Diagrams
+  if (lang === "mermaid") {
+    const diagramCode = codeContent.trim();
+    return (
+      <CodeBlockContainer codeContent={diagramCode} language="mermaid">
+        <Mermaid code={diagramCode} />
+      </CodeBlockContainer>
+    );
+  }
 
   // 2. Handle Fenced Code Blocks (Syntax Highlighting)
   if (lang) {

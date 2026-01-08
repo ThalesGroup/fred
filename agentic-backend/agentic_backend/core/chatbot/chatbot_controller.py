@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 from typing import List, Literal, Union
+from uuid import uuid4
 
 from fastapi import (
     APIRouter,
@@ -30,6 +31,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fred_core import (
+    Action,
     KeycloakUser,
     RBACProvider,
     UserSecurity,
@@ -44,8 +46,17 @@ from starlette.websockets import WebSocketState
 from agentic_backend.application_context import get_configuration, get_rebac_engine
 from agentic_backend.common.structures import AgentSettings, FrontendSettings
 from agentic_backend.common.utils import log_exception
+from agentic_backend.core.a2a.a2a_bridge import (
+    get_proxy_for_agent,
+    is_a2a_agent,
+    stream_a2a_as_chat_messages,
+)
 from agentic_backend.core.agents.agent_manager import AgentManager
-from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.runtime_context import (
+    RuntimeContext,
+    get_deep_search_enabled,
+    get_rag_knowledge_scope,
+)
 from agentic_backend.core.chatbot.chat_schema import (
     ChatAskInput,
     ChatbotRuntimeSummary,
@@ -55,12 +66,16 @@ from agentic_backend.core.chatbot.chat_schema import (
     SessionSchema,
     SessionWithFiles,
     StreamEvent,
+    make_user_text,
 )
 from agentic_backend.core.chatbot.metric_structures import (
     MetricsBucket,
     MetricsResponse,
 )
-from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
+from agentic_backend.core.chatbot.session_orchestrator import (
+    SessionOrchestrator,
+    _utcnow_dt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +197,8 @@ def get_agentic_flows(
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),  # Inject the dependency
 ) -> List[AgentSettings]:
-    return agent_manager.get_agentic_flows()
+    flows = agent_manager.get_agentic_flows()
+    return flows
 
 
 @router.websocket("/chatbot/query/ws")
@@ -191,6 +207,7 @@ async def websocket_chatbot_question(
     session_orchestrator: SessionOrchestrator = Depends(
         get_session_orchestrator_ws
     ),  # Use WebSocket-specific dependency
+    agent_manager: AgentManager = Depends(get_agent_manager_ws),
 ):
     """
     Transport-only:
@@ -261,28 +278,132 @@ async def websocket_chatbot_question(
                 ask.runtime_context.access_token = active_token
                 ask.runtime_context.refresh_token = active_refresh_token
 
+                target_agent_name = ask.agent_name
+                if get_deep_search_enabled(ask.runtime_context):
+                    rag_scope = get_rag_knowledge_scope(ask.runtime_context)
+                    if rag_scope == "general_only":
+                        logger.info(
+                            "[CHATBOT] Deep search ignored because RAG scope is general-only."
+                        )
+                    else:
+                        base_settings = agent_manager.get_agent_settings(ask.agent_name)
+                        delegate_to = (
+                            base_settings.metadata.get("deep_search_delegate_to")
+                            if base_settings and base_settings.metadata
+                            else None
+                        )
+                        if delegate_to:
+                            if agent_manager.get_agent_settings(delegate_to):
+                                target_agent_name = delegate_to
+                                logger.info(
+                                    "[CHATBOT] Deep search enabled; delegating %s request to %s.",
+                                    ask.agent_name,
+                                    delegate_to,
+                                )
+                            else:
+                                logger.warning(
+                                    "[CHATBOT] Deep search requested for %s but delegate '%s' is not configured; falling back.",
+                                    ask.agent_name,
+                                    delegate_to,
+                                )
+
                 async def ws_callback(msg_dict: dict):
                     event = StreamEvent(type="stream", message=ChatMessage(**msg_dict))
                     await websocket.send_text(event.model_dump_json())
 
-                (
-                    session,
-                    final_messages,
-                ) = await session_orchestrator.chat_ask_websocket(
-                    user=active_user,
-                    callback=ws_callback,
-                    session_id=ask.session_id,
-                    message=ask.message,
-                    agent_name=ask.agent_name,
-                    runtime_context=ask.runtime_context,
-                    client_exchange_id=ask.client_exchange_id,
-                )
+                # Route to A2A proxy if the stub agent is selected
+                target_settings = agent_manager.get_agent_settings(target_agent_name)
+                if target_settings and is_a2a_agent(target_settings):
+                    meta = target_settings.metadata or {}
+                    base_url = meta.get("a2a_base_url")
+                    configured_a2a_token = meta.get("a2a_token")
+                    force_disable_streaming = bool(meta.get("a2a_disable_streaming"))
+                    if not base_url:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Agent '{target_agent_name}' is marked as A2A but is missing 'a2a_base_url' metadata.",
+                        )
+                    proxy = get_proxy_for_agent(
+                        websocket.app,
+                        target_agent_name,
+                        base_url,
+                        token,
+                        force_disable_streaming=force_disable_streaming,
+                    )
+                    session_id = ask.session_id or f"a2a-{uuid4()}"
+                    # If a session_id was provided, enforce ownership to match regular agents
+                    if ask.session_id:
+                        session_orchestrator._authorize_user_action_on_session(  # type: ignore[attr-defined]
+                            ask.session_id, active_user, Action.UPDATE
+                        )
+                    # Get or create the persisted session just like the regular flow
+                    session = session_orchestrator._get_or_create_session(  # type: ignore[attr-defined]
+                        user_id=active_user.uid,
+                        query=ask.message,
+                        session_id=session_id,
+                    )
+                    prior = session_orchestrator.history_store.get(session.id) or []
+                    base_rank = len(prior)
+                    exchange_id = ask.client_exchange_id or str(uuid4())
+                    rank = base_rank
 
-                await websocket.send_text(
-                    FinalEvent(
-                        type="final", messages=final_messages, session=session
-                    ).model_dump_json()
-                )
+                    # Emit the user message first
+                    user_msg = make_user_text(
+                        session_id, exchange_id, rank, ask.message
+                    )
+                    collected_messages = [user_msg]
+                    await websocket.send_text(
+                        StreamEvent(type="stream", message=user_msg).model_dump_json()
+                    )
+                    rank += 1
+
+                    async for msg in stream_a2a_as_chat_messages(
+                        proxy=proxy,
+                        user_id=active_user.uid,
+                        # Prefer the configured agent token; fall back to the caller token.
+                        access_token=configured_a2a_token or active_token,
+                        text=ask.message,
+                        session_id=session_id,
+                        exchange_id=exchange_id,
+                        start_rank=rank,
+                    ):
+                        rank = msg.rank + 1
+                        collected_messages.append(msg)
+                        await websocket.send_text(
+                            StreamEvent(type="stream", message=msg).model_dump_json()
+                        )
+
+                    session.updated_at = _utcnow_dt()
+                    # Persist session + history so it behaves like regular agents
+                    session_orchestrator.session_store.save(session)
+                    session_orchestrator.history_store.save(
+                        session.id, prior + collected_messages, active_user.uid
+                    )
+                    await websocket.send_text(
+                        FinalEvent(
+                            type="final", messages=collected_messages, session=session
+                        ).model_dump_json()
+                    )
+
+                else:
+                    (
+                        session,
+                        final_messages,
+                    ) = await session_orchestrator.chat_ask_websocket(
+                        user=active_user,
+                        callback=ws_callback,
+                        session_id=ask.session_id,
+                        message=ask.message,
+                        agent_name=target_agent_name,
+                        runtime_context=ask.runtime_context,
+                        client_exchange_id=ask.client_exchange_id,
+                    )
+
+                    await websocket.send_text(
+                        FinalEvent(
+                            type="final", messages=final_messages, session=session
+                        ).model_dump_json()
+                    )
 
             except WebSocketDisconnect:
                 logger.debug("Client disconnected from chatbot WebSocket")
@@ -341,6 +462,39 @@ def get_session_history(
     return session_orchestrator.get_session_history(session_id, user)
 
 
+class SessionPreferencesPayload(BaseModel):
+    preferences: dict = {}
+
+
+@router.get(
+    "/chatbot/session/{session_id}/preferences",
+    response_model=dict,
+    tags=["Chatbot"],
+)
+def get_session_preferences(
+    session_id: str,
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+    user: KeycloakUser = Depends(get_current_user),
+):
+    return session_orchestrator.get_session_preferences(session_id, user)
+
+
+@router.put(
+    "/chatbot/session/{session_id}/preferences",
+    response_model=dict,
+    tags=["Chatbot"],
+)
+def update_session_preferences(
+    session_id: str,
+    payload: SessionPreferencesPayload,
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+    user: KeycloakUser = Depends(get_current_user),
+):
+    return session_orchestrator.update_session_preferences(
+        session_id, user, payload.preferences
+    )
+
+
 @router.delete(
     "/chatbot/session/{session_id}",
     description="Delete a chatbot session.",
@@ -349,9 +503,12 @@ def get_session_history(
 async def delete_session(
     session_id: str,
     user: KeycloakUser = Depends(get_current_user),
+    access_token: str = Security(oauth2_scheme),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> bool:
-    await session_orchestrator.delete_session(session_id, user)
+    await session_orchestrator.delete_session(
+        session_id, user, access_token=access_token
+    )
     return True
 
 
@@ -381,8 +538,12 @@ async def delete_file(
     session_id: str,
     attachment_id: str,
     user: KeycloakUser = Depends(get_current_user),
+    access_token: str = Security(oauth2_scheme),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> None:
     await session_orchestrator.delete_attachment(
-        user=user, session_id=session_id, attachment_id=attachment_id
+        user=user,
+        session_id=session_id,
+        attachment_id=attachment_id,
+        access_token=access_token,
     )

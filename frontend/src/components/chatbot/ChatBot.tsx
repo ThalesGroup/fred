@@ -12,13 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/**
+ * ChatBot
+ * -------
+ * - Owns the conversation view (welcome vs. messages) and message history loading.
+ * - Uses `useInitialChatInputContext` to supply draft (pre-session) defaults to the input area.
+ * - Delegates per-session preference hydration/persistence to `UserInput`.
+ * - Avoids flicker on session switch by keeping messages while history loads; welcome shows only when truly empty.
+ */
+
 import { Box, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
 import { getConfig } from "../../common/config.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
+import { useInitialChatInputContext } from "../../hooks/useInitialChatInputContext.ts";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import {
   ChatAskInput,
@@ -74,6 +84,16 @@ const ChatBot = ({
 }: ChatBotProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
+  const username =
+    KeyCloakService.GetUserGivenName?.() ||
+    KeyCloakService.GetUserFullName?.() ||
+    KeyCloakService.GetUserName?.() ||
+    "";
+  const greetingText = username ? t("chatbot.welcomeUser", { username }) : t("chatbot.welcomeFallback");
+  const [typedGreeting, setTypedGreeting] = useState<string>(greetingText);
+  useEffect(() => {
+    setTypedGreeting(greetingText);
+  }, [greetingText]);
 
   const [contextOpen, setContextOpen] = useState<boolean>(() => {
     try {
@@ -130,6 +150,9 @@ const ChatBot = ({
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState<boolean>(false);
+  const seedPrefsRef = useRef<any>(null);
+  const seedSessionIdRef = useRef<string | null>(null);
 
   // keep state + ref in sync
   const setAllMessages = (msgs: ChatMessage[]) => {
@@ -138,6 +161,7 @@ const ChatBot = ({
   };
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
+  const defaultAgent = useMemo(() => (agents && agents.length > 0 ? agents[0] : undefined), [agents]);
   const stopStreaming = () => {
     const socket = webSocketRef.current;
     if (!socket) {
@@ -204,7 +228,7 @@ const ChatBot = ({
       wsTokenRef.current = token || null; // mémo pour détection simple de changement
 
       socket.onopen = () => {
-        console.log("[✅ ChatBot] WebSocket connected");
+        console.log("[CHATBOT] WebSocket connected");
         webSocketRef.current = socket;
         setWebSocket(socket);
         resolve(socket);
@@ -239,7 +263,7 @@ const ChatBot = ({
               const finalKeys = new Set(finalEvent.messages.map((m) => keyOf(m)));
               const missing = [...finalKeys].filter((k) => !streamedKeys.has(k));
               const unexpected = [...streamedKeys].filter((k) => !finalKeys.has(k));
-              console.log("[FINAL EVENT SUMMARY]", { missing, unexpected });
+              console.debug("[CHATBOT] Final event summary", { missing, unexpected });
 
               // Merge authoritative finals (includes citations/metadata)
               messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
@@ -323,15 +347,18 @@ const ChatBot = ({
     if (!id) {
       messagesRef.current = [];
       setAllMessages([]);
+      setIsHistoryLoading(false);
       return;
     }
 
+    setIsHistoryLoading(true);
     const existingForSession = messagesRef.current.filter((msg) => msg.session_id === id);
     if (existingForSession.length > 0) {
       const sortedExisting = sortMessages(existingForSession);
       messagesRef.current = sortedExisting;
       setAllMessages(sortedExisting);
-    } else if (messagesRef.current.length > 0) {
+    } else {
+      // No cache for this session: clear messages to avoid showing previous session's conversation
       messagesRef.current = [];
       setAllMessages([]);
     }
@@ -339,86 +366,110 @@ const ChatBot = ({
     fetchHistory({ sessionId: id })
       .unwrap()
       .then((serverMessages) => {
-        console.group(`[📥 ChatBot] Loaded messages for session: ${id}`);
-        console.log(`Total: ${serverMessages.length}`);
-        for (const msg of serverMessages) console.log(msg);
-        console.groupEnd();
-
         const sorted = sortMessages(serverMessages);
         messagesRef.current = sorted;
-        setAllMessages(sorted); // layout effect will scroll
+        setAllMessages(sorted);
+        setIsHistoryLoading(false);
       })
       .catch((e) => {
-        console.error("[❌ ChatBot] Failed to load messages:", e);
+        console.error("[CHATBOT] Failed to load messages:", e);
+        setAllMessages([]);
+        setIsHistoryLoading(false);
       });
   }, [currentChatBotSession?.id, fetchHistory]);
 
-  // Chat knowledge persistance
-  const storageKey = useMemo(() => {
-    const uid = KeyCloakService.GetUserId?.() || "anon";
-    const agent = currentAgent?.name || "default";
-    return `chatctx:${uid}:${agent}`;
-  }, [currentAgent?.name]);
-
-  // Init values (réhydratation)
-  const [initialCtx, setInitialCtx] = useState<{
-    documentLibraryIds: string[];
-    promptResourceIds: string[];
-    templateResourceIds: string[];
-  }>({
-    documentLibraryIds: [],
-    promptResourceIds: [],
-    templateResourceIds: [],
-  });
-
-  // load from local storage
-  // Load defaults for a brand-new convo (no session yet). These act as initial* props for UserInput.
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setInitialCtx({
-          documentLibraryIds: parsed.documentLibraryIds ?? [],
-          promptResourceIds: parsed.promptResourceIds ?? [],
-          templateResourceIds: parsed.templateResourceIds ?? [],
-        });
-      } else {
-        setInitialCtx({ documentLibraryIds: [], promptResourceIds: [], templateResourceIds: [] });
-      }
-    } catch (e) {
-      console.warn("Local context load failed:", e);
-    }
-  }, [storageKey]);
-
   const [userInputContext, setUserInputContext] = useState<any>(null);
+  const handleDraftContextChange = useCallback(
+    (ctx: any) => {
+      // Only track draft context when there is no active session.
+      if (!currentChatBotSession?.id) {
+        setUserInputContext(ctx);
+      }
+    },
+    [currentChatBotSession?.id],
+  );
 
-  // IMPORTANT:
-  // Save per-agent defaults *only before a session exists* (pre-session seeding).
-  // Once a session exists, UserInput persists per-session selections itself.
+  // Draft defaults (pre-session) are handled by a shared hook; once a session exists, per-session prefs come from UserInput.
+  const { prefs: initialCtx, resetToDefaults } = useInitialChatInputContext(
+    currentAgent?.name || "default",
+    currentChatBotSession?.id,
+  );
+
+  const lastSessionIdRef = useRef<string | undefined>(undefined);
+  const isDraft = !currentChatBotSession?.id;
+  const isFreshSessionFromDraft = !!currentChatBotSession?.id && !lastSessionIdRef.current;
+  const isSeededSession =
+    !!currentChatBotSession?.id && seedSessionIdRef.current === currentChatBotSession.id && seedPrefsRef.current;
+
+  // Decide which baseline prefs to pass:
+  // - Draft/welcome: use current draft selections if any, else stored defaults.
+  // - Newly created session (from draft): seed with draft selections.
+  // - Other sessions: use stored defaults; per-session prefs hydrate in UserInput.
+  const basePrefs =
+    isDraft || isFreshSessionFromDraft
+      ? userInputContext || initialCtx
+      : isSeededSession
+        ? seedPrefsRef.current || initialCtx
+        : initialCtx;
+
+  const initialDocumentLibraryIds = isDraft
+    ? (userInputContext?.documentLibraryIds ?? initialCtx.documentLibraryIds)
+    : basePrefs.documentLibraryIds;
+  const initialPromptResourceIds = isDraft
+    ? (userInputContext?.promptResourceIds ?? initialCtx.promptResourceIds)
+    : basePrefs.promptResourceIds;
+  const initialTemplateResourceIds = isDraft
+    ? (userInputContext?.templateResourceIds ?? initialCtx.templateResourceIds)
+    : basePrefs.templateResourceIds;
+  const initialSearchPolicy = isDraft
+    ? (userInputContext?.searchPolicy ?? initialCtx.searchPolicy ?? "semantic")
+    : (basePrefs.searchPolicy ?? "semantic");
+  const initialSearchRagScope = isDraft
+    ? (userInputContext?.searchRagScope ?? initialCtx.searchRagScope ?? undefined)
+    : (basePrefs.searchRagScope ?? undefined);
+  const initialDeepSearch = isDraft
+    ? typeof userInputContext?.deepSearch === "boolean"
+      ? userInputContext.deepSearch
+      : initialCtx.deepSearch
+    : basePrefs.deepSearch;
+
+  // Track session transitions: seed prefs when creating a session from draft; reset draft on return to welcome; clear seed when switching.
   useEffect(() => {
-    if (!userInputContext) return;
-    const sessionId = pendingSessionIdRef.current || currentChatBotSession?.id;
-    if (sessionId) return; // session exists -> do NOT save per-agent defaults here
+    const prev = lastSessionIdRef.current;
+    const curr = currentChatBotSession?.id;
 
-    try {
-      const payload = {
-        documentLibraryIds: userInputContext.documentLibraryIds ?? [],
-        promptResourceIds: userInputContext.promptResourceIds ?? [],
-        templateResourceIds: userInputContext.templateResourceIds ?? [],
-        skipRagSearch: userInputContext.skipRagSearch ?? false,
-      };
-      localStorage.setItem(storageKey, JSON.stringify(payload));
-    } catch (e) {
-      console.warn("Local context save failed:", e);
+    // Draft -> first session: capture draft prefs to seed this session, then clear draft context.
+    if (!prev && curr) {
+      seedPrefsRef.current = userInputContext || initialCtx;
+      seedSessionIdRef.current = curr;
+      setUserInputContext(null);
     }
+
+    if (prev && !curr) {
+      // Returning to welcome: reset draft prefs and agent to deterministic default.
+      resetToDefaults();
+      if (defaultAgent && currentAgent?.name !== defaultAgent.name) {
+        onSelectNewAgent(defaultAgent);
+      }
+      seedPrefsRef.current = null;
+      seedSessionIdRef.current = null;
+      setUserInputContext(null);
+    } else if (prev && curr && prev !== curr) {
+      // Switching between existing sessions: clear transient draft/seed context to avoid bleed.
+      seedPrefsRef.current = null;
+      seedSessionIdRef.current = null;
+      setUserInputContext(null);
+    }
+
+    lastSessionIdRef.current = curr;
   }, [
-    userInputContext?.documentLibraryIds,
-    userInputContext?.promptResourceIds,
-    userInputContext?.templateResourceIds,
-    userInputContext?.skipRagSearch,
-    storageKey,
-    currentChatBotSession?.id, // guard: only save when undefined
+    currentChatBotSession?.id,
+    defaultAgent,
+    currentAgent?.name,
+    onSelectNewAgent,
+    resetToDefaults,
+    userInputContext,
+    initialCtx,
   ]);
 
   // Handle user input (text/audio)
@@ -433,8 +484,11 @@ const ChatBot = ({
 
     // Policy
     runtimeContext.search_policy = content.searchPolicy || "semantic";
-    if (content.skipRagSearch) {
-      runtimeContext.skip_rag_search = true;
+    if (content.searchRagScope) {
+      runtimeContext.search_rag_scope = content.searchRagScope;
+    }
+    if (typeof content.deepSearch === "boolean") {
+      runtimeContext.deep_search = content.deepSearch;
     }
 
     // Files are now uploaded immediately upon selection (not here)
@@ -485,8 +539,14 @@ const ChatBot = ({
         // Refresh attachments view in the popover
         setAttachmentsRefreshTick((x) => x + 1);
       } catch (err: any) {
-        const errMsg = err?.data?.detail || err?.error || (err as Error)?.message || "Unknown error";
-        console.error("❌ File upload failed:", err);
+        const detail = err?.data?.detail ?? err?.data ?? err?.error;
+        const errMsg =
+          typeof detail === "string"
+            ? detail
+            : typeof detail === "object" && detail
+              ? detail.message || detail.upstream || detail.code || JSON.stringify(detail)
+              : (err as Error)?.message || "Unknown error";
+        console.error("[CHATBOT] File upload failed:", err);
         showError({ summary: "File Upload Error", detail: `Failed to upload ${file.name}: ${errMsg}` });
       } finally {
         setUploadingFiles((prev) => prev.filter((n) => n !== file.name));
@@ -500,7 +560,7 @@ const ChatBot = ({
    * The server streams the authoritative user message first.
    */
   const queryChatBot = async (input: string, agent?: AnyAgent, runtimeContext?: RuntimeContext) => {
-    console.log(`[📤 ChatBot] Sending message: ${input}`);
+    console.debug(`[CHATBOT] Sending message: ${input}`);
     // Get tokens for backend use. This proacively allows the backend to perform
     // user-authenticated operations (e.g., vector search) on behalf of the user.
     // The backend is then responsible for refreshing tokens as needed. Which will rarely be needed
@@ -527,17 +587,16 @@ const ChatBot = ({
       if (socket && socket.readyState === WebSocket.OPEN) {
         setWaitResponse(true);
         socket.send(JSON.stringify(event));
-        console.log("[📤 ChatBot] Sent message:", event);
+        console.debug("[CHATBOT] Sent message:", event);
       } else {
         throw new Error("WebSocket not open");
       }
     } catch (err) {
-      console.error("[❌ ChatBot] Failed to send message:", err);
+      console.error("[CHATBOT] Failed to send message:", err);
       showError({ summary: "Connection Error", detail: "Could not send your message — connection failed." });
       setWaitResponse(false);
     }
   };
-
 
   const outputTokenCounts: number =
     messages && messages.length
@@ -552,6 +611,7 @@ const ChatBot = ({
   const effectiveSessionId = pendingSessionIdRef.current || currentChatBotSession?.id || undefined;
 
   const showWelcome = isCreatingNewConversation && !waitResponse && messages.length === 0;
+  // const showWelcome = !waitResponse && !isHistoryLoading && (!currentChatBotSession?.id || messages.length === 0);
 
   const hasContext =
     !!userInputContext &&
@@ -560,6 +620,11 @@ const ChatBot = ({
       (userInputContext?.documentLibraryIds?.length ?? 0) > 0 ||
       (userInputContext?.promptResourceIds?.length ?? 0) > 0 ||
       (userInputContext?.templateResourceIds?.length ?? 0) > 0);
+
+  useEffect(() => {
+    if (!showWelcome) return;
+    setTypedGreeting(greetingText);
+  }, [greetingText, showWelcome]);
 
   return (
     <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center" sx={{ minHeight: 0 }}>
@@ -571,7 +636,7 @@ const ChatBot = ({
 
       <Box
         width="80%"
-        maxWidth="768px"
+        maxWidth={{ xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" }}
         display="flex"
         height="100vh"
         flexDirection="column"
@@ -589,10 +654,35 @@ const ChatBot = ({
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              justifyContent: "center",
-              gap: 2.5,
+              justifyContent: { xs: "flex-start", md: "center" },
+              pt: { xs: 6, md: 8 },
+              gap: 3,
             }}
           >
+            <Box
+              sx={{
+                width: "100%",
+                textAlign: "center",
+              }}
+            >
+              <Typography
+                variant="h3"
+                sx={{
+                  fontWeight: 700,
+                  display: "inline-block",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  position: "relative",
+                  background: theme.palette.primary.main,
+                  backgroundSize: "200% 200%",
+                  backgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  letterSpacing: 0.5,
+                }}
+              >
+                {typedGreeting}
+              </Typography>
+            </Box>
             {/* Welcome hint */}
             <Typography variant="h5" color="text.primary" sx={{ textAlign: "center" }}>
               {t("chatbot.startNew", { name: currentAgent?.name ?? "assistant" })}
@@ -604,15 +694,18 @@ const ChatBot = ({
                 isWaiting={waitResponse}
                 onSend={handleSend}
                 onStop={stopStreaming}
-                onContextChange={setUserInputContext}
+                onContextChange={handleDraftContextChange}
                 sessionId={currentChatBotSession?.id}
                 effectiveSessionId={effectiveSessionId}
                 uploadingFiles={uploadingFiles}
                 onFilesSelected={handleFilesSelected}
                 attachmentsRefreshTick={attachmentsRefreshTick}
-                initialDocumentLibraryIds={initialCtx.documentLibraryIds}
-                initialPromptResourceIds={initialCtx.promptResourceIds}
-                initialTemplateResourceIds={initialCtx.templateResourceIds}
+                initialDocumentLibraryIds={initialDocumentLibraryIds}
+                initialPromptResourceIds={initialPromptResourceIds}
+                initialTemplateResourceIds={initialTemplateResourceIds}
+                initialSearchPolicy={initialSearchPolicy}
+                initialSearchRagScope={initialSearchRagScope}
+                initialDeepSearch={initialDeepSearch}
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}
@@ -662,15 +755,18 @@ const ChatBot = ({
                 isWaiting={waitResponse}
                 onSend={handleSend}
                 onStop={stopStreaming}
-                onContextChange={setUserInputContext}
+                onContextChange={handleDraftContextChange}
                 sessionId={currentChatBotSession?.id}
                 effectiveSessionId={effectiveSessionId}
                 uploadingFiles={uploadingFiles}
                 onFilesSelected={handleFilesSelected}
                 attachmentsRefreshTick={attachmentsRefreshTick}
-                initialDocumentLibraryIds={initialCtx.documentLibraryIds}
-                initialPromptResourceIds={initialCtx.promptResourceIds}
-                initialTemplateResourceIds={initialCtx.templateResourceIds}
+                initialDocumentLibraryIds={initialDocumentLibraryIds}
+                initialPromptResourceIds={initialPromptResourceIds}
+                initialTemplateResourceIds={initialTemplateResourceIds}
+                initialSearchPolicy={initialSearchPolicy}
+                initialSearchRagScope={initialSearchRagScope}
+                initialDeepSearch={initialDeepSearch}
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={onSelectNewAgent}

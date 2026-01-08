@@ -36,7 +36,7 @@ Fred is composed of three main runtime components:
    - Hosts the multi-agent runtime (LangGraph + LangChain).  
    - Integrates with:
      - LLM providers (OpenAI, Azure OpenAI, Ollama, etc.).
-     - Optional OpenSearch cluster for metrics, logs, and future features.
+     - Optional Postgres/OpenSearch backends for metrics, logs, and future features.
 
 3. **Knowledge Flow backend** (`./knowledge-flow-backend`)  
    - FastAPI application focused on:
@@ -45,7 +45,7 @@ Fred is composed of three main runtime components:
      - Document search / retrieval APIs.
    - Integrates with:
      - LLM/embedding providers.
-     - **OpenSearch** for vector storage (recommended in production).
+     - **Either** PostgreSQL + pgvector **or** OpenSearch for vector + metadata storage.
      - Optional object store (e.g., MinIO, S3) for raw documents.
 
 In local dev, these can run with minimal external dependencies.  
@@ -53,7 +53,7 @@ In production, you typically deploy:
 
 - Frontend as static assets served by a reverse proxy (NGINX, ingress, etc.).
 - `agentic-backend` and `knowledge-flow-backend` as separate services (Kubernetes deployments, ECS services, etc.).
-- A shared OpenSearch cluster and object store.
+- A shared persistence stack: PostgreSQL/pgvector or OpenSearch, plus an object store if you need externalized files.
 
 ---
 
@@ -64,7 +64,7 @@ Each backend has two configuration layers:
 1. **`.env` files**  
    - Secrets and environment-specific credentials:
      - API keys for OpenAI / Azure / Ollama.
-     - OpenSearch credentials.
+     - Database credentials (PostgreSQL and/or OpenSearch).
      - Object store keys.
    - Never committed to Git.
 
@@ -95,17 +95,17 @@ In a production-like setup you will typically manage:
    - Azure APIM fronting Azure OpenAI.
    - Requirements: stable network access, quotas, and API keys / credentials.
 
-2. **OpenSearch (recommended for production vector storage)**
-   - Used by the **Knowledge Flow backend** for:
-     - Vector search (KNN) on document chunks.
-     - Filtering by libraries/tags and other metadata.
-   - **Strict mapping and version requirements are enforced by Fred.**  
-     See: [`DEPLOYMENT_GUIDE_OPENSEARCH.md`](./DEPLOYMENT_GUIDE_OPENSEARCH.md).
+2. **Vector + metadata storage**
+   - Choose one:
+     - **PostgreSQL + pgvector** (simplest persistence stack, no OpenSearch dependency).
+     - **OpenSearch** (recommended when you already operate OS and want Lucene/OS-native features).  
+       **Strict mapping and version requirements are enforced.** See [`DEPLOYMENT_GUIDE_OPENSEARCH.md`](./DEPLOYMENT_GUIDE_OPENSEARCH.md).
+   - Both store document metadata and vectors; pick based on platform standards.
 
 3. **Object Storage (optional but recommended)**
    - MinIO, S3, or equivalent.
    - Holds raw ingested documents (PDF, DOCX, PPTX, CSV…).
-   - Knowledge Flow stores metadata and vectors in OpenSearch, and content in the object store.
+   - Knowledge Flow stores metadata and vectors in your chosen backend (PostgreSQL/pgvector or OpenSearch), and content in the object store.
 
 4. **Identity Provider (optional)**
    - Keycloak or another OIDC provider.
@@ -113,4 +113,3 @@ In a production-like setup you will typically manage:
    - See `docs/KEYCLOAK.md` for details when enabled.
 
 ---
-

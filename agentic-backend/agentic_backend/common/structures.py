@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Annotated, Dict, List, Literal, Optional, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from fred_core import (
     LogStorageConfig,
@@ -33,13 +33,19 @@ logger = logging.getLogger(__name__)  # Logger definition added
 
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
-    opensearch: OpenSearchStoreConfig
+    opensearch: Optional[OpenSearchStoreConfig] = Field(
+        default=None, description="Optional OpenSearch store"
+    )
     agent_store: StoreConfig
     mcp_servers_store: Optional[StoreConfig] = Field(
         default=None,
         description="Optional override for MCP servers store (defaults to agent_store backend).",
     )
     session_store: StoreConfig
+    attachments_store: Optional[StoreConfig] = Field(
+        default=None,
+        description="Optional override for session attachments persistence (defaults to session_store backend).",
+    )
     history_store: StoreConfig
     feedback_store: StoreConfig
     kpi_store: StoreConfig
@@ -97,10 +103,16 @@ class AgentChatOptions(BaseModel):
             "Allow attaching local files (e.g., PDFs, images, text) to the message and show existing attachments."
         ),
     )
-    skip_rag_search: bool = Field(
+    search_rag_scoping: bool = Field(
         default=False,
         description=(
-            "Expose a toggle to skip retrieval and answer without querying document corpora for this message."
+            "Expose a selector to decide how the agent should use the corpus: documents only, hybrid, or general knowledge only."
+        ),
+    )
+    deep_search_delegate: bool = Field(
+        default=False,
+        description=(
+            "Expose a toggle to delegate RAG retrieval to a senior agent (deep search) when available."
         ),
     )
 
@@ -121,6 +133,10 @@ class BaseAgent(BaseModel):
     class_path: Optional[str] = None  # None → dynamic/UI agent
     tuning: Optional[AgentTuning] = None
     chat_options: AgentChatOptions = AgentChatOptions()
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional arbitrary metadata for integrations (e.g., A2A proxy config).",
+    )
     # Added for backward compatibility with older YAML files
     mcp_servers: List[MCPServerConfiguration] = Field(
         default_factory=list,

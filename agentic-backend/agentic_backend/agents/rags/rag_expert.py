@@ -33,13 +33,14 @@ from agentic_backend.common.rags_utils import (
     format_sources_for_prompt,
     sort_hits,
 )
-from agentic_backend.common.structures import AgentChatOptions
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
+    get_rag_knowledge_scope,
     get_search_policy,
+    is_corpus_only_mode,
 )
 from agentic_backend.core.runtime_source import expose_runtime_source
 
@@ -53,7 +54,7 @@ logger = logging.getLogger(__name__)
 #   and are applied by AgentFlow at runtime.
 RAG_TUNING = AgentTuning(
     # High-level role as seen by UI / other tools
-    role="Evidence-based document question-answering assistant",
+    role="Document Retrieval Agent",
     description=(
         "A general-purpose RAG agent that answers questions using retrieved document snippets. "
         "It grounds all claims in the provided sources, cites them inline, and explicitly acknowledges "
@@ -201,11 +202,11 @@ RAG_TUNING = AgentTuning(
             type="number",
             title="Minimum Score (filter)",
             description=(
-                "Filter out retrieved chunks with a score below this value. "
-                "Use 0 to disable score-based filtering."
+                "Semantic search only: filter out vector hits with a score below this value. "
+                "Ignored for other search modes. Set 0.0 to disable (default)."
             ),
             required=False,
-            default=0.6,
+            default=0.0,
             ui=UIHints(group="Retrieval"),
         ),
     ],
@@ -224,10 +225,6 @@ class Rico(AgentFlow):
     """
 
     tuning = RAG_TUNING  # UI schema only; live values are in AgentSettings.tuning
-    default_chat_options = AgentChatOptions(
-        search_policy_selection=True,
-        libraries_selection=True,
-    )
 
     async def async_init(self, runtime_context: RuntimeContext):
         """Bind the model, create the vector search client, and build the graph."""
@@ -309,6 +306,32 @@ class Rico(AgentFlow):
         question = last.content
 
         try:
+            runtime_context = self.get_runtime_context()
+            rag_scope = get_rag_knowledge_scope(runtime_context)
+
+            if rag_scope == "general_only":
+                logger.info("Rico: general-only mode; bypassing retrieval.")
+                sys_msg = SystemMessage(content=self._system_prompt())
+                history_max = self.get_tuned_int(
+                    "rag.history_max_messages", default=6, min_value=0
+                )
+                history = self.get_recent_history(
+                    state["messages"],
+                    max_messages=history_max,
+                    include_system=False,
+                    include_tool=False,
+                    drop_last=True,
+                )
+                human_msg = HumanMessage(
+                    content=self._render_tuned_prompt(
+                        "prompts.no_sources", question=question
+                    )
+                )
+                messages = [sys_msg, *history, human_msg]
+                messages = self.with_chat_context_text(messages)
+                answer = await self.model.ainvoke(messages)
+                return {"messages": [answer]}
+
             # 0) Optional keyword expansion to widen recall
             augmented_question = question
             keywords: List[str] = []
@@ -329,16 +352,22 @@ class Rico(AgentFlow):
                 )
 
             # 1) Build retrieval scope from runtime context
-            doc_tag_ids = get_document_library_tags_ids(self.get_runtime_context())
-            search_policy = get_search_policy(self.get_runtime_context())
+            doc_tag_ids = get_document_library_tags_ids(runtime_context)
+            search_policy = get_search_policy(runtime_context)
             top_k = self.get_tuned_int("rag.top_k", default=10)
             logger.debug(
-                "[AGENT] reasoning start question=%r doc_tag_ids=%s search_policy=%s top_k=%s",
+                "[AGENT] reasoning start question=%r doc_tag_ids=%s search_policy=%s top_k=%s rag_scope=%s",
                 question,
                 doc_tag_ids,
                 search_policy,
                 top_k,
+                rag_scope,
             )
+
+            if not runtime_context or not runtime_context.session_id:
+                raise RuntimeError(
+                    "Runtime context missing session_id; required for scoped retrieval."
+                )
 
             # 2) Vector search
             hits: List[VectorSearchHit] = self.search_client.search(
@@ -346,6 +375,8 @@ class Rico(AgentFlow):
                 top_k=top_k,
                 document_library_tags_ids=doc_tag_ids,
                 search_policy=search_policy,
+                session_id=runtime_context.session_id,
+                include_session_scope=True,
             )
             logger.debug("[AGENT] vector search returned %d hit(s)", len(hits))
             if hits:
@@ -362,9 +393,16 @@ class Rico(AgentFlow):
                     )
                 logger.debug("[AGENT] top hits: %s", "; ".join(hit_summaries))
             if not hits:
-                warn = self._render_tuned_prompt(
-                    "prompts.no_results", question=question
-                )
+                if is_corpus_only_mode(runtime_context):
+                    warn = (
+                        "No relevant documents were found for this question. "
+                        "You must not use general knowledge. Explain that you cannot answer without evidence from the corpus "
+                        "and invite the user to refine the question or provide documents."
+                    )
+                else:
+                    warn = self._render_tuned_prompt(
+                        "prompts.no_results", question=question
+                    )
                 messages = [HumanMessage(content=warn)]
                 messages = self.with_chat_context_text(messages)
 
@@ -375,8 +413,8 @@ class Rico(AgentFlow):
             ensure_ranks(hits)
 
             # 3b) Optional score filter
-            min_score = self.get_tuned_number("rag.min_score", default=0.6)
-            if min_score and min_score > 0:
+            min_score = self.get_tuned_number("rag.min_score", default=0.0)
+            if search_policy == "semantic" and min_score and min_score > 0:
                 before = len(hits)
                 hits = [
                     h
@@ -388,6 +426,11 @@ class Rico(AgentFlow):
                     min_score,
                     len(hits),
                     before,
+                )
+            elif search_policy != "semantic":
+                logger.debug(
+                    "Rico: skipping min_score filter because search_policy=%s",
+                    search_policy,
                 )
 
             if not hits:
@@ -402,11 +445,17 @@ class Rico(AgentFlow):
                     include_tool=False,
                     drop_last=True,
                 )
-                human_msg = HumanMessage(
-                    content=self._render_tuned_prompt(
+                if is_corpus_only_mode(runtime_context):
+                    no_sources_text = (
+                        "No relevant documents were found for this question. "
+                        "Answer that you cannot respond without corpus documents and refrain from using general knowledge.\n\n"
+                        f"Question:\n{question}"
+                    )
+                else:
+                    no_sources_text = self._render_tuned_prompt(
                         "prompts.no_sources", question=question
                     )
-                )
+                human_msg = HumanMessage(content=no_sources_text)
                 messages = [sys_msg, *history, human_msg]
                 messages = self.with_chat_context_text(messages)
                 answer = await self.model.ainvoke(messages)
@@ -432,12 +481,20 @@ class Rico(AgentFlow):
                 include_tool=False,
                 drop_last=True,
             )
+            guardrails = ""
+            if is_corpus_only_mode(runtime_context):
+                guardrails = (
+                    "\n\nIMPORTANT: Answer strictly using the provided documents. "
+                    "If they are insufficient, state that you cannot answer without evidence from the corpus. "
+                    "Do not rely on your general knowledge."
+                )
             human_msg = HumanMessage(
                 content=self._render_tuned_prompt(
                     "prompts.with_sources",
                     question=question,
                     sources=sources_block,
                 )
+                + guardrails
             )
             logger.debug(
                 "[AGENT] prompt lengths sys=%d human=%d sources_chars=%d",
@@ -478,9 +535,19 @@ class Rico(AgentFlow):
                     "search_policy": locals().get("search_policy"),
                     "top_k": locals().get("top_k"),
                     "hits_count": hits_count,
+                    "exception": str(e),
                 },
             )
-            logger.error("[AGENT] error in reasoning step.", extra={"err_ctx": log_ctx})
+            logger.error(
+                "[AGENT] error in reasoning step (guardrail=%s type=%s status=%s detail=%r): %s",
+                info.is_guardrail,
+                info.type_name,
+                info.status,
+                info.detail,
+                e,
+                extra={"err_ctx": log_ctx},
+                exc_info=True,
+            )
 
             fallback_text = guardrail_fallback_message(
                 info,

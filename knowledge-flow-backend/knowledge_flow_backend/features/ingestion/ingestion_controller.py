@@ -20,11 +20,13 @@ import logging
 import pathlib
 import shutil
 import tempfile
+import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from fred_core import KeycloakUser, KPIActor, KPIWriter, get_current_user
+from langchain_core.documents import Document
 from pydantic import BaseModel
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_kpi_writer
@@ -34,6 +36,10 @@ from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_md_processing_service import LiteMdError, LiteMdProcessingService
 from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
+from knowledge_flow_backend.core.stores.vector.base_vector_store import (
+    CHUNK_ID_FIELD,
+    BaseVectorStore,
+)
 from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 from knowledge_flow_backend.features.scheduler.activities import input_process, output_process
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
@@ -224,6 +230,8 @@ class IngestionController:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.service = IngestionService()
         self.lite_md_service = LiteMdProcessingService()
+        self.embedder = ApplicationContext.get_instance().get_embedder()
+        self.vector_store: BaseVectorStore = ApplicationContext.get_instance().get_create_vector_store(self.embedder)
         logger.info("IngestionController initialized.")
 
         # ------------------------------------------------------------------
@@ -609,6 +617,24 @@ class IngestionController:
             # Extract
             try:
                 result = self.lite_md_service.extract(raw_path, options=opts)
+                logger.info(
+                    "[LITE_MD] user=%s file=%s format=%s chars=%s pages=%s truncated=%s",
+                    user.uid,
+                    filename,
+                    fmt,
+                    result.total_chars,
+                    result.page_count,
+                    result.truncated,
+                )
+                if not result.markdown or result.total_chars == 0:
+                    logger.warning(
+                        "[LITE_MD] EMPTY_MARKDOWN user=%s file=%s format=%s (page_count=%s truncated=%s)",
+                        user.uid,
+                        filename,
+                        fmt,
+                        result.page_count,
+                        result.truncated,
+                    )
             except LiteMdError as e:
                 raise HTTPException(status_code=400, detail=str(e))
             finally:
@@ -636,3 +662,141 @@ class IngestionController:
                 "pages": [{"page_no": p.page_no, "char_count": p.char_count, "markdown": p.markdown} for p in (result.pages or [])],
                 "extras": result.extras or {},
             }
+
+        @router.post(
+            "/lite/ingest",
+            tags=["Processing"],
+            summary="Lightweight ingest of a single file (fast path for attachments)",
+            description="Extract compact Markdown via the lite processor and store it as vectors with user/session scoping. Skips heavy pandoc/Temporal paths.",
+        )
+        def lightweight_ingest(
+            file: UploadFile = File(...),
+            options_json: Optional[str] = Form(None, description="JSON string of LiteMarkdownOptions"),
+            session_id: Optional[str] = Form(None, description="Optional chat session id for scoping"),
+            scope: str = Form("session", description="Logical scope label, default 'session'"),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            """
+            Fast path for chat attachments:
+            - use lite markdown extractor (markitdown/fitz)
+            - store as a single vectorized document with user/session metadata
+            """
+            filename = file.filename or "uploaded"
+            suffix = pathlib.Path(filename).suffix.lower()
+            if suffix not in (".pdf", ".docx", ".csv", ".pptx"):
+                raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}")
+
+            # Parse options
+            opts = LiteMarkdownOptions()
+            if options_json:
+                try:
+                    payload = _json.loads(options_json)
+                    if not isinstance(payload, dict):
+                        raise ValueError("options_json must be an object")
+                    allowed = {f.name for f in dataclasses.fields(LiteMarkdownOptions)}
+                    filtered = {k: v for k, v in payload.items() if k in allowed}
+                    opts = LiteMarkdownOptions(**filtered)
+                except Exception as e:
+                    raise HTTPException(status_code=400, detail=f"Invalid options_json: {e}")
+
+            # Store to temp
+            raw_path = uploadfile_to_path(file)
+
+            # Extract lite markdown
+            try:
+                result = self.lite_md_service.extract(raw_path, options=opts)
+                logger.info(
+                    "[LITE_MD][INGEST] user=%s file=%s chars=%s pages=%s truncated=%s",
+                    user.uid,
+                    filename,
+                    result.total_chars,
+                    result.page_count,
+                    result.truncated,
+                )
+                markdown_text = result.markdown or ""
+            except LiteMdError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            finally:
+                try:
+                    raw_path.unlink(missing_ok=True)
+                    parent = raw_path.parent
+                    if parent.exists() and not any(parent.iterdir()):
+                        parent.rmdir()
+                except Exception:
+                    logger.warning(f"Failed to clean up temporary file: {raw_path}")
+                    pass
+
+            if not markdown_text.strip():
+                markdown_text = "_(empty markdown extracted)_"
+
+            # Build a single LC document with scoped metadata
+            document_uid = uuid.uuid4().hex
+            chunk_uid = uuid.uuid4().hex
+            doc_meta = {
+                "document_uid": document_uid,
+                CHUNK_ID_FIELD: chunk_uid,
+                "file_name": filename,
+                "user_id": user.uid,
+                "session_id": session_id,
+                "scope": scope,
+                "retrievable": True,
+                "source": "lite_ingest",
+            }
+            doc = Document(page_content=markdown_text, metadata=doc_meta)
+
+            try:
+                ids = self.vector_store.add_documents([doc])
+                chunks = len(ids) if isinstance(ids, (list, tuple, set)) else 1
+                logger.info(
+                    "[LITE_MD][INGEST] Stored vectors doc_uid=%s chunks=%d user=%s session=%s scope=%s",
+                    document_uid,
+                    chunks,
+                    user.uid,
+                    session_id,
+                    scope,
+                )
+            except Exception:
+                logger.exception("[LITE_MD][INGEST] Failed to store vectors for %s", filename)
+                raise HTTPException(status_code=500, detail="Failed to store vectors")
+
+            return {
+                "document_uid": document_uid,
+                "chunks": chunks,
+                "total_chars": len(markdown_text),
+                "truncated": result.truncated,
+                "scope": scope,
+            }
+
+        @router.delete(
+            "/lite/ingest/{document_uid}",
+            tags=["Processing"],
+            summary="Delete vectors for a lite-ingested document",
+            description="Remove vectors created via /lite/ingest (identified by document_uid).",
+        )
+        def delete_lite_ingest(
+            document_uid: str,
+            session_id: Optional[str] = Query(None, description="Optional session_id for scoped cleanup"),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                logger.info(
+                    "[LITE_MD][INGEST][DELETE] user=%s doc_uid=%s session=%s backend=%s",
+                    user.uid,
+                    document_uid,
+                    session_id,
+                    self.vector_store.__class__.__name__,
+                )
+                self.vector_store.delete_vectors_for_document(document_uid=document_uid)
+                logger.info(
+                    "[LITE_MD][INGEST] Deleted vectors for doc_uid=%s user=%s session=%s",
+                    document_uid,
+                    user.uid,
+                    session_id,
+                )
+            except Exception:
+                logger.exception(
+                    "[LITE_MD][INGEST] Failed to delete vectors for doc_uid=%s",
+                    document_uid,
+                )
+                raise HTTPException(status_code=500, detail="Failed to delete vectors")
+            return {"status": "ok", "document_uid": document_uid, "session_id": session_id}

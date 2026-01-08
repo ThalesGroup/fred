@@ -49,6 +49,8 @@ class VectorSearchClient(KfBaseClient):
         top_k: int = 10,
         document_library_tags_ids: Optional[Sequence[str]] = None,
         search_policy: Optional[str] = None,
+        session_id: Optional[str] = None,
+        include_session_scope: bool = True,
     ) -> List[VectorSearchHit]:
         """
         Perform a vector search against the Knowledge Flow backend. This method
@@ -68,6 +70,9 @@ class VectorSearchClient(KfBaseClient):
             payload["document_library_tags_ids"] = list(document_library_tags_ids)
         if search_policy:
             payload["search_policy"] = search_policy
+        if session_id:
+            payload["session_id"] = session_id
+            payload["include_session_scope"] = include_session_scope
 
         # Use the base class's request method, passing the required access_token.
         # This will handle token refresh if needed. The required refresh token
@@ -83,5 +88,43 @@ class VectorSearchClient(KfBaseClient):
         raw = r.json()
         if not isinstance(raw, list):
             logger.warning("Unexpected vector search payload type: %s", type(raw))
+            return []
+        return _HITS.validate_python(raw)
+
+    def rerank(
+        self,
+        *,
+        question: str,
+        documents: Sequence[VectorSearchHit],
+        top_r: int = 6,
+    ) -> List[VectorSearchHit]:
+        """
+        Rerank an existing list of VectorSearchHit items using the cross-encoder.
+        Wire format (matches controller):
+          POST /vector/rerank
+          {
+            "question": str,
+            "top_r": int,
+            "documents": [VectorSearchHit]
+          }
+        """
+        payload: Dict[str, Any] = {
+            "question": question,
+            "top_r": top_r,
+            "documents": [
+                d.model_dump() if hasattr(d, "model_dump") else d for d in documents
+            ],
+        }
+
+        r = self._request_with_token_refresh(
+            method="POST",
+            path="/vector/rerank",
+            json=payload,
+        )
+        r.raise_for_status()
+
+        raw = r.json()
+        if not isinstance(raw, list):
+            logger.warning("Unexpected vector rerank payload type: %s", type(raw))
             return []
         return _HITS.validate_python(raw)

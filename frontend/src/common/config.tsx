@@ -25,6 +25,7 @@ export interface AppConfig {
   backend_url_api: string; // Base URL of the Agentic backend
   backend_url_knowledge: string; // Base URL of the Knowledge Flow backend
   websocket_url: string; // WebSocket server URL
+  frontend_basename: string; // Base name used by the frontend
   feature_flags: Record<string, boolean>;
   properties: Record<string, string>;
   user_auth: UserSecurity; // from OpenAPI types
@@ -66,6 +67,7 @@ export const loadConfig = async () => {
     backend_url_api: string;
     backend_url_knowledge: string;
     websocket_url: string;
+    frontend_basename: string;
   };
 
   // 2) Dynamic config (typed)

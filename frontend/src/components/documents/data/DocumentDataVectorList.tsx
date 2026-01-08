@@ -146,6 +146,9 @@ export const DocumentDataVectorList = (
           {limitedVectorRows.map((row) => {
             const doc = row.document;
             const vectorCount = row.vectorNode?.vector_count ?? null;
+            const backend = row.vectorNode?.backend;
+            const backendDetail = row.vectorNode?.backend_detail;
+            const embeddingModel = row.vectorNode?.embedding_model;
 
             return (
               <Box
@@ -178,6 +181,22 @@ export const DocumentDataVectorList = (
                     {doc.label}
                   </Typography>
                   <DocumentVersionChip version={extractDocumentVersion(doc)} />
+                  {backend && (
+                    <Chip
+                      size="small"
+                      label={backendDetail ? `${backend} · ${backendDetail}` : backend}
+                      variant="outlined"
+                      sx={{ ml: 0.5 }}
+                    />
+                  )}
+                  {embeddingModel && (
+                    <Chip
+                      size="small"
+                      label={embeddingModel}
+                      variant="outlined"
+                      sx={{ ml: 0.5 }}
+                    />
+                  )}
                 </Box>
                 <Box
                   sx={{

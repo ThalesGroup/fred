@@ -4,6 +4,7 @@ import ConstructionIcon from "@mui/icons-material/Construction";
 import GroupIcon from "@mui/icons-material/Group";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
+import ShieldIcon from "@mui/icons-material/Shield";
 import { Box, CSSObject, IconButton, Paper, styled, Theme } from "@mui/material";
 import MuiDrawer from "@mui/material/Drawer";
 import { useContext } from "react";
@@ -87,6 +88,7 @@ export default function SideBar() {
   const canReadOpenSearch = can("opensearch", "create");
   const canReadLogs = can("logs", "create");
   const canReadRuntime = can("kpi", "create");
+  const canUpdateTag = can("tag", "update");
 
   const menuItems: SideBarNavigationElement[] = [
     {
@@ -112,7 +114,7 @@ export default function SideBar() {
     },
 
     // Only show monitoring if user has permission
-    ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime
+    ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime || canUpdateTag
       ? [
           {
             key: "monitoring",
@@ -156,11 +158,22 @@ export default function SideBar() {
               ...(canReadRuntime
                 ? [
                     {
+                      key: "monitoring-graph",
+                      label: t("sidebar.monitoring_graph", "Graph Hub"),
+                      icon: <MonitorHeartIcon />,
+                      url: `/monitoring/graph`,
+                      tooltip: t("sidebar.tooltip.monitoring_graph", "Knowledge graph view"),
+                    },
+                  ]
+                : []),
+              ...(canReadRuntime
+                ? [
+                    {
                       key: "monitoring-processors",
                       label: t("sidebar.monitoring_processors", "Processors"),
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/processors`,
-                      tooltip: t("sidebar.tooltip.monitoring_processors", "Processor bench"),
+                      tooltip: t("sidebar.tooltip.monitoring_processors"),
                     },
                   ]
                 : []),
@@ -171,7 +184,18 @@ export default function SideBar() {
                       label: t("sidebar.monitoring_logs") || "Logs",
                       icon: <MenuBookIcon />,
                       url: `/monitoring/logs`,
-                      tooltip: t("sidebar.tooltip.monitoring_logs") || "Log Console",
+                      tooltip: t("sidebar.tooltip.monitoring_logs"),
+                    },
+                  ]
+                : []),
+              ...(canUpdateTag
+                ? [
+                    {
+                      key: "monitoring-rebac-backfill",
+                      label: t("sidebar.migration"),
+                      icon: <ShieldIcon />,
+                      url: `/monitoring/rebac-backfill`,
+                      tooltip: t("sidebar.tooltip.migration", "Rebuild ReBAC relations"),
                     },
                   ]
                 : []),

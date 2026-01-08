@@ -28,6 +28,10 @@ from knowledge_flow_backend.common.document_structures import (
     ProcessingStatus,
     ProcessingSummary,
 )
+from knowledge_flow_backend.common.structures import (
+    OpenSearchVectorIndexConfig,
+    PgVectorStorageConfig,
+)
 from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import MetadataDeserializationError
 
@@ -85,7 +89,6 @@ class MetadataService:
         context = ApplicationContext.get_instance()
         self.config = context.get_config()
         self.metadata_store = context.get_metadata_store()
-        self.catalog_store = context.get_catalog_store()
         self.csv_input_store = None
         self.vector_store = None
         self.content_store = context.get_content_store()
@@ -155,39 +158,39 @@ class MetadataService:
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_document_vectors(self, user: KeycloakUser, document_uid: str) -> list[dict]:
         """
-        Retourne la liste des vecteurs associés aux chunks du document.
+        Return the list of vectors associated with the document's chunks.
 
-        Chaque élément contient au minimum:
-          - chunk_uid: identifiant unique du chunk
-          - vector: la liste des floats représentant l'embedding
+        Each item contains at minimum:
+          - chunk_uid: unique identifier of the chunk
+          - vector: the list of floats representing the embedding
         """
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
 
-        # Permission spécifique sur le document
+        # Specific permission on the document
         await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
 
-        # S'assurer que le document existe (et lever 404 sinon)
+        # Ensure the document exists (and raise 404 otherwise)
         _ = await self.get_document_metadata(user, document_uid)
 
-        # Initialiser le vector store à la demande
+        # Initialize the vector store on demand
         if self.vector_store is None:
             self.vector_store = ApplicationContext.get_instance().get_vector_store()
 
         store = self.vector_store
         if store is None:
-            logger.warning("[MetadataService] Aucun vector store disponible pour récupérer les vecteurs")
+            logger.warning("[MetadataService] No vector store available to retrieve vectors")
             return []
 
-        # Méthode facultative côté store Chroma
+        # Optional method on Chroma store side
         if hasattr(store, "get_vectors_for_document"):
             try:
                 return store.get_vectors_for_document(document_uid)  # type: ignore[attr-defined]
             except Exception as e:
-                logger.error(f"[MetadataService] Erreur lors de la récupération des vecteurs: {e}")
+                logger.error(f"[MetadataService] Error retrieving vectors: {e}")
                 return []
 
-        logger.info("[MetadataService] Le vector store ne supporte pas la récupération des vecteurs par document")
+        logger.info("[MetadataService] The vector store does not support retrieving vectors by document")
         return []
 
     @authorize(Action.READ, Resource.DOCUMENTS)
@@ -198,6 +201,7 @@ class MetadataService:
         Each item contains at minimum:
           - chunk_uid: unique identifier of the chunk
           - text: the text content of the chunk
+          - metadata: the metadata of the chunk
         """
         if not document_uid:
             raise InvalidMetadataRequest("Document UID cannot be empty")
@@ -227,6 +231,105 @@ class MetadataService:
 
         logger.info("[MetadataService] The vector store does not support retrieving chunks by document")
         return []
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def browse_documents_in_tag(self, user: KeycloakUser, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[list[DocumentMetadata], int]:
+        """
+        Paginated fetch of documents in a given tag.
+        """
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+
+        docs, total = self.metadata_store.browse_metadata_in_tag(tag_id, offset=offset, limit=limit)
+        logger.debug(
+            "[PAGINATION] browse_documents_in_tag tag=%s offset=%s limit=%s -> fetched=%s total=%s",
+            tag_id,
+            offset,
+            limit,
+            len(docs),
+            total,
+        )
+
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            return docs, total
+
+        authorized_doc_ids = {d.id for d in authorized_doc_ref}
+        filtered = [d for d in docs if d.identity.document_uid in authorized_doc_ids]
+
+        # Total reflects store count; computing an authorized-only total would require
+        # scanning all authorized documents. We keep store total to preserve pagination hints.
+        return filtered, total
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
+    async def get_chunk(self, user: KeycloakUser, document_uid: str, chunk_uid: str) -> dict:
+        """
+        Return chunk.
+
+        item contains at minimum:
+          - chunk_uid: unique identifier of the chunk
+          - text: the text content of the chunk
+          - metadata: the metadata of the chunk
+        """
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+
+        if not chunk_uid:
+            raise InvalidMetadataRequest("Chunk UID cannot be empty")
+
+        # Specific permission on the document
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
+
+        # Initialize the vector store on demand
+        if self.vector_store is None:
+            self.vector_store = ApplicationContext.get_instance().get_vector_store()
+
+        store = self.vector_store
+        if store is None:
+            logger.warning("[MetadataService] No vector store available to retrieve chunk")
+            return {"chunk_uid": chunk_uid}
+
+        # Optional method on Chroma store side
+        if hasattr(store, "get_chunk"):
+            try:
+                return store.get_chunk(document_uid=document_uid, chunk_uid=chunk_uid)  # type: ignore[attr-defined]
+            except Exception as e:
+                logger.error(f"[MetadataService] Error retrieving chunk: {e}")
+                return {"chunk_uid": chunk_uid}
+
+        logger.info("[MetadataService] The vector store does not support retrieving chunk")
+        return {"chunk_uid": chunk_uid}
+
+    @authorize(Action.DELETE, Resource.DOCUMENTS)
+    async def delete_chunk(self, user: KeycloakUser, document_uid: str, chunk_uid: str) -> None:
+        """
+        Delete chunk.
+        """
+        if not document_uid:
+            raise InvalidMetadataRequest("Document UID cannot be empty")
+
+        if not chunk_uid:
+            raise InvalidMetadataRequest("Chunk UID cannot be empty")
+
+        # Specific permission on the document
+        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.DELETE, document_uid)
+
+        # Initialize the vector store on demand
+        if self.vector_store is None:
+            self.vector_store = ApplicationContext.get_instance().get_vector_store()
+
+        store = self.vector_store
+        if store is None:
+            logger.warning("[MetadataService] No vector store available to delete chunk")
+            return None
+
+        # Optional method on Chroma store side
+        if hasattr(store, "delete_chunk"):
+            try:
+                return store.delete_chunk(document_uid=document_uid, chunk_uid=chunk_uid)  # type: ignore[attr-defined]
+            except Exception as e:
+                logger.error(f"[MetadataService] Error deleting chunk: {e}")
+                return None
+
+        logger.info("[MetadataService] The vector store does not support retrieving chunk")
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_processing_graph(self, user: KeycloakUser) -> ProcessingGraph:
@@ -283,6 +386,24 @@ class MetadataService:
             except Exception as e:
                 logger.warning(f"[GRAPH] Failed to list tables from tabular store: {e}")
 
+        # Vector backend info (for UI diagnostics)
+        vector_backend: str | None = None
+        vector_detail: str | None = None
+        embedding_model_name: str | None = getattr(self.config.embedding_model, "name", None)
+        try:
+            vs_cfg = self.config.storage.vector_store
+            if isinstance(vs_cfg, OpenSearchVectorIndexConfig):
+                vector_backend = "opensearch"
+                vector_detail = f"index={vs_cfg.index}"
+            elif isinstance(vs_cfg, PgVectorStorageConfig):
+                vector_backend = "pgvector"
+                vector_detail = f"collection={vs_cfg.collection_name}"
+            else:
+                vector_backend = type(vs_cfg).__name__
+                vector_detail = None
+        except Exception as e:
+            logger.debug("[GRAPH] Unable to resolve vector backend info: %s", e)
+
         for metadata in visible_docs:
             doc_uid = metadata.document_uid
             doc_node_id = f"doc:{doc_uid}"
@@ -319,6 +440,9 @@ class MetadataService:
                         label=f"Vectors for {metadata.document_name}",
                         document_uid=doc_uid,
                         vector_count=vector_count,
+                        backend=vector_backend,
+                        backend_detail=vector_detail,
+                        embedding_model=embedding_model_name,
                     )
                 )
                 edges.append(

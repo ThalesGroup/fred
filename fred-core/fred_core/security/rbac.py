@@ -62,6 +62,8 @@ class RBACProvider(AuthorizationProvider):
                 Resource.MESSAGE_ATTACHMENTS: {Action.CREATE},
                 Resource.USER: READ_ONLY,
                 Resource.GROUP: READ_ONLY,
+                # Editor can create and use files in the filesystem endpoint
+                Resource.FILES: CRUD,
             },
             "viewer": {
                 # Viewer can only read
@@ -72,8 +74,8 @@ class RBACProvider(AuthorizationProvider):
                 Resource.SESSIONS: CRUD,
                 Resource.MESSAGE_ATTACHMENTS: {Action.CREATE},
                 Resource.PROMPT_COMPLETIONS: {Action.CREATE},
-                # Viewer can create and use Chat Context (resources)
-                Resource.RESOURCES: CRUD,
+                # Viewer can create and use files in the filesystem endpoint
+                Resource.FILES: CRUD,
             },
             "service_agent": {
                 Resource.TAGS: READ_ONLY,

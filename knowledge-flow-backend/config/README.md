@@ -7,6 +7,7 @@ This folder contains all the configuration files needed to run the Knowledge Flo
 | Config File                  | Purpose                                                                 |
 |-----------------------------|-------------------------------------------------------------------------|
 | `configuration_dev.yaml`    | ✅ Default: local dev mode, in-memory vector store, local disk storage. |
+| `configuration_postgres.yaml` | 📦 Persistent without OpenSearch: PostgreSQL (incl. `pgvector`) for metadata + vectors, local/minio for files. |
 | `configuration_prod.yaml`   | 🛠️ Production-style: uses MinIO + OpenSearch. Requires Docker Compose.  |
 | `configuration_worker.yaml` | ⚙️ Worker mode: runs **only** as a Temporal worker (no FastAPI).        |
 | `configuration.yaml`        | 🔁 Default entrypoint. Aliased to `configuration_dev.yaml`.             |
@@ -36,6 +37,16 @@ This folder contains all the configuration files needed to run the Knowledge Flo
 
 ---
 
+### `configuration_postgres.yaml`
+
+- Production-like persistence **without** OpenSearch.
+- Uses:
+  - 🗄️ **PostgreSQL + pgvector** for metadata and vector index.
+  - 📂 Local filesystem by default for file storage (can be pointed to MinIO/S3 if desired).
+- Good for teams that want to avoid OpenSearch while keeping durable storage.
+
+---
+
 ### `configuration_worker.yaml`
 
 - Runs the backend as a **Temporal worker** only.
@@ -62,10 +73,10 @@ Environment-specific secrets and credentials are **not hardcoded** in these file
 cp .env.template .env
 ```
 
-You’ll need to provide values for:
+You'll need to provide values for:
 
 - LLM API keys / tokens
-- Access credentials for MinIO, OpenSearch, Temporal, etc.
+- Access credentials for PostgreSQL (and optionally MinIO, OpenSearch, Temporal, etc.)
 
 ---
 

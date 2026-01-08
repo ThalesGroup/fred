@@ -30,7 +30,7 @@ interface ImageProps {
 // in the public/images folder with the name provided. If the image is not found, it will
 // fallback to a default image.
 export const ImageComponent = ({ name, width, height, fallback = DEFAULT_FALLBACK_IMAGE }: ImageProps) => {
-  const [imageSrc, setImageSrc] = useState(`/images/${name}.svg`);
+  const [imageSrc, setImageSrc] = useState(`./images/${name}.svg`);
 
   return <img src={imageSrc} alt={name} style={{ width, height }} onError={() => setImageSrc(fallback)} />;
 };
@@ -105,7 +105,7 @@ export const IconComponent = ({ name = "", width = "50px", height = "50px" }: Im
 };
 
 export const LogoComponent = ({ name = "", width = "50px", height = "50px", showLabel = false }: ImageProps) => {
-  const [imageSrc, setImageSrc] = useState(`/images/${name}.svg`);
+  const [imageSrc, setImageSrc] = useState(`./images/${name}.svg`);
   const [imageExists, setImageExists] = useState(true);
 
   const theme = useTheme();
@@ -117,16 +117,16 @@ export const LogoComponent = ({ name = "", width = "50px", height = "50px", show
 
   useEffect(() => {
     const img = new Image();
-    img.src = `/images/${name}.svg`;
+    img.src = `./images/${name}.svg`;
     img.onload = () => {
       setImageExists(true); // Image loaded successfully
-      setImageSrc(`/images/${name}.svg`);
+      setImageSrc(`./images/${name}.svg`);
     };
 
     img.onerror = () => {
       console.warn("logo not found", name);
       setImageExists(false); // Fallback to default image
-      setImageSrc(`/images/package-thin-svgrepo-com.svg`);
+      setImageSrc(`./images/package-thin-svgrepo-com.svg`);
     };
   }, [name]);
 

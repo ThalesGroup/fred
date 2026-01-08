@@ -1,19 +1,36 @@
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// ...
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-// User input component for the chatbot
+/**
+ * UserInput
+ * ---------
+ * - Manages per-session input context (libraries/prompts/templates/policies/rag scope/deep search/agent).
+ * - Hydrates from backend session prefs, applies once per session, and persists only when state differs from last sent.
+ * - No local “dirty” caches; one PUT per change, followed by a refetch to keep UI consistent with backend.
+ * - Receives initial defaults from parent (for draft/no-session) but owns server-side prefs for active sessions.
+ */
 
 import AddIcon from "@mui/icons-material/Add";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import StopIcon from "@mui/icons-material/Stop";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
+import { skipToken } from "@reduxjs/toolkit/query";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import AudioController from "../AudioController.tsx";
 import AudioRecorder from "../AudioRecorder.tsx";
 
-import { Box, Grid2, IconButton, InputBase, Stack, Switch, Tooltip, useTheme } from "@mui/material";
+import { Box, Grid2, IconButton, InputBase, Stack, Tooltip, useTheme } from "@mui/material";
 
 import { useTranslation } from "react-i18next";
 import {
@@ -28,11 +45,16 @@ import {
 import { AnyAgent } from "../../../common/agent.ts";
 import {
   AgentChatOptions,
+  useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
+  useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation,
 } from "../../../slices/agentic/agenticOpenApi.ts";
 import { AgentSelector } from "./AgentSelector.tsx";
 import { UserInputAttachments } from "./UserInputAttachments.tsx";
+import { UserInputDeepSearchToggle } from "./UserInputDeepSearchToggle.tsx";
 import { UserInputPopover } from "./UserInputPopover.tsx";
+import { UserInputRagScope } from "./UserInputRagScope.tsx";
+import { SearchRagScope } from "./types.ts";
 
 export interface UserInputContent {
   text?: string;
@@ -43,7 +65,8 @@ export interface UserInputContent {
   templateResourceIds?: string[];
   profileResourceIds?: string[];
   searchPolicy?: SearchPolicyName;
-  skipRagSearch?: boolean;
+  searchRagScope?: SearchRagScope;
+  deepSearch?: boolean;
 }
 
 type PersistedCtx = {
@@ -52,33 +75,14 @@ type PersistedCtx = {
   templateResourceIds?: string[];
   profileResourceIds?: string[];
   searchPolicy?: SearchPolicyName;
-  skipRagSearch?: boolean;
+  searchRagScope?: SearchRagScope;
+  deepSearch?: boolean;
+  ragKnowledgeScope?: SearchRagScope; // legacy persisted field
+  skipRagSearch?: boolean; // legacy persisted flag
 };
 
-function makeStorageKey(sessionId?: string) {
-  return sessionId ? `fred:userInput:ctx:${sessionId}` : "";
-}
-
-function loadSessionCtx(sessionId?: string): PersistedCtx | null {
-  const key = makeStorageKey(sessionId);
-  if (!key) return null;
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as PersistedCtx) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveSessionCtx(sessionId: string | undefined, ctx: PersistedCtx) {
-  const key = makeStorageKey(sessionId);
-  if (!key) return;
-  try {
-    localStorage.setItem(key, JSON.stringify(ctx));
-  } catch {
-    // storage may be unavailable (private mode/quotas) — fail quietly
-  }
-}
+const serializePrefs = (p: PersistedCtx & { agent_name?: string }) =>
+  JSON.stringify(Object.fromEntries(Object.entries(p).sort(([a], [b]) => a.localeCompare(b))));
 
 export default function UserInput({
   agentChatOptions,
@@ -95,6 +99,8 @@ export default function UserInput({
   initialPromptResourceIds,
   initialTemplateResourceIds,
   initialSearchPolicy = "semantic",
+  initialSearchRagScope,
+  initialDeepSearch,
   currentAgent,
   agents,
   onSelectNewAgent,
@@ -113,6 +119,8 @@ export default function UserInput({
   initialPromptResourceIds?: string[];
   initialTemplateResourceIds?: string[];
   initialSearchPolicy?: SearchPolicyName;
+  initialSearchRagScope?: SearchRagScope;
+  initialDeepSearch?: boolean;
   currentAgent: AnyAgent;
   agents: AnyAgent[];
   onSelectNewAgent: (flow: AnyAgent) => void;
@@ -132,186 +140,60 @@ export default function UserInput({
   const [isRecording, setIsRecording] = useState<boolean>(false);
   // Deprecated for uploads: files are uploaded immediately; keep no per-message files
   const [filesBlob, setFilesBlob] = useState<File[] | null>(null);
-  const supportsSkipRagSearch = agentChatOptions?.skip_rag_search !== undefined;
-  const [skipRagSearch, setSkipRagSearch] = useState<boolean>(
-    agentChatOptions?.skip_rag_search ?? false,
-  ); // true means: skip retrieval; false means: use retrieval
+  // Only show the selector when the agent explicitly opts in via config (new flag, fallback to old).
+  const supportsRagScopeSelection = agentChatOptions?.search_rag_scoping === true;
+  const supportsDeepSearchSelection = agentChatOptions?.deep_search_delegate === true;
+  const defaultRagScope: SearchRagScope = "hybrid";
 
+  const [searchRagScope, setSearchRagScopeState] = useState<SearchRagScope>(initialSearchRagScope ?? defaultRagScope);
+  const [deepSearchEnabled, setDeepSearchEnabledState] = useState<boolean>(initialDeepSearch ?? false);
+
+  // console.log("UserInput render", { searchRagScope, supportsRagScopeSelection });
+  // console.log("Agent chat options", agentChatOptions);
   // --- Fred rationale ---
   // These three selections are *session-scoped context* (used by agents for retrieval/templates).
   // Rule: hydrate exactly once per session. Persist to localStorage to restore when returning.
-  const [selectedDocumentLibrariesIds, setSelectedDocumentLibrariesIds] = useState<string[]>([]);
-  const [selectedPromptResourceIds, setSelectedPromptResourceIds] = useState<string[]>([]);
-  const [selectedTemplateResourceIds, setSelectedTemplateResourceIds] = useState<string[]>([]);
-  const [selectedSearchPolicyName, setSelectedSearchPolicyName] = useState<SearchPolicyName>("semantic");
+  const [selectedDocumentLibrariesIds, setSelectedDocumentLibrariesIdsState] = useState<string[]>(
+    initialDocumentLibraryIds ?? [],
+  );
+  const [selectedPromptResourceIds, setSelectedPromptResourceIdsState] = useState<string[]>(
+    initialPromptResourceIds ?? [],
+  );
+  const [selectedTemplateResourceIds, setSelectedTemplateResourceIdsState] = useState<string[]>(
+    initialTemplateResourceIds ?? [],
+  );
+  const [selectedSearchPolicyName, setSelectedSearchPolicyNameState] = useState<SearchPolicyName>(initialSearchPolicy);
   const canSend = !!userInput.trim() || !!audioBlob; // files upload immediately now
 
   const canAttach = Object.values(agentChatOptions || {})
     .filter((value) => typeof value === "boolean")
     .some((v) => v);
 
-  // Selections made *before* we get a real sessionId (first question) — migrate them.
-  const preSessionRef = useRef<PersistedCtx>({});
-
-  // Capture pre-session picks while sessionId is undefined.
-  useEffect(() => {
-    if (!sessionId) {
-      preSessionRef.current = {
-        documentLibraryIds: selectedDocumentLibrariesIds,
-        promptResourceIds: selectedPromptResourceIds,
-        templateResourceIds: selectedTemplateResourceIds,
-        searchPolicy: selectedSearchPolicyName,
-        skipRagSearch: skipRagSearch,
-      };
-    }
-  }, [
-    sessionId,
-    selectedDocumentLibrariesIds,
-    selectedPromptResourceIds,
-    selectedTemplateResourceIds,
-    selectedSearchPolicyName,
-    skipRagSearch,
-  ]);
-
-  // When switching agents (no active session), align default skip state with the agent option
-  useEffect(() => {
-    if (sessionId) return; // do not override an active session choice
-    if (supportsSkipRagSearch) {
-      setSkipRagSearch(agentChatOptions?.skip_rag_search ?? false);
-    } else {
-      setSkipRagSearch(false);
-    }
-  }, [agentChatOptions?.skip_rag_search, supportsSkipRagSearch, sessionId]);
-
-  // Hydration guard: run at most once per session id.
-  const hydratedForSession = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    // Only attempt to hydrate when we *have* a session id.
-    if (!sessionId) return;
-
-    const isNewSession = hydratedForSession.current !== sessionId;
-    if (!isNewSession) return;
-    hydratedForSession.current = sessionId;
-
-    // Priority to hydrate:
-    // 1) localStorage (returning to a session)
-    // 2) pre-session user picks (user acted before id assigned)
-    // 3) initial* defaults
-    const persisted = loadSessionCtx(sessionId) ?? {};
-    const pre = preSessionRef.current ?? {};
-
-    const libs = persisted.documentLibraryIds?.length
-      ? persisted.documentLibraryIds
-      : pre.documentLibraryIds?.length
-        ? pre.documentLibraryIds
-        : (initialDocumentLibraryIds ?? []);
-    const prompts = persisted.promptResourceIds?.length
-      ? persisted.promptResourceIds
-      : pre.promptResourceIds?.length
-        ? pre.promptResourceIds
-        : (initialPromptResourceIds ?? []);
-    const templates = persisted.templateResourceIds?.length
-      ? persisted.templateResourceIds
-      : pre.templateResourceIds?.length
-        ? pre.templateResourceIds
-        : (initialTemplateResourceIds ?? []);
-    const searchPolicy = persisted.searchPolicy
-      ? persisted.searchPolicy
-      : pre.searchPolicy
-        ? pre.searchPolicy
-        : initialSearchPolicy;
-    const skipRag = persisted.skipRagSearch ?? pre.skipRagSearch ?? false;
-    setSelectedSearchPolicyName(searchPolicy);
-    setSelectedDocumentLibrariesIds(libs);
-    setSelectedPromptResourceIds(prompts);
-    setSelectedTemplateResourceIds(templates);
-    setSkipRagSearch(skipRag);
-
-    // Save immediately so storage stays the source of truth for this session.
-    saveSessionCtx(sessionId, {
-      documentLibraryIds: libs,
-      promptResourceIds: prompts,
-      templateResourceIds: templates,
-      searchPolicy: searchPolicy,
-      skipRagSearch: skipRag,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
-
-  // Wrap setters to persist to storage.
-  const setLibs = (next: React.SetStateAction<string[]>) => {
-    setSelectedDocumentLibrariesIds((prev) => {
-      const value = typeof next === "function" ? (next as any)(prev) : next;
-      if (sessionId)
-        saveSessionCtx(sessionId, {
-          documentLibraryIds: value,
-          promptResourceIds: selectedPromptResourceIds,
-          templateResourceIds: selectedTemplateResourceIds,
-          searchPolicy: selectedSearchPolicyName,
-          skipRagSearch,
-        });
-      return value;
-    });
-  };
-  const setPrompts = (next: React.SetStateAction<string[]>) => {
-    setSelectedPromptResourceIds((prev) => {
-      const value = typeof next === "function" ? (next as any)(prev) : next;
-      if (sessionId)
-        saveSessionCtx(sessionId, {
-          documentLibraryIds: selectedDocumentLibrariesIds,
-          promptResourceIds: value,
-          templateResourceIds: selectedTemplateResourceIds,
-          searchPolicy: selectedSearchPolicyName,
-          skipRagSearch,
-        });
-      return value;
-    });
-  };
-  const setTemplates = (next: React.SetStateAction<string[]>) => {
-    setSelectedTemplateResourceIds((prev) => {
-      const value = typeof next === "function" ? (next as any)(prev) : next;
-      if (sessionId)
-        saveSessionCtx(sessionId, {
-          documentLibraryIds: selectedDocumentLibrariesIds,
-          promptResourceIds: selectedPromptResourceIds,
-          templateResourceIds: value,
-          searchPolicy: selectedSearchPolicyName,
-          skipRagSearch,
-        });
-      return value;
-    });
-  };
-  const setSearchPolicy = (next: React.SetStateAction<SearchPolicyName>) => {
-    setSelectedSearchPolicyName((prev) => {
-      const value = typeof next === "function" ? (next as any)(prev) : next;
-      if (sessionId)
-        saveSessionCtx(sessionId, {
-          documentLibraryIds: selectedDocumentLibrariesIds,
-          promptResourceIds: selectedPromptResourceIds,
-          templateResourceIds: selectedTemplateResourceIds,
-          searchPolicy: value,
-          skipRagSearch,
-        });
-      return value;
-    });
-  };
-  const setSkipRag = (next: boolean) => {
-    setSkipRagSearch(next);
-    if (sessionId)
-      saveSessionCtx(sessionId, {
-        documentLibraryIds: selectedDocumentLibrariesIds,
-        promptResourceIds: selectedPromptResourceIds,
-        templateResourceIds: selectedTemplateResourceIds,
-        searchPolicy: selectedSearchPolicyName,
-        skipRagSearch: next,
-      });
-  };
-
   const searchPolicyLabels: Record<SearchPolicyName, string> = {
     hybrid: t("search.hybrid", "Hybrid"),
     semantic: t("search.semantic", "Semantic"),
     strict: t("search.strict", "Strict"),
+  };
+  const defaultAgent = useMemo(() => (agents && agents.length > 0 ? agents[0] : undefined), [agents]);
+
+  // User-facing setters
+  const setLibs = (next: React.SetStateAction<string[]>) => {
+    setSelectedDocumentLibrariesIdsState((prev) => (typeof next === "function" ? (next as any)(prev) : next));
+  };
+  const setPrompts = (next: React.SetStateAction<string[]>) => {
+    setSelectedPromptResourceIdsState((prev) => (typeof next === "function" ? (next as any)(prev) : next));
+  };
+  const setTemplates = (next: React.SetStateAction<string[]>) => {
+    setSelectedTemplateResourceIdsState((prev) => (typeof next === "function" ? (next as any)(prev) : next));
+  };
+  const setSearchPolicy = (next: React.SetStateAction<SearchPolicyName>) => {
+    setSelectedSearchPolicyNameState((prev) => (typeof next === "function" ? (next as any)(prev) : next));
+  };
+  const setRagScope = (next: SearchRagScope) => {
+    setSearchRagScopeState(next);
+  };
+  const setDeepSearch = (next: boolean) => {
+    setDeepSearchEnabledState(next);
   };
 
   // “+” menu popover
@@ -348,6 +230,147 @@ export default function UserInput({
     return Array.isArray(names) ? names.map((n) => ({ id: n, name: n })) : [];
   }, [sessions, attachmentSessionId]);
 
+  // --- Session preferences (server-side) ---
+  const {
+    data: serverPrefs,
+    refetch: refetchPrefs,
+  } = useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery(
+    attachmentSessionId ? { sessionId: attachmentSessionId } : skipToken,
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnReconnect: true,
+      refetchOnFocus: true,
+    },
+  );
+  const [persistPrefs] = useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation();
+
+  // --- Synchronization Logic ---
+  // Track which session's prefs are currently applied to local state.
+  const [hydratedSessionId, setHydratedSessionId] = useState<string | undefined>(undefined);
+  const prevSessionIdRef = useRef<string | undefined>(undefined);
+  const lastSentJson = useRef<string>("");
+  const forcePersistRef = useRef<boolean>(false);
+
+  // 1. Master Effect: Handle Session Switching & Hydration
+  useEffect(() => {
+    const currentId = attachmentSessionId;
+    const prevId = prevSessionIdRef.current;
+    prevSessionIdRef.current = currentId;
+
+    // No session: clear markers
+    if (!currentId) {
+      setHydratedSessionId(undefined);
+      lastSentJson.current = "";
+      console.log("[PREFS] no session selected; cleared markers");
+      return;
+    }
+
+    // New session selection or switch: clear markers and WAIT for server prefs (no default reset to avoid flicker)
+    if (currentId && currentId !== prevId) {
+      lastSentJson.current = "";
+      setHydratedSessionId(undefined);
+      console.log("[PREFS] switched session; awaiting server prefs", { currentId });
+      return;
+    }
+
+    // Apply server prefs once per session
+    if (currentId && hydratedSessionId !== currentId && serverPrefs) {
+      const p = (serverPrefs as PersistedCtx & { agent_name?: string }) || {};
+      const isEmptyPrefs = Object.keys(p || {}).length === 0;
+      setSelectedDocumentLibrariesIdsState(
+        p.documentLibraryIds ?? initialDocumentLibraryIds ?? selectedDocumentLibrariesIds,
+      );
+      setSelectedPromptResourceIdsState(p.promptResourceIds ?? initialPromptResourceIds ?? selectedPromptResourceIds);
+      setSelectedTemplateResourceIdsState(p.templateResourceIds ?? initialTemplateResourceIds ?? selectedTemplateResourceIds);
+      setSelectedSearchPolicyNameState(p.searchPolicy ?? selectedSearchPolicyName);
+      setSearchRagScopeState(p.searchRagScope ?? searchRagScope);
+      setDeepSearchEnabledState(p.deepSearch ?? deepSearchEnabled);
+      const desiredAgentName = p.agent_name ?? currentAgent?.name ?? defaultAgent?.name;
+      if (desiredAgentName) {
+        const found = agents.find((a) => a.name === desiredAgentName) ?? defaultAgent;
+        if (found && found.name !== currentAgent?.name) {
+          onSelectNewAgent(found);
+        }
+      }
+      const json = serializePrefs({
+        documentLibraryIds: p.documentLibraryIds ?? initialDocumentLibraryIds ?? [],
+        promptResourceIds: p.promptResourceIds ?? initialPromptResourceIds ?? [],
+        templateResourceIds: p.templateResourceIds ?? initialTemplateResourceIds ?? [],
+        searchPolicy: p.searchPolicy ?? initialSearchPolicy,
+        searchRagScope: p.searchRagScope ?? initialSearchRagScope ?? defaultRagScope,
+        deepSearch: p.deepSearch ?? initialDeepSearch ?? false,
+        agent_name: p.agent_name ?? currentAgent?.name ?? defaultAgent?.name,
+      });
+      forcePersistRef.current = isEmptyPrefs;
+      lastSentJson.current = isEmptyPrefs ? "" : json;
+      setHydratedSessionId(currentId);
+      console.log("[PREFS] applied server prefs", { currentId, prefs: p });
+    }
+  }, [
+    attachmentSessionId,
+    hydratedSessionId,
+    serverPrefs,
+    initialDocumentLibraryIds,
+    initialPromptResourceIds,
+    initialTemplateResourceIds,
+    initialSearchPolicy,
+    initialSearchRagScope,
+    initialDeepSearch,
+    defaultRagScope,
+    currentAgent,
+    agents,
+    onSelectNewAgent,
+  ]);
+
+  // 2. Persistence Effect
+  // Only save if we are fully hydrated for the current session and user made a change.
+  useEffect(() => {
+    if (!attachmentSessionId || hydratedSessionId !== attachmentSessionId) return;
+
+    const prefs: PersistedCtx & { agent_name?: string } = {
+      documentLibraryIds: selectedDocumentLibrariesIds,
+      promptResourceIds: selectedPromptResourceIds,
+      templateResourceIds: selectedTemplateResourceIds,
+      searchPolicy: selectedSearchPolicyName,
+      searchRagScope: supportsRagScopeSelection ? searchRagScope : undefined,
+      deepSearch: supportsDeepSearchSelection ? deepSearchEnabled : undefined,
+      agent_name: currentAgent?.name ?? defaultAgent?.name,
+    };
+
+    const serialized = serializePrefs(prefs);
+    if (serialized === lastSentJson.current && !forcePersistRef.current) return;
+
+    lastSentJson.current = serialized;
+    forcePersistRef.current = false;
+    console.log("[PREFS] persisting to backend", { session: attachmentSessionId, prefs });
+    persistPrefs({
+      sessionId: attachmentSessionId,
+      sessionPreferencesPayload: { preferences: prefs },
+    })
+      .unwrap()
+      .then(() => {
+        console.log("[PREFS] persisted, refetching from backend", { session: attachmentSessionId });
+        refetchPrefs();
+      })
+      .catch((err) => {
+        console.warn("[PREFS] persist failed", err);
+      });
+  }, [
+    attachmentSessionId,
+    hydratedSessionId,
+    selectedDocumentLibrariesIds,
+    selectedPromptResourceIds,
+    selectedTemplateResourceIds,
+    selectedSearchPolicyName,
+    searchRagScope,
+    deepSearchEnabled,
+    supportsRagScopeSelection,
+    supportsDeepSearchSelection,
+    currentAgent,
+    persistPrefs,
+    refetchPrefs,
+  ]);
+
   const promptNameById = useMemo(
     () => Object.fromEntries((promptResources as Resource[]).map((r) => [r.id, r.name])),
     [promptResources],
@@ -373,7 +396,8 @@ export default function UserInput({
       promptResourceIds: selectedPromptResourceIds.length ? selectedPromptResourceIds : undefined,
       templateResourceIds: selectedTemplateResourceIds.length ? selectedTemplateResourceIds : undefined,
       searchPolicy: selectedSearchPolicyName,
-      skipRagSearch,
+      searchRagScope: supportsRagScopeSelection ? searchRagScope : undefined,
+      deepSearch: supportsDeepSearchSelection ? deepSearchEnabled : undefined,
     });
   }, [
     filesBlob,
@@ -382,7 +406,10 @@ export default function UserInput({
     selectedPromptResourceIds,
     selectedTemplateResourceIds,
     selectedSearchPolicyName,
-    skipRagSearch,
+    searchRagScope,
+    deepSearchEnabled,
+    supportsRagScopeSelection,
+    supportsDeepSearchSelection,
     onContextChange,
   ]);
 
@@ -412,7 +439,8 @@ export default function UserInput({
       promptResourceIds: selectedPromptResourceIds,
       templateResourceIds: selectedTemplateResourceIds,
       searchPolicy: selectedSearchPolicyName,
-      skipRagSearch,
+      searchRagScope: supportsRagScopeSelection ? searchRagScope : undefined,
+      deepSearch: supportsDeepSearchSelection ? deepSearchEnabled : undefined,
     });
     setUserInput("");
     setAudioBlob(null);
@@ -458,11 +486,6 @@ export default function UserInput({
     inputRef.current?.focus();
   };
 
-  // UI helpers — persist via wrapped setters
-  const removeLib = (id: string) => setLibs((prev) => prev.filter((x) => x !== id));
-  const removePrompt = (id: string) => setPrompts((prev) => prev.filter((x) => x !== id));
-  const removeTemplate = (id: string) => setTemplates((prev) => prev.filter((x) => x !== id));
-
   return (
     <Grid2 container sx={{ height: "100%", justifyContent: "flex-start", overflow: "hidden" }} size={12} display="flex">
       {/* Attachments strip - now a dedicated component */}
@@ -493,15 +516,11 @@ export default function UserInput({
               alignItems: "center",
             }}
           >
-            {supportsSkipRagSearch && (
-              <Tooltip title={t("chatbot.searchToggle", "Recherche documentaire (RAG)")}>
-                <Switch
-                  size="small"
-                  checked={!skipRagSearch}
-                  onChange={(e) => setSkipRag(!e.target.checked)}
-                  inputProps={{ "aria-label": "skip-rag-search" }}
-                />
-              </Tooltip>
+            {supportsDeepSearchSelection && (
+              <UserInputDeepSearchToggle value={deepSearchEnabled} onChange={setDeepSearch} disabled={isWaiting} />
+            )}
+            {supportsRagScopeSelection && (
+              <UserInputRagScope value={searchRagScope} onChange={setRagScope} disabled={isWaiting} />
             )}
             {canAttach && (
               <Tooltip title={t("chatbot.menu.addToSetup")}>
@@ -639,9 +658,9 @@ export default function UserInput({
           setPrompts={setPrompts}
           setTemplates={setTemplates}
           setSearchPolicy={setSearchPolicy}
-          onRemoveLib={removeLib}
-          onRemovePrompt={removePrompt}
-          onRemoveTemplate={removeTemplate}
+          onRemoveLib={(id) => setLibs((prev) => prev.filter((x) => x !== id))}
+          onRemovePrompt={(id) => setPrompts((prev) => prev.filter((x) => x !== id))}
+          onRemoveTemplate={(id) => setTemplates((prev) => prev.filter((x) => x !== id))}
           onRefreshSessionAttachments={() => {
             // Refresh the sessions list so the attachments view updates after deletions
             refetchSessions();

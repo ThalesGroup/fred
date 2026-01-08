@@ -20,10 +20,11 @@ import logging
 import secrets
 import uuid
 from datetime import datetime, timezone
-from typing import Awaitable, Callable, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 from fred_core import (
     Action,
     AuthorizationError,
@@ -40,6 +41,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from requests import HTTPError
 
 from agentic_backend.application_context import (
     get_default_model,
@@ -48,10 +50,7 @@ from agentic_backend.common.kf_lite_markdown_client import KfLiteMarkdownClient
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
-from agentic_backend.core.agents.runtime_context import (
-    RuntimeContext,
-    set_attachments_markdown,
-)
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.chatbot.chat_schema import (
     AttachmentRef,
     Channel,
@@ -66,12 +65,13 @@ from agentic_backend.core.chatbot.chat_schema import (
     ToolResultPart,
 )
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
-from agentic_backend.core.chatbot.session_in_memory_attachements import (
-    SessionInMemoryAttachments,
-)
 from agentic_backend.core.chatbot.stream_transcoder import StreamTranscoder
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.session.attachement_processing import AttachementProcessing
+from agentic_backend.core.session.stores.base_session_attachment_store import (
+    BaseSessionAttachmentStore,
+    SessionAttachmentRecord,
+)
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 
 logger = logging.getLogger(__name__)
@@ -102,18 +102,19 @@ class SessionOrchestrator:
         self,
         configuration: Configuration,
         session_store: BaseSessionStore,
+        attachments_store: Optional[BaseSessionAttachmentStore],
         agent_factory: BaseAgentFactory,
         history_store: BaseHistoryStore,
         kpi: BaseKPIWriter,
     ):
         self.session_store = session_store
+        self.attachments_store = attachments_store
         self.agent_factory = agent_factory
-        self.attachments_memory_store = SessionInMemoryAttachments(1000, 4)
-        logger.info(
-            "[SESSIONS] Initialized attachments memory store max_sessions=%d max_per_session=%d",
-            1000,
-            4,
-        )
+        if self.attachments_store:
+            logger.info(
+                "[SESSIONS] Attachment persistence enabled via %s",
+                type(self.attachments_store).__name__,
+            )
         # Side services
         self.history_store = history_store
         self.kpi: BaseKPIWriter = kpi
@@ -175,19 +176,15 @@ class SessionOrchestrator:
         session = self._get_or_create_session(
             user_id=user.uid, query=message, session_id=session_id
         )
+        # Propagate effective session_id into runtime context so downstream calls
+        # (vector search, attachments) can scope to the correct conversation.
+        runtime_context.session_id = session.id
         # 2) Check if an agent instance can be created/initialized/reused
         agent, is_cached = await self.agent_factory.create_and_init(
             agent_name=agent_name,
             runtime_context=runtime_context,
             session_id=session.id,
         )
-        # 3) Prepare optional attachments context (lite markdown) and make it available via runtime_context
-        # this corresponds to the attached files that the user added to his conversation. These files are transformed to lite markdown format
-        # in turn added to the runtime context so that the agent can use them during its reasoning
-        attachments_context = (
-            self.attachments_memory_store.get_session_attachments_markdown(session.id)
-        )
-        set_attachments_markdown(runtime_context, attachments_context)
 
         # 3) Rebuild minimal LangChain history (user/assistant/system only),
         # This method will only restore history if the agent is not cached.
@@ -218,9 +215,7 @@ class SessionOrchestrator:
         all_msgs: List[ChatMessage] = [user_msg]
         await self._emit(callback, user_msg)
 
-        # 3) Prepare optional attachments context (lite markdown) and make it available via runtime_context
-
-        # 4) Stream agent responses via the transcoder
+        # Stream agent responses via the transcoder
         saw_final_assistant = False
         agent_msgs: List[ChatMessage] = []
         try:
@@ -307,14 +302,6 @@ class SessionOrchestrator:
                 session.id, user, Action.READ
             ):
                 continue
-            files_names = self.attachments_memory_store.get_session_attachment_names(
-                session.id
-            )
-            id_name_pairs = (
-                self.attachments_memory_store.get_session_attachment_id_name_pairs(
-                    session.id
-                )
-            )
 
             # Retrieve all agents
             history = self.get_session_history(session.id, user)
@@ -322,9 +309,20 @@ class SessionOrchestrator:
                 msg.metadata.agent_name for msg in history if msg.metadata.agent_name
             }
 
-            attachments = [
-                AttachmentRef(id=att_id, name=name) for att_id, name in id_name_pairs
-            ]
+            files_names: list[str] = []
+            attachments: list[AttachmentRef] = []
+            if self.attachments_store:
+                try:
+                    records = self.attachments_store.list_for_session(session.id)
+                    files_names = [r.name for r in records]
+                    attachments = [
+                        AttachmentRef(id=r.attachment_id, name=r.name) for r in records
+                    ]
+                except Exception:
+                    logger.exception(
+                        "[SESSIONS] Failed to load attachments for session %s",
+                        session.id,
+                    )
             enriched.append(
                 SessionWithFiles(
                     **session.model_dump(),
@@ -342,12 +340,97 @@ class SessionOrchestrator:
         self._authorize_user_action_on_session(session_id, user, Action.READ)
         return self.history_store.get(session_id) or []
 
+    @authorize(action=Action.READ, resource=Resource.SESSIONS)
+    def get_session_preferences(
+        self, session_id: str, user: KeycloakUser
+    ) -> Dict[str, Any]:
+        """Return stored per-session preferences, if any."""
+        self._authorize_user_action_on_session(session_id, user, Action.READ)
+        session = self.session_store.get(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "session_not_found",
+                    "message": f"Session {session_id} not found.",
+                },
+            )
+        logger.info(
+            "[SESSIONS][PREFS] Retrieved preferences for session=%s user=%s prefs=%s",
+            session_id,
+            user.uid,
+            session.preferences,
+        )
+        return session.preferences or {}
+
+    @authorize(action=Action.UPDATE, resource=Resource.SESSIONS)
+    def update_session_preferences(
+        self, session_id: str, user: KeycloakUser, preferences: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Replace the stored preferences blob for a session."""
+        self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
+        session = self.session_store.get(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "session_not_found",
+                    "message": f"Session {session_id} not found.",
+                },
+            )
+        session.preferences = preferences or {}
+        session.updated_at = _utcnow_dt()
+        self.session_store.save(session)
+        try:
+            prefs_str = json.dumps(session.preferences, default=str)
+        except Exception:
+            prefs_str = str(session.preferences)
+        logger.info(
+            "[SESSIONS][PREFS] Persisted preferences for session=%s user=%s keys=%s values=%s",
+            session_id,
+            user.uid,
+            ",".join(sorted(session.preferences.keys())),
+            prefs_str,
+        )
+        return session.preferences
+
     @authorize(action=Action.DELETE, resource=Resource.SESSIONS)
-    async def delete_session(self, session_id: str, user: KeycloakUser) -> None:
+    async def delete_session(
+        self, session_id: str, user: KeycloakUser, access_token: Optional[str] = None
+    ) -> None:
         self._authorize_user_action_on_session(session_id, user, Action.DELETE)
+        # Collect doc_uids before clearing
+        doc_uids: set[str] = set()
+        if self.attachments_store:
+            try:
+                for rec in self.attachments_store.list_for_session(session_id):
+                    if rec.document_uid:
+                        doc_uids.add(rec.document_uid)
+            except Exception:
+                logger.exception(
+                    "[SESSIONS] Failed to collect attachment doc_uids before delete for session %s",
+                    session_id,
+                )
         await self.agent_factory.teardown_session_agents(session_id)
         self.session_store.delete(session_id)
-        self.attachments_memory_store.clear_session(session_id)
+        if self.attachments_store:
+            self.attachments_store.delete_for_session(session_id)
+        # Remote vector cleanup
+        if doc_uids and access_token:
+            client = KfLiteMarkdownClient(access_token=access_token)
+            for doc_uid in doc_uids:
+                try:
+                    client.delete_ingested_vectors(doc_uid)
+                    logger.info(
+                        "[SESSIONS][ATTACH] Deleted vectors for doc_uid=%s (session cleanup)",
+                        doc_uid,
+                    )
+                except Exception:
+                    logger.warning(
+                        "[SESSIONS][ATTACH] Failed to delete vectors for doc_uid=%s during session cleanup",
+                        doc_uid,
+                        exc_info=True,
+                    )
         logger.info("[SESSIONS] Deleted session %s", session_id)
 
     # ---------------- File uploads (kept for backward compatibility) ----------------
@@ -359,14 +442,42 @@ class SessionOrchestrator:
         user: KeycloakUser,
         session_id: str,
         attachment_id: str,
+        access_token: Optional[str] = None,
     ) -> None:
         """
-        Delete an in-memory attachment from a session.
+        Delete an attachment from a session (persistence + vectors).
         """
         self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
-        self.attachments_memory_store.delete(
-            session_id=session_id, attachment_id=attachment_id
-        )
+        doc_uid: Optional[str] = None
+        if self.attachments_store:
+            try:
+                records = self.attachments_store.list_for_session(session_id)
+                for rec in records:
+                    if rec.attachment_id == attachment_id:
+                        doc_uid = rec.document_uid
+                        break
+                self.attachments_store.delete(
+                    session_id=session_id, attachment_id=attachment_id
+                )
+            except Exception:
+                logger.exception(
+                    "[SESSIONS][ATTACH] Failed to delete attachment record %s",
+                    attachment_id,
+                )
+        if doc_uid and access_token:
+            try:
+                client = KfLiteMarkdownClient(access_token=access_token)
+                client.delete_ingested_vectors(doc_uid)
+                logger.info(
+                    "[SESSIONS][ATTACH] Deleted vectors for doc_uid=%s (attachment removal)",
+                    doc_uid,
+                )
+            except Exception:
+                logger.warning(
+                    "[SESSIONS][ATTACH] Failed to delete vectors for doc_uid=%s",
+                    doc_uid,
+                    exc_info=True,
+                )
         logger.info(
             "[SESSIONS] Deleted attachment %s from session %s",
             attachment_id,
@@ -389,11 +500,46 @@ class SessionOrchestrator:
         """
         Fred rationale:
         - Zero temp-files: we stream the uploaded content to Knowledge Flow 'lite/markdown'.
-        - We store ONLY the compact Markdown summary in RAM (SessionInMemoryAttachments).
-        - This powers 'retrieval implicite' in subsequent turns, exactly as designed.
+        - Store compact markdown + vectors via Knowledge Flow; no in-memory cache is used.
         """
+        if not self.attachments_store:
+            logger.error(
+                "[SESSIONS][ATTACH] Attachment uploads disabled: no attachments_store configured."
+            )
+            raise HTTPException(
+                status_code=501,
+                detail={
+                    "code": "attachments_disabled",
+                    "message": "Attachment uploads are disabled (no attachment store configured).",
+                },
+            )
+        supported_suffixes = {
+            ".pdf",
+            ".docx",
+            ".csv",
+        }
         if not file.filename:
-            raise ValueError("Uploaded file must have a filename.")
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "missing_filename",
+                    "message": "Uploaded file must have a filename.",
+                },
+            )
+        suffix = Path(file.filename).suffix.lower()
+        if suffix not in supported_suffixes:
+            logger.warning(
+                "Unsupported upload extension rejected: %s (user=%s)",
+                file.filename,
+                user.uid,
+            )
+            raise HTTPException(
+                status_code=415,
+                detail={
+                    "code": "unsupported_file_type",
+                    "message": f"Unsupported file type '{suffix or file.filename}'. Allowed: {', '.join(sorted(supported_suffixes))}.",
+                },
+            )
         content = await file.read()  # stays in memory
 
         # If no session_id was provided (first interaction), create one now.
@@ -413,27 +559,112 @@ class SessionOrchestrator:
         )
 
         # 2) Ask KF to produce a compact Markdown (text-only) for conversational use
-        summary_md = client.extract_markdown_from_bytes(
-            filename=file.filename,
-            content=content,
-            mime=file.content_type,
-            max_chars=max_chars,
-            include_tables=include_tables,
-            add_page_headings=add_page_headings,
-        )
+        try:
+            summary_md = client.extract_markdown_from_bytes(
+                filename=file.filename,
+                content=content,
+                mime=file.content_type,
+                max_chars=max_chars,
+                include_tables=include_tables,
+                add_page_headings=add_page_headings,
+            )
+            summary_md = (summary_md or "").strip()
+            if not summary_md:
+                summary_md = "_(No summary returned by Knowledge Flow)_"
+            logger.info(
+                "[SESSIONS][ATTACH] Received summary for %s bytes=%d chars=%d",
+                file.filename,
+                len(content),
+                len(summary_md),
+            )
+        except HTTPError as exc:  # Upstream format or processing failure
+            status = exc.response.status_code if exc.response is not None else 502
+            upstream_detail = (
+                exc.response.text
+                if getattr(exc, "response", None) is not None
+                else str(exc)
+            )
+            logger.error(
+                "Knowledge Flow rejected attachment %s (user=%s, status=%s, detail=%s)",
+                file.filename,
+                user.uid,
+                status,
+                upstream_detail,
+            )
+            raise HTTPException(
+                status_code=status,
+                detail={
+                    "code": "upload_processing_failed",
+                    "message": f"Failed to process {file.filename}.",
+                    "upstream": upstream_detail,
+                },
+            ) from exc
 
         # 3) Create a stable attachment_id (UUID v4 is fine here)
         attachment_id = str(uuid.uuid4())
 
-        # 4) Put into in-RAM session cache for implicit retrieval
-        self.attachments_memory_store.put(
-            session_id=session.id,
-            attachment_id=attachment_id,
-            name=file.filename,
-            summary_md=summary_md,
-            mime=file.content_type,
-            size_bytes=len(content),
-        )
+        # 3b) Ingest into vector store with session/user scoping
+        document_uid: Optional[str] = None
+        try:
+            ingest_resp = client.ingest_markdown_from_bytes(
+                filename=file.filename,
+                content=content,
+                session_id=session.id,
+                scope="session",
+                options={
+                    "max_chars": max_chars,
+                    "include_tables": include_tables,
+                    "add_page_headings": add_page_headings,
+                },
+            )
+            document_uid = ingest_resp.get("document_uid")
+            logger.info(
+                "[SESSIONS][ATTACH] Ingested vectors doc_uid=%s chunks=%s",
+                document_uid,
+                ingest_resp.get("chunks"),
+            )
+        except HTTPError as exc:
+            logger.error(
+                "[SESSIONS][ATTACH] Vector ingest failed for %s (user=%s): %s",
+                file.filename,
+                user.uid,
+                exc.response.text if exc.response is not None else str(exc),
+            )
+        except Exception:
+            logger.exception(
+                "[SESSIONS][ATTACH] Unexpected error during vector ingest for %s",
+                file.filename,
+            )
+
+        # 4) Persist metadata for UI if configured
+        if self.attachments_store:
+            now = _utcnow_dt()
+            try:
+                self.attachments_store.save(
+                    SessionAttachmentRecord(
+                        session_id=session.id,
+                        attachment_id=attachment_id,
+                        name=file.filename,
+                        summary_md=summary_md,
+                        mime=file.content_type,
+                        size_bytes=len(content),
+                        document_uid=document_uid,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+                logger.info(
+                    "[SESSIONS][ATTACH] Persisted summary for session=%s attachment=%s chars=%d",
+                    session.id,
+                    attachment_id,
+                    len(summary_md),
+                )
+            except Exception:
+                logger.exception(
+                    "[SESSIONS][ATTACH] Failed to persist attachment summary for session=%s attachment=%s",
+                    session.id,
+                    attachment_id,
+                )
 
         # 5) Return a minimal DTO for the UI
         return {
@@ -484,14 +715,16 @@ class SessionOrchestrator:
         # Attachments across these sessions
         attachments_total = 0
         attachments_sessions = 0
-        for sid in session_ids:
-            ids = self.attachments_memory_store.list_ids(sid)
-            if ids:
-                attachments_sessions += 1
-                attachments_total += len(ids)
-
-        att_stats = self.attachments_memory_store.stats()
-        max_att = int(att_stats.get("max_attachments_per_session", 0))
+        if self.attachments_store:
+            try:
+                for sid in session_ids:
+                    records = self.attachments_store.list_for_session(sid)
+                    if records:
+                        attachments_sessions += 1
+                        attachments_total += len(records)
+            except Exception:
+                logger.exception("[SESSIONS] Failed to compute attachment stats")
+        max_att = 0
 
         return ChatbotRuntimeSummary(
             sessions_total=sessions_total,
@@ -521,6 +754,9 @@ class SessionOrchestrator:
         """Check if a user can perform an action on a session"""
         session = self.session_store.get(session_id)
         if session is None:
+            # A2A proxy sessions are not persisted locally; allow access to avoid noisy warnings.
+            if session_id.startswith("a2a-"):
+                return True
             return False
 
         # For now, ignore action, only owners can access their sessions
@@ -799,7 +1035,11 @@ class SessionOrchestrator:
             .content
         )
         session = SessionSchema(
-            id=new_session_id, user_id=user_id, title=title, updated_at=_utcnow_dt()
+            id=new_session_id,
+            user_id=user_id,
+            title=title,
+            updated_at=_utcnow_dt(),
+            preferences=None,
         )
         self.session_store.save(session)
         logger.info(

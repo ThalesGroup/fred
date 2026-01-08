@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.12,<3.13"
 
 dependencies = [
+  "a2a-sdk>=0.3.0",
   "fastapi==0.116.1",
   "fastapi-mcp==0.4.0",
   "PyYAML==6.0.1",
@@ -39,6 +40,7 @@ dependencies = [
   "fred-core",
   "uv",
   "pyparsing>=3.2.5",
+  "psycopg2-binary>=2.9.10"
 ]
 
 [project.optional-dependencies]

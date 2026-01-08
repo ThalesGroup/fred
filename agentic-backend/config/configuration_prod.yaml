@@ -32,7 +32,7 @@ security:
   authorized_origins:
     - "http://localhost:5173"
   rebac:
-    enabled: false
+    enabled: true
     type: openfga
     api_url: "http://localhost:9080"
 
@@ -130,7 +130,18 @@ ai:
       chat_options:
         search_policy_selection: true
         libraries_selection: true
+        search_rag_scoping: true
+        deep_search_delegate: true
+        attach_files: true
+      metadata:
+        # Deep-search delegation target
+        deep_search_delegate_to: "Rico Senior"
+    - name: "Rico Senior"
+      type: "agent"
+      class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
       enabled: true
+      metadata:
+        deep_search_hidden_in_ui: true
     - name: "Tessa"
       type: "agent"
       class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
@@ -210,6 +221,10 @@ storage:
   session_store:
     type: "opensearch"
     index: session-index
+
+  attachments_store:
+    type: "postgres"
+    table: session_attachments
 
   history_store:
     type: "opensearch"

@@ -24,8 +24,11 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingGraph, ProcessingSummary
 from knowledge_flow_backend.common.utils import log_exception
 from knowledge_flow_backend.features.metadata.service import InvalidMetadataRequest, MetadataNotFound, MetadataService, MetadataUpdateError, StoreAuditFixResponse, StoreAuditReport
-from knowledge_flow_backend.features.pull.controller import PullDocumentsResponse
-from knowledge_flow_backend.features.pull.service import PullDocumentService
+
+
+class BrowseDocumentsResponse(BaseModel):
+    total: int
+    documents: List[DocumentMetadata]
 
 
 class SortOption(BaseModel):
@@ -39,11 +42,16 @@ lock = Lock()
 
 
 class BrowseDocumentsRequest(BaseModel):
-    source_tag: str = Field(..., description="Tag of the document source to browse (pull or push)")
     filters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Optional metadata filters")
     offset: int = Field(0, ge=0)
     limit: int = Field(50, gt=0, le=500)
     sort_by: Optional[List[SortOption]] = None
+
+
+class BrowseDocumentsByTagRequest(BaseModel):
+    tag_id: str = Field(..., description="Library tag identifier")
+    offset: int = Field(0, ge=0)
+    limit: int = Field(50, gt=0, le=500)
 
 
 def handle_exception(e: Exception) -> HTTPException | Exception:
@@ -93,16 +101,15 @@ class MetadataController:
     - All business exceptions are wrapped and exposed as HTTP errors only in the controller.
     """
 
-    def __init__(self, router: APIRouter, pull_document_service: PullDocumentService):
+    def __init__(self, router: APIRouter):
         self.context = ApplicationContext.get_instance()
         self.service = MetadataService()
         self.content_store = ApplicationContext.get_instance().get_content_store()
-        self.pull_document_service = pull_document_service
 
-        # ---- Schemas locaux pour les réponses ----
+        # ---- Local schemas for responses ----
         class VectorChunk(BaseModel):
-            chunk_uid: str = Field(..., description="Identifiant unique du chunk")
-            vector: List[float] = Field(..., description="Embedding du chunk")
+            chunk_uid: str = Field(..., description="Unique identifier of the chunk")
+            vector: List[float] = Field(..., description="Chunk embedding")
 
         @router.post(
             "/documents/metadata/search",
@@ -198,7 +205,7 @@ class MetadataController:
             "/documents/browse",
             tags=["Documents"],
             summary="Unified endpoint to browse documents from any source (push or pull)",
-            response_model=PullDocumentsResponse,
+            response_model=BrowseDocumentsResponse,
             description="""
             Returns a paginated list of documents from any configured source.
 
@@ -210,38 +217,43 @@ class MetadataController:
             """,
         )
         async def browse_documents(req: BrowseDocumentsRequest, user: KeycloakUser = Depends(get_current_user)):
-            config = self.context.get_config().document_sources.get(req.source_tag)
-            if not config:
-                raise HTTPException(status_code=404, detail=f"Source tag '{req.source_tag}' not found")
+            filters = req.filters or {}
+            docs = await self.service.get_documents_metadata(user, filters)
+            sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]
 
-            if config.type == "push":
-                filters = req.filters or {}
-                filters["source"] = {"source_tag": req.source_tag}
-                docs = await self.service.get_documents_metadata(user, filters)
-                sort_by = req.sort_by or [SortOption(field="document_name", direction="asc")]
+            for sort in reversed(sort_by):  # Apply last sort first for correct multi-field sorting
+                docs.sort(
+                    key=lambda d: getattr(d, sort.field, "") or "",  # fallback to empty string
+                    reverse=(sort.direction == "desc"),
+                )
 
-                for sort in reversed(sort_by):  # Apply last sort first for correct multi-field sorting
-                    docs.sort(
-                        key=lambda d: getattr(d, sort.field, "") or "",  # fallback to empty string
-                        reverse=(sort.direction == "desc"),
-                    )
+            paginated = docs[req.offset : req.offset + req.limit]
+            return BrowseDocumentsResponse(documents=paginated, total=len(docs))
 
-                paginated = docs[req.offset : req.offset + req.limit]
-                return PullDocumentsResponse(documents=paginated, total=len(docs))
-
-            elif config.type == "pull":
-                docs, total = self.pull_document_service.list_pull_documents(user, source_tag=req.source_tag, offset=req.offset, limit=req.limit)
-                # You could apply extra filtering here if needed
-                return PullDocumentsResponse(documents=docs, total=total)
-
-            else:
-                raise HTTPException(status_code=400, detail=f"Unsupported source type '{config.type}'")
+        @router.post(
+            "/documents/metadata/browse",
+            tags=["Documents"],
+            summary="Paginated documents by library tag",
+            response_model=BrowseDocumentsResponse,
+            description="Returns documents for a library tag with pagination support.",
+        )
+        async def browse_documents_by_tag(req: BrowseDocumentsByTagRequest, user: KeycloakUser = Depends(get_current_user)):
+            docs, total = await self.service.browse_documents_in_tag(user, tag_id=req.tag_id, offset=req.offset, limit=req.limit)
+            logger.info(
+                "[PAGINATION] browse_documents_by_tag tag=%s offset=%s limit=%s returned=%s total=%s",
+                req.tag_id,
+                req.offset,
+                req.limit,
+                len(docs),
+                total,
+            )
+            return BrowseDocumentsResponse(documents=docs, total=total)
 
         @router.get(
-            "/document/{document_uid}/vectors",
+            "/documents/{document_uid}/vectors",
             tags=["Documents"],
             summary="Get document chunk vectors (embeddings)",
-            description=("Returns the list of chunk vectors (embeddings) associated with the given document."),
+            description="Returns the list of chunk vectors (embeddings) associated with the given document.",
             response_model=List[VectorChunk],
         )
         async def document_vectors(
@@ -255,10 +267,10 @@ class MetadataController:
                 raise handle_exception(e)
 
         @router.get(
-            "/document/{document_uid}/chunks",
+            "/documents/{document_uid}/chunks",
             tags=["Documents"],
             summary="Get document chunks with metadata",
-            description=("Returns the list of chunks associated with the given document, including their metadata."),
+            description="Returns the list of chunks associated with the given document, including their metadata.",
             response_model=List[Dict[str, Any]],
         )
         async def document_chunks(
@@ -297,4 +309,33 @@ class MetadataController:
                 return await self.service.fix_store_anomalies(user)
             except Exception as e:
                 log_exception(e)
+                raise handle_exception(e)
+
+        @router.get(
+            "/documents/{document_uid}/chunks/{chunk_id}",
+            tags=["Documents"],
+            summary="Get chunk with metadata",
+            description="Returns the chunk, including their metadata.",
+            response_model=Dict[str, Any],
+        )
+        async def get_chunk(
+            document_uid: str,
+            chunk_id: str,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                chunk = await self.service.get_chunk(user, document_uid, chunk_id)
+                return chunk
+            except Exception as e:
+                raise handle_exception(e)
+
+        @router.delete("/documents/{document_uid}/chunks/{chunk_id}", tags=["Documents"], summary="Delete chunk", description="Delete the chunk", status_code=200)
+        async def delete_chunk(
+            document_uid: str,
+            chunk_id: str,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                await self.service.delete_chunk(user, document_uid, chunk_id)
+            except Exception as e:
                 raise handle_exception(e)

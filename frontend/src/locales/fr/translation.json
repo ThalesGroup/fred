@@ -11,7 +11,8 @@
     "refresh": "Rafraîchir",
     "cancel": "Annuler",
     "save": "Enregistrer",
-    "create": "Créer"
+    "create": "Créer",
+    "invalidUrl": "URL invalide"
   },
   "dataHub": {
     "title": "Hub des Données - Lignage des documents",
@@ -42,6 +43,38 @@
     "hideSection": "Masquer",
     "showSection": "Afficher"
   },
+  "graphHub": {
+    "panelTitle": "Actions",
+    "trainModelSection": "Entraîner le modèle",
+    "selectLibrary": "Librairie",
+    "showGraphSection": "Afficher le graphe",
+    "selectLibraries": "Librairies",
+    "selectTag": "Sélectionner une librairie",
+    "tag": "Librairie",
+    "umapError": "Erreur de projection",
+    "modelNotFoundError": "Modèle introuvable",
+    "modelNotFoundDetail": "Le modèle UMAP n'a pas encore été entraîné. Veuillez d'abord entraîner le modèle.",
+    "training": "Entraînement...",
+    "trainModel": "Entraîner le modèle",
+    "refreshGraph": "Afficher le graphe",
+    "deletionError": "Erreur de suppression de chunks",
+    "deletionErrorDetail": "{{failed}} sur {{total}} chunks n'ont pas pu être supprimés",
+    "selection": {
+      "title": "Sélection"
+    },
+    "deleteSelection": "Supprimer la sélection"
+  },
+  "graph3DView": {
+    "toggleLinks": "Afficher/masquer les liens",
+    "colorMode": {
+      "title": "Mode de coloration",
+      "none": "Sans coloration",
+      "3d": "Coloration 3D",
+      "vector": "Coloration vectorielle",
+      "distance": "Coloration distancielle"
+    },
+    "testPromptPlaceholder": "Saisir un prompt de test..."
+  },
   "resource": {
     "kind": {
       "prompt": {
@@ -69,6 +102,7 @@
     "deleted": "Supprimé"
   },
   "sidebar": {
+    "migration": "Migration",
     "cluster": "Cluster",
     "facts": "Faits",
     "audit": "Audit",
@@ -82,6 +116,7 @@
     "workspaces": "Espaces de travail",
     "account": "Profil",
     "tooltip": {
+      "migration": "Vérifier ou exécuter des actions de migration après une mise à jour",
       "cluster": "Expliquer le cluster",
       "facts": "Consulter les faits métier et d'usage du cluster",
       "audit": "Afficher un audit complet éco-score du cluster",
@@ -98,7 +133,8 @@
       "monitoring_logs": "Console de logs",
       "monitoring_runtime": "Résumé d'exécution",
       "monitoring_processors": "Banc de test processeurs",
-      "monitoring_data": "Surveillance des données"
+      "monitoring_data": "Surveillance des données",
+      "monitoring_graph": "Surveillance des graphes de connaissances"
     },
     "theme": {
       "light": "clair",
@@ -114,7 +150,30 @@
     "monitoring_processors": "Processeurs",
     "monitoring_data": "Données",
     "allAgents": "Tous les agents",
-    "deleteSessionFailed": "La supression de la conversation a échoué"
+    "deleteSessionFailed": "La supression de la conversation a échoué",
+    "monitoring_graph": "Graphe"
+  },
+  "chat": {
+    "common": {
+      "unknown": "Inconnu"
+    },
+    "feedback": {
+      "error": "Erreur de retour",
+      "submitted": "Retour envoyé",
+      "thanks": "Merci pour votre retour."
+    },
+    "labels": {
+      "task": "Tâche",
+      "node": "Nœud"
+    },
+    "message": {
+      "waiting": "En attente de réponse…",
+      "toolResult": "Résultat de l'outil"
+    },
+    "actions": {
+      "copyMessage": "Copier le message",
+      "openFeedback": "Ouvrir le retour"
+    }
   },
   "runtime": {
     "title": "Résumé d'exécution",
@@ -154,7 +213,7 @@
   },
   "procbench": {
     "title": "Banc de test des processeurs",
-    "description": "Ajoutez un PDF ou DOCX et comparez la qualité et la vitesse d'extraction entre processeurs.",
+    "description": "Ajoutez un document (PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL) et comparez la qualité et la vitesse d'extraction entre processeurs.",
     "uploadTitle": "Ajouter un document",
     "uploadSubtitle": "Pris en charge : PDF, DOCX, PPTX, Markdown, Texte",
     "browse": "Parcourir",
@@ -272,8 +331,14 @@
       "nickname": "Diminutif",
       "description": "Description",
       "role": "Rôle",
+      "agentType": "Type d'agent",
       "base_prompt": "Prompt",
       "agent_type": "Type d'agent",
+      "a2aProxyToggle": "Proxy A2A",
+      "a2aBaseUrl": "URL de base A2A",
+      "a2aBaseUrlRequired": "L'URL de base A2A est requise pour un agent A2A.",
+      "a2aToken": "Jeton A2A (optionnel)",
+      "optional": "Optionnel",
       "icon": "Icône",
       "tags": "Tags",
       "custom_tag": "Nouveau tag",
@@ -312,7 +377,17 @@
       "title": "Outils"
     },
     "confirmRestoreTitle": "Écraser les agents avec la configuration ?",
-    "confirmRestoreMessage": "Cette action remplacera tous les réglages personnalisés saisis dans l'UI par ceux du YAML. Vous perdrez vos modifications. Cette opération est irréversible."
+    "confirmRestoreMessage": "Cette action remplacera tous les réglages personnalisés saisis dans l'UI par ceux du YAML. Vous perdrez vos modifications. Cette opération est irréversible.",
+    "registerA2A": "Enrôler",
+    "noA2ACardSummary": "Aucune carte A2A stockée",
+    "noA2ACardDetail": "Cet agent ne possède pas encore de carte A2A stockée.",
+    "a2aCardTitle": "Carte Agent A2A",
+    "a2aCapabilities": "Capacités",
+    "a2aStreaming": "Streaming",
+    "a2aPush": "Notifications push",
+    "a2aHistory": "Historique d'état",
+    "a2aSkills": "Compétences",
+    "a2aExamples": "Exemples"
   },
   "mcpHub": {
     "title": "Outils",
@@ -375,6 +450,15 @@
     "confirmRestoreMessage": "Cette action remplacera toutes les modifications de serveurs MCP saisies dans l'UI par celles du YAML. Vous perdrez ces changements. Cette opération est irréversible."
   },
   "chatbot": {
+    "ragScope": {
+      "tooltipCorpus": "Utiliser seulement le corpus documentaire pour répondre",
+      "tooltipHybrid": "Utiliser le corpus documentaire et les connaissances générales du modèle pour répondre",
+      "tooltipGeneral": "Utiliser seulement les connaissances générales du modèle pour répondre"
+    },
+    "deepSearch": {
+      "label": "Recherche approfondie",
+      "tooltip": "Déléguer la recherche RAG à Rico Senior"
+    },
     "menu": {
       "addToSetup": "Ajouter à la configuration de la conversation"
     },
@@ -383,7 +467,8 @@
     },
     "attachFiles": "Joindre des fichiers",
     "attachments": {
-      "betaNotice": "Les pièces jointes sont en version bêta. Seuls les fichiers CSV, docx et pdf sont pris en charge. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
+      "betaNotice": "Les pièces jointes sont en version bêta. Formats pris en charge : PDF, DOCX, CSV. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
+      "supportedFormats": "Formats pris en charge : PDF, DOCX, CSV",
       "count": "{{count}} pièces jointes"
     },
     "uploadingFile": "Téléversement de {{name}}...",
@@ -397,6 +482,8 @@
     "searchDocumentLibraries": "Rechercher dans les bibliothèques de documents...",
     "searchPromptLibraries": "Rechercher dans les bibliothèques de prompts...",
     "searchChatContextLibraries": "Rechercher dans les bibliothèques de contextes de conversations...",
+    "welcomeUser": "Bonjour {{username}}",
+    "welcomeFallback": "Bonjour",
     "startNew": "Commencer une nouvelle conversation avec {{name}}",
     "tooltip": {
       "tokenUsage": "Cette conversation a utilisé {{input}} jetons de prompt et {{output}} jetons de réponse",
@@ -467,7 +554,9 @@
     "favorite": "Ajouter l'agent à vos favoris",
     "unfavorite": "Retirer l'agent de vos favoris",
     "manageAssets": "Gérer les ressources",
-    "manageCrew": "Gérer l'équipe"
+    "manageCrew": "Gérer l'équipe",
+    "inspectCode": "Inspecter le code source",
+    "viewA2ACard": "Voir la carte A2A"
   },
   "dialogs": {
     "create": {
@@ -527,8 +616,13 @@
       "templates": "Modèles",
       "prompts": "Prompts",
       "documents": "Documents",
+      "userAssets": "Mes fichiers",
       "operations": "Opérations",
       "chatContexts": "Contextes de conversation"
+    },
+    "userAssets": {
+      "title": "Mes fichiers",
+      "subtitle": "Fichiers générés par vous ou vos agents, associés à votre compte."
     }
   },
   "documentLibrary": {
@@ -544,6 +638,8 @@
     "uploadDrawerTitle": "Ajouter un document",
     "dropFiles": "Déposez vos fichiers ici",
     "maxSize": "ou cliquez pour sélectionner (max 200Mo par fichier)",
+    "supportedFormats": "Formats pris en charge : PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL",
+    "uploadDrawerTooltip": "Glissez-déposez ou sélectionnez vos fichiers (max 200Mo par fichier). Formats pris en charge : PDF, DOCX, PPTX, CSV, TXT, MD, XLSM, JSONL.",
     "searchPlaceholder": "Rechercher un document",
     "clearSearch": "Effacer la recherche",
     "documents": "{{count}} document(s)",
@@ -553,12 +649,23 @@
     "cancel": "Annuler",
     "save": "Enregistrer",
     "saving": "Enregistrement en cours...",
+    "bulkUploadModalTitle": "Suivi de l'ingestion",
+    "bulkUploadProgressSummary": "{{processed}} / {{total}} documents traités",
+    "bulkUploadDetailsLabel": "Détail par document",
+    "bulkUploadShowDetails": "Afficher le détail",
+    "bulkUploadHideDetails": "Masquer le détail",
+    "bulkUploadCompletedSummary": "Traitement terminé : {{processed}} / {{total}} documents",
+    "bulkUploadErrorsTitle": "Documents en erreur",
+    "bulkUploadUnknownError": "Erreur inconnue",
+    "bulkUploadNoErrors": "Aucune erreur détectée",
     "documentsView": "Documents",
     "removeSuccess": "Documents supprimés",
     "removedDocuments": "{{count}} document(s) supprimé(s) de la bibliothèque",
     "removeError": "Échec de la suppression",
     "removeErrorGeneric": "Impossible de supprimer les documents de la bibliothèque",
     "removeFromLibrary": "Supprimer de la bibliothèque",
+    "removeForbiddenSummary": "Non autorisé",
+    "removeForbiddenDetail": "Vous n'êtes pas autorisé à supprimer des éléments de la bibliothèque « {{folder}} ».",
     "emptyLibraryTitle": "Aucun document dans cette bibliothèque",
     "emptyLibraryDescription": "Cette bibliothèque est vide. Commencez par ajouter votre premier document pour le rendre consultable par vos assistants IA.",
     "uploadFirstDocument": "Ajouter votre premier document",
@@ -578,6 +685,9 @@
     "folderDeleted": "Dossier supprimé",
     "deleteFolder": "Supprimer le dossier",
     "download": "Télécharger",
+    "downloadStarting": "Préparation du téléchargement...",
+    "loadMore": "Charger plus",
+    "loadAll": "Tout charger",
     "pipeline": {
       "title": "Configurer le pipeline de traitement",
       "description": "Définissez la chaîne de processeurs à appliquer pour chaque type de fichier de cette bibliothèque.",
@@ -614,13 +724,20 @@
       "close": "Fermer",
       "addLibraryProcessor": "Ajouter un processeur de bibliothèque",
       "noLibraryProcessorAvailable": "Aucun processeur de bibliothèque disponible."
-    }
+    },
+    "configurePipeline": "Configurer le pipeline de traitement",
+    "viewOriginalPdf": "Voir le PDF original",
+    "makeExcluded": "Exclure de la recherche",
+    "makeSearchable": "Rendre recherchable",
+    "searchOn": "Recherche activée",
+    "searchOff": "Recherche désactivée"
   },
   "documentLibraryShareDialog": {
     "subtitle": "Ajoutez des utilisateurs ou des groupes et gérez les permissions d'accès pour cette bibliothèque.",
     "addAccessTab": "Ajouter un accès",
     "currentAccessTab": "Accès actuels",
     "shareError": "Impossible d'appliquer les paramètres de partage. Veuillez réessayer.",
+    "shareForbidden": "Vous n'êtes pas autorisé à partager la bibliothèque « {{name}} ».",
     "shareButton": "Partager",
     "searchPlaceholder": "Rechercher des utilisateurs ou des groupes…",
     "usersToggle": "Utilisateurs",
@@ -663,6 +780,10 @@
     "expandAll": "Tout développer",
     "folderDeleteSuccess": "Dossier supprimé",
     "folderDeleteDetail": "Le dossier « {{name}} » a été supprimé.",
+    "folderDeleteForbiddenSummary": "Non autorisé",
+    "folderDeleteForbiddenDetail": "Seul les propriétaires peuvent supprimer la bibliothèque « {{name}} ».",
+    "removeForbiddenSummary": "Non autorisé",
+    "removeForbiddenDetail": "Seul les propriétaires peuvent supprimer des éléments de la bibliothèque « {{folder}} ».",
     "searchPlaceholder": "Rechercher un(e) {{typeOne}}",
     "importDrawerTitle": "Importer un(e) {{typeOne}}",
     "dropFiles": "Déposez vos {{typePlural}} ici",
@@ -685,7 +806,8 @@
     "shareFolder": "Partager le dossier",
     "shareFolderWithName": "Partager \"{{name}}\"",
     "deleteFolder": "Supprimer le dossier",
-    "deleteFolderDisabled": "Une bibliothèque doit être vide pour être supprimée"
+    "deleteFolderDisabled": "Une bibliothèque doit être vide pour être supprimée",
+    "ownerTooltip": "Propriétaire : {{name}}"
   },
   "documentTable": {
     "selectedCount": "{{count}} sélectionné(s)",
@@ -861,6 +983,38 @@
         "name": "MCP local (stdio)",
         "description": "Exécute un serveur MCP local via stdio (outils basés sur un processus)"
       }
+    }
+  },
+  "rebac": {
+    "backfill": {
+      "title": "Backfill ReBAC",
+      "subtitle": "Reconstruit les relations propriétaire et tag-vers-document après activation de ReBAC.",
+      "description": "Utilisez-le une fois après avoir activé ReBAC sur un déploiement existant afin de restaurer l'accès aux bibliothèques et à leurs documents.",
+      "run": "Lancer le backfill",
+      "running": "Exécution...",
+      "success": {
+        "title": "Relations ReBAC reconstruites",
+        "detail": "{{owners}} relations propriétaire et {{parents}} relations tag->doc créées."
+      },
+      "disabled": {
+        "title": "ReBAC désactivé",
+        "detail": "ReBAC est désactivé ; aucune reconstruction nécessaire."
+      },
+      "error": {
+        "title": "Échec du backfill"
+      },
+      "stats": {
+        "tags": "Tags traités",
+        "docs": "Documents analysés",
+        "ownerRelations": "Relations propriétaire créées",
+        "parentRelations": "Relations tag->doc créées"
+      }
+    }
+  },
+  "app": {
+    "loading": {
+      "router": "Fred démarre...",
+      "ui": "Fred prépare l'interface..."
     }
   }
 }

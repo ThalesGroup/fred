@@ -32,6 +32,7 @@ from fred_core import (
 )
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.core.stores.resources.base_resource_store import ResourceNotFoundError
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError
 from knowledge_flow_backend.features.groups.groups_service import get_groups_by_ids
 from knowledge_flow_backend.features.groups.groups_structures import GroupSummary
@@ -147,6 +148,26 @@ class TagService:
         )
 
         await self.rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.TAGS, resource_id=tag.id)
+
+        # Link to parent tag in ReBAC when the new tag is nested.
+        if norm_path:
+            parent_tag = self._tag_store.get_by_owner_type_full_path(owner_id=user.uid, tag_type=tag_data.type, full_path=norm_path)
+            if parent_tag:
+                await self.rebac.add_relation(
+                    Relation(
+                        subject=RebacReference(type=Resource.TAGS, id=parent_tag.id),
+                        relation=RelationType.PARENT,
+                        resource=RebacReference(type=Resource.TAGS, id=tag.id),
+                    )
+                )
+            else:
+                logger.warning(
+                    "[TAGS] Parent tag not found for full_path=%s (owner=%s, type=%s) during creation of %s",
+                    norm_path,
+                    user.uid,
+                    tag_data.type,
+                    tag.id,
+                )
 
         return TagWithItemsId.from_tag(tag, [])
 
@@ -282,6 +303,105 @@ class TagService:
         tag = self._tag_store.get_tag_by_id(tag_id)
         tag.updated_at = datetime.now()
         self._tag_store.update_tag_by_id(tag_id, tag)
+
+    @authorize(Action.UPDATE, Resource.TAGS)
+    async def backfill_rebac_relations(self, user: KeycloakUser) -> dict:
+        """
+        Recreate missing ReBAC relations for existing tags and their documents.
+        Intended for migrations when enabling ReBAC on an existing instance.
+        """
+        # If ReBAC is disabled, no-op but stay consistent with other calls.
+        if getattr(self.rebac, "enabled", True) is False:
+            return {
+                "rebac_enabled": False,
+                "tags_seen": 0,
+                "documents_seen": 0,
+                "resources_seen": 0,
+                "tag_owner_relations_created": 0,
+                "tag_parent_relations_created": 0,
+            }
+
+        tags = self._tag_store.list_tags_for_user(user)
+        tag_owner_relations_created = 0
+        tag_parent_relations_created = 0
+        documents_seen = 0
+        resources_seen = 0
+
+        # Access underlying stores directly to avoid permission-filtered queries during migration.
+        metadata_store = self.document_metadata_service.metadata_store
+        resource_store = self.resource_service._resource_store
+
+        for tag in tags:
+            try:
+                await self.rebac.add_relation(
+                    Relation(
+                        subject=RebacReference(type=Resource.USER, id=tag.owner_id),
+                        relation=RelationType.OWNER,
+                        resource=RebacReference(type=Resource.TAGS, id=tag.id),
+                    )
+                )
+                tag_owner_relations_created += 1
+            except Exception as exc:
+                logger.warning("Failed to backfill owner relation for tag %s: %s", tag.id, exc)
+
+            # Tags drive parent relations depending on their type (documents vs other resources)
+            if tag.type == TagType.DOCUMENT:
+                try:
+                    docs = metadata_store.get_metadata_in_tag(tag.id)
+                except Exception as exc:
+                    logger.warning("Failed to list documents for tag %s during backfill: %s", tag.id, exc)
+                    continue
+
+                for doc in docs:
+                    doc_uid = getattr(doc, "document_uid", None) or getattr(doc.identity, "document_uid", None)
+                    if not doc_uid:
+                        continue
+                    documents_seen += 1
+                    try:
+                        await self.rebac.add_relation(
+                            Relation(
+                                subject=RebacReference(type=Resource.TAGS, id=tag.id),
+                                relation=RelationType.PARENT,
+                                resource=RebacReference(type=Resource.DOCUMENTS, id=doc_uid),
+                            )
+                        )
+                        tag_parent_relations_created += 1
+                    except Exception as exc:
+                        logger.warning("Failed to backfill tag->document relation for tag %s doc %s: %s", tag.id, doc_uid, exc)
+            elif tag.type == TagType.CHAT_CONTEXT:
+                try:
+                    resources = resource_store.get_resources_in_tag(tag.id)
+                except ResourceNotFoundError:
+                    resources = []
+                except Exception as exc:
+                    logger.warning("Failed to list resources for tag %s during backfill: %s", tag.id, exc)
+                    continue
+
+                for res in resources:
+                    resources_seen += 1
+                    try:
+                        await self.rebac.add_relation(
+                            Relation(
+                                subject=RebacReference(type=Resource.TAGS, id=tag.id),
+                                relation=RelationType.PARENT,
+                                resource=RebacReference(type=Resource.RESOURCES, id=res.id),
+                            )
+                        )
+                        tag_parent_relations_created += 1
+                    except Exception as exc:
+                        logger.warning("Failed to backfill tag->resource relation for tag %s resource %s: %s", tag.id, res.id, exc)
+            else:
+                # No parent relations to backfill for other tag types.
+                continue
+
+        return {
+            "rebac_enabled": True,
+            "tags_seen": len(tags),
+            "documents_seen": documents_seen,
+            "resources_seen": resources_seen,
+            "tag_owner_relations_created": tag_owner_relations_created,
+            "tag_parent_relations_created": tag_parent_relations_created,
+        }
 
     # ---------- Internals / helpers ----------
 

@@ -90,8 +90,16 @@ class AgentLoader:
         for agent_settings in self.store.load_all_global_scope():
             if not agent_settings.class_path:
                 logger.warning(
-                    "agent=%s No class_path found — skipping.", agent_settings.name
+                    "agent=%s No class_path found — deleting stale entry from store.",
+                    agent_settings.name,
                 )
+                try:
+                    self.store.delete(agent_settings.name)
+                except Exception:
+                    logger.exception(
+                        "agent=%s Failed to delete stale entry without class_path",
+                        agent_settings.name,
+                    )
                 continue
 
             try:

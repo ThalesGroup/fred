@@ -34,7 +34,7 @@ export function useSessionOrchestrator(params: {
   // Local mirror so we can upsert/delete without fighting server pagination/timing.
   const [sessions, setSessions] = useState<SessionWithFiles[]>([]);
   useEffect(() => {
-    console.log(
+    console.debug(
       "Orchestrator: useEffect triggered by sessionsFromServer change. New count:",
       sessionsFromServer?.length,
     );

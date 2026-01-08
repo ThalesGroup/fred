@@ -47,6 +47,7 @@ from fred_core import (
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
     OpenSearchLogStore,
+    PostgresTableConfig,
     RamLogStore,
     RebacEngine,
     SQLStorageConfig,
@@ -54,6 +55,7 @@ from fred_core import (
     rebac_factory,
     split_realm_url,
 )
+from fred_core.sql import create_engine_from_config
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_core.language_models.chat_models import BaseChatModel
 from requests.auth import AuthBase
@@ -64,10 +66,26 @@ from agentic_backend.common.structures import (
 )
 from agentic_backend.core.agents.store.base_agent_store import BaseAgentStore
 from agentic_backend.core.feedback.store.base_feedback_store import BaseFeedbackStore
+from agentic_backend.core.feedback.store.postgres_feedback_store import (
+    PostgresFeedbackStore,
+)
 from agentic_backend.core.mcp.mcp_server_manager import McpServerManager
 from agentic_backend.core.mcp.store.base_mcp_server_store import BaseMcpServerStore
+from agentic_backend.core.mcp.store.postgres_mcp_server_store import (
+    PostgresMcpServerStore,
+)
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
+from agentic_backend.core.monitoring.postgres_history_store import PostgresHistoryStore
+from agentic_backend.core.session.stores.base_session_attachment_store import (
+    BaseSessionAttachmentStore,
+)
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
+from agentic_backend.core.session.stores.postgres_session_attachment_store import (
+    PostgresSessionAttachmentStore,
+)
+from agentic_backend.core.session.stores.postgres_session_store import (
+    PostgresSessionStore,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +141,10 @@ def get_configuration() -> Configuration:
 
 def get_session_store() -> BaseSessionStore:
     return get_app_context().get_session_store()
+
+
+def get_session_attachment_store() -> Optional[BaseSessionAttachmentStore]:
+    return get_app_context().get_session_attachment_store()
 
 
 def get_mcp_configuration() -> McpConfiguration:
@@ -264,6 +286,7 @@ class ApplicationContext:
     _mcp_server_store_instance: Optional[BaseMcpServerStore] = None
     _mcp_server_manager: Optional[McpServerManager] = None
     _session_store_instance: Optional[BaseSessionStore] = None
+    _session_attachment_store_instance: Optional[BaseSessionAttachmentStore] = None
     _history_store_instance: Optional[BaseHistoryStore] = None
     _kpi_store_instance: Optional[BaseKPIStore] = None
     _log_store_instance: Optional[BaseLogStore] = None
@@ -378,8 +401,20 @@ class ApplicationContext:
 
             db_path = Path(store_config.duckdb_path).expanduser()
             return DuckdbSessionStore(db_path)
+        elif isinstance(store_config, PostgresTableConfig):
+            pg = get_configuration().storage.postgres
+            engine = create_engine_from_config(pg)
+            return PostgresSessionStore(
+                engine=engine,
+                table_name=store_config.table,
+                prefix=store_config.prefix or "",
+            )
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if opensearch_config is None:
+                raise ValueError(
+                    "OpenSearch configuration is required but not provided"
+                )
             from agentic_backend.core.session.stores.opensearch_session_store import (
                 OpensearchSessionStore,
             )
@@ -401,6 +436,38 @@ class ApplicationContext:
         else:
             raise ValueError("Unsupported sessions storage backend")
 
+    def get_session_attachment_store(self) -> Optional[BaseSessionAttachmentStore]:
+        """
+        Optional persistence for session attachment summaries.
+        Defaults to the same backend as the session store when compatible.
+        """
+        if self._session_attachment_store_instance is not None:
+            return self._session_attachment_store_instance
+
+        storage_cfg = get_configuration().storage
+        store_config = storage_cfg.attachments_store or storage_cfg.session_store
+
+        if isinstance(store_config, PostgresTableConfig):
+            engine = create_engine_from_config(storage_cfg.postgres)
+            table_name = (
+                store_config.table
+                if storage_cfg.attachments_store is not None
+                else f"{store_config.table}_attachments"
+            )
+            self._session_attachment_store_instance = PostgresSessionAttachmentStore(
+                engine=engine,
+                table_name=table_name,
+                prefix=store_config.prefix or "",
+            )
+            return self._session_attachment_store_instance
+
+        logger.info(
+            "[SESSIONS] Attachment persistence is disabled for backend=%s.",
+            store_config.type,
+        )
+        self._session_attachment_store_instance = None
+        return None
+
     def get_log_store(self) -> BaseLogStore:
         """
         Factory function to get the appropriate log storage backend based on configuration.
@@ -413,6 +480,10 @@ class ApplicationContext:
         config = self.configuration.storage.log_store
         if isinstance(config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if opensearch_config is None:
+                raise ValueError(
+                    "OpenSearch configuration is required but not provided"
+                )
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
@@ -455,9 +526,14 @@ class ApplicationContext:
             )
 
             db_path = Path(store_config.duckdb_path).expanduser()
-            return DuckdbHistoryStore(db_path)
+            self._history_store_instance = DuckdbHistoryStore(db_path)
+            return self._history_store_instance
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if opensearch_config is None:
+                raise ValueError(
+                    "OpenSearch configuration is required but not provided"
+                )
             password = opensearch_config.password
             if not password:
                 raise ValueError(
@@ -467,7 +543,7 @@ class ApplicationContext:
                 OpensearchHistoryStore,
             )
 
-            return OpensearchHistoryStore(
+            self._history_store_instance = OpensearchHistoryStore(
                 host=opensearch_config.host,
                 username=opensearch_config.username,
                 password=password,
@@ -475,6 +551,21 @@ class ApplicationContext:
                 verify_certs=opensearch_config.verify_certs,
                 index=store_config.index,
             )
+            return self._history_store_instance
+        elif isinstance(store_config, PostgresTableConfig):
+            pg = get_configuration().storage.postgres
+            engine = create_engine_from_config(pg)
+            self._history_store_instance = PostgresHistoryStore(
+                engine=engine,
+                table_name=store_config.table,
+                prefix=store_config.prefix or "",
+            )
+            logger.info(
+                "[HISTORY][STORE] Using Postgres backend table=%s prefix=%s",
+                store_config.table,
+                store_config.prefix or "",
+            )
+            return self._history_store_instance
         else:
             raise ValueError("Unsupported sessions storage backend")
 
@@ -485,6 +576,10 @@ class ApplicationContext:
         store_config = get_configuration().storage.kpi_store
         if isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if opensearch_config is None:
+                raise ValueError(
+                    "OpenSearch configuration is required but not provided"
+                )
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
@@ -529,6 +624,10 @@ class ApplicationContext:
             return DuckDBAgentStore(db_path)
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if opensearch_config is None:
+                raise ValueError(
+                    "OpenSearch configuration is required but not provided"
+                )
             password = opensearch_config.password
             if not password:
                 raise ValueError(
@@ -545,6 +644,25 @@ class ApplicationContext:
                 secure=opensearch_config.secure,
                 verify_certs=opensearch_config.verify_certs,
                 index=store_config.index,
+            )
+        elif isinstance(store_config, PostgresTableConfig):
+            if not os.getenv("POSTGRES_PASSWORD"):
+                logger.error(
+                    "[AGENTS][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres agent store)"
+                )
+                raise RuntimeError(
+                    "POSTGRES_PASSWORD is required for Postgres agent store"
+                )
+            pg = get_configuration().storage.postgres
+            engine = create_engine_from_config(pg)
+            from agentic_backend.core.agents.store.postgres_agent_store import (
+                PostgresAgentStore,
+            )
+
+            return PostgresAgentStore(
+                engine=engine,
+                table_name=store_config.table,
+                prefix=store_config.prefix or "",
             )
         else:
             raise ValueError("Unsupported sessions storage backend")
@@ -576,6 +694,10 @@ class ApplicationContext:
             )
 
             opensearch_config = get_configuration().storage.opensearch
+            if opensearch_config is None:
+                raise ValueError(
+                    "OpenSearch configuration is required but not provided"
+                )
             password = opensearch_config.password
             if not password:
                 raise ValueError(
@@ -595,6 +717,26 @@ class ApplicationContext:
                 store_config.index,
                 opensearch_config.secure,
                 opensearch_config.verify_certs,
+            )
+        elif isinstance(store_config, PostgresTableConfig):
+            if not os.getenv("POSTGRES_PASSWORD"):
+                logger.error(
+                    "[MCP][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres MCP server store)"
+                )
+                raise RuntimeError(
+                    "POSTGRES_PASSWORD is required for Postgres MCP server store"
+                )
+            pg = get_configuration().storage.postgres
+            engine = create_engine_from_config(pg)
+            self._mcp_server_store_instance = PostgresMcpServerStore(
+                engine=engine,
+                table_name=store_config.table,
+                prefix=store_config.prefix or "",
+            )
+            logger.info(
+                "[MCP][STORE] Using Postgres backend table=%s prefix=%s",
+                store_config.table,
+                store_config.prefix or "",
             )
         else:
             raise ValueError("Unsupported MCP servers storage backend")
@@ -643,9 +785,14 @@ class ApplicationContext:
                 DuckdbFeedbackStore,
             )
 
-            return DuckdbFeedbackStore(db_path)
+            self._feedback_store_instance = DuckdbFeedbackStore(db_path)
+            return self._feedback_store_instance
         elif isinstance(store_config, OpenSearchIndexConfig):
             opensearch_config = get_configuration().storage.opensearch
+            if opensearch_config is None:
+                raise ValueError(
+                    "OpenSearch configuration is required but not provided"
+                )
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
@@ -653,7 +800,7 @@ class ApplicationContext:
                 OpenSearchFeedbackStore,
             )
 
-            return OpenSearchFeedbackStore(
+            self._feedback_store_instance = OpenSearchFeedbackStore(
                 host=opensearch_config.host,
                 username=opensearch_config.username,
                 password=password,
@@ -661,6 +808,28 @@ class ApplicationContext:
                 verify_certs=opensearch_config.verify_certs,
                 index=store_config.index,
             )
+            return self._feedback_store_instance
+        elif isinstance(store_config, PostgresTableConfig):
+            if not os.getenv("POSTGRES_PASSWORD"):
+                logger.error(
+                    "[FEEDBACK][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres feedback store)"
+                )
+                raise RuntimeError(
+                    "POSTGRES_PASSWORD is required for Postgres feedback store"
+                )
+            pg = get_configuration().storage.postgres
+            engine = create_engine_from_config(pg)
+            self._feedback_store_instance = PostgresFeedbackStore(
+                engine=engine,
+                table_name=store_config.table,
+                prefix=store_config.prefix or "",
+            )
+            logger.info(
+                "[FEEDBACK][STORE] Using Postgres backend table=%s prefix=%s",
+                store_config.table,
+                store_config.prefix or "",
+            )
+            return self._feedback_store_instance
         else:
             raise ValueError("Unsupported sessions storage backend")
 
@@ -766,6 +935,8 @@ class ApplicationContext:
                     )
                 elif isinstance(store_cfg, OpenSearchIndexConfig):
                     os_cfg = cfg.storage.opensearch
+                    if os_cfg is None:
+                        return
                     logger.info(
                         "     • %-14s OpenSearch host=%s index=%s secure=%s verify=%s",
                         label,

@@ -68,6 +68,18 @@ class BaseMetadataStore:
         """
         pass
 
+    def browse_metadata_in_tag(self, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[List[DocumentMetadata], int]:
+        """
+        Return a paginated list of metadata entries tagged with a specific tag ID.
+
+        The second element of the tuple is the total number of documents that match
+        the tag (ignoring pagination).
+        """
+        # Default fallback implementation: load all then slice.
+        all_docs = self.get_metadata_in_tag(tag_id)
+        total = len(all_docs)
+        return all_docs[offset : offset + limit], total
+
     @abstractmethod
     def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
         """

@@ -1,3 +1,6 @@
+*.keras
+*.model
+*.umap
 **/ignore_*
 /metrics/target
 .idea/

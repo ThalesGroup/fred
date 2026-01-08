@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 
+from fred_core import VectorSearchHit
 from pydantic import BaseModel, Field
 
 
@@ -50,82 +50,10 @@ class SearchResponseDocument(BaseModel):
     metadata: dict
 
 
-@dataclass(frozen=True)
-class SearchPolicy:
-    """
-    Fred — Retrieval policy focused on precision.
-    Why:
-      - We prefer returning nothing over surfacing off-topic chunks.
-      - Two signals must agree: vector similarity AND lexical evidence.
-      - Toggle phrase requirement to slash near-topic false positives.
-    """
-
-    k_final: int = 5  # max docs to return
-    fetch_k: int = 60  # ANN/BM25 candidate pool
-    vector_min_cosine: float = 0.52  # gate for ANN (cosine after normalization)
-    bm25_min_score: float = 3.0  # gate for BM25 (tune per index)
-    require_phrase_hit: bool = True  # demand exact phrase in text/title/section
-    use_mmr: bool = True  # de-dup many chunks from same doc
-
-
 class SearchPolicyName(str, Enum):
     hybrid = "hybrid"  # default
     strict = "strict"  # high precision
     semantic = "semantic"  # simple, not precise useful to debug
-
-
-@dataclass(frozen=True)
-class HybridPolicy:
-    """
-    Hybrid (default) — BM25 + ANN with RRF fusion and soft lexical signals.
-    Robust default: resists semantic drift while keeping recall.
-    """
-
-    # ---- Output & fetch sizes ----
-    k_final: int = 8
-    fetch_k_ann: int = 60
-    fetch_k_bm25: int = 60
-
-    # ---- Thresholds ----
-    vector_min_cosine: float = 0.45
-    bm25_min_score: float = 1.5
-
-    # ---- RRF fusion ----
-    rrf_k: int = 60
-    w_ann: float = 1.0
-    w_bm25: float = 0.9
-
-    # ---- Diversity / MMR ----
-    use_mmr: bool = True
-
-    # ---- Soft signal bonuses (never hard filters) ----
-    enable_soft_signals: bool = True
-    who_query_boost: float = 0.02
-    capitalized_terms_bonus: float = 0.08
-    quoted_phrases_bonus: float = 0.12
-    soft_bonus_cap: float = 0.25
-
-
-@dataclass(frozen=True)
-class StrictPolicy:
-    """
-    Strict — ANN ∩ BM25 ∩ (optional) exact phrase; returns [] if weak.
-    Why: high-precision mode for dense/noisy libraries.
-    """
-
-    k_final: int = 5
-    fetch_k: int = 60
-    vector_min_cosine: float = 0.52
-    bm25_min_score: float = 3.0
-    require_phrase_hit: bool = True
-    use_mmr: bool = True
-
-
-POLICIES = {
-    SearchPolicyName.hybrid: HybridPolicy(),
-    SearchPolicyName.strict: StrictPolicy(),
-    SearchPolicyName.semantic: HybridPolicy(k_final=10, fetch_k_ann=50, fetch_k_bm25=0),  # not used by retriever
-}
 
 
 class SearchRequest(BaseModel):
@@ -144,3 +72,17 @@ class SearchRequest(BaseModel):
         default=None,
         description="Optional search policy preset. If omitted, defaults to 'hybrid'.",
     )
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Optional chat session id to include session-scoped attachments (user/session filtered).",
+    )
+    include_session_scope: bool = Field(
+        default=True,
+        description="If true and session_id is provided, also search session-scoped attachment vectors (filtered by user/session).",
+    )
+
+
+class RerankRequest(BaseModel):
+    question: str
+    documents: List[VectorSearchHit]
+    top_r: int = Field(default=6, ge=1, description="Number of top-reranked chunks to consider")
