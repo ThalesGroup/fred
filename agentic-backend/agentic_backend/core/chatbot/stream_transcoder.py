@@ -19,14 +19,16 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Awaitable, Callable, List, Optional, cast
+from typing import Any, Awaitable, Callable, List, Optional, cast
 
-from fred_core import KeycloakUser
+from fred_core import KeycloakUser, VectorSearchHit
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler
 from langgraph.graph import MessagesState
+from pydantic import TypeAdapter, ValidationError
 
+from agentic_backend.common.rags_utils import ensure_ranks
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.chatbot.chat_schema import (
@@ -48,6 +50,8 @@ from agentic_backend.core.chatbot.message_part import (
 )
 
 logger = logging.getLogger(__name__)
+
+_VECTOR_SEARCH_HITS = TypeAdapter(List[VectorSearchHit])
 
 # WS callback type (sync or async)
 CallbackType = Callable[[dict], None] | Callable[[dict], Awaitable[None]]
@@ -96,6 +100,49 @@ def _infer_tool_ok_flag(raw_md: dict, content: str) -> Optional[bool]:
             return False
 
     return None
+
+
+def _extract_vector_search_hits(raw: Any) -> Optional[List[VectorSearchHit]]:
+    if raw is None:
+        return None
+
+    payload: Any = raw
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except Exception:
+            return None
+
+    if isinstance(payload, dict):
+        for key in ("result", "data", "hits"):
+            candidate = payload.get(key)
+            if isinstance(candidate, list):
+                payload = candidate
+                break
+
+    if not isinstance(payload, list):
+        return None
+
+    try:
+        hits = _VECTOR_SEARCH_HITS.validate_python(payload)
+    except ValidationError:
+        return None
+
+    ensure_ranks(hits)
+    return hits
+
+
+def _normalize_sources_payload(raw: Any) -> List[VectorSearchHit]:
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        return []
+    try:
+        hits = _VECTOR_SEARCH_HITS.validate_python(raw)
+    except ValidationError:
+        return []
+    ensure_ranks(hits)
+    return hits
 
 
 class StreamTranscoder:
@@ -147,6 +194,7 @@ class StreamTranscoder:
         out: List[ChatMessage] = []
         seq = start_seq
         final_sent = False
+        pending_sources_payload: Optional[List[VectorSearchHit]] = None
         msgs_any: list[AnyMessage] = [cast(AnyMessage, m) for m in input_messages]
         state: MessagesState = {"messages": msgs_any}
         async for event in agent.astream_updates(state=state, config=config):
@@ -169,9 +217,9 @@ class StreamTranscoder:
                 finish_reason = coerce_finish_reason(raw_md.get("finish_reason"))
                 token_usage = clean_token_usage(usage_raw)
 
-                sources_payload = (
-                    raw_md.get("sources") or additional_kwargs.get("sources") or []
-                )  # NEW
+                sources_payload = _normalize_sources_payload(
+                    raw_md.get("sources") or additional_kwargs.get("sources")
+                )
 
                 # ---------- TOOL CALLS ----------
                 tool_calls = extract_tool_calls(msg)
@@ -214,7 +262,22 @@ class StreamTranscoder:
                         or raw_md.get("tool_call_id")
                         or "t?"
                     )
-                    content_str = getattr(msg, "content", "")
+                    raw_content = getattr(msg, "content", None)
+                    new_hits = _extract_vector_search_hits(raw_content)
+                    if new_hits is not None:
+                        logger.info(
+                            "[Transcoder] tool_result call_id=%s vector_hits=%d",
+                            call_id,
+                            len(new_hits),
+                        )
+                        pending_sources_payload = new_hits
+                    else:
+                        logger.info(
+                            "[Transcoder] tool_result call_id=%s vector_hits=0 (no parse)",
+                            call_id,
+                        )
+
+                    content_str = raw_content or ""
                     if not isinstance(content_str, str):
                         content_str = json.dumps(content_str)
                     ok_flag = _infer_tool_ok_flag(raw_md, content_str)
@@ -317,6 +380,21 @@ class StreamTranscoder:
                         for p in parts
                     ):
                         continue
+
+                if role == Role.assistant and ch == Channel.final:
+                    if not sources_payload and pending_sources_payload is not None:
+                        sources_payload = pending_sources_payload
+                        logger.info(
+                            "[Transcoder] attach_sources to final assistant message sources=%d",
+                            len(sources_payload),
+                        )
+                    else:
+                        logger.info(
+                            "[Transcoder] final assistant message no sources attached pending=%s existing=%d",
+                            pending_sources_payload is not None,
+                            len(sources_payload) if sources_payload else 0,
+                        )
+                    pending_sources_payload = None
 
                 msg_v2 = ChatMessage(
                     session_id=session_id,
