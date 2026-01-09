@@ -228,7 +228,9 @@ class AgentFlow:
         expires_at = payload.get("expires_at_timestamp")
         if expires_at:
             try:
-                setattr(self.runtime_context, "access_token_expires_at", expires_at)
+                setattr(
+                    self.runtime_context, "access_token_expires_at", int(expires_at)
+                )
             except Exception:
                 logger.debug(
                     "Could not set access_token_expires_at on runtime_context; skipping attribute assignment."

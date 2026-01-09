@@ -595,7 +595,7 @@ class IngestionController:
             # Validate extension
             filename = file.filename or "uploaded"
             suffix = pathlib.Path(filename).suffix.lower()
-            if suffix not in (".pdf", ".docx", ".csv", ".pptx"):
+            if suffix not in (".pdf", ".docx", ".csv", ".pptx", ".md"):
                 raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}")
 
             # Store to temp

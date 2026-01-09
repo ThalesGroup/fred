@@ -61,8 +61,12 @@ class LiteMdProcessingService:
                 return self._csv.extract(file_path, options)
             if ext == ".pptx":
                 return self._pptx.extract(file_path, options)
+            if ext == ".md":
+                # No extraction needed
+                content = file_path.read_text(encoding="utf-8")
+                return LiteMarkdownResult(document_name=file_path.name, page_count=1, total_chars=len(content), truncated=False, markdown=content)
         except Exception as e:
             logger.warning(f"Lightweight extraction failed for {file_path.name}: {e}")
             raise LiteExtractionFailed(f"Failed to extract lightweight Markdown from '{file_path.name}': {e}")
 
-        raise LiteTypeNotSupportedError(f"Unsupported file type for lightweight extraction: '{ext}' (only .pdf, .docx, .csv, .pptx are supported)")
+        raise LiteTypeNotSupportedError(f"Unsupported file type for lightweight extraction: '{ext}' (only .pdf, .docx, .csv, .pptx, .md are supported)")

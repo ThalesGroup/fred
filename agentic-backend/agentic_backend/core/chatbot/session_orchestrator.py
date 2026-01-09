@@ -631,11 +631,7 @@ class SessionOrchestrator:
                     "message": "Attachment uploads are disabled (no attachment store configured).",
                 },
             )
-        supported_suffixes = {
-            ".pdf",
-            ".docx",
-            ".csv",
-        }
+        supported_suffixes = {".pdf", ".docx", ".csv", ".md"}
         # Enforce per-user attachment count limit
         max_files_user = self.max_attached_files_per_user
         try:
