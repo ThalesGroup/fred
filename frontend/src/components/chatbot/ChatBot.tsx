@@ -841,6 +841,7 @@ const ChatBot = ({
               width="100%"
               p={2}
               sx={{
+                minHeight: 0,
                 overflowY: "auto",
                 overflowX: "hidden",
                 scrollbarWidth: "none",

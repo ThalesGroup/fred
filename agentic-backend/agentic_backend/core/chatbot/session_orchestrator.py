@@ -233,8 +233,11 @@ class SessionOrchestrator:
         # Stream agent responses via the transcoder
         saw_final_assistant = False
         agent_msgs: List[ChatMessage] = []
+        had_error = False
+        had_cancelled = False
+        error_code: Optional[str] = None
         try:
-            # Timer covers the entire exchange; status defaults to "error" if exception bubbles.
+            # Timer covers the entire exchange; default status="ok" unless overridden.
             with self.kpi.timer(
                 "chat.exchange_latency_ms",
                 dims={
@@ -244,43 +247,78 @@ class SessionOrchestrator:
                     "exchange_id": exchange_id,
                 },
                 actor=actor,
-            ):
+            ) as kpi_dims:
                 # Build input messages ensuring the last message is the Human question.
                 input_messages = lc_history + [HumanMessage(message)]
 
-                agent_msgs = await self.transcoder.stream_agent_response(
-                    agent=agent,
-                    input_messages=input_messages,
-                    session_id=session.id,
-                    exchange_id=exchange_id,
-                    agent_name=agent_name,
-                    base_rank=base_rank,
-                    start_seq=1,  # user message already consumed rank=base_rank
-                    callback=callback,
-                    user_context=user,
-                    runtime_context=runtime_context,
-                )
+                try:
+                    agent_msgs = await self.transcoder.stream_agent_response(
+                        agent=agent,
+                        input_messages=input_messages,
+                        session_id=session.id,
+                        exchange_id=exchange_id,
+                        agent_name=agent_name,
+                        base_rank=base_rank,
+                        start_seq=1,  # user message already consumed rank=base_rank
+                        callback=callback,
+                        user_context=user,
+                        runtime_context=runtime_context,
+                    )
+                except asyncio.CancelledError:
+                    had_cancelled = True
+                    error_code = "cancelled"
+                    kpi_dims["error_code"] = error_code
+                    raise
                 all_msgs.extend(agent_msgs)
                 # Success signal: exactly one assistant/final per exchange (enforced by transcoder)
                 saw_final_assistant = any(
                     (m.role == Role.assistant and m.channel == Channel.final)
                     for m in agent_msgs
                 )
+                # Error signal: explicit error marker from the transcoder.
+                for msg in agent_msgs:
+                    extras = msg.metadata.extras if msg.metadata else {}
+                    if extras.get("error") is True or msg.channel == Channel.error:
+                        had_error = True
+                        error_code = extras.get("error_code") or error_code
+                        break
+                if had_error:
+                    kpi_dims["status"] = "error"
+                    if error_code:
+                        kpi_dims["error_code"] = error_code
+        except asyncio.CancelledError:
+            logger.info(
+                "Agent execution cancelled by client (agent=%s session=%s exchange=%s)",
+                agent_name,
+                session.id,
+                exchange_id,
+            )
+            raise
         except Exception:
             logger.exception("Agent execution failed")
             # KPI timer already recorded status="error" on exception
         finally:
             # Count the exchange outcome
+            exchange_status = (
+                "cancelled"
+                if had_cancelled
+                else (
+                    "error" if had_error else ("ok" if saw_final_assistant else "error")
+                )
+            )
+            exchange_dims: Dict[str, str | None] = {
+                "agent_id": agent_name,
+                "user_id": user.uid,
+                "session_id": session.id,
+                "exchange_id": exchange_id,
+                "status": exchange_status,
+            }
+            if exchange_status in {"error", "cancelled"} and error_code:
+                exchange_dims["error_code"] = error_code
             self.kpi.count(
                 "chat.exchange_total",
                 1,
-                dims={
-                    "agent_id": agent_name,
-                    "user_id": user.uid,
-                    "session_id": session.id,
-                    "exchange_id": exchange_id,
-                    "status": "ok" if saw_final_assistant else "error",
-                },
+                dims=exchange_dims,
                 actor=actor,
             )
 
@@ -631,11 +669,7 @@ class SessionOrchestrator:
                     "message": "Attachment uploads are disabled (no attachment store configured).",
                 },
             )
-        supported_suffixes = {
-            ".pdf",
-            ".docx",
-            ".csv",
-        }
+        supported_suffixes = {".pdf", ".docx", ".csv", ".md"}
         # Enforce per-user attachment count limit
         max_files_user = self.max_attached_files_per_user
         try:
