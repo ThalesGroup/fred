@@ -5,10 +5,9 @@ import logging
 from typing import Any, Optional
 
 import httpx  # ← we log/inspect HTTP errors coming from MCP adapters
+from fred_core import KPIActor
 from langchain_core.tools import BaseTool
 from pydantic import Field
-
-from fred_core import KPIActor
 
 from agentic_backend.application_context import get_app_context
 from agentic_backend.core.agents.runtime_context import (

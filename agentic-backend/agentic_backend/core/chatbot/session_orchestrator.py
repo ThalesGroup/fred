@@ -306,7 +306,7 @@ class SessionOrchestrator:
                     "error" if had_error else ("ok" if saw_final_assistant else "error")
                 )
             )
-            exchange_dims = {
+            exchange_dims: Dict[str, str | None] = {
                 "agent_id": agent_name,
                 "user_id": user.uid,
                 "session_id": session.id,

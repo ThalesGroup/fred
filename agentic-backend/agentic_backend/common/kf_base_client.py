@@ -7,10 +7,9 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 import requests
+from fred_core import KPIActor
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-
-from fred_core import KPIActor
 
 from agentic_backend.application_context import get_app_context
 

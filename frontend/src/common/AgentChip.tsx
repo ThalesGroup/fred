@@ -1,7 +1,8 @@
 // AgentChip.tsx (Consolidated: AgentChipWithIcon and AgentChipMini)
 
-import { alpha, Box, Chip, SxProps, Theme, Typography, useTheme } from "@mui/material";
+import { Box, Chip, SxProps, Theme, Typography, useTheme } from "@mui/material";
 import { AgentColorHint, AnyAgent, getAgentVisuals } from "./agent";
+import { forwardRef, type ForwardRefRenderFunction } from "react";
 
 // --- Configuration Constants ---
 
@@ -150,11 +151,12 @@ export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
 interface AgentChipMiniProps {
   agent: AnyAgent | null | undefined;
   sx?: SxProps;
-  /** If true, add a  subtle hover bg without increasing size */
-  subtleHover?: boolean;
 }
 
-export const AgentChipMini = ({ agent, sx, subtleHover = true }: AgentChipMiniProps) => {
+const AgentChipMiniBase: ForwardRefRenderFunction<HTMLDivElement, AgentChipMiniProps> = (
+  { agent, sx },
+  ref
+) => {
   if (!agent) return null;
 
   const theme = useTheme();
@@ -163,74 +165,27 @@ export const AgentChipMini = ({ agent, sx, subtleHover = true }: AgentChipMiniPr
   const initial = agent.name?.charAt(0)?.toUpperCase() ?? "?";
 
   return (
-    <Chip
-      variant="outlined"
-      size="small"
-      // No icon for mini; pure text
-      label={
-        <Box
-          sx={{
-            flex: 1,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            minWidth: 0,
-            px: `${PAD_X}px`,
-          }}
-        >
-          <Typography
-            // overline is typically tall; we use caption with tuned size for tighter line-box
-            variant="caption"
-            sx={{
-              color: chipColor,
-              fontSize: `${FONT_SIZE}px`,
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: `${LETTER_SPACING}px`,
-              lineHeight: 1, // tight vertical rhythm
-              whiteSpace: "nowrap",
-              maxWidth: "100%",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-            title={agent.name} // full name on hover if truncated
-          >
-            {initial}
-          </Typography>
-        </Box>
-      }
+    <Typography
+      ref={ref}
+      variant="body1"
+      fontWeight={700}
+      title={agent.name}
       sx={[
         (t) => ({
-          // Width: auto but capped; stays compact while allowing a bit of growth
-          maxWidth: MAX_WIDTH,
-          minWidth: 0,
-          height: CHIP_MINI_HEIGHT,
-          borderRadius: CORNER,
-          borderColor: chipColor,
           color: chipColor,
-          // Keep the root dense: remove default paddings around label
-          p: 0,
-
-          // Make sure the internal label is flex and has zero padding
-          "& .MuiChip-label": {
-            flex: 1,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            p: 0.3,
-            minWidth: 0,
-          },
-
-          // Optional: very subtle hover tint that respects the current mode
-          ...(subtleHover && {
-            transition: "background-color 120ms ease",
-            "&:hover": {
-              backgroundColor: t.palette.mode === "dark" ? alpha(chipColor, 0.08) : alpha(chipColor, 0.06),
-            },
-          }),
+          lineHeight: 1.2,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          maxWidth: 180,
+          letterSpacing: `${LETTER_SPACING}px`,
         }),
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
-    />
+    >
+      {agent.name}
+    </Typography>
   );
 };
+
+export const AgentChipMini = forwardRef(AgentChipMiniBase);
