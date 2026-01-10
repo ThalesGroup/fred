@@ -1,18 +1,12 @@
 // AgentChip.tsx (Consolidated: AgentChipWithIcon and AgentChipMini)
 
-import { Box, Chip, SxProps, Theme, Typography, useTheme } from "@mui/material";
-import { AgentColorHint, AnyAgent, getAgentVisuals } from "./agent";
+import { Box, SxProps, Theme, Typography, useTheme } from "@mui/material";
 import { forwardRef, type ForwardRefRenderFunction } from "react";
+import { AgentColorHint, AnyAgent, getAgentVisuals } from "./agent";
 
 // --- Configuration Constants ---
 
-// Constants for the mini chip (Mini)
-const CHIP_MINI_HEIGHT = 18; // ultra-compact
-const PAD_X = 4; // left/right gutter (px)
-const CORNER = 8; // small rounded, keeps legible silhouette
-const FONT_SIZE = 10; // tiny but readable
 const LETTER_SPACING = 0.2; // avoids cramped uppercase
-const MAX_WIDTH = 96; // enough for ≤10 chars + ellipsis
 
 // --- THEME COLOR MAPPING ---
 // Maps the functional color hints to specific, high-contrast chart colors.
@@ -153,16 +147,12 @@ interface AgentChipMiniProps {
   sx?: SxProps;
 }
 
-const AgentChipMiniBase: ForwardRefRenderFunction<HTMLDivElement, AgentChipMiniProps> = (
-  { agent, sx },
-  ref
-) => {
+const AgentChipMiniBase: ForwardRefRenderFunction<HTMLDivElement, AgentChipMiniProps> = ({ agent, sx }, ref) => {
   if (!agent) return null;
 
   const theme = useTheme();
   const { colorHint } = getAgentVisuals(agent);
   const chipColor = THEME_COLOR_MAP(theme)[colorHint];
-  const initial = agent.name?.charAt(0)?.toUpperCase() ?? "?";
 
   return (
     <Typography
@@ -171,7 +161,7 @@ const AgentChipMiniBase: ForwardRefRenderFunction<HTMLDivElement, AgentChipMiniP
       fontWeight={700}
       title={agent.name}
       sx={[
-        (t) => ({
+        () => ({
           color: chipColor,
           lineHeight: 1.2,
           whiteSpace: "nowrap",
