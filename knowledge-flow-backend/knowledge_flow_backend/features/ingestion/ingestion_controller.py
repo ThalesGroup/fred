@@ -584,7 +584,9 @@ class IngestionController:
             "/lite/markdown",
             tags=["Processing"],
             summary="Lightweight Markdown extraction for a single file",
-            description=("Extract a compact Markdown representation of a PDF or DOCX without full ingestion. Intended for agent use where fast, dependency-light text is needed."),
+            description=(
+                "Extract a compact Markdown representation of a file without full ingestion. Supported: PDF, DOCX, CSV, PPTX, MD. Intended for agent use where fast, dependency-light text is needed."
+            ),
         )
         def lightweight_markdown(
             file: UploadFile = File(...),
@@ -683,7 +685,7 @@ class IngestionController:
             """
             filename = file.filename or "uploaded"
             suffix = pathlib.Path(filename).suffix.lower()
-            if suffix not in (".pdf", ".docx", ".csv", ".pptx"):
+            if suffix not in (".pdf", ".docx", ".csv", ".pptx", ".md"):
                 raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}")
 
             # Parse options

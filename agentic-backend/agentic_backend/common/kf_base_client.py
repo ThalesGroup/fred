@@ -10,6 +10,8 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from fred_core import KPIActor
+
 from agentic_backend.application_context import get_app_context
 
 logger = logging.getLogger(__name__)
@@ -50,6 +52,7 @@ class KfBaseClient:
     ):
         ctx = get_app_context()
         self.base_url = ctx.get_knowledge_flow_base_url().rstrip("/")
+        self._kpi = ctx.get_kpi_writer()
 
         tcfg = ctx.configuration.ai.timeout
         connect_t = float(tcfg.connect or 5)
@@ -64,6 +67,33 @@ class KfBaseClient:
 
         if not self._agent and not self._static_access_token:
             raise ValueError("KfBaseClient requires either `agent` or `access_token`.")
+
+    def _kpi_actor(self) -> KPIActor:
+        return KPIActor(type="system")
+
+    def _kpi_dims(self, *, method: str, path: str) -> Dict[str, Optional[str]]:
+        dims: Dict[str, Optional[str]] = {
+            "client": "knowledge_flow",
+            "method": method,
+            "path": path,
+        }
+        if self._agent:
+            agent_name = getattr(self._agent, "agent_settings", None)
+            agent_label = None
+            if agent_name is not None:
+                agent_label = getattr(agent_name, "name", None)
+            dims["agent_id"] = agent_label or type(self._agent).__name__
+            session_id = getattr(
+                getattr(self._agent, "runtime_context", None), "session_id", None
+            )
+            if session_id:
+                dims["session_id"] = str(session_id)
+            user_id = getattr(
+                getattr(self._agent, "runtime_context", None), "user_id", None
+            )
+            if user_id:
+                dims["user_id"] = str(user_id)
+        return dims
 
     # ---------------------------
     # Internal helpers
@@ -135,16 +165,26 @@ class KfBaseClient:
         """
         Executes a request, handling user-token expiration (401) via refresh and retry.
         """
-        r = self._execute_authenticated_request(method=method, path=path, **kwargs)
-        if r.status_code != 401:
+        dims = self._kpi_dims(method=method, path=path)
+        with self._kpi.timer(
+            "kf.request_latency_ms",
+            dims=dims,
+            actor=self._kpi_actor(),
+        ) as kpi_dims:
+            r = self._execute_authenticated_request(method=method, path=path, **kwargs)
+            kpi_dims["http_status"] = str(r.status_code)
+            if r.status_code != 401:
+                r.raise_for_status()
+                return r
+
+            logger.warning(
+                "401 Unauthorized on %s %s. Attempting token refresh...", method, path
+            )
+            if self._try_refresh_token():
+                r = self._execute_authenticated_request(
+                    method=method, path=path, **kwargs
+                )
+                kpi_dims["http_status"] = str(r.status_code)
+
             r.raise_for_status()
             return r
-
-        logger.warning(
-            "401 Unauthorized on %s %s. Attempting token refresh...", method, path
-        )
-        if self._try_refresh_token():
-            r = self._execute_authenticated_request(method=method, path=path, **kwargs)
-
-        r.raise_for_status()
-        return r

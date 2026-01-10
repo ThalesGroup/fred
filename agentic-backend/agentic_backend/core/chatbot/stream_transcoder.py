@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 import logging
@@ -419,6 +420,9 @@ class StreamTranscoder:
                     out.append(msg_v2)
                     seq += 1
                     await self._emit(callback, msg_v2)
+        except asyncio.CancelledError:
+            logger.info("StreamTranscoder: stream cancelled")
+            raise
         except Exception as e:
             logger.error(
                 "StreamTranscoder: Agent execution failed with error: %s",
@@ -429,13 +433,17 @@ class StreamTranscoder:
             # Heuristic for friendly error messages
             err_text = str(e)
             user_msg = "I encountered an unexpected error. Please try again later."
+            error_code = "error"
 
             if "timeout" in err_text.lower() or "timed out" in err_text.lower():
                 user_msg = "The operation timed out because it took too long. Please try reducing the scope of your request or the number of documents."
+                error_code = "timeout"
             elif "context length" in err_text.lower():
                 user_msg = "The request exceeded the model's context limit. Please try with shorter documents or fewer attachments."
+                error_code = "context_length"
             elif "rate limit" in err_text.lower():
                 user_msg = "I'm receiving too many requests right now. Please wait a moment and try again."
+                error_code = "rate_limit"
 
             # Emit error message
             err_chat_msg = ChatMessage(
@@ -449,7 +457,11 @@ class StreamTranscoder:
                 metadata=ChatMetadata(
                     agent_name=agent_name,
                     finish_reason=None,
-                    extras={"raw_error": err_text},
+                    extras={
+                        "error": True,
+                        "error_code": error_code,
+                        "raw_error": err_text,
+                    },
                 ),
             )
             out.append(err_chat_msg)

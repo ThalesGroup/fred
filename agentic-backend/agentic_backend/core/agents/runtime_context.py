@@ -25,6 +25,7 @@ class RuntimeContext(BaseModel):
     """
 
     session_id: Optional[str] = None
+    user_id: Optional[str] = None
     selected_document_libraries_ids: list[str] | None = None
     selected_chat_context_ids: list[str] | None = None
     search_policy: str | None = None

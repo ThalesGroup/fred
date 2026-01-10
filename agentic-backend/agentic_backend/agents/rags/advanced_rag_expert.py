@@ -328,14 +328,18 @@ class AdvancedRico(AgentFlow):
 
         try:
             # Perform search
-            hits: List[VectorSearchHit] = self.search_client.search(
-                question=question or "",
-                top_k=top_k,
-                document_library_tags_ids=document_library_tags_ids,
-                search_policy=search_policy,
-                session_id=runtime_context.session_id,
-                include_session_scope=True,
-            )
+            with self.kpi_timer(
+                "agent.step_latency_ms",
+                dims={"step": "vector_search", "policy": search_policy},
+            ):
+                hits: List[VectorSearchHit] = self.search_client.search(
+                    question=question or "",
+                    top_k=top_k,
+                    document_library_tags_ids=document_library_tags_ids,
+                    search_policy=search_policy,
+                    session_id=runtime_context.session_id,
+                    include_session_scope=True,
+                )
 
             if not hits:
                 warning = f"I couldn't find any relevant documents for “{question}”. Try rephrasing?"
@@ -420,9 +424,10 @@ class AdvancedRico(AgentFlow):
         documents = cast(List[VectorSearchHit], state["documents"])
         top_r = self.get_tuned_int("rerankink.top_r", default=6)
 
-        reranked_documents = self.search_client.rerank(
-            question=question, documents=documents, top_r=top_r
-        )
+        with self.kpi_timer("agent.step_latency_ms", dims={"step": "rerank"}):
+            reranked_documents = self.search_client.rerank(
+                question=question, documents=documents, top_r=top_r
+            )
 
         seen = set()
         keep_documents = []
@@ -481,31 +486,32 @@ class AdvancedRico(AgentFlow):
 
         # Grade each document
         filtered_docs: List[VectorSearchHit] = []
-        for document in grade_documents:
-            # Format document with metadata for grader
-            doc_context = (
-                f"Title: {document.title or document.file_name}\n"
-                f"Page: {getattr(document, 'page', 'n/a')}\n"
-                f"Content:\n{document.content}"
-            )
+        with self.kpi_timer("agent.step_latency_ms", dims={"step": "grade_documents"}):
+            for document in grade_documents:
+                # Format document with metadata for grader
+                doc_context = (
+                    f"Title: {document.title or document.file_name}\n"
+                    f"Page: {getattr(document, 'page', 'n/a')}\n"
+                    f"Content:\n{document.content}"
+                )
 
-            llm_response = await chain.ainvoke(
-                {
-                    "question": question,
-                    "document": doc_context,
-                }
-            )
-            score = cast(GradeDocumentsOutput, llm_response)
+                llm_response = await chain.ainvoke(
+                    {
+                        "question": question,
+                        "document": doc_context,
+                    }
+                )
+                score = cast(GradeDocumentsOutput, llm_response)
 
-            logger.debug(
-                f"Grade for {(document.file_name or document.title,)} (p={getattr(document, 'page', None)}): {getattr(score, 'binary_score', None)}",
-            )
+                logger.debug(
+                    f"Grade for {(document.file_name or document.title,)} (p={getattr(document, 'page', None)}): {getattr(score, 'binary_score', None)}",
+                )
 
-            # Categorize document
-            if str(score.binary_score).lower() == "yes":
-                filtered_docs.append(document)
-            else:
-                irrelevant_documents.append(document)
+                # Categorize document
+                if str(score.binary_score).lower() == "yes":
+                    filtered_docs.append(document)
+                else:
+                    irrelevant_documents.append(document)
 
         # Apply failsafe: ensure minimum number of documents
         if not filtered_docs and documents:
@@ -595,7 +601,8 @@ class AdvancedRico(AgentFlow):
         prompt = ChatPromptTemplate.from_template(base_prompt)
 
         # Generate response
-        response = await (prompt | self.model).ainvoke(variables)
+        with self.kpi_timer("agent.step_latency_ms", dims={"step": "generate"}):
+            response = await (prompt | self.model).ainvoke(variables)
         response = cast(AIMessage, response)
         # Attach sources metadata to response
         attach_sources_to_llm_response(response, documents)
@@ -634,7 +641,8 @@ class AdvancedRico(AgentFlow):
 
         # Generate rephrased query
         chain = rewrite_prompt | self.model.with_structured_output(RephraseQueryOutput)
-        llm_response = await chain.ainvoke({"question": question})
+        with self.kpi_timer("agent.step_latency_ms", dims={"step": "rephrase_query"}):
+            llm_response = await chain.ainvoke({"question": question})
         rephrased = cast(RephraseQueryOutput, llm_response)
 
         logger.info(
@@ -673,12 +681,13 @@ class AdvancedRico(AgentFlow):
 
         # Grade the response
         grader = grade_prompt | self.model.with_structured_output(GradeAnswerOutput)
-        llm_response = await grader.ainvoke(
-            {
-                "question": question,
-                "generation": generation.content,
-            }
-        )
+        with self.kpi_timer("agent.step_latency_ms", dims={"step": "grade_response"}):
+            llm_response = await grader.ainvoke(
+                {
+                    "question": question,
+                    "generation": generation.content,
+                }
+            )
         grade = cast(GradeAnswerOutput, llm_response)
 
         message = mk_thought(
