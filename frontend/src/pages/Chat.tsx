@@ -17,7 +17,6 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
-import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
@@ -46,12 +45,6 @@ export default function Chat() {
     console.log(`New session created -> redirecting to session page /chat/${newSessionId}`);
     navigate(`/chat/${newSessionId}`);
   };
-
-  // todo: move to the new conversation page
-  const [selectedChatContextIds, setSelectedChatContextIds] = useLocalStorageState<string[]>(
-    "chat.selectedChatContextIds",
-    [],
-  );
 
   if (flowsLoading) {
     return (
@@ -92,9 +85,7 @@ export default function Chat() {
           sessionId={sessionId}
           agents={enabledAgents}
           onNewSessionCreated={handleNewSessionCreated}
-          runtimeContext={{
-            selected_chat_context_ids: selectedChatContextIds.length ? selectedChatContextIds : undefined,
-          }}
+          runtimeContext={{}}
         />
       </Grid2>
     </Box>
