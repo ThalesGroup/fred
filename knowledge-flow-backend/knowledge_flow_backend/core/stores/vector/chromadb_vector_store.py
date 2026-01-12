@@ -62,6 +62,12 @@ def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
     # exactly one top-level operator key.
     clauses: List[Dict[str, Dict]] = []
 
+    def _encode_value(value: Any) -> Any:
+        if isinstance(value, list):
+            # encode all lists as JSON strings
+            return json.dumps(value)
+        return value
+
     # ---- Tag IDs ----
     if search_filter.tag_ids:
         # Each tag is stored as a JSON array string
@@ -70,14 +76,19 @@ def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
 
     # ---- Metadata terms ----
     for field, values in (search_filter.metadata_terms or {}).items():
-        encoded_values: List[Any] = []
+        include_values: List[Any] = []
+        exclude_values: List[Any] = []
         for v in values:
-            if isinstance(v, list):
-                # encode all lists as JSON strings
-                encoded_values.append(json.dumps(v))
-            else:
-                encoded_values.append(v)
-        clauses.append({field: {"$in": encoded_values}})
+            if isinstance(v, str) and v.startswith("!"):
+                if v[1:]:
+                    exclude_values.append(v[1:])
+                continue
+            include_values.append(v)
+
+        if include_values:
+            clauses.append({field: {"$in": [_encode_value(v) for v in include_values]}})
+        if exclude_values:
+            clauses.append({field: {"$nin": [_encode_value(v) for v in exclude_values]}})
 
     if not clauses:
         return None
@@ -452,7 +463,7 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         """
         # Show the incoming query and parameters
         logger.debug(f"[SEARCH] Query: '{query[:50]}...', k={k}")
-        logger.debug(f"[SEARCH] Requested Filter (SearchFilter object): {search_filter}")
+        logger.info(f"[SEARCH] Requested Filter (SearchFilter object): {search_filter}")
 
         # ---- Build the Chroma 'where' filter ----
         where = _build_where(search_filter)
@@ -460,10 +471,10 @@ class ChromaDBVectorStore(BaseVectorStore, FetchById):
         # ---- Embed query ----
         logger.debug("[SEARCH] Embedding query...")
         query_vector = self.embeddings.embed_query(query)
-        logger.debug(f"[SEARCH] Query vector generated: dimension={len(query_vector)},model={self.embedding_model_name}")
+        logger.info(f"[SEARCH] Query vector generated: dimension={len(query_vector)},model={self.embedding_model_name}")
 
         # ---- Query Chroma ----
-        logger.debug(f"[SEARCH] Calling ChromaDB query: n_results={k}, where={where}")
+        logger.info(f"[SEARCH] Calling ChromaDB query: n_results={k}, where={where}")
         res = self._collection.query(
             query_embeddings=[query_vector],
             n_results=k,

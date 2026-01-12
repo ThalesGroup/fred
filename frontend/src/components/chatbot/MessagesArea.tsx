@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { memo, useEffect, useMemo, useRef } from "react";
+import React, { memo, useMemo } from "react";
 import { AnyAgent } from "../../common/agent";
 import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras, hasNonEmptyText } from "./ChatBotUtils";
@@ -39,18 +39,8 @@ function Area({
   libraryNameById,
   chatContextNameById,
 }: Props) {
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
-
   // Hover highlight in Sources (syncs with [n] markers inside MessageCard)
   const [highlightUid, setHighlightUid] = React.useState<string | null>(null);
-
-  const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 300);
-    }
-  };
 
   const resolveAgent = (msg: ChatMessage): AnyAgent => {
     const agentName = msg.metadata?.agent_name ?? currentAgent.name;
@@ -240,14 +230,10 @@ function Area({
     return elements;
   }, [messages, agents, currentAgent, highlightUid, libraryNameById, chatContextNameById]);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", flexGrow: 1 }}>
+    <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minHeight: 0 }}>
       {content}
-      <div ref={messagesEndRef} style={{ height: "1px", marginTop: "8px" }} />
+      <div style={{ height: "1px", marginTop: "8px" }} />
     </div>
   );
 }
