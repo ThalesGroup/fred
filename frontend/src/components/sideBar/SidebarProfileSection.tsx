@@ -11,6 +11,25 @@ interface SidebarProfileSectionProps {
 export function SidebarProfileSection({ isSidebarOpen }: SidebarProfileSectionProps) {
   const roles = KeyCloakService.GetUserRoles();
 
+  // Find the highest priority role without sorting the entire array
+  const getPrimaryRole = (): string | undefined => {
+    if (roles.length === 0) return undefined;
+
+    const order = ["admin", "editor", "viewer"];
+    let primaryRole = roles[0];
+    let primaryIndex = order.indexOf(primaryRole);
+
+    for (const role of roles) {
+      const index = order.indexOf(role);
+      if (index !== -1 && (primaryIndex === -1 || index < primaryIndex)) {
+        primaryRole = role;
+        primaryIndex = index;
+      }
+    }
+
+    return primaryRole;
+  };
+
   return (
     <ListItem
       dense
@@ -22,7 +41,7 @@ export function SidebarProfileSection({ isSidebarOpen }: SidebarProfileSectionPr
       }
     >
       <ListItemIcon>{isSidebarOpen && <UserAvatar />}</ListItemIcon>
-      <ListItemText primary={KeyCloakService.GetUserFullName()} secondary={roles.length > 0 ? roles[0] : undefined} />
+      <ListItemText primary={KeyCloakService.GetUserFullName()} secondary={getPrimaryRole()} />
     </ListItem>
   );
 }
