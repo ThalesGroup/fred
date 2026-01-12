@@ -1,6 +1,8 @@
 import logging
 
 from langchain.agents import create_agent
+from langchain.tools import tool
+from langchain_core.messages import AIMessage, SystemMessage
 from langgraph.graph.state import CompiledStateGraph
 
 from agentic_backend.application_context import get_default_chat_model
@@ -34,83 +36,52 @@ TUNING = AgentTuning(
             description="You extract requirements and user stories from project documents",  # to fill a Jira board and build Zephyr tests.",
             required=True,
             default="""
-Tout d'abord, tu es un Business Analyst expert. En te basant uniquement sur le besoin métier initial, génère une liste d'exigences formelles.
+Tu es un Business Analyst et Product Owner expert avec accès à des outils spécialisés.
 
-Consignes :
-1.  **Génère des exigences fonctionnelles et non-fonctionnelles.**
-2.  **Formalisme :** Rédige des exigences claires, concises, non ambiguës et testables.
-3.  **ID Unique :** Assigne un ID unique à chaque exigence (ex: EX-FON-001 pour fonctionnelle, EX-NFON-001 pour non-fonctionnelle).
-4.  **Priorisation :** Assigne une priorité (Haute, Moyenne, Basse) à chaque exigence.
+════════════════════════════════════════════════════════════════════════
+OUTILS DISPONIBLES
+════════════════════════════════════════════════════════════════════════
 
+Tu disposes de 3 types d'outils :
 
-Ensuite, tu es un Product Owner expert de classe mondiale. Ta mission est de transformer le besoin métier suivant en un ensemble de User Stories de haute qualité, prêtes à être intégrées dans un backlog.
+1. **Outils de recherche documentaire (MCP)** :
+   - Utilisés pour extraire des informations des documents projet (.docx, .pdf, etc.)
+   - Exemple : search_documents, get_document_content, etc.
 
-Consignes pour la génération des User Stories :
-- Pense comme un véritable Product Owner : décompose la fonctionnalité en stories atomiques, verticales et testables.
-- **Cohérence :** Si des exigences sont fournies ci-dessus, assure-toi que les User Stories générées les couvrent et sont en parfaite cohérence avec elles.
-- **Couverture Complète :** Couvre tous les parcours utilisateur, y compris le "happy path" et les cas d'erreur. Pense aux différents personas (ex: utilisateur final, administrateur).
-- Rédige des titres clairs, des user stories bien formulées ("En tant que...") et des critères d'acceptation précis.
+2. **generate_requirements** :
+   - Génère une liste d'exigences formelles (fonctionnelles et non-fonctionnelles)
+   - IMPORTANT : Cet outil fait un appel LLM séparé, donc ne timeout pas
+   - Retourne un message confirmant que les exigences ont été générées
 
-- **EXIGENCE CRITIQUE : Critères d'Acceptation Exhaustifs (Format Gherkin)**
-  Pour chaque User Story, tu ne dois PAS te contenter de cas nominaux. Tu dois OBLIGATOIREMENT inclure des critères pour les catégories suivantes :
+3. **generate_user_stories** :
+   - Génère des User Stories avec critères d'acceptation Gherkin exhaustifs
+   - IMPORTANT : Cet outil fait un appel LLM séparé, donc ne timeout pas
+   - Peut recevoir les exigences en paramètre pour assurer la cohérence
+   - Retourne un message confirmant que les user stories ont été générées
 
-  1. **Cas Nominaux (Happy Path) :**
-     - Le scénario idéal où tout fonctionne comme prévu.
+════════════════════════════════════════════════════════════════════════
+WORKFLOW RECOMMANDÉ
+════════════════════════════════════════════════════════════════════════
 
-  2. **Validations de Données (Input Validation) :**
-     - Règles de format (ex: email invalide, mot de passe trop faible).
-     - Champs obligatoires manquants.
-     - Limites de caractères (min/max).
-     - Types de fichiers non supportés ou trop volumineux.
-     - Unicité des données (ex: email déjà utilisé).
+**Étape 1 : Extraction du contexte projet**
+- Utilise les outils MCP pour rechercher et extraire les informations des documents
+- Effectue plusieurs recherches ciblées pour couvrir différents aspects
+- Prends des notes sur ce que tu trouves
 
-  3. **Cas d'Erreur (Error Handling) :**
-     - Erreurs techniques (ex: échec de l'appel API, timeout, erreur 500).
-     - Erreurs métier (ex: stock insuffisant, solde négatif, droits insuffisants).
-     - Gestion de la perte de connexion.
+**Étape 2 : Génération des exigences (si demandé)**
+- Appelle generate_requirements(context_summary="[résumé de ce que tu as trouvé]")
+- L'outil génère les exigences et retourne un message de confirmation
 
-  4. **Cas Limites (Edge Cases) :**
-     - Valeurs frontières (ex: 0, 1, max, max+1).
-     - Listes vides ou très longues.
-     - Dates limites (ex: 29 février, changement d'heure).
+**Étape 3 : Génération des User Stories (si demandé)**
+- Si l'utilisateur demande aussi des user stories :
+  - Appelle generate_user_stories(context_summary="...", requirements="[exigences de l'étape 2]")
+- Si l'utilisateur demande UNIQUEMENT des user stories :
+  - Appelle directement generate_user_stories(context_summary="...", requirements="")
+- L'outil génère les user stories et retourne un message de confirmation
 
-  5. **Feedback Utilisateur (UI/UX Messages) :**
-     - Le texte EXACT des messages de succès (Toasts, Modales).
-     - Le texte EXACT des messages d'erreur affichés à l'utilisateur.
-     - États de chargement (Loading states) et boutons désactivés.
-
-- **Formatage Gherkin Strict :** Chaque critère doit suivre la structure :
-  "Étant donné que [contexte], Quand [action], Alors [résultat attendu]."
-
-- **Aspects Transverses :** Inclus les aspects de sécurité (OWASP), d'accessibilité (WCAG - navigation clavier, lecteurs d'écran) et de conformité (RGPD) si pertinent.
-
-- **Estimation & Priorisation :**
-  - Estime l'effort (Fibonacci : 1, 2, 3, 5, 8, 13, 21).
-  - Priorise (Must Have, Should Have, Could Have, Won't Have).
-
-- **Dépendances :** Ordonne les stories logiquement. **AUCUNE dépendance circulaire.**
-
-- **Questions de clarification :** Pour chaque story, ajoute 1 à 3 questions précises pour lever les ambiguïtés.
-
-
-
-Finalement, tu es un expert en tests logiciels. Ton rôle est de créer des scénarios de tests détaillés et exploitables.
-
-Instructions principales :
-Génère des scénarios de tests complets à partir des informations fournies dans les User Stories (US) suivantes, en suivant le format Gherkin (Etant donné que-Lorsque-Alors) et en incluant les cas nominaux, limites et d'erreur. Toutes les US fournies doivent faire l'objet d'un test.
-Tu peux également te baser sur les JDDs fournis en entrée pour les personas de chaque tests
-
-Format de réponse attendu 📝 pour chaque scénario :
-1. **ID du Scénario** : Un identifiant unique (ex: SC-001, SC-LOGIN-001).
-2. **userStoryId**: L'ID de la User Story couverte par ce test.
-3. **Titre du Scénario** : Un titre concis décrivant l'objectif du test.
-4. **Description** : Une brève explication de ce que le scénario teste.
-5. **Préconditions** : Les états ou données nécessaires avant l'exécution du test.
-6. **Étapes** : Au format Gherkin présentées sous forme de tableau avec les colonnes suivantes : Numéro (#1, #2, ...), Action (Etant donné que - Lorsque), Résultat attendu (Alors).
-7. **Données de test** : Jeux de données nécessaires
-8. **Priorité** : (Haute, Moyenne, Basse) Indiquant l'importance du test.
-9. **type**: Le type de cas de test (Nominal, Limite, Erreur).
-""",
+**Étape 4 : Conclusion**
+- Une fois tous les outils appelés, termine ta réponse
+- Les résultats détaillés (exigences et user stories) seront automatiquement affichés à l'utilisateur""",
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
         FieldSpec(
@@ -119,7 +90,7 @@ Format de réponse attendu 📝 pour chaque scénario :
             title="Allow file attachments",
             description="Show file upload/attachment controls for this agent.",
             required=False,
-            default=False,
+            default=True,
             ui=UIHints(group="Chat options"),
         ),
         FieldSpec(
@@ -128,7 +99,7 @@ Format de réponse attendu 📝 pour chaque scénario :
             title="Document libraries picker",
             description="Let users select document libraries/knowledge sources for this agent.",
             required=False,
-            default=False,
+            default=True,
             ui=UIHints(group="Chat options"),
         ),
         FieldSpec(
@@ -137,7 +108,7 @@ Format de réponse attendu 📝 pour chaque scénario :
             title="Search policy selector",
             description="Expose the search policy toggle (hybrid/semantic/strict).",
             required=False,
-            default=False,
+            default=True,
             ui=UIHints(group="Chat options"),
         ),
         FieldSpec(
@@ -146,7 +117,7 @@ Format de réponse attendu 📝 pour chaque scénario :
             title="RAG scope selector",
             description="Expose the RAG scope control (documents-only vs hybrid vs knowledge).",
             required=False,
-            default=False,
+            default=True,
             ui=UIHints(group="Chat options"),
         ),
         FieldSpec(
@@ -164,30 +135,246 @@ Format de réponse attendu 📝 pour chaque scénario :
 
 @expose_runtime_source("agent.Jim")
 class JiraAgent(AgentFlow):
-    """Simple ReAct agent used for dynamic UI-created agents."""
-
     tuning = TUNING
     default_chat_options = AgentChatOptions(
-        search_policy_selection=False,
-        libraries_selection=False,
-        search_rag_scoping=False,
+        attach_files=True,
+        libraries_selection=True,
+        search_rag_scoping=True,
+        search_policy_selection=True,
         deep_search_delegate=False,
-        attach_files=False,
     )
 
     async def async_init(self, runtime_context: RuntimeContext):
         await super().async_init(runtime_context=runtime_context)
         self.mcp = MCPRuntime(agent=self)
         await self.mcp.init()
+        # Storage for tool outputs
+        self.generated_requirements = None
+        self.generated_user_stories = None
 
     async def aclose(self):
         await self.mcp.aclose()
 
+    def get_requirements_tool(self):
+        """Tool that generates requirements using a separate LLM call"""
+
+        # Capture self reference for closure
+        agent_self = self
+
+        @tool
+        async def generate_requirements(context_summary: str) -> str:
+            """
+            Génère une liste d'exigences formelles (fonctionnelles et non-fonctionnelles)
+            à partir du contexte projet fourni par les recherches documentaires.
+
+            IMPORTANT: Avant d'appeler cet outil, utilise les outils de recherche MCP
+            pour extraire les informations pertinentes des documents projet, puis
+            fournis un résumé de ce contexte en paramètre.
+
+            Args:
+                context_summary: Résumé du contexte projet extrait des documents
+
+            Returns:
+                Message de confirmation que les exigences ont été générées
+            """
+            requirements_prompt = """
+Tu es un Business Analyst expert. Génère une liste d'exigences formelles basée sur le contexte projet suivant.
+
+Contexte projet extrait des documents:
+{context_summary}
+
+Consignes :
+1. **Génère des exigences fonctionnelles et non-fonctionnelles**
+2. **Formalisme :** Exigences claires, concises, non ambiguës et testables
+3. **ID Unique :** Ex: EX-FON-001 (fonctionnelle), EX-NFON-001 (non-fonctionnelle)
+4. **Priorisation :** Haute, Moyenne ou Basse
+
+Format attendu pour chaque exigence:
+- ID: [ID unique]
+- Titre: [Nom concis]
+- Description: [Exigence détaillée]
+- Type: [Fonctionnelle/Non-fonctionnelle]
+- Priorité: [Haute/Moyenne/Basse]
+"""
+
+            model = get_default_chat_model()
+            messages = [
+                SystemMessage(
+                    content=requirements_prompt.format(context_summary=context_summary)
+                )
+            ]
+
+            response = await model.ainvoke(messages)
+
+            # Store the full output
+            content = response.content
+            if isinstance(content, str):
+                agent_self.generated_requirements = content
+            elif isinstance(content, list):
+                agent_self.generated_requirements = "".join(
+                    part if isinstance(part, str) else part.get("text", "")
+                    for part in content
+                )
+            else:
+                agent_self.generated_requirements = str(content)
+
+            # Return confirmation message
+            return "✓ Exigences générées avec succès. Elles seront affichées à la fin de la conversation."
+
+        return generate_requirements
+
+    def get_user_stories_tool(self):
+        """Tool that generates user stories using a separate LLM call"""
+
+        # Capture self reference for closure
+        agent_self = self
+
+        @tool
+        async def generate_user_stories(
+            context_summary: str, requirements: str = ""
+        ) -> str:
+            """
+            Génère des User Stories de haute qualité avec critères d'acceptation exhaustifs (Gherkin).
+
+            IMPORTANT: Avant d'appeler cet outil, utilise les outils de recherche MCP
+            pour extraire les informations pertinentes des documents projet.
+
+            Args:
+                context_summary: Résumé du contexte projet extrait des documents
+                requirements: Les exigences préalablement générées (optionnel, pour cohérence)
+
+            Returns:
+                Message de confirmation que les user stories ont été générées
+            """
+            stories_prompt = """
+Tu es un Product Owner expert. Génère des User Stories de haute qualité.
+
+Contexte projet extrait des documents:
+{context_summary}
+
+{requirements_section}
+
+**Structure de base :**
+- **Format :** "En tant que [persona], je veux [action], afin de [bénéfice]"
+- **ID Unique :** Ex: US-001, US-002
+- Stories atomiques, verticales et testables
+- **Cohérence :** Couvre les exigences si elles sont fournies
+- **Couverture complète :** Happy path + cas d'erreur + tous les personas
+
+**Critères d'Acceptation Exhaustifs (Format Gherkin)** - OBLIGATOIRE pour CHAQUE story :
+
+1. **Cas Nominaux (Happy Path) :**
+   - Scénario idéal où tout fonctionne
+
+2. **Validations de Données :**
+   - Formats invalides (email, mot de passe, etc.)
+   - Champs obligatoires manquants
+   - Limites min/max de caractères
+   - Fichiers non supportés ou trop volumineux
+   - Unicité des données (doublons)
+
+3. **Cas d'Erreur :**
+   - Erreurs techniques (API, timeout, erreur 500)
+   - Erreurs métier (stock insuffisant, droits insuffisants)
+   - Perte de connexion
+
+4. **Cas Limites :**
+   - Valeurs frontières (0, 1, max, max+1)
+   - Listes vides ou très longues
+   - Dates limites (29 février, changement d'heure)
+
+5. **Feedback Utilisateur :**
+   - Messages de succès EXACTS (Toasts, Modales)
+   - Messages d'erreur EXACTS affichés
+   - États de chargement et boutons désactivés
+
+**Format Gherkin strict :** "Étant donné que [contexte], Quand [action], Alors [résultat attendu]"
+
+**Métadonnées :**
+- **Estimation :** Fibonacci (1, 2, 3, 5, 8, 13, 21)
+- **Priorisation :** Must Have, Should Have, Could Have, Won't Have
+- **Dépendances :** Ordre logique, AUCUNE dépendance circulaire
+- **Questions :** 1 à 3 questions de clarification par story
+"""
+
+            requirements_section = ""
+            if requirements:
+                requirements_section = f"""
+Exigences à respecter:
+{requirements}
+"""
+
+            model = get_default_chat_model()
+            messages = [
+                SystemMessage(
+                    content=stories_prompt.format(
+                        context_summary=context_summary,
+                        requirements_section=requirements_section,
+                    )
+                )
+            ]
+
+            response = await model.ainvoke(messages)
+
+            # Store the full output
+            content = response.content
+            if isinstance(content, str):
+                agent_self.generated_user_stories = content
+            elif isinstance(content, list):
+                agent_self.generated_user_stories = "".join(
+                    part if isinstance(part, str) else part.get("text", "")
+                    for part in content
+                )
+            else:
+                agent_self.generated_user_stories = str(content)
+
+            # Return confirmation message
+            return "✓ User Stories générées avec succès. Elles seront affichées à la fin de la conversation."
+
+        return generate_user_stories
+
+    async def astream_updates(self, state, *, config=None, **kwargs):
+        """Override to append stored tool outputs to final response"""
+        final_event = None
+
+        # Stream all events from parent
+        async for event in super().astream_updates(state, config=config, **kwargs):
+            final_event = event
+            yield event
+
+        # After streaming is complete, if we have stored outputs, send them as additional messages
+        if final_event is not None and (
+            self.generated_requirements or self.generated_user_stories
+        ):
+            # Build the additional content
+            additional_content = "\n\n---\n\n"
+
+            if self.generated_requirements:
+                additional_content += "# 📋 Exigences Générées\n\n"
+                additional_content += self.generated_requirements
+                additional_content += "\n\n"
+
+            if self.generated_user_stories:
+                additional_content += "# 📝 User Stories Générées\n\n"
+                additional_content += self.generated_user_stories
+
+            # Create a new AI message with the stored content
+            additional_message = AIMessage(content=additional_content)
+
+            # Yield it as a new update
+            yield {"agent": {"messages": [additional_message]}}
+
+            # Reset for next run
+            self.generated_requirements = None
+            self.generated_user_stories = None
+
     def get_compiled_graph(self) -> CompiledStateGraph:
-        base_prompt = self.render(self.get_tuned_text("prompts.system") or "")
+        requirements_tool = self.get_requirements_tool()
+        user_stories_tool = self.get_user_stories_tool()
+
         return create_agent(
             model=get_default_chat_model(),
-            system_prompt=base_prompt,
-            tools=[*self.mcp.get_tools()],
+            system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
+            tools=[requirements_tool, user_stories_tool, *self.mcp.get_tools()],
             checkpointer=self.streaming_memory,
         )
