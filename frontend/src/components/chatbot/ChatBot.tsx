@@ -37,7 +37,6 @@ import {
   ChatMessage,
   FinalEvent,
   RuntimeContext,
-  SessionSchema,
   StreamEvent,
   useCreateSessionAgenticV1ChatbotSessionPostMutation,
   useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
@@ -105,7 +104,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
 
   const { showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
-  const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   const wsTokenRef = useRef<string | null>(null);
   // When backend creates a session during first file upload, keep it locally
   // so the immediate next message uses the same session id.
@@ -135,7 +133,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     [chatContextResources],
   );
 
-  const { data: history } = useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery(
+  const { currentData: history } = useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery(
     { sessionId: sessionId || "" },
     { skip: !sessionId },
   );
@@ -203,7 +201,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     } finally {
       webSocketRef.current = null;
       wsTokenRef.current = null;
-      setWebSocket(null);
       setWaitResponse(false);
     }
   };
@@ -251,7 +248,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       socket.onopen = () => {
         console.log("[CHATBOT] WebSocket connected");
         webSocketRef.current = socket;
-        setWebSocket(socket);
         resolve(socket);
       };
       socket.onmessage = (event) => {
@@ -289,11 +285,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
               // Merge authoritative finals (includes citations/metadata)
               messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
               setMessages(messagesRef.current);
-
-              // If we were in draft mode and backend created a session, notify parent
-              if (isNewConversation) {
-                onNewSessionCreated(finalEvent.session.id);
-              }
               setWaitResponse(false);
               break;
             }
@@ -334,7 +325,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
         console.warn("[❌ ChatBot] WebSocket closed");
         webSocketRef.current = null;
         wsTokenRef.current = null;
-        setWebSocket(null);
         setWaitResponse(false);
       };
     });
@@ -433,7 +423,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
 
   // Handle user input (text/audio)
   const handleSend = async (content: UserInputContent) => {
-    console.log("[ChatDebug] Handle send", content);
     // Init runtime context
     const runtimeContext: RuntimeContext = { ...(baseRuntimeContext ?? {}) };
 
@@ -497,6 +486,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
         console.warn("[CHATBOT] Failed to seed session prefs on create", prefErr);
       }
       pendingSessionIdRef.current = session.id;
+      onNewSessionCreated(session.id);
       return session.id;
     } catch (err: any) {
       const detail = err?.data?.detail ?? err?.data ?? err?.error;
@@ -521,6 +511,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     sessionId,
     persistSessionPrefs,
     showError,
+    onNewSessionCreated,
   ]);
 
   // Upload files immediately when user selects them (sequential to preserve session binding)
@@ -546,16 +537,9 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       formData.append("file", file);
 
       try {
-        const res = await uploadChatFile({
+        await uploadChatFile({
           bodyUploadFileAgenticV1ChatbotUploadPost: formData as any,
         }).unwrap();
-        const sid = (res as any)?.session_id as string | undefined;
-        const returnedSession = (res as any)?.session as SessionSchema | undefined;
-        if (!sessionId && sid && pendingSessionIdRef.current !== sid) {
-          pendingSessionIdRef.current = sid;
-          // Notify parent that a new session was created via file upload
-          onNewSessionCreated?.(sid);
-        }
         console.log("✅ Uploaded file:", file.name);
         // Refresh attachments view in the popover
         setAttachmentsRefreshTick((x) => x + 1);
