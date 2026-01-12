@@ -379,7 +379,8 @@ class SessionOrchestrator:
                 get_default_model()
                 .invoke(
                     "Give a short, clear title for this conversation based on the user's question. "
-                    "Return a few keywords only. Question: " + prompt
+                    "No markdown formatiing. Return a few keywords only. Question: "
+                    + prompt
                 )
                 .content
             )
@@ -1203,7 +1204,7 @@ class SessionOrchestrator:
             get_default_model()
             .invoke(
                 "Give a short, clear title for this conversation based on the user's question. "
-                "Return a few keywords only. Question: " + query
+                "No markdown formatting. Return a few keywords only. Question: " + query
             )
             .content
         )
