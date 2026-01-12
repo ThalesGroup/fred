@@ -21,7 +21,7 @@
  * - Avoids flicker on session switch by keeping messages while history loads; welcome shows only when truly empty.
  */
 
-import { Box, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
+import { Box, Grid2, Paper, Tooltip, Typography, useTheme } from "@mui/material";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
@@ -30,6 +30,7 @@ import { getConfig } from "../../common/config.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
 import { useAgentSelector } from "../../hooks/useAgentSelector.ts";
 import { useInitialChatInputContext } from "../../hooks/useInitialChatInputContext.ts";
+import { useLocalStorageState } from "../../hooks/useLocalStorageState.ts";
 import { useSessionChange } from "../../hooks/useSessionChange.ts";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import {
@@ -53,6 +54,7 @@ import { AttachmentsButton } from "./AttachmentsButton.tsx";
 import { keyOf, mergeAuthoritative, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import ChatKnowledge from "./ChatKnowledge.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
+import { ChatContextPickerPanel } from "./settings/ChatContextPickerPanel.tsx";
 import UserInput, { UserInputContent } from "./user_input/UserInput.tsx";
 
 export interface ChatBotError {
@@ -118,6 +120,11 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
   const { data: chatContextResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({
     kind: "chat-context",
   });
+
+  const [selectedChatContextIds, setSelectedChatContextIds] = useLocalStorageState<string[]>(
+    "chat.selectedChatContextIds",
+    [],
+  );
 
   const libraryNameMap = useMemo(() => Object.fromEntries(docLibs.map((x) => [x.id, x.name])), [docLibs]);
   const promptNameMap = useMemo(
@@ -426,6 +433,11 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     // Init runtime context
     const runtimeContext: RuntimeContext = { ...(baseRuntimeContext ?? {}) };
 
+    // Add selected chat contexts
+    if (selectedChatContextIds.length) {
+      runtimeContext.selected_chat_context_ids = selectedChatContextIds;
+    }
+
     // Add selected libraries / profiles (CANONIQUES — pas de doublon)
     if (content.documentLibraryIds?.length) {
       runtimeContext.selected_document_libraries_ids = content.documentLibraryIds;
@@ -646,6 +658,32 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
            - Always show the conversation context so developers/users immediately
              understand if they're in a persisted session or a draft.
            - Avoid guesswork (messages length, etc.). Keep UX deterministic. */}
+
+      {/* Chat context picker panel */}
+      <Paper
+        elevation={1}
+        sx={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          zIndex: 10,
+          width: 200,
+          backgroundColor: theme.palette.background.paper,
+          py: 1,
+          borderTopLeftRadius: 0,
+          borderTopRightRadius: 0,
+          borderBottomLeftRadius: 0,
+          borderBottomRightRadius: 8,
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <ChatContextPickerPanel
+          selectedChatContextIds={selectedChatContextIds}
+          onChangeSelectedChatContextIds={setSelectedChatContextIds}
+        />
+      </Paper>
 
       {/* Attachments button */}
       {agentSupportsAttachments && (
