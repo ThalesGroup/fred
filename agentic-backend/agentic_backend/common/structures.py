@@ -213,6 +213,14 @@ class AIConfig(BaseModel):
         128,
         description="Maximum number of agents that can be cached in memory for faster access.",
     )
+    max_attached_files_per_user: int = Field(
+        20,
+        description="Maximum number of files a user can attach across all sessions.",
+    )
+    max_attached_file_size_mb: int = Field(
+        50,
+        description="Maximum size (in MB) for each attached file.",
+    )
     default_chat_model: ModelConfiguration = Field(
         ...,
         description="Default chat model configuration for all agents and services.",

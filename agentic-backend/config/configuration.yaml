@@ -55,6 +55,12 @@ ai:
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
   max_concurrent_agents: 128
 
+  # Maximum number of files a user can attach across all sessions
+  max_attached_files_per_user: 20
+
+  # Maximum size (in MB) for each attached file
+  max_attached_file_size_mb: 50
+
   # Knowledge Flow service URL. Used by agents to access tools and knowledge bases.
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
   # Timeout settings for the client
@@ -69,7 +75,7 @@ ai:
     settings:
       temperature: 0.0
       max_retries: 2
-      request_timeout: 30
+      request_timeout: 90
   default_language_model:
     # Required in .env:
     # - OPENAI_API_KEY
@@ -78,7 +84,7 @@ ai:
     settings:
       temperature: 0.0
       max_retries: 2
-      request_timeout: 30
+      request_timeout: 90
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:
@@ -89,7 +95,7 @@ ai:
       chat_options:
         search_policy_selection: false
         libraries_selection: false
-        attach_files: true
+        attach_files: false
     - name: "Sammy"
       type: "agent"
       class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
@@ -105,8 +111,8 @@ ai:
         deep_search_delegate: true
         attach_files: true
       metadata:
-          # Deep-search delegation target
-          deep_search_delegate_to: "Rico Senior"
+        # Deep-search delegation target
+        deep_search_delegate_to: "Rico Senior"
     - name: "Rico Senior"
       type: "agent"
       class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
@@ -121,6 +127,18 @@ ai:
       type: "agent"
       class_path: "agentic_backend.academy.07_travel_agent.travel_agent.Travel"
       enabled: true
+    - name: "Kellia"
+      type: "agent"
+      class_path: "agentic_backend.agents.knowledge_extractor.slide_maker.SlideMaker"
+      enabled: true
+    - name: "Raph"
+      type: "agent"
+      class_path: "agentic_backend.agents.reference_editor.reference_editor.ReferenceEditor"
+      enabled: true
+    - name: "CoachDG"
+      type: "agent"
+      class_path: "agentic_backend.agents.coach_dg.coach_dg.CoachDG"
+      enabled: false
 
 mcp:
   servers:
@@ -202,6 +220,9 @@ storage:
   history_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/history.duckdb"
+  attachments_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/agentic/session_attachments.duckdb"
   kpi_store:
     type: "log"
     level: "INFO"

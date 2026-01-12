@@ -4,6 +4,7 @@ import ConstructionIcon from "@mui/icons-material/Construction";
 import GroupIcon from "@mui/icons-material/Group";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
+import ScienceIcon from "@mui/icons-material/Science";
 import ShieldIcon from "@mui/icons-material/Shield";
 import { Box, CSSObject, IconButton, Paper, styled, Theme } from "@mui/material";
 import MuiDrawer from "@mui/material/Drawer";
@@ -112,6 +113,40 @@ export default function SideBar() {
       url: `/knowledge`,
       tooltip: t("sidebar.tooltip.knowledge"),
     },
+    ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime || canUpdateTag
+      ? [
+          {
+            key: "laboratory",
+            label: t("sidebar.laboratory"),
+            icon: <ScienceIcon />,
+            tooltip: t("sidebar.tooltip.laboratory"),
+            children: [
+              ...(canReadRuntime
+                ? [
+                    {
+                      key: "monitoring-graph",
+                      label: t("sidebar.monitoring_graph", "Graph Hub"),
+                      icon: <MonitorHeartIcon />,
+                      url: `/monitoring/graph`,
+                      tooltip: t("sidebar.tooltip.monitoring_graph", "Knowledge graph view"),
+                    },
+                  ]
+                : []),
+              ...(canReadRuntime
+                ? [
+                    {
+                      key: "monitoring-processors",
+                      label: t("sidebar.monitoring_processors", "Processors"),
+                      icon: <MonitorHeartIcon />,
+                      url: `/monitoring/processors`,
+                      tooltip: t("sidebar.tooltip.monitoring_processors"),
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]
+      : []),
 
     // Only show monitoring if user has permission
     ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime || canUpdateTag
@@ -152,28 +187,6 @@ export default function SideBar() {
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/data`,
                       tooltip: t("sidebar.tooltip.monitoring_data", "Data lineage view"),
-                    },
-                  ]
-                : []),
-              ...(canReadRuntime
-                ? [
-                    {
-                      key: "monitoring-graph",
-                      label: t("sidebar.monitoring_graph", "Graph Hub"),
-                      icon: <MonitorHeartIcon />,
-                      url: `/monitoring/graph`,
-                      tooltip: t("sidebar.tooltip.monitoring_graph", "Knowledge graph view"),
-                    },
-                  ]
-                : []),
-              ...(canReadRuntime
-                ? [
-                    {
-                      key: "monitoring-processors",
-                      label: t("sidebar.monitoring_processors", "Processors"),
-                      icon: <MonitorHeartIcon />,
-                      url: `/monitoring/processors`,
-                      tooltip: t("sidebar.tooltip.monitoring_processors"),
                     },
                   ]
                 : []),

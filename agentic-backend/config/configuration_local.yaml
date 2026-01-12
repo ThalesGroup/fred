@@ -52,6 +52,12 @@ ai:
   # or when an agent session is re-initialized for any reason.
   agentic_restore_max_exchanges: 20
 
+  # Maximum number of files a user can attach across all sessions
+  max_attached_files_per_user: 20
+
+  # Maximum size (in MB) for each attached file
+  max_attached_file_size_mb: 50
+
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
   max_concurrent_agents: 128
 
@@ -87,7 +93,7 @@ ai:
       chat_options:
         search_policy_selection: false
         libraries_selection: false
-        attach_files: true
+        attach_files: false
     - name: "Sammy"
       type: "agent"
       class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"

@@ -20,9 +20,9 @@ app:
   reload_dir: "."
 
 processing:
-  generate_summary: true
+  generate_summary: false
   use_gpu: true
-  process_images: true
+  process_images: false
 
 security:
   m2m:

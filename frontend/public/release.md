@@ -1,9 +1,28 @@
+- **v1.1.2** — 2026-01-08
+
+  - **Summary**
+    - Dynamic ReAct agents now support source citations, and agent code inspection works for all agents (#950).
+  - **Features**
+    - Add source citation support to dynamic ReAct agents (#950)
+    - Fix agent code inspection to display source for all agents (#950)
+
+- **v1.1.1** — 2026-01-07
+
+  - **Summary**
+    - This release completes the support for per conversation attachements, and improve the capabilities of dynamic agents.
+  - **Features**
+    - Dynamic agent can now leverage the chat options to benefit from depp searchn attachements library scoping (#941)
+    - New duckdb and opensearch connectors to manage per conversation attachments (#941)
+
 - **v1.1.0** — 2026-01-04
   - **Summary**
     - New PostgreSQL/pgvector option so Fred can run fully without OpenSearch, plus in-UI Mermaid rendering for agent replies.
+    - This version provides full support of per conversation attachments. Attached files are vectorized using lite markdown processors.
+    - The Rico agent expose now a first deep search capability that leverage the Rico Senior document agent.
   - **Features**
     - Add a Postgres-first deployment path (metadata + vectors) across knowledge-flow and agentic backends (#933)
     - Surface vector backend details (pgvector or OpenSearch) in the admin views (#933)
+    - Rag support for per conversation attachements files
   - **Bug fixes**
     - Fix Mermaid diagrams rendering in chat by generating safe SVG previews and stabilizing layout (#933)
   - **Impact**

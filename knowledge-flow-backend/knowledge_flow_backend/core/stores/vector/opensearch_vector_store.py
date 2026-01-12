@@ -25,6 +25,7 @@ from opensearchpy import NotFoundError, OpenSearchException, RequestError
 from knowledge_flow_backend.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, AnnHit, BaseVectorHit, BaseVectorStore, FullTextHit, HybridHit, SearchFilter
 
 logger = logging.getLogger(__name__)
+DEBUG = True
 
 
 @dataclass(frozen=True)
@@ -244,7 +245,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 doc.metadata.setdefault("token_count", len((doc.page_content or "").split()))
                 doc.metadata.setdefault("ingested_at", now_iso)
 
-            logger.info("[VECTOR][OPENSEARCH] upserted %s chunk(s) into %s", len(assigned_ids), self._index)
+            logger.debug("[VECTOR][OPENSEARCH] upserted %s chunk(s) into %s", len(assigned_ids), self._index)
             return assigned_ids
 
         except Exception as e:
@@ -256,7 +257,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             body = {"query": {"term": {"metadata.document_uid": {"value": document_uid}}}}
             resp = self._client.delete_by_query(index=self._index, body=body)
             deleted = int(resp.get("deleted", 0))
-            logger.info("[VECTOR][OPENSEARCH] deleted %s vector chunks for document_uid=%s.", deleted, document_uid)
+            logger.debug("[VECTOR][OPENSEARCH] deleted %s vector chunks for document_uid=%s.", deleted, document_uid)
         except Exception:
             logger.exception("[VECTOR][OPENSEARCH] failed to delete vectors for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to delete vectors from OpenSearch.")
@@ -270,7 +271,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             body = {"query": {"term": {"metadata.document_uid": {"value": document_uid}}}}
             resp = self._client.count(index=self._index, body=body)
             count = int(resp.get("count", 0))
-            logger.info(
+            logger.debug(
                 "[VECTOR][OPENSEARCH] counted %s vector chunks for document_uid=%s in index=%s",
                 count,
                 document_uid,
@@ -360,7 +361,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 if with_document:
                     entry["text"] = src.get("text", "")
                 out.append(entry)
-            logger.info(
+            logger.debug(
                 "[VECTOR][OPENSEARCH] fetched %d vectors for document_uid=%s from index=%s",
                 len(out),
                 document_uid,
@@ -395,7 +396,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                         "metadata": src.get("metadata", {}) or {},
                     }
                 )
-            logger.info(
+            logger.debug(
                 "[VECTOR][OPENSEARCH] fetched %d chunks for document_uid=%s from index=%s",
                 len(out),
                 document_uid,
@@ -451,7 +452,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 )
                 return
             self._client.delete(index=self._index, id=chunk_uid)
-            logger.info("[VECTOR][OPENSEARCH] deleted chunk %s for document_uid=%s", chunk_uid, document_uid)
+            logger.debug("[VECTOR][OPENSEARCH] deleted chunk %s for document_uid=%s", chunk_uid, document_uid)
         except Exception:
             logger.exception("[VECTOR][OPENSEARCH] failed to delete chunk %s for document_uid=%s", chunk_uid, document_uid)
 
@@ -505,13 +506,22 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
 
     # ---- helpers ----------------------------------------------------------
     def _build_ann_hits(self, hits_data: List) -> List[AnnHit]:
-        return self._build_hits(hits_data, AnnHit)
+        hits = self._build_hits(hits_data, AnnHit)
+        if DEBUG and hits:
+            logger.debug("[VECTOR][OPENSEARCH][ANN] built hits count=%d sample=%s", len(hits), hits[:3])
+        return hits
 
     def _build_hybrid_hits(self, hits_data: List) -> List[HybridHit]:
-        return self._build_hits(hits_data, HybridHit)
+        hits = self._build_hits(hits_data, HybridHit)
+        if DEBUG and hits:
+            logger.debug("[VECTOR][OPENSEARCH][HYBRID] built hits count=%d sample=%s", len(hits), hits[:3])
+        return hits
 
     def _build_fulltext_hits(self, hits_data: list) -> List[FullTextHit]:
-        return self._build_hits(hits_data, FullTextHit)
+        hits = self._build_hits(hits_data, FullTextHit)
+        if DEBUG and hits:
+            logger.debug("[VECTOR][OPENSEARCH][FULLTEXT] built hits count=%d sample=%s", len(hits), hits[:3])
+        return hits
 
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:
         """
@@ -528,12 +538,13 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         Raises:
             RuntimeError: If the embedding model fails or if the search query fails.
         """
-        logger.info("[VECTOR][OPENSEARCH][ANN] query=%r k=%d search_filter=%s", query, k, search_filter)
+        logger.debug("[VECTOR][OPENSEARCH][ANN] query=%r k=%d search_filter=%s", query, k, search_filter)
         filters = self._to_filter_clause(search_filter)
-        logger.info("[VECTOR][OPENSEARCH][ANN] computed filters=%s", filters or [])
+        logger.debug("[VECTOR][OPENSEARCH][ANN] computed filters=%s", filters or [])
 
         try:
             vector = self._embedding_model.embed_query(query)
+            logger.debug("[VECTOR][OPENSEARCH][ANN] embedding_dim=%d", len(vector))
         except Exception as e:
             logger.exception("[VECTOR][OPENSEARCH] failed to compute embedding.")
             raise RuntimeError("Embedding model failed.") from e
@@ -555,9 +566,39 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         try:
             res = self._client.search(index=self._index, body=bool_knn_body)
             hits_data = res.get("hits", {}).get("hits", [])
-            logger.info("[VECTOR][OPENSEARCH][ANN] search returned %d hits", len(hits_data))
+            logger.debug("[VECTOR][OPENSEARCH][ANN] search returned %d hits", len(hits_data))
+            if hits_data:
+                sample = [
+                    {
+                        "chunk_id": h["_source"].get("chunk_id"),
+                        "score": h.get("_score"),
+                        "metadata": h["_source"].get("metadata", {}),
+                    }
+                    for h in hits_data[:3]
+                ]
+                logger.debug("[VECTOR][OPENSEARCH][ANN] top hits sample=%s", sample)
+            else:
+                filter_only = {"size": 3, "query": {"bool": {"filter": filters}}} if filters else {"size": 3, "query": {"match_all": {}}}
+                try:
+                    debug_res = self._client.search(index=self._index, body=filter_only)
+                    debug_hits = debug_res.get("hits", {}).get("hits", [])
+                    sample = [
+                        {
+                            "chunk_id": h["_source"].get("chunk_id"),
+                            "has_vector": "vector_field" in h["_source"],
+                            "metadata": h["_source"].get("metadata", {}),
+                        }
+                        for h in debug_hits
+                    ]
+                    logger.debug(
+                        "[VECTOR][OPENSEARCH][ANN] 0 KNN hits; filter-only match count=%d sample=%s",
+                        len(debug_hits),
+                        sample,
+                    )
+                except Exception as e:
+                    logger.warning("[VECTOR][OPENSEARCH][ANN] filter-only debug query failed: %s", e)
         except Exception as e:
-            logger.debug("[VECTOR][OPENSEARCH][ANN] query failed: %s", str(e))
+            logger.warning("[VECTOR][OPENSEARCH][ANN] query failed: %s", str(e))
             raise OpenSearchException(f"{str(e)}") from e
 
         return self._build_ann_hits(hits_data)
@@ -621,9 +662,19 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         try:
             response = self._client.search(index=self._index, body=search_body, params={"search_pipeline": HYBRID_SEARCH_PIPELINE_NAME})
             hits_data = response.get("hits", {}).get("hits", [])
-            logger.info("[VECTOR][OPENSEARCH][HYBRID] search returned %d hits", len(hits_data))
+            logger.debug("[VECTOR][OPENSEARCH][HYBRID] search returned %d hits", len(hits_data))
+            if DEBUG and hits_data:
+                sample = [
+                    {
+                        "chunk_id": h["_source"].get("chunk_id"),
+                        "score": h.get("_score"),
+                        "metadata": h["_source"].get("metadata", {}),
+                    }
+                    for h in hits_data[:3]
+                ]
+                logger.debug("[VECTOR][OPENSEARCH][HYBRID] top hits sample=%s", sample)
         except Exception as e:
-            logger.debug("[VECTOR][OPENSEARCH][HYBRID] query failed: %s", str(e))
+            logger.warning("[VECTOR][OPENSEARCH][HYBRID] query failed: %s", str(e))
             raise OpenSearchException(f"{str(e)}") from e
 
         return self._build_hybrid_hits(hits_data=hits_data)
@@ -658,9 +709,19 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         try:
             response = self._client.search(index=self._index, body=search_body)
             hits_data = response.get("hits", {}).get("hits", [])
-            logger.info("[VECTOR][OPENSEARCH][FULLTEXT] search returned %d hits", len(hits_data))
+            logger.debug("[VECTOR][OPENSEARCH][FULLTEXT] search returned %d hits", len(hits_data))
+            if DEBUG and hits_data:
+                sample = [
+                    {
+                        "chunk_id": h["_source"].get("chunk_id"),
+                        "score": h.get("_score"),
+                        "metadata": h["_source"].get("metadata", {}),
+                    }
+                    for h in hits_data[:3]
+                ]
+                logger.debug("[VECTOR][OPENSEARCH][FULLTEXT] top hits sample=%s", sample)
         except Exception as e:
-            logger.debug("[VECTOR][OPENSEARCH][FULLTEXT] query failed: %s", str(e))
+            logger.warning("[VECTOR][OPENSEARCH][FULLTEXT] query failed: %s", str(e))
             raise OpenSearchException(f"{str(e)}") from e
 
         return self._build_fulltext_hits(hits_data=hits_data)
@@ -730,7 +791,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             if str(knn_enabled).lower() not in {"true", "1"}:
                 problems.append("- Index setting 'index.knn' is not enabled (should be true).")
         except Exception as e:
-            logger.debug("Could not check index.knn setting: %s", e)
+            logger.warning("Could not check index.knn setting: %s", e)
 
         try:
             metadata_props = _safe_get(m, ["properties", "metadata", "properties"], {}) or {}
@@ -808,7 +869,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                     if not (want_true or want_false):
                         continue
 
-                    logger.info(
+                    logger.debug(
                         "[VECTOR][OPENSEARCH][FILTER] building retrievable filter: field=%s values=%s want_true=%s want_false=%s",
                         meta_field,
                         values_list,
@@ -845,12 +906,28 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                     elif want_false:
                         filters.append(_retrievable_clause(False))
                 else:
-                    logger.info(
-                        "[VECTOR][OPENSEARCH][FILTER] adding terms filter: field=%s values=%s",
-                        meta_field,
-                        values_list,
-                    )
-                    filters.append({"terms": {meta_field: values_list}})
+                    include_values: List[Any] = []
+                    exclude_values: List[Any] = []
+                    for v in values_list:
+                        if isinstance(v, str) and v.startswith("!"):
+                            if v[1:]:
+                                exclude_values.append(v[1:])
+                        else:
+                            include_values.append(v)
+                    if include_values:
+                        logger.debug(
+                            "[VECTOR][OPENSEARCH][FILTER] adding terms filter: field=%s values=%s",
+                            meta_field,
+                            include_values,
+                        )
+                        filters.append({"terms": {meta_field: include_values}})
+                    if exclude_values:
+                        logger.debug(
+                            "[VECTOR][OPENSEARCH][FILTER] adding must_not terms: field=%s values=%s",
+                            meta_field,
+                            exclude_values,
+                        )
+                        filters.append({"bool": {"must_not": {"terms": {meta_field: exclude_values}}}})
         if filters:
-            logger.info("[VECTOR][OPENSEARCH][FILTER] final filter list=%s", filters)
+            logger.debug("[VECTOR][OPENSEARCH][FILTER] final filter list=%s", filters)
         return filters or None

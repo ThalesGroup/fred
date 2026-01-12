@@ -1,0 +1,496 @@
+globalSchema = {
+    "type": "object",
+    "properties": {
+        "enjeuxBesoins": {
+            "type": "object",
+            "description": "Informations sur le contexte et les missions du projet.",
+            "properties": {
+                "contexte": {
+                    "type": "string",
+                    "description": "Court résumé du contexte du projet. Longueur maximale: 300 caractères (une à deux phrases).",
+                    "maxLength": 270,
+                },
+                "missions": {
+                    "type": "string",
+                    "description": "Court résumé de l'ensemble des missions et objectifs. Longueur maximale: 300 caractères (une à deux phrases).",
+                    "maxLength": 270,
+                },
+                "refCahierCharges": {
+                    "type": "string",
+                    "description": "Nom du fichier duquel les données sont exraites.",
+                },
+            },
+            "additionalProperties": False,
+            "minProperties": 3,
+        },
+        "cv": {
+            "type": "object",
+            "description": "Informations sur le CV de l'intervenant Thalès Services Numériques.",
+            "properties": {
+                "trigramme": {
+                    "type": "string",
+                    "description": "Trigramme servant à anonymiser le nom de l'intervenant (présent dans le CV).",
+                    "maxLength": 3,
+                },
+                "poste": {
+                    "type": "string",
+                    "description": "L'intitulé du poste pour lequel les services de l'intervenant sont proposés.",
+                    "maxLength": 40,
+                },
+                "dateFormation1": {
+                    "type": "string",
+                    "description": "La date du du premier diplôme ou formation pertinent pour le projet.",
+                },
+                "formation1": {
+                    "type": "string",
+                    "description": "Le nom du premier diplôme ou formation pertinent pour le projet.",
+                },
+                "dateFormation2": {
+                    "type": "string",
+                    "description": "La date du second diplôme ou formation pertinent pour le projet.",
+                },
+                "formation2": {
+                    "type": "string",
+                    "description": "Le nom du second diplôme ou formation pertinent pour le projet.",
+                },
+                "dateFormation3": {
+                    "type": "string",
+                    "description": "La date du troisième diplôme ou formation pertinent pour le projet.",
+                },
+                "formation3": {
+                    "type": "string",
+                    "description": "Le nom du troisième diplôme ou formation pertinent pour le projet.",
+                },
+                "langue1": {
+                    "type": "string",
+                    "description": "La première langue parlée (généralement anglais).",
+                },
+                "maitriseLangue1": {
+                    "type": "string",
+                    "description": "La maitrise de la première langue parlée. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
+                },
+                "competenceManagement1": {
+                    "type": "string",
+                    "description": "Le nom de la première compétence en management.",
+                    "maxLength": 30,
+                },
+                "maitriseManagement1": {
+                    "type": "string",
+                    "description": "La maitrise de la première compétence en management. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
+                },
+                "competenceManagement2": {
+                    "type": "string",
+                    "description": "Le nom de la seconde compétence en management.",
+                    "maxLength": 30,
+                },
+                "maitriseManagement2": {
+                    "type": "string",
+                    "description": "La maitrise de la seconde compétence en management. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
+                },
+                "competenceManagement3": {
+                    "type": "string",
+                    "description": "Le nom de la troisième compétence en management.",
+                    "maxLength": 30,
+                },
+                "maitriseManagement3": {
+                    "type": "string",
+                    "description": "La maitrise de la troisième compétence en management. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
+                },
+                "competenceInformatique1": {
+                    "type": "string",
+                    "description": "Le nom de la première compétence informatique.",
+                    "maxLength": 30,
+                },
+                "maitriseInformatique1": {
+                    "type": "string",
+                    "description": "La maitrise de la première compétence informatique. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
+                },
+                "competenceInformatique2": {
+                    "type": "string",
+                    "description": "Le nom de la seconde compétence informatique.",
+                    "maxLength": 30,
+                },
+                "maitriseInformatique2": {
+                    "type": "string",
+                    "description": "La maitrise de la seconde compétence informatique. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
+                },
+                "competenceInformatique3": {
+                    "type": "string",
+                    "description": "Le nom de la troisième compétence informatique.",
+                    "maxLength": 30,
+                },
+                "maitriseInformatique3": {
+                    "type": "string",
+                    "description": "La maitrise de la troisième compétence informatique. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
+                },
+                "competenceGestionProjet1": {
+                    "type": "string",
+                    "description": "Le nom de la première compétence en gestion de projet.",
+                    "maxLength": 30,
+                },
+                "maitriseGestionProjet1": {
+                    "type": "string",
+                    "description": "La maitrise de la première compétence en gestion de projet. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
+                },
+                "competenceGestionProjet2": {
+                    "type": "string",
+                    "description": "Le nom de la seconde compétence en gestion de projet.",
+                    "maxLength": 30,
+                },
+                "maitriseGestionProjet2": {
+                    "type": "string",
+                    "description": "La maitrise de la seconde compétence en gestion de projet. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
+                },
+                "competenceGestionProjet3": {
+                    "type": "string",
+                    "description": "Le nom de la troisième compétence en gestion de projet.",
+                    "maxLength": 30,
+                },
+                "maitriseGestionProjet3": {
+                    "type": "string",
+                    "description": "La maitrise de la troisième compétence en gestion de projet. Réfère toi au texte alternatif de l'image correspondante. Utilise des emoji ● et ○.",
+                    "maxLength": 5,
+                },
+                "entreprise1": {
+                    "type": "string",
+                    "description": "Le nom de la première entreprise.",
+                },
+                "poste1": {
+                    "type": "string",
+                    "description": "Le nom du premier poste.",
+                },
+                "duree1": {
+                    "type": "string",
+                    "description": "La durée de la première expérience.",
+                },
+                "realisations1": {
+                    "type": "string",
+                    "description": "Description des taches réalisées lors de la première expérience en quelques phrases.",
+                },
+                "entreprise2": {
+                    "type": "string",
+                    "description": "Le nom de la seconde entreprise.",
+                },
+                "poste2": {
+                    "type": "string",
+                    "description": "Le nom du second poste.",
+                },
+                "duree2": {
+                    "type": "string",
+                    "description": "La durée de la seconde expérience.",
+                },
+                "realisations2": {
+                    "type": "string",
+                    "description": "Description des taches réalisées lors de la seconde expérience en quelques phrases.",
+                },
+                "entreprise3": {
+                    "type": "string",
+                    "description": "Le nom de la troisième entreprise.",
+                },
+                "poste3": {
+                    "type": "string",
+                    "description": "Le nom du troisième poste.",
+                },
+                "duree3": {
+                    "type": "string",
+                    "description": "La durée de la troisième expérience.",
+                },
+                "realisations3": {
+                    "type": "string",
+                    "description": "Description des taches réalisées lors de la troisième expérience en quelques phrases.",
+                },
+            },
+            "additionalProperties": False,
+            "minProperties": 40,
+        },
+        "prestationFinanciere": {
+            "type": "object",
+            "descripion": "Informations sur les prestations financière facturées au client.",
+            "properties": {
+                "prestation1": {
+                    "type": "string",
+                    "description": "Nom de la première prestation.",
+                },
+                "prix1": {
+                    "type": "integer",
+                    "description": "Prix unitaire de la première prestation.",
+                },
+                "charge1": {
+                    "type": "integer",
+                    "description": "Charge estimée de la première prestation en unités d'oeuvre.",
+                },
+                "prixTotal1": {
+                    "type": "integer",
+                    "description": "Coût total de la première prestation.",
+                },
+                "prestation2": {
+                    "type": "string",
+                    "description": "Nom de la seconde prestation.",
+                },
+                "prix2": {
+                    "type": "integer",
+                    "description": "Prix unitaire de la seconde prestation.",
+                },
+                "charge2": {
+                    "type": "integer",
+                    "description": "Charge estimée de la seconde prestation en unités d'oeuvre.",
+                },
+                "prixTotal2": {
+                    "type": "integer",
+                    "description": "Coût total de la seconde prestation.",
+                },
+                "prestation3": {
+                    "type": "string",
+                    "description": "Nom de la troisième prestation.",
+                },
+                "prix3": {
+                    "type": "integer",
+                    "description": "Prix unitaire de la troisième prestation.",
+                },
+                "charge3": {
+                    "type": "integer",
+                    "description": "Charge estimée de la troisième prestation en unités d'oeuvre.",
+                },
+                "prixTotal3": {
+                    "type": "integer",
+                    "description": "Coût total de la troisième prestation.",
+                },
+                "prixTotal": {
+                    "type": "integer",
+                    "description": "Coût total de toutes les prestations.",
+                },
+            },
+            "additionalProperties": False,
+            "minProperties": 13,
+        },
+    },
+    "additionalProperties": False,
+    "minProperties": 3,
+}
+"""
+enjeuxBesoinsSchema = {
+    "type": "object",
+    "description": "Informations sur le contexte et les missions du projet.",
+    "properties": {
+        "contexte": {
+            "type": "string",
+            "description": "Contexte du projet.",
+            "maxLength": 300,
+        },
+        "missions": {
+            "type": "string",
+            "description": "Ensemble des missions et objectifs.",
+            "maxLength": 300,
+        },
+        "refCahierCharges": {
+            "type": "string",
+            "description": "Nom du fichier duquel les données sont exraites.",
+        },
+    },
+}
+
+cvSchema = {
+    "type": "object",
+    "description": "Informations sur le CV de l'intervenant Thalès Services Numériques.",
+    "properties": {
+        "poste": {
+            "type": "string",
+            "description": "L'intitulé du poste rempli par l'intervenant.",
+        },
+        "formations": {
+            "type": "array",
+            "description": "Les écoles et formations qu'a suivi l'intervenant.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "description": "La date de la de diplôme ou de la formation.",
+                    },
+                    "nom": {
+                        "type": "string",
+                        "description": "Le nom de l'établissement ou de la formation.",
+                    },
+                },
+            },
+        },
+        "langues": {
+            "type": "array",
+            "description": "Les langues parlées par l'intervenant.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "langue": {"type": "string", "description": "La langue parlée."},
+                    "maitrise": {
+                        "type": "integer",
+                        "description": "La maitrise de la langue parlée.",
+                    },
+                },
+            },
+        },
+        "competencesManagement": {
+            "type": "array",
+            "description": "Les compétences en management de l'intervenant.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "competence": {
+                        "type": "string",
+                        "description": "Le nom de la compétence en management.",
+                    },
+                    "maitrise": {
+                        "type": "integer",
+                        "description": "La maitrise de la compétence en management.",
+                    },
+                },
+            },
+        },
+        "competencesInformatique": {
+            "type": "array",
+            "description": "Les compétences informatiques de l'intervenant.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "competence": {
+                        "type": "string",
+                        "description": "Le nom de la compétence informatique.",
+                    },
+                    "maitrise": {
+                        "type": "integer",
+                        "description": "La maitrise de la compétence informatique.",
+                    },
+                },
+            },
+        },
+        "competencesGestionProjet": {
+            "type": "array",
+            "description": "Les compétences en gestion de projet de l'intervenant.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "competence": {
+                        "type": "string",
+                        "description": "Le nom de la compétence en gestion de projet.",
+                    },
+                    "maitrise": {
+                        "type": "integer",
+                        "description": "La maitrise de la compétence en gestion de projet.",
+                    },
+                },
+            },
+        },
+        "experiences": {
+            "type": "array",
+            "description": "Les expériences de l'intervenant.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "entreprise": {
+                        "type": "string",
+                        "description": "Le nom de l'entreprise.",
+                    },
+                    "poste": {"type": "string", "description": "Le nom du poste."},
+                    "duree": {
+                        "type": "string",
+                        "description": "La durée de l'expérience.",
+                    },
+                    "realisations": {
+                        "type": "string",
+                        "description": "Description des taches réalisées.",
+                    },
+                },
+            },
+        },
+    },
+}
+
+prestationFinanciereSchema = {
+    "type": "object",
+    "descripion": "Informations sur les prestations financière facturées au client.",
+    "properties": {
+        "prestations": {
+            "type": "array",
+            "items": {
+                "nom": {"type": "string", "description": "Nom de la prestation."},
+                "prix": {
+                    "type": "integer",
+                    "description": "Prix unitaire de la prestation.",
+                },
+                "charge": {
+                    "type": "integer",
+                    "description": "Charge estimée de a prestation en unités d'oeuvre.",
+                },
+                "prixTotal": {
+                    "type": "integer",
+                    "description": "Coût total de la prestation.",
+                },
+            },
+        },
+        "prixTotal": {
+            "type": "integer",
+            "description": "Coût total de toutes les prestations.",
+        },
+    },
+}
+
+listSchema = [enjeuxBesoinsSchema, cvSchema, prestationFinanciereSchema]
+
+
+@dataclass
+class EnjeuxBesoins:
+    contexte: str
+    missions: list[str]
+    refCahierCharges: list[str]
+
+
+
+@dataclass
+class Formation:
+    date: str
+    institut: str
+@dataclass
+class Langue:
+    nom: str
+    maitrise: int
+@dataclass
+class Competence:
+    nom: str
+    maitrise: int
+@dataclass
+class Experience:
+    entreprise: str
+    poste: str
+    duree: str
+    realisations: list[str]
+@dataclass
+class CV:
+    poste: str
+    formations: list[Formation]
+    langues: list[Langue]
+    competencesManagement: list[Competence]
+    competencesInformatique: list[Competence]
+    competencesGestionProjet: list[Competence]
+    experiences: list[Experience]
+
+
+
+@dataclass
+class Prestation:
+    nom: str
+    prix: float
+    charge: int
+    prixTotal: float
+@dataclass
+class PropositionFinanciere:
+    prestations: list[Prestation]
+    prixTotal: float
+"""

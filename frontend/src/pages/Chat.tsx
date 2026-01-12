@@ -14,6 +14,7 @@
 import { Box, CircularProgress, Grid2, Typography } from "@mui/material";
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
@@ -29,7 +30,11 @@ export default function Chat() {
     isLoading: flowsLoading,
     isError: flowsError,
     error: flowsErrObj,
-  } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
+  } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+  });
 
   const agentsFromServer = useMemo<AnyAgent[]>(() => normalizeAgenticFlows(rawAgentsFromServer), [rawAgentsFromServer]);
   const enabledAgents = (agentsFromServer ?? []).filter(

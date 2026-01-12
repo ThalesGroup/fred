@@ -79,7 +79,8 @@ embedding_model:
 # and other text generation tasks.
 chat_model:
   provider: openai # openai | azure | ollama
-  name: gpt-4o-mini # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
+  name: "gpt-4o-mini"
+  # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
 # chat_model:
 #   provider: ollama
 #   name: qwen2.5:3b-instruct         # any chat-capable Ollama model you pulled

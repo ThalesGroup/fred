@@ -183,10 +183,41 @@ class VectorSearchService:
         except Exception as e:
             logger.error("[VECTOR][SEARCH][ANN] Unexpected error during search: %s", str(e))
             raise
+        if not ann_hits:
+            logger.warning(
+                "[VECTOR][SEARCH][ANN] no hits returned; tags=%s metadata_terms=%s question_len=%d",
+                library_tags_ids,
+                metadata_terms,
+                len(question),
+            )
+        else:
+            sample = [
+                {
+                    "score": h.score,
+                    "uid": h.document.metadata.get("document_uid"),
+                    "chunk": h.document.metadata.get("chunk_id"),
+                    "session": h.document.metadata.get("session_id"),
+                    "tag_ids": h.document.metadata.get("tag_ids"),
+                    "scope": h.document.metadata.get("scope"),
+                }
+                for h in ann_hits[:3]
+            ]
+            logger.info(
+                "[VECTOR][SEARCH][ANN] got %d hits (sample: %s)",
+                len(ann_hits),
+                sample,
+            )
 
         return await asyncio.gather(*[self._to_hit(h.document, h.score, rank, user) for rank, h in enumerate(ann_hits, start=1)])
 
-    async def _strict(self, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str]) -> List[VectorSearchHit]:
+    async def _strict(
+        self,
+        question: str,
+        user: KeycloakUser,
+        k: int,
+        library_tags_ids: List[str],
+        metadata_terms_extra: Optional[dict[str, Any]] = None,
+    ) -> List[VectorSearchHit]:
         """
         Perform a strict search using BM25 (Best Matching 25).
         This strategy is only available when using OpenSearch as the vector store.
@@ -207,6 +238,8 @@ class VectorSearchService:
             raise TypeError(f"Strict search requires Opensearch, but vector_store is of type {type(self.vector_store).__name__}")
 
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
+        if metadata_terms_extra:
+            metadata_terms.update(metadata_terms_extra)
         search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
 
         try:
@@ -217,7 +250,14 @@ class VectorSearchService:
 
         return await asyncio.gather(*[self._to_hit(hit.document, hit.score, rank, user) for rank, hit in enumerate(hits, start=1)])
 
-    async def _hybrid(self, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str]) -> List[VectorSearchHit]:
+    async def _hybrid(
+        self,
+        question: str,
+        user: KeycloakUser,
+        k: int,
+        library_tags_ids: List[str],
+        metadata_terms_extra: Optional[dict[str, Any]] = None,
+    ) -> List[VectorSearchHit]:
         """
         Hybrid search strategy that combines vector similarity and keyword matching.
         This strategy is only available when using OpenSearch as the vector store.
@@ -238,6 +278,8 @@ class VectorSearchService:
             raise TypeError(f"Hybrid search requires Opensearch, but vector_store is of type {type(self.vector_store).__name__}")
 
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
+        if metadata_terms_extra:
+            metadata_terms.update(metadata_terms_extra)
         search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
 
         try:
@@ -278,8 +320,7 @@ class VectorSearchService:
             Exception: For any other unexpected errors during the search process.
         """
         try:
-            if not document_library_tags_ids or document_library_tags_ids == []:
-                document_library_tags_ids = await self._all_document_library_tags_ids(user)
+            original_tag_ids = document_library_tags_ids or []
 
             policy_key = policy_name or SearchPolicyName.hybrid
             corpus_hits: List[VectorSearchHit] = []
@@ -307,7 +348,16 @@ class VectorSearchService:
                     },
                 )
 
-            # Corpus/library query
+            # Resolve library tags only if the caller provided some; otherwise stay empty so
+            # we can short-circuit when attachments already cover the request.
+            document_library_tags_ids = original_tag_ids
+            if not document_library_tags_ids:
+                document_library_tags_ids = await self._all_document_library_tags_ids(user)
+
+            # Exclude session-scoped vectors from corpus/library search to avoid leakage across sessions
+            corpus_metadata_extra = {"scope": ["!session"]}
+
+            # Corpus/library query: always run (default) even when attachments exist
             if policy_key == SearchPolicyName.strict:
                 logger.info(
                     "[VECTOR][SEARCH][CORPUS] policy=strict tags=%s question=%r top_k=%d",
@@ -315,7 +365,13 @@ class VectorSearchService:
                     question,
                     top_k,
                 )
-                corpus_hits = await self._strict(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+                corpus_hits = await self._strict(
+                    question=question,
+                    user=user,
+                    k=top_k,
+                    library_tags_ids=document_library_tags_ids,
+                    metadata_terms_extra=corpus_metadata_extra,
+                )
             elif policy_key == SearchPolicyName.hybrid:
                 logger.info(
                     "[VECTOR][SEARCH][CORPUS] policy=hybrid tags=%s question=%r top_k=%d",
@@ -323,7 +379,13 @@ class VectorSearchService:
                     question,
                     top_k,
                 )
-                corpus_hits = await self._hybrid(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+                corpus_hits = await self._hybrid(
+                    question=question,
+                    user=user,
+                    k=top_k,
+                    library_tags_ids=document_library_tags_ids,
+                    metadata_terms_extra=corpus_metadata_extra,
+                )
             else:
                 logger.info(
                     "[VECTOR][SEARCH][CORPUS] policy=semantic tags=%s question=%r top_k=%d",
@@ -331,10 +393,21 @@ class VectorSearchService:
                     question,
                     top_k,
                 )
-                corpus_hits = await self._semantic(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+                corpus_hits = await self._semantic(
+                    question=question,
+                    user=user,
+                    k=top_k,
+                    library_tags_ids=document_library_tags_ids,
+                    metadata_terms_extra=corpus_metadata_extra,
+                )
 
-            # Merge: prefer attachments first, then corpus to fill top_k
-            merged = (attachment_hits + corpus_hits)[:top_k]
+            # Merge: combine then keep top_k by score so corpus can surface even when attachments exist
+            merged_candidates = attachment_hits + corpus_hits
+            merged = sorted(
+                merged_candidates,
+                key=lambda h: h.score or 0.0,
+                reverse=True,
+            )[:top_k]
             logger.info(
                 "[VECTOR][SEARCH] merged results attachment=%d corpus=%d returned=%d",
                 len(attachment_hits),
