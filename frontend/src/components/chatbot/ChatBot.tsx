@@ -140,10 +140,30 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     [chatContextResources],
   );
 
-  const { currentData: history } = useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery(
+  const {
+    currentData: history,
+    refetch: refetchHistory,
+    isFetching: isHistoryFetching,
+  } = useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery(
     { sessionId: sessionId || "" },
-    { skip: !sessionId },
+    {
+      skip: !sessionId,
+      // Make the UI stateless/robust: always refresh when switching sessions (even if cached).
+      refetchOnMountOrArgChange: true,
+      refetchOnReconnect: true,
+      refetchOnFocus: true,
+    },
   );
+
+  // Keep a ref to the latest sessionId so the (long-lived) WebSocket handlers don't capture a stale one.
+  const activeSessionIdRef = useRef<string | undefined>(sessionId);
+  useEffect(() => {
+    activeSessionIdRef.current = sessionId;
+    if (sessionId) {
+      // Best-effort refresh when returning to a session; RTK Query dedupes in-flight requests.
+      refetchHistory();
+    }
+  }, [sessionId, refetchHistory]);
 
   // Clear messages when switching sessions (but not on draft→session to avoid blink when a new session is created from draft)
   useSessionChange(sessionId, {
@@ -267,7 +287,8 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
               const msg = streamed.message as ChatMessage;
 
               // Ignore streams for another session than the one being viewed
-              if (sessionId && msg.session_id !== sessionId) {
+              const activeSessionId = activeSessionIdRef.current;
+              if (activeSessionId && msg.session_id !== activeSessionId) {
                 console.warn("Ignoring stream for another session:", msg.session_id);
                 break;
               }
@@ -281,6 +302,13 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
 
             case "final": {
               const finalEvent = response as FinalEvent;
+
+              // Ignore finals for another session than the one being viewed
+              const activeSessionId = activeSessionIdRef.current;
+              if (activeSessionId && finalEvent.session?.id && finalEvent.session.id !== activeSessionId) {
+                console.warn("Ignoring final for another session:", finalEvent.session.id);
+                break;
+              }
 
               // Optional debug summary
               const streamedKeys = new Set(messagesRef.current.map((m) => keyOf(m)));
@@ -595,7 +623,9 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     const eventBase: ChatAskInput = {
       message: input,
       agent_name: agent ? agent.name : currentAgent.name,
-      session_id: pendingSessionIdRef.current || sessionId,
+      // Use the already-resolved sid (may come from ensureSessionId()) to avoid any drift
+      // between the check above and the payload build here.
+      session_id: sid,
       runtime_context: runtimeContext,
       access_token: accessToken || undefined, // Now the backend can read the active token
       refresh_token: refreshToken || undefined, // Now the backend can save and use the refresh token
@@ -636,6 +666,8 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
   const effectiveSessionId = pendingSessionIdRef.current || sessionId || undefined;
 
   const showWelcome = isNewConversation && !waitResponse && messages.length === 0;
+  // Helps spot session-history fetch issues quickly in dev without adding noisy logs.
+  const showHistoryLoading = !!sessionId && isHistoryFetching && messages.length === 0;
 
   const hasContext =
     !!userInputContext &&
@@ -810,6 +842,11 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
                 libraryNameById={libraryNameMap}
                 chatContextNameById={chatContextNameMap}
               />
+              {showHistoryLoading && (
+                <Box mt={1} sx={{ alignSelf: "center" }}>
+                  <DotsLoader dotColor={theme.palette.text.secondary} />
+                </Box>
+              )}
               {waitResponse && (
                 <Box mt={1} sx={{ alignSelf: "flex-start" }}>
                   <DotsLoader dotColor={theme.palette.text.primary} />
