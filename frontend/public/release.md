@@ -2,7 +2,10 @@
 
 - **Summary**
 
-  - This release brings in kpi, language and logging improvments to facilitate operations
+  This release brings in kpi, language and logging improvments to facilitate operations.
+  It also leverage the rebac feature to start proposing a clean sresource sharing policy.
+  Please not the rebac coverage is not yet complete and will be fully delivered in a future
+  major release.
 
 - **Improvements**
 
@@ -14,6 +17,7 @@
   - fixed the missing attachement file number in the UI (#966)
   - fixed the error preview attached files from the 'My Files' area (#965)
   - removed the display button fro user files list (#969)
+  - prevent viewer to share libraries in turn with others (#972)
 
 ---
 
