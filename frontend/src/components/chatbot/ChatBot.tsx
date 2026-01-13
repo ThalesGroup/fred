@@ -147,7 +147,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     refetch: refetchHistory,
     isFetching: isHistoryFetching,
   } = useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery(
-    { sessionId: sessionId || "" },
+    { sessionId: sessionId || "", textLimit: HISTORY_TEXT_LIMIT, textOffset: 0 },
     {
       skip: !sessionId,
       // Make the UI stateless/robust: always refresh when switching sessions (even if cached).
