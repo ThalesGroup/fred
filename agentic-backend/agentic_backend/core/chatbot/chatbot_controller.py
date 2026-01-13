@@ -25,6 +25,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     Request,
     Security,
     UploadFile,
@@ -64,9 +65,12 @@ from agentic_backend.core.chatbot.chat_schema import (
     ChatMessage,
     ErrorEvent,
     FinalEvent,
+    MessagePart,
+    Role,
     SessionSchema,
     SessionWithFiles,
     StreamEvent,
+    TextPart,
     make_user_text,
 )
 from agentic_backend.core.chatbot.metric_structures import (
@@ -79,6 +83,53 @@ from agentic_backend.core.chatbot.session_orchestrator import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _paginate_message_text(
+    message: ChatMessage, text_offset: int = 0, text_limit: Optional[int] = None
+) -> ChatMessage:
+    if text_limit is None and text_offset == 0:
+        return message
+
+    parts = message.parts or []
+    total = sum(len(p.text) for p in parts if getattr(p, "type", None) == "text")
+    if total == 0:
+        return message
+
+    start = min(text_offset, total)
+    end = total if text_limit is None else min(total, start + text_limit)
+
+    if start == 0 and end == total:
+        return message
+
+    paged_parts: List[MessagePart] = []
+    cursor = 0
+    for part in parts:
+        if getattr(part, "type", None) != "text":
+            paged_parts.append(part)
+            continue
+
+        text = part.text or ""
+        next_cursor = cursor + len(text)
+        if end <= cursor or start >= next_cursor:
+            cursor = next_cursor
+            continue
+
+        slice_start = max(0, start - cursor)
+        slice_end = min(len(text), end - cursor)
+        if slice_end > slice_start:
+            paged_parts.append(TextPart(text=text[slice_start:slice_end]))
+        cursor = next_cursor
+
+    extras = dict(message.metadata.extras or {})
+    extras["text_pagination"] = {
+        "offset": start,
+        "limit": text_limit,
+        "total": total,
+        "has_more": end < total,
+    }
+    metadata = message.metadata.model_copy(update={"extras": extras})
+    return message.model_copy(update={"parts": paged_parts, "metadata": metadata})
 
 # ---------------- Echo types for UI OpenAPI ----------------
 
@@ -479,10 +530,61 @@ def create_session(
 )
 def get_session_history(
     session_id: str,
+    limit: Optional[int] = Query(None, ge=1),
+    offset: int = Query(0, ge=0),
+    text_limit: Optional[int] = Query(None, ge=1),
+    text_offset: int = Query(0, ge=0),
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> list[ChatMessage]:
-    return session_orchestrator.get_session_history(session_id, user)
+    history = session_orchestrator.get_session_history(
+        session_id=session_id,
+        user=user,
+        limit=limit,
+        offset=offset,
+    )
+    if text_limit is not None or text_offset > 0:
+        history = [
+            _paginate_message_text(m, text_offset=text_offset, text_limit=text_limit)
+            if m.role == Role.user
+            else m
+            for m in history
+        ]
+    return history
+
+
+@router.get(
+    "/chatbot/session/{session_id}/message/{rank}",
+    description="Get a single chatbot message by rank.",
+    summary="Get a single chatbot message.",
+    response_model=ChatMessage,
+)
+def get_session_message(
+    session_id: str,
+    rank: int,
+    text_limit: Optional[int] = Query(None, ge=1),
+    text_offset: int = Query(0, ge=0),
+    user: KeycloakUser = Depends(get_current_user),
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+) -> ChatMessage:
+    logger.info(
+        "[CHATBOT] get_session_message start session=%s rank=%s user=%s",
+        session_id,
+        rank,
+        user.uid,
+    )
+    message = session_orchestrator.get_session_message(session_id, rank, user)
+    if text_limit is not None or text_offset > 0:
+        message = _paginate_message_text(
+            message, text_offset=text_offset, text_limit=text_limit
+        )
+    logger.info(
+        "[CHATBOT] get_session_message done session=%s rank=%s user=%s",
+        session_id,
+        rank,
+        user.uid,
+    )
+    return message
 
 
 class SessionPreferencesPayload(BaseModel):

@@ -175,7 +175,10 @@
     },
     "message": {
       "waiting": "Waiting for response...",
-      "toolResult": "Tool result"
+      "toolResult": "Tool result",
+      "showMore": "Show more",
+      "showLess": "Show less",
+      "loadError": "Failed to load full message"
     },
     "actions": {
       "copyMessage": "Copy message",

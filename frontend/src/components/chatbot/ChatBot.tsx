@@ -53,6 +53,8 @@ import ChatKnowledge from "./ChatKnowledge.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
 import UserInput, { UserInputContent } from "./user_input/UserInput.tsx";
 
+const HISTORY_TEXT_LIMIT = 1200;
+
 export interface ChatBotError {
   session_id: string | null;
   content: string;
@@ -382,7 +384,7 @@ const ChatBot = ({
       setAllMessages([]);
     }
 
-    fetchHistory({ sessionId: id })
+    fetchHistory({ sessionId: id, textLimit: HISTORY_TEXT_LIMIT, textOffset: 0 })
       .unwrap()
       .then((serverMessages) => {
         const sorted = sortMessages(serverMessages);
@@ -839,7 +841,17 @@ const ChatBot = ({
                 minHeight: 0,
                 overflowY: "auto",
                 overflowX: "hidden",
-                scrollbarWidth: "none",
+                scrollbarWidth: "thin",
+                "&::-webkit-scrollbar": {
+                  width: "10px",
+                },
+                "&::-webkit-scrollbar-thumb": {
+                  backgroundColor: theme.palette.divider,
+                  borderRadius: "8px",
+                },
+                "&::-webkit-scrollbar-track": {
+                  backgroundColor: "transparent",
+                },
                 wordBreak: "break-word",
                 alignContent: "center",
               }}
