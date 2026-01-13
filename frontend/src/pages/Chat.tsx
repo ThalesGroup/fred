@@ -13,7 +13,7 @@
 // limitations under the License.
 import ChatIcon from "@mui/icons-material/Chat";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import FolderOpenIcon from "@mui/icons-material/FolderOpen";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
 
 import { Badge, Box, CircularProgress, Grid2, IconButton, Paper, Typography } from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -317,7 +317,7 @@ export default function Chat() {
               overlap="circular"
               anchorOrigin={{ vertical: "top", horizontal: "right" }}
             >
-              <FolderOpenIcon />
+              <AttachFileIcon />
             </Badge>
           </IconButton>
         </Box>
