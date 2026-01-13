@@ -70,7 +70,7 @@ from agentic_backend.common.user_token_refresher import (
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec
 from agentic_backend.core.agents.agent_state import Prepared, resolve_prepared
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
-from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.runtime_context import RuntimeContext, get_language
 
 logger = logging.getLogger(__name__)
 
@@ -774,6 +774,12 @@ class AgentFlow:
         Notes:
         - Accepts AnyMessage/Sequence to play nicely with LangChain's typing.
         """
+        lang = get_language(self.get_runtime_context())
+        if lang:
+            system_text = (
+                f"{system_text}\n\n"
+                f"User language preference: respond in '{lang}' by default unless explicitly asked otherwise."
+            )
         return [SystemMessage(content=system_text), *messages]
 
     def with_chat_context_text(

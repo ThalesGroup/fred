@@ -29,6 +29,10 @@ import { TimePrecision, alignDateRangeToPrecision, getPrecisionForRange, precisi
 import { useLazyGetNodeNumericalMetricsAgenticV1MetricsChatbotNumericalGetQuery } from "../../../slices/agentic/agenticOpenApi";
 import { TokenUsageChart } from "./TokenUsageChart";
 
+// to allow admin to have a view all KPIs mode
+import { FormControlLabel, Switch, Typography } from "@mui/material";
+import { useAuth } from "../../../security/AuthContext";
+
 // KPI query client
 import {
   FilterTerm,
@@ -53,7 +57,8 @@ import { KpiStatusMini } from "./KpiStatusMini";
  */
 export default function KpiDashboard() {
   const now = dayjs();
-
+  const isAdmin = useAuth().roles.includes("admin");
+  const [viewGlobal, setViewGlobal] = useState(false);
   // Range state (top-level owns it)
   const [startDate, setStartDate] = useState<Dayjs>(now.subtract(12, "hours"));
   const [endDate, setEndDate] = useState<Dayjs>(now);
@@ -103,6 +108,7 @@ export default function KpiDashboard() {
     () => ({
       since: alignedStartIso,
       until: alignedEndIso,
+      view_global: viewGlobal,
       select: [
         { field: "metric.value", op: "percentile", alias: "p50", p: 50 } as any,
         { field: "metric.value", op: "percentile", alias: "p95", p: 95 } as any,
@@ -115,7 +121,7 @@ export default function KpiDashboard() {
       ],
       limit: 1000,
     }),
-    [alignedStartIso, alignedEndIso, precision, agentFilter],
+    [alignedStartIso, alignedEndIso, precision, agentFilter, viewGlobal],
   );
 
   useEffect(() => {
@@ -137,6 +143,7 @@ export default function KpiDashboard() {
     () => ({
       since: alignedStartIso,
       until: alignedEndIso,
+      view_global: viewGlobal,
       select: [{ field: "metric.value", op: "sum", alias: "exchanges" } as any],
       group_by: ["dims.status"],
       // No time_bucket: we want totals over the selected window
@@ -148,7 +155,7 @@ export default function KpiDashboard() {
       // If you want to sort bars by the metric instead of doc_count:
       // order_by: { by: "metric", metric_alias: "exchanges", direction: "desc" } as any,
     }),
-    [alignedStartIso, alignedEndIso, agentFilter],
+    [alignedStartIso, alignedEndIso, agentFilter, viewGlobal],
   );
 
   useEffect(() => {
@@ -203,6 +210,7 @@ export default function KpiDashboard() {
     () => ({
       since: alignedStartIso,
       until: alignedEndIso,
+      view_global: viewGlobal,
       select: [{ field: "metric.value", op: "avg", alias: "avg_ms" } as any],
       group_by: ["dims.agent_step"],
       filters: [
@@ -211,7 +219,7 @@ export default function KpiDashboard() {
       ],
       limit: 50,
     }),
-    [alignedStartIso, alignedEndIso, agentFilter],
+    [alignedStartIso, alignedEndIso, agentFilter, viewGlobal],
   );
 
   useEffect(() => {
@@ -231,6 +239,7 @@ export default function KpiDashboard() {
     () => ({
       since: alignedStartIso,
       until: alignedEndIso,
+      view_global: viewGlobal,
       select: [{ field: "metric.value", op: "avg", alias: "avg_ms" } as any],
       group_by: ["dims.tool_name"],
       filters: [
@@ -239,7 +248,7 @@ export default function KpiDashboard() {
       ],
       limit: 50,
     }),
-    [alignedStartIso, alignedEndIso, agentFilter],
+    [alignedStartIso, alignedEndIso, agentFilter, viewGlobal],
   );
 
   useEffect(() => {
@@ -271,6 +280,11 @@ export default function KpiDashboard() {
                 label="Agent"
                 value={agentFilter}
                 onChange={(event) => setAgentFilter(event.target.value)}
+                sx={(theme) => ({
+                  ".MuiSelect-select": {
+                    fontSize: theme.typography.body2.fontSize,
+                  },
+                })}
               >
                 <MenuItem value="">All agents</MenuItem>
                 {agentOptions.map((agentId) => (
@@ -280,6 +294,19 @@ export default function KpiDashboard() {
                 ))}
               </Select>
             </FormControl>
+            {isAdmin && (
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={viewGlobal}
+                    onChange={(e) => setViewGlobal(e.target.checked)}
+                    name="viewGlobalToggle"
+                    size="small"
+                  />
+                }
+                label={<Typography variant="body2">View Global KPIs</Typography>}
+              />
+            )}
           </Box>
         </Box>
       </DashboardCard>

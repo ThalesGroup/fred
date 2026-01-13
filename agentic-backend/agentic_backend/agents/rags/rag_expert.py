@@ -147,7 +147,10 @@ RAG_TUNING = AgentTuning(
             ),
             required=True,
             default=(
-                "I couldn't find any relevant documents. Try rephrasing or expanding your query?"
+                "No relevant documents or uploaded files were found in the selected libraries "
+                "to answer this question. Please refine the query (e.g., add date/location constraints, a specific document type, or alternate keywords), "
+                "or upload supporting documents so I can work with concrete sources.\n\n"
+                "Question:\n{question}"
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
@@ -405,13 +408,13 @@ class Rico(AgentFlow):
             if not hits:
                 if is_corpus_only_mode(runtime_context):
                     warn = (
-                        "No relevant documents were found for this question. "
-                        "You must not use general knowledge. Explain that you cannot answer without evidence from the corpus "
-                        "and invite the user to refine the question or provide documents."
+                        "No relevant documents or attached files were found in the selected libraries, "
+                        "and I am restricted to the corpus only. Please provide documents or refine your query."
                     )
                 else:
-                    warn = self._render_tuned_prompt(
-                        "prompts.no_results", question=question
+                    warn = (
+                        "I couldn't find any relevant documents or uploaded attachments for that question. "
+                        "Try asking about something covered by the selected libraries or upload relevant files."
                     )
                 messages = [HumanMessage(content=warn)]
                 messages = self.with_chat_context_text(messages)

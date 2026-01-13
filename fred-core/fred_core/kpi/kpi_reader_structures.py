@@ -96,6 +96,7 @@ class OrderBy(BaseModel):
 class KPIQuery(BaseModel):
     since: str = Field(..., description="ISO or 'now-24h'")
     until: Optional[str] = None
+    view_global: bool = False
     filters: List[FilterTerm] = Field(default_factory=list)
     select: List[SelectMetric] = Field(..., min_length=1)  # require at least one metric
     group_by: List[GroupByField] = Field(default_factory=list)

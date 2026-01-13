@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import secrets
 import uuid
 from datetime import datetime, timezone
@@ -418,20 +419,44 @@ class SessionOrchestrator:
         If a session was created with a placeholder title (e.g., via create_empty_session),
         generate a better one from the user's first question.
         """
+
+        def _sanitize_title(raw: str) -> str:
+            cleaned = raw.replace("\n", " ").strip()
+            cleaned = re.sub(r"\s+", " ", cleaned)
+            cleaned = re.sub(r"[^\w\s'-]", "", cleaned)
+            words = cleaned.split()
+            if len(words) > 5:
+                cleaned = " ".join(words[:5])
+            return cleaned[:80].strip()
+
         try:
             if session.title and session.title.strip().lower() != "new conversation":
                 return
-            new_title: str = (
-                get_default_model()
-                .invoke(
-                    "Give a short, clear title for this conversation based on the user's question. "
-                    "Return a few keywords only. Question: " + prompt
-                )
-                .content
+            prompt_text = (
+                "Give a short, clear title for this conversation based on the user's question. "
+                "Summarize the user intent in 3 to 5 words. "
+                "Avoid special characters and punctuation. "
+                "Return ONLY the title (no prefix), keep the same language as the question, and do not translate.\n\n"
+                "User question: " + prompt
             )
+            model = get_default_model()
+            resp = model.invoke(prompt_text)
+            raw_title = resp.content if hasattr(resp, "content") else str(resp)
+            logger.debug(
+                "[SESSIONS] Title generation raw response model=%s prompt=%s raw=%s",
+                getattr(model, "model", None) or type(model).__name__,
+                prompt_text,
+                raw_title,
+            )
+            new_title = _sanitize_title(raw_title)
+            if not new_title:
+                raise ValueError("Empty title from model")
             session.title = new_title
         except Exception:
-            logger.debug("[SESSIONS] Failed to refresh session title", exc_info=True)
+            # Fallback: first few words of the prompt
+            logger.warning("[SESSIONS] Failed to refresh session title", exc_info=True)
+            words = prompt.strip().split()
+            session.title = " ".join(words[:6]) if words else "New conversation"
 
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
     def get_session_history(

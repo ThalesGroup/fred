@@ -675,6 +675,7 @@ export type VectorSearchHit = {
 };
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "cancelled" | "other";
 export type RuntimeContext = {
+  language?: string | null;
   session_id?: string | null;
   user_id?: string | null;
   selected_document_libraries_ids?: string[] | null;

@@ -1802,6 +1802,7 @@ export type KpiQuery = {
   /** ISO or 'now-24h' */
   since: string;
   until?: string | null;
+  view_global?: boolean;
   filters?: FilterTerm[];
   select: SelectMetric[];
   group_by?: (
