@@ -11,6 +11,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from agentic_backend.agents.reference_editor.powerpoint_template_util import (
     fill_slide_from_structured_response,
+    fill_word_from_structured_response,
     referenceSchema,
 )
 from agentic_backend.application_context import get_default_chat_model
@@ -47,6 +48,14 @@ TUNING = AgentTuning(
             default="ref_template.pptx",
         ),
         FieldSpec(
+            key="word.template_key",
+            type="text",
+            title="Word Template Key",
+            description="Agent asset key for the .docx template.",
+            ui=UIHints(group="Word"),
+            default="ref_template.docx",
+        ),
+        FieldSpec(
             key="prompts.system",
             type="prompt",
             title="System Prompt",
@@ -79,6 +88,12 @@ Ton objectif est d'extraire des informations depuis des documents (via recherche
    - Retourne automatiquement un objet LinkPart avec le lien de téléchargement formaté pour l'interface utilisateur
    - IMPÉRATIF : Dès que validator_tool retourne un message de succès, tu DOIS IMMÉDIATEMENT appeler template_tool(data={{...}}) avec exactement les mêmes données
    - Ne JAMAIS afficher le JSON à l'utilisateur, appelle directement template_tool
+
+4. **word_template_tool(data: dict)**
+   - Génère un document Word templatisé (au lieu d'un PowerPoint)
+   - Fonctionne exactement comme template_tool mais produit un fichier .docx
+   - N'utilise cet outil QUE si l'utilisateur demande EXPLICITEMENT un document Word
+   - Par défaut, utilise toujours template_tool (PowerPoint) sauf demande contraire de l'utilisateur
 
 # RÈGLES D'EXTRACTION DES DONNÉES
 
@@ -151,19 +166,22 @@ Par exemple, synthèseprojet ne doit jamais être en dehors de data.
 - Répète jusqu'à obtenir un message de succès
 
 ## Étape 4 : Templetisation (OBLIGATOIRE, NE PAS SAUTER)
-- CRITIQUE : Dès que validator_tool retourne un message de succès, tu DOIS appeler template_tool dans le MÊME tour de conversation
-- Appelle : template_tool(data={{...}}) avec exactement les mêmes données validées
+- CRITIQUE : Dès que validator_tool retourne un message de succès, tu DOIS appeler l'outil de templetisation approprié dans le MÊME tour de conversation
+- Choix de l'outil :
+  - Si l'utilisateur a demandé EXPLICITEMENT un document Word : appelle word_template_tool(data={{...}})
+  - Sinon (par défaut) : appelle template_tool(data={{...}}) pour générer un PowerPoint
+- Appelle l'outil avec exactement les mêmes données validées
 - NE JAMAIS afficher le JSON brut à l'utilisateur
-- NE JAMAIS t'arrêter après validation sans appeler template_tool
+- NE JAMAIS t'arrêter après validation sans appeler l'outil de templetisation
 - L'outil retourne automatiquement un objet LinkPart contenant le lien de téléchargement formaté
 
 ## Étape 5 : Restitution à l'utilisateur
-- Utilise le lien retourné par template_tool pour le présenter à l'utilisateur
+- Utilise le lien retourné par l'outil de templetisation pour le présenter à l'utilisateur
 - Résume en 2-3 phrases ce qui a été fait
 - Indique les champs manquants s'il y en a
 - Ne montre JAMAIS le JSON brut dans ta réponse texte
 
-# MISE À JOUR DU POWERPOINT
+# MISE À JOUR DU DOCUMENT
 
 Si l'utilisateur demande des modifications :
 1. Rappelle-toi TOUTES les données déjà collectées dans la conversation
@@ -171,25 +189,27 @@ Si l'utilisateur demande des modifications :
 3. Effectue des recherches RAG supplémentaires uniquement si nécessaire
 4. Reconstruis le JSON COMPLET (anciennes données + nouvelles données)
 5. Valide avec validator_tool jusqu'à obtenir un message de succès
-6. Appelle IMMÉDIATEMENT template_tool (obligatoire même pour une mise à jour mineure)
+6. Appelle IMMÉDIATEMENT l'outil de templetisation approprié (template_tool ou word_template_tool selon le format demandé initialement)
 7. Fournis le nouveau lien de téléchargement
 
 # CONSIGNES TECHNIQUES
 
 ⚠️ RÈGLE ABSOLUE : VALIDATION → TEMPLETISATION (SÉQUENCE OBLIGATOIRE)
 1. Appelle validator_tool(data={{...}})
-2. Si retour = message de succès → Appelle IMMÉDIATEMENT template_tool(data={{...}}) dans la MÊME réponse
+2. Si retour = message de succès → Appelle IMMÉDIATEMENT l'outil de templetisation approprié (data={{...}}) dans la MÊME réponse
+   - word_template_tool si l'utilisateur a demandé explicitement un document Word
+   - template_tool (PowerPoint) par défaut
 3. Ne JAMAIS afficher le JSON à l'utilisateur
 4. Ne JAMAIS t'arrêter entre validation et templetisation
 
 Autres règles :
-- Ne jamais appeler template_tool si validator_tool a retourné des erreurs
+- Ne jamais appeler les outils de templetisation si validator_tool a retourné des erreurs
 - À chaque génération ou modification : validation + templetisation complète (les deux dans le même tour)
-- Le lien de téléchargement est automatiquement généré par template_tool, utilise-le directement
+- Le lien de téléchargement est automatiquement généré par l'outil de templetisation, utilise-le directement
 
 # EXEMPLE DE RÉPONSE UTILISATEUR
 
-J'ai extrait les informations depuis les documents de référence et généré votre PowerPoint de référence.
+J'ai extrait les informations depuis les documents de référence et généré votre document de référence.
 
 **Informations extraites :**
 - Nom du projet : [nom]
@@ -198,7 +218,7 @@ J'ai extrait les informations depuis les documents de référence et généré v
 
 **Champs manquants :** [liste si applicable, sinon "Aucun"]
 
-[Lien de téléchargement retourné par template_tool]
+[Lien de téléchargement retourné par l'outil de templetisation]
 
 """,
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
@@ -225,12 +245,13 @@ class ReferenceEditor(AgentFlow):
 
     def get_compiled_graph(self) -> CompiledStateGraph:
         template_tool = self.get_template_tool()
+        word_template_tool = self.get_word_template_tool()
         validator_tool = self.get_validator_tool()
 
         return create_agent(
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
-            tools=[template_tool, validator_tool, *self.mcp.get_tools()],
+            tools=[template_tool, word_template_tool, validator_tool, *self.mcp.get_tools()],
             checkpointer=self.streaming_memory,
             middleware=[],
         )
@@ -303,7 +324,9 @@ class ReferenceEditor(AgentFlow):
                 delete=False, suffix=".pptx", prefix="result_"
             ) as out:
                 output_path = Path(out.name)
-                fill_slide_from_structured_response(template_path, data, output_path)
+                # Extract the actual data from the wrapper
+                actual_data = data.get("data", data)
+                fill_slide_from_structured_response(template_path, actual_data, output_path)
 
             # 3. Upload the generated asset to user storage
             user_id_to_store_asset = self.get_end_user_id()
@@ -331,3 +354,64 @@ class ReferenceEditor(AgentFlow):
             )
 
         return template_tool
+
+    def get_word_template_tool(self):
+        tool_schema = {
+            "type": "object",
+            "properties": {
+                "data": referenceSchema,  # todo: get it by parsing a tuning field
+            },
+            "required": ["data"],
+        }
+
+        @tool(args_schema=tool_schema)
+        async def word_template_tool(data: dict):
+            """
+            Outil permettant de templétiser un fichier Word envoyé par l'utilisateur.
+            La nature du fichier importe peu tant que le format des données est respecté. Tu n'as pas besoin de préciser quel fichier,
+            l'outil possède déjà cette information.
+            L'outil retournera un lien de téléchargement une fois le fichier templatisé.
+            """
+            # 1. Fetch template from secure asset storage
+            template_key = (
+                self.get_tuned_text("word.template_key") or "simple_template.docx"
+            )
+            template_path = await self.fetch_asset_blob_to_tempfile(
+                template_key, suffix=".docx"
+            )
+
+            # 2. Save the modified document to a temp file
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix=".docx", prefix="result_"
+            ) as out:
+                output_path = Path(out.name)
+                # Extract the actual data from the wrapper
+                actual_data = data.get("data", data)
+                fill_word_from_structured_response(template_path, actual_data, output_path)
+
+            # 3. Upload the generated asset to user storage
+            user_id_to_store_asset = self.get_end_user_id()
+            final_key = f"{user_id_to_store_asset}_{output_path.name}"
+
+            with open(output_path, "rb") as f_out:
+                upload_result = await self.upload_user_asset(
+                    key=final_key,
+                    file_content=f_out,
+                    filename=f"Generated_Document_{self.get_name()}.docx",
+                    content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    user_id_override=user_id_to_store_asset,
+                )
+
+            # 4. Construct the structured message for the UI
+            final_download_url = self.get_asset_download_url(
+                asset_key=upload_result.key, scope="user"
+            )
+
+            return LinkPart(
+                href=final_download_url,
+                title=f"Download {upload_result.file_name}",
+                kind=LinkKind.download,
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+
+        return word_template_tool

@@ -1,6 +1,7 @@
 import logging
 import re
 
+from docx import Document
 from pptx import Presentation
 
 logger = logging.getLogger(__name__)
@@ -102,6 +103,79 @@ def fill_slide_from_structured_response(ppt_path, structured_responses, output_p
     return output_path
 
 
+def fill_word_from_structured_response(docx_path, structured_responses, output_path):
+    doc = Document(docx_path)
+    pattern = re.compile(r"\{([^}]+)\}")
+
+    # Flatten the nested structure into a single dictionary
+    flattened_data = {}
+    for section_name, section_data in structured_responses.items():
+        if isinstance(section_data, dict):
+            # Add all nested key-value pairs to the flattened dictionary
+            for key, value in section_data.items():
+                flattened_data[key] = value
+        else:
+            # If it's not a dict, keep it as is
+            flattened_data[section_name] = section_data
+
+    logger.info(f"Flattened data keys: {list(flattened_data.keys())}")
+    logger.info(f"Flattened data: {flattened_data}")
+
+    # Helper function to process paragraphs
+    def process_paragraph(paragraph):
+        # Merge all runs to find complete placeholders (handles split placeholders)
+        full_text = "".join(run.text for run in paragraph.runs)
+
+        if not full_text:
+            return
+
+        logger.debug(f"Processing paragraph text: '{full_text}'")
+
+        # Find all placeholders and their positions in the merged text
+        matches = list(pattern.finditer(full_text))
+        if not matches:
+            return
+
+        logger.info(f"Found {len(matches)} placeholders in paragraph")
+
+        # Replace placeholders in reverse order to maintain string positions
+        for match in reversed(matches):
+            key = match.group(1)
+            logger.info(f"Processing placeholder: {{{key}}}")
+            if key in flattened_data:
+                value = str(flattened_data[key])
+                logger.info(f"Replacing {{{key}}} with: {value}")
+                # Replace in the full text
+                full_text = full_text[:match.start()] + value + full_text[match.end():]
+            else:
+                logger.warning(f"Placeholder '{key}' not found in flattened data")
+
+        logger.info(f"Final paragraph text: '{full_text}'")
+
+        # Clear all runs and create a single new run with the replaced text
+        for run in paragraph.runs:
+            run.text = ""
+
+        if paragraph.runs:
+            paragraph.runs[0].text = full_text
+        else:
+            paragraph.add_run(full_text)
+
+    # Process all paragraphs in the document
+    for paragraph in doc.paragraphs:
+        process_paragraph(paragraph)
+
+    # Process tables in the document
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    process_paragraph(paragraph)
+
+    doc.save(output_path)
+    return output_path
+
+
 referenceSchema = {
     "type": "object",
     "properties": {
@@ -125,11 +199,12 @@ referenceSchema = {
                 },
                 "nombrePersonnes": {
                     "type": "string",
-                    "description": "Le nombre de personnes",
+                    "description": "Le nombre de personnes dans la direction (uniquement dans la direction)",
                 },
                 "enjeuFinancier": {
                     "type": "string",
-                    "description": "Les enjeux financier du projet exprimé en k euros",
+                    "description": "Les coûts financiers ou la rentabilité du projet exprimé en euros, juste un seul chiffre clé comme le CA (jamais en nombre de personnes sinon ne rien mettre)",
+                    "maxLength": 100,
                 },
             },
         },
