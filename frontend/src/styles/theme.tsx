@@ -186,12 +186,8 @@ const lightPalette = {
 // ---------- Dark Palette ----------
 const darkPalette = {
   mode: "dark" as PaletteMode,
-  background: {
-    default: "#1b1b1b",
-    paper: "#333333",
-  },
   common: { white: "#fff", black: "#000" },
-  primary: { contrastText: "#fff", main: "#6482AD", light: "#879ed9", dark: "#404040" },
+  primary: { contrastText: "#fff", main: "#90CAF9", light: "#879ed9", dark: "#404040" },
   secondary: { main: "#f48fb1", light: "#f8bbd0", dark: "#c2185b", contrastText: "#000" },
   info: { main: "#81d4fa", light: "#b3e5fc", dark: "#0288d1", contrastText: "#fff" },
   warning: { main: "#ffcc80", light: "#ffe0b2", dark: "#f57c00", contrastText: "#fff" },
@@ -225,7 +221,7 @@ const darkPalette = {
     alterningBgColor1: "#ffffff1a",
     alterningBgColor2: "#c8c8c84d",
   },
-  text: { primary: "#fff", secondary: "#bbb", disabled: "#888888" },
+  text: { primary: "#ffffffff", secondary: "#ffffffb3", disabled: "#888888" },
   sidebar: { background: "#121214f2", activeItem: "#42424db3", hoverColor: "#ffffff0d" },
   borderChip: { border: "#ffffff26" },
   heroBackgroundGrad: { gradientFrom: darkHeroFrom, gradientTo: darkHeroTo },
@@ -239,7 +235,6 @@ const darkPalette = {
 // ---------- Typography ----------
 const baseTypography = {
   fontFamily: "Inter, sans-serif",
-  fontSize: 12,
   sidebar: {
     fontSize: "14px",
     fontWeight: 300,
@@ -361,15 +356,6 @@ const lightTheme = createTheme({
       },
     },
 
-    // Apply the subtle hero-tinted surfaces globally
-    MuiPaper: {
-      styleOverrides: {
-        root: ({ theme }) => ({
-          background: theme.palette.surfaces.soft,
-          border: `1px solid ${theme.palette.divider}`,
-        }),
-      },
-    },
     MuiCard: {
       styleOverrides: {
         root: ({ theme }) => ({
@@ -430,7 +416,7 @@ const darkTheme = createTheme({
         tooltip: ({ theme }) => ({
           background: theme.palette.surfaces.raised,
           color: theme.palette.text.primary,
-          fontSize: theme.typography.body1.fontSize, // ⬅ use body2 baseline (~0.875rem)
+          fontSize: theme.typography.body1.fontSize,
           fontWeight: 400, // a touch heavier for readability
           padding: "8px 12px",
           borderRadius: 8,
@@ -475,15 +461,6 @@ const darkTheme = createTheme({
       },
     },
 
-    // Apply the subtle hero-tinted surfaces globally
-    MuiPaper: {
-      styleOverrides: {
-        root: ({ theme }) => ({
-          background: theme.palette.surfaces.soft,
-          border: `1px solid ${theme.palette.divider}`,
-        }),
-      },
-    },
     MuiCard: {
       styleOverrides: {
         root: ({ theme }) => ({
@@ -493,14 +470,7 @@ const darkTheme = createTheme({
         }),
       },
     },
-    MuiDrawer: {
-      styleOverrides: {
-        paper: ({ theme }) => ({
-          background: theme.palette.surfaces.soft,
-          borderRight: `1px solid ${theme.palette.divider}`,
-        }),
-      },
-    },
+
     MuiAppBar: {
       styleOverrides: {
         root: ({ theme }) => ({

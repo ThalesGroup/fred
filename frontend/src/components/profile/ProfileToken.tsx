@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Card, CardContent, Grid2, Stack, Typography, useTheme } from "@mui/material";
 import CodeIcon from "@mui/icons-material/Code";
+import { Box, Card, CardContent, Grid2, Stack, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 interface ProfileTokenProps {
@@ -26,11 +26,15 @@ export function ProfileToken({ tokenParsed }: ProfileTokenProps) {
 
   return (
     // Right-anchored container to match ProfileCard
-    <Grid2 size={{ xs: 12 }} display="flex" justifyContent={{ xs: "stretch", md: "flex-end" }} px={{ xs: 1.5, md: 3 }}>
+    <Grid2
+      size={{ xs: 12 }}
+      display="flex"
+      justifyContent={{ xs: "stretch", md: "flex-start" }}
+      px={{ xs: 1.5, md: 3 }}
+    >
       <Card
         variant="outlined"
         sx={{
-          ml: { md: "auto" }, // stick to the right on md+
           width: "100%",
           maxWidth: 980, // align width with ProfileCard
           borderRadius: 3,

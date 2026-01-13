@@ -13,6 +13,11 @@
 // limitations under the License.
 
 /**
+ * Theme mode options
+ */
+export type ThemeMode = "light" | "system" | "dark";
+
+/**
  * The Application context keeps track of all the clusters known to frugal IT.
  * If a cluster is selected as the current cluster, its namespaces will be
  * loaded.
@@ -27,8 +32,14 @@ export interface ApplicationContextStruct {
 
   /**
    * Whether the application is in dark mode or not.
+   * This is computed from themeMode and system preference.
    */
   darkMode: boolean;
+
+  /**
+   * The current theme mode setting (light, system, or dark)
+   */
+  themeMode: ThemeMode;
 
   /**
    * Toggles the sidebar collapsed state.
@@ -36,7 +47,7 @@ export interface ApplicationContextStruct {
   toggleSidebar: () => void;
 
   /**
-   * Toggles between dark and light mode.
+   * Sets the theme mode.
    */
-  toggleDarkMode: () => void;
+  setThemeMode: (mode: ThemeMode) => void;
 }

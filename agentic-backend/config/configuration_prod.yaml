@@ -212,7 +212,7 @@ storage:
     host: localhost
     port: 5432
     database: fred
-    username: admin
+    username: fred
 
   opensearch:
     host: https://localhost:9200

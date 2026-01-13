@@ -647,6 +647,7 @@ export default function UserInput({
                 </Stack>
               ) : (
                 <InputBase
+                  autoFocus
                   fullWidth
                   multiline
                   maxRows={12}
