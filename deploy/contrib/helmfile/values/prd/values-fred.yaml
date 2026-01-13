@@ -1,0 +1,318 @@
+global:
+  create_index:
+    enabled: false
+    image: "carma.corp.thales/proxy-docker-internal-c2/fred/opensearchproject/opensearch:2.19.3"
+
+  persistence:
+    # Enable duckdb save in pvc
+    # enabled: true
+    # dynamic: true
+    # Set storage class
+    accessModes: "ReadWriteMany"
+    storageClass: "ontap-nfs"
+
+applications:
+  agentic-backend:
+    # Set Carma registry and PRISM tag
+    image:
+      repository: carma.corp.thales/proxy-docker-internal-c2/fred/agentic-backend
+      tag: &prism-tag "0.0.1-prism"
+    imagePullSecrets: &carma-pull-secret
+      - name: "carma-pull-secret"
+
+    # Disable service acount
+    serviceAccount: &disable-service-account
+      rbac:
+        enabled: false
+
+    # Add SSL certs
+    extraEnvVars: &ssl-extra-env-vars
+      - name: SSL_CERT_FILE
+        value: "/etc/ssl/certs/thales.pem"
+      - name: REQUESTS_CA_BUNDLE
+        value: "/etc/ssl/certs/thales.pem"
+    extraVolumes: &ssl-extra-volumes
+      - name: thales-certificate
+        secret:
+          secretName: "thales-secret-chain"
+    extraVolumeMounts: &ssl-extra-volume-mounts
+      - name: thales-certificate
+        mountPath: /etc/ssl/certs/thales.pem
+        subPath: tls.crt
+        readOnly: true
+
+    configuration:
+      # Set Keycloak url
+      security: &security-configuration
+        m2m:
+          realm_url: &realm-url https://prism-idp-prd.six.cloud.thales/realms/app
+        user:
+          realm_url: *realm-url
+        authorized_origins:
+          - "http://prism-ui-prd.six.cloud.thales"
+          - "https://prism-ui-prd.six.cloud.thales"
+        rebac:
+          enabled: true
+
+      # Set UI title and logo
+      frontend_settings:
+        properties:
+          logoName: "fred" # todo: set PRISM logo
+          siteDisplayName: "Prism"
+
+      ai:
+        # Set KF right url
+        knowledge_flow_url: "https://prism-ui-prd.six.cloud.thales/knowledge-flow/v1"
+
+        # Use mistral medium from TGS as LLM
+        default_chat_model: &tgs-mistral-medium
+          provider: "openai"
+          name: "mistral"
+          settings:
+            base_url: "https://api.corp.thales/corp/genai/llm/medium/v1"
+        default_language_model: *tgs-mistral-medium
+
+        # Add PRSIM agents
+        agents:
+          # Default Fred agents
+          - name: "Samy"
+            type: "agent"
+            class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
+            enabled: false
+          - name: "Georges"
+            type: "agent"
+            class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
+            enabled: true
+          - name: "Tessa"
+            type: "agent"
+            class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
+            enabled: true
+          - name: "Rico"
+            type: "agent"
+            class_path: "agentic_backend.agents.rags.rag_expert.Rico"
+            enabled: true
+          - name: "Rico Senior"
+            type: "agent"
+            role: "Advanced Document Retrieval Expert"
+            class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
+            enabled: true
+          # PRISM agents
+          - name: "Kellia"
+            type: "agent"
+            class_path: "agentic_backend.agents.knowledge_extractor.slide_maker.SlideMaker"
+            enabled: true
+          - name: "Raph"
+            type: "agent"
+            class_path: "agentic_backend.agents.reference_editor.reference_editor.ReferenceEditor"
+            enabled: true
+          - name: "CoachDG"
+            type: "agent"
+            class_path: "agentic_backend.agents.coach_dg.coach_dg.CoachDG"
+            enabled: true
+
+      storage:
+        # Set Postgres connection params
+        postgres: &storage-postgres
+          host: postgres
+          port: 5432
+          database: fred
+          username: admin
+
+        # Set Opensearch connection params
+        opensearch: &storage-opensearch
+          host: https://prism-opensearch-prd.six.cloud.thales
+          # verify_certs: true # todo: set to true
+
+        # Set all store to opensearch
+        feedback_store:
+          type: "opensearch"
+          index: feedback-index
+        agent_store:
+          type: "opensearch"
+          index: agent-index
+        session_store:
+          type: "opensearch"
+          index: session-index
+        history_store:
+          type: "opensearch"
+          index: history-index
+        kpi_store:
+          type: "opensearch"
+          index: kpi-index
+        log_store:
+          type: "opensearch"
+          index: log-index
+
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  frontend:
+    # Set Carma registry and PRISM tag
+    image:
+      repository: carma.corp.thales/proxy-docker-internal-c2/fred/frontend
+      tag: *prism-tag
+    imagePullSecrets: *carma-pull-secret
+
+    # Set UI ingress
+    ingress:
+      hosts:
+        - host: prism-ui-prd.six.cloud.thales
+          paths:
+            - path: /
+              pathType: Prefix
+              service:
+                name: frontend
+                port: 80
+            - path: /agentic
+              pathType: Prefix
+              service:
+                name: agentic-backend
+                port: 80
+            - path: /knowledge-flow
+              pathType: Prefix
+              service:
+                name: knowledge-flow-backend
+                port: 8000
+      tls:
+        - hosts:
+            - "prism-ui-prd.six.cloud.thales"
+          secretName: "tls-dc2-wd1-six-prd-kns-pri"
+
+    # Increase probes delay
+    probes:
+      livenessProbe:
+        data:
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 10
+      readinessProbe:
+        data:
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 10
+
+    # Disable service acount
+    serviceAccount: *disable-service-account
+
+    # Add SSL certs
+    extraEnvVars: *ssl-extra-env-vars
+    extraVolumes: *ssl-extra-volumes
+    extraVolumeMounts: *ssl-extra-volume-mounts
+
+    configuration:
+      config_json:
+        # Set bakcend endpoints for frontend
+        backend_url_api: "https://prism-ui-prd.six.cloud.thales"
+        backend_url_knowledge: "https://prism-ui-prd.six.cloud.thales"
+        websocket_url: "ws://prism-ui-prd.six.cloud.thales/fred/chatbot/query"
+
+    # Don't think that's needed (shouldn't be able to change VITE env variable after build)
+    # env:
+    #   - name: VITE_ALLOWED_HOSTS
+    #     value: "prism-knowledge-flow-backend.six"
+    #   - name: VITE_BACKEND_URL_KNOWLEDGE
+    #     value: "http://prism-knowledge-flow-backend-prd.six.cloud.thales"
+    #   - name: VITE_USE_AUTH
+    #     value: "true"
+
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  knowledge-flow-backend:
+    # Set Carma registry and PRISM tag
+    image:
+      repository: carma.corp.thales/proxy-docker-internal-c2/fred/knowledge-flow-backend
+      tag: *prism-tag
+    imagePullSecrets: *carma-pull-secret
+
+    # Disable service acount
+    serviceAccount: *disable-service-account
+
+    # Add SSL certs
+    extraEnvVars: *ssl-extra-env-vars
+    extraVolumes: *ssl-extra-volumes
+    extraVolumeMounts: *ssl-extra-volume-mounts
+
+    configuration:
+      processing:
+        # disable image processing for now (todo: enable it)
+        process_images: false
+        # disable gpu for now (todo: enable it)
+        use_gpu: false
+
+      # Set Keycloak url
+      security: *security-configuration
+
+      # Disable scheduler (todo: enable after Temporal install)
+      scheduler:
+        enabled: false
+
+      # Set Minio connection params
+      content_storage: &content-storage
+        type: minio
+        endpoint: http://minio:9000
+        access_key: "admin"
+        bucket_name: "knowledge-flow-content"
+        secure: false # todo: pass to true
+
+      # Use bge-m3 from TGS as embedding model
+      embedding_model:
+        <<: *tgs-mistral-medium
+        name: bge-m3 # or text-embedding-3-small
+        # name: text-embedding-3-small
+        settings:
+          base_url: "https://api.corp.thales/corp/genai-embedding/v2"
+      # Use mistral medium from TGS as LLM
+      chat_model: *tgs-mistral-medium
+
+      storage:
+        # Set Postgres connection params
+        postgres: *storage-postgres
+        # Set Opensearch connection params
+        opensearch: *storage-opensearch
+
+        # Set all store to opensearch
+        catalog_store:
+          type: "opensearch"
+          index: "catalog-index"
+        prompt_store:
+          type: "opensearch"
+          index: prompt-index
+        resource_store:
+          type: "opensearch"
+          index: resource-index
+        kpi_store:
+          type: "opensearch"
+          index: kpi-index
+        tag_store:
+          type: "opensearch"
+          index: tag-index
+        metadata_store:
+          type: "opensearch"
+          index: metadata-index
+        vector_store:
+          type: opensearch
+          index: vector-index-3-large
+          # Default bulk size for vector insertions is 500. Increase if you have
+          # enough memory and want faster ingestion. Or if run into ingestion errors
+          # while ingesting large documents.
+          bulk_size: 1000
+        log_store:
+          type: "opensearch"
+          index: log-index
+
+        # Set tabular store to opensearch
+        tabular_store:
+          base_database:
+            type: postgres
+            table: fred-tabular-store
+
+      # Enable filesystem mcp
+      mcp:
+        filesystem_enabled: true
+        opensearch_ops_enabled: true
+
+      # Set filesystem tools to use Minio
+      filesystem:
+        <<: *content-storage
+        bucket_name: filesystem
