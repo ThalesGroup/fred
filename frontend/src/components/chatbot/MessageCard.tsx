@@ -127,6 +127,7 @@ export default function MessageCard({
     onError: onLoadError,
   });
 
+
   const extras = getExtras(renderMessage);
   const { downloadLink } = useAssetDownloader();
   const isCall = isToolCall(renderMessage);
@@ -188,6 +189,14 @@ export default function MessageCard({
   const bubbleBackground =
     side === "right" ? theme.palette.background.paper : theme.palette.background.default;
   const mdContent = useMemo(() => toMarkdown(processedParts), [processedParts]);
+  const toggleButtonSx = {
+    minWidth: "unset",
+    px: 1,
+    textTransform: "none",
+    borderRadius: 999,
+  };
+  const toggleEdgeSx = side === "right" ? { right: 8 } : { left: 8 };
+  const showLessSticky = shouldCollapse && isExpanded;
 
 
   return (
@@ -207,19 +216,19 @@ export default function MessageCard({
             <>
               <Grid2>
                 <Box
-                  onMouseEnter={() => setBubbleHover(true)}
-                  onMouseLeave={() => setBubbleHover(false)}
-                  sx={{
-                    display: "flex",
-                    flexDirection: "column",
-                    backgroundColor:
-                      side === "right" ? theme.palette.background.paper : theme.palette.background.default,
-                    padding: side === "right" ? "0.8em 16px 0 16px" : "0.8em 0 0 0",
-                    marginTop: side === "right" ? 1 : 0,
-                    borderRadius: 3,
-                    wordBreak: "break-word",
-                  }}
-                >
+                    onMouseEnter={() => setBubbleHover(true)}
+                    onMouseLeave={() => setBubbleHover(false)}
+                    sx={{
+                      display: "flex",
+                      flexDirection: "column",
+                      backgroundColor:
+                        side === "right" ? theme.palette.background.paper : theme.palette.background.default,
+                      padding: side === "right" ? "0.8em 16px 0 16px" : "0.8em 0 0 0",
+                      marginTop: side === "right" ? 1 : 0,
+                      borderRadius: 3,
+                      wordBreak: "break-word",
+                    }}
+                  >
                   {/* Header: task chips + indicators */}
                   {(showMetaChips || isCall || isResult) && (
                     <Box display="flex" alignItems="center" gap={1} px={side === "right" ? 0 : 1} pb={0.5}>
@@ -288,7 +297,39 @@ export default function MessageCard({
                   )}
 
                   {/* Main content */}
-                  <Box px={side === "right" ? 0 : 1} pb={0.5}>
+                  <Box
+                    px={side === "right" ? 0 : 1}
+                    pb={0.5}
+                    sx={{ display: "flex", flexDirection: "column", position: "relative" }}
+                  >
+                    {showLessSticky && (
+                      <Box
+                        sx={{
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 1,
+                          height: 0,
+                          overflow: "visible",
+                        }}
+                      >
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="primary"
+                          onClick={toggleExpanded}
+                          aria-expanded={isExpanded}
+                          disabled={isLoadingFullText}
+                          sx={{
+                            position: "absolute",
+                            top: 0,
+                            ...toggleEdgeSx,
+                            ...toggleButtonSx,
+                          }}
+                        >
+                          {t("chat.message.showLess")}
+                        </Button>
+                      </Box>
+                    )}
                     <Box
                       sx={{
                         position: "relative",
@@ -322,16 +363,29 @@ export default function MessageCard({
                         }}
                       />
                     </Box>
-                    {shouldCollapse && (
-                      <Box pt={0.5} display="flex" justifyContent="flex-start">
+                    {shouldCollapse && !isExpanded && (
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          right: 8,
+                          bottom: 8,
+                          zIndex: 1,
+                        }}
+                      >
                         <Button
                           size="small"
-                          variant="text"
+                          variant="contained"
+                          color="primary"
                           onClick={toggleExpanded}
                           aria-expanded={isExpanded}
                           disabled={isLoadingFullText}
+                          sx={{
+                            ...toggleButtonSx,
+                            ...toggleEdgeSx,
+                            bottom: 8,
+                          }}
                         >
-                          {isExpanded ? t("chat.message.showLess") : t("chat.message.showMore")}
+                          {t("chat.message.showMore")}
                         </Button>
                       </Box>
                     )}
