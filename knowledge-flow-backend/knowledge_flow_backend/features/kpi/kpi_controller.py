@@ -16,7 +16,6 @@ import logging
 
 from fastapi import APIRouter, Depends
 from fred_core import Action, FilterTerm, KeycloakUser, KPIQuery, KPIQueryResult, Resource, authorize_or_raise, get_current_user
-from fred_core.security import oidc
 
 from knowledge_flow_backend.application_context import get_app_context
 
@@ -40,13 +39,12 @@ class KPIController:
 
         @router.post("/kpi/query", response_model=KPIQueryResult, tags=["KPI"])
         async def query(body: KPIQuery, user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.KPIS)
-
-            # Enforce user scoping only when auth is enabled; dev mode uses a mock user.
-            if oidc.KEYCLOAK_ENABLED:
-                logger.info("[KPI][QUERY] apply user filter user_id=%s", user.uid)
-                body.filters.append(FilterTerm(field="dims.user_id", value=user.uid))
+            if body.view_global:
+                authorize_or_raise(user, Action.READ_GLOBAL, Resource.KPIS)
+                logger.info("[KPI][QUERY] Global view requested by user_id=%s. Not applying user filter.", user.uid)
             else:
-                logger.info("[KPI][QUERY] skip user filter (keycloak disabled)")
+                authorize_or_raise(user, Action.READ, Resource.KPIS)
+                logger.info("[KPI][QUERY] Applying user filter for user_id=%s", user.uid)
+                body.filters.append(FilterTerm(field="dims.user_id", value=user.uid))
 
             return self.reader.query(body)
