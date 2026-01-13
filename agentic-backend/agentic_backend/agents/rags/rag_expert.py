@@ -372,6 +372,14 @@ class Rico(AgentFlow):
                 top_k,
                 rag_scope,
             )
+            logger.info(
+                "[AGENT][SESSION PATH] question=%r runtime_context.session_id=%s rag_scope=%s search_policy=%s doc_tag_ids=%s",
+                question,
+                runtime_context.session_id if runtime_context else None,
+                rag_scope,
+                search_policy,
+                doc_tag_ids,
+            )
 
             if not runtime_context or not runtime_context.session_id:
                 raise RuntimeError(

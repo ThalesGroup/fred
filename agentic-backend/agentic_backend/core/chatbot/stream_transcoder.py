@@ -270,14 +270,14 @@ class StreamTranscoder:
                         new_hits = _extract_vector_search_hits(raw_content)
                         if new_hits is not None:
                             logger.info(
-                                "[Transcoder] tool_result call_id=%s vector_hits=%d",
+                                "[TRANSCODER] tool_result call_id=%s vector_hits=%d",
                                 call_id,
                                 len(new_hits),
                             )
                             pending_sources_payload = new_hits
                         else:
                             logger.info(
-                                "[Transcoder] tool_result call_id=%s vector_hits=0 (no parse)",
+                                "[TRANSCODER] tool_result call_id=%s vector_hits=0 (no parse)",
                                 call_id,
                             )
 
@@ -386,17 +386,41 @@ class StreamTranscoder:
                             continue
 
                     if role == Role.assistant and ch == Channel.final:
-                        if not sources_payload and pending_sources_payload is not None:
+                        existing_sources = (
+                            len(sources_payload) if sources_payload else 0
+                        )
+                        pending_sources = (
+                            len(pending_sources_payload)
+                            if pending_sources_payload is not None
+                            else 0
+                        )
+                        if (
+                            existing_sources == 0
+                            and pending_sources_payload is not None
+                        ):
+                            # Some agents put sources in the vector-search tool result, not on the final AIMessage.
+                            # In that case, carry the tool-result sources forward into the final message metadata.
                             sources_payload = pending_sources_payload
                             logger.info(
-                                "[Transcoder] attach_sources to final assistant message sources=%d",
-                                len(sources_payload),
+                                "[TRANSCODER][SOURCES] final: adopted %d pending sources from tool_result",
+                                pending_sources,
+                            )
+                        elif existing_sources > 0:
+                            # Sources already present on the final AIMessage (citations can still appear in text either way).
+                            logger.info(
+                                "[TRANSCODER][SOURCES] final: kept %d existing sources (pending_sources=%s)",
+                                existing_sources,
+                                pending_sources
+                                if pending_sources_payload is not None
+                                else "none",
                             )
                         else:
+                            # No sources anywhere: neither provided by agent metadata nor parsed from tool results.
                             logger.info(
-                                "[Transcoder] final assistant message no sources attached pending=%s existing=%d",
-                                pending_sources_payload is not None,
-                                len(sources_payload) if sources_payload else 0,
+                                "[TRANSCODER][SOURCES] final: no sources present (pending_sources=%s)",
+                                pending_sources
+                                if pending_sources_payload is not None
+                                else "none",
                             )
                         pending_sources_payload = None
 

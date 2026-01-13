@@ -73,6 +73,14 @@ class VectorSearchClient(KfBaseClient):
         if session_id:
             payload["session_id"] = session_id
             payload["include_session_scope"] = include_session_scope
+        logger.info(
+            "[VECTOR][CLIENT] session_id=%s include_session_scope=%s top_k=%d search_policy=%s document_library_tags_ids=%s",
+            session_id,
+            include_session_scope,
+            top_k,
+            search_policy,
+            payload.get("document_library_tags_ids"),
+        )
 
         # Use the base class's request method, passing the required access_token.
         # This will handle token refresh if needed. The required refresh token
