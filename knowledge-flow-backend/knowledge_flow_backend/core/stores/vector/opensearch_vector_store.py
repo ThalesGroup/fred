@@ -44,6 +44,12 @@ MODEL_INDEX_SPECS: dict[str, ExpectedIndexSpec] = {
     "text-embedding-ada-002": ExpectedIndexSpec(dim=1536, engine="lucene", space_type="cosinesimil", method_name="hnsw"),
 }
 
+REQUIRED_METADATA_FIELDS: dict[str, Dict[str, str]] = {
+    "session_id": {"type": "keyword"},
+    "user_id": {"type": "keyword"},
+    "scope": {"type": "keyword"},
+}
+
 HYBRID_SEARCH_PIPELINE_NAME = "hybrid-search-pipeline"
 
 HYBRID_SEARCH_PIPELINE_CONFIG = {
@@ -728,11 +734,43 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
 
     # ---------- helpers ----------
 
+    def _apply_metadata_mapping_updates(self, missing_fields: List[str]) -> bool:
+        """
+        Try to add missing metadata keyword fields so the attachment/session filters continue to work.
+        """
+        payload = {
+            "properties": {
+                "metadata": {
+                    "properties": {
+                        field: {"type": REQUIRED_METADATA_FIELDS[field]["type"]}
+                        for field in missing_fields
+                        if field in REQUIRED_METADATA_FIELDS
+                    }
+                }
+            }
+        }
+        try:
+            self._client.indices.put_mapping(index=self._index, body=payload)
+            logger.info(
+                "[VECTOR][OPENSEARCH][MAPPING] added missing metadata fields %s to index %s",
+                missing_fields,
+                self._index,
+            )
+            return True
+        except Exception as exc:
+            logger.error(
+                "[VECTOR][OPENSEARCH][MAPPING] failed to add metadata fields %s to index %s: %s",
+                missing_fields,
+                self._index,
+                exc,
+            )
+            return False
+
     def _get_embedding_dimension(self) -> int:
         dummy_vector = self._embedding_model.embed_query("dummy")
         return len(dummy_vector)
 
-    def _validate_index_compatibility(self, expected_dim: int):
+    def _validate_index_compatibility(self, expected_dim: int, allow_metadata_mapping_update: bool = True):
         """
         Fred rationale:
         - We fail fast if index mapping cannot faithfully serve the configured embedding model.
@@ -793,8 +831,23 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         except Exception as e:
             logger.warning("Could not check index.knn setting: %s", e)
 
+        metadata_props = _safe_get(m, ["properties", "metadata", "properties"], {}) or {}
+        missing_metadata_fields = [field for field in REQUIRED_METADATA_FIELDS if field not in metadata_props]
+        if missing_metadata_fields:
+            logger.critical(
+                "[VECTOR][OPENSEARCH][MAPPING] index %s missing metadata keyword fields %s required for session/attachment filters",
+                self._index,
+                missing_metadata_fields,
+            )
+            if allow_metadata_mapping_update and self._apply_metadata_mapping_updates(missing_metadata_fields):
+                self._validate_index_compatibility(expected_dim, allow_metadata_mapping_update=False)
+                return
+            problems.append(
+                "- Missing metadata fields "
+                f"{', '.join(missing_metadata_fields)}. These fields must be mapped as keywords for session-scoped searches."
+            )
+
         try:
-            metadata_props = _safe_get(m, ["properties", "metadata", "properties"], {}) or {}
             tag_field = metadata_props.get("tag_ids")
             if tag_field is None:
                 problems.append("- Missing field 'metadata.tag_ids'. Fred relies on this keyword field for library filters.")
