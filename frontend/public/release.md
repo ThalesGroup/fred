@@ -1,3 +1,70 @@
+**v1.2.0** — 2026-01-10
+
+This release brings in a major UI revamp. This revamp has been proposed and designed
+by the Prism team to make Fred evolve towards a state-of-the-art agentic orchestration platform.
+
+- **Improvements**
+
+  - Side bar now integrated into the main left side bar. (#976)
+
+---
+
+**v1.1.3** — 2026-01-09
+
+- **Summary**
+
+  This release brings in kpi, language and logging improvments to facilitate operations.
+  It also leverage the rebac feature to start proposing a clean sresource sharing policy.
+  Please not the rebac coverage is not yet complete and will be fully delivered in a future
+  major release.
+
+- **Improvements**
+
+  - reduce log verbosity (#963)
+  - log and update the vector search mapping for attachements required fields (#964)
+  - take into account frontend language (#962)
+
+- **Bug fixes**
+  - fixed the missing attachement file number in the UI (#966)
+  - fixed the error preview attached files from the 'My Files' area (#965)
+  - removed the display button fro user files list (#969)
+  - prevent viewer to share libraries in turn with others (#972)
+
+---
+
+**v1.1.2** — 2026-01-08
+
+- **Summary**
+  - Dynamic ReAct agents now support source citations, and agent code inspection works for all agents (#950).
+- **Features**
+
+  - Add source citation support to dynamic ReAct agents (#950)
+  - Fix agent code inspection to display source for all agents (#950)
+
+- **v1.1.1** — 2026-01-07
+
+  - **Summary**
+    - This release completes the support for per conversation attachements, and improve the capabilities of dynamic agents.
+  - **Features**
+    - Dynamic agent can now leverage the chat options to benefit from depp searchn attachements library scoping (#941)
+    - New duckdb and opensearch connectors to manage per conversation attachments (#941)
+
+- **v1.1.0** — 2026-01-04
+  - **Summary**
+    - New PostgreSQL/pgvector option so Fred can run fully without OpenSearch, plus in-UI Mermaid rendering for agent replies.
+    - This version provides full support of per conversation attachments. Attached files are vectorized using lite markdown processors.
+    - The Rico agent expose now a first deep search capability that leverage the Rico Senior document agent.
+  - **Features**
+    - Add a Postgres-first deployment path (metadata + vectors) across knowledge-flow and agentic backends (#933)
+    - Surface vector backend details (pgvector or OpenSearch) in the admin views (#933)
+    - Rag support for per conversation attachements files
+  - **Bug fixes**
+    - Fix Mermaid diagrams rendering in chat by generating safe SVG previews and stabilizing layout (#933)
+  - **Impact**
+    - Teams can choose a single Postgres stack for persistence; diagrams now display cleanly without layout jumps.
+
+---
+
 - **v1.0.9** — 2025-12-09
   - **Summary**
     - Corrected the OpenSearch k-NN query to use the proper `{ knn: … }` structure with filters inside the k-NN block, avoiding sub-optimal or inconsistent results.

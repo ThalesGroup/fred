@@ -24,6 +24,9 @@ class RuntimeContext(BaseModel):
     Properties that can be passed to an agent at runtime (with a message)
     """
 
+    language: Optional[str] = None
+    session_id: Optional[str] = None
+    user_id: Optional[str] = None
     selected_document_libraries_ids: list[str] | None = None
     selected_chat_context_ids: list[str] | None = None
     search_policy: str | None = None
@@ -34,6 +37,7 @@ class RuntimeContext(BaseModel):
         None  # if the session has some attachement files, this will hold their markdown representation
     )
     search_rag_scope: Optional[Literal["corpus_only", "hybrid", "general_only"]] = None
+    deep_search: Optional[bool] = None
 
 
 # Type alias for context provider functions
@@ -80,6 +84,16 @@ def get_rag_knowledge_scope(context: RuntimeContext | None) -> str:
     return "hybrid"
 
 
+def get_deep_search_enabled(context: RuntimeContext | None) -> bool:
+    """
+    Decide whether deep search delegation should be enabled for this request.
+    Mirrors the runtime-context precedence style used for RAG scope.
+    """
+    if not context:
+        return False
+    return bool(context.deep_search)
+
+
 def get_chat_context_libraries_ids(context: RuntimeContext | None) -> list[str] | None:
     """Helper to extract profile library IDs from context."""
     if not context:
@@ -112,3 +126,10 @@ def should_skip_rag_search(context: RuntimeContext | None) -> bool:
 def is_corpus_only_mode(context: RuntimeContext | None) -> bool:
     """Helper to check whether the agent must answer only from corpus documents."""
     return get_rag_knowledge_scope(context) == "corpus_only"
+
+
+def get_language(context: RuntimeContext | None) -> str:
+    """Helper to get preferred language if provided."""
+    if not context:
+        return ""
+    return context.language or ""

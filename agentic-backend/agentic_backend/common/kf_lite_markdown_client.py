@@ -83,6 +83,46 @@ class KfLiteMarkdownClient(KfBaseClient):
         r.raise_for_status()
         return r.text or ""
 
+    def ingest_markdown_from_bytes(
+        self,
+        *,
+        filename: str,
+        content: bytes,
+        session_id: Optional[str] = None,
+        scope: str = "session",
+        options: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Fast ingest path: use the lite extractor and store vectors with scoping metadata.
+        Returns the backend payload (document_uid, chunks, etc.).
+        """
+        options_json = json.dumps(options or {})
+        mime = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        files = {"file": (filename, io.BytesIO(content), mime)}
+        data = {
+            "options_json": options_json,
+            "session_id": session_id or "",
+            "scope": scope,
+        }
+        r: requests.Response = self._request_with_token_refresh(
+            method="POST",
+            path="/lite/ingest",
+            files=files,
+            data=data,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def delete_ingested_vectors(self, document_uid: str) -> None:
+        """
+        Delete vectors created via the lite ingest path.
+        """
+        r: requests.Response = self._request_with_token_refresh(
+            method="DELETE",
+            path=f"/lite/ingest/{document_uid}",
+        )
+        r.raise_for_status()
+
     def extract_markdown(
         self,
         file_path: Path,

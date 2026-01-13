@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import List, Optional
 
@@ -25,6 +26,8 @@ from knowledge_flow_backend.core.stores.metadata.base_metadata_store import (
     BaseMetadataStore,
     MetadataDeserializationError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DuckdbMetadataStore(BaseMetadataStore):
@@ -106,6 +109,31 @@ class DuckdbMetadataStore(BaseMetadataStore):
                 [tag_id],
             ).fetchall()
         return [self._from_json(r[0]) for r in rows]
+
+    def browse_metadata_in_tag(self, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[list[DocumentMetadata], int]:
+        logger.debug(
+            "[PAGINATION] (DuckDB) browse_metadata_in_tag(tag_id=%s, offset=%s, limit=%s)",
+            tag_id,
+            offset,
+            limit,
+        )
+        with self.store._connect() as conn:
+            total_row = conn.execute(
+                f'SELECT COUNT(*) FROM "{self._table()}" WHERE list_contains(tag_ids, ?)',
+                [tag_id],
+            ).fetchone()
+            total = total_row[0] if total_row else 0
+            rows = conn.execute(
+                f'SELECT doc FROM "{self._table()}" WHERE list_contains(tag_ids, ?) LIMIT ? OFFSET ?',
+                [tag_id, limit, offset],
+            ).fetchall()
+        docs = [self._from_json(r[0]) for r in rows]
+        logger.debug(
+            "[PAGINATION] (DuckDB) browse_metadata_in_tag result: returned=%s total=%s",
+            len(docs),
+            total,
+        )
+        return docs, total
 
     def get_all_metadata(self, filters: dict) -> List[DocumentMetadata]:
         """

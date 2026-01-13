@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from contextlib import AbstractContextManager
@@ -243,7 +244,12 @@ class KPIWriter(BaseKPIWriter):
 
             # The status is read from the dictionary after the `with` block finishes.
             # If an exception occurs, default to "error", otherwise default to "ok".
-            status = "error" if exc_type else (self.dims.get("status") or "ok")
+            # Cancellations are tracked explicitly so we can separate user aborts
+            # from genuine failures.
+            if exc_type is asyncio.CancelledError:
+                status = "cancelled"
+            else:
+                status = "error" if exc_type else (self.dims.get("status") or "ok")
 
             # CRITICAL FIX: Add the final status to the dictionary for emission.
             # We use the original dictionary self.dims which may have been mutated

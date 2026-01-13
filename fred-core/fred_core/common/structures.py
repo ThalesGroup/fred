@@ -61,12 +61,20 @@ class DuckdbStoreConfig(BaseModel):
 
 
 class PostgresStoreConfig(BaseModel):
+    type: Literal["postgres"] = "postgres"
     host: str = Field(..., description="PostgreSQL host")
     port: int = 5432
     database: str
     username: str
     password: Optional[str] = Field(
         default_factory=lambda: os.getenv("POSTGRES_PASSWORD")
+    )
+    echo: bool = Field(default=False, description="SQLAlchemy echo flag.")
+    pool_size: Optional[int] = Field(
+        default=None, description="Optional pool size for the engine."
+    )
+    connect_args: Optional[dict[str, Any]] = Field(
+        default=None, description="Optional connect_args passed to SQLAlchemy."
     )
 
     def dsn(self) -> str:
@@ -75,7 +83,10 @@ class PostgresStoreConfig(BaseModel):
 
 class PostgresTableConfig(BaseModel):
     type: Literal["postgres"]
-    table: str
+    table: str = Field(..., description="Table name used by the store.")
+    prefix: Optional[str] = Field(
+        default=None, description="Optional prefix applied to the table name."
+    )
 
 
 class SQLStorageConfig(BaseModel):
@@ -118,10 +129,10 @@ class SQLStorageConfig(BaseModel):
 StoreConfig = Annotated[
     Union[
         DuckdbStoreConfig,
-        PostgresTableConfig,
         OpenSearchIndexConfig,
         SQLStorageConfig,
         LogStoreConfig,
+        PostgresTableConfig,
     ],
     Field(discriminator="type"),
 ]

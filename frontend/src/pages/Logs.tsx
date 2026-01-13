@@ -15,15 +15,15 @@
 // - Parent owns time window; tile stays presentational.
 // - Live mode: sliding window → end=undefined (backend reads "until now").
 // - Fixed mode: frozen start/end from pickers (shareable investigations).
-import { useMemo, useState, useEffect } from "react";
 import { Box, FormControlLabel, Switch } from "@mui/material";
 import dayjs, { Dayjs } from "dayjs";
-import { alignDateRangeToPrecision, getPrecisionForRange, TimePrecision } from "../components/monitoring/timeAxis";
-import { LogConsoleTile } from "../components/monitoring/logs/LogConsoleTile";
-import { SHORT_QUICK_RANGES } from "../components/monitoring/common/dateRangeControlPresets";
-import DateRangeControl from "../components/monitoring/common/DateRangeControl";
-import { TopBar } from "../common/TopBar";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { TopBar } from "../common/TopBar";
+import DateRangeControl from "../components/monitoring/common/DateRangeControl";
+import { SHORT_QUICK_RANGES } from "../components/monitoring/common/dateRangeControlPresets";
+import { LogConsoleTile } from "../components/monitoring/logs/LogConsoleTile";
+import { alignDateRangeToPrecision, getPrecisionForRange, TimePrecision } from "../components/monitoring/timeAxis";
 
 export default function Logs() {
   const { t } = useTranslation();
@@ -71,6 +71,7 @@ export default function Logs() {
           overflow: "hidden",
           p: 2,
           gap: 1,
+          mt: 1,
         }}
       >
         {/* Header: date range + Live toggle */}

@@ -39,6 +39,7 @@ import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 import GeoMapRenderer from "./GeoMapRenderer.tsx";
 import { MessagePart, toCopyText, toMarkdown } from "./messageParts.ts";
 import MessageRuntimeContextHeader from "./MessageRuntimeContextHeader.tsx";
+import { useAssetDownloader } from "./useAssetDownloader.tsx";
 
 export default function MessageCard({
   message,
@@ -107,6 +108,7 @@ export default function MessageCard({
   };
 
   const extras = getExtras(message);
+  const { downloadLink } = useAssetDownloader();
   const isCall = isToolCall(message);
   const isResult = isToolResult(message);
 
@@ -277,20 +279,16 @@ export default function MessageCard({
                   {(downloadLinkPart || viewLinkPart) && (
                     <Box px={side === "right" ? 0 : 1} pt={0.5} pb={1} display="flex" gap={1} flexWrap="wrap">
                       {downloadLinkPart && (
-                        <Tooltip title="Click to securely download the PowerPoint file">
-                          <Chip
-                            icon={<DownloadIcon />}
-                            label={downloadLinkPart.title || "Download File"}
-                            component="a"
-                            href={downloadLinkPart.href}
-                            target="_blank"
-                            clickable
-                            color="primary"
-                            variant="filled"
-                            size="medium"
-                            sx={{ fontWeight: "bold" }}
-                          />
-                        </Tooltip>
+                        <Chip
+                          icon={<DownloadIcon />}
+                          label={downloadLinkPart.title || "Download File"}
+                          onClick={() => downloadLink(downloadLinkPart)}
+                          clickable={Boolean(downloadLinkPart.href)}
+                          color="primary"
+                          variant="filled"
+                          size="medium"
+                          sx={{ fontWeight: "bold" }}
+                        />
                       )}
                       {viewLinkPart && (
                         <Tooltip title="Open PDF preview in viewer">

@@ -63,6 +63,12 @@ ai:
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
   max_concurrent_agents: 128
 
+  # Maximum number of files a user can attach across all sessions
+  max_attached_files_per_user: 20
+
+  # Maximum size (in MB) for each attached file
+  max_attached_file_size_mb: 50
+
   # Base URL for the Knowledge Flow service
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
 
@@ -110,16 +116,12 @@ ai:
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:
-    - name: "Appollo"
-      type: "leader"
-      class_path: "agentic_backend.academy.06_simple_leader.mini_llm_orchestrator.MiniLLMOrchestrator"
-      enabled: true
     - name: "Georges"
       type: "agent"
       class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
       enabled: true
       chat_options:
-        attach_files: true
+        attach_files: false
     - name: "Sammy"
       type: "agent"
       class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
@@ -131,12 +133,33 @@ ai:
         search_policy_selection: true
         libraries_selection: true
         search_rag_scoping: true
+        deep_search_delegate: true
         attach_files: true
+      metadata:
+        # Deep-search delegation target
+        deep_search_delegate_to: "Rico Senior"
+    - name: "Rico Senior"
+      type: "agent"
+      class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
       enabled: true
+      metadata:
+        deep_search_hidden_in_ui: true
     - name: "Tessa"
       type: "agent"
       class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
       enabled: true
+    - name: "Kellia"
+      type: "agent"
+      class_path: "agentic_backend.agents.knowledge_extractor.slide_maker.SlideMaker"
+      enabled: true
+    - name: "Raph"
+      type: "agent"
+      class_path: "agentic_backend.agents.reference_editor.reference_editor.ReferenceEditor"
+      enabled: true
+    - name: "CoachDG"
+      type: "agent"
+      class_path: "agentic_backend.agents.coach_dg.coach_dg.CoachDG"
+      enabled: false
 mcp:
   servers:
     - id: "mcp-knowledge-flow-mcp-text"
@@ -189,7 +212,7 @@ storage:
     host: localhost
     port: 5432
     database: fred
-    username: admin
+    username: fred
 
   opensearch:
     host: https://localhost:9200
@@ -212,6 +235,10 @@ storage:
   session_store:
     type: "opensearch"
     index: session-index
+
+  attachments_store:
+    type: "opensearch"
+    index: session-attachments-index
 
   history_store:
     type: "opensearch"

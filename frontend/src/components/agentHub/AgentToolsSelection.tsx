@@ -35,7 +35,7 @@ export function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: Ag
     <Stack spacing={1}>
       <Typography variant="subtitle2">{t("agentHub.toolsSelection.title")}</Typography>
 
-      <Stack spacing={1}>
+      <Stack spacing={0.75}>
         {mcpServersData.map((conf, index) => {
           const isEnabled = conf.enabled !== false;
           if (!isEnabled) {
@@ -87,19 +87,25 @@ export function AgentToolSelectionCard({ conf, selected, onSelectedChange }: Age
   return (
     <Card
       sx={{
-        padding: 1.25,
+        padding: 1,
         borderColor: selected ? "primary.main" : "divider",
         boxShadow: selected ? 2 : 0,
       }}
       variant="outlined"
     >
-      <Stack spacing={0.75}>
+      <Stack spacing={0.5}>
         <Stack direction="row" spacing={1} alignItems="center">
-          <Switch checked={selected} onChange={(event) => onSelectedChange(event.target.checked)} />
+          <Switch
+            size="small"
+            checked={selected}
+            onChange={(event) => onSelectedChange(event.target.checked)}
+          />
           <Stack spacing={0.25} flex={1}>
-            <Typography fontWeight={600}>{t(conf.name)}</Typography>
+            <Typography fontWeight={600} variant="body2">
+              {t(conf.name)}
+            </Typography>
             {conf.description && (
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="caption" color="text.secondary">
                 {t(conf.description)}
               </Typography>
             )}
@@ -113,8 +119,8 @@ export function AgentToolSelectionCard({ conf, selected, onSelectedChange }: Age
           />
         </Stack>
 
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ marginLeft: "44px" }}>
-          <Typography variant="caption" color="text.secondary">
+        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ marginLeft: "36px" }}>
+          <Typography variant="caption" color="text.secondary" sx={{ minWidth: 88 }}>
             {isStdio ? t("agentHub.fields.mcp_server.command", "Command") : t("agentHub.fields.mcp_server.url")}
           </Typography>
           <Typography

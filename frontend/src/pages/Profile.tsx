@@ -12,29 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect } from "react";
+import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import KeyIcon from "@mui/icons-material/VpnKey";
 import {
   Box,
-  Typography,
-  Theme,
   Button,
-  useTheme,
+  Card,
+  CardContent,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Card,
-  CardContent,
+  Theme,
+  Typography,
+  useTheme,
 } from "@mui/material";
-import AccountCircleIcon from "@mui/icons-material/AccountCircle";
-import KeyIcon from "@mui/icons-material/VpnKey";
-import { KeyCloakService } from "../security/KeycloakService";
+import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
+import { TopBar } from "../common/TopBar";
+import InvisibleLink from "../components/InvisibleLink";
 import { ProfileCard } from "../components/profile/ProfileCard";
 import { ProfileToken } from "../components/profile/ProfileToken";
-import { TopBar } from "../common/TopBar";
-import { useSearchParams } from "react-router-dom";
-import InvisibleLink from "../components/InvisibleLink";
-import { useTranslation } from "react-i18next";
+import { KeyCloakService } from "../security/KeycloakService";
+import ReleaseNotes from "./ReleaseNotes";
 
 function getFallbackTab(): number {
   const savedTab = localStorage.getItem("last_profile_active_tab");
@@ -82,6 +84,7 @@ export function Profile() {
   const menuItems = [
     { label: t("profile.menu.account"), icon: <AccountCircleIcon fontSize="small" /> },
     { label: t("profile.menu.token"), icon: <KeyIcon fontSize="small" /> },
+    { label: t("profile.menu.releaseNotes"), icon: <InfoOutlinedIcon fontSize="small" /> },
   ];
 
   return (
@@ -91,7 +94,8 @@ export function Profile() {
       <Box
         sx={{
           width: "100%",
-          maxWidth: 1280,
+          flexGrow: 1,
+          overflowY: "auto",
           mx: "auto",
           px: { xs: 2, md: 3 },
           py: { xs: 4, md: 6 },
@@ -112,7 +116,7 @@ export function Profile() {
               component="nav"
               sx={{
                 position: { md: "sticky" },
-                top: { md: 88 },
+                top: { md: 0 },
                 alignSelf: "start",
               }}
             >
@@ -190,6 +194,12 @@ export function Profile() {
               )}
 
               {activeTab === 1 && <ProfileToken tokenParsed={tokenParsed} />}
+
+              {activeTab === 2 && (
+                <Card sx={{ mx: { xs: 1.5, md: 3 } }}>
+                  <ReleaseNotes />
+                </Card>
+              )}
             </Box>
           </Box>
         ) : (
@@ -198,7 +208,6 @@ export function Profile() {
             variant="outlined"
             sx={{
               maxWidth: 760,
-              mx: "auto",
               borderRadius: 3,
               bgcolor: "transparent",
               boxShadow: "none",

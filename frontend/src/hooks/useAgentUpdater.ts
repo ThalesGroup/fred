@@ -31,13 +31,13 @@ export function useAgentUpdater() {
   };
   // -------------------------------------
 
-  const updateEnabled = async (agent: AnyAgent, enabled: boolean) => {
+  const updateEnabled = async (agent: AnyAgent, enabled: boolean, isGlobal: boolean = true) => {
     // The cast to AnyAgent is clean here as the type definition ensures correct properties
     const payload: AnyAgent = { ...agent, enabled };
 
     try {
       // The mutation expects a type compatible with Agent | Leader, which AnyAgent is.
-      return await mutate({ agentSettings: payload }).unwrap();
+      return await mutate({ agentSettings: payload, isGlobal }).unwrap();
     } catch (e: unknown) {
       handleUpdateError(e, t("agentHub.errors.updateFailed"));
     }

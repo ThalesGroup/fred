@@ -193,6 +193,12 @@ applications:
 
         # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
         max_concurrent_agents: 128
+        
+        # Maximum number of files a user can attach across all sessions
+        max_attached_files_per_user: 20
+  
+        # Maximum size (in MB) for each attached file
+        max_attached_file_size_mb: 50
 
         # Base URL for the Knowledge Flow service
         knowledge_flow_url: "http://knowledge-flow-backend:8111/knowledge-flow/v1"
@@ -218,6 +224,11 @@ applications:
             temperature: 0.0
             max_retries: 2
             request_timeout: 30
+        crossencoder_model:
+          name: cross-encoder/ms-marco-MiniLM-L-12-v2
+          settings:
+            online: false
+            local_path: /app/models
 
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the chat model
@@ -306,6 +317,10 @@ applications:
         history_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/history.duckdb"
+
+        attachments_store:
+          type: "duckdb"
+          duckdb_path: "/home/fred-user/.fred/agentic/session_attachments.duckdb"
 
         kpi_store:
           type: "log"

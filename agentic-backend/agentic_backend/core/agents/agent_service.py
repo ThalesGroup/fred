@@ -23,7 +23,11 @@ from a2a.utils.constants import EXTENDED_AGENT_CARD_PATH
 from fred_core import Action, KeycloakUser, Resource, authorize
 
 from agentic_backend.application_context import get_agent_store
-from agentic_backend.common.structures import Agent, AgentSettings
+from agentic_backend.common.structures import (
+    Agent,
+    AgentChatOptions,
+    AgentSettings,
+)
 from agentic_backend.core.agents.a2a_proxy_agent import A2AProxyAgent
 from agentic_backend.core.agents.agent_manager import (
     AgentAlreadyExistsException,
@@ -117,6 +121,8 @@ class AgentService:
                 class_path=_class_path(BasicReActAgent),
                 enabled=False,  # Start disabled until fully initialized
                 tuning=BASIC_REACT_TUNING,  # default tuning
+                # Start with all chat options off by default; UI can toggle them later.
+                chat_options=AgentChatOptions(),
                 mcp_servers=[],  # Empty list by default; to be configured later
             )
             self.agent_manager.create_dynamic_agent(agent_settings, BASIC_REACT_TUNING)

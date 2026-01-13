@@ -64,6 +64,7 @@ class OpensearchSessionStore(BaseSessionStore):
             connection_class=RequestsHttpConnection,
         )
         self._cache = ThreadSafeLRUCache[str, SessionSchema](max_size=1000)
+        self._user_cache = ThreadSafeLRUCache[str, List[SessionSchema]](max_size=1000)
         self.index = index
         if not self.client.indices.exists(index=index):
             self.client.indices.create(index=index, body=MAPPING)
@@ -77,7 +78,7 @@ class OpensearchSessionStore(BaseSessionStore):
         try:
             session_dict = session.model_dump()
             self.client.index(index=self.index, id=session.id, body=session_dict)
-            self._cache.set(session.id, session)
+            self._cache_session(session)
             logger.debug(f"Session {session.id} saved for user {session.user_id}")
         except Exception as e:
             logger.error(f"Failed to save session {session.id}: {e}")
@@ -101,7 +102,9 @@ class OpensearchSessionStore(BaseSessionStore):
 
     def delete(self, session_id: str) -> None:
         try:
-            self._cache.delete(session_id)
+            session = self._cache.delete(session_id)
+            if session:
+                self._remove_from_user_cache(session.user_id, session_id)
             self.client.delete(index=self.index, id=session_id)
             # query = {"query": {"term": {"session_id.keyword": {"value": session_id}}}}
             # self.client.delete_by_query(index=self.history_index, body=query)
@@ -110,20 +113,43 @@ class OpensearchSessionStore(BaseSessionStore):
             logger.error(f"Failed to delete session {session_id}: {e}")
 
     def get_for_user(self, user_id: str) -> List[SessionSchema]:
+        cached = self._user_cache.get(user_id)
+        if cached is not None:
+            logger.debug("[SESSION][OS] user cache hit for user_id=%s", user_id)
+            return cached
+
         try:
-            query = {
-                "query": {
-                    "term": {"user_id": {"value": user_id}}  # fixed
-                }
-            }
+            query = {"query": {"term": {"user_id": {"value": user_id}}}}
             response = self.client.search(
-                params={"size": 10000}, index=self.index, body=query
+                params={"size": 10000},
+                index=self.index,
+                body=query,
             )
             sessions = [
                 SessionSchema(**hit["_source"]) for hit in response["hits"]["hits"]
             ]
+            for s in sessions:
+                self._cache_session(s)
             logger.debug(f"Retrieved {len(sessions)} sessions for user {user_id}")
             return sessions
         except Exception as e:
             logger.error(f"Failed to fetch sessions for user {user_id}: {e}")
             return []
+
+    # ---------- cache helpers ----------
+
+    def _cache_session(self, session: SessionSchema) -> None:
+        self._cache.set(session.id, session)
+        existing = self._user_cache.get(session.user_id) or []
+        # deduplicate and keep newest first
+        remaining = [s for s in existing if s.id != session.id]
+        remaining.append(session)
+        remaining.sort(key=lambda s: s.updated_at, reverse=True)
+        self._user_cache.set(session.user_id, remaining)
+
+    def _remove_from_user_cache(self, user_id: str, session_id: str) -> None:
+        existing = self._user_cache.get(user_id)
+        if existing is None:
+            return
+        filtered = [s for s in existing if s.id != session_id]
+        self._user_cache.set(user_id, filtered)

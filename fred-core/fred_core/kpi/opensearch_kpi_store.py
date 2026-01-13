@@ -80,7 +80,9 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "scope_id": {
                         "type": "keyword"
                     },  # session_id | project_id | library tag
-                    "status": {"type": "keyword"},  # ok | error | timeout | filtered
+                    "status": {
+                        "type": "keyword"
+                    },  # ok | error | timeout | filtered | cancelled
                     "http_status": {"type": "keyword"},  # "200".."599"
                     "error_code": {"type": "keyword"},  # e.g., rate_limit, jwt_invalid
                     "exception_type": {"type": "keyword"},  # e.g., TimeoutError
@@ -186,9 +188,31 @@ class OpenSearchKPIStore(BaseKPIStore):
 
     # -- reads -----------------------------------------------------------------
     def query(self, q: KPIQuery) -> KPIQueryResult:
+        logger.info(
+            "[KPI][QUERY] since=%s until=%s group_by=%s filters=%s select=%s time_bucket=%s limit=%s",
+            q.since,
+            q.until,
+            q.group_by,
+            [f"{f.field}={f.value}" for f in (q.filters or [])],
+            [f"{s.alias}:{s.op}:{s.field or ''}" for s in (q.select or [])],
+            getattr(q.time_bucket, "interval", None) if q.time_bucket else None,
+            q.limit,
+        )
         os_query = self._build_os_query(q)
+        logger.debug("[KPI][QUERY] os_query=%s", os_query)
         resp = self.client.search(index=self.index, body=os_query)
+        total_hits = (
+            (resp.get("hits", {}).get("total") or {}).get("value")
+            if isinstance(resp.get("hits", {}), dict)
+            else None
+        )
+        logger.info(
+            "[KPI][QUERY] response total_hits=%s aggregations=%s",
+            total_hits,
+            list((resp.get("aggregations") or {}).keys()),
+        )
         rows = self._parse_response(q, resp)
+        logger.info("[KPI][QUERY] rows=%d", len(rows))
         return KPIQueryResult(rows=rows)
 
     # ---- internal: build OS query -------------------------------------------

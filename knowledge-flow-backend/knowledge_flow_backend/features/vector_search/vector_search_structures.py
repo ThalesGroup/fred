@@ -13,8 +13,9 @@
 # limitations under the License.
 
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 
+from fred_core import VectorSearchHit
 from pydantic import BaseModel, Field
 
 
@@ -71,3 +72,17 @@ class SearchRequest(BaseModel):
         default=None,
         description="Optional search policy preset. If omitted, defaults to 'hybrid'.",
     )
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Optional chat session id to include session-scoped attachments (user/session filtered).",
+    )
+    include_session_scope: bool = Field(
+        default=True,
+        description="If true and session_id is provided, also search session-scoped attachment vectors (filtered by user/session).",
+    )
+
+
+class RerankRequest(BaseModel):
+    question: str
+    documents: List[VectorSearchHit]
+    top_r: int = Field(default=6, ge=1, description="Number of top-reranked chunks to consider")

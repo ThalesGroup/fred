@@ -20,7 +20,7 @@ from fred_core import KeycloakUser, VectorSearchHit, get_current_user
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
-from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName, SearchRequest
+from knowledge_flow_backend.features.vector_search.vector_search_structures import RerankRequest, SearchPolicyName, SearchRequest
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,13 @@ class VectorSearchController:
         ) -> List[VectorSearchHit]:
             try:
                 hits = await self.service.search(
-                    question=request.question, user=user, top_k=request.top_k, document_library_tags_ids=request.document_library_tags_ids, policy_name=request.search_policy
+                    question=request.question,
+                    user=user,
+                    top_k=request.top_k,
+                    document_library_tags_ids=request.document_library_tags_ids,
+                    policy_name=request.search_policy,
+                    session_id=request.session_id,
+                    include_session_scope=request.include_session_scope,
                 )
                 return hits
             except Exception as e:
@@ -75,7 +81,6 @@ class VectorSearchController:
 
         @router.post(
             "/vector/test",
-            tags=["Vector Search"],
             summary="Test endpoint that always returns a successful dummy response.",
             description="A simple test endpoint for POST requests. Returns a fixed list of VectorSearchHit.",
             response_model=list[VectorSearchHit],
@@ -91,3 +96,19 @@ class VectorSearchController:
             dummy_hit = VectorSearchHit(content="This is a test document chunk.", uid="test-doc-001", title="Dummy Test Document", score=0.99, rank=1, type="test")
 
             return [dummy_hit]
+
+        @router.post(
+            "/vector/rerank",
+            tags=["Vector Search"],
+            summary="Sort documents according to their relevance",
+            description="Returns a list of VectorSearchHit sorted by relevance",
+            response_model=List[VectorSearchHit],
+            operation_id="rerank_documents",
+            status_code=status.HTTP_200_OK,
+        )
+        async def rerank(
+            request: RerankRequest,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> List[VectorSearchHit]:
+            documents = self.service.rerank_documents(question=request.question, documents=request.documents, top_r=request.top_r)
+            return documents

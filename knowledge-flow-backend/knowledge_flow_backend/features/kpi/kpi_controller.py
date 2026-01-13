@@ -39,9 +39,12 @@ class KPIController:
 
         @router.post("/kpi/query", response_model=KPIQueryResult, tags=["KPI"])
         async def query(body: KPIQuery, user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.KPIS)
-
-            # Enforce user scoping
-            body.filters.append(FilterTerm(field="dims.user_id", value=user.uid))
+            if body.view_global:
+                authorize_or_raise(user, Action.READ_GLOBAL, Resource.KPIS)
+                logger.info("[KPI][QUERY] Global view requested by user_id=%s. Not applying user filter.", user.uid)
+            else:
+                authorize_or_raise(user, Action.READ, Resource.KPIS)
+                logger.info("[KPI][QUERY] Applying user filter for user_id=%s", user.uid)
+                body.filters.append(FilterTerm(field="dims.user_id", value=user.uid))
 
             return self.reader.query(body)

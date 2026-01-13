@@ -55,6 +55,12 @@ ai:
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
   max_concurrent_agents: 128
 
+  # Maximum number of files a user can attach across all sessions
+  max_attached_files_per_user: 20
+
+  # Maximum size (in MB) for each attached file
+  max_attached_file_size_mb: 50
+
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
   # Timeout settings for the client
   timeout:
@@ -105,6 +111,10 @@ ai:
     - name: "MiniDataExpert"
       type: "agent"
       class_path: "agentic_backend.academy.06_simple_leader.mini_data_expert.MiniDataExpert"
+      enabled: true
+    - name: "DownloadableContentMaker"
+      type: "agent"
+      class_path: "agentic_backend.academy.09_downloadable_content_maker.downloadable_content_maker.DownloadableContentMaker"
       enabled: true
     - name: "Appolo"
       type: "leader"

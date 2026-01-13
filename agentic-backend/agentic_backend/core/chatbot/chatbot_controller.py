@@ -15,11 +15,12 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Literal, Union
+from typing import List, Literal, Optional, Union
 from uuid import uuid4
 
 from fastapi import (
     APIRouter,
+    Body,
     Depends,
     File,
     Form,
@@ -52,7 +53,11 @@ from agentic_backend.core.a2a.a2a_bridge import (
     stream_a2a_as_chat_messages,
 )
 from agentic_backend.core.agents.agent_manager import AgentManager
-from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.runtime_context import (
+    RuntimeContext,
+    get_deep_search_enabled,
+    get_rag_knowledge_scope,
+)
 from agentic_backend.core.chatbot.chat_schema import (
     ChatAskInput,
     ChatbotRuntimeSummary,
@@ -114,6 +119,11 @@ class FrontendConfigDTO(BaseModel):
     frontend_settings: FrontendSettings
     user_auth: UserSecurity
     is_rebac_enabled: bool
+
+
+class CreateSessionPayload(BaseModel):
+    agent_name: Optional[str] = None
+    title: Optional[str] = None
 
 
 def get_agent_manager(request: Request) -> AgentManager:
@@ -273,13 +283,43 @@ async def websocket_chatbot_question(
                     ask.runtime_context = RuntimeContext()
                 ask.runtime_context.access_token = active_token
                 ask.runtime_context.refresh_token = active_refresh_token
+                ask.runtime_context.user_id = active_user.uid
+
+                target_agent_name = ask.agent_name
+                if get_deep_search_enabled(ask.runtime_context):
+                    rag_scope = get_rag_knowledge_scope(ask.runtime_context)
+                    if rag_scope == "general_only":
+                        logger.info(
+                            "[CHATBOT] Deep search ignored because RAG scope is general-only."
+                        )
+                    else:
+                        base_settings = agent_manager.get_agent_settings(ask.agent_name)
+                        delegate_to = (
+                            base_settings.metadata.get("deep_search_delegate_to")
+                            if base_settings and base_settings.metadata
+                            else None
+                        )
+                        if delegate_to:
+                            if agent_manager.get_agent_settings(delegate_to):
+                                target_agent_name = delegate_to
+                                logger.info(
+                                    "[CHATBOT] Deep search enabled; delegating %s request to %s.",
+                                    ask.agent_name,
+                                    delegate_to,
+                                )
+                            else:
+                                logger.warning(
+                                    "[CHATBOT] Deep search requested for %s but delegate '%s' is not configured; falling back.",
+                                    ask.agent_name,
+                                    delegate_to,
+                                )
 
                 async def ws_callback(msg_dict: dict):
                     event = StreamEvent(type="stream", message=ChatMessage(**msg_dict))
                     await websocket.send_text(event.model_dump_json())
 
                 # Route to A2A proxy if the stub agent is selected
-                target_settings = agent_manager.get_agent_settings(ask.agent_name)
+                target_settings = agent_manager.get_agent_settings(target_agent_name)
                 if target_settings and is_a2a_agent(target_settings):
                     meta = target_settings.metadata or {}
                     base_url = meta.get("a2a_base_url")
@@ -288,11 +328,11 @@ async def websocket_chatbot_question(
                     if not base_url:
                         raise HTTPException(
                             status_code=400,
-                            detail=f"Agent '{ask.agent_name}' is marked as A2A but is missing 'a2a_base_url' metadata.",
+                            detail=f"Agent '{target_agent_name}' is marked as A2A but is missing 'a2a_base_url' metadata.",
                         )
                     proxy = get_proxy_for_agent(
                         websocket.app,
-                        ask.agent_name,
+                        target_agent_name,
                         base_url,
                         token,
                         force_disable_streaming=force_disable_streaming,
@@ -361,7 +401,7 @@ async def websocket_chatbot_question(
                         callback=ws_callback,
                         session_id=ask.session_id,
                         message=ask.message,
-                        agent_name=ask.agent_name,
+                        agent_name=target_agent_name,
                         runtime_context=ask.runtime_context,
                         client_exchange_id=ask.client_exchange_id,
                     )
@@ -415,6 +455,22 @@ def get_sessions(
     return session_orchestrator.get_sessions(user)
 
 
+@router.post(
+    "/chatbot/session",
+    description="Create a new empty chatbot session.",
+    summary="Create chatbot session.",
+    response_model=SessionSchema,
+)
+def create_session(
+    payload: CreateSessionPayload = Body(default_factory=CreateSessionPayload),
+    user: KeycloakUser = Depends(get_current_user),
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+) -> SessionSchema:
+    return session_orchestrator.create_empty_session(
+        user=user, agent_name=payload.agent_name, title=payload.title
+    )
+
+
 @router.get(
     "/chatbot/session/{session_id}/history",
     description="Get the history of a chatbot session.",
@@ -429,6 +485,39 @@ def get_session_history(
     return session_orchestrator.get_session_history(session_id, user)
 
 
+class SessionPreferencesPayload(BaseModel):
+    preferences: dict = {}
+
+
+@router.get(
+    "/chatbot/session/{session_id}/preferences",
+    response_model=dict,
+    tags=["Chatbot"],
+)
+def get_session_preferences(
+    session_id: str,
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+    user: KeycloakUser = Depends(get_current_user),
+):
+    return session_orchestrator.get_session_preferences(session_id, user)
+
+
+@router.put(
+    "/chatbot/session/{session_id}/preferences",
+    response_model=dict,
+    tags=["Chatbot"],
+)
+def update_session_preferences(
+    session_id: str,
+    payload: SessionPreferencesPayload,
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+    user: KeycloakUser = Depends(get_current_user),
+):
+    return session_orchestrator.update_session_preferences(
+        session_id, user, payload.preferences
+    )
+
+
 @router.delete(
     "/chatbot/session/{session_id}",
     description="Delete a chatbot session.",
@@ -437,9 +526,12 @@ def get_session_history(
 async def delete_session(
     session_id: str,
     user: KeycloakUser = Depends(get_current_user),
+    access_token: str = Security(oauth2_scheme),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> bool:
-    await session_orchestrator.delete_session(session_id, user)
+    await session_orchestrator.delete_session(
+        session_id, user, access_token=access_token
+    )
     return True
 
 
@@ -460,6 +552,22 @@ async def upload_file(
     )
 
 
+@router.get(
+    "/chatbot/upload/{attachment_id}/summary",
+    description="Get the markdown summary generated for an uploaded file",
+    summary="Get attachment summary",
+)
+async def get_file_summary(
+    session_id: str,
+    attachment_id: str,
+    user: KeycloakUser = Depends(get_current_user),
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+) -> dict:
+    return await session_orchestrator.get_attachment_summary(
+        user=user, session_id=session_id, attachment_id=attachment_id
+    )
+
+
 @router.delete(
     "/chatbot/upload/{attachment_id}",
     description="Delete an uploaded file from a chatbot conversation",
@@ -469,8 +577,12 @@ async def delete_file(
     session_id: str,
     attachment_id: str,
     user: KeycloakUser = Depends(get_current_user),
+    access_token: str = Security(oauth2_scheme),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> None:
     await session_orchestrator.delete_attachment(
-        user=user, session_id=session_id, attachment_id=attachment_id
+        user=user,
+        session_id=session_id,
+        attachment_id=attachment_id,
+        access_token=access_token,
     )

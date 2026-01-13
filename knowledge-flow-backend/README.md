@@ -104,11 +104,13 @@ See the `ai:` section in `config/configuration.yaml` for complete setup examples
 Use the [fred-deployment-factory](https://github.com/ThalesGroup/fred-deployment-factory) to run a full stack including:
 
 - Keycloak (authentication)
-- OpenSearch (vector + metadata index)
-- MinIO (content storage)
+- Storage options:
+  - PostgreSQL + `pgvector` (no OpenSearch dependency), or
+  - OpenSearch (vector + metadata index) if you prefer that stack
+- MinIO (content storage) when you need object storage
 - Fred + Knowledge Flow containers
 
-This is the recommended way to test a production-grade Fred deployment.
+Pick the storage flavour that matches your platform constraints; both are supported end-to-end.
 
 ---
 

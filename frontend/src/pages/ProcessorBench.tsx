@@ -111,7 +111,7 @@ export default function ProcessorBench() {
   return (
     <>
       <TopBar title={t("procbench.title")} description={t("procbench.description")} />
-      <Container maxWidth="xl" sx={{ pb: 2 }}>
+      <Container maxWidth="xl" sx={{ pb: 2, mt: 3 }}>
         {/* Upload Panel */}
         <Card variant="outlined" sx={{ mb: 1.5, borderColor: theme.palette.divider }}>
           <CardHeader

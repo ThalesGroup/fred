@@ -33,13 +33,19 @@ logger = logging.getLogger(__name__)  # Logger definition added
 
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
-    opensearch: OpenSearchStoreConfig
+    opensearch: Optional[OpenSearchStoreConfig] = Field(
+        default=None, description="Optional OpenSearch store"
+    )
     agent_store: StoreConfig
     mcp_servers_store: Optional[StoreConfig] = Field(
         default=None,
         description="Optional override for MCP servers store (defaults to agent_store backend).",
     )
     session_store: StoreConfig
+    attachments_store: Optional[StoreConfig] = Field(
+        default=None,
+        description="Optional override for session attachments persistence (defaults to session_store backend).",
+    )
     history_store: StoreConfig
     feedback_store: StoreConfig
     kpi_store: StoreConfig
@@ -101,6 +107,12 @@ class AgentChatOptions(BaseModel):
         default=False,
         description=(
             "Expose a selector to decide how the agent should use the corpus: documents only, hybrid, or general knowledge only."
+        ),
+    )
+    deep_search_delegate: bool = Field(
+        default=False,
+        description=(
+            "Expose a toggle to delegate RAG retrieval to a senior agent (deep search) when available."
         ),
     )
 
@@ -200,6 +212,14 @@ class AIConfig(BaseModel):
     max_concurrent_agents: int = Field(
         128,
         description="Maximum number of agents that can be cached in memory for faster access.",
+    )
+    max_attached_files_per_user: int = Field(
+        20,
+        description="Maximum number of files a user can attach across all sessions.",
+    )
+    max_attached_file_size_mb: int = Field(
+        50,
+        description="Maximum size (in MB) for each attached file.",
     )
     default_chat_model: ModelConfiguration = Field(
         ...,

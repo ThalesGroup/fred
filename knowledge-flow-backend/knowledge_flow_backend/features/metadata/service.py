@@ -28,6 +28,10 @@ from knowledge_flow_backend.common.document_structures import (
     ProcessingStatus,
     ProcessingSummary,
 )
+from knowledge_flow_backend.common.structures import (
+    OpenSearchVectorIndexConfig,
+    PgVectorStorageConfig,
+)
 from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import MetadataDeserializationError
 
@@ -85,7 +89,6 @@ class MetadataService:
         context = ApplicationContext.get_instance()
         self.config = context.get_config()
         self.metadata_store = context.get_metadata_store()
-        self.catalog_store = context.get_catalog_store()
         self.csv_input_store = None
         self.vector_store = None
         self.content_store = context.get_content_store()
@@ -230,6 +233,33 @@ class MetadataService:
         return []
 
     @authorize(Action.READ, Resource.DOCUMENTS)
+    async def browse_documents_in_tag(self, user: KeycloakUser, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[list[DocumentMetadata], int]:
+        """
+        Paginated fetch of documents in a given tag.
+        """
+        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+
+        docs, total = self.metadata_store.browse_metadata_in_tag(tag_id, offset=offset, limit=limit)
+        logger.debug(
+            "[PAGINATION] browse_documents_in_tag tag=%s offset=%s limit=%s -> fetched=%s total=%s",
+            tag_id,
+            offset,
+            limit,
+            len(docs),
+            total,
+        )
+
+        if isinstance(authorized_doc_ref, RebacDisabledResult):
+            return docs, total
+
+        authorized_doc_ids = {d.id for d in authorized_doc_ref}
+        filtered = [d for d in docs if d.identity.document_uid in authorized_doc_ids]
+
+        # Total reflects store count; computing an authorized-only total would require
+        # scanning all authorized documents. We keep store total to preserve pagination hints.
+        return filtered, total
+
+    @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_chunk(self, user: KeycloakUser, document_uid: str, chunk_uid: str) -> dict:
         """
         Return chunk.
@@ -356,6 +386,24 @@ class MetadataService:
             except Exception as e:
                 logger.warning(f"[GRAPH] Failed to list tables from tabular store: {e}")
 
+        # Vector backend info (for UI diagnostics)
+        vector_backend: str | None = None
+        vector_detail: str | None = None
+        embedding_model_name: str | None = getattr(self.config.embedding_model, "name", None)
+        try:
+            vs_cfg = self.config.storage.vector_store
+            if isinstance(vs_cfg, OpenSearchVectorIndexConfig):
+                vector_backend = "opensearch"
+                vector_detail = f"index={vs_cfg.index}"
+            elif isinstance(vs_cfg, PgVectorStorageConfig):
+                vector_backend = "pgvector"
+                vector_detail = f"collection={vs_cfg.collection_name}"
+            else:
+                vector_backend = type(vs_cfg).__name__
+                vector_detail = None
+        except Exception as e:
+            logger.debug("[GRAPH] Unable to resolve vector backend info: %s", e)
+
         for metadata in visible_docs:
             doc_uid = metadata.document_uid
             doc_node_id = f"doc:{doc_uid}"
@@ -392,6 +440,9 @@ class MetadataService:
                         label=f"Vectors for {metadata.document_name}",
                         document_uid=doc_uid,
                         vector_count=vector_count,
+                        backend=vector_backend,
+                        backend_detail=vector_detail,
+                        embedding_model=embedding_model_name,
                     )
                 )
                 edges.append(

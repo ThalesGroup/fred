@@ -18,20 +18,19 @@ import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { AgentHub } from "../pages/AgentHub";
 import Chat from "../pages/Chat";
-import ReleaseNotes from "../pages/ReleaseNotes";
+import DataHub from "../pages/DataHub";
+import GraphHub from "../pages/GraphHub.tsx";
 import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { Kpis } from "../pages/Kpis";
 import Logs from "../pages/Logs";
-import Runtime from "../pages/Runtime";
-import RebacBackfill from "../pages/RebacBackfill";
-import DataHub from "../pages/DataHub";
+import { McpHub } from "../pages/McpHub";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
-import { Profile } from "../pages/Profile";
 import ProcessorBench from "../pages/ProcessorBench";
 import ProcessorRunDetail from "../pages/ProcessorRunDetail";
-import { McpHub } from "../pages/McpHub";
-import GraphHub from "../pages/GraphHub.tsx";
+import { Profile } from "../pages/Profile";
+import RebacBackfill from "../pages/RebacBackfill";
+import Runtime from "../pages/Runtime";
 import { getConfig } from "./config";
 
 const basename = getConfig().frontend_basename;
@@ -48,7 +47,7 @@ export const routes: RouteObject[] = [
         element: <Chat />,
       },
       {
-        path: "chat",
+        path: "chat/:sessionId",
         element: <Chat />,
       },
       {
@@ -120,7 +119,7 @@ export const routes: RouteObject[] = [
         ),
       },
       {
-        path: "account",
+        path: "settings",
         element: <Profile />,
       },
       {
@@ -132,16 +131,12 @@ export const routes: RouteObject[] = [
         element: <RendererPlayground />,
       },
       {
-        path: "agentHub",
+        path: "agents",
         element: <AgentHub />,
       },
       {
-        path: "mcpHub",
+        path: "tools",
         element: <McpHub />,
-      },
-      {
-        path: "release-notes",
-        element: <ReleaseNotes />,
       },
     ].filter(Boolean),
   },

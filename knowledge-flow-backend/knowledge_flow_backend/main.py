@@ -46,7 +46,6 @@ from knowledge_flow_backend.core.monitoring.monitoring_controller import (
     MonitoringController,
 )
 from knowledge_flow_backend.features.benchmark.benchmark_controller import BenchmarkController
-from knowledge_flow_backend.features.catalog.controller import CatalogController
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.asset_controller import AssetController
 from knowledge_flow_backend.features.content.content_controller import ContentController
@@ -61,8 +60,6 @@ from knowledge_flow_backend.features.kpi.opensearch_controller import (
 from knowledge_flow_backend.features.metadata.controller import MetadataController
 from knowledge_flow_backend.features.model.controller import ModelController
 from knowledge_flow_backend.features.neo4j.neo4j_controller import Neo4jController
-from knowledge_flow_backend.features.pull.controller import PullDocumentController
-from knowledge_flow_backend.features.pull.service import PullDocumentService
 from knowledge_flow_backend.features.resources.controller import ResourceController
 from knowledge_flow_backend.features.scheduler.scheduler_controller import SchedulerController
 from knowledge_flow_backend.features.statistic.controller import StatisticController
@@ -181,12 +178,9 @@ def create_app() -> FastAPI:
 
     MonitoringController(router)
 
-    pull_document_service = PullDocumentService()
     # Register base controllers. These are the one always needed.
-    MetadataController(router, pull_document_service)
+    MetadataController(router)
     ModelController(router)
-    CatalogController(router)
-    PullDocumentController(router, pull_document_service)
     ContentController(router)
     AssetController(router)
     IngestionController(router)

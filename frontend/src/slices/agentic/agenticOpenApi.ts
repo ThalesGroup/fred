@@ -137,11 +137,37 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/agentic/v1/chatbot/sessions` }),
     }),
+    createSessionAgenticV1ChatbotSessionPost: build.mutation<
+      CreateSessionAgenticV1ChatbotSessionPostApiResponse,
+      CreateSessionAgenticV1ChatbotSessionPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/session`,
+        method: "POST",
+        body: queryArg.createSessionPayload,
+      }),
+    }),
     getSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGet: build.query<
       GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiResponse,
       GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiArg
     >({
       query: (queryArg) => ({ url: `/agentic/v1/chatbot/session/${queryArg.sessionId}/history` }),
+    }),
+    getSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGet: build.query<
+      GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiResponse,
+      GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/chatbot/session/${queryArg.sessionId}/preferences` }),
+    }),
+    updateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPut: build.mutation<
+      UpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutApiResponse,
+      UpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/session/${queryArg.sessionId}/preferences`,
+        method: "PUT",
+        body: queryArg.sessionPreferencesPayload,
+      }),
     }),
     deleteSessionAgenticV1ChatbotSessionSessionIdDelete: build.mutation<
       DeleteSessionAgenticV1ChatbotSessionSessionIdDeleteApiResponse,
@@ -157,6 +183,17 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/agentic/v1/chatbot/upload`,
         method: "POST",
         body: queryArg.bodyUploadFileAgenticV1ChatbotUploadPost,
+      }),
+    }),
+    getFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGet: build.query<
+      GetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetApiResponse,
+      GetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/upload/${queryArg.attachmentId}/summary`,
+        params: {
+          session_id: queryArg.sessionId,
+        },
       }),
     }),
     deleteFileAgenticV1ChatbotUploadAttachmentIdDelete: build.mutation<
@@ -305,10 +342,29 @@ export type GetAgenticFlowsAgenticV1ChatbotAgenticflowsGetApiArg = void;
 export type GetSessionsAgenticV1ChatbotSessionsGetApiResponse =
   /** status 200 Successful Response */ SessionWithFiles[];
 export type GetSessionsAgenticV1ChatbotSessionsGetApiArg = void;
+export type CreateSessionAgenticV1ChatbotSessionPostApiResponse = /** status 200 Successful Response */ SessionSchema;
+export type CreateSessionAgenticV1ChatbotSessionPostApiArg = {
+  createSessionPayload: CreateSessionPayload;
+};
 export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiResponse =
   /** status 200 Successful Response */ ChatMessage2[];
 export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiArg = {
   sessionId: string;
+};
+export type GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiArg = {
+  sessionId: string;
+};
+export type UpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type UpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutApiArg = {
+  sessionId: string;
+  sessionPreferencesPayload: SessionPreferencesPayload;
 };
 export type DeleteSessionAgenticV1ChatbotSessionSessionIdDeleteApiResponse =
   /** status 200 Successful Response */ boolean;
@@ -320,6 +376,14 @@ export type UploadFileAgenticV1ChatbotUploadPostApiResponse = /** status 200 Suc
 };
 export type UploadFileAgenticV1ChatbotUploadPostApiArg = {
   bodyUploadFileAgenticV1ChatbotUploadPost: BodyUploadFileAgenticV1ChatbotUploadPost;
+};
+export type GetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetApiArg = {
+  attachmentId: string;
+  sessionId: string;
 };
 export type DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiResponse = /** status 200 Successful Response */ null;
 export type DeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteApiArg = {
@@ -443,6 +507,8 @@ export type AgentChatOptions = {
   attach_files?: boolean;
   /** Expose a selector to decide how the agent should use the corpus: documents only, hybrid, or general knowledge only. */
   search_rag_scoping?: boolean;
+  /** Expose a toggle to delegate RAG retrieval to a senior agent (deep search) when available. */
+  deep_search_delegate?: boolean;
 };
 export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
@@ -609,6 +675,9 @@ export type VectorSearchHit = {
 };
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "cancelled" | "other";
 export type RuntimeContext = {
+  language?: string | null;
+  session_id?: string | null;
+  user_id?: string | null;
   selected_document_libraries_ids?: string[] | null;
   selected_chat_context_ids?: string[] | null;
   search_policy?: string | null;
@@ -617,6 +686,7 @@ export type RuntimeContext = {
   access_token_expires_at?: number | null;
   attachments_markdown?: string | null;
   search_rag_scope?: ("corpus_only" | "hybrid" | "general_only") | null;
+  deep_search?: boolean | null;
 };
 export type ChatMetadata = {
   model?: string | null;
@@ -678,8 +748,12 @@ export type StreamEvent = {
 export type SessionSchema = {
   id: string;
   user_id: string;
+  agent_name?: string | null;
   title: string;
   updated_at: string;
+  preferences?: {
+    [key: string]: any;
+  } | null;
 };
 export type FinalEvent = {
   type?: "final";
@@ -698,8 +772,13 @@ export type AttachmentRef = {
 export type SessionWithFiles = {
   id: string;
   user_id: string;
+  agent_name?: string | null;
   title: string;
   updated_at: string;
+  preferences?: {
+    [key: string]: any;
+  } | null;
+  agents: string[];
   file_names?: string[];
   attachments?: AttachmentRef[];
 };
@@ -819,6 +898,10 @@ export type Leader2 = {
   /** Names of agents in this leader's crew (if any). */
   crew?: string[];
 };
+export type CreateSessionPayload = {
+  agent_name?: string | null;
+  title?: string | null;
+};
 export type ChatMessage2 = {
   session_id: string;
   exchange_id: string;
@@ -850,6 +933,11 @@ export type ChatMessage2 = {
       } & ToolResultPart)
   )[];
   metadata?: ChatMetadata;
+};
+export type SessionPreferencesPayload = {
+  preferences?: {
+    [key: string]: any;
+  };
 };
 export type BodyUploadFileAgenticV1ChatbotUploadPost = {
   session_id: string;
@@ -936,10 +1024,16 @@ export const {
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
   useLazyGetSessionsAgenticV1ChatbotSessionsGetQuery,
+  useCreateSessionAgenticV1ChatbotSessionPostMutation,
   useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
+  useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
+  useLazyGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
+  useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
+  useGetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetQuery,
+  useLazyGetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetQuery,
   useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation,
   useHealthzAgenticV1HealthzGetQuery,
   useLazyHealthzAgenticV1HealthzGetQuery,

@@ -5,9 +5,11 @@ import logging
 from typing import Any, Optional
 
 import httpx  # ← we log/inspect HTTP errors coming from MCP adapters
+from fred_core import KPIActor
 from langchain_core.tools import BaseTool
 from pydantic import Field
 
+from agentic_backend.application_context import get_app_context
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContextProvider,
     get_document_library_tags_ids,
@@ -154,11 +156,28 @@ class ContextAwareTool(BaseTool):
 
         return kwargs
 
+    def _kpi_timer(self, *, context) -> Any:
+        kpi = get_app_context().get_kpi_writer()
+        dims: dict[str, Optional[str]] = {"tool_name": self.name, "source": "mcp"}
+        session_id = getattr(context, "session_id", None) if context else None
+        if session_id:
+            dims["session_id"] = str(session_id)
+        user_id = getattr(context, "user_id", None) if context else None
+        if user_id:
+            dims["user_id"] = str(user_id)
+        return kpi.timer(
+            "agent.tool_latency_ms",
+            dims=dims,
+            actor=KPIActor(type="system"),
+        )
+
     def _run(self, **kwargs: Any) -> Any:
         """Sync execution with context injection + robust HTTP(401) tracing."""
+        context = self.context_provider()
         kwargs = self._inject_context_if_needed(kwargs)
         try:
-            return self.base_tool._run(**kwargs)
+            with self._kpi_timer(context=context):
+                return self.base_tool._run(**kwargs)
         except httpx.RequestError as e:
             # Network / DNS / TLS issues before we even get an HTTP status code
             logger.error(
@@ -179,9 +198,11 @@ class ContextAwareTool(BaseTool):
 
     async def _arun(self, config=None, **kwargs: Any) -> Any:
         """Async execution with context injection + robust HTTP(401) tracing."""
+        context = self.context_provider()
         kwargs = self._inject_context_if_needed(kwargs)
         try:
-            return await self.base_tool._arun(config=config, **kwargs)
+            with self._kpi_timer(context=context):
+                return await self.base_tool._arun(config=config, **kwargs)
         except httpx.RequestError as e:
             logger.error(
                 "[MCP][%s] HTTP request error: %s", self.name, e, exc_info=True

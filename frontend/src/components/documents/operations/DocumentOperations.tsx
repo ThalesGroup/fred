@@ -28,7 +28,6 @@ import {
   Pagination,
   Paper,
   Select,
-  SelectChangeEvent,
   TextField,
   Typography,
   useTheme,
@@ -36,27 +35,22 @@ import {
 
 import ClearIcon from "@mui/icons-material/Clear";
 import LibraryBooksRoundedIcon from "@mui/icons-material/LibraryBooksRounded";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useDocumentSources } from "../../../hooks/useDocumentSources";
 import { useDocumentTags } from "../../../hooks/useDocumentTags";
-import { KeyCloakService } from "../../../security/KeycloakService";
 import {
   DocumentMetadata,
-  RescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostApiArg,
   useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
   useProcessLibraryKnowledgeFlowV1ProcessLibraryPostMutation,
-  useRescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 import { EmptyState } from "../../EmptyState";
 import { TableSkeleton } from "../../TableSkeleton";
 import { useToast } from "../../ToastProvider";
-import { DocumentOperationsTable } from "./DocumentOperationsTable";
 import { useDocumentActions } from "../common/useDocumentActions";
+import { DocumentOperationsTable } from "./DocumentOperationsTable";
 
 interface DocumentsViewProps {}
 
@@ -67,17 +61,15 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
 
   // API Hooks
   const [browseDocuments, { isLoading }] = useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation();
-  const { sources: allSources } = useDocumentSources();
   const { tags: allDocumentLibraries } = useDocumentTags();
   const tagMap = new Map(allDocumentLibraries.map((tag) => [tag.id, tag.name]));
 
-  const [rescanCatalogSource] = useRescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostMutation();
-  const [processLibrary, { isLoading: isProcessingLibrary }] = useProcessLibraryKnowledgeFlowV1ProcessLibraryPostMutation();
+  const [processLibrary, { isLoading: isProcessingLibrary }] =
+    useProcessLibraryKnowledgeFlowV1ProcessLibraryPostMutation();
 
   // UI States
   const [documentsPerPage, setDocumentsPerPage] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedSourceTag, setSelectedSourceTag] = useState<string | null>(null);
 
   // Filter states
   const [selectedLibrary, setSelectLibraries] = useState<string[]>([]);
@@ -90,38 +82,6 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
   const [totalDocCount, setTotalDocCount] = useState<number>();
   const [selectedDocuments, setSelectedDocuments] = useState<DocumentMetadata[]>([]);
   const [selectionResetCounter, setSelectionResetCounter] = useState(0);
-
-  // Source + Permissions
-  const selectedSource = allSources?.find((s) => s.tag === selectedSourceTag);
-  const isPullMode = selectedSource?.type === "pull";
-
-  const hasDocumentManagementPermission = () => {
-    const userRoles = KeyCloakService.GetUserRoles();
-    return userRoles.includes("admin") || userRoles.includes("editor");
-  };
-
-  const userInfo = {
-    name: KeyCloakService.GetUserName(),
-    canManageDocuments: hasDocumentManagementPermission(),
-    roles: KeyCloakService.GetUserRoles(),
-  };
-
-  const handleRefreshPullSource = async () => {
-    if (!selectedSourceTag) return;
-    try {
-      const args: RescanCatalogSourceKnowledgeFlowV1PullCatalogRescanSourceTagPostApiArg = {
-        sourceTag: selectedSourceTag,
-      };
-      await rescanCatalogSource(args).unwrap();
-      await fetchFiles();
-    } catch (err: any) {
-      console.error("Refresh failed:", err);
-      showError({
-        summary: t("scheduler.refreshFailed"),
-        detail: err?.data?.detail || err?.message || "Unknown error occurred while refreshing.",
-      });
-    }
-  };
 
   const handleProcessLibrary = async () => {
     if (!selectedLibrary.length) {
@@ -181,7 +141,6 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
   };
 
   const fetchFiles = async () => {
-    if (!selectedSourceTag) return;
     const filters = {
       ...(searchQuery ? { document_name: searchQuery } : {}),
       // Filter by tag IDs stored in metadata (tag_ids field in OpenSearch)
@@ -194,7 +153,6 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
     try {
       const response = await browseDocuments({
         browseDocumentsRequest: {
-          source_tag: selectedSourceTag,
           filters,
           offset: (currentPage - 1) * documentsPerPage,
           limit: documentsPerPage,
@@ -213,26 +171,12 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
     }
   };
 
-  const { processDocuments: processDocumentsAction, isProcessing: isProcessingDocuments } = useDocumentActions(fetchFiles);
-
-  useEffect(() => {
-    if (allSources && selectedSourceTag === null) {
-      const pushSource = allSources.find((s) => s.type === "push");
-      if (pushSource) setSelectedSourceTag(pushSource.tag);
-    }
-  }, [allSources, selectedSourceTag]);
+  const { processDocuments: processDocumentsAction, isProcessing: isProcessingDocuments } =
+    useDocumentActions(fetchFiles);
 
   useEffect(() => {
     fetchFiles();
-  }, [
-    selectedSourceTag,
-    searchQuery,
-    selectedLibrary,
-    selectedStages,
-    searchableFilter,
-    currentPage,
-    documentsPerPage,
-  ]);
+  }, [searchQuery, selectedLibrary, selectedStages, searchableFilter, currentPage, documentsPerPage]);
 
   return (
     <Container maxWidth="xl">
@@ -333,38 +277,6 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
                   }}
                   size="small"
                 />
-              </Grid2>
-
-              <Grid2 size={{ xs: 12, md: 4 }} display="flex" gap={1}>
-                <FormControl fullWidth size="small">
-                  <InputLabel id="sources-label">Document Sources</InputLabel>
-                  <Select
-                    labelId="sources-label"
-                    value={selectedSourceTag || ""}
-                    onChange={(e: SelectChangeEvent) => {
-                      const value = e.target.value;
-                      setSelectedSourceTag(value === "" ? null : value);
-                    }}
-                    input={<OutlinedInput label="Document Sources" />}
-                  >
-                    {allSources?.map((source) => (
-                      <MenuItem key={source.tag} value={source.tag}>
-                        <Box
-                          title={source.description || source.tag}
-                          sx={{ overflow: "hidden", textOverflow: "ellipsis" }}
-                        >
-                          {source.tag}
-                        </Box>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                {userInfo.canManageDocuments && isPullMode && (
-                  <Button variant="outlined" onClick={handleRefreshPullSource} sx={{ minWidth: "auto", px: 2 }}>
-                    <RefreshIcon />
-                  </Button>
-                )}
               </Grid2>
             </Grid2>
 

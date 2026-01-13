@@ -36,6 +36,7 @@ class VectorSearchService:
         self.embedder = ctx.get_embedder()
         self.vector_store = ctx.get_create_vector_store(self.embedder)
         self.tag_service = TagService()
+        self.crossencoder_model = ctx.get_crossencoder_model()
 
     # ---------- helpers -------------------------------------------------------
 
@@ -149,7 +150,14 @@ class VectorSearchService:
 
     # ---------- private strategies -------------------------------------------
 
-    async def _semantic(self, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str]) -> List[VectorSearchHit]:
+    async def _semantic(
+        self,
+        question: str,
+        user: KeycloakUser,
+        k: int,
+        library_tags_ids: List[str],
+        metadata_terms_extra: Optional[dict[str, Any]] = None,
+    ) -> List[VectorSearchHit]:
         """
         Perform a semantic search using the ANN (Approximate Nearest Neighbors) strategy.
         This strategy relies purely on vector similarity.
@@ -165,6 +173,8 @@ class VectorSearchService:
             List[VectorSearchHit]: A list of VectorSearchHit objects containing the search results.
         """
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
+        if metadata_terms_extra:
+            metadata_terms.update(metadata_terms_extra)
 
         sf = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
 
@@ -173,10 +183,41 @@ class VectorSearchService:
         except Exception as e:
             logger.error("[VECTOR][SEARCH][ANN] Unexpected error during search: %s", str(e))
             raise
+        if not ann_hits:
+            logger.warning(
+                "[VECTOR][SEARCH][ANN] no hits returned; tags=%s metadata_terms=%s question_len=%d",
+                library_tags_ids,
+                metadata_terms,
+                len(question),
+            )
+        else:
+            sample = [
+                {
+                    "score": h.score,
+                    "uid": h.document.metadata.get("document_uid"),
+                    "chunk": h.document.metadata.get("chunk_id"),
+                    "session": h.document.metadata.get("session_id"),
+                    "tag_ids": h.document.metadata.get("tag_ids"),
+                    "scope": h.document.metadata.get("scope"),
+                }
+                for h in ann_hits[:3]
+            ]
+            logger.info(
+                "[VECTOR][SEARCH][ANN] got %d hits (sample: %s)",
+                len(ann_hits),
+                sample,
+            )
 
         return await asyncio.gather(*[self._to_hit(h.document, h.score, rank, user) for rank, h in enumerate(ann_hits, start=1)])
 
-    async def _strict(self, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str]) -> List[VectorSearchHit]:
+    async def _strict(
+        self,
+        question: str,
+        user: KeycloakUser,
+        k: int,
+        library_tags_ids: List[str],
+        metadata_terms_extra: Optional[dict[str, Any]] = None,
+    ) -> List[VectorSearchHit]:
         """
         Perform a strict search using BM25 (Best Matching 25).
         This strategy is only available when using OpenSearch as the vector store.
@@ -197,6 +238,8 @@ class VectorSearchService:
             raise TypeError(f"Strict search requires Opensearch, but vector_store is of type {type(self.vector_store).__name__}")
 
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
+        if metadata_terms_extra:
+            metadata_terms.update(metadata_terms_extra)
         search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
 
         try:
@@ -207,7 +250,14 @@ class VectorSearchService:
 
         return await asyncio.gather(*[self._to_hit(hit.document, hit.score, rank, user) for rank, hit in enumerate(hits, start=1)])
 
-    async def _hybrid(self, question: str, user: KeycloakUser, k: int, library_tags_ids: List[str]) -> List[VectorSearchHit]:
+    async def _hybrid(
+        self,
+        question: str,
+        user: KeycloakUser,
+        k: int,
+        library_tags_ids: List[str],
+        metadata_terms_extra: Optional[dict[str, Any]] = None,
+    ) -> List[VectorSearchHit]:
         """
         Hybrid search strategy that combines vector similarity and keyword matching.
         This strategy is only available when using OpenSearch as the vector store.
@@ -228,6 +278,8 @@ class VectorSearchService:
             raise TypeError(f"Hybrid search requires Opensearch, but vector_store is of type {type(self.vector_store).__name__}")
 
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
+        if metadata_terms_extra:
+            metadata_terms.update(metadata_terms_extra)
         search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
 
         try:
@@ -242,7 +294,15 @@ class VectorSearchService:
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def search(
-        self, *, question: str, user: KeycloakUser, top_k: int = 10, document_library_tags_ids: Optional[List[str]] = None, policy_name: Optional[SearchPolicyName] = None
+        self,
+        *,
+        question: str,
+        user: KeycloakUser,
+        top_k: int = 10,
+        document_library_tags_ids: Optional[List[str]] = None,
+        policy_name: Optional[SearchPolicyName] = None,
+        session_id: Optional[str] = None,
+        include_session_scope: bool = True,
     ) -> List[VectorSearchHit]:
         """
         Args:
@@ -260,20 +320,106 @@ class VectorSearchService:
             Exception: For any other unexpected errors during the search process.
         """
         try:
-            if not document_library_tags_ids or document_library_tags_ids == []:
-                document_library_tags_ids = await self._all_document_library_tags_ids(user)
+            original_tag_ids = document_library_tags_ids or []
 
             policy_key = policy_name or SearchPolicyName.hybrid
-            if policy_key == SearchPolicyName.strict:
-                logger.info("[VECTOR][SEARCH] Using strict search policy")
-                return await self._strict(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+            corpus_hits: List[VectorSearchHit] = []
+            attachment_hits: List[VectorSearchHit] = []
 
-            elif policy_key == SearchPolicyName.hybrid:
-                logger.info("[VECTOR][SEARCH] Using hybrid search policy")
-                return await self._hybrid(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
-            else:
-                logger.info("[VECTOR][SEARCH] Using semantic search policy (legacy)")
-                return await self._semantic(question=question, user=user, k=top_k, library_tags_ids=document_library_tags_ids)
+            # Attachment/session-scope query (semantic vector only), optional
+            if include_session_scope and session_id:
+                logger.info(
+                    "[VECTOR][SEARCH][ATTACH] session=%s user=%s policy=%s question=%r top_k=%d",
+                    session_id,
+                    user.uid,
+                    policy_key,
+                    question,
+                    top_k,
+                )
+                attachment_hits = await self._semantic(
+                    question=question,
+                    user=user,
+                    k=top_k,
+                    library_tags_ids=[],  # no tag filter for attachments
+                    metadata_terms_extra={
+                        "user_id": [user.uid],
+                        "session_id": [session_id],
+                        "scope": ["session"],
+                    },
+                )
+
+            # Resolve library tags only if the caller provided some; otherwise stay empty so
+            # we can short-circuit when attachments already cover the request.
+            document_library_tags_ids = original_tag_ids
+            if not document_library_tags_ids:
+                logger.info(
+                    "[VECTOR][SEARCH] user=%s has not restricted library tags → fetching all visible tags",
+                    user.uid,
+                )
+                document_library_tags_ids = await self._all_document_library_tags_ids(user)
+
+            # Exclude session-scoped vectors from corpus/library search to avoid leakage across sessions
+            corpus_metadata_extra = {"scope": ["!session"]}
+
+            # Corpus/library query: only run when the user actually has accessible tags
+            if document_library_tags_ids:
+                if policy_key == SearchPolicyName.strict:
+                    logger.info(
+                        "[VECTOR][SEARCH][CORPUS] policy=strict tags=%s question=%r top_k=%d",
+                        document_library_tags_ids,
+                        question,
+                        top_k,
+                    )
+                    corpus_hits = await self._strict(
+                        question=question,
+                        user=user,
+                        k=top_k,
+                        library_tags_ids=document_library_tags_ids,
+                        metadata_terms_extra=corpus_metadata_extra,
+                    )
+                elif policy_key == SearchPolicyName.hybrid:
+                    logger.info(
+                        "[VECTOR][SEARCH][CORPUS] policy=hybrid tags=%s question=%r top_k=%d",
+                        document_library_tags_ids,
+                        question,
+                        top_k,
+                    )
+                    corpus_hits = await self._hybrid(
+                        question=question,
+                        user=user,
+                        k=top_k,
+                        library_tags_ids=document_library_tags_ids,
+                        metadata_terms_extra=corpus_metadata_extra,
+                    )
+                else:
+                    logger.info(
+                        "[VECTOR][SEARCH][CORPUS] policy=semantic tags=%s question=%r top_k=%d",
+                        document_library_tags_ids,
+                        question,
+                        top_k,
+                    )
+                    corpus_hits = await self._semantic(
+                        question=question,
+                        user=user,
+                        k=top_k,
+                        library_tags_ids=document_library_tags_ids,
+                        metadata_terms_extra=corpus_metadata_extra,
+                    )
+
+            # Merge: combine then keep top_k by score so corpus can surface even when attachments exist
+            merged_candidates = attachment_hits + corpus_hits
+            merged = sorted(
+                merged_candidates,
+                key=lambda h: h.score or 0.0,
+                reverse=True,
+            )[:top_k]
+            logger.info(
+                "[VECTOR][SEARCH] merged results attachment=%d corpus=%d returned=%d",
+                len(attachment_hits),
+                len(corpus_hits),
+                len(merged),
+            )
+            return merged
 
         except TypeError as e:
             logger.error("[VECTOR][SEARCH]: %s", str(e))
@@ -282,3 +428,26 @@ class VectorSearchService:
         except Exception as e:
             logger.error("[VECTOR][SEARCH] Unexpected error during search: %s", str(e))
             raise
+
+    def rerank_documents(self, question: str, documents: List[VectorSearchHit], top_r: int) -> List[VectorSearchHit]:
+        """
+        Re-rank a list of documents using a cross-encoder model based on the relevance to a given question.
+
+        Args:
+            question (str): The query string used to re-rank the documents.
+            documents (List[VectorSearchHit]): A list of VectorSearchHit objects representing the documents to be re-ranked.
+            top_r (int): The number of top relevant documents to return after re-ranking.
+
+        Returns:
+            List[VectorSearchHit]: A list of VectorSearchHit objects sorted by relevance to the question, limited to top_r documents.
+        """
+        # Score and sort documents by relevance
+        pairs = [(question, doc.content) for doc in documents]
+        scores = self.crossencoder_model.predict(pairs)
+        sorted_docs = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
+
+        # Keep top-R documents
+        reranked_documents = [doc for doc, _ in sorted_docs[:top_r]]
+        logger.info("[VECTOR][RERANK] Reranked %s documents, keeping top %s", len(documents), len(reranked_documents))
+
+        return reranked_documents

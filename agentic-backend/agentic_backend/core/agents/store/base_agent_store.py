@@ -106,3 +106,9 @@ class BaseAgentStore(ABC):
         Mark the store as having seeded static agents.
         """
         pass
+
+
+class AgentNotFoundError(Exception):
+    """Raised when an agent is not found."""
+
+    pass

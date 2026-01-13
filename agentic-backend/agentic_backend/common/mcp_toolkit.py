@@ -32,6 +32,7 @@ from pydantic import Field, PrivateAttr
 
 if TYPE_CHECKING:
     from agentic_backend.core.agents.agent_flow import AgentFlow
+from agentic_backend.core.agents.context_aware_tool import ContextAwareTool
 
 logger = logging.getLogger(__name__)
 
@@ -120,4 +121,12 @@ class McpToolkit(BaseToolkit):
         Build the per-turn toolset: Discover, Filter, and Wrap, using the
         agent's RuntimeContext for context-specific filtering.
         """
-        return self._discover_base_tools()
+        base_tools = self._discover_base_tools()
+        context_provider = self._agent.get_runtime_context
+        wrapped: List[BaseTool] = []
+        for tool in base_tools:
+            if isinstance(tool, ContextAwareTool):
+                wrapped.append(tool)
+                continue
+            wrapped.append(ContextAwareTool(tool, context_provider))
+        return wrapped

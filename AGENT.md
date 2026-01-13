@@ -42,7 +42,7 @@ Guidance for AI coding assistants working in the Fred repository. Follow these n
 
 ## Security & Ops Notes
 - Never commit secrets; rely on `.env` files and documented configuration.
-- Production deployments should swap filesystem storage for OpenSearch/MinIO/DuckDB as configured.
+- Production deployments should swap filesystem storage for durable backends (PostgreSQL/pgvector or OpenSearch) and object storage where appropriate.
 - Enable debug logging in `configuration.yaml` when diagnosing workflow/agent issues.
 
 Stay consistent with existing patterns, keep changes minimal and well-tested, and call out cross-service impacts in PR descriptions.

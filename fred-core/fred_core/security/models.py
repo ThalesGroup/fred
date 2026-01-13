@@ -26,6 +26,7 @@ class Action(str, Enum):
     READ = "read"
     UPDATE = "update"
     DELETE = "delete"
+    READ_GLOBAL = "read:global"
 
     # Document specific actions
     PROCESS = "process"

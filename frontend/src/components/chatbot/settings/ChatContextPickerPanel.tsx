@@ -6,7 +6,18 @@
 
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import { Box, IconButton, List, ListItem, ListItemButton, Theme, Tooltip, Typography, useTheme } from "@mui/material";
+import {
+  Box,
+  Button,
+  IconButton,
+  List,
+  ListItem,
+  ListItemButton,
+  Theme,
+  Tooltip,
+  Typography,
+  useTheme,
+} from "@mui/material";
 // Import BoxProps and SxProps from MUI for proper typing
 import { BoxProps } from "@mui/material";
 import Popover from "@mui/material/Popover";
@@ -66,40 +77,31 @@ export function ChatContextPickerPanel({
   const applyChatContextSelection = (ids: string[]) => {
     const uniqueIds = Array.from(new Set(ids));
     onChangeSelectedChatContextIds(uniqueIds);
+    setChatContextPickerAnchor(null);
   };
 
   const hasSelectedChatContext = selectedChatContextIds.length > 0;
 
   return (
     <Box
-      // <-- MODIFIED: Apply the passed-in 'sx' prop to the root Box
       sx={[
-        {
-          px: 1,
-          py: 1,
-          borderBottom: `1px solid ${theme.palette.divider}`,
-          backgroundColor: theme.palette.sidebar.background,
-        },
         // Spread the passed-in sx prop (supports object or array form)
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
     >
       {/* Titre + action à droite */}
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Typography variant="subtitle1" sx={{ pl: 1 }}>
-          {t("settings.chatContext")}
-        </Typography>
-
-        <Tooltip title={t("settings.selectChatContext", "Select a chat context")}>
-          <IconButton
+      {!hasSelectedChatContext && (
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 0.5 }}>
+          <Button
             size="small"
+            startIcon={<AddIcon />}
             onClick={(e) => setChatContextPickerAnchor(e.currentTarget)}
-            sx={{ borderRadius: 1.5 }}
+            sx={{ textTransform: "none", color: theme.palette.text.primary }}
           >
-            <AddIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      </Box>
+            {t("settings.chatContext")}
+          </Button>
+        </Box>
+      )}
 
       {/* Popover de sélection/modification */}
       <Popover
@@ -120,11 +122,11 @@ export function ChatContextPickerPanel({
 
       {/* Carte compacte quand un profil est sélectionné */}
       {hasSelectedChatContext ? (
-        <List dense disablePadding sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
+        <List dense disablePadding sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
           {selectedChatContextResources.map((resource) => {
             const preview = chatContextBodyPreviews[resource.id];
             return (
-              <ListItem key={resource.id} disableGutters>
+              <ListItem key={resource.id} disableGutters sx={{ width: 170 }}>
                 <ListItemButton
                   dense
                   selected
@@ -134,11 +136,9 @@ export function ChatContextPickerPanel({
                     px: 1,
                     py: 0.75,
                     border: `1px solid ${theme.palette.primary.main}`,
-                    backgroundColor:
-                      theme.palette.mode === "dark" ? "rgba(25,118,210,0.06)" : "rgba(25,118,210,0.04)",
+                    backgroundColor: theme.palette.mode === "dark" ? "rgba(25,118,210,0.06)" : "rgba(25,118,210,0.04)",
                     "&:hover": {
-                      backgroundColor:
-                        theme.palette.mode === "dark" ? "rgba(25,118,210,0.1)" : "rgba(25,118,210,0.08)",
+                      backgroundColor: theme.palette.mode === "dark" ? "rgba(25,118,210,0.1)" : "rgba(25,118,210,0.08)",
                     },
                     display: "flex",
                     gap: 1,
@@ -164,7 +164,7 @@ export function ChatContextPickerPanel({
                           {
                             mt: 0.5,
                             display: "-webkit-box",
-                            WebkitLineClamp: "2",
+                            WebkitLineClamp: "1",
                             WebkitBoxOrient: "vertical",
                             overflow: "hidden",
                             textOverflow: "ellipsis",

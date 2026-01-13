@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import inspect
 import sys
 from dataclasses import dataclass
@@ -91,6 +92,30 @@ def _resolve_attr(root: object, qualname: str) -> object:
             )
         cur = getattr(cur, part)
     return cur
+
+
+def _import_class(class_path: str) -> object:
+    try:
+        module_name, class_name = class_path.rsplit(".", 1)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Invalid class_path (expected module.Class): {class_path}",
+        ) from exc
+
+    try:
+        module = importlib.import_module(module_name)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=404, detail=f"Cannot import module: {module_name}: {exc}"
+        ) from exc
+
+    if not hasattr(module, class_name):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Class '{class_name}' not found in module '{module_name}'",
+        )
+    return getattr(module, class_name)
 
 
 # Create a module-level APIRouter
@@ -216,10 +241,16 @@ async def list_runtime_source_keys(
 async def runtime_source_by_object(
     key: str,
     user: KeycloakUser = Depends(get_current_user),
+    agent_manager: AgentManager = Depends(get_agent_manager),
 ):
     # FRED: Prefer this path — explicit allowlist.
     # 👇 CHANGE: Access the registry via the getter function
     obj = get_runtime_source_registry().get(key)
+    if obj is None and key.startswith("agent."):
+        agent_name = key.split(".", 1)[1]
+        agent_settings = agent_manager.get_agent_settings(agent_name)
+        if agent_settings and agent_settings.class_path:
+            obj = _import_class(agent_settings.class_path)
     if obj is None:
         raise HTTPException(status_code=404, detail="Unknown registry key")
     blob = _sourcelines(obj)

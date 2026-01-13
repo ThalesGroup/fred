@@ -1,7 +1,7 @@
 # Deployment Guide – OpenSearch Requirements for Fred
 
-**This guide explains the mandatory OpenSearch configuration required to run Fred in production.**  
-If an index does not meet these constraints, Fred will raise a `ValueError` at startup and **refuse to run**.
+**Use this guide only if you choose OpenSearch as your vector backend.**  
+Fred now supports PostgreSQL/pgvector as an alternative. When you pick OpenSearch, the constraints below are **mandatory**; otherwise Fred will raise a `ValueError` at startup and **refuse to run**.
 
 ---
 
@@ -20,7 +20,7 @@ If an index does not meet these constraints, Fred will raise a `ValueError` at s
 
 # 1. Overview
 
-Fred relies on **OpenSearch 2.x** as its vector database in production.  
+When configured for OpenSearch, Fred relies on **OpenSearch 2.x** as its vector database in production.  
 This document details the **mandatory mapping and settings** your DevOps team must apply when preparing an OpenSearch cluster.
 
 Fred performs **fail-fast, strict validation** of these requirements.  

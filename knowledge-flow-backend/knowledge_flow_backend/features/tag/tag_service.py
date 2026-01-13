@@ -114,6 +114,13 @@ class TagService:
             item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
 
             result.append(TagWithItemsId.from_tag(tag, item_ids))
+        logger.info(
+            "[TAGS] list_all_tags_for_user user=%s type=%s returned=%d tags=%s",
+            user.uid,
+            tag_type,
+            len(result),
+            [t.id for t in result],
+        )
         return result
 
     @authorize(Action.READ, Resource.TAGS)

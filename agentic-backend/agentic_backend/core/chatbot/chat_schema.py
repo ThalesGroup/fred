@@ -243,8 +243,10 @@ class ChatMessage(BaseModel):
 class SessionSchema(BaseModel):
     id: str
     user_id: str
+    agent_name: str | None = None
     title: str
     updated_at: datetime
+    preferences: Dict[str, Any] | None = None
 
 
 class AttachmentRef(BaseModel):
@@ -253,6 +255,7 @@ class AttachmentRef(BaseModel):
 
 
 class SessionWithFiles(SessionSchema):
+    agents: set[str]  # Set of all agents used in this conversation
     file_names: List[str] = []
     attachments: List[AttachmentRef] = []
 

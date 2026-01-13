@@ -2,7 +2,9 @@
   "common": {
     "add": "Ajouter",
     "noneSelected": "Aucune sélection",
+    "expand": "Développer",
     "close": "Fermer",
+    "collapse": "Réduire",
     "remove": "Supprimer",
     "loading": "Chargement…",
     "beta": "Bêta",
@@ -11,7 +13,13 @@
     "refresh": "Rafraîchir",
     "cancel": "Annuler",
     "save": "Enregistrer",
-    "invalidUrl": "URL invalide"
+    "create": "Créer",
+    "invalidUrl": "URL invalide",
+    "preview": "Aperçu",
+    "uploading": "Téléchargement en cours...",
+    "dropHere": "Déposez les fichiers ici ou cliquez pour parcourir",
+    "loadingPreview": "Aperçu en cours de chargement...",
+    "loadingPreviewError": "Impossible de charger l'aperçu."
   },
   "dataHub": {
     "title": "Hub des Données - Lignage des documents",
@@ -106,11 +114,12 @@
     "facts": "Faits",
     "audit": "Audit",
     "optimize": "Optimiser",
-    "chat": "Discussion",
+    "chat": "Conversations",
     "monitoring": "Supervision",
+    "laboratory": "Laboratoire",
     "knowledge": "Ressources",
-    "mcp": "Hub MCP",
-    "agent": "Hub Agent",
+    "mcp": "Outils",
+    "agent": "Agents",
     "release_notes": "Notes de version",
     "workspaces": "Espaces de travail",
     "account": "Profil",
@@ -122,12 +131,12 @@
       "optimize": "Consulter les gains d'optimisation",
       "chat": "Discuter avec l'assistant IA",
       "monitoring": "Superviser les appels IA backend",
+      "laboratory": "Explorer les fonctionnalités et outils de validation et de laboratoire",
       "knowledge": "Consulter vos bibliothèques de documents et de prompts",
       "mcp": "Gérer les serveurs MCP",
       "agent": "Voir les agents",
       "release_notes": "Consulter les dernières notes de version",
       "workspaces": "Voir les espaces",
-      "account": "Voir votre profil",
       "selectCluster": "Veuillez d'abord sélectionner un cluster",
       "monitoring_kpi": "Vue d'ensemble des Kpis",
       "monitoring_logs": "Console de logs",
@@ -149,7 +158,31 @@
     "monitoring_runtime": "Runtime",
     "monitoring_processors": "Processeurs",
     "monitoring_data": "Données",
+    "allAgents": "Tous les agents",
+    "deleteSessionFailed": "La supression de la conversation a échoué",
     "monitoring_graph": "Graphe"
+  },
+  "chat": {
+    "common": {
+      "unknown": "Inconnu"
+    },
+    "feedback": {
+      "error": "Erreur de retour",
+      "submitted": "Retour envoyé",
+      "thanks": "Merci pour votre retour."
+    },
+    "labels": {
+      "task": "Tâche",
+      "node": "Nœud"
+    },
+    "message": {
+      "waiting": "En attente de réponse…",
+      "toolResult": "Résultat de l'outil"
+    },
+    "actions": {
+      "copyMessage": "Copier le message",
+      "openFeedback": "Ouvrir le retour"
+    }
   },
   "runtime": {
     "title": "Résumé d'exécution",
@@ -283,7 +316,7 @@
     "noMcpServers": "Aucun serveur MCP disponible pour le moment."
   },
   "agentHub": {
-    "title": "Centre des Agents",
+    "title": "Vos agents",
     "confirmDeleteTitle": "Confirmer la suppression",
     "confirmDeleteMessage": "Supprimer cet agent ? Cette action est irréversible.",
     "description": "Explorez et gérez les agents IA disponibles",
@@ -366,7 +399,7 @@
     "a2aExamples": "Exemples"
   },
   "mcpHub": {
-    "title": "Hub MCP",
+    "title": "Outils",
     "subtitle": "Déclarez et modifiez les serveurs MCP accessibles aux agents.",
     "addButton": "Ajouter un serveur MCP",
     "restoreButton": "Restaurer depuis la configuration",
@@ -431,6 +464,10 @@
       "tooltipHybrid": "Utiliser le corpus documentaire et les connaissances générales du modèle pour répondre",
       "tooltipGeneral": "Utiliser seulement les connaissances générales du modèle pour répondre"
     },
+    "deepSearch": {
+      "label": "Recherche approfondie",
+      "tooltip": "Déléguer la recherche RAG à Rico Senior"
+    },
     "menu": {
       "addToSetup": "Ajouter à la configuration de la conversation"
     },
@@ -441,7 +478,9 @@
     "attachments": {
       "betaNotice": "Les pièces jointes sont en version bêta. Formats pris en charge : PDF, DOCX, CSV. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
       "supportedFormats": "Formats pris en charge : PDF, DOCX, CSV",
-      "count": "{{count}} pièces jointes"
+      "count": "{{count}} pièces jointes",
+      "drawerTitle": "Gérer les pièces jointes",
+      "noAttachments": "Aucune pièce jointe pour le moment"
     },
     "uploadingFile": "Téléversement de {{name}}...",
     "searchToggle": "Recherche : activé = RAG (sources), désactivé = sans recherche",
@@ -559,11 +598,12 @@
     }
   },
   "profile": {
-    "title": "Profil utilisateur",
+    "title": "Paramètres",
     "description": "Gérez vos préférences utilisateur et vos profils de chat",
     "menu": {
       "account": "Compte",
-      "token": "Jeton"
+      "token": "Jeton",
+      "releaseNotes": "Notes de version"
     },
     "noUser": "Aucun utilisateur connecté",
     "login": "Se connecter",
@@ -578,7 +618,18 @@
       "title": "Informations du token",
       "none": "Aucun token disponible"
     },
-    "language": "Langue de l'interface"
+    "language": "Langue de l'interface",
+    "theme": {
+      "title": "Thème",
+      "light": "Clair",
+      "system": "Système",
+      "dark": "Sombre"
+    },
+    "links": {
+      "title": "Liens",
+      "website": "Site web",
+      "repo": "Dépot Github"
+    }
   },
   "knowledge": {
     "title": "Ressources",
@@ -588,8 +639,13 @@
       "templates": "Modèles",
       "prompts": "Prompts",
       "documents": "Documents",
+      "userAssets": "Mes fichiers",
       "operations": "Opérations",
       "chatContexts": "Contextes de conversation"
+    },
+    "userAssets": {
+      "title": "Mes fichiers",
+      "subtitle": "Fichiers générés par vous ou vos agents, associés à votre compte."
     }
   },
   "documentLibrary": {
@@ -616,6 +672,15 @@
     "cancel": "Annuler",
     "save": "Enregistrer",
     "saving": "Enregistrement en cours...",
+    "bulkUploadModalTitle": "Suivi de l'ingestion",
+    "bulkUploadProgressSummary": "{{processed}} / {{total}} documents traités",
+    "bulkUploadDetailsLabel": "Détail par document",
+    "bulkUploadShowDetails": "Afficher le détail",
+    "bulkUploadHideDetails": "Masquer le détail",
+    "bulkUploadCompletedSummary": "Traitement terminé : {{processed}} / {{total}} documents",
+    "bulkUploadErrorsTitle": "Documents en erreur",
+    "bulkUploadUnknownError": "Erreur inconnue",
+    "bulkUploadNoErrors": "Aucune erreur détectée",
     "documentsView": "Documents",
     "removeSuccess": "Documents supprimés",
     "removedDocuments": "{{count}} document(s) supprimé(s) de la bibliothèque",
@@ -644,6 +709,8 @@
     "deleteFolder": "Supprimer le dossier",
     "download": "Télécharger",
     "downloadStarting": "Préparation du téléchargement...",
+    "loadMore": "Charger plus",
+    "loadAll": "Tout charger",
     "pipeline": {
       "title": "Configurer le pipeline de traitement",
       "description": "Définissez la chaîne de processeurs à appliquer pour chaque type de fichier de cette bibliothèque.",
@@ -680,7 +747,13 @@
       "close": "Fermer",
       "addLibraryProcessor": "Ajouter un processeur de bibliothèque",
       "noLibraryProcessorAvailable": "Aucun processeur de bibliothèque disponible."
-    }
+    },
+    "configurePipeline": "Configurer le pipeline de traitement",
+    "viewOriginalPdf": "Voir le PDF original",
+    "makeExcluded": "Exclure de la recherche",
+    "makeSearchable": "Rendre recherchable",
+    "searchOn": "Recherche activée",
+    "searchOff": "Recherche désactivée"
   },
   "documentLibraryShareDialog": {
     "subtitle": "Ajoutez des utilisateurs ou des groupes et gérez les permissions d'accès pour cette bibliothèque.",
