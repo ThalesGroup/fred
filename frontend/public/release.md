@@ -5,9 +5,13 @@
   - This release brings in kpi, language and logging improvments to facilitate operations
 
 - **Improvements**
+
   - reduce log verbosity (#963)
   - log and update the vector search mapping for attachements required fields (#964)
   - take into account frontend language (#962)
+
+- **Bug fixes**
+  - fixe the missing attachement file number in the UI (#966)
 
 ---
 

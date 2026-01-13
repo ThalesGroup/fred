@@ -213,11 +213,6 @@ const ChatBot = ({
     }
   }, [currentChatBotSession?.id]);
 
-  // When switching sessions, immediately reset attachment badge to avoid stale counts.
-  useEffect(() => {
-    onAttachmentCountChange?.(0);
-  }, [currentChatBotSession?.id, onAttachmentCountChange]);
-
   const setupWebSocket = async (): Promise<WebSocket | null> => {
     const current = webSocketRef.current;
     if (current && current.readyState === WebSocket.OPEN) return current;
