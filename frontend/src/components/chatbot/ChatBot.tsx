@@ -380,45 +380,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // mount/unmount
 
-  // Fetch messages when the session changes
-  useEffect(() => {
-    const id = currentChatBotSession?.id;
-
-    if (!id) {
-      messagesRef.current = [];
-      setAllMessages([]);
-      setIsHistoryLoading(false);
-      return;
-    }
-
-    setIsHistoryLoading(true);
-    const existingForSession = messagesRef.current.filter((msg) => msg.session_id === id);
-    if (existingForSession.length > 0) {
-      const sortedExisting = sortMessages(existingForSession);
-      messagesRef.current = sortedExisting;
-      setAllMessages(sortedExisting);
-    } else {
-      // No cache for this session: clear messages to avoid showing previous session's conversation
-      messagesRef.current = [];
-      setAllMessages([]);
-    }
-
-    fetchHistory({ sessionId: id, textLimit: HISTORY_TEXT_LIMIT, textOffset: 0 })
-      .unwrap()
-      .then((serverMessages) => {
-        const sorted = sortMessages(serverMessages);
-        messagesRef.current = sorted;
-        setAllMessages(sorted);
-        onBindDraftAgentToSessionId?.(id);
-        setIsHistoryLoading(false);
-      })
-      .catch((e) => {
-        console.error("[CHATBOT] Failed to load messages:", e);
-        setAllMessages([]);
-        setIsHistoryLoading(false);
-      });
-  }, [currentChatBotSession?.id, fetchHistory]);
-
   const [userInputContext, setUserInputContext] = useState<any>(null);
   const handleDraftContextChange = useCallback(
     (ctx: any) => {
