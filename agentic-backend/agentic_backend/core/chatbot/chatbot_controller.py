@@ -92,7 +92,7 @@ def _paginate_message_text(
         return message
 
     parts = message.parts or []
-    total = sum(len(p.text) for p in parts if getattr(p, "type", None) == "text")
+    total = sum(len(p.text) for p in parts if isinstance(p, TextPart))
     if total == 0:
         return message
 
@@ -105,7 +105,7 @@ def _paginate_message_text(
     paged_parts: List[MessagePart] = []
     cursor = 0
     for part in parts:
-        if getattr(part, "type", None) != "text":
+        if not isinstance(part, TextPart):
             paged_parts.append(part)
             continue
 
