@@ -11,7 +11,9 @@
   - take into account frontend language (#962)
 
 - **Bug fixes**
-  - fixe the missing attachement file number in the UI (#966)
+  - fixed the missing attachement file number in the UI (#966)
+  - fixed the error preview attached files from the 'My Files' area (#965)
+  - removed the display button fro user files list (#969)
 
 ---
 

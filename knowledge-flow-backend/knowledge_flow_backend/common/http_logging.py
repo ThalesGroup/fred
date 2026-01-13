@@ -55,5 +55,5 @@ class RequestResponseLogger(BaseHTTPMiddleware):
         is_redirect = response.status_code in (301, 302, 303, 307, 308)
         location = response.headers.get("location")
         if not skip_logging:
-            logger.debug(f"<<< {request.method} {request.url.path} status={response.status_code} ms={dt:.1f} redirect={is_redirect} location={location}")
+            logger.info(f"<<< {request.method} {request.url.path} status={response.status_code} ms={dt:.1f} redirect={is_redirect} location={location}")
         return response
