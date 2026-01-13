@@ -127,7 +127,6 @@ export default function MessageCard({
     onError: onLoadError,
   });
 
-
   const extras = getExtras(renderMessage);
   const { downloadLink } = useAssetDownloader();
   const isCall = isToolCall(renderMessage);
