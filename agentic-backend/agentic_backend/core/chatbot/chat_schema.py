@@ -255,6 +255,7 @@ class AttachmentRef(BaseModel):
 
 
 class SessionWithFiles(SessionSchema):
+    agents: set[str]  # Set of all agents used in this conversation
     file_names: List[str] = []
     attachments: List[AttachmentRef] = []
 

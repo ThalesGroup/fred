@@ -147,7 +147,10 @@ RAG_TUNING = AgentTuning(
             ),
             required=True,
             default=(
-                "I couldn't find any relevant documents. Try rephrasing or expanding your query?"
+                "No relevant documents or uploaded files were found in the selected libraries "
+                "to answer this question. Please refine the query (e.g., add date/location constraints, a specific document type, or alternate keywords), "
+                "or upload supporting documents so I can work with concrete sources.\n\n"
+                "Question:\n{question}"
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
@@ -275,7 +278,10 @@ class Rico(AgentFlow):
             "prompts.keyword_expansion", question=question
         )
         try:
-            resp = await self.model.ainvoke([HumanMessage(content=prompt)])
+            with self.kpi_timer(
+                "agent.step_latency_ms", dims={"step": "keyword_expansion"}
+            ):
+                resp = await self.model.ainvoke([HumanMessage(content=prompt)])
             raw = resp.content if isinstance(resp.content, str) else ""
             keywords = [kw.strip() for kw in raw.split(",") if kw.strip()]
             if not keywords:
@@ -329,7 +335,10 @@ class Rico(AgentFlow):
                 )
                 messages = [sys_msg, *history, human_msg]
                 messages = self.with_chat_context_text(messages)
-                answer = await self.model.ainvoke(messages)
+                with self.kpi_timer(
+                    "agent.step_latency_ms", dims={"step": "answer_general_only"}
+                ):
+                    answer = await self.model.ainvoke(messages)
                 return {"messages": [answer]}
 
             # 0) Optional keyword expansion to widen recall
@@ -363,6 +372,14 @@ class Rico(AgentFlow):
                 top_k,
                 rag_scope,
             )
+            logger.info(
+                "[AGENT][SESSION PATH] question=%r runtime_context.session_id=%s rag_scope=%s search_policy=%s doc_tag_ids=%s",
+                question,
+                runtime_context.session_id if runtime_context else None,
+                rag_scope,
+                search_policy,
+                doc_tag_ids,
+            )
 
             if not runtime_context or not runtime_context.session_id:
                 raise RuntimeError(
@@ -370,14 +387,18 @@ class Rico(AgentFlow):
                 )
 
             # 2) Vector search
-            hits: List[VectorSearchHit] = self.search_client.search(
-                question=augmented_question,
-                top_k=top_k,
-                document_library_tags_ids=doc_tag_ids,
-                search_policy=search_policy,
-                session_id=runtime_context.session_id,
-                include_session_scope=True,
-            )
+            with self.kpi_timer(
+                "agent.step_latency_ms",
+                dims={"step": "vector_search", "policy": search_policy},
+            ):
+                hits: List[VectorSearchHit] = self.search_client.search(
+                    question=augmented_question,
+                    top_k=top_k,
+                    document_library_tags_ids=doc_tag_ids,
+                    search_policy=search_policy,
+                    session_id=runtime_context.session_id,
+                    include_session_scope=True,
+                )
             logger.debug("[AGENT] vector search returned %d hit(s)", len(hits))
             if hits:
                 hit_summaries = []
@@ -395,18 +416,21 @@ class Rico(AgentFlow):
             if not hits:
                 if is_corpus_only_mode(runtime_context):
                     warn = (
-                        "No relevant documents were found for this question. "
-                        "You must not use general knowledge. Explain that you cannot answer without evidence from the corpus "
-                        "and invite the user to refine the question or provide documents."
+                        "No relevant documents or attached files were found in the selected libraries, "
+                        "and I am restricted to the corpus only. Please provide documents or refine your query."
                     )
                 else:
-                    warn = self._render_tuned_prompt(
-                        "prompts.no_results", question=question
+                    warn = (
+                        "I couldn't find any relevant documents or uploaded attachments for that question. "
+                        "Try asking about something covered by the selected libraries or upload relevant files."
                     )
                 messages = [HumanMessage(content=warn)]
                 messages = self.with_chat_context_text(messages)
 
-                return {"messages": [await self.model.ainvoke(messages)]}
+                with self.kpi_timer(
+                    "agent.step_latency_ms", dims={"step": "answer_no_results"}
+                ):
+                    return {"messages": [await self.model.ainvoke(messages)]}
 
             # 3) Deterministic ordering + fill ranks
             hits = sort_hits(hits)
@@ -458,7 +482,10 @@ class Rico(AgentFlow):
                 human_msg = HumanMessage(content=no_sources_text)
                 messages = [sys_msg, *history, human_msg]
                 messages = self.with_chat_context_text(messages)
-                answer = await self.model.ainvoke(messages)
+                with self.kpi_timer(
+                    "agent.step_latency_ms", dims={"step": "answer_no_sources"}
+                ):
+                    answer = await self.model.ainvoke(messages)
                 return {"messages": [answer]}
 
             # 4) Build messages explicitly (no magic)
@@ -513,7 +540,10 @@ class Rico(AgentFlow):
                 len(sys_msg.content),
                 len(human_msg.content),
             )
-            answer = await self.model.ainvoke(messages)
+            with self.kpi_timer(
+                "agent.step_latency_ms", dims={"step": "answer_with_sources"}
+            ):
+                answer = await self.model.ainvoke(messages)
 
             # 6) Attach rich sources metadata for the UI
             attach_sources_to_llm_response(answer, hits)

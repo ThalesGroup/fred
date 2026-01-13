@@ -59,7 +59,7 @@ class RBACProvider(AuthorizationProvider):
                 Resource.AGENTS: READ_ONLY,  # Can't create/update/delete agents
                 Resource.SESSIONS: CRUD,
                 Resource.MCP_SERVERS: CRU,
-                Resource.MESSAGE_ATTACHMENTS: {Action.CREATE},
+                Resource.MESSAGE_ATTACHMENTS: {Action.CREATE, Action.READ},
                 Resource.USER: READ_ONLY,
                 Resource.GROUP: READ_ONLY,
                 # Editor can create and use files in the filesystem endpoint
@@ -72,7 +72,7 @@ class RBACProvider(AuthorizationProvider):
                 Resource.FEEDBACK: {Action.CREATE},
                 # Viewer can chat:
                 Resource.SESSIONS: CRUD,
-                Resource.MESSAGE_ATTACHMENTS: {Action.CREATE},
+                Resource.MESSAGE_ATTACHMENTS: {Action.CREATE, Action.READ},
                 Resource.PROMPT_COMPLETIONS: {Action.CREATE},
                 # Viewer can create and use files in the filesystem endpoint
                 Resource.FILES: CRUD,

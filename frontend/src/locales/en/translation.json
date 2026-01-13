@@ -13,6 +13,7 @@
     "refresh": "Refresh",
     "cancel": "Cancel",
     "save": "Save",
+    "create": "Create",
     "invalidUrl": "Invalid URL",
     "preview": "Preview",
     "uploading": "Uploading...",
@@ -113,11 +114,11 @@
     "facts": "Facts",
     "audit": "Audit",
     "optimize": "Optimize",
-    "chat": "Chat",
+    "chat": "Chats",
     "monitoring": "Admin",
     "laboratory": "Laboratory",
     "knowledge": "Resources",
-    "mcp": "MCP Servers",
+    "mcp": "Tools",
     "agent": "Agents",
     "release_notes": "Release Notes",
     "workspaces": "Workspaces",
@@ -136,7 +137,6 @@
       "agent": "View agents",
       "release_notes": "View the latest release notes",
       "workspaces": "View Workspace",
-      "account": "View your account",
       "selectCluster": "Please select a cluster first",
       "monitoring_kpi": "Kpi Dashboard",
       "monitoring_logs": "Log Console",
@@ -158,6 +158,8 @@
     "monitoring_runtime": "Runtime",
     "monitoring_processors": "Processors",
     "monitoring_data": "Data",
+    "allAgents": "All agents",
+    "deleteSessionFailed": "Failed to delete conversation",
     "monitoring_graph": "Graph"
   },
   "chat": {
@@ -314,7 +316,7 @@
     "noMcpServers": "No MCP servers are currently available."
   },
   "agentHub": {
-    "title": "Agent Hub",
+    "title": "Your agents",
     "confirmDeleteTitle": "Confirm deletion",
     "confirmDeleteMessage": "Delete this agent ? This action cannot be undone.",
     "description": "Explore and manage available AI agents",
@@ -397,7 +399,7 @@
     "a2aExamples": "Examples"
   },
   "mcpHub": {
-    "title": "MCP Servers",
+    "title": "Tools",
     "subtitle": "Register and edit MCP servers available to agents.",
     "restoreButton": "Restore from configuration",
     "addButton": "Add MCP server",
@@ -596,11 +598,12 @@
     }
   },
   "profile": {
-    "title": "User profile",
+    "title": "Settings",
     "description": "Manage your profile settings",
     "menu": {
       "account": "Account",
-      "token": "Token"
+      "token": "Token",
+      "releaseNotes": "Release Notes"
     },
     "noUser": "No user connected",
     "login": "Login",
@@ -615,7 +618,18 @@
       "title": "Token information",
       "none": "No token available"
     },
-    "language": "Interface language"
+    "language": "Interface language",
+    "theme": {
+      "title": "Theme",
+      "light": "Light",
+      "system": "System",
+      "dark": "Dark"
+    },
+    "links": {
+      "title": "Links",
+      "website": "Website",
+      "repo": "Github repository"
+    }
   },
   "knowledge": {
     "title": "Resources",

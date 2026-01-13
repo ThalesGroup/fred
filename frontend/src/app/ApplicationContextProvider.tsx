@@ -13,51 +13,61 @@
 // limitations under the License.
 
 import { createContext, PropsWithChildren, useEffect, useState } from "react";
-import { ApplicationContextStruct } from "./ApplicationContextStruct.tsx";
+import { useLocalStorageState } from "../hooks/useLocalStorageState";
+import { ApplicationContextStruct, ThemeMode } from "./ApplicationContextStruct.tsx";
 
 /**
  * Our application context.
  */
 export const ApplicationContext = createContext<ApplicationContextStruct>(null!);
+
+/**
+ * Detects if the user's system prefers dark mode
+ */
+const getSystemDarkMode = (): boolean => {
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+};
+
+/**
+ * Computes the effective dark mode based on theme mode and system preference
+ */
+const computeDarkMode = (themeMode: ThemeMode, systemDarkMode: boolean): boolean => {
+  if (themeMode === "system") {
+    return systemDarkMode;
+  }
+  return themeMode === "dark";
+};
+
 export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [darkMode, setDarkMode] = useState(true);
-  // Load user preferences from local storage on app startup
-  useEffect(() => {
-    const storedSidebarState = localStorage.getItem("isSidebarCollapsed");
-    const storedThemeMode = localStorage.getItem("darkMode");
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useLocalStorageState(
+    "ApplicationContextProvider.isSidebarCollapsed",
+    false,
+  );
+  const [themeMode, setThemeMode] = useLocalStorageState<ThemeMode>("ApplicationContextProvider.themeMode", "system");
+  const [systemDarkMode, setSystemDarkMode] = useState(getSystemDarkMode());
+  const darkMode = computeDarkMode(themeMode, systemDarkMode);
 
-    if (storedSidebarState !== null) {
-      setIsSidebarCollapsed(JSON.parse(storedSidebarState));
-    }
-    if (storedThemeMode !== null) {
-      setDarkMode(JSON.parse(storedThemeMode));
-    }
+  // Listen for system theme changes
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = (e: MediaQueryListEvent) => {
+      setSystemDarkMode(e.matches);
+    };
+
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
   }, []);
-
-  // Save sidebar state to local storage when it changes
-  useEffect(() => {
-    localStorage.setItem("isSidebarCollapsed", JSON.stringify(isSidebarCollapsed));
-  }, [isSidebarCollapsed]);
-
-  // Save dark mode preference to local storage when it changes
-  useEffect(() => {
-    localStorage.setItem("darkMode", JSON.stringify(darkMode));
-  }, [darkMode]);
 
   const toggleSidebar = () => {
     setIsSidebarCollapsed((prevState) => !prevState);
   };
 
-  const toggleDarkMode = () => {
-    setDarkMode((prevState) => !prevState);
-  };
-
   const contextValue: ApplicationContextStruct = {
     isSidebarCollapsed,
     darkMode,
+    themeMode,
     toggleSidebar,
-    toggleDarkMode,
+    setThemeMode,
   };
 
   return <ApplicationContext.Provider value={contextValue}>{props.children}</ApplicationContext.Provider>;

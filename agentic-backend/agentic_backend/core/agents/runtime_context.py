@@ -24,7 +24,9 @@ class RuntimeContext(BaseModel):
     Properties that can be passed to an agent at runtime (with a message)
     """
 
+    language: Optional[str] = None
     session_id: Optional[str] = None
+    user_id: Optional[str] = None
     selected_document_libraries_ids: list[str] | None = None
     selected_chat_context_ids: list[str] | None = None
     search_policy: str | None = None
@@ -124,3 +126,10 @@ def should_skip_rag_search(context: RuntimeContext | None) -> bool:
 def is_corpus_only_mode(context: RuntimeContext | None) -> bool:
     """Helper to check whether the agent must answer only from corpus documents."""
     return get_rag_knowledge_scope(context) == "corpus_only"
+
+
+def get_language(context: RuntimeContext | None) -> str:
+    """Helper to get preferred language if provided."""
+    if not context:
+        return ""
+    return context.language or ""

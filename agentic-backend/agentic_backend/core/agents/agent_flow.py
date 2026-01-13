@@ -31,7 +31,7 @@ from typing import (
     cast,
 )
 
-from fred_core import get_keycloak_client_id, get_keycloak_url
+from fred_core import KPIActor, get_keycloak_client_id, get_keycloak_url
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
@@ -70,7 +70,7 @@ from agentic_backend.common.user_token_refresher import (
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec
 from agentic_backend.core.agents.agent_state import Prepared, resolve_prepared
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
-from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.runtime_context import RuntimeContext, get_language
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +228,9 @@ class AgentFlow:
         expires_at = payload.get("expires_at_timestamp")
         if expires_at:
             try:
-                setattr(self.runtime_context, "access_token_expires_at", expires_at)
+                setattr(
+                    self.runtime_context, "access_token_expires_at", int(expires_at)
+                )
             except Exception:
                 logger.debug(
                     "Could not set access_token_expires_at on runtime_context; skipping attribute assignment."
@@ -772,6 +774,12 @@ class AgentFlow:
         Notes:
         - Accepts AnyMessage/Sequence to play nicely with LangChain's typing.
         """
+        lang = get_language(self.get_runtime_context())
+        if lang:
+            system_text = (
+                f"{system_text}\n\n"
+                f"User language preference: respond in '{lang}' by default unless explicitly asked otherwise."
+            )
         return [SystemMessage(content=system_text), *messages]
 
     def with_chat_context_text(
@@ -798,6 +806,44 @@ class AgentFlow:
     def get_runtime_context(self) -> Optional[RuntimeContext]:
         """Get the current runtime context."""
         return self.runtime_context
+
+    def _kpi_base_dims(
+        self, extra: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Optional[str]]:
+        dims: Dict[str, Optional[str]] = {
+            "agent_id": self.agent_settings.name or type(self).__name__
+        }
+        session_id = getattr(self.runtime_context, "session_id", None)
+        if session_id:
+            dims["session_id"] = str(session_id)
+        user_id = getattr(self.runtime_context, "user_id", None)
+        if user_id:
+            dims["user_id"] = str(user_id)
+
+        extra_dims = dict(extra or {})
+        if "step" in extra_dims and "agent_step" not in extra_dims:
+            extra_dims["agent_step"] = extra_dims.pop("step")
+
+        for key, value in extra_dims.items():
+            if value is None:
+                continue
+            dims[key] = str(value)
+        return dims
+
+    def kpi_timer(
+        self,
+        name: str,
+        *,
+        dims: Optional[Dict[str, Any]] = None,
+        unit: str = "ms",
+    ):
+        kpi = get_app_context().get_kpi_writer()
+        return kpi.timer(
+            name,
+            dims=self._kpi_base_dims(dims),
+            unit=unit,
+            actor=KPIActor(type="system"),
+        )
 
     def __str__(self) -> str:
         """String representation of the agent."""

@@ -112,7 +112,7 @@ class Trace(BaseModel):
 
 
 # Dims: cardinality-critical identifiers; keep them stable and few.
-# - status: "ok" | "error" | "timeout" | "filtered"
+# - status: "ok" | "error" | "timeout" | "filtered" | "cancelled"
 # - http_status: "200".."599" when relevant
 # - error_code: short machine code (e.g., "rate_limit", "jwt_invalid", "timeout", "pdf_parse")
 # - exception_type: short class name (e.g., "TimeoutError", "JWTError")
