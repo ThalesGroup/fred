@@ -12,8 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
+import CodeIcon from "@mui/icons-material/Code";
+import EmailIcon from "@mui/icons-material/Email";
+import FingerprintIcon from "@mui/icons-material/Fingerprint";
+import LogoutIcon from "@mui/icons-material/Logout";
+import SecurityIcon from "@mui/icons-material/Security";
 import {
-  Avatar,
   Box,
   Button,
   Card,
@@ -22,20 +29,15 @@ import {
   Divider,
   Grid2,
   Stack,
+  Tooltip,
   Typography,
   useTheme,
-  Tooltip,
 } from "@mui/material";
-import AccountCircleIcon from "@mui/icons-material/AccountCircle";
-import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
-import SecurityIcon from "@mui/icons-material/Security";
-import CodeIcon from "@mui/icons-material/Code";
-import LogoutIcon from "@mui/icons-material/Logout";
-import EmailIcon from "@mui/icons-material/Email";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import FingerprintIcon from "@mui/icons-material/Fingerprint";
 import { useTranslation } from "react-i18next";
 import { LanguageSelector } from "../LanguageSelector";
+import { ThemeModeSelector } from "../ThemeModeSelector";
+import { ExternalLink } from "./ExternalLink";
+import { UserAvatar } from "./UserAvatar";
 
 interface ProfileCardProps {
   username: string;
@@ -61,19 +63,6 @@ export function ProfileCard({
 }: ProfileCardProps) {
   const theme = useTheme();
   const { t } = useTranslation();
-
-  const getInitials = () => {
-    if (!username) return "U";
-    const parts = username.trim().split(/\s+/);
-    if (parts.length > 1) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-    return username.substring(0, 2).toUpperCase();
-  };
-
-  const getAvatarColor = () => {
-    if (userRoles.includes("admin")) return theme.palette.error.main;
-    if (userRoles.includes("manager")) return theme.palette.secondary.dark;
-    return theme.palette.primary.main;
-  };
 
   const getRoleIcon = (role: string) => {
     if (role.includes("admin")) return <AdminPanelSettingsIcon fontSize="small" />;
@@ -109,11 +98,15 @@ export function ProfileCard({
 
   return (
     // Right-anchored container
-    <Grid2 size={{ xs: 12 }} display="flex" justifyContent={{ xs: "stretch", md: "flex-end" }} px={{ xs: 1.5, md: 3 }}>
+    <Grid2
+      size={{ xs: 12 }}
+      display="flex"
+      justifyContent={{ xs: "stretch", md: "flex-start" }}
+      px={{ xs: 1.5, md: 3 }}
+    >
       <Card
         variant="outlined"
         sx={{
-          ml: { md: "auto" }, // stick to the right on md+
           width: "100%",
           maxWidth: 980, // comfortable reading width
           borderRadius: 3,
@@ -128,18 +121,7 @@ export function ProfileCard({
             {/* LEFT COLUMN — identity & controls */}
             <Grid2 size={{ xs: 12, md: 5 }} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <Stack direction="row" spacing={1.5} alignItems="center">
-                <Avatar
-                  sx={{
-                    width: 64,
-                    height: 64,
-                    fontSize: "1.25rem",
-                    fontWeight: 700,
-                    backgroundColor: getAvatarColor(),
-                    outline: (t) => `2px solid ${t.palette.background.default}`, // subtle halo
-                  }}
-                >
-                  {getInitials()}
-                </Avatar>
+                <UserAvatar />
                 <Box sx={{ minWidth: 0 }}>
                   <Typography variant="h6" fontWeight={600} noWrap>
                     {fullName}
@@ -224,6 +206,21 @@ export function ProfileCard({
                     </Tooltip>
                   ))}
                 </Box>
+              </Box>
+
+              <Divider />
+
+              <Box>
+                <SectionTitle>{t("profile.theme.title")}</SectionTitle>
+                <ThemeModeSelector />
+              </Box>
+
+              <Divider />
+
+              <Box>
+                <SectionTitle>{t("profile.links.title")}</SectionTitle>
+                <ExternalLink href="https://fredk8.dev" label={t("profile.links.website")} />
+                <ExternalLink href="https://github.com/ThalesGroup/fred" label={t("profile.links.repo")} />
               </Box>
             </Grid2>
           </Grid2>

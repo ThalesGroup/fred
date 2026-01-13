@@ -260,7 +260,7 @@ export default function KpiDashboard() {
   const toolLatencyRows = (toolLatencyState.data as KpiQueryResult | undefined)?.rows ?? [];
 
   return (
-    <Box display="flex" flexDirection="column" gap={2} p={2}>
+    <Box display="flex" flexDirection="column" gap={2} p={2} mt={1}>
       {/* Single Paper host: global filters only */}
       <DashboardCard>
         <Box display="flex" flexDirection="column" gap={1.5}>

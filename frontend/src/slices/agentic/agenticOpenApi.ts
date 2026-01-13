@@ -778,6 +778,7 @@ export type SessionWithFiles = {
   preferences?: {
     [key: string]: any;
   } | null;
+  agents: string[];
   file_names?: string[];
   attachments?: AttachmentRef[];
 };

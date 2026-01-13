@@ -356,6 +356,13 @@ class SessionOrchestrator:
                 session.id, user, Action.READ
             ):
                 continue
+
+            # Retrieve all agents
+            history = self.get_session_history(session.id, user)
+            agents = {
+                msg.metadata.agent_name for msg in history if msg.metadata.agent_name
+            }
+
             files_names: list[str] = []
             attachments: list[AttachmentRef] = []
             if self.attachments_store:
@@ -373,6 +380,7 @@ class SessionOrchestrator:
             enriched.append(
                 SessionWithFiles(
                     **session.model_dump(),
+                    agents=agents,
                     file_names=files_names,
                     attachments=attachments,
                 )
