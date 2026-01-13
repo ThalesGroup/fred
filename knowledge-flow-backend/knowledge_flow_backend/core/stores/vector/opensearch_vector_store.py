@@ -738,17 +738,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         """
         Try to add missing metadata keyword fields so the attachment/session filters continue to work.
         """
-        payload = {
-            "properties": {
-                "metadata": {
-                    "properties": {
-                        field: {"type": REQUIRED_METADATA_FIELDS[field]["type"]}
-                        for field in missing_fields
-                        if field in REQUIRED_METADATA_FIELDS
-                    }
-                }
-            }
-        }
+        payload = {"properties": {"metadata": {"properties": {field: {"type": REQUIRED_METADATA_FIELDS[field]["type"]} for field in missing_fields if field in REQUIRED_METADATA_FIELDS}}}}
         try:
             self._client.indices.put_mapping(index=self._index, body=payload)
             logger.info(
@@ -842,10 +832,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             if allow_metadata_mapping_update and self._apply_metadata_mapping_updates(missing_metadata_fields):
                 self._validate_index_compatibility(expected_dim, allow_metadata_mapping_update=False)
                 return
-            problems.append(
-                "- Missing metadata fields "
-                f"{', '.join(missing_metadata_fields)}. These fields must be mapped as keywords for session-scoped searches."
-            )
+            problems.append(f"- Missing metadata fields {', '.join(missing_metadata_fields)}. These fields must be mapped as keywords for session-scoped searches.")
 
         try:
             tag_field = metadata_props.get("tag_ids")
