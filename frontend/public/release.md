@@ -1,3 +1,14 @@
+**v1.2.0** — 2026-01-10
+
+This release brings in a major UI revamp. This revamp has been proposed and designed
+by the Prism team to make Fred evolve towards a state-of-the-art agentic orchestration platform.
+
+- **Improvements**
+
+  - Side bar now integrated into the main left side bar. (#976)
+
+---
+
 **v1.1.3** — 2026-01-09
 
 - **Summary**
