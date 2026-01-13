@@ -22,6 +22,7 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger("http")
+SKIP_PATHS = frozenset({"/knowledge-flow/v1/healthz", "/knowledge-flow/v1/ready"})
 
 
 def _jwt_preview(auth_header: Optional[str]) -> Dict[str, Any]:
@@ -43,13 +44,16 @@ def _jwt_preview(auth_header: Optional[str]) -> Dict[str, Any]:
 
 class RequestResponseLogger(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        skip_logging = request.url.path in SKIP_PATHS
         t0 = time.perf_counter()
         hdrs = {k.lower(): v for k, v in request.headers.items()}
         auth_info = _jwt_preview(hdrs.get("authorization"))
-        logger.info(f">>> {request.method} {request.url.path} qs='{request.url.query}' client={request.client.host if request.client else None} auth={auth_info}")
+        if not skip_logging:
+            logger.debug(f">>> {request.method} {request.url.path} qs='{request.url.query}' client={request.client.host if request.client else None} auth={auth_info}")
         response: Response = await call_next(request)
         dt = (time.perf_counter() - t0) * 1000
         is_redirect = response.status_code in (301, 302, 303, 307, 308)
         location = response.headers.get("location")
-        logger.info(f"<<< {request.method} {request.url.path} status={response.status_code} ms={dt:.1f} redirect={is_redirect} location={location}")
+        if not skip_logging:
+            logger.debug(f"<<< {request.method} {request.url.path} status={response.status_code} ms={dt:.1f} redirect={is_redirect} location={location}")
         return response
