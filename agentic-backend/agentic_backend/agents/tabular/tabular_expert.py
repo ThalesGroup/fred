@@ -171,7 +171,8 @@ class Tessa(AgentFlow):
                 col_items: list[dict[str, Any]] = []
                 if isinstance(columns, dict):
                     col_items = [
-                        {"name": name, "dtype": dtype} for name, dtype in columns.items()
+                        {"name": name, "dtype": dtype}
+                        for name, dtype in columns.items()
                     ]
                 elif isinstance(columns, list):
                     for col in columns:

@@ -131,6 +131,7 @@ def _paginate_message_text(
     metadata = message.metadata.model_copy(update={"extras": extras})
     return message.model_copy(update={"parts": paged_parts, "metadata": metadata})
 
+
 # ---------------- Echo types for UI OpenAPI ----------------
 
 EchoPayload = Union[
