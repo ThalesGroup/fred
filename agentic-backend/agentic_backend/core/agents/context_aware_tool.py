@@ -142,12 +142,8 @@ class ContextAwareTool(BaseTool):
                 tool_properties = {}
 
         library_ids = get_document_library_tags_ids(context)
-        if (
-            library_ids
-            and "tags" in tool_properties
-            and ("tags" not in kwargs or kwargs["tags"] is None)
-        ):
-            kwargs["tags"] = library_ids
+        if library_ids and "document_library_tags_ids" in tool_properties:
+            kwargs["document_library_tags_ids"] = library_ids
             logger.info(
                 "ContextAwareTool(%s) injecting library filter: %s",
                 self.name,
