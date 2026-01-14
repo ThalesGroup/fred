@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import secrets
 import uuid
 from datetime import datetime, timezone
@@ -233,8 +234,11 @@ class SessionOrchestrator:
         # Stream agent responses via the transcoder
         saw_final_assistant = False
         agent_msgs: List[ChatMessage] = []
+        had_error = False
+        had_cancelled = False
+        error_code: Optional[str] = None
         try:
-            # Timer covers the entire exchange; status defaults to "error" if exception bubbles.
+            # Timer covers the entire exchange; default status="ok" unless overridden.
             with self.kpi.timer(
                 "chat.exchange_latency_ms",
                 dims={
@@ -244,43 +248,78 @@ class SessionOrchestrator:
                     "exchange_id": exchange_id,
                 },
                 actor=actor,
-            ):
+            ) as kpi_dims:
                 # Build input messages ensuring the last message is the Human question.
                 input_messages = lc_history + [HumanMessage(message)]
 
-                agent_msgs = await self.transcoder.stream_agent_response(
-                    agent=agent,
-                    input_messages=input_messages,
-                    session_id=session.id,
-                    exchange_id=exchange_id,
-                    agent_name=agent_name,
-                    base_rank=base_rank,
-                    start_seq=1,  # user message already consumed rank=base_rank
-                    callback=callback,
-                    user_context=user,
-                    runtime_context=runtime_context,
-                )
+                try:
+                    agent_msgs = await self.transcoder.stream_agent_response(
+                        agent=agent,
+                        input_messages=input_messages,
+                        session_id=session.id,
+                        exchange_id=exchange_id,
+                        agent_name=agent_name,
+                        base_rank=base_rank,
+                        start_seq=1,  # user message already consumed rank=base_rank
+                        callback=callback,
+                        user_context=user,
+                        runtime_context=runtime_context,
+                    )
+                except asyncio.CancelledError:
+                    had_cancelled = True
+                    error_code = "cancelled"
+                    kpi_dims["error_code"] = error_code
+                    raise
                 all_msgs.extend(agent_msgs)
                 # Success signal: exactly one assistant/final per exchange (enforced by transcoder)
                 saw_final_assistant = any(
                     (m.role == Role.assistant and m.channel == Channel.final)
                     for m in agent_msgs
                 )
+                # Error signal: explicit error marker from the transcoder.
+                for msg in agent_msgs:
+                    extras = msg.metadata.extras if msg.metadata else {}
+                    if extras.get("error") is True or msg.channel == Channel.error:
+                        had_error = True
+                        error_code = extras.get("error_code") or error_code
+                        break
+                if had_error:
+                    kpi_dims["status"] = "error"
+                    if error_code:
+                        kpi_dims["error_code"] = error_code
+        except asyncio.CancelledError:
+            logger.info(
+                "Agent execution cancelled by client (agent=%s session=%s exchange=%s)",
+                agent_name,
+                session.id,
+                exchange_id,
+            )
+            raise
         except Exception:
             logger.exception("Agent execution failed")
             # KPI timer already recorded status="error" on exception
         finally:
             # Count the exchange outcome
+            exchange_status = (
+                "cancelled"
+                if had_cancelled
+                else (
+                    "error" if had_error else ("ok" if saw_final_assistant else "error")
+                )
+            )
+            exchange_dims: Dict[str, str | None] = {
+                "agent_id": agent_name,
+                "user_id": user.uid,
+                "session_id": session.id,
+                "exchange_id": exchange_id,
+                "status": exchange_status,
+            }
+            if exchange_status in {"error", "cancelled"} and error_code:
+                exchange_dims["error_code"] = error_code
             self.kpi.count(
                 "chat.exchange_total",
                 1,
-                dims={
-                    "agent_id": agent_name,
-                    "user_id": user.uid,
-                    "session_id": session.id,
-                    "exchange_id": exchange_id,
-                    "status": "ok" if saw_final_assistant else "error",
-                },
+                dims=exchange_dims,
                 actor=actor,
             )
 
@@ -317,6 +356,13 @@ class SessionOrchestrator:
                 session.id, user, Action.READ
             ):
                 continue
+
+            # Retrieve all agents
+            history = self.get_session_history(session.id, user)
+            agents = {
+                msg.metadata.agent_name for msg in history if msg.metadata.agent_name
+            }
+
             files_names: list[str] = []
             attachments: list[AttachmentRef] = []
             if self.attachments_store:
@@ -334,6 +380,7 @@ class SessionOrchestrator:
             enriched.append(
                 SessionWithFiles(
                     **session.model_dump(),
+                    agents=agents,
                     file_names=files_names,
                     attachments=attachments,
                 )
@@ -372,28 +419,78 @@ class SessionOrchestrator:
         If a session was created with a placeholder title (e.g., via create_empty_session),
         generate a better one from the user's first question.
         """
+
+        def _sanitize_title(raw: str) -> str:
+            cleaned = raw.replace("\n", " ").strip()
+            cleaned = re.sub(r"\s+", " ", cleaned)
+            cleaned = re.sub(r"[^\w\s'-]", "", cleaned)
+            words = cleaned.split()
+            if len(words) > 5:
+                cleaned = " ".join(words[:5])
+            return cleaned[:80].strip()
+
         try:
             if session.title and session.title.strip().lower() != "new conversation":
                 return
-            new_title: str = (
-                get_default_model()
-                .invoke(
-                    "Give a short, clear title for this conversation based on the user's question. "
-                    "No markdown formatiing. Return a few keywords only. Question: "
-                    + prompt
-                )
-                .content
+            prompt_text = (
+                "Give a short, clear title for this conversation based on the user's question. "
+                "Summarize the user intent in 3 to 5 words. "
+                "Avoid special characters and punctuation. "
+                "Return ONLY the title (no prefix), keep the same language as the question, and do not translate.\n\n"
+                "User question: " + prompt
             )
+            model = get_default_model()
+            resp = model.invoke(prompt_text)
+            raw_title = resp.content if hasattr(resp, "content") else str(resp)
+            logger.debug(
+                "[SESSIONS] Title generation raw response model=%s prompt=%s raw=%s",
+                getattr(model, "model", None) or type(model).__name__,
+                prompt_text,
+                raw_title,
+            )
+            new_title = _sanitize_title(raw_title)
+            if not new_title:
+                raise ValueError("Empty title from model")
             session.title = new_title
         except Exception:
-            logger.debug("[SESSIONS] Failed to refresh session title", exc_info=True)
+            # Fallback: first few words of the prompt
+            logger.warning("[SESSIONS] Failed to refresh session title", exc_info=True)
+            words = prompt.strip().split()
+            session.title = " ".join(words[:6]) if words else "New conversation"
 
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
     def get_session_history(
-        self, session_id: str, user: KeycloakUser
+        self,
+        session_id: str,
+        user: KeycloakUser,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> List[ChatMessage]:
         self._authorize_user_action_on_session(session_id, user, Action.READ)
-        return self.history_store.get(session_id) or []
+        history = self.history_store.get(session_id) or []
+        if limit is None:
+            return history
+        total = len(history)
+        end = max(0, total - offset)
+        start = max(0, end - limit)
+        return history[start:end]
+
+    @authorize(action=Action.READ, resource=Resource.SESSIONS)
+    def get_session_message(
+        self, session_id: str, rank: int, user: KeycloakUser
+    ) -> ChatMessage:
+        self._authorize_user_action_on_session(session_id, user, Action.READ)
+        history = self.history_store.get(session_id) or []
+        for msg in history:
+            if msg.rank == rank:
+                return msg
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "message_not_found",
+                "message": f"Message rank {rank} not found in session {session_id}.",
+            },
+        )
 
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
     def get_session_preferences(
@@ -632,11 +729,7 @@ class SessionOrchestrator:
                     "message": "Attachment uploads are disabled (no attachment store configured).",
                 },
             )
-        supported_suffixes = {
-            ".pdf",
-            ".docx",
-            ".csv",
-        }
+        supported_suffixes = {".pdf", ".docx", ".csv", ".md"}
         # Enforce per-user attachment count limit
         max_files_user = self.max_attached_files_per_user
         try:

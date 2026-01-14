@@ -1773,7 +1773,9 @@ export type FilterTerm = {
     | "dims.file_type"
     | "dims.http_status"
     | "dims.error_code"
-    | "dims.model";
+    | "dims.model"
+    | "dims.step"
+    | "dims.agent_step";
   value: string;
 };
 export type SelectMetric = {
@@ -1800,6 +1802,7 @@ export type KpiQuery = {
   /** ISO or 'now-24h' */
   since: string;
   until?: string | null;
+  view_global?: boolean;
   filters?: FilterTerm[];
   select: SelectMetric[];
   group_by?: (
@@ -1808,6 +1811,8 @@ export type KpiQuery = {
     | "dims.doc_source"
     | "dims.user_id"
     | "dims.agent_id"
+    | "dims.step"
+    | "dims.agent_step"
     | "dims.tool_name"
     | "dims.model"
     | "dims.http_status"

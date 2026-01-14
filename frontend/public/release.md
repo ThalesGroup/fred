@@ -1,10 +1,45 @@
-- **v1.1.2** — 2026-01-08
+**v1.2.0** — 2026-01-10
 
-  - **Summary**
-    - Dynamic ReAct agents now support source citations, and agent code inspection works for all agents (#950).
-  - **Features**
-    - Add source citation support to dynamic ReAct agents (#950)
-    - Fix agent code inspection to display source for all agents (#950)
+This release brings in a major UI revamp. This revamp has been proposed and designed
+by the Prism team to make Fred evolve towards a state-of-the-art agentic orchestration platform.
+
+- **Improvements**
+
+  - Side bar now integrated into the main left side bar. (#976)
+
+---
+
+**v1.1.3** — 2026-01-09
+
+- **Summary**
+
+  This release brings in kpi, language and logging improvments to facilitate operations.
+  It also leverage the rebac feature to start proposing a clean sresource sharing policy.
+  Please not the rebac coverage is not yet complete and will be fully delivered in a future
+  major release.
+
+- **Improvements**
+
+  - reduce log verbosity (#963)
+  - log and update the vector search mapping for attachements required fields (#964)
+  - take into account frontend language (#962)
+
+- **Bug fixes**
+  - fixed the missing attachement file number in the UI (#966)
+  - fixed the error preview attached files from the 'My Files' area (#965)
+  - removed the display button fro user files list (#969)
+  - prevent viewer to share libraries in turn with others (#972)
+
+---
+
+**v1.1.2** — 2026-01-08
+
+- **Summary**
+  - Dynamic ReAct agents now support source citations, and agent code inspection works for all agents (#950).
+- **Features**
+
+  - Add source citation support to dynamic ReAct agents (#950)
+  - Fix agent code inspection to display source for all agents (#950)
 
 - **v1.1.1** — 2026-01-07
 

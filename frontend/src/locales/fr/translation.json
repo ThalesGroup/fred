@@ -13,6 +13,7 @@
     "refresh": "Rafraîchir",
     "cancel": "Annuler",
     "save": "Enregistrer",
+    "create": "Créer",
     "invalidUrl": "URL invalide",
     "preview": "Aperçu",
     "uploading": "Téléchargement en cours...",
@@ -113,12 +114,12 @@
     "facts": "Faits",
     "audit": "Audit",
     "optimize": "Optimiser",
-    "chat": "Discussion",
+    "chat": "Conversations",
     "monitoring": "Supervision",
     "laboratory": "Laboratoire",
     "knowledge": "Ressources",
-    "mcp": "Hub MCP",
-    "agent": "Hub Agent",
+    "mcp": "Outils",
+    "agent": "Agents",
     "release_notes": "Notes de version",
     "workspaces": "Espaces de travail",
     "account": "Profil",
@@ -136,7 +137,6 @@
       "agent": "Voir les agents",
       "release_notes": "Consulter les dernières notes de version",
       "workspaces": "Voir les espaces",
-      "account": "Voir votre profil",
       "selectCluster": "Veuillez d'abord sélectionner un cluster",
       "monitoring_kpi": "Vue d'ensemble des Kpis",
       "monitoring_logs": "Console de logs",
@@ -158,6 +158,8 @@
     "monitoring_runtime": "Runtime",
     "monitoring_processors": "Processeurs",
     "monitoring_data": "Données",
+    "allAgents": "Tous les agents",
+    "deleteSessionFailed": "La supression de la conversation a échoué",
     "monitoring_graph": "Graphe"
   },
   "chat": {
@@ -175,7 +177,10 @@
     },
     "message": {
       "waiting": "En attente de réponse…",
-      "toolResult": "Résultat de l'outil"
+      "toolResult": "Résultat de l'outil",
+      "showMore": "Afficher plus",
+      "showLess": "Afficher moins",
+      "loadError": "Échec du chargement du message complet"
     },
     "actions": {
       "copyMessage": "Copier le message",
@@ -314,7 +319,7 @@
     "noMcpServers": "Aucun serveur MCP disponible pour le moment."
   },
   "agentHub": {
-    "title": "Centre des Agents",
+    "title": "Vos agents",
     "confirmDeleteTitle": "Confirmer la suppression",
     "confirmDeleteMessage": "Supprimer cet agent ? Cette action est irréversible.",
     "description": "Explorez et gérez les agents IA disponibles",
@@ -397,7 +402,7 @@
     "a2aExamples": "Exemples"
   },
   "mcpHub": {
-    "title": "Hub MCP",
+    "title": "Outils",
     "subtitle": "Déclarez et modifiez les serveurs MCP accessibles aux agents.",
     "addButton": "Ajouter un serveur MCP",
     "restoreButton": "Restaurer depuis la configuration",
@@ -596,11 +601,12 @@
     }
   },
   "profile": {
-    "title": "Profil utilisateur",
+    "title": "Paramètres",
     "description": "Gérez vos préférences utilisateur et vos profils de chat",
     "menu": {
       "account": "Compte",
-      "token": "Jeton"
+      "token": "Jeton",
+      "releaseNotes": "Notes de version"
     },
     "noUser": "Aucun utilisateur connecté",
     "login": "Se connecter",
@@ -615,7 +621,18 @@
       "title": "Informations du token",
       "none": "Aucun token disponible"
     },
-    "language": "Langue de l'interface"
+    "language": "Langue de l'interface",
+    "theme": {
+      "title": "Thème",
+      "light": "Clair",
+      "system": "Système",
+      "dark": "Sombre"
+    },
+    "links": {
+      "title": "Liens",
+      "website": "Site web",
+      "repo": "Dépot Github"
+    }
   },
   "knowledge": {
     "title": "Ressources",

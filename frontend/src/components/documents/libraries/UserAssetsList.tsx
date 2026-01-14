@@ -3,7 +3,6 @@
 
 import { InfoOutlined } from "@mui/icons-material";
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
-import VisibilityIcon from "@mui/icons-material/Visibility";
 import {
   Box,
   Button,
@@ -38,7 +37,7 @@ export const UserAssetsList: React.FC<Props> = ({ tagId }) => {
   const [docs, setDocs] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [browseByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
-  const { preview, previewPdf, download } = useDocumentCommands();
+  const { download } = useDocumentCommands();
 
   React.useEffect(() => {
     const run = async () => {
@@ -92,17 +91,16 @@ export const UserAssetsList: React.FC<Props> = ({ tagId }) => {
               ? dayjs(doc.source.date_added_to_kb).format("YYYY-MM-DD HH:mm")
               : "—";
             const size = formatSize(doc.file?.file_size_bytes);
-            const isPdf = (name || "").toLowerCase().endsWith(".pdf");
             return (
-              <Box
-                key={doc.identity.document_uid}
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: "minmax(0,2fr) auto auto auto",
-                  alignItems: "center",
-                  gap: 1,
-                  px: 1,
-                  py: 1,
+                <Box
+                  key={doc.identity.document_uid}
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0,2fr) auto",
+                    alignItems: "center",
+                    gap: 1,
+                    px: 1,
+                    py: 1,
                   border: "1px solid",
                   borderColor: "divider",
                   borderRadius: 1,
@@ -120,14 +118,6 @@ export const UserAssetsList: React.FC<Props> = ({ tagId }) => {
                   </Box>
                 </Box>
                 <Box display="flex" gap={1} justifyContent="flex-end">
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    startIcon={<VisibilityIcon />}
-                    onClick={() => (isPdf ? previewPdf(doc) : preview(doc))}
-                  >
-                    View
-                  </Button>
                   <Button
                     size="small"
                     variant="contained"

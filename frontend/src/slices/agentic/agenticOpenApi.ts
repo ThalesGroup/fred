@@ -151,7 +151,27 @@ const injectedRtkApi = api.injectEndpoints({
       GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiResponse,
       GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/chatbot/session/${queryArg.sessionId}/history` }),
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/session/${queryArg.sessionId}/history`,
+        params: {
+          limit: queryArg.limit,
+          offset: queryArg.offset,
+          text_limit: queryArg.textLimit,
+          text_offset: queryArg.textOffset,
+        },
+      }),
+    }),
+    getSessionMessageAgenticV1ChatbotSessionSessionIdMessageRankGet: build.query<
+      GetSessionMessageAgenticV1ChatbotSessionSessionIdMessageRankGetApiResponse,
+      GetSessionMessageAgenticV1ChatbotSessionSessionIdMessageRankGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/session/${queryArg.sessionId}/message/${queryArg.rank}`,
+        params: {
+          text_limit: queryArg.textLimit,
+          text_offset: queryArg.textOffset,
+        },
+      }),
     }),
     getSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGet: build.query<
       GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiResponse,
@@ -350,6 +370,18 @@ export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiRespon
   /** status 200 Successful Response */ ChatMessage2[];
 export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiArg = {
   sessionId: string;
+  limit?: number | null;
+  offset?: number;
+  textLimit?: number | null;
+  textOffset?: number;
+};
+export type GetSessionMessageAgenticV1ChatbotSessionSessionIdMessageRankGetApiResponse =
+  /** status 200 Successful Response */ ChatMessage2;
+export type GetSessionMessageAgenticV1ChatbotSessionSessionIdMessageRankGetApiArg = {
+  sessionId: string;
+  rank: number;
+  textLimit?: number | null;
+  textOffset?: number;
 };
 export type GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiResponse =
   /** status 200 Successful Response */ {
@@ -675,7 +707,9 @@ export type VectorSearchHit = {
 };
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "cancelled" | "other";
 export type RuntimeContext = {
+  language?: string | null;
   session_id?: string | null;
+  user_id?: string | null;
   selected_document_libraries_ids?: string[] | null;
   selected_chat_context_ids?: string[] | null;
   search_policy?: string | null;
@@ -776,6 +810,7 @@ export type SessionWithFiles = {
   preferences?: {
     [key: string]: any;
   } | null;
+  agents: string[];
   file_names?: string[];
   attachments?: AttachmentRef[];
 };
@@ -1024,6 +1059,8 @@ export const {
   useCreateSessionAgenticV1ChatbotSessionPostMutation,
   useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
+  useGetSessionMessageAgenticV1ChatbotSessionSessionIdMessageRankGetQuery,
+  useLazyGetSessionMessageAgenticV1ChatbotSessionSessionIdMessageRankGetQuery,
   useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
   useLazyGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
   useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation,

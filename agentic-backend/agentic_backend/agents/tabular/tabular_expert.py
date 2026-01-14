@@ -153,14 +153,43 @@ class Tessa(AgentFlow):
             lines.append(f"- Database: {db_name}")
 
             for table in tables:
+                table = self._maybe_parse_json(table)
+                if not isinstance(table, dict):
+                    lines.append(f"  • Table: {table}")
+                    continue
+
                 table_name = table.get("table_name", "unknown")
                 columns = table.get("columns", [])
                 row_count = table.get("row_count", "unknown")
 
                 lines.append(f"  • Table: {table_name}  (rows: {row_count})")
+                # Normalize columns so non-iterables don't crash the prompt formatter.
+                if isinstance(columns, int):
+                    lines.append(f"      Columns: {columns} columns")
+                    continue
+
+                col_items: list[dict[str, Any]] = []
+                if isinstance(columns, dict):
+                    col_items = [
+                        {"name": name, "dtype": dtype}
+                        for name, dtype in columns.items()
+                    ]
+                elif isinstance(columns, list):
+                    for col in columns:
+                        if isinstance(col, dict):
+                            col_items.append(col)
+                        elif isinstance(col, str):
+                            col_items.append({"name": col, "dtype": "unknown"})
+                        else:
+                            col_items.append({"name": str(col), "dtype": "unknown"})
+
+                if not col_items:
+                    lines.append("      Columns: unknown")
+                    continue
+
                 lines.append("      Columns:")
 
-                for col in columns:
+                for col in col_items:
                     col_name = col.get("name", "unknown")
                     col_type = col.get("dtype", "unknown")
                     lines.append(f"        - {col_name}: {col_type}")
