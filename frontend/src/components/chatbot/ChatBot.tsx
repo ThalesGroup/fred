@@ -57,6 +57,8 @@ import { MessagesArea } from "./MessagesArea.tsx";
 import { ChatContextPickerPanel } from "./settings/ChatContextPickerPanel.tsx";
 import UserInput, { UserInputContent } from "./user_input/UserInput.tsx";
 
+const HISTORY_TEXT_LIMIT = 1200;
+
 export interface ChatBotError {
   session_id: string | null;
   content: string;
@@ -145,7 +147,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     refetch: refetchHistory,
     isFetching: isHistoryFetching,
   } = useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery(
-    { sessionId: sessionId || "" },
+    { sessionId: sessionId || "", textLimit: HISTORY_TEXT_LIMIT, textOffset: 0 },
     {
       skip: !sessionId,
       // Make the UI stateless/robust: always refresh when switching sessions (even if cached).
@@ -376,7 +378,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       webSocketRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // WebSocket is session-agnostic; persists across all conversations
+  }, []); // mount/unmount
 
   const [userInputContext, setUserInputContext] = useState<any>(null);
   const handleDraftContextChange = useCallback(
@@ -829,7 +831,17 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
                 minHeight: 0,
                 overflowY: "auto",
                 overflowX: "hidden",
-                scrollbarWidth: "none",
+                scrollbarWidth: "thin",
+                "&::-webkit-scrollbar": {
+                  width: "10px",
+                },
+                "&::-webkit-scrollbar-thumb": {
+                  backgroundColor: theme.palette.divider,
+                  borderRadius: "8px",
+                },
+                "&::-webkit-scrollbar-track": {
+                  backgroundColor: "transparent",
+                },
                 wordBreak: "break-word",
                 alignContent: "center",
               }}

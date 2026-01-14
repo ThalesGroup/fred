@@ -15,7 +15,7 @@
 
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import PreviewIcon from "@mui/icons-material/Preview";
-import { Box, Chip, Grid2, IconButton, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Chip, Grid2, IconButton, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -27,19 +27,17 @@ import { AnyAgent } from "../../common/agent.ts";
 import { AgentChipMini } from "../../common/AgentChip.tsx";
 import { usePdfDocumentViewer } from "../../common/usePdfDocumentViewer";
 import type { GeoPart, LinkPart } from "../../slices/agentic/agenticOpenApi.ts";
-import {
-  ChatMessage,
-  usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
-} from "../../slices/agentic/agenticOpenApi.ts";
+import { ChatMessage, usePostFeedbackAgenticV1ChatbotFeedbackPostMutation } from "../../slices/agentic/agenticOpenApi.ts";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
 import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
 import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
 import { useToast } from "../ToastProvider.tsx";
 import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 import GeoMapRenderer from "./GeoMapRenderer.tsx";
-import { MessagePart, toCopyText, toMarkdown } from "./messageParts.ts";
+import { MessagePart, toCopyText, toMarkdown, toPlainText } from "./messageParts.ts";
 import MessageRuntimeContextHeader from "./MessageRuntimeContextHeader.tsx";
 import { useAssetDownloader } from "./useAssetDownloader.tsx";
+import { useMessageContentPagination } from "./useMessageContentPagination.tsx";
 
 export default function MessageCard({
   message,
@@ -107,14 +105,36 @@ export default function MessageCard({
     navigator.clipboard.writeText(text).catch(() => {});
   };
 
-  const extras = getExtras(message);
-  const { downloadLink } = useAssetDownloader();
-  const isCall = isToolCall(message);
-  const isResult = isToolResult(message);
+  const onLoadError = (err: unknown) => {
+    showError({
+      summary: t("chat.message.loadError", "Failed to load full message"),
+      detail: err instanceof Error ? err.message : String(err),
+    });
+  };
 
-  // Build the markdown content once (optionally filtering out text parts)
-  const { mdContent, downloadLinkPart, viewLinkPart, geoPart } = useMemo(() => {
-    const allParts = message.parts || [];
+  const textPagination = (message.metadata?.extras as any)?.text_pagination as
+    | { offset?: number; limit?: number; total?: number; has_more?: boolean }
+    | undefined;
+  const paginationHasMore = Boolean(textPagination?.has_more);
+  const {
+    renderMessage,
+    isExpanded,
+    isLoadingFullText,
+    toggleExpanded,
+  } = useMessageContentPagination({
+    message,
+    paginationHasMore,
+    onError: onLoadError,
+  });
+
+  const extras = getExtras(renderMessage);
+  const { downloadLink } = useAssetDownloader();
+  const isCall = isToolCall(renderMessage);
+  const isResult = isToolResult(renderMessage);
+
+  // Build the message parts once (optionally filtering out text parts)
+  const { processedParts, downloadLinkPart, viewLinkPart, geoPart } = useMemo(() => {
+    const allParts = renderMessage.parts || [];
     let linkPart: LinkPart | undefined = undefined;
     let viewPart: LinkPart | undefined = undefined;
     let mapPart: GeoPart | undefined = undefined;
@@ -149,12 +169,34 @@ export default function MessageCard({
     }) as MessagePart[];
 
     return {
-      mdContent: toMarkdown(processedParts),
+      processedParts,
       downloadLinkPart: linkPart,
       viewLinkPart: viewPart,
       geoPart: mapPart,
     };
-  }, [message.parts, suppressText]);
+  }, [renderMessage.parts, suppressText]);
+
+  const plainText = useMemo(() => toPlainText(processedParts), [processedParts]);
+
+  const collapsedCharThreshold = 1200;
+  const collapsedMaxHeight = 320;
+  const effectiveLimit =
+    typeof textPagination?.limit === "number" ? textPagination.limit : collapsedCharThreshold;
+  const shouldCollapse =
+    !suppressText && side === "right" && (paginationHasMore || plainText.trim().length > effectiveLimit);
+  const isCollapsed = shouldCollapse && !isExpanded;
+  const bubbleBackground =
+    side === "right" ? theme.palette.background.paper : theme.palette.background.default;
+  const mdContent = useMemo(() => toMarkdown(processedParts), [processedParts]);
+  const toggleButtonSx = {
+    minWidth: "unset",
+    px: 1,
+    textTransform: "none",
+    borderRadius: 999,
+  };
+  const toggleEdgeSx = side === "right" ? { right: 8 } : { left: 8 };
+  const showLessSticky = shouldCollapse && isExpanded;
+
 
   return (
     <>
@@ -173,19 +215,19 @@ export default function MessageCard({
             <>
               <Grid2>
                 <Box
-                  onMouseEnter={() => setBubbleHover(true)}
-                  onMouseLeave={() => setBubbleHover(false)}
-                  sx={{
-                    display: "flex",
-                    flexDirection: "column",
-                    backgroundColor:
-                      side === "right" ? theme.palette.background.paper : theme.palette.background.default,
-                    padding: side === "right" ? "0.8em 16px 0 16px" : "0.8em 0 0 0",
-                    marginTop: side === "right" ? 1 : 0,
-                    borderRadius: 3,
-                    wordBreak: "break-word",
-                  }}
-                >
+                    onMouseEnter={() => setBubbleHover(true)}
+                    onMouseLeave={() => setBubbleHover(false)}
+                    sx={{
+                      display: "flex",
+                      flexDirection: "column",
+                      backgroundColor:
+                        side === "right" ? theme.palette.background.paper : theme.palette.background.default,
+                      padding: side === "right" ? "0.8em 16px 0 16px" : "0.8em 0 0 0",
+                      marginTop: side === "right" ? 1 : 0,
+                      borderRadius: 3,
+                      wordBreak: "break-word",
+                    }}
+                  >
                   {/* Header: task chips + indicators */}
                   {(showMetaChips || isCall || isResult) && (
                     <Box display="flex" alignItems="center" gap={1} px={side === "right" ? 0 : 1} pb={0.5}>
@@ -231,7 +273,7 @@ export default function MessageCard({
                       {/* Runtime context header (indicators + popover trigger) */}
                       {isAssistant && (
                         <MessageRuntimeContextHeader
-                          message={message}
+                          message={renderMessage}
                           visible={bubbleHover}
                           libraryNameById={libraryNameById}
                           chatContextNameById={chatContextNameById}
@@ -241,34 +283,111 @@ export default function MessageCard({
                   )}
 
                   {/* tool_call compact args */}
-                  {isCall && message.parts?.[0]?.type === "tool_call" && (
+                  {isCall && renderMessage.parts?.[0]?.type === "tool_call" && (
                     <Box px={side === "right" ? 0 : 1} pb={0.5} sx={{ opacity: 0.8 }}>
                       <Typography fontSize=".8rem">
-                        <b>{(message.parts[0] as any).name}</b>
+                        <b>{(renderMessage.parts[0] as any).name}</b>
                         {": "}
                         <code style={{ whiteSpace: "pre-wrap" }}>
-                          {JSON.stringify((message.parts[0] as any).args ?? {}, null, 0)}
+                          {JSON.stringify((renderMessage.parts[0] as any).args ?? {}, null, 0)}
                         </code>
                       </Typography>
                     </Box>
                   )}
 
                   {/* Main content */}
-                  <Box px={side === "right" ? 0 : 1} pb={0.5}>
-                    <MarkdownRenderer
-                      content={mdContent}
-                      size="medium"
-                      citations={{
-                        getUidForNumber: (n) => {
-                          const src = (message.metadata?.sources as any[]) || [];
-                          const ordered = [...src].sort((a, b) => (a?.rank ?? 1e9) - (b?.rank ?? 1e9));
-                          const hit = ordered[n - 1];
-                          return hit?.uid ?? null;
-                        },
-                        onHover: onCitationHover,
-                        onClick: onCitationClick,
+                  <Box
+                    px={side === "right" ? 0 : 1}
+                    pb={0.5}
+                    sx={{ display: "flex", flexDirection: "column", position: "relative" }}
+                  >
+                    {showLessSticky && (
+                      <Box
+                        sx={{
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 1,
+                          height: 0,
+                          overflow: "visible",
+                        }}
+                      >
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="primary"
+                          onClick={toggleExpanded}
+                          aria-expanded={isExpanded}
+                          disabled={isLoadingFullText}
+                          sx={{
+                            position: "absolute",
+                            top: 0,
+                            ...toggleEdgeSx,
+                            ...toggleButtonSx,
+                          }}
+                        >
+                          {t("chat.message.showLess")}
+                        </Button>
+                      </Box>
+                    )}
+                    <Box
+                      sx={{
+                        position: "relative",
+                        ...(isCollapsed && {
+                          maxHeight: collapsedMaxHeight,
+                          overflow: "hidden",
+                          "&::after": {
+                            content: "\"\"",
+                            position: "absolute",
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            height: 48,
+                            background: `linear-gradient(transparent, ${bubbleBackground})`,
+                          },
+                        }),
                       }}
-                    />
+                    >
+                      <MarkdownRenderer
+                        content={mdContent}
+                        size="medium"
+                        citations={{
+                          getUidForNumber: (n) => {
+                            const src = (renderMessage.metadata?.sources as any[]) || [];
+                            const ordered = [...src].sort((a, b) => (a?.rank ?? 1e9) - (b?.rank ?? 1e9));
+                            const hit = ordered[n - 1];
+                            return hit?.uid ?? null;
+                          },
+                          onHover: onCitationHover,
+                          onClick: onCitationClick,
+                        }}
+                      />
+                    </Box>
+                    {shouldCollapse && !isExpanded && (
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          right: 8,
+                          bottom: 8,
+                          zIndex: 1,
+                        }}
+                      >
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="primary"
+                          onClick={toggleExpanded}
+                          aria-expanded={isExpanded}
+                          disabled={isLoadingFullText}
+                          sx={{
+                            ...toggleButtonSx,
+                            ...toggleEdgeSx,
+                            bottom: 8,
+                          }}
+                        >
+                          {t("chat.message.showMore")}
+                        </Button>
+                      </Box>
+                    )}
                   </Box>
                   {geoPart && (
                     <Box px={side === "right" ? 0 : 1} pt={0.5} pb={1}>
@@ -325,7 +444,7 @@ export default function MessageCard({
                   {enableCopy && (
                     <IconButton
                       size="small"
-                      onClick={() => copyToClipboard(toCopyText(message.parts))}
+                      onClick={() => copyToClipboard(toCopyText(renderMessage.parts))}
                       aria-label={t("chat.actions.copyMessage")}
                     >
                       <ContentCopyIcon fontSize="medium" color="inherit" />
@@ -342,13 +461,13 @@ export default function MessageCard({
                     </IconButton>
                   )}
 
-                  {message.metadata?.token_usage && (
+                  {renderMessage.metadata?.token_usage && (
                     <Tooltip
-                      title={`In: ${message.metadata.token_usage?.input_tokens ?? 0} · Out: ${message.metadata.token_usage?.output_tokens ?? 0}`}
+                      title={`In: ${renderMessage.metadata.token_usage?.input_tokens ?? 0} · Out: ${renderMessage.metadata.token_usage?.output_tokens ?? 0}`}
                       placement="top"
                     >
                       <Typography color={theme.palette.text.secondary} fontSize=".7rem" sx={{ wordBreak: "normal" }}>
-                        {message.metadata.token_usage?.output_tokens ?? 0} tokens
+                        {renderMessage.metadata.token_usage?.output_tokens ?? 0} tokens
                       </Typography>
                     </Tooltip>
                   )}

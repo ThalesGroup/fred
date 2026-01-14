@@ -177,7 +177,10 @@
     },
     "message": {
       "waiting": "En attente de réponse…",
-      "toolResult": "Résultat de l'outil"
+      "toolResult": "Résultat de l'outil",
+      "showMore": "Afficher plus",
+      "showLess": "Afficher moins",
+      "loadError": "Échec du chargement du message complet"
     },
     "actions": {
       "copyMessage": "Copier le message",

@@ -460,10 +460,37 @@ class SessionOrchestrator:
 
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
     def get_session_history(
-        self, session_id: str, user: KeycloakUser
+        self,
+        session_id: str,
+        user: KeycloakUser,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> List[ChatMessage]:
         self._authorize_user_action_on_session(session_id, user, Action.READ)
-        return self.history_store.get(session_id) or []
+        history = self.history_store.get(session_id) or []
+        if limit is None:
+            return history
+        total = len(history)
+        end = max(0, total - offset)
+        start = max(0, end - limit)
+        return history[start:end]
+
+    @authorize(action=Action.READ, resource=Resource.SESSIONS)
+    def get_session_message(
+        self, session_id: str, rank: int, user: KeycloakUser
+    ) -> ChatMessage:
+        self._authorize_user_action_on_session(session_id, user, Action.READ)
+        history = self.history_store.get(session_id) or []
+        for msg in history:
+            if msg.rank == rank:
+                return msg
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "message_not_found",
+                "message": f"Message rank {rank} not found in session {session_id}.",
+            },
+        )
 
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
     def get_session_preferences(
