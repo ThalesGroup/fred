@@ -1,8 +1,11 @@
 import logging
+import os
 
 from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
+from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 from langgraph.graph.state import CompiledStateGraph
 
 from agentic_backend.application_context import get_default_chat_model
@@ -33,7 +36,7 @@ TUNING = AgentTuning(
             key="prompts.system",
             type="prompt",
             title="System Prompt",
-            description="You extract requirements and user stories from project documents",  # to fill a Jira board and build Zephyr tests.",
+            description="You extract requirements, user stories and build tests from project documents",  # to fill a Jira board and build Zephyr tests.",
             required=True,
             default="""
 Tu es un Business Analyst et Product Owner expert avec accès à des outils spécialisés.
@@ -164,6 +167,18 @@ class JiraAgent(AgentFlow):
         self.generated_requirements = None
         self.generated_user_stories = None
         self.generated_tests = None
+        # Check if Langfuse is configured
+        self.langfuse_enabled = bool(
+            os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY")
+        )
+        if self.langfuse_enabled:
+            logger.info("[JiraAgent] Langfuse tracing enabled")
+
+    def _get_langfuse_handler(self) -> LangfuseCallbackHandler | None:
+        """Create a Langfuse callback handler for tracing LLM calls."""
+        if not self.langfuse_enabled:
+            return None
+        return LangfuseCallbackHandler()
 
     async def aclose(self):
         await self.mcp.aclose()
@@ -217,7 +232,13 @@ Format attendu pour chaque exigence:
                 )
             ]
 
-            response = await model.ainvoke(messages)
+            # Add Langfuse tracing if enabled
+            langfuse_handler = agent_self._get_langfuse_handler()
+            config: RunnableConfig = (
+                {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+            )
+
+            response = await model.ainvoke(messages, config=config)
 
             # Store the full output
             content = response.content
@@ -327,7 +348,13 @@ Exigences à respecter:
                 )
             ]
 
-            response = await model.ainvoke(messages)
+            # Add Langfuse tracing if enabled
+            langfuse_handler = agent_self._get_langfuse_handler()
+            config: RunnableConfig = (
+                {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+            )
+
+            response = await model.ainvoke(messages, config=config)
 
             # Store the full output
             content = response.content
@@ -407,12 +434,18 @@ Pour chaque scénario :
                 SystemMessage(
                     content=tests_prompt.format(
                         USER_STORIES=user_stories,
-                        JDD=jdd if jdd else "Aucun JDD fourni"
+                        JDD=jdd if jdd else "Aucun JDD fourni",
                     )
                 )
             ]
 
-            response = await model.ainvoke(messages)
+            # Add Langfuse tracing if enabled
+            langfuse_handler = agent_self._get_langfuse_handler()
+            config: RunnableConfig = (
+                {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+            )
+
+            response = await model.ainvoke(messages, config=config)
 
             # Store the full output
             content = response.content
@@ -442,7 +475,9 @@ Pour chaque scénario :
 
         # After streaming is complete, if we have stored outputs, send them as additional messages
         if final_event is not None and (
-            self.generated_requirements or self.generated_user_stories or self.generated_tests
+            self.generated_requirements
+            or self.generated_user_stories
+            or self.generated_tests
         ):
             # Build the additional content
             additional_content = "\n\n---\n\n"
@@ -480,6 +515,11 @@ Pour chaque scénario :
         return create_agent(
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
-            tools=[requirements_tool, user_stories_tool, tests_tool, *self.mcp.get_tools()],
+            tools=[
+                requirements_tool,
+                user_stories_tool,
+                tests_tool,
+                *self.mcp.get_tools(),
+            ],
             checkpointer=self.streaming_memory,
         )
