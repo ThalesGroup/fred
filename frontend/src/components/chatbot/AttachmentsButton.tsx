@@ -14,7 +14,7 @@
 
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
-import { Badge, Box, IconButton, Tooltip } from "@mui/material";
+import { Badge, Box, IconButton, Stack, Tooltip } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 const ATTACH_PANEL_W = { xs: 320, sm: 340 };
@@ -27,6 +27,8 @@ export interface AttachmentsButtonProps {
   setupCount?: number;
   showSetupButton?: boolean;
   onOpenSetup?: (anchorEl: HTMLElement) => void;
+  topSlot?: React.ReactNode;
+  bottomSlot?: React.ReactNode;
 }
 
 export const AttachmentsButton = ({
@@ -37,6 +39,8 @@ export const AttachmentsButton = ({
   setupCount,
   showSetupButton,
   onOpenSetup,
+  topSlot,
+  bottomSlot,
 }: AttachmentsButtonProps) => {
   const { t } = useTranslation();
   const baseRight = attachmentsPanelOpen
@@ -55,28 +59,40 @@ export const AttachmentsButton = ({
         right: baseRight,
         zIndex: 10,
         display: "flex",
-        gap: 0.5,
       }}
     >
-      <AttachmentsSetupButton
-        showSetupButton={showSetupButton}
-        setupCount={setupCount}
-        onOpenSetup={onOpenSetup}
-      />
-      {showAttachmentsButton && (
-        <Tooltip title={t("chatbot.attachments.drawerTitle", "Attachments")}>
-          <IconButton color={attachmentsPanelOpen ? "primary" : "default"} onClick={onToggle}>
-            <Badge
-              color="primary"
-              badgeContent={attachmentCount > 0 ? attachmentCount : undefined}
-              overlap="circular"
-              anchorOrigin={{ vertical: "top", horizontal: "right" }}
+      <Stack direction="column" alignItems="flex-end" spacing={0.5}>
+        {topSlot}
+        <AttachmentsSetupButton
+          showSetupButton={showSetupButton}
+          setupCount={setupCount}
+          onOpenSetup={onOpenSetup}
+        />
+        {showAttachmentsButton && (
+          <Tooltip
+            title={t("chatbot.attachments.drawerTitle", "Attachments")}
+            placement="left"
+            slotProps={{ popper: { sx: { backdropFilter: "none", WebkitBackdropFilter: "none" } } }}
+          >
+            <IconButton
+              size="small"
+              color={attachmentsPanelOpen ? "primary" : "default"}
+              onClick={onToggle}
+              aria-label="conversation-attachments"
             >
-              <AttachFileIcon />
-            </Badge>
-          </IconButton>
-        </Tooltip>
-      )}
+              <Badge
+                color="primary"
+                badgeContent={attachmentCount > 0 ? attachmentCount : undefined}
+                overlap="circular"
+                anchorOrigin={{ vertical: "top", horizontal: "right" }}
+              >
+                <AttachFileIcon fontSize="small" />
+              </Badge>
+            </IconButton>
+          </Tooltip>
+        )}
+        {bottomSlot}
+      </Stack>
     </Box>
   );
 };
@@ -90,8 +106,13 @@ const AttachmentsSetupButton = ({
   if (!showSetupButton) return null;
 
   return (
-    <Tooltip title={t("knowledge.viewSelector.libraries", "Libraries")}>
+    <Tooltip
+      title={t("knowledge.viewSelector.libraries", "Libraries")}
+      placement="left"
+      slotProps={{ popper: { sx: { backdropFilter: "none", WebkitBackdropFilter: "none" } } }}
+    >
       <IconButton
+        size="small"
         onClick={(e) => onOpenSetup?.(e.currentTarget)}
         aria-label="conversation-libraries"
         disabled={!onOpenSetup}
@@ -102,7 +123,7 @@ const AttachmentsSetupButton = ({
           overlap="circular"
           anchorOrigin={{ vertical: "top", horizontal: "right" }}
         >
-          <FolderOutlinedIcon />
+          <FolderOutlinedIcon fontSize="small" />
         </Badge>
       </IconButton>
     </Tooltip>

@@ -24,8 +24,7 @@
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import StopIcon from "@mui/icons-material/Stop";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
-import { skipToken } from "@reduxjs/toolkit/query";
-import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import AudioController from "../AudioController.tsx";
 import AudioRecorder from "../AudioRecorder.tsx";
 import DotsLoader from "../../../common/DotsLoader.tsx";
@@ -45,13 +44,11 @@ import {
 import { AnyAgent } from "../../../common/agent.ts";
 import {
   AgentChatOptions,
-  useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
   useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation,
 } from "../../../slices/agentic/agenticOpenApi.ts";
 import { AgentSelector } from "./AgentSelector.tsx";
 import { UserInputAttachments } from "./UserInputAttachments.tsx";
-import { UserInputDeepSearchToggle } from "./UserInputDeepSearchToggle.tsx";
 import { PickerView, UserInputPopover } from "./UserInputPopover.tsx";
 import { UserInputRagScope } from "./UserInputRagScope.tsx";
 import { SearchRagScope } from "./types.ts";
@@ -72,9 +69,12 @@ export interface UserInputContent {
 export type UserInputHandle = {
   openSetupPopover: (anchorEl: HTMLElement, view?: PickerView) => void;
   closeSetupPopover: () => void;
+  setDeepSearchEnabled: (next: boolean) => void;
+  markSessionPrefsDirty: () => void;
 };
 
 type PersistedCtx = {
+  chatContextIds?: string[];
   documentLibraryIds?: string[];
   promptResourceIds?: string[];
   templateResourceIds?: string[];
@@ -105,6 +105,10 @@ type UserInputProps = {
   uploadingFiles?: string[];
   onFilesSelected?: (files: File[]) => void;
   attachmentsRefreshTick?: number;
+  serverPrefs?: PersistedCtx & { agent_name?: string };
+  refetchServerPrefs?: () => void;
+  selectedChatContextIds?: string[];
+  onSelectedChatContextIdsChange?: (ids: string[]) => void;
   initialDocumentLibraryIds?: string[];
   initialPromptResourceIds?: string[];
   initialTemplateResourceIds?: string[];
@@ -118,6 +122,7 @@ type UserInputProps = {
   onAttachmentsPanelOpenChange?: (open: boolean) => void;
   onAttachmentCountChange?: (count: number) => void;
   onSelectedDocumentLibrariesIdsChange?: (ids: string[]) => void;
+  onDeepSearchEnabledChange?: (enabled: boolean) => void;
 };
 
 function UserInput(
@@ -131,7 +136,11 @@ function UserInput(
     effectiveSessionId,
     uploadingFiles,
     onFilesSelected,
-    attachmentsRefreshTick,
+	    attachmentsRefreshTick,
+	    serverPrefs: serverPrefsProp,
+	    refetchServerPrefs,
+	    selectedChatContextIds,
+	    onSelectedChatContextIdsChange,
     initialDocumentLibraryIds,
     initialPromptResourceIds,
     initialTemplateResourceIds,
@@ -145,6 +154,7 @@ function UserInput(
     onAttachmentsPanelOpenChange,
     onAttachmentCountChange,
     onSelectedDocumentLibrariesIdsChange,
+    onDeepSearchEnabledChange,
   }: UserInputProps,
   ref: React.ForwardedRef<UserInputHandle>,
 ) {
@@ -201,23 +211,33 @@ function UserInput(
   };
   const defaultAgent = useMemo(() => (agents && agents.length > 0 ? agents[0] : undefined), [agents]);
 
+  const [prefsDirtyTick, setPrefsDirtyTick] = useState<number>(0);
+  const lastProcessedDirtyTickRef = useRef<number>(0);
+  const markPrefsDirty = useCallback(() => setPrefsDirtyTick((x) => x + 1), []);
+
   // User-facing setters
   const setLibs = (next: React.SetStateAction<string[]>) => {
+    markPrefsDirty();
     setSelectedDocumentLibrariesIdsState((prev) => (typeof next === "function" ? (next as any)(prev) : next));
   };
   const setPrompts = (next: React.SetStateAction<string[]>) => {
+    markPrefsDirty();
     setSelectedPromptResourceIdsState((prev) => (typeof next === "function" ? (next as any)(prev) : next));
   };
   const setTemplates = (next: React.SetStateAction<string[]>) => {
+    markPrefsDirty();
     setSelectedTemplateResourceIdsState((prev) => (typeof next === "function" ? (next as any)(prev) : next));
   };
   const setSearchPolicy = (next: React.SetStateAction<SearchPolicyName>) => {
+    markPrefsDirty();
     setSelectedSearchPolicyNameState((prev) => (typeof next === "function" ? (next as any)(prev) : next));
   };
   const setRagScope = (next: SearchRagScope) => {
+    markPrefsDirty();
     setSearchRagScopeState(next);
   };
   const setDeepSearch = (next: boolean) => {
+    markPrefsDirty();
     setDeepSearchEnabledState(next);
   };
 
@@ -238,6 +258,9 @@ function UserInput(
   useEffect(() => {
     onSelectedDocumentLibrariesIdsChange?.(selectedDocumentLibrariesIds);
   }, [onSelectedDocumentLibrariesIdsChange, selectedDocumentLibrariesIds]);
+  useEffect(() => {
+    onDeepSearchEnabledChange?.(deepSearchEnabled);
+  }, [deepSearchEnabled, onDeepSearchEnabledChange]);
 
   useImperativeHandle(
     ref,
@@ -250,8 +273,14 @@ function UserInput(
         setPickerView(null);
         setPlusAnchor(null);
       },
+      setDeepSearchEnabled: (next: boolean) => {
+        setDeepSearch(next);
+      },
+      markSessionPrefsDirty: () => {
+        markPrefsDirty();
+      },
     }),
-    [],
+    [markPrefsDirty, setDeepSearch],
   );
 
   // --- Fetch resource/tag names so chips can display labels instead of raw IDs
@@ -283,12 +312,6 @@ function UserInput(
     const names = (s && (s.file_names as string[] | undefined)) || [];
     return Array.isArray(names) ? names.map((n) => ({ id: n, name: n })) : [];
   }, [sessions, attachmentSessionId]);
-  const sessionAgentName = useMemo(() => {
-    if (!attachmentSessionId) return undefined;
-    const s = (sessions as any[]).find((x) => x?.id === attachmentSessionId) as any | undefined;
-    const name = s?.agent_name;
-    return typeof name === "string" && name.length ? name : undefined;
-  }, [sessions, attachmentSessionId]);
   const attachmentCount = sessionAttachments.length + (uploadingFiles?.length ?? 0);
   const hasAttachedFiles = sessionAttachments.length > 0 || (uploadingFiles?.length ?? 0) > 0;
   useEffect(() => {
@@ -301,15 +324,7 @@ function UserInput(
   }, [attachmentCount, onAttachmentCountChange]);
 
   // --- Session preferences (server-side) ---
-  const { data: serverPrefs, refetch: refetchPrefs } =
-    useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery(
-      attachmentSessionId ? { sessionId: attachmentSessionId } : skipToken,
-      {
-        refetchOnMountOrArgChange: true,
-        refetchOnReconnect: true,
-        refetchOnFocus: true,
-      },
-    );
+  const serverPrefs = serverPrefsProp;
   const [persistPrefs] = useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation();
 
   // --- Synchronization Logic ---
@@ -318,6 +333,7 @@ function UserInput(
   const prevSessionIdRef = useRef<string | undefined>(undefined);
   const lastSentJson = useRef<string>("");
   const forcePersistRef = useRef<boolean>(false);
+  const isHydratingSession = Boolean(attachmentSessionId && hydratedSessionId !== attachmentSessionId);
 
   // 1. Master Effect: Handle Session Switching & Hydration
   useEffect(() => {
@@ -337,6 +353,8 @@ function UserInput(
     if (currentId && currentId !== prevId) {
       lastSentJson.current = "";
       setHydratedSessionId(undefined);
+      setPickerView(null);
+      setPlusAnchor(null);
       // Important: avoid leaking selections from a previous session while the new session prefs are loading.
       setSelectedDocumentLibrariesIdsState([]);
       setSelectedPromptResourceIdsState([]);
@@ -344,9 +362,6 @@ function UserInput(
       setSelectedSearchPolicyNameState(initialSearchPolicy);
       setSearchRagScopeState(initialSearchRagScope ?? defaultRagScope);
       setDeepSearchEnabledState(initialDeepSearch ?? false);
-      if (defaultAgent && defaultAgent.name !== currentAgent?.name) {
-        onSelectNewAgent(defaultAgent);
-      }
       console.log("[PREFS] switched session; awaiting server prefs", { currentId });
       return;
     }
@@ -354,8 +369,8 @@ function UserInput(
     // Apply server prefs once per session
     if (currentId && hydratedSessionId !== currentId && serverPrefs) {
       const p = (serverPrefs as PersistedCtx & { agent_name?: string }) || {};
-      const isEmptyPrefs = Object.keys(p || {}).length === 0;
 
+      const nextChatContextIds = asStringArray(p.chatContextIds, []);
       const nextLibs = asStringArray(p.documentLibraryIds, []);
       const nextPrompts = asStringArray(p.promptResourceIds, []);
       const nextTemplates = asStringArray(p.templateResourceIds, []);
@@ -363,19 +378,21 @@ function UserInput(
       const nextRagScope = p.searchRagScope ?? initialSearchRagScope ?? defaultRagScope;
       const nextDeepSearch = p.deepSearch ?? initialDeepSearch ?? false;
 
+      if (onSelectedChatContextIdsChange) {
+        const prev = selectedChatContextIds ?? [];
+        const same =
+          prev.length === nextChatContextIds.length && prev.every((id, i) => id === nextChatContextIds[i]);
+        if (!same) onSelectedChatContextIdsChange(nextChatContextIds);
+      }
       setSelectedDocumentLibrariesIdsState(nextLibs);
       setSelectedPromptResourceIdsState(nextPrompts);
       setSelectedTemplateResourceIdsState(nextTemplates);
       setSelectedSearchPolicyNameState(nextSearchPolicy);
       setSearchRagScopeState(nextRagScope);
       setDeepSearchEnabledState(nextDeepSearch);
-      const desiredAgentName = (p.agent_name || sessionAgentName || defaultAgent?.name) ?? undefined;
-      const shouldBackfillAgentName = !p.agent_name && Boolean(desiredAgentName);
-      if (desiredAgentName) {
-        const found = agents.find((a) => a.name === desiredAgentName) ?? defaultAgent;
-        if (found && found.name !== currentAgent?.name) onSelectNewAgent(found);
-      }
+      const desiredAgentName = typeof p.agent_name === "string" && p.agent_name.length ? p.agent_name : undefined;
       const json = serializePrefs({
+        chatContextIds: nextChatContextIds,
         documentLibraryIds: nextLibs,
         promptResourceIds: nextPrompts,
         templateResourceIds: nextTemplates,
@@ -384,8 +401,9 @@ function UserInput(
         deepSearch: nextDeepSearch,
         agent_name: desiredAgentName,
       });
-      forcePersistRef.current = isEmptyPrefs || shouldBackfillAgentName;
-      lastSentJson.current = isEmptyPrefs || shouldBackfillAgentName ? "" : json;
+      // Do not trigger a write on hydration; only persist on explicit user changes.
+      forcePersistRef.current = false;
+      lastSentJson.current = json;
       setHydratedSessionId(currentId);
       console.log("[PREFS] applied server prefs", { currentId, prefs: p });
     }
@@ -393,14 +411,12 @@ function UserInput(
     attachmentSessionId,
     hydratedSessionId,
     serverPrefs,
-    sessionAgentName,
     initialSearchPolicy,
     initialSearchRagScope,
     initialDeepSearch,
     defaultRagScope,
-    currentAgent,
-    agents,
-    onSelectNewAgent,
+    onSelectedChatContextIdsChange,
+    selectedChatContextIds,
   ]);
 
   // 2. Persistence Effect
@@ -408,7 +424,12 @@ function UserInput(
   useEffect(() => {
     if (!attachmentSessionId || hydratedSessionId !== attachmentSessionId) return;
 
+    // Persist only in response to an explicit user action.
+    // This prevents transient UI state during hydration/session switching from overwriting other sessions.
+    if (prefsDirtyTick === lastProcessedDirtyTickRef.current) return;
+
     const prefs: PersistedCtx & { agent_name?: string } = {
+      chatContextIds: selectedChatContextIds,
       documentLibraryIds: selectedDocumentLibrariesIds,
       promptResourceIds: selectedPromptResourceIds,
       templateResourceIds: selectedTemplateResourceIds,
@@ -419,6 +440,8 @@ function UserInput(
     };
 
     const serialized = serializePrefs(prefs);
+    // Mark this user-change as processed even if it ends up being a no-op persist.
+    lastProcessedDirtyTickRef.current = prefsDirtyTick;
     if (serialized === lastSentJson.current && !forcePersistRef.current) return;
 
     lastSentJson.current = serialized;
@@ -430,8 +453,8 @@ function UserInput(
     })
       .unwrap()
       .then(() => {
-        console.log("[PREFS] persisted, refetching from backend", { session: attachmentSessionId });
-        refetchPrefs();
+        console.log("[PREFS] persisted", { session: attachmentSessionId });
+        refetchServerPrefs?.();
       })
       .catch((err) => {
         console.warn("[PREFS] persist failed", err);
@@ -448,8 +471,10 @@ function UserInput(
     supportsRagScopeSelection,
     supportsDeepSearchSelection,
     currentAgent,
+    selectedChatContextIds,
+    prefsDirtyTick,
     persistPrefs,
-    refetchPrefs,
+    refetchServerPrefs,
   ]);
 
   const promptNameById = useMemo(
@@ -497,7 +522,7 @@ function UserInput(
   // Enter sends; Shift+Enter newline
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === "Enter") {
-      if (isWaiting || !canSend) {
+      if (isWaiting || isHydratingSession || !canSend) {
         event.preventDefault();
         return;
       }
@@ -512,7 +537,7 @@ function UserInput(
   };
 
   const handleSend = () => {
-    if (isWaiting || !canSend) return;
+    if (isWaiting || isHydratingSession || !canSend) return;
     onSend({
       text: userInput,
       audio: audioBlob || undefined,
@@ -582,12 +607,37 @@ function UserInput(
           pr: { xs: 0, md: attachmentsPanelOpen ? 1.5 : 0 },
         }}
       >
-        <AgentSelector
-          agents={agents}
-          currentAgent={currentAgent}
-          onSelectNewAgent={onSelectNewAgent}
-          sx={{ alignSelf: "flex-start" }}
-        />
+        {attachmentSessionId && hydratedSessionId !== attachmentSessionId ? (
+          <Box
+            sx={{
+              border: `1px solid ${theme.palette.divider}`,
+              borderBottom: "0px",
+              borderTopLeftRadius: "16px",
+              borderTopRightRadius: "16px",
+              background: theme.palette.background.paper,
+              paddingX: 2,
+              paddingY: 0.5,
+              display: "flex",
+              gap: 1,
+              alignItems: "center",
+              justifyContent: "center",
+              alignSelf: "flex-start",
+              color: theme.palette.text.secondary,
+            }}
+          >
+            {t("common.loading", "Loading")}…
+          </Box>
+        ) : (
+          <AgentSelector
+            agents={agents}
+            currentAgent={currentAgent}
+            onSelectNewAgent={(agent) => {
+              markPrefsDirty();
+              onSelectNewAgent(agent);
+            }}
+            sx={{ alignSelf: "flex-start" }}
+          />
+        )}
 
         <Grid2 container size={12} alignItems="center" sx={{ p: 0, gap: 0, backgroundColor: "transparent" }}>
           {/* Single rounded input with the "+" inside (bottom-left) */}
@@ -604,13 +654,10 @@ function UserInput(
                 alignItems: "center",
               }}
             >
-              {supportsDeepSearchSelection && (
-                <UserInputDeepSearchToggle value={deepSearchEnabled} onChange={setDeepSearch} disabled={isWaiting} />
-              )}
               {supportsRagScopeSelection && (
-                <UserInputRagScope value={searchRagScope} onChange={setRagScope} disabled={isWaiting} />
+                <UserInputRagScope value={searchRagScope} onChange={setRagScope} disabled={isWaiting || isHydratingSession} />
               )}
-              {!isWaiting && (
+              {!isWaiting && !isHydratingSession && (
                 <Tooltip title={t("chatbot.sendMessage", "Send message")}>
                   <span>
                     <IconButton
@@ -696,6 +743,7 @@ function UserInput(
                   value={userInput}
                   onKeyDown={handleKeyDown}
                   onChange={(event) => setUserInput(event.target.value)}
+                  disabled={isWaiting || isHydratingSession}
                   inputRef={inputRef}
                   sx={{
                     fontSize: "1rem",

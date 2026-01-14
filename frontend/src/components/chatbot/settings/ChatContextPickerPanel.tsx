@@ -6,8 +6,10 @@
 
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
 import {
   Box,
+  Badge,
   Button,
   IconButton,
   List,
@@ -34,11 +36,13 @@ import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard";
 export type ChatContextPickerPanelProps = {
   selectedChatContextIds: string[];
   onChangeSelectedChatContextIds: (ids: string[]) => void;
+  variant?: "button" | "icon";
 } & Pick<BoxProps, "sx">;
 
 export function ChatContextPickerPanel({
   selectedChatContextIds,
   onChangeSelectedChatContextIds,
+  variant = "button",
   sx,
 }: ChatContextPickerPanelProps) {
   const theme = useTheme<Theme>();
@@ -81,6 +85,7 @@ export function ChatContextPickerPanel({
   };
 
   const hasSelectedChatContext = selectedChatContextIds.length > 0;
+  const isIconVariant = variant === "icon";
 
   return (
     <Box
@@ -89,18 +94,37 @@ export function ChatContextPickerPanel({
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
     >
-      {/* Titre + action à droite */}
-      {!hasSelectedChatContext && (
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 0.5 }}>
-          <Button
-            size="small"
-            startIcon={<AddIcon />}
-            onClick={(e) => setChatContextPickerAnchor(e.currentTarget)}
-            sx={{ textTransform: "none", color: theme.palette.text.primary }}
-          >
-            {t("settings.chatContext")}
-          </Button>
-        </Box>
+      {/* Trigger */}
+      {isIconVariant ? (
+        <Tooltip
+          title={t("settings.chatContext")}
+          placement="left"
+          slotProps={{ popper: { sx: { backdropFilter: "none", WebkitBackdropFilter: "none" } } }}
+        >
+          <IconButton size="small" onClick={(e) => setChatContextPickerAnchor(e.currentTarget)}>
+            <Badge
+              color="primary"
+              badgeContent={selectedChatContextIds.length ? selectedChatContextIds.length : undefined}
+              overlap="circular"
+              anchorOrigin={{ vertical: "top", horizontal: "right" }}
+            >
+              <ForumOutlinedIcon fontSize="small" />
+            </Badge>
+          </IconButton>
+        </Tooltip>
+      ) : (
+        !hasSelectedChatContext && (
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 0.5 }}>
+            <Button
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={(e) => setChatContextPickerAnchor(e.currentTarget)}
+              sx={{ textTransform: "none", color: theme.palette.text.primary }}
+            >
+              {t("settings.chatContext")}
+            </Button>
+          </Box>
+        )
       )}
 
       {/* Popover de sélection/modification */}
@@ -120,8 +144,8 @@ export function ChatContextPickerPanel({
         />
       </Popover>
 
-      {/* Carte compacte quand un profil est sélectionné */}
-      {hasSelectedChatContext ? (
+      {/* Selected list (hidden in icon variant) */}
+      {!isIconVariant && hasSelectedChatContext ? (
         <List dense disablePadding sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
           {selectedChatContextResources.map((resource) => {
             const preview = chatContextBodyPreviews[resource.id];

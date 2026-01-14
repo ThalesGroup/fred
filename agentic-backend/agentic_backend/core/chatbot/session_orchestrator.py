@@ -535,7 +535,16 @@ class SessionOrchestrator:
                 },
             )
         session.preferences = preferences or {}
-        session.updated_at = _utcnow_dt()
+        # Keep session.agent_name in sync with the latest user-selected agent, if provided.
+        try:
+            agent_name = session.preferences.get("agent_name")
+            if isinstance(agent_name, str) and agent_name.strip():
+                session.agent_name = agent_name.strip()
+        except Exception:
+            pass
+        # Important: do NOT bump session.updated_at for preference changes.
+        # The UI orders conversations by updated_at and expects it to change only
+        # on actual conversation activity (messages), not when viewing/toggling settings.
         self.session_store.save(session)
         try:
             prefs_str = json.dumps(session.preferences, default=str)

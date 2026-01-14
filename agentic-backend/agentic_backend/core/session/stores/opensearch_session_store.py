@@ -33,11 +33,18 @@ MAPPING = {
         "properties": {
             "id": {"type": "keyword"},
             "user_id": {"type": "keyword"},
+            "agent_name": {
+                "type": "text",
+                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+            },
             "title": {
                 "type": "text",
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
             "updated_at": {"type": "date"},
+            # Preferences are session-scoped UI/agent settings (agent_name, selected libraries, etc.).
+            # Keep mapping permissive for forward-compatibility (new keys can appear without migrations).
+            "preferences": {"type": "object", "dynamic": True},
             "file_names": {
                 "type": "keyword"
             },  # Stores file names as exact-matchable strings
@@ -71,8 +78,33 @@ class OpensearchSessionStore(BaseSessionStore):
             logger.info(f"OpenSearch index '{index}' created with mapping.")
         else:
             logger.info(f"OpenSearch index '{index}' already exists.")
+            self._ensure_expected_fields()
             # Validate existing mapping matches expected mapping
             validate_index_mapping(self.client, index, MAPPING)
+
+    def _ensure_expected_fields(self) -> None:
+        """
+        Best-effort forward migration: add missing fields to the mapping.
+
+        OpenSearch allows adding new fields via PUT _mapping (but not changing existing types).
+        """
+        try:
+            current_mapping_resp = self.client.indices.get_mapping(index=self.index)
+            current_props = (
+                current_mapping_resp.get(self.index, {}).get("mappings", {}).get("properties", {}) or {}
+            )
+            expected_props = MAPPING.get("mappings", {}).get("properties", {}) or {}
+            missing = {k: v for k, v in expected_props.items() if k not in current_props}
+            if not missing:
+                return
+            self.client.indices.put_mapping(index=self.index, body={"properties": missing})
+            logger.info(
+                "[OPENSEARCH][MAPPING] Added missing fields to '%s': %s",
+                self.index,
+                ", ".join(sorted(missing.keys())),
+            )
+        except Exception as e:
+            logger.warning("[OPENSEARCH][MAPPING] Failed to auto-add missing fields: %s", e)
 
     def save(self, session: SessionSchema) -> None:
         try:
