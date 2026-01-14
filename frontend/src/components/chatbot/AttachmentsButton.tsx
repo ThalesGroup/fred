@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import FolderOpenIcon from "@mui/icons-material/FolderOpen";
-import { Badge, Box, IconButton } from "@mui/material";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
+import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
+import { Badge, Box, IconButton, Tooltip } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 const ATTACH_PANEL_W = { xs: 320, sm: 340 };
@@ -22,41 +23,88 @@ export interface AttachmentsButtonProps {
   attachmentsPanelOpen: boolean;
   attachmentCount: number;
   onToggle: () => void;
+  showAttachmentsButton?: boolean;
+  setupCount?: number;
+  showSetupButton?: boolean;
+  onOpenSetup?: (anchorEl: HTMLElement) => void;
 }
 
-export const AttachmentsButton = ({ attachmentsPanelOpen, attachmentCount, onToggle }: AttachmentsButtonProps) => {
+export const AttachmentsButton = ({
+  attachmentsPanelOpen,
+  attachmentCount,
+  onToggle,
+  showAttachmentsButton = true,
+  setupCount,
+  showSetupButton,
+  onOpenSetup,
+}: AttachmentsButtonProps) => {
   const { t } = useTranslation();
+  const baseRight = attachmentsPanelOpen
+    ? {
+        xs: ATTACH_PANEL_W.xs + 12,
+        sm: ATTACH_PANEL_W.sm + 12,
+        md: ATTACH_PANEL_W.sm + 12,
+      }
+    : 12;
 
   return (
     <Box
       sx={{
         position: "absolute",
         top: 12,
-        right: attachmentsPanelOpen
-          ? {
-              xs: ATTACH_PANEL_W.xs + 12,
-              sm: ATTACH_PANEL_W.sm + 12,
-              md: ATTACH_PANEL_W.sm + 12,
-            }
-          : 12,
+        right: baseRight,
         zIndex: 10,
         display: "flex",
+        gap: 0.5,
       }}
     >
+      <AttachmentsSetupButton
+        showSetupButton={showSetupButton}
+        setupCount={setupCount}
+        onOpenSetup={onOpenSetup}
+      />
+      {showAttachmentsButton && (
+        <Tooltip title={t("chatbot.attachments.drawerTitle", "Attachments")}>
+          <IconButton color={attachmentsPanelOpen ? "primary" : "default"} onClick={onToggle}>
+            <Badge
+              color="primary"
+              badgeContent={attachmentCount > 0 ? attachmentCount : undefined}
+              overlap="circular"
+              anchorOrigin={{ vertical: "top", horizontal: "right" }}
+            >
+              <AttachFileIcon />
+            </Badge>
+          </IconButton>
+        </Tooltip>
+      )}
+    </Box>
+  );
+};
+
+const AttachmentsSetupButton = ({
+  showSetupButton,
+  setupCount,
+  onOpenSetup,
+}: Pick<AttachmentsButtonProps, "showSetupButton" | "setupCount" | "onOpenSetup">) => {
+  const { t } = useTranslation();
+  if (!showSetupButton) return null;
+
+  return (
+    <Tooltip title={t("knowledge.viewSelector.libraries", "Libraries")}>
       <IconButton
-        color={attachmentsPanelOpen ? "primary" : "default"}
-        onClick={onToggle}
-        title={t("chatbot.attachments.drawerTitle", "Attachments")}
+        onClick={(e) => onOpenSetup?.(e.currentTarget)}
+        aria-label="conversation-libraries"
+        disabled={!onOpenSetup}
       >
         <Badge
           color="primary"
-          badgeContent={attachmentCount > 0 ? attachmentCount : undefined}
+          badgeContent={setupCount && setupCount > 0 ? setupCount : undefined}
           overlap="circular"
           anchorOrigin={{ vertical: "top", horizontal: "right" }}
         >
-          <FolderOpenIcon />
+          <FolderOutlinedIcon />
         </Badge>
       </IconButton>
-    </Box>
+    </Tooltip>
   );
 };

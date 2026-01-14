@@ -45,8 +45,10 @@ export function useAgentSelector(
     }
 
     // For new conversations (draft): use last agent from localStorage
-    const lastAgent = agents.find((a) => a.name === lastNewConversationAgent);
-    if (lastAgent) return lastAgent;
+    if (isNewConversation) {
+      const lastAgent = agents.find((a) => a.name === lastNewConversationAgent);
+      if (lastAgent) return lastAgent;
+    }
 
     // Fallback to first agent in the list
     return agents[0] ?? null;

@@ -55,7 +55,7 @@ import { keyOf, mergeAuthoritative, toWsUrl, upsertOne } from "./ChatBotUtils.ts
 import ChatKnowledge from "./ChatKnowledge.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
 import { ChatContextPickerPanel } from "./settings/ChatContextPickerPanel.tsx";
-import UserInput, { UserInputContent } from "./user_input/UserInput.tsx";
+import UserInput, { UserInputContent, UserInputHandle } from "./user_input/UserInput.tsx";
 
 const HISTORY_TEXT_LIMIT = 1200;
 
@@ -109,6 +109,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
   const { showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
   const wsTokenRef = useRef<string | null>(null);
+  const wsConnectSeqRef = useRef<number>(0);
   // When backend creates a session during first file upload, keep it locally
   // so the immediate next message uses the same session id.
   const pendingSessionIdRef = useRef<string | null>(null);
@@ -208,12 +209,66 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
 
   const [attachmentsPanelOpen, setAttachmentsPanelOpen] = useState<boolean>(false);
   const [attachmentCount, setAttachmentCount] = useState<number>(0);
+  const [setupCount, setSetupCount] = useState<number>(0);
+  const userInputRef = useRef<UserInputHandle | null>(null);
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
+  const waitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const waitStartedAtRef = useRef<number>(0);
+  const waitSeqRef = useRef<number>(0);
+  const debugLoader = useMemo(() => {
+    try {
+      return localStorage.getItem("chat.debugLoader") === "1";
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const beginWaiting = () => {
+    waitSeqRef.current += 1;
+    waitStartedAtRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (waitTimerRef.current) {
+      clearTimeout(waitTimerRef.current);
+      waitTimerRef.current = null;
+    }
+    if (debugLoader) console.debug("[loader] begin", { seq: waitSeqRef.current });
+    setWaitResponse(true);
+  };
+
+  const endWaiting = ({ immediate = false }: { immediate?: boolean } = {}) => {
+    const seq = waitSeqRef.current;
+    const MIN_MS = 200;
+
+    if (waitTimerRef.current) {
+      clearTimeout(waitTimerRef.current);
+      waitTimerRef.current = null;
+    }
+
+    const finish = () => {
+      if (seq === waitSeqRef.current) setWaitResponse(false);
+    };
+
+    if (immediate) {
+      finish();
+      return;
+    }
+
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const elapsed = now - waitStartedAtRef.current;
+    const remaining = MIN_MS - elapsed;
+    if (remaining > 0) {
+      if (debugLoader) console.debug("[loader] end (delayed)", { seq, remainingMs: Math.ceil(remaining) });
+      waitTimerRef.current = setTimeout(finish, remaining);
+    } else {
+      if (debugLoader) console.debug("[loader] end", { seq, immediate });
+      finish();
+    }
+  };
+
   const stopStreaming = () => {
     const socket = webSocketRef.current;
     if (!socket) {
-      setWaitResponse(false);
+      endWaiting({ immediate: true });
       return;
     }
 
@@ -230,7 +285,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     } finally {
       webSocketRef.current = null;
       wsTokenRef.current = null;
-      setWaitResponse(false);
+      endWaiting({ immediate: true });
     }
   };
 
@@ -265,6 +320,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     //    ce token au handshake et ignorer tout user_id client.
     await KeyCloakService.ensureFreshToken(30);
     const token = KeyCloakService.GetToken();
+    const connectSeq = ++wsConnectSeqRef.current;
 
     return new Promise((resolve, reject) => {
       const rawWsUrl = toWsUrl(getConfig().backend_url_api, "/agentic/v1/chatbot/query/ws");
@@ -275,11 +331,18 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       wsTokenRef.current = token || null; // mémo pour détection simple de changement
 
       socket.onopen = () => {
+        if (connectSeq !== wsConnectSeqRef.current) {
+          try {
+            socket.close(4001, "stale_ws_connection");
+          } catch {}
+          return;
+        }
         console.log("[CHATBOT] WebSocket connected");
         webSocketRef.current = socket;
         resolve(socket);
       };
       socket.onmessage = (event) => {
+        if (connectSeq !== wsConnectSeqRef.current) return;
         try {
           const response = JSON.parse(event.data);
 
@@ -298,6 +361,8 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
               // Upsert streamed message and keep order stable
               messagesRef.current = upsertOne(messagesRef.current, msg);
               setMessages(messagesRef.current);
+              // Defensive: ensure loader is visible while we are streaming a response.
+              beginWaiting();
               // ⛔ no scrolling logic here — the layout effect handles it post-render
               break;
             }
@@ -322,14 +387,14 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
               // Merge authoritative finals (includes citations/metadata)
               messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
               setMessages(messagesRef.current);
-              setWaitResponse(false);
+              endWaiting();
               break;
             }
 
             case "error": {
               showError({ summary: "Error", detail: response.content });
               console.error("[RCV ERROR ChatBot] WebSocket error:", response);
-              setWaitResponse(false);
+              endWaiting({ immediate: true });
               break;
             }
 
@@ -339,30 +404,32 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
                 summary: "Unknown Message",
                 detail: `Received unknown message type: ${response.type}`,
               });
-              setWaitResponse(false);
+              endWaiting({ immediate: true });
               break;
             }
           }
         } catch (err) {
           console.error("[❌ ChatBot] Failed to parse message:", err);
           showError({ summary: "Parsing Error", detail: "Assistant response could not be processed." });
-          setWaitResponse(false);
+          endWaiting({ immediate: true });
           socket.close(); // Close only if the payload is unreadable
         }
       };
 
       socket.onerror = (err) => {
+        if (connectSeq !== wsConnectSeqRef.current) return;
         console.error("[❌ ChatBot] WebSocket error:", err);
         showError({ summary: "Connection Error", detail: "Chat connection failed." });
-        setWaitResponse(false);
+        endWaiting({ immediate: true });
         reject(err);
       };
 
       socket.onclose = () => {
+        if (connectSeq !== wsConnectSeqRef.current) return;
         console.warn("[❌ ChatBot] WebSocket closed");
         webSocketRef.current = null;
         wsTokenRef.current = null;
-        setWaitResponse(false);
+        endWaiting();
       };
     });
   };
@@ -371,6 +438,10 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
   useEffect(() => {
     setupWebSocket();
     return () => {
+      if (waitTimerRef.current) {
+        clearTimeout(waitTimerRef.current);
+        waitTimerRef.current = null;
+      }
       if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.OPEN) {
         console.log("[ChatBot] Closing websocket on component unmount");
         webSocketRef.current.close();
@@ -616,6 +687,8 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
         return;
       }
     }
+    // Show loader immediately (even while WS is connecting).
+    beginWaiting();
     // Get tokens for backend use. This proacively allows the backend to perform
     // user-authenticated operations (e.g., vector search) on behalf of the user.
     // The backend is then responsible for refreshing tokens as needed. Which will rarely be needed
@@ -642,7 +715,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       const socket = await setupWebSocket();
 
       if (socket && socket.readyState === WebSocket.OPEN) {
-        setWaitResponse(true);
         socket.send(JSON.stringify(event));
         console.debug("[CHATBOT] Sent message:", event);
       } else {
@@ -651,7 +723,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     } catch (err) {
       console.error("[CHATBOT] Failed to send message:", err);
       showError({ summary: "Connection Error", detail: "Could not send your message — connection failed." });
-      setWaitResponse(false);
+      endWaiting({ immediate: true });
     }
   };
 
@@ -679,6 +751,11 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       (userInputContext?.promptResourceIds?.length ?? 0) > 0 ||
       (userInputContext?.templateResourceIds?.length ?? 0) > 0);
   const agentSupportsAttachments = currentAgent?.chat_options?.attach_files === true;
+  const showSetupButton = Boolean(
+    currentAgent?.chat_options?.libraries_selection ||
+      currentAgent?.chat_options?.search_policy_selection ||
+      currentAgent?.chat_options?.record_audio_files,
+  );
 
   useEffect(() => {
     if (!showWelcome) return;
@@ -719,12 +796,18 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
         />
       </Paper>
 
-      {/* Attachments button */}
-      {agentSupportsAttachments && (
+      {/* Conversation top-right controls (attachments + setup) */}
+      {(agentSupportsAttachments || showSetupButton) && (
         <AttachmentsButton
-          attachmentsPanelOpen={attachmentsPanelOpen}
-          attachmentCount={attachmentCount}
+          attachmentsPanelOpen={agentSupportsAttachments ? attachmentsPanelOpen : false}
+          attachmentCount={agentSupportsAttachments ? attachmentCount : 0}
           onToggle={() => setAttachmentsPanelOpen((v) => !v)}
+          showAttachmentsButton={agentSupportsAttachments}
+          showSetupButton={showSetupButton}
+          setupCount={setupCount}
+          onOpenSetup={(anchorEl) => {
+            userInputRef.current?.openSetupPopover(anchorEl);
+          }}
         />
       )}
 
@@ -789,6 +872,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
             {/* Input area */}
             <Box sx={{ width: "min(900px, 100%)" }}>
               <UserInput
+                ref={userInputRef}
                 agentChatOptions={currentAgent.chat_options}
                 isWaiting={waitResponse}
                 onSend={handleSend}
@@ -811,6 +895,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
                 attachmentsPanelOpen={agentSupportsAttachments ? attachmentsPanelOpen : false}
                 onAttachmentsPanelOpenChange={agentSupportsAttachments ? setAttachmentsPanelOpen : undefined}
                 onAttachmentCountChange={agentSupportsAttachments ? setAttachmentCount : undefined}
+                onSelectedDocumentLibrariesIdsChange={(ids) => setSetupCount(ids.length)}
               />
             </Box>
           </Box>
@@ -859,16 +944,12 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
                   <DotsLoader dotColor={theme.palette.text.secondary} />
                 </Box>
               )}
-              {waitResponse && (
-                <Box mt={1} sx={{ alignSelf: "flex-start" }}>
-                  <DotsLoader dotColor={theme.palette.text.primary} />
-                </Box>
-              )}
             </Grid2>
 
             {/* User input area */}
             <Grid2 container width="100%" alignContent="center">
               <UserInput
+                ref={userInputRef}
                 agentChatOptions={currentAgent.chat_options}
                 isWaiting={waitResponse}
                 onSend={handleSend}
@@ -891,6 +972,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
                 attachmentsPanelOpen={agentSupportsAttachments ? attachmentsPanelOpen : false}
                 onAttachmentsPanelOpenChange={agentSupportsAttachments ? setAttachmentsPanelOpen : undefined}
                 onAttachmentCountChange={agentSupportsAttachments ? setAttachmentCount : undefined}
+                onSelectedDocumentLibrariesIdsChange={(ids) => setSetupCount(ids.length)}
               />
             </Grid2>
 
