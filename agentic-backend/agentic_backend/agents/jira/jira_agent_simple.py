@@ -42,7 +42,7 @@ Tu es un Business Analyst et Product Owner expert avec accès à des outils spé
 OUTILS DISPONIBLES
 ════════════════════════════════════════════════════════════════════════
 
-Tu disposes de 3 types d'outils :
+Tu disposes de 4 types d'outils :
 
 1. **Outils de recherche documentaire (MCP)** :
    - Utilisés pour extraire des informations des documents projet (.docx, .pdf, etc.)
@@ -58,6 +58,13 @@ Tu disposes de 3 types d'outils :
    - IMPORTANT : Cet outil fait un appel LLM séparé, donc ne timeout pas
    - Peut recevoir les exigences en paramètre pour assurer la cohérence
    - Retourne un message confirmant que les user stories ont été générées
+
+4. **generate_tests** :
+   - Génère des scénarios de tests détaillés au format Gherkin
+   - IMPORTANT : Cet outil fait un appel LLM séparé, donc ne timeout pas
+   - Nécessite les User Stories en paramètre
+   - Peut recevoir un JDD (Jeu de Données) optionnel pour les personas
+   - Retourne un message confirmant que les scénarios de tests ont été générés
 
 ════════════════════════════════════════════════════════════════════════
 WORKFLOW RECOMMANDÉ
@@ -79,9 +86,14 @@ WORKFLOW RECOMMANDÉ
   - Appelle directement generate_user_stories(context_summary="...", requirements="")
 - L'outil génère les user stories et retourne un message de confirmation
 
-**Étape 4 : Conclusion**
+**Étape 4 : Génération des scénarios de tests (si demandé)**
+- Si l'utilisateur demande des tests :
+  - Appelle generate_tests(user_stories="[user stories de l'étape 3]", jdd="[JDD si fourni]")
+- L'outil génère les scénarios de tests et retourne un message de confirmation
+
+**Étape 5 : Conclusion**
 - Une fois tous les outils appelés, termine ta réponse
-- Les résultats détaillés (exigences et user stories) seront automatiquement affichés à l'utilisateur""",
+- Les résultats détaillés (exigences, user stories et tests) seront automatiquement affichés à l'utilisateur""",
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
         FieldSpec(
@@ -151,6 +163,7 @@ class JiraAgent(AgentFlow):
         # Storage for tool outputs
         self.generated_requirements = None
         self.generated_user_stories = None
+        self.generated_tests = None
 
     async def aclose(self):
         await self.mcp.aclose()
@@ -333,6 +346,91 @@ Exigences à respecter:
 
         return generate_user_stories
 
+    def get_tests_tool(self):
+        """Tool that generates test scenarios using a separate LLM call"""
+
+        # Capture self reference for closure
+        agent_self = self
+
+        @tool
+        async def generate_tests(user_stories: str, jdd: str = "") -> str:
+            """
+            Génère des scénarios de tests détaillés et exploitables à partir des User Stories fournies.
+
+            IMPORTANT: Avant d'appeler cet outil, assure-toi d'avoir les User Stories.
+            Tu peux également fournir un JDD (Jeu de Données) pour les personas de chaque test.
+
+            Args:
+                user_stories: Les User Stories à couvrir par les tests
+                jdd: Jeu de Données pour les personas (optionnel)
+
+            Returns:
+                Message de confirmation que les scénarios de tests ont été générés
+            """
+            tests_prompt = """
+## Rôle
+
+Tu es un expert en tests logiciels. Ton rôle est de créer des scénarios de tests détaillés et exploitables.
+
+## Instructions principales
+
+Génère des scénarios de tests complets à partir des informations fournies dans les User Stories (US) suivantes, en suivant le format Gherkin (Etant donné que-Lorsque-Alors) et en incluant les cas nominaux, limites et d'erreur. Toutes les US fournies doivent faire l'objet d'un test.
+Tu peux également te baser sur les JDDs fournis en entrée pour les personas de chaque tests
+
+## Format de réponse attendu 📝
+
+Pour chaque scénario :
+
+1. **ID du Scénario** : Un identifiant unique (ex: SC-001, SC-LOGIN-001).
+2. **userStoryId**: L'ID de la User Story couverte par ce test.
+3. **Titre du Scénario** : Un titre concis décrivant l'objectif du test.
+4. **Description** : Une brève explication de ce que le scénario teste.
+5. **Préconditions** : Les états ou données nécessaires avant l'exécution du test.
+6. **Étapes** : Au format Gherkin présentées sous forme de tableau avec les colonnes suivantes : Numéro (#1, #2, ...), Action (Etant donné que - Lorsque), Résultat attendu (Alors).
+7. **Données de test** : Jeux de données nécessaires
+8. **Priorité** : (Haute, Moyenne, Basse) Indiquant l'importance du test.
+9. **type**: Le type de cas de test (Nominal, Limite, Erreur).
+
+-------------------------------------------
+
+**--- DÉBUT DES USER STORIES À ANALYSER ---**
+{USER_STORIES}
+**--- FIN DES USER STORIES À ANALYSER ---**
+
+**--- DÉBUT DU JDD À ANALYSER ---**
+{JDD}
+**--- FIN DU JDD À ANALYSER ---**
+"""
+
+            model = get_default_chat_model()
+            messages = [
+                SystemMessage(
+                    content=tests_prompt.format(
+                        USER_STORIES=user_stories,
+                        JDD=jdd if jdd else "Aucun JDD fourni"
+                    )
+                )
+            ]
+
+            response = await model.ainvoke(messages)
+
+            # Store the full output
+            content = response.content
+            if isinstance(content, str):
+                agent_self.generated_tests = content
+            elif isinstance(content, list):
+                agent_self.generated_tests = "".join(
+                    part if isinstance(part, str) else part.get("text", "")
+                    for part in content
+                )
+            else:
+                agent_self.generated_tests = str(content)
+
+            # Return confirmation message
+            return "✓ Scénarios de tests générés avec succès. Ils seront affichés à la fin de la conversation."
+
+        return generate_tests
+
     async def astream_updates(self, state, *, config=None, **kwargs):
         """Override to append stored tool outputs to final response"""
         final_event = None
@@ -344,7 +442,7 @@ Exigences à respecter:
 
         # After streaming is complete, if we have stored outputs, send them as additional messages
         if final_event is not None and (
-            self.generated_requirements or self.generated_user_stories
+            self.generated_requirements or self.generated_user_stories or self.generated_tests
         ):
             # Build the additional content
             additional_content = "\n\n---\n\n"
@@ -357,6 +455,11 @@ Exigences à respecter:
             if self.generated_user_stories:
                 additional_content += "# 📝 User Stories Générées\n\n"
                 additional_content += self.generated_user_stories
+                additional_content += "\n\n"
+
+            if self.generated_tests:
+                additional_content += "# 🧪 Scénarios de Tests Générés\n\n"
+                additional_content += self.generated_tests
 
             # Create a new AI message with the stored content
             additional_message = AIMessage(content=additional_content)
@@ -367,14 +470,16 @@ Exigences à respecter:
             # Reset for next run
             self.generated_requirements = None
             self.generated_user_stories = None
+            self.generated_tests = None
 
     def get_compiled_graph(self) -> CompiledStateGraph:
         requirements_tool = self.get_requirements_tool()
         user_stories_tool = self.get_user_stories_tool()
+        tests_tool = self.get_tests_tool()
 
         return create_agent(
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
-            tools=[requirements_tool, user_stories_tool, *self.mcp.get_tools()],
+            tools=[requirements_tool, user_stories_tool, tests_tool, *self.mcp.get_tools()],
             checkpointer=self.streaming_memory,
         )
