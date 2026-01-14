@@ -36,6 +36,7 @@ from fred_core import (
     OpenSearchIndexConfig,
     OpenSearchKPIStore,
     OpenSearchLogStore,
+    PrometheusKPIStore,
     PostgresTableConfig,
     RamLogStore,
     RebacEngine,
@@ -738,7 +739,7 @@ class ApplicationContext:
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
-            self._kpi_store_instance = OpenSearchKPIStore(
+            store: BaseKPIStore = OpenSearchKPIStore(
                 host=opensearch_config.host,
                 username=opensearch_config.username,
                 password=password,
@@ -747,9 +748,10 @@ class ApplicationContext:
                 index=store_config.index,
             )
         elif isinstance(store_config, LogStoreConfig):
-            self._kpi_store_instance = KpiLogStore(level=store_config.level)
+            store = KpiLogStore(level=store_config.level)
         else:
             raise ValueError("Unsupported KPI storage backend")
+        self._kpi_store_instance = PrometheusKPIStore(delegate=store)
         return self._kpi_store_instance
 
     def get_tag_store(self) -> BaseTagStore:
