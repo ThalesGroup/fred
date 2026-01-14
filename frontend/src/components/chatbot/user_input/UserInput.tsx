@@ -21,12 +21,11 @@
  * - Receives initial defaults from parent (for draft/no-session) but owns server-side prefs for active sessions.
  */
 
-import AddIcon from "@mui/icons-material/Add";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import StopIcon from "@mui/icons-material/Stop";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import { skipToken } from "@reduxjs/toolkit/query";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import AudioController from "../AudioController.tsx";
 import AudioRecorder from "../AudioRecorder.tsx";
 
@@ -52,7 +51,7 @@ import {
 import { AgentSelector } from "./AgentSelector.tsx";
 import { UserInputAttachments } from "./UserInputAttachments.tsx";
 import { UserInputDeepSearchToggle } from "./UserInputDeepSearchToggle.tsx";
-import { UserInputPopover } from "./UserInputPopover.tsx";
+import { PickerView, UserInputPopover } from "./UserInputPopover.tsx";
 import { UserInputRagScope } from "./UserInputRagScope.tsx";
 import { SearchRagScope } from "./types.ts";
 
@@ -69,6 +68,11 @@ export interface UserInputContent {
   deepSearch?: boolean;
 }
 
+export type UserInputHandle = {
+  openSetupPopover: (anchorEl: HTMLElement, view?: PickerView) => void;
+  closeSetupPopover: () => void;
+};
+
 type PersistedCtx = {
   documentLibraryIds?: string[];
   promptResourceIds?: string[];
@@ -84,30 +88,12 @@ type PersistedCtx = {
 const serializePrefs = (p: PersistedCtx & { agent_name?: string }) =>
   JSON.stringify(Object.fromEntries(Object.entries(p).sort(([a], [b]) => a.localeCompare(b))));
 
-export default function UserInput({
-  agentChatOptions,
-  isWaiting = false,
-  onSend = () => {},
-  onStop,
-  onContextChange,
-  sessionId,
-  effectiveSessionId,
-  uploadingFiles,
-  onFilesSelected,
-  attachmentsRefreshTick,
-  initialDocumentLibraryIds,
-  initialPromptResourceIds,
-  initialTemplateResourceIds,
-  initialSearchPolicy = "semantic",
-  initialSearchRagScope,
-  initialDeepSearch,
-  currentAgent,
-  agents,
-  onSelectNewAgent,
-  attachmentsPanelOpen: attachmentsPanelOpenProp,
-  onAttachmentsPanelOpenChange,
-  onAttachmentCountChange,
-}: {
+const asStringArray = (v: unknown, fallback: string[] = []): string[] => {
+  if (!Array.isArray(v)) return fallback;
+  return v.filter((x): x is string => typeof x === "string" && x.length > 0);
+};
+
+type UserInputProps = {
   agentChatOptions?: AgentChatOptions;
   isWaiting: boolean;
   onSend: (content: UserInputContent) => void;
@@ -130,7 +116,37 @@ export default function UserInput({
   attachmentsPanelOpen?: boolean;
   onAttachmentsPanelOpenChange?: (open: boolean) => void;
   onAttachmentCountChange?: (count: number) => void;
-}) {
+  onSelectedDocumentLibrariesIdsChange?: (ids: string[]) => void;
+};
+
+function UserInput(
+  {
+    agentChatOptions,
+    isWaiting = false,
+    onSend = () => {},
+    onStop,
+    onContextChange,
+    sessionId,
+    effectiveSessionId,
+    uploadingFiles,
+    onFilesSelected,
+    attachmentsRefreshTick,
+    initialDocumentLibraryIds,
+    initialPromptResourceIds,
+    initialTemplateResourceIds,
+    initialSearchPolicy = "semantic",
+    initialSearchRagScope,
+    initialDeepSearch,
+    currentAgent,
+    agents,
+    onSelectNewAgent,
+    attachmentsPanelOpen: attachmentsPanelOpenProp,
+    onAttachmentsPanelOpenChange,
+    onAttachmentCountChange,
+    onSelectedDocumentLibrariesIdsChange,
+  }: UserInputProps,
+  ref: React.ForwardedRef<UserInputHandle>,
+) {
   const theme = useTheme();
   const { t } = useTranslation();
 
@@ -208,7 +224,7 @@ export default function UserInput({
   const [plusAnchor, setPlusAnchor] = useState<HTMLElement | null>(null);
   // Inline picker view inside the same popover (replaces the old Dialogs)
   // null -> root menu with sections; otherwise show the corresponding selector inline
-  const [pickerView, setPickerView] = useState<null | "libraries" | "prompts" | "templates" | "search_policy">(null);
+  const [pickerView, setPickerView] = useState<PickerView>(null);
   const [internalAttachmentsPanelOpen, setInternalAttachmentsPanelOpen] = useState<boolean>(false);
   const attachmentsPanelOpen = attachmentsPanelOpenProp ?? internalAttachmentsPanelOpen;
   const setAttachmentsPanelOpen = (open: boolean) => {
@@ -218,6 +234,24 @@ export default function UserInput({
     onAttachmentsPanelOpenChange?.(open);
   };
   const [uploadDialogOpen, setUploadDialogOpen] = useState<boolean>(false);
+  useEffect(() => {
+    onSelectedDocumentLibrariesIdsChange?.(selectedDocumentLibrariesIds);
+  }, [onSelectedDocumentLibrariesIdsChange, selectedDocumentLibrariesIds]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      openSetupPopover: (anchorEl: HTMLElement, view: PickerView = null) => {
+        setPickerView(view);
+        setPlusAnchor(anchorEl);
+      },
+      closeSetupPopover: () => {
+        setPickerView(null);
+        setPlusAnchor(null);
+      },
+    }),
+    [],
+  );
 
   // --- Fetch resource/tag names so chips can display labels instead of raw IDs
   const { data: promptResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "prompt" });
@@ -296,6 +330,13 @@ export default function UserInput({
     if (currentId && currentId !== prevId) {
       lastSentJson.current = "";
       setHydratedSessionId(undefined);
+      // Important: avoid leaking selections from a previous session while the new session prefs are loading.
+      setSelectedDocumentLibrariesIdsState([]);
+      setSelectedPromptResourceIdsState([]);
+      setSelectedTemplateResourceIdsState([]);
+      setSelectedSearchPolicyNameState(initialSearchPolicy);
+      setSearchRagScopeState(initialSearchRagScope ?? defaultRagScope);
+      setDeepSearchEnabledState(initialDeepSearch ?? false);
       console.log("[PREFS] switched session; awaiting server prefs", { currentId });
       return;
     }
@@ -304,16 +345,20 @@ export default function UserInput({
     if (currentId && hydratedSessionId !== currentId && serverPrefs) {
       const p = (serverPrefs as PersistedCtx & { agent_name?: string }) || {};
       const isEmptyPrefs = Object.keys(p || {}).length === 0;
-      setSelectedDocumentLibrariesIdsState(
-        p.documentLibraryIds ?? initialDocumentLibraryIds ?? selectedDocumentLibrariesIds,
-      );
-      setSelectedPromptResourceIdsState(p.promptResourceIds ?? initialPromptResourceIds ?? selectedPromptResourceIds);
-      setSelectedTemplateResourceIdsState(
-        p.templateResourceIds ?? initialTemplateResourceIds ?? selectedTemplateResourceIds,
-      );
-      setSelectedSearchPolicyNameState(p.searchPolicy ?? selectedSearchPolicyName);
-      setSearchRagScopeState(p.searchRagScope ?? searchRagScope);
-      setDeepSearchEnabledState(p.deepSearch ?? deepSearchEnabled);
+
+      const nextLibs = asStringArray(p.documentLibraryIds, []);
+      const nextPrompts = asStringArray(p.promptResourceIds, []);
+      const nextTemplates = asStringArray(p.templateResourceIds, []);
+      const nextSearchPolicy = p.searchPolicy ?? initialSearchPolicy;
+      const nextRagScope = p.searchRagScope ?? initialSearchRagScope ?? defaultRagScope;
+      const nextDeepSearch = p.deepSearch ?? initialDeepSearch ?? false;
+
+      setSelectedDocumentLibrariesIdsState(nextLibs);
+      setSelectedPromptResourceIdsState(nextPrompts);
+      setSelectedTemplateResourceIdsState(nextTemplates);
+      setSelectedSearchPolicyNameState(nextSearchPolicy);
+      setSearchRagScopeState(nextRagScope);
+      setDeepSearchEnabledState(nextDeepSearch);
       const desiredAgentName = p.agent_name ?? currentAgent?.name ?? defaultAgent?.name;
       if (desiredAgentName) {
         const found = agents.find((a) => a.name === desiredAgentName) ?? defaultAgent;
@@ -322,12 +367,12 @@ export default function UserInput({
         }
       }
       const json = serializePrefs({
-        documentLibraryIds: p.documentLibraryIds ?? initialDocumentLibraryIds ?? [],
-        promptResourceIds: p.promptResourceIds ?? initialPromptResourceIds ?? [],
-        templateResourceIds: p.templateResourceIds ?? initialTemplateResourceIds ?? [],
-        searchPolicy: p.searchPolicy ?? initialSearchPolicy,
-        searchRagScope: p.searchRagScope ?? initialSearchRagScope ?? defaultRagScope,
-        deepSearch: p.deepSearch ?? initialDeepSearch ?? false,
+        documentLibraryIds: nextLibs,
+        promptResourceIds: nextPrompts,
+        templateResourceIds: nextTemplates,
+        searchPolicy: nextSearchPolicy,
+        searchRagScope: nextRagScope,
+        deepSearch: nextDeepSearch,
         agent_name: p.agent_name ?? currentAgent?.name ?? defaultAgent?.name,
       });
       forcePersistRef.current = isEmptyPrefs;
@@ -339,9 +384,6 @@ export default function UserInput({
     attachmentSessionId,
     hydratedSessionId,
     serverPrefs,
-    initialDocumentLibraryIds,
-    initialPromptResourceIds,
-    initialTemplateResourceIds,
     initialSearchPolicy,
     initialSearchRagScope,
     initialDeepSearch,
@@ -558,23 +600,6 @@ export default function UserInput({
               {supportsRagScopeSelection && (
                 <UserInputRagScope value={searchRagScope} onChange={setRagScope} disabled={isWaiting} />
               )}
-              {hasPopoverContent && (
-                <Tooltip title={t("chatbot.menu.addToSetup")}>
-                  <span>
-                    <IconButton
-                      aria-label="add-to-setup"
-                      sx={{ fontSize: "1.6rem", p: "8px" }}
-                      onClick={(e) => {
-                        setPickerView(null);
-                        setPlusAnchor(e.currentTarget);
-                      }}
-                      disabled={isWaiting}
-                    >
-                      <AddIcon fontSize="inherit" />
-                    </IconButton>
-                  </span>
-                </Tooltip>
-              )}
               {!isWaiting && (
                 <Tooltip title={t("chatbot.sendMessage", "Send message")}>
                   <span>
@@ -740,3 +765,5 @@ export default function UserInput({
     </Grid2>
   );
 }
+
+export default forwardRef<UserInputHandle, UserInputProps>(UserInput);

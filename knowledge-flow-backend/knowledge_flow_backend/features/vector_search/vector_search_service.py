@@ -20,6 +20,40 @@ from knowledge_flow_backend.features.vector_search.vector_search_structures impo
 logger = logging.getLogger(__name__)
 
 
+def _merge_attachment_and_corpus_hits(
+    *,
+    attachment_hits: List[VectorSearchHit],
+    corpus_hits: List[VectorSearchHit],
+    top_k: int,
+    attachment_quota: int = 3,
+) -> List[VectorSearchHit]:
+    """
+    Merge attachment (session-scoped) and corpus hits, ensuring attachments are represented.
+
+    Policy:
+    - Always include up to `attachment_quota` attachment hits when present.
+    - Fill remaining slots with the best-scoring remaining candidates.
+    """
+    if top_k <= 0:
+        return []
+    if not attachment_hits:
+        return sorted(corpus_hits, key=lambda h: h.score or 0.0, reverse=True)[:top_k]
+
+    attachment_quota = max(0, min(int(attachment_quota), top_k))
+    attachment_ranked = sorted(
+        attachment_hits, key=lambda h: h.score or 0.0, reverse=True
+    )
+    attachment_primary = attachment_ranked[:attachment_quota]
+    attachment_rest = attachment_ranked[attachment_quota:]
+
+    remaining_ranked = sorted(
+        [*attachment_rest, *corpus_hits],
+        key=lambda h: h.score or 0.0,
+        reverse=True,
+    )
+    return (attachment_primary + remaining_ranked)[:top_k]
+
+
 class VectorSearchService:
     """
     Fred — Vector Search Service (policy-driven).
@@ -406,17 +440,17 @@ class VectorSearchService:
                         metadata_terms_extra=corpus_metadata_extra,
                     )
 
-            # Merge: combine then keep top_k by score so corpus can surface even when attachments exist
-            merged_candidates = attachment_hits + corpus_hits
-            merged = sorted(
-                merged_candidates,
-                key=lambda h: h.score or 0.0,
-                reverse=True,
-            )[:top_k]
+            merged = _merge_attachment_and_corpus_hits(
+                attachment_hits=attachment_hits,
+                corpus_hits=corpus_hits,
+                top_k=top_k,
+                attachment_quota=3,
+            )
             logger.info(
-                "[VECTOR][SEARCH] merged results attachment=%d corpus=%d returned=%d",
+                "[VECTOR][SEARCH] merged results attachment=%d corpus=%d forced_attachment=%d returned=%d",
                 len(attachment_hits),
                 len(corpus_hits),
+                min(3, top_k, len(attachment_hits)),
                 len(merged),
             )
             return merged
