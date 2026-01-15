@@ -262,6 +262,7 @@ class AppConfig(BaseModel):
     reload: bool = False
     reload_dir: str = "."
     max_ingestion_workers: int = 1
+    metrics_enabled: bool = True
 
 
 class PullProvider(str, Enum):

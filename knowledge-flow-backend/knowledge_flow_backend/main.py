@@ -26,7 +26,7 @@ from contextlib import asynccontextmanager, suppress
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, Response
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import AuthConfig, FastApiMCP
 from fred_core import (
@@ -35,7 +35,7 @@ from fred_core import (
     log_setup,
     register_exception_handlers,
 )
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.application_state import attach_app
@@ -159,9 +159,8 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    @app.get("/metrics", include_in_schema=False)
-    def prometheus_metrics() -> Response:
-        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    if configuration.app.metrics_enabled:
+        Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
     # Register exception handlers
     register_exception_handlers(app)

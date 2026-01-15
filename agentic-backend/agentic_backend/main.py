@@ -24,10 +24,10 @@ import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, Response
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_user_security, log_setup, register_exception_handlers
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from agentic_backend.application_context import (
     ApplicationContext,
@@ -152,9 +152,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    @app.get("/metrics", include_in_schema=False)
-    def prometheus_metrics() -> Response:
-        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    if configuration.app.metrics_enabled:
+        Instrumentator().instrument(app).expose(app, include_in_schema=False)
+
 
     # Register exception handlers
     register_exception_handlers(app)
