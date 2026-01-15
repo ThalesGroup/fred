@@ -27,7 +27,6 @@ import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import AudioController from "../AudioController.tsx";
 import AudioRecorder from "../AudioRecorder.tsx";
-import DotsLoader from "../../../common/DotsLoader.tsx";
 
 import { Box, Grid2, IconButton, InputBase, Stack, Tooltip, useTheme } from "@mui/material";
 
@@ -674,10 +673,6 @@ function UserInput(
               )}
               {isWaiting && onStop && (
                 <>
-                  {/* Always show a "working" indicator next to controls (more visible than the one in the messages area). */}
-                  <Box sx={{ display: "flex", alignItems: "center", pr: 0.5, transform: "scale(0.9)" }}>
-                    <DotsLoader dotColor={theme.palette.text.secondary} />
-                  </Box>
                   <Tooltip title={t("chatbot.stopResponse", "Stop response")}>
                     <span>
                       <IconButton
