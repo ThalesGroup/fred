@@ -189,11 +189,9 @@ export const UserInputAttachments: React.FC<UserInputAttachmentsProps> = ({
                 </IconButton>
               </span>
             </Tooltip>
-            <Tooltip title={open ? t("common.collapse") : t("common.expand")}>
-              <IconButton size="small" onClick={() => onToggleOpen(!open)}>
-                {open ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
-              </IconButton>
-            </Tooltip>
+            <IconButton size="small" onClick={() => onToggleOpen(!open)}>
+              {open ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+            </IconButton>
           </Stack>
         </Stack>
 

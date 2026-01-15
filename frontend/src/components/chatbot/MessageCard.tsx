@@ -27,7 +27,10 @@ import { AnyAgent } from "../../common/agent.ts";
 import { AgentChipMini } from "../../common/AgentChip.tsx";
 import { usePdfDocumentViewer } from "../../common/usePdfDocumentViewer";
 import type { GeoPart, LinkPart } from "../../slices/agentic/agenticOpenApi.ts";
-import { ChatMessage, usePostFeedbackAgenticV1ChatbotFeedbackPostMutation } from "../../slices/agentic/agenticOpenApi.ts";
+import {
+  ChatMessage,
+  usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
+} from "../../slices/agentic/agenticOpenApi.ts";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
 import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
 import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
@@ -76,7 +79,6 @@ export default function MessageCard({
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   // Header hover state (controls header indicators visibility)
-  const [bubbleHover, setBubbleHover] = useState(false);
   const isAssistant = side === "left";
 
   const handleFeedbackSubmit = (rating: number, comment?: string) => {
@@ -116,12 +118,7 @@ export default function MessageCard({
     | { offset?: number; limit?: number; total?: number; has_more?: boolean }
     | undefined;
   const paginationHasMore = Boolean(textPagination?.has_more);
-  const {
-    renderMessage,
-    isExpanded,
-    isLoadingFullText,
-    toggleExpanded,
-  } = useMessageContentPagination({
+  const { renderMessage, isExpanded, isLoadingFullText, toggleExpanded } = useMessageContentPagination({
     message,
     paginationHasMore,
     onError: onLoadError,
@@ -180,13 +177,11 @@ export default function MessageCard({
 
   const collapsedCharThreshold = 1200;
   const collapsedMaxHeight = 320;
-  const effectiveLimit =
-    typeof textPagination?.limit === "number" ? textPagination.limit : collapsedCharThreshold;
+  const effectiveLimit = typeof textPagination?.limit === "number" ? textPagination.limit : collapsedCharThreshold;
   const shouldCollapse =
     !suppressText && side === "right" && (paginationHasMore || plainText.trim().length > effectiveLimit);
   const isCollapsed = shouldCollapse && !isExpanded;
-  const bubbleBackground =
-    side === "right" ? theme.palette.background.paper : theme.palette.background.default;
+  const bubbleBackground = side === "right" ? theme.palette.background.paper : theme.palette.background.default;
   const mdContent = useMemo(() => toMarkdown(processedParts), [processedParts]);
   const toggleButtonSx = {
     minWidth: "unset",
@@ -197,10 +192,9 @@ export default function MessageCard({
   const toggleEdgeSx = side === "right" ? { right: 8 } : { left: 8 };
   const showLessSticky = shouldCollapse && isExpanded;
 
-
   return (
     <>
-      <Grid2 container marginBottom={1}>
+      <Grid2 container marginBottom={1} sx={{ position: "relative" }}>
         {/* Assistant avatar on the left */}
         {side === "left" && agent && (
           <Grid2 size="auto" paddingTop={2}>
@@ -215,19 +209,17 @@ export default function MessageCard({
             <>
               <Grid2>
                 <Box
-                    onMouseEnter={() => setBubbleHover(true)}
-                    onMouseLeave={() => setBubbleHover(false)}
-                    sx={{
-                      display: "flex",
-                      flexDirection: "column",
-                      backgroundColor:
-                        side === "right" ? theme.palette.background.paper : theme.palette.background.default,
-                      padding: side === "right" ? "0.8em 16px 0 16px" : "0.8em 0 0 0",
-                      marginTop: side === "right" ? 1 : 0,
-                      borderRadius: 3,
-                      wordBreak: "break-word",
-                    }}
-                  >
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    backgroundColor:
+                      side === "right" ? theme.palette.background.paper : theme.palette.background.default,
+                    padding: side === "right" ? "0.8em 16px 0 16px" : "0.8em 0 0 0",
+                    marginTop: side === "right" ? 1 : 0,
+                    borderRadius: 3,
+                    wordBreak: "break-word",
+                  }}
+                >
                   {/* Header: task chips + indicators */}
                   {(showMetaChips || isCall || isResult) && (
                     <Box display="flex" alignItems="center" gap={1} px={side === "right" ? 0 : 1} pb={0.5}>
@@ -271,14 +263,6 @@ export default function MessageCard({
                       )}
 
                       {/* Runtime context header (indicators + popover trigger) */}
-                      {isAssistant && (
-                        <MessageRuntimeContextHeader
-                          message={renderMessage}
-                          visible={bubbleHover}
-                          libraryNameById={libraryNameById}
-                          chatContextNameById={chatContextNameById}
-                        />
-                      )}
                     </Box>
                   )}
 
@@ -336,7 +320,7 @@ export default function MessageCard({
                           maxHeight: collapsedMaxHeight,
                           overflow: "hidden",
                           "&::after": {
-                            content: "\"\"",
+                            content: '""',
                             position: "absolute",
                             left: 0,
                             right: 0,
@@ -472,7 +456,7 @@ export default function MessageCard({
                     </Tooltip>
                   )}
 
-                  <Chip
+                  {/* <Chip
                     label="AI content may be incorrect, please double-check responses"
                     size="small"
                     variant="outlined"
@@ -482,7 +466,7 @@ export default function MessageCard({
                       borderColor: theme.palette.divider,
                       color: theme.palette.text.primary,
                     }}
-                  />
+                  /> */}
                 </Grid2>
               ) : (
                 <Grid2 height="30px" />
@@ -490,6 +474,15 @@ export default function MessageCard({
             </>
           )}
         </Grid2>
+        {isAssistant && (
+          <Box sx={{ position: "absolute", right: 0, top: "0.8em", zIndex: 1 }}>
+            <MessageRuntimeContextHeader
+              message={renderMessage}
+              libraryNameById={libraryNameById}
+              chatContextNameById={chatContextNameById}
+            />
+          </Box>
+        )}
       </Grid2>
 
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} onSubmit={handleFeedbackSubmit} />

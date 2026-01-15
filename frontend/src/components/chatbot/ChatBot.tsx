@@ -21,16 +21,15 @@
  * - Avoids flicker on session switch by keeping messages while history loads; welcome shows only when truly empty.
  */
 
-import { Box, Grid2, Paper, Tooltip, Typography, useTheme } from "@mui/material";
+import TravelExploreOutlinedIcon from "@mui/icons-material/TravelExploreOutlined";
+import { Box, Grid2, IconButton, Tooltip, Typography, useTheme } from "@mui/material";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
 import { getConfig } from "../../common/config.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
-import { useAgentSelector } from "../../hooks/useAgentSelector.ts";
 import { useInitialChatInputContext } from "../../hooks/useInitialChatInputContext.ts";
-import { useLocalStorageState } from "../../hooks/useLocalStorageState.ts";
 import { useSessionChange } from "../../hooks/useSessionChange.ts";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import {
@@ -41,6 +40,7 @@ import {
   StreamEvent,
   useCreateSessionAgenticV1ChatbotSessionPostMutation,
   useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
+  useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
   useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
 } from "../../slices/agentic/agenticOpenApi.ts";
@@ -53,9 +53,10 @@ import { useToast } from "../ToastProvider.tsx";
 import { AttachmentsButton } from "./AttachmentsButton.tsx";
 import { keyOf, mergeAuthoritative, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import ChatKnowledge from "./ChatKnowledge.tsx";
+import { FeatureTooltip } from "./FeatureTooltip.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
 import { ChatContextPickerPanel } from "./settings/ChatContextPickerPanel.tsx";
-import UserInput, { UserInputContent } from "./user_input/UserInput.tsx";
+import UserInput, { UserInputContent, UserInputHandle } from "./user_input/UserInput.tsx";
 
 const HISTORY_TEXT_LIMIT = 1200;
 
@@ -109,11 +110,13 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
   const { showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
   const wsTokenRef = useRef<string | null>(null);
+  const wsConnectSeqRef = useRef<number>(0);
   // When backend creates a session during first file upload, keep it locally
   // so the immediate next message uses the same session id.
   const pendingSessionIdRef = useRef<string | null>(null);
   // Track files being uploaded right now to surface inline progress in the input bar
   const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
+  const userInputRef = useRef<UserInputHandle | null>(null);
 
   // Name of des libs / prompts / templates / chat-context
   const { data: docLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
@@ -123,10 +126,14 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     kind: "chat-context",
   });
 
-  const [selectedChatContextIds, setSelectedChatContextIds] = useLocalStorageState<string[]>(
-    "chat.selectedChatContextIds",
-    [],
-  );
+  const [selectedChatContextIds, setSelectedChatContextIds] = useState<string[]>([]);
+  const setSelectedChatContextIdsFromHydration = useCallback((ids: string[]) => {
+    setSelectedChatContextIds(ids);
+  }, []);
+  const setSelectedChatContextIdsFromUser = useCallback((ids: string[]) => {
+    setSelectedChatContextIds(ids);
+    userInputRef.current?.markSessionPrefsDirty();
+  }, []);
 
   const libraryNameMap = useMemo(() => Object.fromEntries(docLibs.map((x) => [x.id, x.name])), [docLibs]);
   const promptNameMap = useMemo(
@@ -204,16 +211,96 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     setMessages(msgs);
   };
 
-  const { currentAgent, setCurrentAgent } = useAgentSelector(agents, isNewConversation, messages, sessionId);
+  const defaultAgent = useMemo(() => agents[0] ?? null, [agents]);
+  const [currentAgent, setCurrentAgent] = useState<AnyAgent>(agents[0] ?? ({} as AnyAgent));
+  useEffect(() => {
+    if (defaultAgent && (!currentAgent || !currentAgent.name)) setCurrentAgent(defaultAgent);
+  }, [currentAgent, defaultAgent]);
 
   const [attachmentsPanelOpen, setAttachmentsPanelOpen] = useState<boolean>(false);
   const [attachmentCount, setAttachmentCount] = useState<number>(0);
+  const [deepSearchEnabled, setDeepSearchEnabled] = useState<boolean>(false);
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
+  const waitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const waitStartedAtRef = useRef<number>(0);
+  const waitSeqRef = useRef<number>(0);
+  const debugLoader = useMemo(() => {
+    try {
+      return localStorage.getItem("chat.debugLoader") === "1";
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // --- Session preferences (authoritative) ---
+  const effectiveSessionId = pendingSessionIdRef.current || sessionId || undefined;
+  const prefsSessionId = effectiveSessionId;
+  const {
+    data: sessionPrefs,
+    refetch: refetchSessionPrefs,
+  } = useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery(
+    { sessionId: prefsSessionId || "" },
+    {
+      skip: !prefsSessionId,
+      refetchOnMountOrArgChange: true,
+      refetchOnReconnect: true,
+      refetchOnFocus: true,
+    },
+  );
+  useEffect(() => {
+    if (!prefsSessionId) return;
+    const agentName = (sessionPrefs as any)?.agent_name;
+    if (typeof agentName !== "string" || !agentName.length) return;
+    const found = agents.find((a) => a.name === agentName) ?? defaultAgent;
+    if (found && found.name !== currentAgent?.name) setCurrentAgent(found);
+  }, [agents, currentAgent?.name, defaultAgent, prefsSessionId, sessionPrefs]);
+
+  const beginWaiting = () => {
+    waitSeqRef.current += 1;
+    waitStartedAtRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (waitTimerRef.current) {
+      clearTimeout(waitTimerRef.current);
+      waitTimerRef.current = null;
+    }
+    if (debugLoader) console.debug("[loader] begin", { seq: waitSeqRef.current });
+    setWaitResponse(true);
+  };
+
+  const endWaiting = ({ immediate = false }: { immediate?: boolean } = {}) => {
+    const seq = waitSeqRef.current;
+    const MIN_MS = 200;
+
+    if (waitTimerRef.current) {
+      clearTimeout(waitTimerRef.current);
+      waitTimerRef.current = null;
+    }
+
+    const finish = () => {
+      if (seq === waitSeqRef.current) setWaitResponse(false);
+    };
+
+    if (immediate) {
+      finish();
+      return;
+    }
+
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const elapsed = now - waitStartedAtRef.current;
+    const remaining = MIN_MS - elapsed;
+    if (remaining > 0) {
+      if (debugLoader) console.debug("[loader] end (delayed)", { seq, remainingMs: Math.ceil(remaining) });
+      waitTimerRef.current = setTimeout(finish, remaining);
+    } else {
+      if (debugLoader) console.debug("[loader] end", { seq, immediate });
+      finish();
+    }
+  };
+
   const stopStreaming = () => {
     const socket = webSocketRef.current;
     if (!socket) {
-      setWaitResponse(false);
+      endWaiting({ immediate: true });
       return;
     }
 
@@ -230,7 +317,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     } finally {
       webSocketRef.current = null;
       wsTokenRef.current = null;
-      setWaitResponse(false);
+      endWaiting({ immediate: true });
     }
   };
 
@@ -265,6 +352,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     //    ce token au handshake et ignorer tout user_id client.
     await KeyCloakService.ensureFreshToken(30);
     const token = KeyCloakService.GetToken();
+    const connectSeq = ++wsConnectSeqRef.current;
 
     return new Promise((resolve, reject) => {
       const rawWsUrl = toWsUrl(getConfig().backend_url_api, "/agentic/v1/chatbot/query/ws");
@@ -275,11 +363,18 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       wsTokenRef.current = token || null; // mémo pour détection simple de changement
 
       socket.onopen = () => {
+        if (connectSeq !== wsConnectSeqRef.current) {
+          try {
+            socket.close(4001, "stale_ws_connection");
+          } catch {}
+          return;
+        }
         console.log("[CHATBOT] WebSocket connected");
         webSocketRef.current = socket;
         resolve(socket);
       };
       socket.onmessage = (event) => {
+        if (connectSeq !== wsConnectSeqRef.current) return;
         try {
           const response = JSON.parse(event.data);
 
@@ -298,6 +393,8 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
               // Upsert streamed message and keep order stable
               messagesRef.current = upsertOne(messagesRef.current, msg);
               setMessages(messagesRef.current);
+              // Defensive: ensure loader is visible while we are streaming a response.
+              beginWaiting();
               // ⛔ no scrolling logic here — the layout effect handles it post-render
               break;
             }
@@ -322,14 +419,14 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
               // Merge authoritative finals (includes citations/metadata)
               messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
               setMessages(messagesRef.current);
-              setWaitResponse(false);
+              endWaiting();
               break;
             }
 
             case "error": {
               showError({ summary: "Error", detail: response.content });
               console.error("[RCV ERROR ChatBot] WebSocket error:", response);
-              setWaitResponse(false);
+              endWaiting({ immediate: true });
               break;
             }
 
@@ -339,30 +436,32 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
                 summary: "Unknown Message",
                 detail: `Received unknown message type: ${response.type}`,
               });
-              setWaitResponse(false);
+              endWaiting({ immediate: true });
               break;
             }
           }
         } catch (err) {
           console.error("[❌ ChatBot] Failed to parse message:", err);
           showError({ summary: "Parsing Error", detail: "Assistant response could not be processed." });
-          setWaitResponse(false);
+          endWaiting({ immediate: true });
           socket.close(); // Close only if the payload is unreadable
         }
       };
 
       socket.onerror = (err) => {
+        if (connectSeq !== wsConnectSeqRef.current) return;
         console.error("[❌ ChatBot] WebSocket error:", err);
         showError({ summary: "Connection Error", detail: "Chat connection failed." });
-        setWaitResponse(false);
+        endWaiting({ immediate: true });
         reject(err);
       };
 
       socket.onclose = () => {
+        if (connectSeq !== wsConnectSeqRef.current) return;
         console.warn("[❌ ChatBot] WebSocket closed");
         webSocketRef.current = null;
         wsTokenRef.current = null;
-        setWaitResponse(false);
+        endWaiting();
       };
     });
   };
@@ -371,6 +470,10 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
   useEffect(() => {
     setupWebSocket();
     return () => {
+      if (waitTimerRef.current) {
+        clearTimeout(waitTimerRef.current);
+        waitTimerRef.current = null;
+      }
       if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.OPEN) {
         console.log("[ChatBot] Closing websocket on component unmount");
         webSocketRef.current.close();
@@ -442,6 +545,8 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       seedPrefsRef.current = userInputContext || initialCtx;
       seedSessionIdRef.current = newSessionId;
       setUserInputContext(null);
+      // If we navigated from draft to an existing session (not created just now), avoid leaking draft selections.
+      if (pendingSessionIdRef.current !== newSessionId) setSelectedChatContextIds([]);
     },
     onSessionToDraft: () => {
       // Returning to welcome: reset draft prefs and agent to deterministic default
@@ -449,12 +554,14 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       seedPrefsRef.current = null;
       seedSessionIdRef.current = null;
       setUserInputContext(null);
+      setSelectedChatContextIds([]);
     },
     onSessionSwitch: () => {
       // Switching between existing sessions: clear transient draft/seed context to avoid bleed
       seedPrefsRef.current = null;
       seedSessionIdRef.current = null;
       setUserInputContext(null);
+      setSelectedChatContextIds([]);
     },
   });
 
@@ -511,6 +618,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       }).unwrap();
       // Seed backend preferences with current draft context so selections are preserved.
       const prefPayload: Record<string, any> = {
+        chatContextIds: selectedChatContextIds,
         documentLibraryIds: basePrefs?.documentLibraryIds ?? [],
         promptResourceIds: basePrefs?.promptResourceIds ?? [],
         templateResourceIds: basePrefs?.templateResourceIds ?? [],
@@ -550,6 +658,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     basePrefs?.templateResourceIds,
     createSession,
     currentAgent?.name,
+    selectedChatContextIds,
     sessionId,
     persistSessionPrefs,
     showError,
@@ -616,6 +725,8 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
         return;
       }
     }
+    // Show loader immediately (even while WS is connecting).
+    beginWaiting();
     // Get tokens for backend use. This proacively allows the backend to perform
     // user-authenticated operations (e.g., vector search) on behalf of the user.
     // The backend is then responsible for refreshing tokens as needed. Which will rarely be needed
@@ -642,7 +753,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       const socket = await setupWebSocket();
 
       if (socket && socket.readyState === WebSocket.OPEN) {
-        setWaitResponse(true);
         socket.send(JSON.stringify(event));
         console.debug("[CHATBOT] Sent message:", event);
       } else {
@@ -651,7 +761,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     } catch (err) {
       console.error("[CHATBOT] Failed to send message:", err);
       showError({ summary: "Connection Error", detail: "Could not send your message — connection failed." });
-      setWaitResponse(false);
+      endWaiting({ immediate: true });
     }
   };
 
@@ -664,12 +774,10 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     messages && messages.length
       ? messages.reduce((sum, msg) => sum + (msg.metadata?.token_usage?.input_tokens || 0), 0)
       : 0;
-  // After your state declarations
-  const effectiveSessionId = pendingSessionIdRef.current || sessionId || undefined;
-
   const showWelcome = isNewConversation && !waitResponse && messages.length === 0;
   // Helps spot session-history fetch issues quickly in dev without adding noisy logs.
   const showHistoryLoading = !!sessionId && isHistoryFetching && messages.length === 0;
+  const isSessionPrefsReady = !effectiveSessionId || !!sessionPrefs;
 
   const hasContext =
     !!userInputContext &&
@@ -679,6 +787,20 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       (userInputContext?.promptResourceIds?.length ?? 0) > 0 ||
       (userInputContext?.templateResourceIds?.length ?? 0) > 0);
   const agentSupportsAttachments = currentAgent?.chat_options?.attach_files === true;
+  const effectiveAttachmentsPanelOpen = agentSupportsAttachments ? attachmentsPanelOpen : false;
+  const showSetupButton = Boolean(
+    currentAgent?.chat_options?.libraries_selection ||
+      currentAgent?.chat_options?.search_policy_selection ||
+      currentAgent?.chat_options?.record_audio_files,
+  );
+  const librariesCount = useMemo(() => {
+    if (effectiveSessionId) {
+      const ids = (sessionPrefs as any)?.documentLibraryIds;
+      return Array.isArray(ids) ? ids.length : 0;
+    }
+    const draftIds = basePrefs?.documentLibraryIds;
+    return Array.isArray(draftIds) ? draftIds.length : 0;
+  }, [basePrefs?.documentLibraryIds, effectiveSessionId, sessionPrefs]);
 
   useEffect(() => {
     if (!showWelcome) return;
@@ -694,57 +816,101 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
            - Avoid guesswork (messages length, etc.). Keep UX deterministic. */}
 
       {/* Chat context picker panel */}
-      <Paper
-        elevation={1}
-        sx={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          zIndex: 10,
-          width: 200,
-          backgroundColor: theme.palette.background.paper,
-          py: 1,
-          borderTopLeftRadius: 0,
-          borderTopRightRadius: 0,
-          borderBottomLeftRadius: 0,
-          borderBottomRightRadius: 8,
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <ChatContextPickerPanel
-          selectedChatContextIds={selectedChatContextIds}
-          onChangeSelectedChatContextIds={setSelectedChatContextIds}
-        />
-      </Paper>
+      {/* (moved) Chat context is now in the top-right vertical toolbar */}
 
-      {/* Attachments button */}
-      {agentSupportsAttachments && (
-        <AttachmentsButton
-          attachmentsPanelOpen={attachmentsPanelOpen}
-          attachmentCount={attachmentCount}
-          onToggle={() => setAttachmentsPanelOpen((v) => !v)}
-        />
-      )}
+      {/* Conversation top-right controls (attachments + setup) */}
+      <AttachmentsButton
+        attachmentsPanelOpen={effectiveAttachmentsPanelOpen}
+        attachmentCount={agentSupportsAttachments ? attachmentCount : 0}
+        onToggle={() => setAttachmentsPanelOpen((v) => !v)}
+        showAttachmentsButton
+        attachmentsEnabled={isSessionPrefsReady && agentSupportsAttachments}
+        showSetupButton
+        setupEnabled={isSessionPrefsReady && showSetupButton}
+        setupCount={librariesCount}
+        onOpenSetup={(anchorEl) => {
+          userInputRef.current?.openSetupPopover(anchorEl);
+        }}
+        topSlot={
+          <>
+            <ChatContextPickerPanel
+              variant="icon"
+              selectedChatContextIds={selectedChatContextIds}
+              onChangeSelectedChatContextIds={setSelectedChatContextIdsFromUser}
+            />
+              <FeatureTooltip
+                label={t("chatbot.deepSearch.label", "Deep Search")}
+                description={t(
+                "chatbot.deepSearch.tooltipDescription",
+                "Delegates retrieval to a specialized agent for deeper search across your knowledge.\nAdds `deep_search` to the runtime context; may be slower but more thorough.",
+              )}
+              disabledReason={
+                currentAgent?.chat_options?.deep_search_delegate === true
+                  ? undefined
+                  : t(
+                      "chatbot.deepSearch.tooltipDisabled",
+                      "This agent does not support deep search delegation.",
+                    )
+              }
+            >
+              <span>
+                <IconButton
+                  size="small"
+                  aria-label="deep-search"
+                  onClick={() => userInputRef.current?.setDeepSearchEnabled(!deepSearchEnabled)}
+                  disabled={
+                    waitResponse || !isSessionPrefsReady || currentAgent?.chat_options?.deep_search_delegate !== true
+                  }
+                  sx={{
+                    border: `1px solid ${theme.palette.divider}`,
+                    backgroundColor: deepSearchEnabled ? theme.palette.primary.main : theme.palette.background.paper,
+                    color: deepSearchEnabled ? theme.palette.primary.contrastText : theme.palette.text.secondary,
+                    opacity: currentAgent?.chat_options?.deep_search_delegate === true ? 1 : 0.45,
+                    "&:hover": {
+                      backgroundColor: deepSearchEnabled ? theme.palette.primary.dark : theme.palette.action.hover,
+                    },
+                  }}
+                >
+                  <TravelExploreOutlinedIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </FeatureTooltip>
+          </>
+        }
+      />
 
       <Box
-        width="80%"
-        maxWidth={{ xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" }}
-        display="flex"
         height="100vh"
+        width="100%"
+        display="flex"
         flexDirection="column"
-        alignItems="center"
         paddingBottom={1}
         sx={{
           minHeight: 0,
           overflow: "hidden",
-          pr: attachmentsPanelOpen ? { xs: "min(92vw, 320px)", sm: "340px" } : 0,
-          transition: (t) => t.transitions.create("padding-right"),
         }}
       >
-        {/* Conversation start: new conversation without message */}
+        {/*
+          IMPORTANT: keep the scrollbar on the browser edge.
+          - The scrollable container must be full-width (100%),
+            while the conversation content stays centered (maxWidth).
+        */}
         {showWelcome && (
+          <Box
+            width="80%"
+            maxWidth={{ xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" }}
+            display="flex"
+            flexDirection="column"
+            alignItems="center"
+              sx={{
+                minHeight: 0,
+                overflow: "hidden",
+              pr: effectiveAttachmentsPanelOpen ? { xs: "min(92vw, 320px)", sm: "340px" } : 0,
+              transition: (t) => t.transitions.create("padding-right"),
+              mx: "auto",
+            }}
+          >
+        {/* Conversation start: new conversation without message */}
           <Box
             sx={{
               minHeight: "100vh",
@@ -789,6 +955,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
             {/* Input area */}
             <Box sx={{ width: "min(900px, 100%)" }}>
               <UserInput
+                ref={userInputRef}
                 agentChatOptions={currentAgent.chat_options}
                 isWaiting={waitResponse}
                 onSend={handleSend}
@@ -799,6 +966,10 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
                 uploadingFiles={uploadingFiles}
                 onFilesSelected={agentSupportsAttachments ? handleFilesSelected : undefined}
                 attachmentsRefreshTick={attachmentsRefreshTick}
+                serverPrefs={sessionPrefs as any}
+                refetchServerPrefs={refetchSessionPrefs}
+                selectedChatContextIds={selectedChatContextIds}
+                onSelectedChatContextIdsChange={setSelectedChatContextIdsFromHydration}
                 initialDocumentLibraryIds={initialDocumentLibraryIds}
                 initialPromptResourceIds={initialPromptResourceIds}
                 initialTemplateResourceIds={initialTemplateResourceIds}
@@ -808,11 +979,13 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={setCurrentAgent}
-                attachmentsPanelOpen={agentSupportsAttachments ? attachmentsPanelOpen : false}
+                attachmentsPanelOpen={effectiveAttachmentsPanelOpen}
                 onAttachmentsPanelOpenChange={agentSupportsAttachments ? setAttachmentsPanelOpen : undefined}
                 onAttachmentCountChange={agentSupportsAttachments ? setAttachmentCount : undefined}
+                onDeepSearchEnabledChange={(enabled) => setDeepSearchEnabled(enabled)}
               />
             </Box>
+          </Box>
           </Box>
         )}
 
@@ -820,15 +993,12 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
         {!showWelcome && (
           <>
             {/* Chatbot messages area */}
-            <Grid2
+            <Box
               ref={scrollerRef}
-              display="flex"
-              flexDirection="column"
-              flex="1"
-              width="100%"
-              p={2}
               sx={{
+                flex: 1,
                 minHeight: 0,
+                width: "100%",
                 overflowY: "auto",
                 overflowX: "hidden",
                 scrollbarWidth: "thin",
@@ -842,73 +1012,96 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
                 "&::-webkit-scrollbar-track": {
                   backgroundColor: "transparent",
                 },
-                wordBreak: "break-word",
-                alignContent: "center",
               }}
             >
-              <MessagesArea
-                key={sessionId}
-                messages={messages}
-                agents={agents}
-                currentAgent={currentAgent}
-                libraryNameById={libraryNameMap}
-                chatContextNameById={chatContextNameMap}
-              />
-              {showHistoryLoading && (
-                <Box mt={1} sx={{ alignSelf: "center" }}>
-                  <DotsLoader dotColor={theme.palette.text.secondary} />
-                </Box>
-              )}
-              {waitResponse && (
-                <Box mt={1} sx={{ alignSelf: "flex-start" }}>
-                  <DotsLoader dotColor={theme.palette.text.primary} />
-                </Box>
-              )}
-            </Grid2>
-
-            {/* User input area */}
-            <Grid2 container width="100%" alignContent="center">
-              <UserInput
-                agentChatOptions={currentAgent.chat_options}
-                isWaiting={waitResponse}
-                onSend={handleSend}
-                onStop={stopStreaming}
-                onContextChange={handleDraftContextChange}
-                sessionId={sessionId}
-                effectiveSessionId={effectiveSessionId}
-                uploadingFiles={uploadingFiles}
-                onFilesSelected={agentSupportsAttachments ? handleFilesSelected : undefined}
-                attachmentsRefreshTick={attachmentsRefreshTick}
-                initialDocumentLibraryIds={initialDocumentLibraryIds}
-                initialPromptResourceIds={initialPromptResourceIds}
-                initialTemplateResourceIds={initialTemplateResourceIds}
-                initialSearchPolicy={initialSearchPolicy}
-                initialSearchRagScope={initialSearchRagScope}
-                initialDeepSearch={initialDeepSearch}
-                currentAgent={currentAgent}
-                agents={agents}
-                onSelectNewAgent={setCurrentAgent}
-                attachmentsPanelOpen={agentSupportsAttachments ? attachmentsPanelOpen : false}
-                onAttachmentsPanelOpenChange={agentSupportsAttachments ? setAttachmentsPanelOpen : undefined}
-                onAttachmentCountChange={agentSupportsAttachments ? setAttachmentCount : undefined}
-              />
-            </Grid2>
-
-            {/* Conversation tokens count */}
-            <Grid2 container width="100%" display="flex" justifyContent="flex-end" marginTop={0.5}>
-              <Tooltip
-                title={t("chatbot.tooltip.tokenUsage", {
-                  input: inputTokenCounts,
-                  output: outputTokenCounts,
-                })}
+              <Box
+                sx={{
+                  width: "80%",
+                  maxWidth: { xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" },
+                  mx: "auto",
+                  p: 2,
+                  pr: effectiveAttachmentsPanelOpen ? { xs: "min(92vw, 320px)", sm: "340px" } : 0,
+                  transition: (t) => t.transitions.create("padding-right"),
+                  wordBreak: "break-word",
+                  alignContent: "center",
+                  minHeight: 0,
+                }}
               >
-                <Typography fontSize="0.8rem" color={theme.palette.text.secondary} fontStyle="italic">
-                  {t("chatbot.tooltip.tokenCount", {
-                    total: outputTokenCounts + inputTokenCounts > 0 ? outputTokenCounts + inputTokenCounts : "...",
+                <MessagesArea
+                  key={sessionId}
+                  messages={messages}
+                  agents={agents}
+                  currentAgent={currentAgent}
+                  libraryNameById={libraryNameMap}
+                  chatContextNameById={chatContextNameMap}
+                />
+                {showHistoryLoading && (
+                  <Box mt={1} sx={{ alignSelf: "center" }}>
+                    <DotsLoader dotColor={theme.palette.text.secondary} />
+                  </Box>
+                )}
+              </Box>
+            </Box>
+
+            <Box
+              sx={{
+                width: "80%",
+                maxWidth: { xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" },
+                mx: "auto",
+                pr: effectiveAttachmentsPanelOpen ? { xs: "min(92vw, 320px)", sm: "340px" } : 0,
+                transition: (t) => t.transitions.create("padding-right"),
+              }}
+            >
+              {/* User input area */}
+              <Grid2 container width="100%" alignContent="center">
+                <UserInput
+                  ref={userInputRef}
+                  agentChatOptions={currentAgent.chat_options}
+                  isWaiting={waitResponse}
+                  onSend={handleSend}
+                  onStop={stopStreaming}
+                  onContextChange={handleDraftContextChange}
+                  sessionId={sessionId}
+                  effectiveSessionId={effectiveSessionId}
+                  uploadingFiles={uploadingFiles}
+                  onFilesSelected={agentSupportsAttachments ? handleFilesSelected : undefined}
+                  attachmentsRefreshTick={attachmentsRefreshTick}
+                  serverPrefs={sessionPrefs as any}
+                  refetchServerPrefs={refetchSessionPrefs}
+                  selectedChatContextIds={selectedChatContextIds}
+                  onSelectedChatContextIdsChange={setSelectedChatContextIdsFromHydration}
+                  initialDocumentLibraryIds={initialDocumentLibraryIds}
+                  initialPromptResourceIds={initialPromptResourceIds}
+                  initialTemplateResourceIds={initialTemplateResourceIds}
+                  initialSearchPolicy={initialSearchPolicy}
+                  initialSearchRagScope={initialSearchRagScope}
+                  initialDeepSearch={initialDeepSearch}
+                  currentAgent={currentAgent}
+                  agents={agents}
+                  onSelectNewAgent={setCurrentAgent}
+                  attachmentsPanelOpen={effectiveAttachmentsPanelOpen}
+                  onAttachmentsPanelOpenChange={agentSupportsAttachments ? setAttachmentsPanelOpen : undefined}
+                  onAttachmentCountChange={agentSupportsAttachments ? setAttachmentCount : undefined}
+                  onDeepSearchEnabledChange={(enabled) => setDeepSearchEnabled(enabled)}
+                />
+              </Grid2>
+
+              {/* Conversation tokens count */}
+              <Grid2 container width="100%" display="flex" justifyContent="flex-end" marginTop={0.5}>
+                <Tooltip
+                  title={t("chatbot.tooltip.tokenUsage", {
+                    input: inputTokenCounts,
+                    output: outputTokenCounts,
                   })}
-                </Typography>
-              </Tooltip>
-            </Grid2>
+                >
+                  <Typography fontSize="0.8rem" color={theme.palette.text.secondary} fontStyle="italic">
+                    {t("chatbot.tooltip.tokenCount", {
+                      total: outputTokenCounts + inputTokenCounts > 0 ? outputTokenCounts + inputTokenCounts : "...",
+                    })}
+                  </Typography>
+                </Tooltip>
+              </Grid2>
+            </Box>
           </>
         )}
       </Box>
