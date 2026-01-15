@@ -20,6 +20,7 @@ import logging
 import pathlib
 import shutil
 import tempfile
+import time
 import uuid
 from typing import List, Optional
 
@@ -540,12 +541,17 @@ class IngestionController:
                     success = 0
                     last_error: str | None = None
                     for filename, input_temp_file in preloaded_files:
+                        file_started = time.perf_counter()
+                        file_status = "error"
+                        file_type = pathlib.Path(filename).suffix.lstrip(".") or None
                         try:
                             output_temp_dir = input_temp_file.parent.parent
 
                             current_step = "metadata extraction"
                             yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                             metadata = self.service.extract_metadata(user, file_path=input_temp_file, tags=tags, source_tag=source_tag)
+                            metadata_file_type = getattr(metadata, "file_type", None)
+                            file_type = metadata_file_type or file_type
                             yield ProcessingProgress(step=current_step, status=Status.SUCCESS, filename=filename).model_dump_json() + "\n"
 
                             current_step = "input content saving"
@@ -565,12 +571,23 @@ class IngestionController:
                             yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                             yield ProcessingProgress(step="Finished", filename=filename, status=Status.FINISHED, document_uid=metadata.document_uid).model_dump_json() + "\n"
                             success += 1
+                            file_status = "ok"
 
                         except Exception as e:
                             error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
                             last_error = error_message
                             logger.exception("Ingestion error during '%s' for file '%s'", current_step, filename, exc_info=True)
                             yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n"
+                        finally:
+                            duration_ms = (time.perf_counter() - file_started) * 1000.0
+                            kpi.emit(
+                                name="ingestion.document_duration_ms",
+                                type="timer",
+                                value=duration_ms,
+                                unit="ms",
+                                dims={"file_type": file_type, "status": file_status, "source": "api"},
+                                actor=KPIActor(type="human", user_id=user.uid),
+                            )
                     d["status"] = "ok" if success == total else "error"
                     overall_status = Status.SUCCESS if success == total else Status.ERROR
                     done_payload: dict = {"step": "done", "status": overall_status}
