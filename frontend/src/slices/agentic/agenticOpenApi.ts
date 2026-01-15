@@ -869,6 +869,10 @@ export type FrontendFlags = {
 export type Properties = {
   logoName?: string;
   logoNameDark?: string;
+  logoHeight?: string;
+  logoWidth?: string;
+  faviconName?: string | null;
+  faviconNameDark?: string | null;
   siteDisplayName?: string;
   /** Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'. */
   releaseBrand?: string | null;
