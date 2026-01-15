@@ -71,8 +71,9 @@ ai:
     # Required in .env:
     # - OPENAI_API_KEY
     provider: "openai"
-    name: "gpt-5.1"
+    name: "mistral-medium-latest"
     settings:
+      base_url: "https://api.mistral.ai/v1/"
       temperature: 0.0
       max_retries: 2
       request_timeout: 90
@@ -80,8 +81,9 @@ ai:
     # Required in .env:
     # - OPENAI_API_KEY
     provider: "openai"
-    name: "gpt-5.1"
+    name: "mistral-medium-latest"
     settings:
+      base_url: "https://api.mistral.ai/v1/"
       temperature: 0.0
       max_retries: 2
       request_timeout: 90

@@ -329,29 +329,63 @@ class ReferenceEditor(AgentFlow):
                 fill_slide_from_structured_response(template_path, actual_data, output_path)
 
             # 3. Upload the generated asset to user storage
+            import uuid
+            import asyncio
             user_id_to_store_asset = self.get_end_user_id()
-            final_key = f"{user_id_to_store_asset}_{output_path.name}"
+            # Use UUID to generate a unique filename that won't trigger versioning conflicts
+            unique_id = str(uuid.uuid4())
+            final_key = f"Generated_Slide_{unique_id}.pptx"
 
-            with open(output_path, "rb") as f_out:
-                upload_result = await self.upload_user_asset(
-                    key=final_key,
-                    file_content=f_out,
-                    filename=f"Generated_Slide_{self.get_name()}.pptx",
-                    content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    user_id_override=user_id_to_store_asset,
+            # Try upload with retry logic in case of temporary backend issues
+            max_retries = 2
+            upload_succeeded = False
+            last_error = None
+
+            for attempt in range(max_retries):
+                try:
+                    with open(output_path, "rb") as f_out:
+                        upload_result = await self.upload_user_asset(
+                            key=final_key,
+                            file_content=f_out,
+                            filename=final_key,  # Use the same unique filename to avoid versioning conflicts
+                            content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                            user_id_override=user_id_to_store_asset if attempt == 0 else None,
+                        )
+                    upload_succeeded = True
+                    break  # Success, exit retry loop
+                except Exception as e:
+                    last_error = e
+                    if attempt < max_retries - 1:
+                        # Wait a bit before retrying
+                        await asyncio.sleep(1)
+                        continue
+
+            if upload_succeeded:
+                # 4. Construct the structured message for the UI
+                final_download_url = self.get_asset_download_url(
+                    asset_key=upload_result.key, scope="user"
                 )
 
-            # 4. Construct the structured message for the UI
-            final_download_url = self.get_asset_download_url(
-                asset_key=upload_result.key, scope="user"
-            )
+                return LinkPart(
+                    href=final_download_url,
+                    title=f"Download {upload_result.file_name}",
+                    kind=LinkKind.download,
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                )
+            else:
+                # Upload failed - save locally and inform user
+                import shutil
+                backup_dir = Path.home() / ".fred" / "agentic-backend" / "failed_uploads"
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                backup_path = backup_dir / final_key
+                shutil.copy2(output_path, backup_path)
 
-            return LinkPart(
-                href=final_download_url,
-                title=f"Download {upload_result.file_name}",
-                kind=LinkKind.download,
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            )
+                error_msg = f"⚠️ L'upload vers le serveur a échoué, mais le fichier a été généré avec succès.\n\n"
+                error_msg += f"Le fichier est sauvegardé localement à: {backup_path}\n\n"
+                error_msg += f"Erreur technique: {str(last_error)[:200]}\n\n"
+                error_msg += "Veuillez vérifier que le backend knowledge-flow fonctionne correctement."
+
+                return error_msg
 
         return template_tool
 
@@ -390,17 +424,34 @@ class ReferenceEditor(AgentFlow):
                 fill_word_from_structured_response(template_path, actual_data, output_path)
 
             # 3. Upload the generated asset to user storage
+            import uuid
+            import asyncio
             user_id_to_store_asset = self.get_end_user_id()
-            final_key = f"{user_id_to_store_asset}_{output_path.name}"
+            # Use UUID to generate a unique filename that won't trigger versioning conflicts
+            unique_id = str(uuid.uuid4())
+            final_key = f"Generated_Document_{unique_id}.docx"
 
-            with open(output_path, "rb") as f_out:
-                upload_result = await self.upload_user_asset(
-                    key=final_key,
-                    file_content=f_out,
-                    filename=f"Generated_Document_{self.get_name()}.docx",
-                    content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    user_id_override=user_id_to_store_asset,
-                )
+            # Try upload with retry logic in case of temporary backend issues
+            max_retries = 2
+            for attempt in range(max_retries):
+                try:
+                    with open(output_path, "rb") as f_out:
+                        upload_result = await self.upload_user_asset(
+                            key=final_key,
+                            file_content=f_out,
+                            filename=final_key,  # Use the same unique filename to avoid versioning conflicts
+                            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            user_id_override=user_id_to_store_asset if attempt == 0 else None,
+                        )
+                    break  # Success, exit retry loop
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        # Wait a bit before retrying
+                        await asyncio.sleep(1)
+                        continue
+                    else:
+                        # Final attempt failed, re-raise
+                        raise
 
             # 4. Construct the structured message for the UI
             final_download_url = self.get_asset_download_url(
