@@ -469,7 +469,9 @@
     },
     "deepSearch": {
       "label": "Deep Search",
-      "tooltip": "Delegate RAG retrieval to Rico Senior"
+      "tooltip": "Delegate RAG retrieval to Rico Senior",
+      "tooltipDescription": "Delegates retrieval to a specialized agent for deeper search across your knowledge.\n\nActivating this feature will result in slower but more thorough replies. A downloadable transcript of the search process will be attached to the conversation.",
+      "tooltipDisabled": "This agent does not support deep search delegation."
     },
     "menu": {
       "addToSetup": "Add to conversation setup"
@@ -483,7 +485,11 @@
       "supportedFormats": "Supported files: PDF, DOCX, CSV",
       "count": "{{count}} attached",
       "drawerTitle": "Manage Attachments",
-      "noAttachments": "No attachments yet"
+      "noAttachments": "No attachments yet",
+      "tooltip": {
+        "description": "Files attached to this conversation.\nThe files are processed by faster but less precise algorithms. The agent may use these files to answer.\n\nNote that this feature is in beta and may not work perfectly for all file types. For persistent corpora, consider using document libraries.",
+        "disabled": "This agent does not use attachments."
+      }
     },
     "uploadingFile": "Uploading {{name}}...",
     "searchToggle": "Toggle retrieval: on searches documents, off skips RAG",
@@ -525,9 +531,9 @@
     "confirmDeleteAllTitle": "Delete all conversations?",
     "confirmDeleteAllMessage": "This action will permanently delete all conversations. Do you want to continue?",
     "chatContext": "Chat context",
-    "conversationSetup": "Conversation setup",
-    "newConversationHelp": "Start a new conversation (not yet saved)",
-    "draftNotSaved": "Draft • not yet saved"
+    "chatContextTooltip": {
+      "description": "Select reusable context snippets included with every message in this conversation.\n\nThese prompt instructions is automatically included in the agents system prompt and thus works with all agents.\n\nNote that each agent also expose its internal prompt tuning options in the agent settings. Those are agent-specific and not shared across agents. Using the chat context allows to adapt agents global behavior to your needs."
+    }
   },
   "kpis": {
     "title": "Agent & AI Service Monitoring",
@@ -639,6 +645,8 @@
     "description": "Manage your document and chat context libraries",
     "viewSelector": {
       "libraries": "Libraries",
+      "librariesTooltip": "Scope document retrieval to only the selected document libraries.\n\nThis settings is saved per conversation and used for RAG when the selected agent supports it.",
+      "librariesUnsupported": "This agent does not support library scoping.",
       "templates": "Templates",
       "prompts": "Prompts",
       "documents": "Documents",

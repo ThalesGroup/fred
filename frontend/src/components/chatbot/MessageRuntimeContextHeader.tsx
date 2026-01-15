@@ -112,7 +112,7 @@ export default function MessageRuntimeContextHeader({ message, visible, libraryN
         display: "flex",
         alignItems: "center",
         gap: 0.5,
-        opacity: visible || insightOpen ? 1 : 0,
+        opacity: 1,
         transition: "opacity .15s ease",
       }}
     >

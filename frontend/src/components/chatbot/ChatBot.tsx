@@ -53,6 +53,7 @@ import { useToast } from "../ToastProvider.tsx";
 import { AttachmentsButton } from "./AttachmentsButton.tsx";
 import { keyOf, mergeAuthoritative, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import ChatKnowledge from "./ChatKnowledge.tsx";
+import { FeatureTooltip } from "./FeatureTooltip.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
 import { ChatContextPickerPanel } from "./settings/ChatContextPickerPanel.tsx";
 import UserInput, { UserInputContent, UserInputHandle } from "./user_input/UserInput.tsx";
@@ -218,7 +219,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
 
   const [attachmentsPanelOpen, setAttachmentsPanelOpen] = useState<boolean>(false);
   const [attachmentCount, setAttachmentCount] = useState<number>(0);
-  const [setupCount, setSetupCount] = useState<number>(0);
   const [deepSearchEnabled, setDeepSearchEnabled] = useState<boolean>(false);
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
@@ -787,11 +787,20 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       (userInputContext?.promptResourceIds?.length ?? 0) > 0 ||
       (userInputContext?.templateResourceIds?.length ?? 0) > 0);
   const agentSupportsAttachments = currentAgent?.chat_options?.attach_files === true;
+  const effectiveAttachmentsPanelOpen = agentSupportsAttachments ? attachmentsPanelOpen : false;
   const showSetupButton = Boolean(
     currentAgent?.chat_options?.libraries_selection ||
       currentAgent?.chat_options?.search_policy_selection ||
       currentAgent?.chat_options?.record_audio_files,
   );
+  const librariesCount = useMemo(() => {
+    if (effectiveSessionId) {
+      const ids = (sessionPrefs as any)?.documentLibraryIds;
+      return Array.isArray(ids) ? ids.length : 0;
+    }
+    const draftIds = basePrefs?.documentLibraryIds;
+    return Array.isArray(draftIds) ? draftIds.length : 0;
+  }, [basePrefs?.documentLibraryIds, effectiveSessionId, sessionPrefs]);
 
   useEffect(() => {
     if (!showWelcome) return;
@@ -810,74 +819,98 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       {/* (moved) Chat context is now in the top-right vertical toolbar */}
 
       {/* Conversation top-right controls (attachments + setup) */}
-      {isSessionPrefsReady && (agentSupportsAttachments || showSetupButton) && (
-        <AttachmentsButton
-          attachmentsPanelOpen={agentSupportsAttachments ? attachmentsPanelOpen : false}
-          attachmentCount={agentSupportsAttachments ? attachmentCount : 0}
-          onToggle={() => setAttachmentsPanelOpen((v) => !v)}
-          showAttachmentsButton={agentSupportsAttachments}
-          showSetupButton={showSetupButton}
-          setupCount={setupCount}
-          onOpenSetup={(anchorEl) => {
-            userInputRef.current?.openSetupPopover(anchorEl);
-          }}
-          topSlot={
-            <>
-              <ChatContextPickerPanel
-                variant="icon"
-                selectedChatContextIds={selectedChatContextIds}
-                onChangeSelectedChatContextIds={setSelectedChatContextIdsFromUser}
-              />
-              {currentAgent?.chat_options?.deep_search_delegate === true && (
-                <Tooltip
-                  title={t("chatbot.deepSearch.label", "Deep Search")}
-                  placement="left"
-                  slotProps={{ popper: { sx: { backdropFilter: "none", WebkitBackdropFilter: "none" } } }}
-                >
-                  <span>
-                    <IconButton
-                      size="small"
-                      aria-label="deep-search"
-                      onClick={() => userInputRef.current?.setDeepSearchEnabled(!deepSearchEnabled)}
-                      disabled={waitResponse}
-                      sx={{
-                        border: `1px solid ${theme.palette.divider}`,
-                        backgroundColor: deepSearchEnabled ? theme.palette.primary.main : theme.palette.background.paper,
-                        color: deepSearchEnabled ? theme.palette.primary.contrastText : theme.palette.text.secondary,
-                        "&:hover": {
-                          backgroundColor: deepSearchEnabled
-                            ? theme.palette.primary.dark
-                            : theme.palette.action.hover,
-                        },
-                      }}
-                    >
-                      <TravelExploreOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  </span>
-                </Tooltip>
+      <AttachmentsButton
+        attachmentsPanelOpen={effectiveAttachmentsPanelOpen}
+        attachmentCount={agentSupportsAttachments ? attachmentCount : 0}
+        onToggle={() => setAttachmentsPanelOpen((v) => !v)}
+        showAttachmentsButton
+        attachmentsEnabled={isSessionPrefsReady && agentSupportsAttachments}
+        showSetupButton
+        setupEnabled={isSessionPrefsReady && showSetupButton}
+        setupCount={librariesCount}
+        onOpenSetup={(anchorEl) => {
+          userInputRef.current?.openSetupPopover(anchorEl);
+        }}
+        topSlot={
+          <>
+            <ChatContextPickerPanel
+              variant="icon"
+              selectedChatContextIds={selectedChatContextIds}
+              onChangeSelectedChatContextIds={setSelectedChatContextIdsFromUser}
+            />
+              <FeatureTooltip
+                label={t("chatbot.deepSearch.label", "Deep Search")}
+                description={t(
+                "chatbot.deepSearch.tooltipDescription",
+                "Delegates retrieval to a specialized agent for deeper search across your knowledge.\nAdds `deep_search` to the runtime context; may be slower but more thorough.",
               )}
-            </>
-          }
-        />
-      )}
+              disabledReason={
+                currentAgent?.chat_options?.deep_search_delegate === true
+                  ? undefined
+                  : t(
+                      "chatbot.deepSearch.tooltipDisabled",
+                      "This agent does not support deep search delegation.",
+                    )
+              }
+            >
+              <span>
+                <IconButton
+                  size="small"
+                  aria-label="deep-search"
+                  onClick={() => userInputRef.current?.setDeepSearchEnabled(!deepSearchEnabled)}
+                  disabled={
+                    waitResponse || !isSessionPrefsReady || currentAgent?.chat_options?.deep_search_delegate !== true
+                  }
+                  sx={{
+                    border: `1px solid ${theme.palette.divider}`,
+                    backgroundColor: deepSearchEnabled ? theme.palette.primary.main : theme.palette.background.paper,
+                    color: deepSearchEnabled ? theme.palette.primary.contrastText : theme.palette.text.secondary,
+                    opacity: currentAgent?.chat_options?.deep_search_delegate === true ? 1 : 0.45,
+                    "&:hover": {
+                      backgroundColor: deepSearchEnabled ? theme.palette.primary.dark : theme.palette.action.hover,
+                    },
+                  }}
+                >
+                  <TravelExploreOutlinedIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </FeatureTooltip>
+          </>
+        }
+      />
 
       <Box
-        width="80%"
-        maxWidth={{ xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" }}
-        display="flex"
         height="100vh"
+        width="100%"
+        display="flex"
         flexDirection="column"
-        alignItems="center"
         paddingBottom={1}
         sx={{
           minHeight: 0,
           overflow: "hidden",
-          pr: attachmentsPanelOpen ? { xs: "min(92vw, 320px)", sm: "340px" } : 0,
-          transition: (t) => t.transitions.create("padding-right"),
         }}
       >
-        {/* Conversation start: new conversation without message */}
+        {/*
+          IMPORTANT: keep the scrollbar on the browser edge.
+          - The scrollable container must be full-width (100%),
+            while the conversation content stays centered (maxWidth).
+        */}
         {showWelcome && (
+          <Box
+            width="80%"
+            maxWidth={{ xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" }}
+            display="flex"
+            flexDirection="column"
+            alignItems="center"
+              sx={{
+                minHeight: 0,
+                overflow: "hidden",
+              pr: effectiveAttachmentsPanelOpen ? { xs: "min(92vw, 320px)", sm: "340px" } : 0,
+              transition: (t) => t.transitions.create("padding-right"),
+              mx: "auto",
+            }}
+          >
+        {/* Conversation start: new conversation without message */}
           <Box
             sx={{
               minHeight: "100vh",
@@ -946,13 +979,13 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
                 currentAgent={currentAgent}
                 agents={agents}
                 onSelectNewAgent={setCurrentAgent}
-                attachmentsPanelOpen={agentSupportsAttachments ? attachmentsPanelOpen : false}
+                attachmentsPanelOpen={effectiveAttachmentsPanelOpen}
                 onAttachmentsPanelOpenChange={agentSupportsAttachments ? setAttachmentsPanelOpen : undefined}
                 onAttachmentCountChange={agentSupportsAttachments ? setAttachmentCount : undefined}
-                onSelectedDocumentLibrariesIdsChange={(ids) => setSetupCount(ids.length)}
                 onDeepSearchEnabledChange={(enabled) => setDeepSearchEnabled(enabled)}
               />
             </Box>
+          </Box>
           </Box>
         )}
 
@@ -960,15 +993,12 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
         {!showWelcome && (
           <>
             {/* Chatbot messages area */}
-            <Grid2
+            <Box
               ref={scrollerRef}
-              display="flex"
-              flexDirection="column"
-              flex="1"
-              width="100%"
-              p={2}
               sx={{
+                flex: 1,
                 minHeight: 0,
+                width: "100%",
                 overflowY: "auto",
                 overflowX: "hidden",
                 scrollbarWidth: "thin",
@@ -982,75 +1012,96 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
                 "&::-webkit-scrollbar-track": {
                   backgroundColor: "transparent",
                 },
-                wordBreak: "break-word",
-                alignContent: "center",
               }}
             >
-              <MessagesArea
-                key={sessionId}
-                messages={messages}
-                agents={agents}
-                currentAgent={currentAgent}
-                libraryNameById={libraryNameMap}
-                chatContextNameById={chatContextNameMap}
-              />
-              {showHistoryLoading && (
-                <Box mt={1} sx={{ alignSelf: "center" }}>
-                  <DotsLoader dotColor={theme.palette.text.secondary} />
-                </Box>
-              )}
-            </Grid2>
-
-            {/* User input area */}
-            <Grid2 container width="100%" alignContent="center">
-              <UserInput
-                ref={userInputRef}
-                agentChatOptions={currentAgent.chat_options}
-                isWaiting={waitResponse}
-                onSend={handleSend}
-                onStop={stopStreaming}
-                onContextChange={handleDraftContextChange}
-                sessionId={sessionId}
-                effectiveSessionId={effectiveSessionId}
-                uploadingFiles={uploadingFiles}
-                onFilesSelected={agentSupportsAttachments ? handleFilesSelected : undefined}
-                attachmentsRefreshTick={attachmentsRefreshTick}
-                serverPrefs={sessionPrefs as any}
-                refetchServerPrefs={refetchSessionPrefs}
-                selectedChatContextIds={selectedChatContextIds}
-                onSelectedChatContextIdsChange={setSelectedChatContextIdsFromHydration}
-                initialDocumentLibraryIds={initialDocumentLibraryIds}
-                initialPromptResourceIds={initialPromptResourceIds}
-                initialTemplateResourceIds={initialTemplateResourceIds}
-                initialSearchPolicy={initialSearchPolicy}
-                initialSearchRagScope={initialSearchRagScope}
-                initialDeepSearch={initialDeepSearch}
-                currentAgent={currentAgent}
-                agents={agents}
-                onSelectNewAgent={setCurrentAgent}
-                attachmentsPanelOpen={agentSupportsAttachments ? attachmentsPanelOpen : false}
-                onAttachmentsPanelOpenChange={agentSupportsAttachments ? setAttachmentsPanelOpen : undefined}
-                onAttachmentCountChange={agentSupportsAttachments ? setAttachmentCount : undefined}
-                onSelectedDocumentLibrariesIdsChange={(ids) => setSetupCount(ids.length)}
-                onDeepSearchEnabledChange={(enabled) => setDeepSearchEnabled(enabled)}
-              />
-            </Grid2>
-
-            {/* Conversation tokens count */}
-            <Grid2 container width="100%" display="flex" justifyContent="flex-end" marginTop={0.5}>
-              <Tooltip
-                title={t("chatbot.tooltip.tokenUsage", {
-                  input: inputTokenCounts,
-                  output: outputTokenCounts,
-                })}
+              <Box
+                sx={{
+                  width: "80%",
+                  maxWidth: { xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" },
+                  mx: "auto",
+                  p: 2,
+                  pr: effectiveAttachmentsPanelOpen ? { xs: "min(92vw, 320px)", sm: "340px" } : 0,
+                  transition: (t) => t.transitions.create("padding-right"),
+                  wordBreak: "break-word",
+                  alignContent: "center",
+                  minHeight: 0,
+                }}
               >
-                <Typography fontSize="0.8rem" color={theme.palette.text.secondary} fontStyle="italic">
-                  {t("chatbot.tooltip.tokenCount", {
-                    total: outputTokenCounts + inputTokenCounts > 0 ? outputTokenCounts + inputTokenCounts : "...",
+                <MessagesArea
+                  key={sessionId}
+                  messages={messages}
+                  agents={agents}
+                  currentAgent={currentAgent}
+                  libraryNameById={libraryNameMap}
+                  chatContextNameById={chatContextNameMap}
+                />
+                {showHistoryLoading && (
+                  <Box mt={1} sx={{ alignSelf: "center" }}>
+                    <DotsLoader dotColor={theme.palette.text.secondary} />
+                  </Box>
+                )}
+              </Box>
+            </Box>
+
+            <Box
+              sx={{
+                width: "80%",
+                maxWidth: { xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" },
+                mx: "auto",
+                pr: effectiveAttachmentsPanelOpen ? { xs: "min(92vw, 320px)", sm: "340px" } : 0,
+                transition: (t) => t.transitions.create("padding-right"),
+              }}
+            >
+              {/* User input area */}
+              <Grid2 container width="100%" alignContent="center">
+                <UserInput
+                  ref={userInputRef}
+                  agentChatOptions={currentAgent.chat_options}
+                  isWaiting={waitResponse}
+                  onSend={handleSend}
+                  onStop={stopStreaming}
+                  onContextChange={handleDraftContextChange}
+                  sessionId={sessionId}
+                  effectiveSessionId={effectiveSessionId}
+                  uploadingFiles={uploadingFiles}
+                  onFilesSelected={agentSupportsAttachments ? handleFilesSelected : undefined}
+                  attachmentsRefreshTick={attachmentsRefreshTick}
+                  serverPrefs={sessionPrefs as any}
+                  refetchServerPrefs={refetchSessionPrefs}
+                  selectedChatContextIds={selectedChatContextIds}
+                  onSelectedChatContextIdsChange={setSelectedChatContextIdsFromHydration}
+                  initialDocumentLibraryIds={initialDocumentLibraryIds}
+                  initialPromptResourceIds={initialPromptResourceIds}
+                  initialTemplateResourceIds={initialTemplateResourceIds}
+                  initialSearchPolicy={initialSearchPolicy}
+                  initialSearchRagScope={initialSearchRagScope}
+                  initialDeepSearch={initialDeepSearch}
+                  currentAgent={currentAgent}
+                  agents={agents}
+                  onSelectNewAgent={setCurrentAgent}
+                  attachmentsPanelOpen={effectiveAttachmentsPanelOpen}
+                  onAttachmentsPanelOpenChange={agentSupportsAttachments ? setAttachmentsPanelOpen : undefined}
+                  onAttachmentCountChange={agentSupportsAttachments ? setAttachmentCount : undefined}
+                  onDeepSearchEnabledChange={(enabled) => setDeepSearchEnabled(enabled)}
+                />
+              </Grid2>
+
+              {/* Conversation tokens count */}
+              <Grid2 container width="100%" display="flex" justifyContent="flex-end" marginTop={0.5}>
+                <Tooltip
+                  title={t("chatbot.tooltip.tokenUsage", {
+                    input: inputTokenCounts,
+                    output: outputTokenCounts,
                   })}
-                </Typography>
-              </Tooltip>
-            </Grid2>
+                >
+                  <Typography fontSize="0.8rem" color={theme.palette.text.secondary} fontStyle="italic">
+                    {t("chatbot.tooltip.tokenCount", {
+                      total: outputTokenCounts + inputTokenCounts > 0 ? outputTokenCounts + inputTokenCounts : "...",
+                    })}
+                  </Typography>
+                </Tooltip>
+              </Grid2>
+            </Box>
           </>
         )}
       </Box>

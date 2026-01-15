@@ -29,6 +29,7 @@ import {
   Resource,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { FeatureTooltip } from "../FeatureTooltip";
 import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard";
 
 // Extend with the standard MUI prop types for styling.
@@ -96,10 +97,12 @@ export function ChatContextPickerPanel({
     >
       {/* Trigger */}
       {isIconVariant ? (
-        <Tooltip
-          title={t("settings.chatContext")}
-          placement="left"
-          slotProps={{ popper: { sx: { backdropFilter: "none", WebkitBackdropFilter: "none" } } }}
+        <FeatureTooltip
+          label={t("settings.chatContext", "Chat Context")}
+          description={t(
+            "settings.chatContextTooltip.description",
+            "Select reusable context snippets included with every message in this conversation.\nSends `selected_chat_context_ids` in the runtime context; works with all agents.",
+          )}
         >
           <IconButton size="small" onClick={(e) => setChatContextPickerAnchor(e.currentTarget)}>
             <Badge
@@ -111,7 +114,7 @@ export function ChatContextPickerPanel({
               <ForumOutlinedIcon fontSize="small" />
             </Badge>
           </IconButton>
-        </Tooltip>
+        </FeatureTooltip>
       ) : (
         !hasSelectedChatContext && (
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 0.5 }}>

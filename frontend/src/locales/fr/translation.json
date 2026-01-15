@@ -469,7 +469,9 @@
     },
     "deepSearch": {
       "label": "Recherche approfondie",
-      "tooltip": "Déléguer la recherche RAG à Rico Senior"
+      "tooltip": "Déléguer la recherche RAG à Rico Senior",
+      "tooltipDescription": "Délègue la recherche à un agent spécialisé pour explorer plus en profondeur votre corpus documentaire.\n\nL'activation de cette fonctionnalité peut ralentir les réponses mais les rendra plus complètes. Une transcription téléchargeable du processus de recherche sera jointe à la conversation.",
+      "tooltipDisabled": "Cet agent ne supporte pas la délégation de recherche approfondie."
     },
     "menu": {
       "addToSetup": "Ajouter à la configuration de la conversation"
@@ -483,7 +485,11 @@
       "supportedFormats": "Formats pris en charge : PDF, DOCX, CSV",
       "count": "{{count}} pièces jointes",
       "drawerTitle": "Gérer les pièces jointes",
-      "noAttachments": "Aucune pièce jointe pour le moment"
+      "noAttachments": "Aucune pièce jointe pour le moment",
+      "tooltip": {
+        "description": "Fichiers attachés à cette conversation.\n\nLes fichiers sont traités par des algorithmes plus rapides mais moins précis. L'agent pourra utiliser ces fichiers pour répondre .\n\nNotez que cette fonctionnalité est en version bêta et peut ne pas fonctionner parfaitement pour tous les types de fichiers. Pour des corpus pérennes, envisagez d'utiliser des bibliothèques de documents.",
+        "disabled": "Cet agent n’utilise pas les pièces jointes."
+      }
     },
     "uploadingFile": "Téléversement de {{name}}...",
     "searchToggle": "Recherche : activé = RAG (sources), désactivé = sans recherche",
@@ -524,10 +530,10 @@
     "deleteAll": "Tout supprimer",
     "confirmDeleteAllTitle": "Supprimer toutes les conversations ?",
     "confirmDeleteAllMessage": "Cette action supprimera toutes les conversations définitivement. Voulez-vous continuer ?",
-    "conversationSetup": "Configuration de la conversation",
-    "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
-    "draftNotSaved": "Brouillon • non encore enregistré",
-    "chatContext": "Contexte de conversation"
+    "chatContext": "Contexte de conversation",
+    "chatContextTooltip": {
+      "description": "Ajoute des instructions (un « profil ») à cette conversation.\n\nCe contexte est injecté dans le prompt système des agents et s’applique donc à tous les agents.\n\nChaque agent possède aussi ses propres prompts internes, configurables, plus spécifiques à ses étapes : le contexte de conversation vient en complément de ces derniers et vous permet d’adapter le comportement de l’agent à votre besoin."
+    }
   },
   "kpis": {
     "title": "Surveillance des agents et services IA",
@@ -639,6 +645,8 @@
     "description": "Gérez vos documents et contextes de conversation",
     "viewSelector": {
       "libraries": "Bibliothèques",
+      "librariesTooltip": "Restreignez la recherche aux bibliothèques de documents sélectionnées pour cette conversation.\n\nCe paramètre est enregistré par conversation et utilisé pour les recherches RAG lorsque l’agent sélectionné le supporte.",
+      "librariesUnsupported": "Cet agent ne supporte pas le filtrage par bibliothèque.",
       "templates": "Modèles",
       "prompts": "Prompts",
       "documents": "Documents",

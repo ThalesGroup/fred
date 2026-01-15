@@ -91,20 +91,29 @@ class OpensearchSessionStore(BaseSessionStore):
         try:
             current_mapping_resp = self.client.indices.get_mapping(index=self.index)
             current_props = (
-                current_mapping_resp.get(self.index, {}).get("mappings", {}).get("properties", {}) or {}
+                current_mapping_resp.get(self.index, {})
+                .get("mappings", {})
+                .get("properties", {})
+                or {}
             )
             expected_props = MAPPING.get("mappings", {}).get("properties", {}) or {}
-            missing = {k: v for k, v in expected_props.items() if k not in current_props}
+            missing = {
+                k: v for k, v in expected_props.items() if k not in current_props
+            }
             if not missing:
                 return
-            self.client.indices.put_mapping(index=self.index, body={"properties": missing})
+            self.client.indices.put_mapping(
+                index=self.index, body={"properties": missing}
+            )
             logger.info(
                 "[OPENSEARCH][MAPPING] Added missing fields to '%s': %s",
                 self.index,
                 ", ".join(sorted(missing.keys())),
             )
         except Exception as e:
-            logger.warning("[OPENSEARCH][MAPPING] Failed to auto-add missing fields: %s", e)
+            logger.warning(
+                "[OPENSEARCH][MAPPING] Failed to auto-add missing fields: %s", e
+            )
 
     def save(self, session: SessionSchema) -> None:
         try:

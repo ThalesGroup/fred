@@ -541,6 +541,12 @@ class SessionOrchestrator:
             if isinstance(agent_name, str) and agent_name.strip():
                 session.agent_name = agent_name.strip()
         except Exception:
+            logger.warning(
+                "[SESSIONS][PREFS] Failed to update agent_name in session=%s preferences: %s",
+                session_id,
+                session.preferences,
+                exc_info=True,
+            )
             pass
         # Important: do NOT bump session.updated_at for preference changes.
         # The UI orders conversations by updated_at and expects it to change only

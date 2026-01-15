@@ -197,7 +197,7 @@ RAG_TUNING = AgentTuning(
                 "Extract keywords with the LLM and append them to the search query to widen recall."
             ),
             required=False,
-            default=True,
+            default=False,
             ui=UIHints(group="Retrieval"),
         ),
         FieldSpec(
