@@ -57,8 +57,11 @@ applications:
       # Set UI title and logo
       frontend_settings:
         properties:
-          logoName: "fred" # todo: set PRISM logo
-          siteDisplayName: "Prism"
+          logoName: "logo_PRISM_light"
+          logoNameDark: "logo_PRISM_dark"
+          logoHeight: "24px"
+          logoWidth: "100px"
+          siteDisplayName: "PRISM.AI"
 
       ai:
         # Set KF right url

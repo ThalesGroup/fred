@@ -44,8 +44,11 @@ frontend_settings:
     # If true activate support for an electronic warfare demonstration
     enableElecWarfare: false
   properties:
-    logoName: "fred"
-    siteDisplayName: "Fred"
+    logoName: "logo_PRISM_light"
+    logoNameDark: "logo_PRISM_dark"
+    logoHeight: "24px"
+    logoWidth: "100px"
+    siteDisplayName: "PRISM.AI"
 
 ai:
   # In production  activate the configuration persistence mechanism
