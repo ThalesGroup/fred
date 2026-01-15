@@ -144,7 +144,7 @@ class KPIActor(BaseModel):
 
     type: Literal["human", "system"]
     user_id: Optional[str] = None
-    groups: list[str] = []
+    groups: Optional[list[str]] = None
 
     @field_validator("user_id")
     @classmethod

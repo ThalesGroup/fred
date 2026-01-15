@@ -166,21 +166,24 @@ class ContextAwareTool(BaseTool):
             dims["user_id"] = str(user_id)
         return dims
 
-    def _kpi_timer(self, *, context) -> tuple[Any, Any, dict[str, Optional[str]]]:
+    def _kpi_timer(
+        self, *, context
+    ) -> tuple[Any, Any, dict[str, Optional[str]], list[str] | None]:
         kpi = get_app_context().get_kpi_writer()
         dims = self._kpi_base_dims(context=context)
+        groups = getattr(context, "user_groups", None) if context else None
         timer = kpi.timer(
             "agent.tool_latency_ms",
             dims=dims,
-            actor=KPIActor(type="system"),
+            actor=KPIActor(type="system", groups=groups),
         )
-        return kpi, timer, dims
+        return kpi, timer, dims, groups
 
     def _run(self, **kwargs: Any) -> Any:
         """Sync execution with context injection + robust HTTP(401) tracing."""
         context = self.context_provider()
         kwargs = self._inject_context_if_needed(kwargs)
-        kpi, timer, base_dims = self._kpi_timer(context=context)
+        kpi, timer, base_dims, groups = self._kpi_timer(context=context)
         with timer as kpi_dims:
             try:
                 return self.base_tool._run(**kwargs)
@@ -196,7 +199,7 @@ class ContextAwareTool(BaseTool):
                         "error_code": "request_error",
                         "exception_type": type(e).__name__,
                     },
-                    actor=KPIActor(type="system"),
+                    actor=KPIActor(type="system", groups=groups),
                 )
                 logger.error(
                     "[MCP][%s] HTTP request error: %s", self.name, e, exc_info=True
@@ -220,7 +223,7 @@ class ContextAwareTool(BaseTool):
                         if status_code is not None
                         else None,
                     },
-                    actor=KPIActor(type="system"),
+                    actor=KPIActor(type="system", groups=groups),
                 )
                 _log_http_error(self.name, e)
                 raise
@@ -236,7 +239,7 @@ class ContextAwareTool(BaseTool):
                         "error_code": type(e).__name__,
                         "exception_type": type(e).__name__,
                     },
-                    actor=KPIActor(type="system"),
+                    actor=KPIActor(type="system", groups=groups),
                 )
                 inner = _unwrap_httpx_status_error(e)
                 if inner is not None:
@@ -249,7 +252,7 @@ class ContextAwareTool(BaseTool):
         """Async execution with context injection + robust HTTP(401) tracing."""
         context = self.context_provider()
         kwargs = self._inject_context_if_needed(kwargs)
-        kpi, timer, base_dims = self._kpi_timer(context=context)
+        kpi, timer, base_dims, groups = self._kpi_timer(context=context)
         with timer as kpi_dims:
             try:
                 return await self.base_tool._arun(config=config, **kwargs)
@@ -265,7 +268,7 @@ class ContextAwareTool(BaseTool):
                         "error_code": "request_error",
                         "exception_type": type(e).__name__,
                     },
-                    actor=KPIActor(type="system"),
+                    actor=KPIActor(type="system", groups=groups),
                 )
                 logger.error(
                     "[MCP][%s] HTTP request error: %s", self.name, e, exc_info=True
@@ -289,7 +292,7 @@ class ContextAwareTool(BaseTool):
                         if status_code is not None
                         else None,
                     },
-                    actor=KPIActor(type="system"),
+                    actor=KPIActor(type="system", groups=groups),
                 )
                 _log_http_error(self.name, e)
                 raise
@@ -305,7 +308,7 @@ class ContextAwareTool(BaseTool):
                         "error_code": type(e).__name__,
                         "exception_type": type(e).__name__,
                     },
-                    actor=KPIActor(type="system"),
+                    actor=KPIActor(type="system", groups=groups),
                 )
                 inner = _unwrap_httpx_status_error(e)
                 if inner is not None:
