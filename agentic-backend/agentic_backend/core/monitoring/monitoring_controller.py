@@ -15,21 +15,14 @@
 import logging
 from typing import Dict, List
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    HTTPException,
-    Query,
-    Response
-)
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fred_core import KeycloakUser, get_current_user
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from agentic_backend.core.chatbot.chat_schema import ChatbotRuntimeSummary
 from agentic_backend.core.chatbot.chatbot_controller import get_session_orchestrator
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
-
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +46,11 @@ async def healthz():
 def ready():
     return {"status": "ready"}
 
+
 @router.get("/metrics", include_in_schema=False)
 def prometheus_metrics() -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 
 @router.get(
     "/metrics/chatbot/numerical",

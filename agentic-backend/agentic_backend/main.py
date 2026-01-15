@@ -155,7 +155,6 @@ def create_app() -> FastAPI:
     if configuration.app.metrics_enabled:
         Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
-
     # Register exception handlers
     register_exception_handlers(app)
     allowed_origins = list(
