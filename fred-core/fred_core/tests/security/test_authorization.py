@@ -26,7 +26,7 @@ class TestRBACProvider:
 
         # Create test users
         self.admin_user = KeycloakUser(
-            uid="admin-123", username="admin", roles=["admin"], email="admin@test.com"
+            uid="admin-123", username="admin", roles=["admin"], email="admin@test.com", groups=["admins"]
         )
 
         self.editor_user = KeycloakUser(
@@ -34,6 +34,7 @@ class TestRBACProvider:
             username="editor",
             roles=["editor"],
             email="editor@test.com",
+            groups=["editors"]
         )
 
         self.viewer_user = KeycloakUser(
@@ -41,10 +42,11 @@ class TestRBACProvider:
             username="viewer",
             roles=["viewer"],
             email="viewer@test.com",
+            groups=["viewers"]
         )
 
         self.no_role_user = KeycloakUser(
-            uid="norole-123", username="norole", roles=[], email="norole@test.com"
+            uid="norole-123", username="norole", roles=[], email="norole@test.com", groups=[]
         )
 
     def test_admin_has_all_permissions(self):
@@ -101,6 +103,7 @@ class TestRBACProvider:
             username="unknown",
             roles=["unknown_role"],
             email="unknown@test.com",
+            groups=[]
         )
 
         assert not self.rbac.is_authorized(unknown_user, Action.READ, Resource.TAGS)
@@ -113,6 +116,7 @@ class TestRBACProvider:
             username="multi",
             roles=["viewer", "editor"],
             email="multi@test.com",
+            groups=["viewers", "editors"]
         )
 
         # Should have editor permissions (highest)

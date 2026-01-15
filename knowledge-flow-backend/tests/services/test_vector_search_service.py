@@ -63,6 +63,7 @@ def test_user():
         username="testuser",
         email="testuser@localhost",
         roles=["admin"],
+        groups=["admins"]
     )
 
 
