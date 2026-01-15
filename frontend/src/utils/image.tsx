@@ -40,6 +40,10 @@ export const ImageComponent = ({ name, width, height, fallback = DEFAULT_FALLBAC
     setImageSrc(publicAssetUrl(`images/${name}.svg`));
   }, [name]);
 
+  useEffect(() => {
+    setImageSrc(`./images/${name}.svg`);
+  }, [name, fallback]);
+
   return <img src={imageSrc} alt={name} style={{ width, height }} onError={() => setImageSrc(fallback)} />;
 };
 
