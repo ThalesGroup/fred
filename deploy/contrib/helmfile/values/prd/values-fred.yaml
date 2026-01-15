@@ -61,6 +61,8 @@ applications:
           logoNameDark: "logo_PRISM_dark"
           logoHeight: "24px"
           logoWidth: "100px"
+          faviconName: "favicon_PRISM_light"
+          faviconNameDark: "favicon_PRISM_dark"
           siteDisplayName: "PRISM.AI"
 
       ai:
