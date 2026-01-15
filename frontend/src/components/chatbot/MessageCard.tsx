@@ -25,6 +25,7 @@ import { Download as DownloadIcon } from "@mui/icons-material";
 import FeedbackOutlinedIcon from "@mui/icons-material/FeedbackOutlined";
 import { AnyAgent } from "../../common/agent.ts";
 import { AgentChipMini } from "../../common/AgentChip.tsx";
+import DotsLoader from "../../common/DotsLoader.tsx";
 import { usePdfDocumentViewer } from "../../common/usePdfDocumentViewer";
 import type { GeoPart, LinkPart } from "../../slices/agentic/agenticOpenApi.ts";
 import {
@@ -199,7 +200,14 @@ export default function MessageCard({
         {side === "left" && agent && (
           <Grid2 size="auto" paddingTop={2}>
             <Tooltip title={`${agent.name}: ${agent.tuning.role}`}>
-              <AgentChipMini agent={agent} />
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                <AgentChipMini agent={agent} />
+                {pending && (
+                  <Box sx={{ display: "flex", alignItems: "center", transform: "translateY(1px) scale(0.9)" }}>
+                    <DotsLoader dotSize="4px" dotColor={theme.palette.text.secondary} />
+                  </Box>
+                )}
+              </Box>
             </Tooltip>
           </Grid2>
         )}
