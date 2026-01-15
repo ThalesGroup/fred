@@ -18,7 +18,7 @@ import logging
 import threading
 from typing import Dict, Optional, Tuple
 
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_reader_structures import KPIQuery, KPIQueryResult
@@ -78,7 +78,11 @@ class PrometheusKPIStore(BaseKPIStore):
         metric = self._get_metric(metric_name, metric_type)
         if metric_type == "counter":
             if value < 0:
-                logger.warning("[KPI][prometheus] Skipping negative counter: %s=%s", metric_name, value)
+                logger.warning(
+                    "[KPI][prometheus] Skipping negative counter: %s=%s",
+                    metric_name,
+                    value,
+                )
                 return
             metric.labels(dims=dims).inc(value)
         elif metric_type == "gauge":
@@ -109,7 +113,9 @@ class PrometheusKPIStore(BaseKPIStore):
             for key, value in quantities.items():
                 if value is None:
                     continue
-                qty_name = f"{base_name}_quantity_{_sanitize_metric_name(str(key))}_total"
+                qty_name = (
+                    f"{base_name}_quantity_{_sanitize_metric_name(str(key))}_total"
+                )
                 self._emit_value(qty_name, "counter", float(value), dims)
 
     def index_event(self, event: KPIEvent) -> None:

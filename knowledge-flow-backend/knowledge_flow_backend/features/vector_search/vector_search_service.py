@@ -10,8 +10,8 @@ from typing import Any, List, Optional, Set
 from fred_core import (
     Action,
     BaseKPIWriter,
-    KPIActor,
     KeycloakUser,
+    KPIActor,
     Resource,
     VectorSearchHit,
     authorize,

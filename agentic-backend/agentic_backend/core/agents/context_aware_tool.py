@@ -190,7 +190,12 @@ class ContextAwareTool(BaseTool):
                 kpi.count(
                     "agent.tool_failed_total",
                     1,
-                    dims={**base_dims, "status": "error", "error_code": "request_error", "exception_type": type(e).__name__},
+                    dims={
+                        **base_dims,
+                        "status": "error",
+                        "error_code": "request_error",
+                        "exception_type": type(e).__name__,
+                    },
                     actor=KPIActor(type="system"),
                 )
                 logger.error(
@@ -211,7 +216,9 @@ class ContextAwareTool(BaseTool):
                         "status": "error",
                         "error_code": "http_status",
                         "exception_type": type(e).__name__,
-                        "http_status": str(status_code) if status_code is not None else None,
+                        "http_status": str(status_code)
+                        if status_code is not None
+                        else None,
                     },
                     actor=KPIActor(type="system"),
                 )
@@ -223,7 +230,12 @@ class ContextAwareTool(BaseTool):
                 kpi.count(
                     "agent.tool_failed_total",
                     1,
-                    dims={**base_dims, "status": "error", "error_code": type(e).__name__, "exception_type": type(e).__name__},
+                    dims={
+                        **base_dims,
+                        "status": "error",
+                        "error_code": type(e).__name__,
+                        "exception_type": type(e).__name__,
+                    },
                     actor=KPIActor(type="system"),
                 )
                 inner = _unwrap_httpx_status_error(e)
@@ -247,7 +259,12 @@ class ContextAwareTool(BaseTool):
                 kpi.count(
                     "agent.tool_failed_total",
                     1,
-                    dims={**base_dims, "status": "error", "error_code": "request_error", "exception_type": type(e).__name__},
+                    dims={
+                        **base_dims,
+                        "status": "error",
+                        "error_code": "request_error",
+                        "exception_type": type(e).__name__,
+                    },
                     actor=KPIActor(type="system"),
                 )
                 logger.error(
@@ -268,7 +285,9 @@ class ContextAwareTool(BaseTool):
                         "status": "error",
                         "error_code": "http_status",
                         "exception_type": type(e).__name__,
-                        "http_status": str(status_code) if status_code is not None else None,
+                        "http_status": str(status_code)
+                        if status_code is not None
+                        else None,
                     },
                     actor=KPIActor(type="system"),
                 )
@@ -280,7 +299,12 @@ class ContextAwareTool(BaseTool):
                 kpi.count(
                     "agent.tool_failed_total",
                     1,
-                    dims={**base_dims, "status": "error", "error_code": type(e).__name__, "exception_type": type(e).__name__},
+                    dims={
+                        **base_dims,
+                        "status": "error",
+                        "error_code": type(e).__name__,
+                        "exception_type": type(e).__name__,
+                    },
                     actor=KPIActor(type="system"),
                 )
                 inner = _unwrap_httpx_status_error(e)
