@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, cast
 
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
@@ -52,14 +52,14 @@ class PrometheusKPIStore(BaseKPIStore):
 
     def __init__(self, delegate: Optional[BaseKPIStore] = None):
         self._delegate = delegate
-        self._metrics: Dict[Tuple[str, str], object] = {}
+        self._metrics: Dict[Tuple[str, str], Counter | Gauge | Histogram] = {}
         self._lock = threading.Lock()
 
     def ensure_ready(self) -> None:
         if self._delegate:
             self._delegate.ensure_ready()
 
-    def _get_metric(self, name: str, metric_type: str) -> object:
+    def _get_metric(self, name: str, metric_type: str) -> Counter | Gauge | Histogram:
         key = (name, metric_type)
         with self._lock:
             existing = self._metrics.get(key)
@@ -84,11 +84,11 @@ class PrometheusKPIStore(BaseKPIStore):
                     value,
                 )
                 return
-            metric.labels(dims=dims).inc(value)
+            cast(Counter, metric).labels(dims=dims).inc(value)
         elif metric_type == "gauge":
-            metric.labels(dims=dims).set(value)
+            cast(Gauge, metric).labels(dims=dims).set(value)
         else:
-            metric.labels(dims=dims).observe(value)
+            cast(Histogram, metric).labels(dims=dims).observe(value)
 
     def _record_event(self, event: KPIEvent) -> None:
         if not event.metric or event.metric.value is None:
