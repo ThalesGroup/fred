@@ -27,6 +27,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_user_security, log_setup, register_exception_handlers
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from agentic_backend.application_context import (
     ApplicationContext,
@@ -150,6 +151,9 @@ def create_app() -> FastAPI:
         openapi_url=f"{base_url}/openapi.json",
         lifespan=lifespan,
     )
+
+    if configuration.app.metrics_enabled:
+        Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
     # Register exception handlers
     register_exception_handlers(app)

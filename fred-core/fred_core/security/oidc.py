@@ -225,7 +225,11 @@ def decode_jwt(token: str) -> KeycloakUser:
     if not KEYCLOAK_ENABLED:
         logger.debug("[SECURITY] Authentication is DISABLED. Returning a mock user.")
         return KeycloakUser(
-            uid="admin", username="admin", roles=["admin"], email="dev@localhost"
+            uid="admin",
+            username="admin",
+            roles=["admin"],
+            email="dev@localhost",
+            groups=["admins"],
         )
 
     cached_user = _get_cached_user(token)
@@ -350,7 +354,11 @@ def get_current_user(token: str = Security(oauth2_scheme)) -> KeycloakUser:
     if not KEYCLOAK_ENABLED:
         logger.debug("[SECURITY] Authentication is DISABLED. Returning a mock user.")
         return KeycloakUser(
-            uid="admin", username="admin", roles=["admin"], email="admin@mail.com"
+            uid="admin",
+            username="admin",
+            roles=["admin"],
+            email="admin@mail.com",
+            groups=["admins"],
         )
 
     if not token:

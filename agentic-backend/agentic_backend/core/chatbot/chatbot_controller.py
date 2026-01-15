@@ -353,6 +353,7 @@ async def websocket_chatbot_question(
                 ask.runtime_context.access_token = active_token
                 ask.runtime_context.refresh_token = active_refresh_token
                 ask.runtime_context.user_id = active_user.uid
+                ask.runtime_context.user_groups = active_user.groups or None
 
                 target_agent_name = ask.agent_name
                 if get_deep_search_enabled(ask.runtime_context):
