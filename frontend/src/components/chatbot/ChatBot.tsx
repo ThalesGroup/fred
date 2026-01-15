@@ -22,13 +22,12 @@
  */
 
 import TravelExploreOutlinedIcon from "@mui/icons-material/TravelExploreOutlined";
-import { Box, Grid2, IconButton, Tooltip, Typography, useTheme } from "@mui/material";
+import { Box, CircularProgress, Grid2, IconButton, Tooltip, Typography, useTheme } from "@mui/material";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
 import { getConfig } from "../../common/config.tsx";
-import DotsLoader from "../../common/DotsLoader.tsx";
 import { useInitialChatInputContext } from "../../hooks/useInitialChatInputContext.ts";
 import { useSessionChange } from "../../hooks/useSessionChange.ts";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
@@ -776,7 +775,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       : 0;
   const showWelcome = isNewConversation && !waitResponse && messages.length === 0;
   // Helps spot session-history fetch issues quickly in dev without adding noisy logs.
-  const showHistoryLoading = !!sessionId && isHistoryFetching && messages.length === 0;
+  const showHistoryLoading = !!sessionId && isHistoryFetching && messages.length === 0 && !waitResponse;
   const isSessionPrefsReady = !effectiveSessionId || !!sessionPrefs;
 
   const hasContext =
@@ -1032,12 +1031,13 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
                   messages={messages}
                   agents={agents}
                   currentAgent={currentAgent}
+                  isWaiting={waitResponse}
                   libraryNameById={libraryNameMap}
                   chatContextNameById={chatContextNameMap}
                 />
                 {showHistoryLoading && (
-                  <Box mt={1} sx={{ alignSelf: "center" }}>
-                    <DotsLoader dotColor={theme.palette.text.secondary} />
+                  <Box mt={1} sx={{ display: "flex", justifyContent: "center" }}>
+                    <CircularProgress size={18} thickness={4} sx={{ color: theme.palette.text.secondary }} />
                   </Box>
                 )}
               </Box>
