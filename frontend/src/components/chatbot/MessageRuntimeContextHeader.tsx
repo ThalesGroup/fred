@@ -1,11 +1,11 @@
 // MessageRuntimeContextHeader.tsx
 // Header indicators for Libraries/ChatContext + info icon that opens the popover.
 
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import LibraryBooksOutlinedIcon from "@mui/icons-material/LibraryBooksOutlined";
+import PersonOutlinedIcon from "@mui/icons-material/PersonOutline";
 import { Box, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import PersonOutlinedIcon from "@mui/icons-material/PersonOutline";
-import LibraryBooksOutlinedIcon from "@mui/icons-material/LibraryBooksOutlined";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
@@ -14,19 +14,17 @@ import MessageRuntimeContextPopover from "./MessageRuntimeContextPopover";
 
 type Props = {
   message: ChatMessage;
-  visible: boolean; // show indicators on bubble hover
   libraryNameById?: Record<string, string>;
   chatContextNameById?: Record<string, string>;
 };
 
-export default function MessageRuntimeContextHeader({ message, visible, libraryNameById, chatContextNameById }: Props) {
+export default function MessageRuntimeContextHeader({ message, libraryNameById, chatContextNameById }: Props) {
   const theme = useTheme();
   const { t } = useTranslation();
 
   // Popover anchor + bridged hover to avoid flicker
   const [insightAnchorEl, setInsightAnchorEl] = useState<HTMLElement | null>(null);
   const insightHoverRef = useRef(false);
-  const insightOpen = Boolean(insightAnchorEl);
 
   const openInsights = (el: HTMLElement | null) => {
     setInsightAnchorEl(el);

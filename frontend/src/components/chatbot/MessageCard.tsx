@@ -79,7 +79,6 @@ export default function MessageCard({
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   // Header hover state (controls header indicators visibility)
-  const [bubbleHover, setBubbleHover] = useState(false);
   const isAssistant = side === "left";
 
   const handleFeedbackSubmit = (rating: number, comment?: string) => {
@@ -210,19 +209,17 @@ export default function MessageCard({
             <>
               <Grid2>
                 <Box
-                    onMouseEnter={() => setBubbleHover(true)}
-                    onMouseLeave={() => setBubbleHover(false)}
-                    sx={{
-                      display: "flex",
-                      flexDirection: "column",
-                      backgroundColor:
-                        side === "right" ? theme.palette.background.paper : theme.palette.background.default,
-                      padding: side === "right" ? "0.8em 16px 0 16px" : "0.8em 0 0 0",
-                      marginTop: side === "right" ? 1 : 0,
-                      borderRadius: 3,
-                      wordBreak: "break-word",
-                    }}
-                  >
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    backgroundColor:
+                      side === "right" ? theme.palette.background.paper : theme.palette.background.default,
+                    padding: side === "right" ? "0.8em 16px 0 16px" : "0.8em 0 0 0",
+                    marginTop: side === "right" ? 1 : 0,
+                    borderRadius: 3,
+                    wordBreak: "break-word",
+                  }}
+                >
                   {/* Header: task chips + indicators */}
                   {(showMetaChips || isCall || isResult) && (
                     <Box display="flex" alignItems="center" gap={1} px={side === "right" ? 0 : 1} pb={0.5}>
@@ -481,7 +478,6 @@ export default function MessageCard({
           <Box sx={{ position: "absolute", right: 0, top: "0.8em", zIndex: 1 }}>
             <MessageRuntimeContextHeader
               message={renderMessage}
-              visible={bubbleHover}
               libraryNameById={libraryNameById}
               chatContextNameById={chatContextNameById}
             />
