@@ -29,7 +29,7 @@ spec:
         {{- if .app.podAnnotations }}
 {{ toYaml .app.podAnnotations | nindent 8 }}
         {{- end }}
-        {{- if .app.configuration.app.metrics_enabled }}
+        {{- if and .app.configuration .app.configuration.app .app.configuration.app.metrics_enabled }}
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .app.configuration.app.metrics_port }}"
         prometheus.io/path: "/metrics"

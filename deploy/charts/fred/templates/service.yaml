@@ -19,30 +19,4 @@ spec:
     app: {{ .app.applicationName }}
   ports:
 {{ toYaml .app.service.ports | indent 2  }}
-
-{{- if and .app.configuration.app.metrics_enabled .app.metricsService.enabled }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ .app.applicationName }}-metrics
-  {{- if .app.metricsService.annotations }}
-  annotations:
-{{ toYaml .app.metricsService.annotations | indent 4 }}
-  {{- end }}
-  labels:
-    app: {{ .app.applicationName }}
-    {{- if .app.metricsService.extraLabels }}
-{{ toYaml .app.metricsService.extraLabels | indent 4 }}
-    {{- end }}
-spec:
-  type: {{ .app.metricsService.type }}
-  selector:
-    app: {{ .app.applicationName }}
-  ports:
-    - name: metrics
-      port: {{ .app.metricsService.port | default .app.configuration.app.metrics_port }}
-      targetPort: {{ .app.metricsService.targetPort | default .app.configuration.app.metrics_port }}
-{{- end }}
-
 {{ end -}}
