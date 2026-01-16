@@ -49,6 +49,8 @@ applications:
     ports:
       - name: http
         containerPort: 8000
+      - name: metrics
+        containerPort: 9000
     service:
       annotations: {}
       extraLabels: {}
@@ -57,6 +59,13 @@ applications:
         - name: http
           port: 80
           targetPort: 8000
+    metricsService:
+      enabled: true
+      annotations: {}
+      extraLabels: {}
+      type: ClusterIP
+      port: 9000
+      targetPort: 9000
     ingress:
       enabled: false
       className: ""
@@ -146,6 +155,8 @@ applications:
         reload: false
         reload_dir: "."
         metrics_enabled: true # Prometheus exporter
+        metrics_address: "0.0.0.0"
+        metrics_port: 9000
       security:
         m2m:
           enabled: true
@@ -488,6 +499,8 @@ applications:
     ports:
       - name: http
         containerPort: 8111
+      - name: metrics
+        containerPort: 9111
       - name: https
         containerPort: 8443
     service:
@@ -503,6 +516,13 @@ applications:
           port: 8443
           targetPort: 8443
           protocol: TCP
+    metricsService:
+      enabled: true
+      annotations: {}
+      extraLabels: {}
+      type: ClusterIP
+      port: 9111
+      targetPort: 9111
     ingress:
       enabled: false
       className: ""
@@ -573,6 +593,8 @@ applications:
         reload: false
         reload_dir: "."
         metrics_enabled: true # Prometheus exporter
+        metrics_address: "0.0.0.0"
+        metrics_port: 9111
       processing:
         generate_summary: true
         use_gpu: true
