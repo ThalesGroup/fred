@@ -263,6 +263,8 @@ class AppConfig(BaseModel):
     reload_dir: str = "."
     max_ingestion_workers: int = 1
     metrics_enabled: bool = True
+    metrics_address: str = "0.0.0.0"
+    metrics_port: int = 9111
 
 
 class PullProvider(str, Enum):
