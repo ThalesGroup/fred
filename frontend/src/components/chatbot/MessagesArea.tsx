@@ -213,7 +213,7 @@ function Area({
               side={msg.role === "user" ? "right" : "left"}
               enableCopy
               enableThumbs
-              pending={isActiveExchange && isWaiting && msg.role === "assistant" && !hasNonEmptyText(msg)}
+              pending={isActiveExchange && msg.role === "assistant"}
               suppressText={false}
               libraryNameById={libraryNameById}
               chatContextNameById={chatContextNameById}
@@ -253,7 +253,7 @@ function Area({
             side="left"
             enableCopy
             enableThumbs
-            pending={isActiveExchange && isWaiting && !hasNonEmptyText(msg)}
+            pending={isActiveExchange}
             suppressText={false}
             libraryNameById={libraryNameById}
             chatContextNameById={chatContextNameById}

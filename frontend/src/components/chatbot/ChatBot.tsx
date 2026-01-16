@@ -188,9 +188,8 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
   // Load history when available (RTK Query handles fetching)
   useEffect(() => {
     if (history && sessionId) {
-      const merged = mergeAuthoritative(messagesRef.current, history);
-      messagesRef.current = merged;
-      setAllMessages(merged);
+      messagesRef.current = history;
+      setAllMessages(history);
     }
   }, [history, sessionId]);
 
@@ -712,8 +711,8 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
 
   /**
    * Send a new user message to the chatbot agent.
-   * Backend is authoritative; we still add a brief optimistic bubble for UX.
-   * The server stream replaces it using the same exchange_id.
+   * Backend is authoritative: we DO NOT add an optimistic user bubble.
+   * The server streams the authoritative user message first.
    */
   const queryChatBot = async (input: string, agent?: AnyAgent, runtimeContext?: RuntimeContext) => {
     console.debug(`[CHATBOT] Sending message: ${input}`);
@@ -725,23 +724,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
         return;
       }
     }
-    const exchangeId = uuidv4();
-    const optimisticMessage: ChatMessage = {
-      session_id: sid,
-      exchange_id: exchangeId,
-      rank: messagesRef.current.length,
-      timestamp: new Date().toISOString(),
-      role: "user",
-      channel: "final",
-      parts: [{ type: "text", text: input }],
-      metadata: {
-        agent_name: agent ? agent.name : currentAgent.name,
-        runtime_context: runtimeContext ?? null,
-      },
-    };
-    const optimisticKey = keyOf(optimisticMessage);
-    messagesRef.current = upsertOne(messagesRef.current, optimisticMessage);
-    setMessages(messagesRef.current);
     // Show loader immediately (even while WS is connecting).
     beginWaiting();
     // Get tokens for backend use. This proacively allows the backend to perform
@@ -763,7 +745,7 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
 
     const event = {
       ...eventBase,
-      client_exchange_id: exchangeId,
+      client_exchange_id: uuidv4(),
     } as ChatAskInput;
 
     try {
@@ -778,8 +760,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     } catch (err) {
       console.error("[CHATBOT] Failed to send message:", err);
       showError({ summary: "Connection Error", detail: "Could not send your message — connection failed." });
-      messagesRef.current = messagesRef.current.filter((m) => keyOf(m) !== optimisticKey);
-      setMessages(messagesRef.current);
       endWaiting({ immediate: true });
     }
   };
