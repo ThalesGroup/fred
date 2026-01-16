@@ -327,7 +327,7 @@ const lightTheme = createTheme({
           },
         }),
         popper: {
-          backdropFilter: "blur(6px)",
+          backdropFilter: "none",
         },
       },
     },
@@ -432,7 +432,7 @@ const darkTheme = createTheme({
           },
         }),
         popper: {
-          backdropFilter: "blur(6px)",
+          backdropFilter: "none",
         },
       },
     },

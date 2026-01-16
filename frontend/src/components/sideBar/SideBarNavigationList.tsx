@@ -1,7 +1,7 @@
 import ExpandLess from "@mui/icons-material/ExpandLess";
 import ExpandMore from "@mui/icons-material/ExpandMore";
 import { Collapse, List, ListItemButton, ListItemIcon, ListItemText } from "@mui/material";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 export type SideBarNavigationElement = {
@@ -52,11 +52,10 @@ export function SideBarNavigationList({ menuItems, isSidebarOpen, indentation = 
         const active = item.url ? isActive(item.url) : isAnyChildActive(item.children);
 
         return (
-          <>
+          <Fragment key={item.key}>
             <ListItemButton
               selected={active}
               dense={indentation > 0}
-              key={item.key}
               component={hasLink ? Link : "div"}
               {...(hasLink ? { to: item.url } : {})}
               onClick={
@@ -78,7 +77,7 @@ export function SideBarNavigationList({ menuItems, isSidebarOpen, indentation = 
                 />
               </Collapse>
             )}
-          </>
+          </Fragment>
         );
       })}
     </List>

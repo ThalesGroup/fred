@@ -16,19 +16,18 @@
  * ChatBot
  * -------
  * - Owns the conversation view (welcome vs. messages) and message history loading.
- * - Uses `useInitialChatInputContext` to supply draft (pre-session) defaults to the input area.
- * - Delegates per-session preference hydration/persistence to `UserInput`.
+ * - Uses `useInitialChatInputContext` to seed draft (pre-session) defaults.
+ * - Owns per-session preference hydration/persistence and shares controlled values with `UserInput`.
  * - Avoids flicker on session switch by keeping messages while history loads; welcome shows only when truly empty.
  */
 
-import TravelExploreOutlinedIcon from "@mui/icons-material/TravelExploreOutlined";
-import { Box, CircularProgress, Grid2, IconButton, Tooltip, Typography, useTheme } from "@mui/material";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Box, CircularProgress, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
 import { getConfig } from "../../common/config.tsx";
-import { useInitialChatInputContext } from "../../hooks/useInitialChatInputContext.ts";
+import { useInitialChatInputContext, type InitialChatPrefs } from "../../hooks/useInitialChatInputContext.ts";
 import { useSessionChange } from "../../hooks/useSessionChange.ts";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import {
@@ -40,24 +39,55 @@ import {
   useCreateSessionAgenticV1ChatbotSessionPostMutation,
   useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
+  useGetSessionsAgenticV1ChatbotSessionsGetQuery,
   useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
 } from "../../slices/agentic/agenticOpenApi.ts";
 import {
+  SearchPolicyName,
   TagType,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../ToastProvider.tsx";
-import { AttachmentsButton } from "./AttachmentsButton.tsx";
 import { keyOf, mergeAuthoritative, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
+import ChatAttachmentsWidget from "./ChatAttachmentsWidget.tsx";
+import ChatContextWidget from "./ChatContextWidget.tsx";
+import ChatDocumentLibrariesWidget from "./ChatDocumentLibrariesWidget.tsx";
 import ChatKnowledge from "./ChatKnowledge.tsx";
-import { FeatureTooltip } from "./FeatureTooltip.tsx";
+import ChatSearchOptionsWidget from "./ChatSearchOptionsWidget.tsx";
+import { createConversationMeta } from "./ConversationMeta.ts";
 import { MessagesArea } from "./MessagesArea.tsx";
-import { ChatContextPickerPanel } from "./settings/ChatContextPickerPanel.tsx";
-import UserInput, { UserInputContent, UserInputHandle } from "./user_input/UserInput.tsx";
+import UserInput, { UserInputContent } from "./user_input/UserInput.tsx";
 
 const HISTORY_TEXT_LIMIT = 1200;
+
+type ConversationPrefs = InitialChatPrefs & {
+  chatContextIds: string[];
+};
+
+type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
+
+type PersistedCtx = {
+  chatContextIds?: string[];
+  documentLibraryIds?: string[];
+  promptResourceIds?: string[];
+  templateResourceIds?: string[];
+  searchPolicy?: SearchPolicyName;
+  searchRagScope?: SearchRagScope;
+  deepSearch?: boolean;
+  ragKnowledgeScope?: SearchRagScope;
+  skipRagSearch?: boolean;
+  agent_name?: string;
+};
+
+const serializePrefs = (p: PersistedCtx) =>
+  JSON.stringify(Object.fromEntries(Object.entries(p).sort(([a], [b]) => a.localeCompare(b))));
+
+const asStringArray = (v: unknown, fallback: string[] = []): string[] => {
+  if (!Array.isArray(v)) return fallback;
+  return v.filter((x): x is string => typeof x === "string" && x.length > 0);
+};
 
 export interface ChatBotError {
   session_id: string | null;
@@ -106,6 +136,11 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     } catch {}
   }, [contextOpen]);
 
+  const [chatContextWidgetOpen, setChatContextWidgetOpen] = useState<boolean>(false);
+  const [attachmentsWidgetOpen, setAttachmentsWidgetOpen] = useState<boolean>(false);
+  const [searchOptionsWidgetOpen, setSearchOptionsWidgetOpen] = useState<boolean>(false);
+  const [librariesWidgetOpen, setLibrariesWidgetOpen] = useState<boolean>(false);
+
   const { showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
   const wsTokenRef = useRef<string | null>(null);
@@ -115,7 +150,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
   const pendingSessionIdRef = useRef<string | null>(null);
   // Track files being uploaded right now to surface inline progress in the input bar
   const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
-  const userInputRef = useRef<UserInputHandle | null>(null);
 
   // Name of des libs / prompts / templates / chat-context
   const { data: docLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
@@ -125,16 +159,8 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     kind: "chat-context",
   });
 
-  const [selectedChatContextIds, setSelectedChatContextIds] = useState<string[]>([]);
-  const setSelectedChatContextIdsFromHydration = useCallback((ids: string[]) => {
-    setSelectedChatContextIds(ids);
-  }, []);
-  const setSelectedChatContextIdsFromUser = useCallback((ids: string[]) => {
-    setSelectedChatContextIds(ids);
-    userInputRef.current?.markSessionPrefsDirty();
-  }, []);
-
   const libraryNameMap = useMemo(() => Object.fromEntries(docLibs.map((x) => [x.id, x.name])), [docLibs]);
+  const libraryById = useMemo(() => Object.fromEntries(docLibs.map((x) => [x.id, x])), [docLibs]);
   const promptNameMap = useMemo(
     () => Object.fromEntries(promptResources.map((x) => [x.id, x.name ?? x.id])),
     [promptResources],
@@ -147,7 +173,10 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     () => Object.fromEntries(chatContextResources.map((x) => [x.id, x.name ?? x.id])),
     [chatContextResources],
   );
-
+  const chatContextResourceMap = useMemo(
+    () => Object.fromEntries(chatContextResources.map((x) => [x.id, x])),
+    [chatContextResources],
+  );
   const {
     currentData: history,
     refetch: refetchHistory,
@@ -201,8 +230,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
-  const seedPrefsRef = useRef<any>(null);
-  const seedSessionIdRef = useRef<string | null>(null);
 
   // keep state + ref in sync
   const setAllMessages = (msgs: ChatMessage[]) => {
@@ -212,13 +239,11 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
 
   const defaultAgent = useMemo(() => agents[0] ?? null, [agents]);
   const [currentAgent, setCurrentAgent] = useState<AnyAgent>(agents[0] ?? ({} as AnyAgent));
+  const agentOverrideRef = useRef<string | null>(null);
+  const agentLockedRef = useRef<boolean>(false);
   useEffect(() => {
     if (defaultAgent && (!currentAgent || !currentAgent.name)) setCurrentAgent(defaultAgent);
   }, [currentAgent, defaultAgent]);
-
-  const [attachmentsPanelOpen, setAttachmentsPanelOpen] = useState<boolean>(false);
-  const [attachmentCount, setAttachmentCount] = useState<number>(0);
-  const [deepSearchEnabled, setDeepSearchEnabled] = useState<boolean>(false);
 
   const [waitResponse, setWaitResponse] = useState<boolean>(false);
   const waitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -235,25 +260,49 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
   // --- Session preferences (authoritative) ---
   const effectiveSessionId = pendingSessionIdRef.current || sessionId || undefined;
   const prefsSessionId = effectiveSessionId;
-  const {
-    data: sessionPrefs,
-    refetch: refetchSessionPrefs,
-  } = useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery(
-    { sessionId: prefsSessionId || "" },
-    {
-      skip: !prefsSessionId,
-      refetchOnMountOrArgChange: true,
-      refetchOnReconnect: true,
-      refetchOnFocus: true,
-    },
-  );
+  const { data: sessionPrefs, refetch: refetchSessionPrefs } =
+    useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery(
+      { sessionId: prefsSessionId || "" },
+      {
+        skip: !prefsSessionId,
+        refetchOnMountOrArgChange: true,
+        refetchOnReconnect: true,
+        refetchOnFocus: true,
+      },
+    );
   useEffect(() => {
     if (!prefsSessionId) return;
+    if (agentLockedRef.current) return;
     const agentName = (sessionPrefs as any)?.agent_name;
     if (typeof agentName !== "string" || !agentName.length) return;
+    if (agentOverrideRef.current && agentName !== agentOverrideRef.current) return;
+    if (agentOverrideRef.current && agentName === agentOverrideRef.current) {
+      agentOverrideRef.current = null;
+    }
     const found = agents.find((a) => a.name === agentName) ?? defaultAgent;
     if (found && found.name !== currentAgent?.name) setCurrentAgent(found);
   }, [agents, currentAgent?.name, defaultAgent, prefsSessionId, sessionPrefs]);
+
+  const { data: sessions = [], refetch: refetchSessions } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: false,
+    refetchOnReconnect: true,
+  });
+  const attachmentSessionId = effectiveSessionId;
+  useEffect(() => {
+    if (attachmentSessionId) {
+      refetchSessions();
+    }
+  }, [attachmentsRefreshTick, attachmentSessionId, refetchSessions]);
+  const sessionAttachments = useMemo(() => {
+    if (!attachmentSessionId) return [];
+    const s = (sessions as any[]).find((x) => x?.id === attachmentSessionId) as any | undefined;
+    const att = s?.attachments;
+    if (Array.isArray(att)) return att as { id: string; name: string }[];
+    const names = (s && (s.file_names as string[] | undefined)) || [];
+    return Array.isArray(names) ? names.map((n) => ({ id: n, name: n })) : [];
+  }, [sessions, attachmentSessionId]);
+  const attachmentCount = sessionAttachments.length + uploadingFiles.length;
 
   const beginWaiting = () => {
     waitSeqRef.current += 1;
@@ -482,87 +531,286 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // mount/unmount
 
-  const [userInputContext, setUserInputContext] = useState<any>(null);
-  const handleDraftContextChange = useCallback(
-    (ctx: any) => {
-      // Only track draft context when there is no active session.
-      if (!sessionId) {
-        setUserInputContext(ctx);
-      }
+  // Draft defaults (pre-session) are handled by a shared hook.
+  const { prefs: initialCtx, resetToDefaults } = useInitialChatInputContext(currentAgent?.name || "default", sessionId);
+  const defaultRagScope: SearchRagScope = "hybrid";
+
+  const [conversationPrefs, setConversationPrefs] = useState<ConversationPrefs>(() => ({
+    chatContextIds: [],
+    documentLibraryIds: initialCtx.documentLibraryIds,
+    promptResourceIds: initialCtx.promptResourceIds,
+    templateResourceIds: initialCtx.templateResourceIds,
+    searchPolicy: initialCtx.searchPolicy,
+    searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
+    deepSearch: initialCtx.deepSearch ?? false,
+  }));
+
+  useEffect(() => {
+    if (sessionId) return;
+    setConversationPrefs((prev) => ({
+      ...prev,
+      chatContextIds: [],
+      documentLibraryIds: initialCtx.documentLibraryIds,
+      promptResourceIds: initialCtx.promptResourceIds,
+      templateResourceIds: initialCtx.templateResourceIds,
+      searchPolicy: initialCtx.searchPolicy,
+      searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
+      deepSearch: initialCtx.deepSearch ?? false,
+    }));
+  }, [sessionId, initialCtx, defaultRagScope]);
+
+  const [prefsDirtyTick, setPrefsDirtyTick] = useState<number>(0);
+  const lastProcessedDirtyTickRef = useRef<number>(0);
+  const markPrefsDirty = useCallback(() => setPrefsDirtyTick((x) => x + 1), []);
+
+  const setSearchPolicy = useCallback(
+    (next: SetStateAction<SearchPolicyName>) => {
+      markPrefsDirty();
+      setConversationPrefs((prev) => ({
+        ...prev,
+        searchPolicy: typeof next === "function" ? next(prev.searchPolicy) : next,
+      }));
     },
-    [sessionId],
+    [markPrefsDirty],
   );
 
-  // Draft defaults (pre-session) are handled by a shared hook; once a session exists, per-session prefs come from UserInput.
-  const { prefs: initialCtx, resetToDefaults } = useInitialChatInputContext(currentAgent?.name || "default", sessionId);
-
-  const lastSessionIdRef = useRef<string | undefined>(undefined);
-  const isDraft = !sessionId;
-  const isFreshSessionFromDraft = !!sessionId && !lastSessionIdRef.current;
-  const isSeededSession = !!sessionId && seedSessionIdRef.current === sessionId && seedPrefsRef.current;
-
-  // Decide which baseline prefs to pass:
-  // - Draft/welcome: use current draft selections if any, else stored defaults.
-  // - Newly created session (from draft): seed with draft selections.
-  // - Other sessions: use stored defaults; per-session prefs hydrate in UserInput.
-  const basePrefs =
-    isDraft || isFreshSessionFromDraft
-      ? userInputContext || initialCtx
-      : isSeededSession
-        ? seedPrefsRef.current || initialCtx
-        : initialCtx;
-
-  const initialDocumentLibraryIds = isDraft
-    ? (userInputContext?.documentLibraryIds ?? initialCtx.documentLibraryIds)
-    : basePrefs.documentLibraryIds;
-  const initialPromptResourceIds = isDraft
-    ? (userInputContext?.promptResourceIds ?? initialCtx.promptResourceIds)
-    : basePrefs.promptResourceIds;
-  const initialTemplateResourceIds = isDraft
-    ? (userInputContext?.templateResourceIds ?? initialCtx.templateResourceIds)
-    : basePrefs.templateResourceIds;
-  const initialSearchPolicy = isDraft
-    ? (userInputContext?.searchPolicy ?? initialCtx.searchPolicy ?? "semantic")
-    : (basePrefs.searchPolicy ?? "semantic");
-  const initialSearchRagScope = isDraft
-    ? (userInputContext?.searchRagScope ?? initialCtx.searchRagScope ?? undefined)
-    : (basePrefs.searchRagScope ?? undefined);
-  const initialDeepSearch = isDraft
-    ? typeof userInputContext?.deepSearch === "boolean"
-      ? userInputContext.deepSearch
-      : initialCtx.deepSearch
-    : basePrefs.deepSearch;
-
-  // Track session transitions: seed prefs when creating a session from draft; reset draft on return to welcome; clear seed when switching.
-  useSessionChange(sessionId, {
-    onChange: (_, curr) => {
-      // Update lastSessionIdRef for isFreshSessionFromDraft calculation
-      lastSessionIdRef.current = curr;
+  const setSearchRagScope = useCallback(
+    (next: SearchRagScope) => {
+      markPrefsDirty();
+      setConversationPrefs((prev) => ({
+        ...prev,
+        searchRagScope: next,
+      }));
     },
-    onDraftToSession: (newSessionId) => {
-      // Capture draft prefs to seed this new session, then clear draft context
-      seedPrefsRef.current = userInputContext || initialCtx;
-      seedSessionIdRef.current = newSessionId;
-      setUserInputContext(null);
-      // If we navigated from draft to an existing session (not created just now), avoid leaking draft selections.
-      if (pendingSessionIdRef.current !== newSessionId) setSelectedChatContextIds([]);
+    [markPrefsDirty],
+  );
+
+  const setDeepSearchEnabled = useCallback(
+    (next: boolean) => {
+      markPrefsDirty();
+      setConversationPrefs((prev) => ({
+        ...prev,
+        deepSearch: next,
+      }));
     },
-    onSessionToDraft: () => {
-      // Returning to welcome: reset draft prefs and agent to deterministic default
+    [markPrefsDirty],
+  );
+
+  const setChatContextIds = useCallback(
+    (ids: string[]) => {
+      markPrefsDirty();
+      const uniqueIds = Array.from(new Set(ids));
+      setConversationPrefs((prev) => ({
+        ...prev,
+        chatContextIds: uniqueIds,
+      }));
+    },
+    [markPrefsDirty],
+  );
+  const setDocumentLibraryIds = useCallback(
+    (ids: string[]) => {
+      markPrefsDirty();
+      const uniqueIds = Array.from(new Set(ids));
+      setConversationPrefs((prev) => ({
+        ...prev,
+        documentLibraryIds: uniqueIds,
+      }));
+    },
+    [markPrefsDirty],
+  );
+
+  const handleSelectNewAgent = useCallback(
+    (agent: AnyAgent) => {
+      markPrefsDirty();
+      agentOverrideRef.current = agent.name;
+      agentLockedRef.current = true;
+      setCurrentAgent(agent);
+    },
+    [markPrefsDirty],
+  );
+
+  const supportsRagScopeSelection = currentAgent?.chat_options?.search_rag_scoping === true;
+  const supportsSearchPolicySelection = currentAgent?.chat_options?.search_policy_selection === true;
+  const supportsDeepSearchSelection = currentAgent?.chat_options?.deep_search_delegate === true;
+  const supportsAttachments = currentAgent?.chat_options?.attach_files === true;
+  const supportsLibrariesSelection = currentAgent?.chat_options?.libraries_selection === true;
+
+  // Synchronize with server-side session preferences.
+  const [hydratedSessionId, setHydratedSessionId] = useState<string | undefined>(undefined);
+  const prevPrefsSessionIdRef = useRef<string | undefined>(undefined);
+  const lastSentJson = useRef<string>("");
+  const forcePersistRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    const currentId = prefsSessionId;
+    const prevId = prevPrefsSessionIdRef.current;
+    prevPrefsSessionIdRef.current = currentId;
+    if (currentId !== prevId) {
+      agentLockedRef.current = false;
+    }
+
+    if (!currentId) {
+      console.info("[PREFS] draft defaults (no session)");
+      agentLockedRef.current = false;
+      setHydratedSessionId(undefined);
+      lastSentJson.current = "";
       resetToDefaults();
-      seedPrefsRef.current = null;
-      seedSessionIdRef.current = null;
-      setUserInputContext(null);
-      setSelectedChatContextIds([]);
-    },
-    onSessionSwitch: () => {
-      // Switching between existing sessions: clear transient draft/seed context to avoid bleed
-      seedPrefsRef.current = null;
-      seedSessionIdRef.current = null;
-      setUserInputContext(null);
-      setSelectedChatContextIds([]);
-    },
-  });
+      setChatContextWidgetOpen(false);
+      setAttachmentsWidgetOpen(false);
+      setLibrariesWidgetOpen(false);
+      setSearchOptionsWidgetOpen(false);
+      setConversationPrefs((prev) => ({
+        ...prev,
+        chatContextIds: [],
+        documentLibraryIds: initialCtx.documentLibraryIds,
+        promptResourceIds: initialCtx.promptResourceIds,
+        templateResourceIds: initialCtx.templateResourceIds,
+        searchPolicy: initialCtx.searchPolicy,
+        searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
+        deepSearch: initialCtx.deepSearch ?? false,
+      }));
+      return;
+    }
+
+    if (prevId && currentId !== prevId) {
+      console.info("[PREFS] session switch, reset pending load", { prevId, currentId });
+      lastSentJson.current = "";
+      setHydratedSessionId(undefined);
+      setChatContextWidgetOpen(false);
+      setAttachmentsWidgetOpen(false);
+      setLibrariesWidgetOpen(false);
+      setSearchOptionsWidgetOpen(false);
+      setConversationPrefs({
+        chatContextIds: [],
+        documentLibraryIds: [],
+        promptResourceIds: [],
+        templateResourceIds: [],
+        searchPolicy: initialCtx.searchPolicy,
+        searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
+        deepSearch: initialCtx.deepSearch ?? false,
+      });
+      return;
+    }
+
+    if (currentId && hydratedSessionId !== currentId && sessionPrefs) {
+      const p = (sessionPrefs as PersistedCtx) || {};
+      const nextChatContextIds = asStringArray(p.chatContextIds, []);
+      const nextLibs = asStringArray(p.documentLibraryIds, []);
+      const nextPrompts = asStringArray(p.promptResourceIds, []);
+      const nextTemplates = asStringArray(p.templateResourceIds, []);
+      const nextSearchPolicy = p.searchPolicy ?? initialCtx.searchPolicy;
+      const nextRagScope = p.searchRagScope ?? p.ragKnowledgeScope ?? initialCtx.searchRagScope ?? defaultRagScope;
+      const nextDeepSearch = p.deepSearch ?? initialCtx.deepSearch ?? false;
+
+      setConversationPrefs({
+        chatContextIds: nextChatContextIds,
+        documentLibraryIds: nextLibs,
+        promptResourceIds: nextPrompts,
+        templateResourceIds: nextTemplates,
+        searchPolicy: nextSearchPolicy,
+        searchRagScope: nextRagScope,
+        deepSearch: nextDeepSearch,
+      });
+      setChatContextWidgetOpen(nextChatContextIds.length > 0);
+      setLibrariesWidgetOpen(nextLibs.length > 0);
+
+      const desiredAgentName = typeof p.agent_name === "string" && p.agent_name.length ? p.agent_name : undefined;
+      const json = serializePrefs({
+        chatContextIds: nextChatContextIds,
+        documentLibraryIds: nextLibs,
+        promptResourceIds: nextPrompts,
+        templateResourceIds: nextTemplates,
+        searchPolicy: nextSearchPolicy,
+        searchRagScope: nextRagScope,
+        deepSearch: nextDeepSearch,
+        agent_name: desiredAgentName,
+      });
+      forcePersistRef.current = false;
+      lastSentJson.current = json;
+      setHydratedSessionId(currentId);
+      console.info("[PREFS] prefs loaded from server", {
+        sessionId: currentId,
+        agent: desiredAgentName,
+        conversationMeta: createConversationMeta({
+          sessionId,
+          effectiveSessionId: currentId,
+          agentName: currentAgent?.name,
+          agentSupportsAttachments: currentAgent?.chat_options?.attach_files === true,
+          isSessionPrefsReady: true,
+          deepSearchEnabled: Boolean(nextDeepSearch),
+          attachmentCount,
+          selectedChatContextIds: nextChatContextIds,
+          documentLibraryIds: nextLibs,
+          promptResourceIds: nextPrompts,
+          templateResourceIds: nextTemplates,
+          librariesSelectionEnabled: currentAgent?.chat_options?.libraries_selection === true,
+          librariesCount: nextLibs.length,
+          searchPolicy: nextSearchPolicy,
+          searchRagScope: nextRagScope,
+          sessionPreferences: sessionPrefs ? { preferences: sessionPrefs as Record<string, any> } : undefined,
+        }),
+      });
+    }
+  }, [
+    prefsSessionId,
+    hydratedSessionId,
+    sessionPrefs,
+    initialCtx,
+    defaultRagScope,
+    resetToDefaults,
+    sessionId,
+    currentAgent?.name,
+    currentAgent?.chat_options?.attach_files,
+    currentAgent?.chat_options?.libraries_selection,
+    attachmentCount,
+  ]);
+
+  useEffect(() => {
+    if (!prefsSessionId || hydratedSessionId !== prefsSessionId) return;
+    if (prefsDirtyTick === lastProcessedDirtyTickRef.current) return;
+
+    const prefs: PersistedCtx = {
+      chatContextIds: conversationPrefs.chatContextIds,
+      documentLibraryIds: conversationPrefs.documentLibraryIds,
+      promptResourceIds: conversationPrefs.promptResourceIds,
+      templateResourceIds: conversationPrefs.templateResourceIds,
+      searchPolicy: conversationPrefs.searchPolicy,
+      searchRagScope: supportsRagScopeSelection ? conversationPrefs.searchRagScope : undefined,
+      deepSearch: supportsDeepSearchSelection ? conversationPrefs.deepSearch : undefined,
+      agent_name: currentAgent?.name ?? defaultAgent?.name,
+    };
+
+    const serialized = serializePrefs(prefs);
+    lastProcessedDirtyTickRef.current = prefsDirtyTick;
+    if (serialized === lastSentJson.current && !forcePersistRef.current) return;
+
+    lastSentJson.current = serialized;
+    forcePersistRef.current = false;
+    console.log("[PREFS] persisting to backend", { session: prefsSessionId, prefs });
+    persistSessionPrefs({
+      sessionId: prefsSessionId,
+      sessionPreferencesPayload: { preferences: prefs },
+    })
+      .unwrap()
+      .then(() => {
+        console.log("[PREFS] persisted", { session: prefsSessionId });
+        refetchSessionPrefs();
+      })
+      .catch((err) => {
+        console.warn("[PREFS] persist failed", err);
+      });
+  }, [
+    prefsSessionId,
+    hydratedSessionId,
+    prefsDirtyTick,
+    conversationPrefs,
+    supportsRagScopeSelection,
+    supportsDeepSearchSelection,
+    currentAgent?.name,
+    defaultAgent?.name,
+    persistSessionPrefs,
+    refetchSessionPrefs,
+  ]);
 
   // Handle user input (text/audio)
   const handleSend = async (content: UserInputContent) => {
@@ -570,22 +818,22 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     const runtimeContext: RuntimeContext = { ...(baseRuntimeContext ?? {}) };
 
     // Add selected chat contexts
-    if (selectedChatContextIds.length) {
-      runtimeContext.selected_chat_context_ids = selectedChatContextIds;
+    if (conversationPrefs.chatContextIds.length) {
+      runtimeContext.selected_chat_context_ids = conversationPrefs.chatContextIds;
     }
 
     // Add selected libraries / profiles (CANONIQUES — pas de doublon)
-    if (content.documentLibraryIds?.length) {
-      runtimeContext.selected_document_libraries_ids = content.documentLibraryIds;
+    if (conversationPrefs.documentLibraryIds.length) {
+      runtimeContext.selected_document_libraries_ids = conversationPrefs.documentLibraryIds;
     }
 
     // Policy
-    runtimeContext.search_policy = content.searchPolicy || "semantic";
-    if (content.searchRagScope) {
-      runtimeContext.search_rag_scope = content.searchRagScope;
+    runtimeContext.search_policy = conversationPrefs.searchPolicy || "semantic";
+    if (supportsRagScopeSelection && conversationPrefs.searchRagScope) {
+      runtimeContext.search_rag_scope = conversationPrefs.searchRagScope;
     }
-    if (typeof content.deepSearch === "boolean") {
-      runtimeContext.deep_search = content.deepSearch;
+    if (supportsDeepSearchSelection && typeof conversationPrefs.deepSearch === "boolean") {
+      runtimeContext.deep_search = conversationPrefs.deepSearch;
     }
 
     // Files are now uploaded immediately upon selection (not here)
@@ -616,14 +864,14 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
         createSessionPayload: { agent_name: currentAgent?.name },
       }).unwrap();
       // Seed backend preferences with current draft context so selections are preserved.
-      const prefPayload: Record<string, any> = {
-        chatContextIds: selectedChatContextIds,
-        documentLibraryIds: basePrefs?.documentLibraryIds ?? [],
-        promptResourceIds: basePrefs?.promptResourceIds ?? [],
-        templateResourceIds: basePrefs?.templateResourceIds ?? [],
-        searchPolicy: basePrefs?.searchPolicy ?? "semantic",
-        searchRagScope: basePrefs?.searchRagScope,
-        deepSearch: typeof basePrefs?.deepSearch === "boolean" ? basePrefs.deepSearch : undefined,
+      const prefPayload: PersistedCtx = {
+        chatContextIds: conversationPrefs.chatContextIds,
+        documentLibraryIds: conversationPrefs.documentLibraryIds,
+        promptResourceIds: conversationPrefs.promptResourceIds,
+        templateResourceIds: conversationPrefs.templateResourceIds,
+        searchPolicy: conversationPrefs.searchPolicy ?? "semantic",
+        searchRagScope: supportsRagScopeSelection ? conversationPrefs.searchRagScope : undefined,
+        deepSearch: supportsDeepSearchSelection ? conversationPrefs.deepSearch : undefined,
         agent_name: currentAgent?.name,
       };
       try {
@@ -649,65 +897,68 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       throw err;
     }
   }, [
-    basePrefs?.deepSearch,
-    basePrefs?.documentLibraryIds,
-    basePrefs?.promptResourceIds,
-    basePrefs?.searchPolicy,
-    basePrefs?.searchRagScope,
-    basePrefs?.templateResourceIds,
+    conversationPrefs.chatContextIds,
+    conversationPrefs.documentLibraryIds,
+    conversationPrefs.promptResourceIds,
+    conversationPrefs.templateResourceIds,
+    conversationPrefs.searchPolicy,
+    conversationPrefs.searchRagScope,
+    conversationPrefs.deepSearch,
+    supportsRagScopeSelection,
+    supportsDeepSearchSelection,
     createSession,
     currentAgent?.name,
-    selectedChatContextIds,
     sessionId,
     persistSessionPrefs,
     showError,
     onNewSessionCreated,
   ]);
 
+  const handleAddAttachments = useCallback(
+    async (files: File[]) => {
+      if (!files.length) return;
+      let sid = pendingSessionIdRef.current || sessionId;
+      if (!sid) {
+        try {
+          sid = await ensureSessionId();
+        } catch {
+          return;
+        }
+      }
+
+      for (const file of files) {
+        setUploadingFiles((prev) => [...prev, file.name]);
+        const formData = new FormData();
+        formData.append("session_id", sid);
+        formData.append("file", file);
+        try {
+          await uploadChatFile({
+            bodyUploadFileAgenticV1ChatbotUploadPost: formData as any,
+          }).unwrap();
+        } catch (err: any) {
+          const detail = err?.data?.detail ?? err?.data ?? err?.error;
+          const errMsg =
+            typeof detail === "string"
+              ? detail
+              : typeof detail === "object" && detail
+                ? detail.message || detail.upstream || detail.code || JSON.stringify(detail)
+                : (err as Error)?.message || "Unknown error";
+          showError({ summary: "Upload failed", detail: errMsg });
+        } finally {
+          setUploadingFiles((prev) => prev.filter((name) => name !== file.name));
+        }
+      }
+
+      setAttachmentsRefreshTick((tick) => tick + 1);
+    },
+    [ensureSessionId, sessionId, showError, uploadChatFile],
+  );
+
+  const handleAttachmentsUpdated = useCallback(() => {
+    setAttachmentsRefreshTick((tick) => tick + 1);
+  }, []);
+
   // Upload files immediately when user selects them (sequential to preserve session binding)
-  const handleFilesSelected = async (files: File[]) => {
-    if (!files?.length) return;
-    const agentName = currentAgent.name;
-    let baseSessionId = pendingSessionIdRef.current || sessionId;
-
-    if (!baseSessionId) {
-      try {
-        baseSessionId = await ensureSessionId();
-      } catch {
-        return;
-      }
-    }
-
-    for (const file of files) {
-      setUploadingFiles((prev) => [...prev, file.name]);
-      const formData = new FormData();
-      const effectiveSessionId = pendingSessionIdRef.current || baseSessionId || "";
-      formData.append("session_id", effectiveSessionId);
-      formData.append("agent_name", agentName);
-      formData.append("file", file);
-
-      try {
-        await uploadChatFile({
-          bodyUploadFileAgenticV1ChatbotUploadPost: formData as any,
-        }).unwrap();
-        console.log("✅ Uploaded file:", file.name);
-        // Refresh attachments view in the popover
-        setAttachmentsRefreshTick((x) => x + 1);
-      } catch (err: any) {
-        const detail = err?.data?.detail ?? err?.data ?? err?.error;
-        const errMsg =
-          typeof detail === "string"
-            ? detail
-            : typeof detail === "object" && detail
-              ? detail.message || detail.upstream || detail.code || JSON.stringify(detail)
-              : (err as Error)?.message || "Unknown error";
-        console.error("[CHATBOT] File upload failed:", err);
-        showError({ summary: "File Upload Error", detail: `Failed to upload ${file.name}: ${errMsg}` });
-      } finally {
-        setUploadingFiles((prev) => prev.filter((n) => n !== file.name));
-      }
-    }
-  };
 
   /**
    * Send a new user message to the chatbot agent.
@@ -776,30 +1027,37 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
   const showWelcome = isNewConversation && !waitResponse && messages.length === 0;
   // Helps spot session-history fetch issues quickly in dev without adding noisy logs.
   const showHistoryLoading = !!sessionId && isHistoryFetching && messages.length === 0 && !waitResponse;
-  const isSessionPrefsReady = !effectiveSessionId || !!sessionPrefs;
+  const isHydratingSession = Boolean(prefsSessionId && hydratedSessionId !== prefsSessionId);
+  const displayChatContextIds = isHydratingSession ? [] : conversationPrefs.chatContextIds;
+  const displayDocumentLibraryIds = isHydratingSession ? [] : conversationPrefs.documentLibraryIds;
+  const chatContextWidgetOpenDisplay = isHydratingSession ? false : chatContextWidgetOpen;
+  const attachmentsWidgetOpenDisplay = isHydratingSession ? false : supportsAttachments && attachmentsWidgetOpen;
+  const searchOptionsWidgetOpenDisplay =
+    isHydratingSession ? false : (supportsRagScopeSelection || supportsSearchPolicySelection) && searchOptionsWidgetOpen;
+  const librariesWidgetOpenDisplay = isHydratingSession ? false : supportsLibrariesSelection && librariesWidgetOpen;
+  const widgetsOpen =
+    chatContextWidgetOpenDisplay ||
+    librariesWidgetOpenDisplay ||
+    attachmentsWidgetOpenDisplay ||
+    searchOptionsWidgetOpenDisplay;
+  const chatWidgetRail = widgetsOpen ? "16vw" : "0px";
+  const chatWidgetGap = "12px";
+  const chatContentRightPadding = widgetsOpen ? `calc(${chatWidgetRail} + ${chatWidgetGap})` : "0px";
+  const chatContentWidth = widgetsOpen ? "100%" : "80%";
+  const chatContentLeftPadding = 3;
 
-  const hasContext =
-    !!userInputContext &&
-    ((userInputContext?.files?.length ?? 0) > 0 ||
-      !!userInputContext?.audioBlob ||
-      (userInputContext?.documentLibraryIds?.length ?? 0) > 0 ||
-      (userInputContext?.promptResourceIds?.length ?? 0) > 0 ||
-      (userInputContext?.templateResourceIds?.length ?? 0) > 0);
-  const agentSupportsAttachments = currentAgent?.chat_options?.attach_files === true;
-  const effectiveAttachmentsPanelOpen = agentSupportsAttachments ? attachmentsPanelOpen : false;
-  const showSetupButton = Boolean(
-    currentAgent?.chat_options?.libraries_selection ||
-      currentAgent?.chat_options?.search_policy_selection ||
-      currentAgent?.chat_options?.record_audio_files,
+  const userInputContext = useMemo(
+    () => ({
+      documentLibraryIds: conversationPrefs.documentLibraryIds,
+      promptResourceIds: conversationPrefs.promptResourceIds,
+      templateResourceIds: conversationPrefs.templateResourceIds,
+    }),
+    [conversationPrefs.documentLibraryIds, conversationPrefs.promptResourceIds, conversationPrefs.templateResourceIds],
   );
-  const librariesCount = useMemo(() => {
-    if (effectiveSessionId) {
-      const ids = (sessionPrefs as any)?.documentLibraryIds;
-      return Array.isArray(ids) ? ids.length : 0;
-    }
-    const draftIds = basePrefs?.documentLibraryIds;
-    return Array.isArray(draftIds) ? draftIds.length : 0;
-  }, [basePrefs?.documentLibraryIds, effectiveSessionId, sessionPrefs]);
+  const hasContext =
+    conversationPrefs.documentLibraryIds.length > 0 ||
+    conversationPrefs.promptResourceIds.length > 0 ||
+    conversationPrefs.templateResourceIds.length > 0;
 
   useEffect(() => {
     if (!showWelcome) return;
@@ -807,7 +1065,75 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
   }, [greetingText, showWelcome]);
 
   return (
-    <Box width={"100%"} height="100%" display="flex" flexDirection="column" alignItems="center" sx={{ minHeight: 0 }}>
+    <Box
+      width={"100%"}
+      height="100%"
+      display="flex"
+      flexDirection="column"
+      alignItems="center"
+      sx={{
+        minHeight: 0,
+        position: "relative",
+      }}
+    >
+      <Box
+        sx={{
+          position: "fixed",
+          top: { xs: 8, md: 12 },
+          right: { xs: 8, md: 16 },
+          zIndex: 1200,
+          width: { xs: "auto", md: widgetsOpen ? chatWidgetRail : "auto" },
+          display: { xs: "none", md: "block" },
+        }}
+      >
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-end" }}>
+          <ChatContextWidget
+            selectedChatContextIds={displayChatContextIds}
+            onChangeSelectedChatContextIds={setChatContextIds}
+            nameById={chatContextNameMap}
+            resourceById={chatContextResourceMap}
+            open={chatContextWidgetOpenDisplay}
+            closeOnClickAway={false}
+            onOpen={() => setChatContextWidgetOpen(true)}
+            onClose={() => setChatContextWidgetOpen(false)}
+          />
+          <ChatDocumentLibrariesWidget
+            selectedLibraryIds={displayDocumentLibraryIds}
+            onChangeSelectedLibraryIds={setDocumentLibraryIds}
+            nameById={libraryNameMap}
+            libraryById={libraryById}
+            open={librariesWidgetOpenDisplay}
+            closeOnClickAway={false}
+            disabled={!supportsLibrariesSelection}
+            onOpen={() => setLibrariesWidgetOpen(true)}
+            onClose={() => setLibrariesWidgetOpen(false)}
+          />
+          <ChatAttachmentsWidget
+            attachments={sessionAttachments}
+            sessionId={attachmentSessionId}
+            open={attachmentsWidgetOpenDisplay}
+            closeOnClickAway={false}
+            disabled={!supportsAttachments}
+            onAddAttachments={handleAddAttachments}
+            onAttachmentsUpdated={handleAttachmentsUpdated}
+            onOpen={() => setAttachmentsWidgetOpen(true)}
+            onClose={() => setAttachmentsWidgetOpen(false)}
+          />
+          <ChatSearchOptionsWidget
+            searchPolicy={conversationPrefs.searchPolicy ?? "semantic"}
+            onSearchPolicyChange={setSearchPolicy}
+            searchRagScope={conversationPrefs.searchRagScope ?? defaultRagScope}
+            onSearchRagScopeChange={setSearchRagScope}
+            ragScopeDisabled={!supportsRagScopeSelection}
+            searchPolicyDisabled={!supportsSearchPolicySelection}
+            open={searchOptionsWidgetOpenDisplay}
+            closeOnClickAway={false}
+            disabled={!supportsRagScopeSelection && !supportsSearchPolicySelection}
+            onOpen={() => setSearchOptionsWidgetOpen(true)}
+            onClose={() => setSearchOptionsWidgetOpen(false)}
+          />
+        </Box>
+      </Box>
       {/* ===== Conversation header status =====
            Fred rationale:
            - Always show the conversation context so developers/users immediately
@@ -816,67 +1142,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
 
       {/* Chat context picker panel */}
       {/* (moved) Chat context is now in the top-right vertical toolbar */}
-
-      {/* Conversation top-right controls (attachments + setup) */}
-      <AttachmentsButton
-        attachmentsPanelOpen={effectiveAttachmentsPanelOpen}
-        attachmentCount={agentSupportsAttachments ? attachmentCount : 0}
-        onToggle={() => setAttachmentsPanelOpen((v) => !v)}
-        showAttachmentsButton
-        attachmentsEnabled={isSessionPrefsReady && agentSupportsAttachments}
-        showSetupButton
-        setupEnabled={isSessionPrefsReady && showSetupButton}
-        setupCount={librariesCount}
-        onOpenSetup={(anchorEl) => {
-          userInputRef.current?.openSetupPopover(anchorEl);
-        }}
-        topSlot={
-          <>
-            <ChatContextPickerPanel
-              variant="icon"
-              selectedChatContextIds={selectedChatContextIds}
-              onChangeSelectedChatContextIds={setSelectedChatContextIdsFromUser}
-            />
-              <FeatureTooltip
-                label={t("chatbot.deepSearch.label", "Deep Search")}
-                description={t(
-                "chatbot.deepSearch.tooltipDescription",
-                "Delegates retrieval to a specialized agent for deeper search across your knowledge.\nAdds `deep_search` to the runtime context; may be slower but more thorough.",
-              )}
-              disabledReason={
-                currentAgent?.chat_options?.deep_search_delegate === true
-                  ? undefined
-                  : t(
-                      "chatbot.deepSearch.tooltipDisabled",
-                      "This agent does not support deep search delegation.",
-                    )
-              }
-            >
-              <span>
-                <IconButton
-                  size="small"
-                  aria-label="deep-search"
-                  onClick={() => userInputRef.current?.setDeepSearchEnabled(!deepSearchEnabled)}
-                  disabled={
-                    waitResponse || !isSessionPrefsReady || currentAgent?.chat_options?.deep_search_delegate !== true
-                  }
-                  sx={{
-                    border: `1px solid ${theme.palette.divider}`,
-                    backgroundColor: deepSearchEnabled ? theme.palette.primary.main : theme.palette.background.paper,
-                    color: deepSearchEnabled ? theme.palette.primary.contrastText : theme.palette.text.secondary,
-                    opacity: currentAgent?.chat_options?.deep_search_delegate === true ? 1 : 0.45,
-                    "&:hover": {
-                      backgroundColor: deepSearchEnabled ? theme.palette.primary.dark : theme.palette.action.hover,
-                    },
-                  }}
-                >
-                  <TravelExploreOutlinedIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </FeatureTooltip>
-          </>
-        }
-      />
 
       <Box
         height="100vh"
@@ -896,95 +1161,87 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
         */}
         {showWelcome && (
           <Box
-            width="80%"
-            maxWidth={{ xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" }}
-            display="flex"
-            flexDirection="column"
-            alignItems="center"
-              sx={{
-                minHeight: 0,
-                overflow: "hidden",
-              pr: effectiveAttachmentsPanelOpen ? { xs: "min(92vw, 320px)", sm: "340px" } : 0,
-              transition: (t) => t.transitions.create("padding-right"),
-              mx: "auto",
-            }}
-          >
-        {/* Conversation start: new conversation without message */}
-          <Box
             sx={{
-              minHeight: "100vh",
               width: "100%",
-              px: { xs: 2, sm: 3 },
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: { xs: "flex-start", md: "center" },
-              pt: { xs: 6, md: 8 },
-              gap: 3,
+              pr: { xs: 0, md: chatContentRightPadding },
+              pl: { xs: 0, md: chatContentLeftPadding },
             }}
           >
             <Box
+              width={chatContentWidth}
+              maxWidth={{ xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" }}
+              display="flex"
+              flexDirection="column"
+              alignItems="center"
               sx={{
-                width: "100%",
-                textAlign: "center",
+                minHeight: 0,
+                overflow: "hidden",
+                mx: "auto",
+                pl: { xs: 0, md: chatContentLeftPadding },
               }}
             >
-              <Typography
-                variant="h3"
+              {/* Conversation start: new conversation without message */}
+              <Box
                 sx={{
-                  fontWeight: 700,
-                  display: "inline-block",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  position: "relative",
-                  background: theme.palette.primary.main,
-                  backgroundSize: "200% 200%",
-                  backgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  letterSpacing: 0.5,
+                  minHeight: "100vh",
+                  width: "100%",
+                  px: { xs: 2, sm: 3 },
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: { xs: "flex-start", md: "center" },
+                  pt: { xs: 6, md: 8 },
+                  gap: 3,
                 }}
               >
-                {typedGreeting}
-              </Typography>
+                <Box
+                  sx={{
+                    width: "100%",
+                    textAlign: "center",
+                  }}
+                >
+                  <Typography
+                    variant="h3"
+                    sx={{
+                      fontWeight: 700,
+                      display: "inline-block",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      position: "relative",
+                      background: theme.palette.primary.main,
+                      backgroundSize: "200% 200%",
+                      backgroundClip: "text",
+                      WebkitTextFillColor: "transparent",
+                      letterSpacing: 0.5,
+                    }}
+                  >
+                    {typedGreeting}
+                  </Typography>
+                </Box>
+                {/* Welcome hint */}
+                <Typography variant="h5" color="text.primary" sx={{ textAlign: "center" }}>
+                  {t("chatbot.startNew", { name: currentAgent?.name ?? "assistant" })}
+                </Typography>
+                {/* Input area */}
+                <Box sx={{ width: "min(900px, 100%)" }}>
+                  <UserInput
+                    agentChatOptions={currentAgent.chat_options}
+                    isWaiting={waitResponse}
+                    isHydratingSession={isHydratingSession}
+                    onSend={handleSend}
+                    onStop={stopStreaming}
+                    searchPolicy={conversationPrefs.searchPolicy}
+                    onSearchPolicyChange={setSearchPolicy}
+                    searchRagScope={conversationPrefs.searchRagScope}
+                    onSearchRagScopeChange={setSearchRagScope}
+                    onDeepSearchEnabledChange={setDeepSearchEnabled}
+                    currentAgent={currentAgent}
+                    agents={agents}
+                    onSelectNewAgent={handleSelectNewAgent}
+                  />
+                </Box>
+              </Box>
             </Box>
-            {/* Welcome hint */}
-            <Typography variant="h5" color="text.primary" sx={{ textAlign: "center" }}>
-              {t("chatbot.startNew", { name: currentAgent?.name ?? "assistant" })}
-            </Typography>
-            {/* Input area */}
-            <Box sx={{ width: "min(900px, 100%)" }}>
-              <UserInput
-                ref={userInputRef}
-                agentChatOptions={currentAgent.chat_options}
-                isWaiting={waitResponse}
-                onSend={handleSend}
-                onStop={stopStreaming}
-                onContextChange={handleDraftContextChange}
-                sessionId={sessionId}
-                effectiveSessionId={effectiveSessionId}
-                uploadingFiles={uploadingFiles}
-                onFilesSelected={agentSupportsAttachments ? handleFilesSelected : undefined}
-                attachmentsRefreshTick={attachmentsRefreshTick}
-                serverPrefs={sessionPrefs as any}
-                refetchServerPrefs={refetchSessionPrefs}
-                selectedChatContextIds={selectedChatContextIds}
-                onSelectedChatContextIdsChange={setSelectedChatContextIdsFromHydration}
-                initialDocumentLibraryIds={initialDocumentLibraryIds}
-                initialPromptResourceIds={initialPromptResourceIds}
-                initialTemplateResourceIds={initialTemplateResourceIds}
-                initialSearchPolicy={initialSearchPolicy}
-                initialSearchRagScope={initialSearchRagScope}
-                initialDeepSearch={initialDeepSearch}
-                currentAgent={currentAgent}
-                agents={agents}
-                onSelectNewAgent={setCurrentAgent}
-                attachmentsPanelOpen={effectiveAttachmentsPanelOpen}
-                onAttachmentsPanelOpenChange={agentSupportsAttachments ? setAttachmentsPanelOpen : undefined}
-                onAttachmentCountChange={agentSupportsAttachments ? setAttachmentCount : undefined}
-                onDeepSearchEnabledChange={(enabled) => setDeepSearchEnabled(enabled)}
-              />
-            </Box>
-          </Box>
           </Box>
         )}
 
@@ -1015,92 +1272,91 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
             >
               <Box
                 sx={{
-                  width: "80%",
-                  maxWidth: { xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" },
-                  mx: "auto",
-                  p: 2,
-                  pr: effectiveAttachmentsPanelOpen ? { xs: "min(92vw, 320px)", sm: "340px" } : 0,
-                  transition: (t) => t.transitions.create("padding-right"),
-                  wordBreak: "break-word",
-                  alignContent: "center",
-                  minHeight: 0,
+                  width: "100%",
+                  pr: { xs: 0, md: chatContentRightPadding },
+                  pl: { xs: 0, md: chatContentLeftPadding },
                 }}
               >
-                <MessagesArea
-                  key={sessionId}
-                  messages={messages}
-                  agents={agents}
-                  currentAgent={currentAgent}
-                  isWaiting={waitResponse}
-                  libraryNameById={libraryNameMap}
-                  chatContextNameById={chatContextNameMap}
-                />
-                {showHistoryLoading && (
-                  <Box mt={1} sx={{ display: "flex", justifyContent: "center" }}>
-                    <CircularProgress size={18} thickness={4} sx={{ color: theme.palette.text.secondary }} />
-                  </Box>
-                )}
+                <Box
+                  sx={{
+                    width: chatContentWidth,
+                    maxWidth: { xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" },
+                    mx: "auto",
+                    p: 2,
+                    wordBreak: "break-word",
+                    alignContent: "center",
+                    minHeight: 0,
+                    pl: { xs: 0, md: chatContentLeftPadding },
+                  }}
+                >
+                  <MessagesArea
+                    key={sessionId}
+                    messages={messages}
+                    agents={agents}
+                    currentAgent={currentAgent}
+                    isWaiting={waitResponse}
+                    libraryNameById={libraryNameMap}
+                    chatContextNameById={chatContextNameMap}
+                  />
+                  {showHistoryLoading && (
+                    <Box mt={1} sx={{ display: "flex", justifyContent: "center" }}>
+                      <CircularProgress size={18} thickness={4} sx={{ color: theme.palette.text.secondary }} />
+                    </Box>
+                  )}
+                </Box>
               </Box>
             </Box>
 
             <Box
               sx={{
-                width: "80%",
-                maxWidth: { xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" },
-                mx: "auto",
-                pr: effectiveAttachmentsPanelOpen ? { xs: "min(92vw, 320px)", sm: "340px" } : 0,
-                transition: (t) => t.transitions.create("padding-right"),
+                width: "100%",
+                pr: { xs: 0, md: chatContentRightPadding },
+                pl: { xs: 0, md: chatContentLeftPadding },
               }}
             >
-              {/* User input area */}
-              <Grid2 container width="100%" alignContent="center">
-                <UserInput
-                  ref={userInputRef}
-                  agentChatOptions={currentAgent.chat_options}
-                  isWaiting={waitResponse}
-                  onSend={handleSend}
-                  onStop={stopStreaming}
-                  onContextChange={handleDraftContextChange}
-                  sessionId={sessionId}
-                  effectiveSessionId={effectiveSessionId}
-                  uploadingFiles={uploadingFiles}
-                  onFilesSelected={agentSupportsAttachments ? handleFilesSelected : undefined}
-                  attachmentsRefreshTick={attachmentsRefreshTick}
-                  serverPrefs={sessionPrefs as any}
-                  refetchServerPrefs={refetchSessionPrefs}
-                  selectedChatContextIds={selectedChatContextIds}
-                  onSelectedChatContextIdsChange={setSelectedChatContextIdsFromHydration}
-                  initialDocumentLibraryIds={initialDocumentLibraryIds}
-                  initialPromptResourceIds={initialPromptResourceIds}
-                  initialTemplateResourceIds={initialTemplateResourceIds}
-                  initialSearchPolicy={initialSearchPolicy}
-                  initialSearchRagScope={initialSearchRagScope}
-                  initialDeepSearch={initialDeepSearch}
-                  currentAgent={currentAgent}
-                  agents={agents}
-                  onSelectNewAgent={setCurrentAgent}
-                  attachmentsPanelOpen={effectiveAttachmentsPanelOpen}
-                  onAttachmentsPanelOpenChange={agentSupportsAttachments ? setAttachmentsPanelOpen : undefined}
-                  onAttachmentCountChange={agentSupportsAttachments ? setAttachmentCount : undefined}
-                  onDeepSearchEnabledChange={(enabled) => setDeepSearchEnabled(enabled)}
-                />
-              </Grid2>
+              <Box
+                sx={{
+                  width: chatContentWidth,
+                  maxWidth: { xs: "100%", md: "1200px", lg: "1400px", xl: "1750px" },
+                  mx: "auto",
+                  pl: { xs: 0, md: chatContentLeftPadding },
+                }}
+              >
+                {/* User input area */}
+                <Grid2 container width="100%" alignContent="center">
+                  <UserInput
+                    agentChatOptions={currentAgent.chat_options}
+                    isWaiting={waitResponse}
+                    isHydratingSession={isHydratingSession}
+                    onSend={handleSend}
+                    onStop={stopStreaming}
+                    searchPolicy={conversationPrefs.searchPolicy}
+                    onSearchPolicyChange={setSearchPolicy}
+                    searchRagScope={conversationPrefs.searchRagScope}
+                    onSearchRagScopeChange={setSearchRagScope}
+                    onDeepSearchEnabledChange={setDeepSearchEnabled}
+                    currentAgent={currentAgent}
+                    agents={agents}
+                    onSelectNewAgent={handleSelectNewAgent}
+                  />
+                </Grid2>
 
-              {/* Conversation tokens count */}
-              <Grid2 container width="100%" display="flex" justifyContent="flex-end" marginTop={0.5}>
-                <Tooltip
-                  title={t("chatbot.tooltip.tokenUsage", {
-                    input: inputTokenCounts,
-                    output: outputTokenCounts,
-                  })}
-                >
-                  <Typography fontSize="0.8rem" color={theme.palette.text.secondary} fontStyle="italic">
-                    {t("chatbot.tooltip.tokenCount", {
-                      total: outputTokenCounts + inputTokenCounts > 0 ? outputTokenCounts + inputTokenCounts : "...",
+                {/* Conversation tokens count */}
+                <Grid2 container width="100%" display="flex" justifyContent="flex-end" marginTop={0.5}>
+                  <Tooltip
+                    title={t("chatbot.tooltip.tokenUsage", {
+                      input: inputTokenCounts,
+                      output: outputTokenCounts,
                     })}
-                  </Typography>
-                </Tooltip>
-              </Grid2>
+                  >
+                    <Typography fontSize="0.8rem" color={theme.palette.text.secondary} fontStyle="italic">
+                      {t("chatbot.tooltip.tokenCount", {
+                        total: outputTokenCounts + inputTokenCounts > 0 ? outputTokenCounts + inputTokenCounts : "...",
+                      })}
+                    </Typography>
+                  </Tooltip>
+                </Grid2>
+              </Box>
             </Box>
           </>
         )}

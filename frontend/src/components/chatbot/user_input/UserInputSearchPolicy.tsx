@@ -12,62 +12,54 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
-import PublicOutlinedIcon from "@mui/icons-material/PublicOutlined";
+import AutoFixHighOutlinedIcon from "@mui/icons-material/AutoFixHighOutlined";
+import RuleOutlinedIcon from "@mui/icons-material/RuleOutlined";
 import SyncAltOutlinedIcon from "@mui/icons-material/SyncAltOutlined";
 import { Box, Divider, ToggleButton, ToggleButtonGroup, Tooltip, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
-import type { RuntimeContext } from "../../../slices/agentic/agenticOpenApi.ts";
-
-type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
+import { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 
 type Props = {
-  value: SearchRagScope;
-  onChange: (next: SearchRagScope) => void;
+  value: SearchPolicyName;
+  onChange: (next: SearchPolicyName) => void;
   disabled?: boolean;
 };
 
-/**
- * Compact tri-state selector for corpus usage:
- * - corpus_only
- * - hybrid
- * - general_only
- */
-export function UserInputRagScope({ value, onChange, disabled }: Props) {
+export function UserInputSearchPolicy({ value, onChange, disabled }: Props) {
   const theme = useTheme();
   const { t } = useTranslation();
 
-  const labels: Record<SearchRagScope, string> = {
-    corpus_only: "Corpus",
-    hybrid: "Hybrid",
-    general_only: "General",
+  const labels: Record<SearchPolicyName, string> = {
+    hybrid: t("search.hybrid", "Hybrid"),
+    semantic: t("search.semantic", "Semantic"),
+    strict: t("search.strict", "Strict"),
   };
 
-  const tooltipByValue: Record<SearchRagScope, string> = {
-    corpus_only: t("chatbot.ragScope.tooltipCorpus"),
-    hybrid: t("chatbot.ragScope.tooltipHybrid"),
-    general_only: t("chatbot.ragScope.tooltipGeneral"),
+  const tooltipByValue: Record<SearchPolicyName, string> = {
+    hybrid: t("search.hybridDescription"),
+    semantic: t("search.semanticDescription"),
+    strict: t("search.strictDescription"),
   };
 
-  const renderTooltipContent = (scope: SearchRagScope) => (
+  const renderTooltipContent = (policy: SearchPolicyName) => (
     <Box sx={{ maxWidth: 360 }}>
       <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.75 }}>
-        {labels[scope]}
+        {labels[policy]}
       </Typography>
       <Divider sx={{ opacity: 0.5, mb: 0.75 }} />
       <Box sx={{ pl: 1.25, borderLeft: `2px solid ${theme.palette.divider}` }}>
         <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
-          {tooltipByValue[scope]}
+          {tooltipByValue[policy]}
         </Typography>
       </Box>
     </Box>
   );
 
-  const renderButton = (scope: SearchRagScope, icon: JSX.Element) => (
+  const renderButton = (policy: SearchPolicyName, icon: JSX.Element) => (
     <Tooltip
-      key={scope}
-      title={renderTooltipContent(scope)}
+      key={policy}
+      title={renderTooltipContent(policy)}
       placement="right"
       arrow
       componentsProps={{
@@ -75,7 +67,7 @@ export function UserInputRagScope({ value, onChange, disabled }: Props) {
         arrow: { sx: { color: "background.paper" } },
       }}
     >
-      <ToggleButton value={scope} aria-label={labels[scope]}>
+      <ToggleButton value={policy} aria-label={labels[policy]}>
         {icon}
       </ToggleButton>
     </Tooltip>
@@ -88,9 +80,9 @@ export function UserInputRagScope({ value, onChange, disabled }: Props) {
       value={value}
       disabled={disabled}
       onChange={(_, next) => {
-        if (next) onChange(next as SearchRagScope);
+        if (next) onChange(next as SearchPolicyName);
       }}
-      aria-label="rag-knowledge-scope"
+      aria-label="search-policy"
       sx={{
         borderRadius: 999,
         overflow: "hidden",
@@ -111,9 +103,9 @@ export function UserInputRagScope({ value, onChange, disabled }: Props) {
         },
       }}
     >
-      {renderButton("corpus_only", <MenuBookOutlinedIcon fontSize="small" />)}
       {renderButton("hybrid", <SyncAltOutlinedIcon fontSize="small" />)}
-      {renderButton("general_only", <PublicOutlinedIcon fontSize="small" />)}
+      {renderButton("semantic", <AutoFixHighOutlinedIcon fontSize="small" />)}
+      {renderButton("strict", <RuleOutlinedIcon fontSize="small" />)}
     </ToggleButtonGroup>
   );
 }
