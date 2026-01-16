@@ -267,7 +267,7 @@ class AppConfig(BaseModel):
     reload: bool = False
     reload_dir: str = "."
     metrics_enabled: bool = True
-    metrics_address: str = "0.0.0.0"
+    metrics_address: str = "127.0.0.1"
     metrics_port: int = 9000
 
 
