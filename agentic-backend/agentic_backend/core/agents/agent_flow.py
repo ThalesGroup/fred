@@ -775,7 +775,8 @@ class AgentFlow:
         - Accepts AnyMessage/Sequence to play nicely with LangChain's typing.
         """
         lang = get_language(self.get_runtime_context())
-        if lang:
+        if lang and not self.chat_context_text():
+            # Only inject language preference if no chat context is present to avoid duplication.
             system_text = (
                 f"{system_text}\n\n"
                 f"User language preference: respond in '{lang}' by default unless explicitly asked otherwise."
@@ -786,18 +787,42 @@ class AgentFlow:
         self, messages: Sequence[AnyMessage]
     ) -> list[AnyMessage]:
         """
-        Wrap the chat context description in a SystemMessage at the end of the messages.
+        Wrap the chat context description in a SystemMessage near the start of the messages.
 
         Why:
-        - Force the system to take it into account.
+        - Force the system to take it into account as prompt-level context.
 
         """
         messages = [msg for msg in messages if not isinstance(msg, ChatContextMessage)]
         chat_context = self.chat_context_text()
         if not chat_context:
             return list(messages)
-        messages.append(ChatContextMessage(content=chat_context))
-        return messages
+        include_spec = self.get_field_spec("prompts.include_chat_context")
+        if include_spec is not None and not bool(
+            self.get_tuned_any("prompts.include_chat_context")
+        ):
+            logger.info(
+                "%s: chat context present but disabled by prompts.include_chat_context",
+                self,
+            )
+            return list(messages)
+
+        # Keep system-level context at the front so it is treated like a prompt.
+        insert_at = 0
+        for i, msg in enumerate(messages):
+            if isinstance(msg, SystemMessage):
+                insert_at = i + 1
+            else:
+                break
+        updated = list(messages)
+        updated.insert(insert_at, ChatContextMessage(content=chat_context))
+        logger.info(
+            "%s: chat context applied (len=%d insert_at=%d)",
+            self,
+            len(chat_context),
+            insert_at,
+        )
+        return updated
 
     def set_runtime_context(self, context: RuntimeContext) -> None:
         """Set the runtime context for this agent."""
