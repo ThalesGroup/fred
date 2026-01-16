@@ -1,12 +1,18 @@
 import logging
 import os
+import tempfile
+from datetime import datetime
+from pathlib import Path
 
-from langchain.agents import create_agent
-from langchain.tools import tool
+from langchain.agents import AgentState, create_agent
+from langchain.agents.middleware import after_model
+from langchain.messages import ToolMessage
+from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Command
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
@@ -19,9 +25,17 @@ from agentic_backend.core.agents.agent_spec import (
     UIHints,
 )
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.chatbot.chat_schema import LinkKind, LinkPart
 from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
+
+
+class CustomState(AgentState):
+    generated_requirements: str
+    generated_user_stories: str
+    generated_tests: str
+
 
 # ---------------------------
 # Tuning spec (UI-editable)
@@ -59,13 +73,13 @@ Tu disposes de 4 types d'outils :
 3. **generate_user_stories** :
    - Génère des User Stories avec critères d'acceptation Gherkin exhaustifs
    - IMPORTANT : Cet outil fait un appel LLM séparé, donc ne timeout pas
-   - Peut recevoir les exigences en paramètre pour assurer la cohérence
+   - CHAÎNAGE AUTOMATIQUE : Si des exigences ont été générées avant, elles sont automatiquement utilisées
    - Retourne un message confirmant que les user stories ont été générées
 
 4. **generate_tests** :
    - Génère des scénarios de tests détaillés au format Gherkin
    - IMPORTANT : Cet outil fait un appel LLM séparé, donc ne timeout pas
-   - Nécessite les User Stories en paramètre
+   - CHAÎNAGE AUTOMATIQUE : Utilise automatiquement les User Stories générées précédemment
    - Peut recevoir un JDD (Jeu de Données) optionnel pour les personas
    - Retourne un message confirmant que les scénarios de tests ont été générés
 
@@ -83,20 +97,19 @@ WORKFLOW RECOMMANDÉ
 - L'outil génère les exigences et retourne un message de confirmation
 
 **Étape 3 : Génération des User Stories (si demandé)**
-- Si l'utilisateur demande aussi des user stories :
-  - Appelle generate_user_stories(context_summary="...", requirements="[exigences de l'étape 2]")
-- Si l'utilisateur demande UNIQUEMENT des user stories :
-  - Appelle directement generate_user_stories(context_summary="...", requirements="")
+- Appelle generate_user_stories(context_summary="[résumé de ce que tu as trouvé]")
+- Les exigences générées à l'étape 2 sont automatiquement utilisées si disponibles
 - L'outil génère les user stories et retourne un message de confirmation
 
 **Étape 4 : Génération des scénarios de tests (si demandé)**
-- Si l'utilisateur demande des tests :
-  - Appelle generate_tests(user_stories="[user stories de l'étape 3]", jdd="[JDD si fourni]")
+- Appelle generate_tests() ou generate_tests(jdd="[JDD si fourni]")
+- Les User Stories générées à l'étape 3 sont automatiquement utilisées
+- IMPORTANT : generate_user_stories doit avoir été appelé avant
 - L'outil génère les scénarios de tests et retourne un message de confirmation
 
 **Étape 5 : Conclusion**
 - Une fois tous les outils appelés, termine ta réponse
-- Les résultats détaillés (exigences, user stories et tests) seront automatiquement affichés à l'utilisateur""",
+- Un fichier téléchargeable contenant tous les livrables sera automatiquement généré""",
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
         FieldSpec(
@@ -163,10 +176,6 @@ class JiraAgent(AgentFlow):
         await super().async_init(runtime_context=runtime_context)
         self.mcp = MCPRuntime(agent=self)
         await self.mcp.init()
-        # Storage for tool outputs
-        self.generated_requirements = None
-        self.generated_user_stories = None
-        self.generated_tests = None
         # Check if Langfuse is configured
         self.langfuse_enabled = bool(
             os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY")
@@ -186,11 +195,8 @@ class JiraAgent(AgentFlow):
     def get_requirements_tool(self):
         """Tool that generates requirements using a separate LLM call"""
 
-        # Capture self reference for closure
-        agent_self = self
-
         @tool
-        async def generate_requirements(context_summary: str) -> str:
+        async def generate_requirements(runtime: ToolRuntime, context_summary: str):
             """
             Génère une liste d'exigences formelles (fonctionnelles et non-fonctionnelles)
             à partir du contexte projet fourni par les recherches documentaires.
@@ -233,49 +239,44 @@ Format attendu pour chaque exigence:
             ]
 
             # Add Langfuse tracing if enabled
-            langfuse_handler = agent_self._get_langfuse_handler()
+            langfuse_handler = self._get_langfuse_handler()
             config: RunnableConfig = (
                 {"callbacks": [langfuse_handler]} if langfuse_handler else {}
             )
 
             response = await model.ainvoke(messages, config=config)
 
-            # Store the full output
-            content = response.content
-            if isinstance(content, str):
-                agent_self.generated_requirements = content
-            elif isinstance(content, list):
-                agent_self.generated_requirements = "".join(
-                    part if isinstance(part, str) else part.get("text", "")
-                    for part in content
-                )
-            else:
-                agent_self.generated_requirements = str(content)
-
             # Return confirmation message
-            return "✓ Exigences générées avec succès. Elles seront affichées à la fin de la conversation."
+            return Command(
+                update={
+                    "generated_requirements": str(response.content),
+                    "messages": [
+                        ToolMessage(
+                            "✓ Exigences générées avec succès. Elles seront affichées à la fin de la conversation.",
+                            tool_call_id=runtime.tool_call_id,
+                        ),
+                    ],
+                }
+            )
 
         return generate_requirements
 
     def get_user_stories_tool(self):
         """Tool that generates user stories using a separate LLM call"""
 
-        # Capture self reference for closure
-        agent_self = self
-
         @tool
-        async def generate_user_stories(
-            context_summary: str, requirements: str = ""
-        ) -> str:
+        async def generate_user_stories(runtime: ToolRuntime, context_summary: str):
             """
             Génère des User Stories de haute qualité avec critères d'acceptation exhaustifs (Gherkin).
 
             IMPORTANT: Avant d'appeler cet outil, utilise les outils de recherche MCP
             pour extraire les informations pertinentes des documents projet.
 
+            Si des exigences ont été générées précédemment avec generate_requirements,
+            elles seront automatiquement utilisées pour assurer la cohérence.
+
             Args:
                 context_summary: Résumé du contexte projet extrait des documents
-                requirements: Les exigences préalablement générées (optionnel, pour cohérence)
 
             Returns:
                 Message de confirmation que les user stories ont été générées
@@ -332,10 +333,12 @@ Contexte projet extrait des documents:
 """
 
             requirements_section = ""
-            if requirements:
+            # Use stored requirements from previous tool call if available
+            generated_requirements = runtime.state.get("generated_requirements")
+            if generated_requirements:
                 requirements_section = f"""
 Exigences à respecter:
-{requirements}
+{generated_requirements}
 """
 
             model = get_default_chat_model()
@@ -349,46 +352,41 @@ Exigences à respecter:
             ]
 
             # Add Langfuse tracing if enabled
-            langfuse_handler = agent_self._get_langfuse_handler()
+            langfuse_handler = self._get_langfuse_handler()
             config: RunnableConfig = (
                 {"callbacks": [langfuse_handler]} if langfuse_handler else {}
             )
 
             response = await model.ainvoke(messages, config=config)
 
-            # Store the full output
-            content = response.content
-            if isinstance(content, str):
-                agent_self.generated_user_stories = content
-            elif isinstance(content, list):
-                agent_self.generated_user_stories = "".join(
-                    part if isinstance(part, str) else part.get("text", "")
-                    for part in content
-                )
-            else:
-                agent_self.generated_user_stories = str(content)
-
-            # Return confirmation message
-            return "✓ User Stories générées avec succès. Elles seront affichées à la fin de la conversation."
+            # Return confirmation message and update state
+            return Command(
+                update={
+                    "generated_user_stories": str(response.content),
+                    "messages": [
+                        ToolMessage(
+                            "✓ User Stories générées avec succès. Elles seront affichées à la fin de la conversation.",
+                            tool_call_id=runtime.tool_call_id,
+                        ),
+                    ],
+                }
+            )
 
         return generate_user_stories
 
     def get_tests_tool(self):
         """Tool that generates test scenarios using a separate LLM call"""
 
-        # Capture self reference for closure
-        agent_self = self
-
         @tool
-        async def generate_tests(user_stories: str, jdd: str = "") -> str:
+        async def generate_tests(runtime: ToolRuntime, jdd: str = ""):
             """
-            Génère des scénarios de tests détaillés et exploitables à partir des User Stories fournies.
+            Génère des scénarios de tests détaillés et exploitables.
 
-            IMPORTANT: Avant d'appeler cet outil, assure-toi d'avoir les User Stories.
-            Tu peux également fournir un JDD (Jeu de Données) pour les personas de chaque test.
+            IMPORTANT: Cet outil utilise automatiquement les User Stories générées
+            précédemment avec generate_user_stories. Assurez-vous d'avoir appelé
+            generate_user_stories avant d'appeler cet outil.
 
             Args:
-                user_stories: Les User Stories à couvrir par les tests
                 jdd: Jeu de Données pour les personas (optionnel)
 
             Returns:
@@ -429,88 +427,192 @@ Pour chaque scénario :
 **--- FIN DU JDD À ANALYSER ---**
 """
 
+            # Use stored user stories from previous tool call
+            generated_user_stories = runtime.state.get("generated_user_stories")
+            if not generated_user_stories:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                "❌ Erreur: Aucune User Story n'a été générée. Veuillez d'abord appeler generate_user_stories.",
+                                tool_call_id=runtime.tool_call_id,
+                            ),
+                        ],
+                    }
+                )
+
             model = get_default_chat_model()
             messages = [
                 SystemMessage(
                     content=tests_prompt.format(
-                        USER_STORIES=user_stories,
+                        USER_STORIES=generated_user_stories,
                         JDD=jdd if jdd else "Aucun JDD fourni",
                     )
                 )
             ]
 
             # Add Langfuse tracing if enabled
-            langfuse_handler = agent_self._get_langfuse_handler()
+            langfuse_handler = self._get_langfuse_handler()
             config: RunnableConfig = (
                 {"callbacks": [langfuse_handler]} if langfuse_handler else {}
             )
 
             response = await model.ainvoke(messages, config=config)
 
-            # Store the full output
-            content = response.content
-            if isinstance(content, str):
-                agent_self.generated_tests = content
-            elif isinstance(content, list):
-                agent_self.generated_tests = "".join(
-                    part if isinstance(part, str) else part.get("text", "")
-                    for part in content
-                )
-            else:
-                agent_self.generated_tests = str(content)
-
-            # Return confirmation message
-            return "✓ Scénarios de tests générés avec succès. Ils seront affichés à la fin de la conversation."
+            # Return confirmation message and update state
+            return Command(
+                update={
+                    "generated_tests": str(response.content),
+                    "messages": [
+                        ToolMessage(
+                            "✓ Scénarios de tests générés avec succès. Ils seront affichés à la fin de la conversation.",
+                            tool_call_id=runtime.tool_call_id,
+                        ),
+                    ],
+                }
+            )
 
         return generate_tests
 
-    async def astream_updates(self, state, *, config=None, **kwargs):
-        """Override to append stored tool outputs to final response"""
-        final_event = None
+    def _build_markdown_content(self, state: dict) -> str | None:
+        """Build markdown content from generated requirements, user stories, and tests."""
+        requirements = state.get("generated_requirements")
+        user_stories = state.get("generated_user_stories")
+        tests = state.get("generated_tests")
 
-        # Stream all events from parent
-        async for event in super().astream_updates(state, config=config, **kwargs):
-            final_event = event
-            yield event
+        # If nothing was generated, return None
+        if not any([requirements, user_stories, tests]):
+            return None
 
-        # After streaming is complete, if we have stored outputs, send them as additional messages
-        if final_event is not None and (
-            self.generated_requirements
-            or self.generated_user_stories
-            or self.generated_tests
-        ):
-            # Build the additional content
-            additional_content = "\n\n---\n\n"
+        sections = []
+        sections.append("# Livrables Projet\n")
+        sections.append(f"*Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}*\n")
 
-            if self.generated_requirements:
-                additional_content += "# 📋 Exigences Générées\n\n"
-                additional_content += self.generated_requirements
-                additional_content += "\n\n"
+        if requirements:
+            sections.append("---\n")
+            sections.append("## Exigences\n")
+            sections.append(requirements)
+            sections.append("\n")
 
-            if self.generated_user_stories:
-                additional_content += "# 📝 User Stories Générées\n\n"
-                additional_content += self.generated_user_stories
-                additional_content += "\n\n"
+        if user_stories:
+            sections.append("---\n")
+            sections.append("## User Stories\n")
+            sections.append(user_stories)
+            sections.append("\n")
 
-            if self.generated_tests:
-                additional_content += "# 🧪 Scénarios de Tests Générés\n\n"
-                additional_content += self.generated_tests
+        if tests:
+            sections.append("---\n")
+            sections.append("## Scénarios de Tests\n")
+            sections.append(tests)
+            sections.append("\n")
 
-            # Create a new AI message with the stored content
-            additional_message = AIMessage(content=additional_content)
+        return "\n".join(sections)
 
-            # Yield it as a new update
-            yield {"agent": {"messages": [additional_message]}}
+    async def _generate_markdown_file(self, state: dict) -> LinkPart | None:
+        """Generate a markdown file from state and return a download link."""
+        content = self._build_markdown_content(state)
+        if not content:
+            return None
 
-            # Reset for next run
-            self.generated_requirements = None
-            self.generated_user_stories = None
-            self.generated_tests = None
+        # Create temp file with markdown content
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=".md", prefix="livrables_", mode="w", encoding="utf-8"
+        ) as f:
+            f.write(content)
+            output_path = Path(f.name)
+
+        # Upload to user storage
+        user_id = self.get_end_user_id()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        final_key = f"{user_id}_livrables_{timestamp}.md"
+
+        with open(output_path, "rb") as f_out:
+            upload_result = await self.upload_user_asset(
+                key=final_key,
+                file_content=f_out,
+                filename=f"Livrables_{timestamp}.md",
+                content_type="text/markdown",
+                user_id_override=user_id,
+            )
+
+        # Clean up temp file
+        output_path.unlink(missing_ok=True)
+
+        # Build download URL
+        download_url = self.get_asset_download_url(
+            asset_key=upload_result.key, scope="user"
+        )
+
+        return LinkPart(
+            href=download_url,
+            title=f"📥 Télécharger {upload_result.file_name}",
+            kind=LinkKind.download,
+            mime="text/markdown",
+        )
+
+    def get_markdown_export_middleware(self):
+        """Middleware that generates a markdown file when the agent finishes."""
+
+        @after_model
+        async def export_markdown_on_finish(state, runtime):
+            """
+            After model responds, check if:
+            1. There are no pending tool calls (agent is finishing)
+            2. There is generated content in the state
+            If both, generate a markdown file and append the download link.
+            """
+            messages = state.get("messages", [])
+            if not messages:
+                return None
+
+            last_message = messages[-1]
+
+            # Only process if this is an AI message without tool calls (final response)
+            if not isinstance(last_message, AIMessage):
+                return None
+
+            # Check if there are tool calls - if so, agent is still working
+            if getattr(last_message, "tool_calls", None):
+                return None
+
+            # Check if we have any generated content
+            has_content = any(
+                [
+                    state.get("generated_requirements"),
+                    state.get("generated_user_stories"),
+                    state.get("generated_tests"),
+                ]
+            )
+
+            if not has_content:
+                return None
+
+            # Generate the markdown file
+            try:
+                link_part = await self._generate_markdown_file(state)
+                if link_part:
+                    # Append a new AIMessage with the download link
+                    link_message = AIMessage(
+                        content=(
+                            f"**Fichier de livrables généré :**\n"
+                            f"[{link_part.title}]({link_part.href})"
+                        )
+                    )
+                    return {"messages": [link_message]}
+            except Exception as e:
+                logger.error(f"Failed to generate markdown file: {e}")
+
+            return None
+
+        return export_markdown_on_finish
 
     def get_compiled_graph(self) -> CompiledStateGraph:
         requirements_tool = self.get_requirements_tool()
         user_stories_tool = self.get_user_stories_tool()
         tests_tool = self.get_tests_tool()
+
+        # Create middleware for markdown export
+        markdown_export_middleware = self.get_markdown_export_middleware()
 
         return create_agent(
             model=get_default_chat_model(),
@@ -522,4 +624,6 @@ Pour chaque scénario :
                 *self.mcp.get_tools(),
             ],
             checkpointer=self.streaming_memory,
+            state_schema=CustomState,
+            middleware=[markdown_export_middleware],
         )
