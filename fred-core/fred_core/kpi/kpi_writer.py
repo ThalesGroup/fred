@@ -100,7 +100,7 @@ def to_kpi_actor(user: KeycloakUser) -> KPIActor:
     - Fred’s KPI model is actor-centric (human/agent/system). We always attribute
       costs and usage to an actor to support per-user chargeback and audits.
     """
-    return KPIActor(type="human", user_id=user.uid)
+    return KPIActor(type="human", user_id=user.uid, groups=user.groups)
 
 
 # -------------------------
@@ -158,6 +158,8 @@ class KPIWriter(BaseKPIWriter):
         _dims["actor_type"] = actor.type
         if actor.user_id:
             _dims["user_id"] = actor.user_id
+        if "groups" not in _dims and actor.groups:
+            _dims["groups"] = ",".join(sorted(actor.groups))
         merged_dims = _merge_dims(self.defaults, _dims)
 
         event = KPIEvent(

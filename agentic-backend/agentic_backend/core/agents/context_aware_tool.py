@@ -156,8 +156,7 @@ class ContextAwareTool(BaseTool):
 
         return kwargs
 
-    def _kpi_timer(self, *, context) -> Any:
-        kpi = get_app_context().get_kpi_writer()
+    def _kpi_base_dims(self, *, context) -> dict[str, Optional[str]]:
         dims: dict[str, Optional[str]] = {"tool_name": self.name, "source": "mcp"}
         session_id = getattr(context, "session_id", None) if context else None
         if session_id:
@@ -165,56 +164,155 @@ class ContextAwareTool(BaseTool):
         user_id = getattr(context, "user_id", None) if context else None
         if user_id:
             dims["user_id"] = str(user_id)
-        return kpi.timer(
+        return dims
+
+    def _kpi_timer(
+        self, *, context
+    ) -> tuple[Any, Any, dict[str, Optional[str]], list[str] | None]:
+        kpi = get_app_context().get_kpi_writer()
+        dims = self._kpi_base_dims(context=context)
+        groups = getattr(context, "user_groups", None) if context else None
+        timer = kpi.timer(
             "agent.tool_latency_ms",
             dims=dims,
-            actor=KPIActor(type="system"),
+            actor=KPIActor(type="system", groups=groups),
         )
+        return kpi, timer, dims, groups
 
     def _run(self, **kwargs: Any) -> Any:
         """Sync execution with context injection + robust HTTP(401) tracing."""
         context = self.context_provider()
         kwargs = self._inject_context_if_needed(kwargs)
-        try:
-            with self._kpi_timer(context=context):
+        kpi, timer, base_dims, groups = self._kpi_timer(context=context)
+        with timer as kpi_dims:
+            try:
                 return self.base_tool._run(**kwargs)
-        except httpx.RequestError as e:
-            # Network / DNS / TLS issues before we even get an HTTP status code
-            logger.error(
-                "[MCP][%s] HTTP request error: %s", self.name, e, exc_info=True
-            )
-            raise
-        except httpx.HTTPStatusError as e:
-            _log_http_error(self.name, e)
-            raise
-        except Exception as e:
-            # Catch wrapped httpx errors (common in adapters)
-            inner = _unwrap_httpx_status_error(e)
-            if inner is not None:
-                _log_http_error(self.name, inner)
-            else:
-                logger.exception("[MCP][%s] Tool error", self.name)
-            raise
+            except httpx.RequestError as e:
+                kpi_dims["error_code"] = "request_error"
+                kpi_dims["exception_type"] = type(e).__name__
+                kpi.count(
+                    "agent.tool_failed_total",
+                    1,
+                    dims={
+                        **base_dims,
+                        "status": "error",
+                        "error_code": "request_error",
+                        "exception_type": type(e).__name__,
+                    },
+                    actor=KPIActor(type="system", groups=groups),
+                )
+                logger.error(
+                    "[MCP][%s] HTTP request error: %s", self.name, e, exc_info=True
+                )
+                raise
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code if e.response else None
+                kpi_dims["error_code"] = "http_status"
+                kpi_dims["exception_type"] = type(e).__name__
+                if status_code is not None:
+                    kpi_dims["http_status"] = str(status_code)
+                kpi.count(
+                    "agent.tool_failed_total",
+                    1,
+                    dims={
+                        **base_dims,
+                        "status": "error",
+                        "error_code": "http_status",
+                        "exception_type": type(e).__name__,
+                        "http_status": str(status_code)
+                        if status_code is not None
+                        else None,
+                    },
+                    actor=KPIActor(type="system", groups=groups),
+                )
+                _log_http_error(self.name, e)
+                raise
+            except Exception as e:
+                kpi_dims["error_code"] = type(e).__name__
+                kpi_dims["exception_type"] = type(e).__name__
+                kpi.count(
+                    "agent.tool_failed_total",
+                    1,
+                    dims={
+                        **base_dims,
+                        "status": "error",
+                        "error_code": type(e).__name__,
+                        "exception_type": type(e).__name__,
+                    },
+                    actor=KPIActor(type="system", groups=groups),
+                )
+                inner = _unwrap_httpx_status_error(e)
+                if inner is not None:
+                    _log_http_error(self.name, inner)
+                else:
+                    logger.exception("[MCP][%s] Tool error", self.name)
+                raise
 
     async def _arun(self, config=None, **kwargs: Any) -> Any:
         """Async execution with context injection + robust HTTP(401) tracing."""
         context = self.context_provider()
         kwargs = self._inject_context_if_needed(kwargs)
-        try:
-            with self._kpi_timer(context=context):
+        kpi, timer, base_dims, groups = self._kpi_timer(context=context)
+        with timer as kpi_dims:
+            try:
                 return await self.base_tool._arun(config=config, **kwargs)
-        except httpx.RequestError as e:
-            logger.error(
-                "[MCP][%s] HTTP request error: %s", self.name, e, exc_info=True
-            )
-            raise
-        except httpx.HTTPStatusError as e:
-            _log_http_error(self.name, e)
-            raise
-        except Exception as e:
-            inner = _unwrap_httpx_status_error(e)
-            if inner is not None:
-                _log_http_error(self.name, inner)
-            else:
-                logger.exception("[MCP][%s] Tool error", self.name)
-            raise
+            except httpx.RequestError as e:
+                kpi_dims["error_code"] = "request_error"
+                kpi_dims["exception_type"] = type(e).__name__
+                kpi.count(
+                    "agent.tool_failed_total",
+                    1,
+                    dims={
+                        **base_dims,
+                        "status": "error",
+                        "error_code": "request_error",
+                        "exception_type": type(e).__name__,
+                    },
+                    actor=KPIActor(type="system", groups=groups),
+                )
+                logger.error(
+                    "[MCP][%s] HTTP request error: %s", self.name, e, exc_info=True
+                )
+                raise
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code if e.response else None
+                kpi_dims["error_code"] = "http_status"
+                kpi_dims["exception_type"] = type(e).__name__
+                if status_code is not None:
+                    kpi_dims["http_status"] = str(status_code)
+                kpi.count(
+                    "agent.tool_failed_total",
+                    1,
+                    dims={
+                        **base_dims,
+                        "status": "error",
+                        "error_code": "http_status",
+                        "exception_type": type(e).__name__,
+                        "http_status": str(status_code)
+                        if status_code is not None
+                        else None,
+                    },
+                    actor=KPIActor(type="system", groups=groups),
+                )
+                _log_http_error(self.name, e)
+                raise
+            except Exception as e:
+                kpi_dims["error_code"] = type(e).__name__
+                kpi_dims["exception_type"] = type(e).__name__
+                kpi.count(
+                    "agent.tool_failed_total",
+                    1,
+                    dims={
+                        **base_dims,
+                        "status": "error",
+                        "error_code": type(e).__name__,
+                        "exception_type": type(e).__name__,
+                    },
+                    actor=KPIActor(type="system", groups=groups),
+                )
+                inner = _unwrap_httpx_status_error(e)
+                if inner is not None:
+                    _log_http_error(self.name, inner)
+                else:
+                    logger.exception("[MCP][%s] Tool error", self.name)
+                raise

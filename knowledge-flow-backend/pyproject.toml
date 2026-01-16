@@ -64,6 +64,7 @@ dependencies = [
   "torchvision==0.22.1; platform_machine == 'aarch64' or platform_machine == 'arm64'",
   "sentence-transformers==5.1.1",
   "umap-learn>=0.5.9.post2",
+  "prometheus-fastapi-instrumentator>=7.1.0",
 ]
 
 [project.optional-dependencies]

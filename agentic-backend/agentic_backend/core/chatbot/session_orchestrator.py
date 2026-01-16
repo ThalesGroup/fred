@@ -173,7 +173,7 @@ class SessionOrchestrator:
         )
 
         # KPI: count incoming question early (before any work)
-        actor = KPIActor(type="human", user_id=user.uid)
+        actor = KPIActor(type="human", user_id=user.uid, groups=user.groups)
         exchange_id = client_exchange_id or str(uuid4())
         self.kpi.count(
             "chat.user_message_total",
@@ -460,10 +460,37 @@ class SessionOrchestrator:
 
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
     def get_session_history(
-        self, session_id: str, user: KeycloakUser
+        self,
+        session_id: str,
+        user: KeycloakUser,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> List[ChatMessage]:
         self._authorize_user_action_on_session(session_id, user, Action.READ)
-        return self.history_store.get(session_id) or []
+        history = self.history_store.get(session_id) or []
+        if limit is None:
+            return history
+        total = len(history)
+        end = max(0, total - offset)
+        start = max(0, end - limit)
+        return history[start:end]
+
+    @authorize(action=Action.READ, resource=Resource.SESSIONS)
+    def get_session_message(
+        self, session_id: str, rank: int, user: KeycloakUser
+    ) -> ChatMessage:
+        self._authorize_user_action_on_session(session_id, user, Action.READ)
+        history = self.history_store.get(session_id) or []
+        for msg in history:
+            if msg.rank == rank:
+                return msg
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "message_not_found",
+                "message": f"Message rank {rank} not found in session {session_id}.",
+            },
+        )
 
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
     def get_session_preferences(
@@ -508,7 +535,22 @@ class SessionOrchestrator:
                 },
             )
         session.preferences = preferences or {}
-        session.updated_at = _utcnow_dt()
+        # Keep session.agent_name in sync with the latest user-selected agent, if provided.
+        try:
+            agent_name = session.preferences.get("agent_name")
+            if isinstance(agent_name, str) and agent_name.strip():
+                session.agent_name = agent_name.strip()
+        except Exception:
+            logger.warning(
+                "[SESSIONS][PREFS] Failed to update agent_name in session=%s preferences: %s",
+                session_id,
+                session.preferences,
+                exc_info=True,
+            )
+            pass
+        # Important: do NOT bump session.updated_at for preference changes.
+        # The UI orders conversations by updated_at and expects it to change only
+        # on actual conversation activity (messages), not when viewing/toggling settings.
         self.session_store.save(session)
         try:
             prefs_str = json.dumps(session.preferences, default=str)

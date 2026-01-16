@@ -18,6 +18,7 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
+  metrics_enabled: true
 processing:
   generate_summary: false
   use_gpu: true

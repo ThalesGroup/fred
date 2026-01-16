@@ -58,12 +58,7 @@ class DummyContext:
 
 @pytest.fixture
 def test_user():
-    return KeycloakUser(
-        uid="test-user",
-        username="testuser",
-        email="testuser@localhost",
-        roles=["admin"],
-    )
+    return KeycloakUser(uid="test-user", username="testuser", email="testuser@localhost", roles=["admin"], groups=["admins"])
 
 
 # ----------------------------

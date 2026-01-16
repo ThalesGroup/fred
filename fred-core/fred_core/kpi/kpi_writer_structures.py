@@ -56,6 +56,22 @@ class MetricNames:
     AG_TOOL_LAT_MS = "agent.tool_latency_ms"  # timer
     AG_TOOL_FAIL = "agent.tool_failed_total"  # counter
 
+    # RAG search
+    RAG_SEARCH_LAT_MS = "rag.search_latency_ms"  # timer
+    RAG_SEARCH_TOTAL = "rag.search_total"  # counter
+    RAG_SEARCH_ERROR_TOTAL = "rag.search_error_total"  # counter
+    RAG_SEARCH_HITS_TOTAL = "rag.search_hits_total"  # counter
+    RAG_SEARCH_TOP_K_TOTAL = "rag.search_top_k_total"  # counter
+    RAG_SEARCH_EMPTY_TOTAL = "rag.search_empty_total"  # counter
+    RAG_SEARCH_HIT_RATIO = "rag.search_hit_ratio"  # gauge
+    RAG_RERANK_LAT_MS = "rag.rerank_latency_ms"  # timer
+    RAG_RERANK_TOTAL = "rag.rerank_total"  # counter
+    RAG_RERANK_DOCS_TOTAL = "rag.rerank_docs_total"  # counter
+    RAG_RERANK_TOP_R_TOTAL = "rag.rerank_top_r_total"  # counter
+
+    # Ingestion
+    ING_DOC_DURATION_MS = "ingestion.document_duration_ms"  # timer
+
     # Document usage
     DOC_USED_TOTAL = "doc.used_total"  # counter
     DOC_CITED_TOTAL = "doc.cited_total"  # counter
@@ -128,6 +144,7 @@ class KPIActor(BaseModel):
 
     type: Literal["human", "system"]
     user_id: Optional[str] = None
+    groups: Optional[list[str]] = None
 
     @field_validator("user_id")
     @classmethod

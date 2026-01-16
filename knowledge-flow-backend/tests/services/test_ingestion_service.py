@@ -36,12 +36,7 @@ def output_dir(tmp_path):
 
 @pytest.fixture
 def test_user():
-    return KeycloakUser(
-        uid="test-user",
-        username="testuser",
-        email="testuser@localhost",
-        roles=["admin"],
-    )
+    return KeycloakUser(uid="test-user", username="testuser", email="testuser@localhost", roles=["admin"], groups=["admins"])
 
 
 async def test_extract_and_save_metadata(sample_docx, metadata_store, test_user):

@@ -114,7 +114,7 @@ export function AgentPopoverPicker({ currentAgent, agents, onSelectNewAgent }: A
         return (
           <AgentTooltip agent={agent}>
             <ListItemButton onClick={() => onSelectNewAgent(agent)} selected={agent.name === currentAgent.name}>
-              <AgentChipWithIcon agent={agent} />
+              <AgentChipWithIcon agent={agent} disableTitles />
             </ListItemButton>
           </AgentTooltip>
         );

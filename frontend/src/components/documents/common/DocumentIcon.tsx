@@ -24,6 +24,9 @@ type ExtIconProps = { ext?: string; size?: number };
 const ExtIcon: React.FC<ExtIconProps> = ({ ext, size = 20 }) => {
   const [imgOk, setImgOk] = useState(true);
   const style = useMemo(() => ({ width: size, height: size, display: "inline-block" }), [size]);
+  const baseUrl = (import.meta.env.BASE_URL ?? "/").endsWith("/")
+    ? (import.meta.env.BASE_URL ?? "/")
+    : `${import.meta.env.BASE_URL ?? "/"}/`;
 
   // Built-in mapping for common types
   const builtIn = useMemo(() => {
@@ -50,7 +53,7 @@ const ExtIcon: React.FC<ExtIconProps> = ({ ext, size = 20 }) => {
   }, [ext, style]);
 
   if (ext && imgOk) {
-    const src = `./images/filetypes/${ext}.svg`;
+    const src = `${baseUrl}images/filetypes/${ext}.svg`;
     return (
       <img
         src={src}

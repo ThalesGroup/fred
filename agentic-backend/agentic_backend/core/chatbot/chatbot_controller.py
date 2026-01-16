@@ -25,6 +25,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     Request,
     Security,
     UploadFile,
@@ -64,9 +65,12 @@ from agentic_backend.core.chatbot.chat_schema import (
     ChatMessage,
     ErrorEvent,
     FinalEvent,
+    MessagePart,
+    Role,
     SessionSchema,
     SessionWithFiles,
     StreamEvent,
+    TextPart,
     make_user_text,
 )
 from agentic_backend.core.chatbot.metric_structures import (
@@ -79,6 +83,71 @@ from agentic_backend.core.chatbot.session_orchestrator import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def _safe_ws_send_text(websocket: WebSocket, data: str) -> bool:
+    """
+    Best-effort send: client disconnects (or server-side close) are expected and
+    should not crash the handler or spam logs.
+    """
+    try:
+        if websocket.client_state != WebSocketState.CONNECTED:
+            return False
+        await websocket.send_text(data)
+        return True
+    except (WebSocketDisconnect, RuntimeError):
+        return False
+    except Exception:
+        logger.debug("WebSocket send failed", exc_info=True)
+        return False
+
+
+def _paginate_message_text(
+    message: ChatMessage, text_offset: int = 0, text_limit: Optional[int] = None
+) -> ChatMessage:
+    if text_limit is None and text_offset == 0:
+        return message
+
+    parts = message.parts or []
+    total = sum(len(p.text) for p in parts if isinstance(p, TextPart))
+    if total == 0:
+        return message
+
+    start = min(text_offset, total)
+    end = total if text_limit is None else min(total, start + text_limit)
+
+    if start == 0 and end == total:
+        return message
+
+    paged_parts: List[MessagePart] = []
+    cursor = 0
+    for part in parts:
+        if not isinstance(part, TextPart):
+            paged_parts.append(part)
+            continue
+
+        text = part.text or ""
+        next_cursor = cursor + len(text)
+        if end <= cursor or start >= next_cursor:
+            cursor = next_cursor
+            continue
+
+        slice_start = max(0, start - cursor)
+        slice_end = min(len(text), end - cursor)
+        if slice_end > slice_start:
+            paged_parts.append(TextPart(text=text[slice_start:slice_end]))
+        cursor = next_cursor
+
+    extras = dict(message.metadata.extras or {})
+    extras["text_pagination"] = {
+        "offset": start,
+        "limit": text_limit,
+        "total": total,
+        "has_more": end < total,
+    }
+    metadata = message.metadata.model_copy(update={"extras": extras})
+    return message.model_copy(update={"parts": paged_parts, "metadata": metadata})
+
 
 # ---------------- Echo types for UI OpenAPI ----------------
 
@@ -284,6 +353,7 @@ async def websocket_chatbot_question(
                 ask.runtime_context.access_token = active_token
                 ask.runtime_context.refresh_token = active_refresh_token
                 ask.runtime_context.user_id = active_user.uid
+                ask.runtime_context.user_groups = active_user.groups or None
 
                 target_agent_name = ask.agent_name
                 if get_deep_search_enabled(ask.runtime_context):
@@ -316,7 +386,8 @@ async def websocket_chatbot_question(
 
                 async def ws_callback(msg_dict: dict):
                     event = StreamEvent(type="stream", message=ChatMessage(**msg_dict))
-                    await websocket.send_text(event.model_dump_json())
+                    if not await _safe_ws_send_text(websocket, event.model_dump_json()):
+                        raise WebSocketDisconnect
 
                 # Route to A2A proxy if the stub agent is selected
                 target_settings = agent_manager.get_agent_settings(target_agent_name)
@@ -359,9 +430,11 @@ async def websocket_chatbot_question(
                         session_id, exchange_id, rank, ask.message
                     )
                     collected_messages = [user_msg]
-                    await websocket.send_text(
-                        StreamEvent(type="stream", message=user_msg).model_dump_json()
-                    )
+                    if not await _safe_ws_send_text(
+                        websocket,
+                        StreamEvent(type="stream", message=user_msg).model_dump_json(),
+                    ):
+                        raise WebSocketDisconnect
                     rank += 1
 
                     async for msg in stream_a2a_as_chat_messages(
@@ -376,9 +449,11 @@ async def websocket_chatbot_question(
                     ):
                         rank = msg.rank + 1
                         collected_messages.append(msg)
-                        await websocket.send_text(
-                            StreamEvent(type="stream", message=msg).model_dump_json()
-                        )
+                        if not await _safe_ws_send_text(
+                            websocket,
+                            StreamEvent(type="stream", message=msg).model_dump_json(),
+                        ):
+                            raise WebSocketDisconnect
 
                     session.updated_at = _utcnow_dt()
                     # Persist session + history so it behaves like regular agents
@@ -386,11 +461,13 @@ async def websocket_chatbot_question(
                     session_orchestrator.history_store.save(
                         session.id, prior + collected_messages, active_user.uid
                     )
-                    await websocket.send_text(
+                    if not await _safe_ws_send_text(
+                        websocket,
                         FinalEvent(
                             type="final", messages=collected_messages, session=session
-                        ).model_dump_json()
-                    )
+                        ).model_dump_json(),
+                    ):
+                        break
 
                 else:
                     (
@@ -406,11 +483,13 @@ async def websocket_chatbot_question(
                         client_exchange_id=ask.client_exchange_id,
                     )
 
-                    await websocket.send_text(
+                    if not await _safe_ws_send_text(
+                        websocket,
                         FinalEvent(
                             type="final", messages=final_messages, session=session
-                        ).model_dump_json()
-                    )
+                        ).model_dump_json(),
+                    ):
+                        break
 
             except WebSocketDisconnect:
                 logger.debug("Client disconnected from chatbot WebSocket")
@@ -424,23 +503,22 @@ async def websocket_chatbot_question(
                     if client_request
                     else "unknown-session"
                 )
-                if websocket.client_state == WebSocketState.CONNECTED:
-                    await websocket.send_text(
-                        ErrorEvent(
-                            type="error", content=summary, session_id=session_id
-                        ).model_dump_json()
-                    )
-                else:
-                    logger.error("[🔌 WebSocket] Connection closed by client.")
+                if not await _safe_ws_send_text(
+                    websocket,
+                    ErrorEvent(
+                        type="error", content=summary, session_id=session_id
+                    ).model_dump_json(),
+                ):
+                    logger.debug("WebSocket closed; cannot send error event.")
                     break
     except Exception as e:
         summary = log_exception(e, "EXTERNAL Error processing chatbot client query")
-        if websocket.client_state == WebSocketState.CONNECTED:
-            await websocket.send_text(
-                ErrorEvent(
-                    type="error", content=summary, session_id="unknown-session"
-                ).model_dump_json()
-            )
+        await _safe_ws_send_text(
+            websocket,
+            ErrorEvent(
+                type="error", content=summary, session_id="unknown-session"
+            ).model_dump_json(),
+        )
 
 
 @router.get(
@@ -479,10 +557,61 @@ def create_session(
 )
 def get_session_history(
     session_id: str,
+    limit: Optional[int] = Query(None, ge=1),
+    offset: int = Query(0, ge=0),
+    text_limit: Optional[int] = Query(None, ge=1),
+    text_offset: int = Query(0, ge=0),
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> list[ChatMessage]:
-    return session_orchestrator.get_session_history(session_id, user)
+    history = session_orchestrator.get_session_history(
+        session_id=session_id,
+        user=user,
+        limit=limit,
+        offset=offset,
+    )
+    if text_limit is not None or text_offset > 0:
+        history = [
+            _paginate_message_text(m, text_offset=text_offset, text_limit=text_limit)
+            if m.role == Role.user
+            else m
+            for m in history
+        ]
+    return history
+
+
+@router.get(
+    "/chatbot/session/{session_id}/message/{rank}",
+    description="Get a single chatbot message by rank.",
+    summary="Get a single chatbot message.",
+    response_model=ChatMessage,
+)
+def get_session_message(
+    session_id: str,
+    rank: int,
+    text_limit: Optional[int] = Query(None, ge=1),
+    text_offset: int = Query(0, ge=0),
+    user: KeycloakUser = Depends(get_current_user),
+    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+) -> ChatMessage:
+    logger.info(
+        "[CHATBOT] get_session_message start session=%s rank=%s user=%s",
+        session_id,
+        rank,
+        user.uid,
+    )
+    message = session_orchestrator.get_session_message(session_id, rank, user)
+    if text_limit is not None or text_offset > 0:
+        message = _paginate_message_text(
+            message, text_offset=text_offset, text_limit=text_limit
+        )
+    logger.info(
+        "[CHATBOT] get_session_message done session=%s rank=%s user=%s",
+        session_id,
+        rank,
+        user.uid,
+    )
+    return message
 
 
 class SessionPreferencesPayload(BaseModel):

@@ -242,6 +242,10 @@ class FrontendFlags(BaseModel):
 class Properties(BaseModel):
     logoName: str = "fred"
     logoNameDark: str = "fred-dark"
+    logoHeight: str = "36px"
+    logoWidth: str = "36px"
+    faviconName: str | None = None
+    faviconNameDark: str | None = None
     siteDisplayName: str = "Fred"
     releaseBrand: Optional[str] = Field(
         default="fred",
@@ -262,6 +266,7 @@ class AppConfig(BaseModel):
     log_level: str = "info"
     reload: bool = False
     reload_dir: str = "."
+    metrics_enabled: bool = True
 
 
 class McpConfiguration(BaseModel):

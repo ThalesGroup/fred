@@ -42,7 +42,7 @@ import { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpe
 import { ChatDocumentLibrariesSelectionCard } from "../ChatDocumentLibrariesSelectionCard.tsx";
 import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard.tsx";
 
-type PickerView = null | "libraries" | "prompts" | "templates" | "search_policy";
+export type PickerView = null | "libraries" | "prompts" | "templates" | "search_policy";
 
 interface UserInputPopoverProps {
   plusAnchor: HTMLElement | null;
@@ -141,11 +141,11 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
       anchorEl={plusAnchor}
       onClose={handleClose}
       anchorOrigin={{
-        vertical: "top",
-        horizontal: "center",
+        vertical: "bottom",
+        horizontal: "right",
       }}
       transformOrigin={{
-        vertical: "bottom",
+        vertical: "top",
         horizontal: "right",
       }}
       slotProps={{

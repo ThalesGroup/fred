@@ -32,6 +32,7 @@ const THEME_COLOR_MAP = (theme: Theme): Record<AgentColorHint, string> => ({
 interface AgentChipProps {
   agent: AnyAgent | null | undefined;
   align?: "center" | "right";
+  disableTitles?: boolean;
   sx?: SxProps;
 }
 
@@ -44,7 +45,7 @@ interface AgentChipProps {
  * - Chip width is intrinsic: no fixed min/max width unless you cap it.
  * - All colors come from theme tokens (mode-safe).
  */
-export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
+export const AgentChipWithIcon = ({ agent, disableTitles = false, sx }: AgentChipProps) => {
   if (!agent) return null;
 
   const theme = useTheme();
@@ -112,7 +113,7 @@ export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
             maxWidth: NAME_MAX_W,
             textAlign: "center",
           }}
-          title={agent.name}
+          title={disableTitles ? undefined : agent.name}
         >
           {agent.name}
         </Typography>
@@ -131,7 +132,7 @@ export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
             textAlign: "center",
             fontSize: "12.5px",
           }}
-          title={agent.tuning.role}
+          title={disableTitles ? undefined : agent.tuning.role}
         >
           {agent.tuning.role}
         </Typography>

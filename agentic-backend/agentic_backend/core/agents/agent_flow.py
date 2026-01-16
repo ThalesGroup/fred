@@ -842,7 +842,10 @@ class AgentFlow:
             name,
             dims=self._kpi_base_dims(dims),
             unit=unit,
-            actor=KPIActor(type="system"),
+            actor=KPIActor(
+                type="system",
+                groups=getattr(self.runtime_context, "user_groups", None),
+            ),
         )
 
     def __str__(self) -> str:

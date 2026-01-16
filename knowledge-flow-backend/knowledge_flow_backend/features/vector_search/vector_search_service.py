@@ -7,7 +7,15 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Set
 
-from fred_core import Action, KeycloakUser, Resource, VectorSearchHit, authorize
+from fred_core import (
+    Action,
+    BaseKPIWriter,
+    KeycloakUser,
+    KPIActor,
+    Resource,
+    VectorSearchHit,
+    authorize,
+)
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -18,6 +26,38 @@ from knowledge_flow_backend.features.tag.tag_service import TagService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
 
 logger = logging.getLogger(__name__)
+
+
+def _merge_attachment_and_corpus_hits(
+    *,
+    attachment_hits: List[VectorSearchHit],
+    corpus_hits: List[VectorSearchHit],
+    top_k: int,
+    attachment_quota: int = 3,
+) -> List[VectorSearchHit]:
+    """
+    Merge attachment (session-scoped) and corpus hits, ensuring attachments are represented.
+
+    Policy:
+    - Always include up to `attachment_quota` attachment hits when present.
+    - Fill remaining slots with the best-scoring remaining candidates.
+    """
+    if top_k <= 0:
+        return []
+    if not attachment_hits:
+        return sorted(corpus_hits, key=lambda h: h.score or 0.0, reverse=True)[:top_k]
+
+    attachment_quota = max(0, min(int(attachment_quota), top_k))
+    attachment_ranked = sorted(attachment_hits, key=lambda h: h.score or 0.0, reverse=True)
+    attachment_primary = attachment_ranked[:attachment_quota]
+    attachment_rest = attachment_ranked[attachment_quota:]
+
+    remaining_ranked = sorted(
+        [*attachment_rest, *corpus_hits],
+        key=lambda h: h.score or 0.0,
+        reverse=True,
+    )
+    return (attachment_primary + remaining_ranked)[:top_k]
 
 
 class VectorSearchService:
@@ -37,6 +77,56 @@ class VectorSearchService:
         self.vector_store = ctx.get_create_vector_store(self.embedder)
         self.tag_service = TagService()
         self.crossencoder_model = ctx.get_crossencoder_model()
+        self.kpi: BaseKPIWriter = ctx.get_kpi_writer()
+
+    def _kpi_search_dims(self, *, policy: str) -> dict[str, Optional[str]]:
+        index_name = getattr(self.vector_store, "index_name", None) or getattr(self.vector_store, "index", None)
+        return {
+            "policy": policy,
+            "backend": type(self.vector_store).__name__,
+            "index": str(index_name) if index_name else None,
+        }
+
+    def _kpi_actor(self, *, user: Optional[KeycloakUser] = None) -> KPIActor:
+        groups = user.groups if user else None
+        return KPIActor(type="system", groups=groups)
+
+    def _record_search_stats(
+        self,
+        *,
+        base_dims: dict[str, Optional[str]],
+        hits_count: int,
+        top_k: int,
+        user: Optional[KeycloakUser],
+    ) -> None:
+        ok_dims = {**base_dims, "status": "ok"}
+        self.kpi.count(
+            "rag.search_hits_total",
+            hits_count,
+            dims=ok_dims,
+            actor=self._kpi_actor(user=user),
+        )
+        self.kpi.count(
+            "rag.search_top_k_total",
+            top_k,
+            dims=ok_dims,
+            actor=self._kpi_actor(user=user),
+        )
+        if top_k > 0:
+            ratio = float(hits_count) / float(top_k)
+            self.kpi.gauge(
+                "rag.search_hit_ratio",
+                ratio,
+                dims=ok_dims,
+                actor=self._kpi_actor(user=user),
+            )
+        if hits_count == 0:
+            self.kpi.count(
+                "rag.search_empty_total",
+                1,
+                dims=ok_dims,
+                actor=self._kpi_actor(user=user),
+            )
 
     # ---------- helpers -------------------------------------------------------
 
@@ -178,11 +268,30 @@ class VectorSearchService:
 
         sf = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
 
-        try:
-            ann_hits: List[AnnHit] = self.vector_store.ann_search(question, k=k, search_filter=sf)
-        except Exception as e:
-            logger.error("[VECTOR][SEARCH][ANN] Unexpected error during search: %s", str(e))
-            raise
+        base_dims = self._kpi_search_dims(policy="semantic")
+        with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
+            try:
+                ann_hits: List[AnnHit] = self.vector_store.ann_search(question, k=k, search_filter=sf)
+            except Exception as e:
+                kpi_dims["error_code"] = "ann_search_failed"
+                kpi_dims["exception_type"] = type(e).__name__
+                self.kpi.count(
+                    "rag.search_error_total",
+                    1,
+                    dims={**base_dims, "status": "error"},
+                    actor=self._kpi_actor(user=user),
+                )
+                logger.error("[VECTOR][SEARCH][ANN] Unexpected error during search: %s", str(e))
+                raise
+            kpi_dims["status"] = "ok"
+            self.kpi.count(
+                "rag.search_total",
+                1,
+                dims={**base_dims, "status": "ok"},
+                actor=self._kpi_actor(user=user),
+            )
+        hits_count = len(ann_hits)
+        self._record_search_stats(base_dims=base_dims, hits_count=hits_count, top_k=k, user=user)
         if not ann_hits:
             logger.warning(
                 "[VECTOR][SEARCH][ANN] no hits returned; tags=%s metadata_terms=%s question_len=%d",
@@ -242,12 +351,31 @@ class VectorSearchService:
             metadata_terms.update(metadata_terms_extra)
         search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
 
-        try:
-            hits: List[FullTextHit] = self.vector_store.full_text_search(query=question, top_k=k, search_filter=search_filter)
-        except Exception as e:
-            logger.error("[VECTOR][SEARCH][FULLTEXT] Unexpected error during search: %s", str(e))
-            raise
+        base_dims = self._kpi_search_dims(policy="strict")
+        with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
+            try:
+                hits: List[FullTextHit] = self.vector_store.full_text_search(query=question, top_k=k, search_filter=search_filter)
+            except Exception as e:
+                kpi_dims["error_code"] = "fulltext_search_failed"
+                kpi_dims["exception_type"] = type(e).__name__
+                self.kpi.count(
+                    "rag.search_error_total",
+                    1,
+                    dims={**base_dims, "status": "error"},
+                    actor=self._kpi_actor(user=user),
+                )
+                logger.error("[VECTOR][SEARCH][FULLTEXT] Unexpected error during search: %s", str(e))
+                raise
+            kpi_dims["status"] = "ok"
+            self.kpi.count(
+                "rag.search_total",
+                1,
+                dims={**base_dims, "status": "ok"},
+                actor=self._kpi_actor(user=user),
+            )
 
+        hits_count = len(hits)
+        self._record_search_stats(base_dims=base_dims, hits_count=hits_count, top_k=k, user=user)
         return await asyncio.gather(*[self._to_hit(hit.document, hit.score, rank, user) for rank, hit in enumerate(hits, start=1)])
 
     async def _hybrid(
@@ -282,12 +410,31 @@ class VectorSearchService:
             metadata_terms.update(metadata_terms_extra)
         search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
 
-        try:
-            hits: List[HybridHit] = self.vector_store.hybrid_search(query=question, top_k=k, search_filter=search_filter)
-        except Exception as e:
-            logger.error("[VECTOR][SEARCH][HYBRID] Unexpected error during search: %s", str(e))
-            raise
+        base_dims = self._kpi_search_dims(policy="hybrid")
+        with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
+            try:
+                hits: List[HybridHit] = self.vector_store.hybrid_search(query=question, top_k=k, search_filter=search_filter)
+            except Exception as e:
+                kpi_dims["error_code"] = "hybrid_search_failed"
+                kpi_dims["exception_type"] = type(e).__name__
+                self.kpi.count(
+                    "rag.search_error_total",
+                    1,
+                    dims={**base_dims, "status": "error"},
+                    actor=self._kpi_actor(user=user),
+                )
+                logger.error("[VECTOR][SEARCH][HYBRID] Unexpected error during search: %s", str(e))
+                raise
+            kpi_dims["status"] = "ok"
+            self.kpi.count(
+                "rag.search_total",
+                1,
+                dims={**base_dims, "status": "ok"},
+                actor=self._kpi_actor(user=user),
+            )
 
+        hits_count = len(hits)
+        self._record_search_stats(base_dims=base_dims, hits_count=hits_count, top_k=k, user=user)
         return await asyncio.gather(*[self._to_hit(hit.document, hit.score, rank, user) for rank, hit in enumerate(hits, start=1)])
 
     # ---------- unified public API -------------------------------------------
@@ -406,17 +553,17 @@ class VectorSearchService:
                         metadata_terms_extra=corpus_metadata_extra,
                     )
 
-            # Merge: combine then keep top_k by score so corpus can surface even when attachments exist
-            merged_candidates = attachment_hits + corpus_hits
-            merged = sorted(
-                merged_candidates,
-                key=lambda h: h.score or 0.0,
-                reverse=True,
-            )[:top_k]
+            merged = _merge_attachment_and_corpus_hits(
+                attachment_hits=attachment_hits,
+                corpus_hits=corpus_hits,
+                top_k=top_k,
+                attachment_quota=3,
+            )
             logger.info(
-                "[VECTOR][SEARCH] merged results attachment=%d corpus=%d returned=%d",
+                "[VECTOR][SEARCH] merged results attachment=%d corpus=%d forced_attachment=%d returned=%d",
                 len(attachment_hits),
                 len(corpus_hits),
+                min(3, top_k, len(attachment_hits)),
                 len(merged),
             )
             return merged
@@ -441,13 +588,36 @@ class VectorSearchService:
         Returns:
             List[VectorSearchHit]: A list of VectorSearchHit objects sorted by relevance to the question, limited to top_r documents.
         """
-        # Score and sort documents by relevance
-        pairs = [(question, doc.content) for doc in documents]
-        scores = self.crossencoder_model.predict(pairs)
-        sorted_docs = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
+        base_dims = self._kpi_search_dims(policy="rerank")
+        model_name = getattr(self.crossencoder_model, "model_name", None) or getattr(self.crossencoder_model, "name", None)
+        if model_name:
+            base_dims["model"] = str(model_name)
+        with self.kpi.timer("rag.rerank_latency_ms", dims=base_dims, actor=self._kpi_actor(user=None)) as kpi_dims:
+            # Score and sort documents by relevance
+            pairs = [(question, doc.content) for doc in documents]
+            scores = self.crossencoder_model.predict(pairs)
+            sorted_docs = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
 
-        # Keep top-R documents
-        reranked_documents = [doc for doc, _ in sorted_docs[:top_r]]
-        logger.info("[VECTOR][RERANK] Reranked %s documents, keeping top %s", len(documents), len(reranked_documents))
-
-        return reranked_documents
+            # Keep top-R documents
+            reranked_documents = [doc for doc, _ in sorted_docs[:top_r]]
+            logger.info("[VECTOR][RERANK] Reranked %s documents, keeping top %s", len(documents), len(reranked_documents))
+            kpi_dims["status"] = "ok"
+            self.kpi.count(
+                "rag.rerank_total",
+                1,
+                dims={**base_dims, "status": "ok"},
+                actor=self._kpi_actor(user=None),
+            )
+            self.kpi.count(
+                "rag.rerank_docs_total",
+                len(documents),
+                dims={**base_dims, "status": "ok"},
+                actor=self._kpi_actor(user=None),
+            )
+            self.kpi.count(
+                "rag.rerank_top_r_total",
+                top_r,
+                dims={**base_dims, "status": "ok"},
+                actor=self._kpi_actor(user=None),
+            )
+            return reranked_documents

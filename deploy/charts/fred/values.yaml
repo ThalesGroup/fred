@@ -1,5 +1,3 @@
-# Unified values.yaml
-
 global:
   kubeconfig: ""
   create_index:
@@ -147,6 +145,7 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
+        metrics_enabled: true # Prometheus exporter
       security:
         m2m:
           enabled: true
@@ -573,6 +572,7 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
+        metrics_enabled: true # Prometheus exporter
       processing:
         generate_summary: true
         use_gpu: true

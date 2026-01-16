@@ -1,3 +1,18 @@
+**v1.2.1** — 2026-01-16
+
+- **Features**
+  - add favicon override front setting (#987)
+
+- **Improvements**
+  - use kpi store to expose prometheus metrics (#983)
+  - batch "load more" calls to max 500 docs and paginate long user chat messages (#975)
+
+- **Bug fixes**
+  - fix the dot loader (#986)
+  - fix UI leak when selecting a library affecting other conversations (#981)
+
+---
+
 **v1.2.0** — 2026-01-10
 
 This release brings in a major UI revamp. This revamp has been proposed and designed

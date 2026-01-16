@@ -16,15 +16,15 @@
 import { Box, Typography } from "@mui/material";
 import { ThemeProvider, keyframes } from "@mui/material/styles";
 import React, { useContext, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
 import { ConfirmationDialogProvider } from "../components/ConfirmationDialogProvider";
 import { DrawerProvider } from "../components/DrawerProvider";
 import { ToastProvider } from "../components/ToastProvider";
-import { darkTheme, lightTheme } from "../styles/theme";
-import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 import { AuthProvider } from "../security/AuthContext";
 import { useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery } from "../slices/agentic/agenticOpenApi";
-import { useTranslation } from "react-i18next";
+import { darkTheme, lightTheme } from "../styles/theme";
+import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 
 const pulse = keyframes`
   0% { transform: scale(1); opacity: 0.9; }
@@ -48,6 +48,9 @@ const LoadingScreen = ({
   const palette = dark ? darkTheme.palette : lightTheme.palette;
   const bg = dark ? palette.background.default : palette.surfaces.soft;
   const textColor = palette.text.primary;
+  const baseUrl = (import.meta.env.BASE_URL ?? "/").endsWith("/")
+    ? (import.meta.env.BASE_URL ?? "/")
+    : `${import.meta.env.BASE_URL ?? "/"}/`;
 
   return (
     <Box
@@ -87,15 +90,13 @@ const LoadingScreen = ({
       >
         <Box
           component="img"
-          src={`./images/${dark ? logoNameDark : logoName}.svg`}
+          src={`${baseUrl}images/${dark ? logoNameDark : logoName}.svg`}
           alt={alt}
           sx={{
             width: 68,
             height: 68,
             animation: `${pulse} 1.8s ease-in-out infinite`,
-            filter: dark
-              ? "drop-shadow(0 6px 16px rgba(0,0,0,0.35))"
-              : "drop-shadow(0 6px 16px rgba(0,0,0,0.12))",
+            filter: dark ? "drop-shadow(0 6px 16px rgba(0,0,0,0.35))" : "drop-shadow(0 6px 16px rgba(0,0,0,0.12))",
           }}
         />
         <Typography
@@ -124,8 +125,18 @@ function FredUi() {
   const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
   const { t } = useTranslation();
   const siteDisplayName = frontendConfig?.frontend_settings?.properties?.siteDisplayName || "Fred";
-  const logoName = frontendConfig?.frontend_settings?.properties?.logoName || "fred";
-  const logoNameDark = frontendConfig?.frontend_settings?.properties?.logoNameDark || "fred-dark";
+  const faviconName =
+    frontendConfig?.frontend_settings?.properties?.faviconName ||
+    frontendConfig?.frontend_settings?.properties?.logoName ||
+    "fred";
+  const faviconNameDark =
+    frontendConfig?.frontend_settings?.properties?.faviconNameDark ||
+    frontendConfig?.frontend_settings?.properties?.logoNameDark ||
+    "fred-dark";
+  const baseUrl = (import.meta.env.BASE_URL ?? "/").endsWith("/")
+    ? (import.meta.env.BASE_URL ?? "/")
+    : `${import.meta.env.BASE_URL ?? "/"}/`;
+
   const [prefersDark, setPrefersDark] = useState<boolean>(() => {
     const stored = localStorage.getItem("darkMode");
     if (stored !== null) return stored === "true";
@@ -136,8 +147,8 @@ function FredUi() {
     document.title = siteDisplayName;
     const favicon = document.getElementById("favicon") as HTMLLinkElement;
     const isDark = window.matchMedia("(prefers-color-scheme: dark)");
-    if (isDark.matches) favicon.href = `./images/${logoNameDark}.svg`;
-    else favicon.href = `./images/${logoName}.svg`;
+    if (isDark.matches) favicon.href = `${baseUrl}images/${faviconNameDark}.svg`;
+    else favicon.href = `${baseUrl}images/${faviconName}.svg`;
 
     const listener = (event: MediaQueryListEvent) => setPrefersDark(event.matches);
     const storageListener = (event: StorageEvent) => {
@@ -151,7 +162,7 @@ function FredUi() {
       isDark.removeEventListener("change", listener);
       window.removeEventListener("storage", storageListener);
     };
-  }, [siteDisplayName, logoName]);
+  }, [baseUrl, siteDisplayName, faviconName, faviconNameDark]);
 
   useEffect(() => {
     import("../common/router").then((mod) => {
@@ -164,8 +175,8 @@ function FredUi() {
       <LoadingScreen
         label={t("app.loading.router", "Fred démarre...")}
         dark={prefersDark}
-        logoName={logoName}
-        logoNameDark={logoNameDark}
+        logoName={faviconName}
+        logoNameDark={faviconNameDark}
         alt={siteDisplayName}
       />
     );
@@ -176,8 +187,8 @@ function FredUi() {
         <LoadingScreen
           label={t("app.loading.ui", "L'interface Fred se prépare...")}
           dark={prefersDark}
-          logoName={logoName}
-          logoNameDark={logoNameDark}
+          logoName={faviconName}
+          logoNameDark={faviconNameDark}
           alt={siteDisplayName}
         />
       }

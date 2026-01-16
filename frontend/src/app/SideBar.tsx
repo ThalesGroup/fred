@@ -230,7 +230,11 @@ export default function SideBar() {
           {open && (
             <Box sx={{ display: "flex", width: "100%", justifyContent: "flex-start", alignItems: "center", pl: 1 }}>
               <InvisibleLink to="/">
-                <ImageComponent name={darkMode ? logoNameDark : logoName} width="36px" height="36px" />
+                <ImageComponent
+                  name={darkMode ? logoNameDark : logoName}
+                  height={getProperty("logoHeight")}
+                  width={getProperty("logoWidth")}
+                />
               </InvisibleLink>
             </Box>
           )}

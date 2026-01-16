@@ -170,6 +170,7 @@ export default function DocumentLibraryList() {
           setTotalDocuments(computedTotalForTag ?? docs.length);
           setNextOffset(offset + docs.length);
         }
+        return { count: docs.length, total: computedTotalForTag };
       } finally {
         setTagLoading(tagId, false);
       }
@@ -221,7 +222,23 @@ export default function DocumentLibraryList() {
       const remaining = total !== undefined ? Math.max(total - offset, 0) : 0;
       if (remaining <= 0) return;
       const applyToCurrent = tagId === currentTagId;
-      void loadPage(tagId, offset, true, applyToCurrent, remaining);
+      const MAX_BATCH = 500;
+      void (async () => {
+        let currentOffset = offset;
+        let remainingCount = remaining;
+
+        while (remainingCount > 0) {
+          const batch = Math.min(remainingCount, MAX_BATCH);
+          const { count, total: updatedTotal } = await loadPage(tagId, currentOffset, true, applyToCurrent, batch);
+          if (count <= 0) break;
+          currentOffset += count;
+          if (updatedTotal !== undefined) {
+            remainingCount = Math.max(updatedTotal - currentOffset, 0);
+          } else {
+            remainingCount = Math.max(remainingCount - count, 0);
+          }
+        }
+      })();
     },
     [currentTagId, loadPage, nextOffset, perTagDocs, perTagTotals, totalDocuments],
   );
