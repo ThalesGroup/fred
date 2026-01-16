@@ -21,8 +21,12 @@
  * - Avoids flicker on session switch by keeping messages while history loads; welcome shows only when truly empty.
  */
 
+import AttachFileIcon from "@mui/icons-material/AttachFile";
+import CheckIcon from "@mui/icons-material/Check";
+import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
+import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
 import TravelExploreOutlinedIcon from "@mui/icons-material/TravelExploreOutlined";
-import { Box, CircularProgress, Grid2, IconButton, Tooltip, Typography, useTheme } from "@mui/material";
+import { Badge, Box, CircularProgress, Grid2, IconButton, Stack, Tooltip, Typography, useTheme } from "@mui/material";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
@@ -54,7 +58,6 @@ import { keyOf, mergeAuthoritative, toWsUrl, upsertOne } from "./ChatBotUtils.ts
 import ChatKnowledge from "./ChatKnowledge.tsx";
 import { FeatureTooltip } from "./FeatureTooltip.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
-import { ChatContextPickerPanel } from "./settings/ChatContextPickerPanel.tsx";
 import UserInput, { UserInputContent, UserInputHandle } from "./user_input/UserInput.tsx";
 
 const HISTORY_TEXT_LIMIT = 1200;
@@ -74,6 +77,8 @@ export interface ChatBotProps {
   runtimeContext?: RuntimeContext;
   onNewSessionCreated: (sessionId: string) => void;
 }
+
+type ConversationPanelView = "chat_contexts" | "libraries" | "attachments";
 
 const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseRuntimeContext }: ChatBotProps) => {
   const theme = useTheme();
@@ -128,10 +133,6 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
   const [selectedChatContextIds, setSelectedChatContextIds] = useState<string[]>([]);
   const setSelectedChatContextIdsFromHydration = useCallback((ids: string[]) => {
     setSelectedChatContextIds(ids);
-  }, []);
-  const setSelectedChatContextIdsFromUser = useCallback((ids: string[]) => {
-    setSelectedChatContextIds(ids);
-    userInputRef.current?.markSessionPrefsDirty();
   }, []);
 
   const libraryNameMap = useMemo(() => Object.fromEntries(docLibs.map((x) => [x.id, x.name])), [docLibs]);
@@ -216,7 +217,36 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
     if (defaultAgent && (!currentAgent || !currentAgent.name)) setCurrentAgent(defaultAgent);
   }, [currentAgent, defaultAgent]);
 
-  const [attachmentsPanelOpen, setAttachmentsPanelOpen] = useState<boolean>(false);
+  const [attachmentsPanelOpen, setAttachmentsPanelOpen] = useState<boolean>(() => {
+    try {
+      const uid = KeyCloakService.GetUserId?.() || "anon";
+      return localStorage.getItem(`conversation_panel_open:${uid}`) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [conversationPanelView, setConversationPanelView] = useState<ConversationPanelView>(() => {
+    try {
+      const uid = KeyCloakService.GetUserId?.() || "anon";
+      const v = localStorage.getItem(`conversation_panel_view:${uid}`);
+      if (v === "chat_contexts" || v === "libraries" || v === "attachments") return v;
+      return "attachments";
+    } catch {
+      return "attachments";
+    }
+  });
+  useEffect(() => {
+    try {
+      const uid = KeyCloakService.GetUserId?.() || "anon";
+      localStorage.setItem(`conversation_panel_open:${uid}`, attachmentsPanelOpen ? "1" : "0");
+    } catch {}
+  }, [attachmentsPanelOpen]);
+  useEffect(() => {
+    try {
+      const uid = KeyCloakService.GetUserId?.() || "anon";
+      localStorage.setItem(`conversation_panel_view:${uid}`, conversationPanelView);
+    } catch {}
+  }, [conversationPanelView]);
   const [attachmentCount, setAttachmentCount] = useState<number>(0);
   const [deepSearchEnabled, setDeepSearchEnabled] = useState<boolean>(false);
 
@@ -235,18 +265,16 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
   // --- Session preferences (authoritative) ---
   const effectiveSessionId = pendingSessionIdRef.current || sessionId || undefined;
   const prefsSessionId = effectiveSessionId;
-  const {
-    data: sessionPrefs,
-    refetch: refetchSessionPrefs,
-  } = useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery(
-    { sessionId: prefsSessionId || "" },
-    {
-      skip: !prefsSessionId,
-      refetchOnMountOrArgChange: true,
-      refetchOnReconnect: true,
-      refetchOnFocus: true,
-    },
-  );
+  const { data: sessionPrefs, refetch: refetchSessionPrefs } =
+    useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery(
+      { sessionId: prefsSessionId || "" },
+      {
+        skip: !prefsSessionId,
+        refetchOnMountOrArgChange: true,
+        refetchOnReconnect: true,
+        refetchOnFocus: true,
+      },
+    );
   useEffect(() => {
     if (!prefsSessionId) return;
     const agentName = (sessionPrefs as any)?.agent_name;
@@ -786,12 +814,8 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       (userInputContext?.promptResourceIds?.length ?? 0) > 0 ||
       (userInputContext?.templateResourceIds?.length ?? 0) > 0);
   const agentSupportsAttachments = currentAgent?.chat_options?.attach_files === true;
-  const effectiveAttachmentsPanelOpen = agentSupportsAttachments ? attachmentsPanelOpen : false;
-  const showSetupButton = Boolean(
-    currentAgent?.chat_options?.libraries_selection ||
-      currentAgent?.chat_options?.search_policy_selection ||
-      currentAgent?.chat_options?.record_audio_files,
-  );
+  const effectiveAttachmentsPanelOpen = attachmentsPanelOpen;
+  const librariesSelectionEnabled = currentAgent?.chat_options?.libraries_selection === true;
   const librariesCount = useMemo(() => {
     if (effectiveSessionId) {
       const ids = (sessionPrefs as any)?.documentLibraryIds;
@@ -820,61 +844,116 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
       {/* Conversation top-right controls (attachments + setup) */}
       <AttachmentsButton
         attachmentsPanelOpen={effectiveAttachmentsPanelOpen}
-        attachmentCount={agentSupportsAttachments ? attachmentCount : 0}
-        onToggle={() => setAttachmentsPanelOpen((v) => !v)}
+        attachmentCount={attachmentCount}
+        onToggle={() => {
+          setConversationPanelView("attachments");
+          setAttachmentsPanelOpen((open) => (conversationPanelView === "attachments" ? !open : true));
+        }}
         showAttachmentsButton
-        attachmentsEnabled={isSessionPrefsReady && agentSupportsAttachments}
+        attachmentsEnabled={agentSupportsAttachments}
         showSetupButton
-        setupEnabled={isSessionPrefsReady && showSetupButton}
+        setupEnabled={isSessionPrefsReady && librariesSelectionEnabled}
         setupCount={librariesCount}
-        onOpenSetup={(anchorEl) => {
-          userInputRef.current?.openSetupPopover(anchorEl);
+        onOpenSetup={() => {
+          setConversationPanelView("libraries");
+          setAttachmentsPanelOpen((open) => (conversationPanelView === "libraries" ? !open : true));
         }}
         topSlot={
-          <>
-            <ChatContextPickerPanel
-              variant="icon"
-              selectedChatContextIds={selectedChatContextIds}
-              onChangeSelectedChatContextIds={setSelectedChatContextIdsFromUser}
-            />
-              <FeatureTooltip
-                label={t("chatbot.deepSearch.label", "Deep Search")}
-                description={t(
-                "chatbot.deepSearch.tooltipDescription",
-                "Delegates retrieval to a specialized agent for deeper search across your knowledge.\nAdds `deep_search` to the runtime context; may be slower but more thorough.",
+          <Stack direction="column" alignItems="flex-end" spacing={0.5}>
+            <FeatureTooltip
+              label={t("settings.chatContext", "Chat Context")}
+              description={t(
+                "settings.chatContextTooltip.description",
+                "Select reusable context snippets included with every message in this conversation.\nSends `selected_chat_context_ids` in the runtime context; works with all agents.",
               )}
-              disabledReason={
-                currentAgent?.chat_options?.deep_search_delegate === true
-                  ? undefined
-                  : t(
-                      "chatbot.deepSearch.tooltipDisabled",
-                      "This agent does not support deep search delegation.",
-                    )
-              }
             >
               <span>
                 <IconButton
                   size="small"
-                  aria-label="deep-search"
-                  onClick={() => userInputRef.current?.setDeepSearchEnabled(!deepSearchEnabled)}
-                  disabled={
-                    waitResponse || !isSessionPrefsReady || currentAgent?.chat_options?.deep_search_delegate !== true
+                  aria-label="conversation-chat-contexts"
+                  onClick={() => {
+                    setConversationPanelView("chat_contexts");
+                    setAttachmentsPanelOpen((open) =>
+                      conversationPanelView === "chat_contexts" ? !open : true,
+                    );
+                  }}
+                >
+                  <Badge
+                    color="primary"
+                    badgeContent={selectedChatContextIds.length ? selectedChatContextIds.length : undefined}
+                    overlap="circular"
+                    anchorOrigin={{ vertical: "top", horizontal: "right" }}
+                    sx={{
+                      "& .MuiBadge-badge": {
+                        fontSize: "0.65rem",
+                        height: 16,
+                        minWidth: 16,
+                        px: 0.5,
+                      },
+                    }}
+                  >
+                    <ForumOutlinedIcon fontSize="small" />
+                  </Badge>
+                </IconButton>
+              </span>
+            </FeatureTooltip>
+          </Stack>
+        }
+        bottomSlot={
+          <FeatureTooltip
+            label={t("chatbot.deepSearch.label", "Deep Search")}
+            description={t(
+              "chatbot.deepSearch.tooltipDescription",
+              "Delegates retrieval to a specialized agent for deeper search across your knowledge.\nAdds `deep_search` to the runtime context; may be slower but more thorough.",
+            )}
+            disabledReason={
+              currentAgent?.chat_options?.deep_search_delegate === true
+                ? undefined
+                : t("chatbot.deepSearch.tooltipDisabled", "This agent does not support deep search delegation.")
+            }
+          >
+            <span>
+              <IconButton
+                size="small"
+                aria-label="deep-search"
+                onClick={() => userInputRef.current?.setDeepSearchEnabled(!deepSearchEnabled)}
+                disabled={
+                  waitResponse || !isSessionPrefsReady || currentAgent?.chat_options?.deep_search_delegate !== true
+                }
+                sx={{
+                  border: `1px solid ${theme.palette.divider}`,
+                  backgroundColor: theme.palette.background.paper,
+                  color: theme.palette.text.secondary,
+                  opacity: currentAgent?.chat_options?.deep_search_delegate === true ? 1 : 0.45,
+                  "&:hover": {
+                    backgroundColor: theme.palette.action.hover,
+                  },
+                }}
+              >
+                <Badge
+                  badgeContent={
+                    deepSearchEnabled ? (
+                      <CheckIcon fontSize="inherit" sx={{ lineHeight: 1 }} />
+                    ) : undefined
                   }
+                  color="primary"
                   sx={{
-                    border: `1px solid ${theme.palette.divider}`,
-                    backgroundColor: deepSearchEnabled ? theme.palette.primary.main : theme.palette.background.paper,
-                    color: deepSearchEnabled ? theme.palette.primary.contrastText : theme.palette.text.secondary,
-                    opacity: currentAgent?.chat_options?.deep_search_delegate === true ? 1 : 0.45,
-                    "&:hover": {
-                      backgroundColor: deepSearchEnabled ? theme.palette.primary.dark : theme.palette.action.hover,
+                    "& .MuiBadge-badge": {
+                      fontSize: "0.65rem",
+                      lineHeight: 1,
+                      height: 16,
+                      minWidth: 16,
+                      px: 0.25,
+                      backgroundColor: theme.palette.primary.contrastText,
+                      color: theme.palette.primary.main,
                     },
                   }}
                 >
                   <TravelExploreOutlinedIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </FeatureTooltip>
-          </>
+                </Badge>
+              </IconButton>
+            </span>
+          </FeatureTooltip>
         }
       />
 
@@ -901,90 +980,92 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
             display="flex"
             flexDirection="column"
             alignItems="center"
-              sx={{
-                minHeight: 0,
-                overflow: "hidden",
+            sx={{
+              minHeight: 0,
+              overflow: "hidden",
               pr: effectiveAttachmentsPanelOpen ? { xs: "min(92vw, 320px)", sm: "340px" } : 0,
               transition: (t) => t.transitions.create("padding-right"),
               mx: "auto",
             }}
           >
-        {/* Conversation start: new conversation without message */}
-          <Box
-            sx={{
-              minHeight: "100vh",
-              width: "100%",
-              px: { xs: 2, sm: 3 },
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: { xs: "flex-start", md: "center" },
-              pt: { xs: 6, md: 8 },
-              gap: 3,
-            }}
-          >
+            {/* Conversation start: new conversation without message */}
             <Box
               sx={{
+                minHeight: "100vh",
                 width: "100%",
-                textAlign: "center",
+                px: { xs: 2, sm: 3 },
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: { xs: "flex-start", md: "center" },
+                pt: { xs: 6, md: 8 },
+                gap: 3,
               }}
             >
-              <Typography
-                variant="h3"
+              <Box
                 sx={{
-                  fontWeight: 700,
-                  display: "inline-block",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  position: "relative",
-                  background: theme.palette.primary.main,
-                  backgroundSize: "200% 200%",
-                  backgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  letterSpacing: 0.5,
+                  width: "100%",
+                  textAlign: "center",
                 }}
               >
-                {typedGreeting}
+                <Typography
+                  variant="h3"
+                  sx={{
+                    fontWeight: 700,
+                    display: "inline-block",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    position: "relative",
+                    background: theme.palette.primary.main,
+                    backgroundSize: "200% 200%",
+                    backgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    letterSpacing: 0.5,
+                  }}
+                >
+                  {typedGreeting}
+                </Typography>
+              </Box>
+              {/* Welcome hint */}
+              <Typography variant="h5" color="text.primary" sx={{ textAlign: "center" }}>
+                {t("chatbot.startNew", { name: currentAgent?.name ?? "assistant" })}
               </Typography>
+              {/* Input area */}
+              <Box sx={{ width: "min(900px, 100%)" }}>
+                <UserInput
+                  ref={userInputRef}
+                  agentChatOptions={currentAgent.chat_options}
+                  isWaiting={waitResponse}
+                  onSend={handleSend}
+                  onStop={stopStreaming}
+                  onContextChange={handleDraftContextChange}
+                  sessionId={sessionId}
+                  effectiveSessionId={effectiveSessionId}
+                  uploadingFiles={uploadingFiles}
+                  onFilesSelected={agentSupportsAttachments ? handleFilesSelected : undefined}
+                  attachmentsRefreshTick={attachmentsRefreshTick}
+                  serverPrefs={sessionPrefs as any}
+                  refetchServerPrefs={refetchSessionPrefs}
+                  selectedChatContextIds={selectedChatContextIds}
+                  onSelectedChatContextIdsChange={setSelectedChatContextIdsFromHydration}
+                  chatContextNameById={chatContextNameMap}
+                  conversationPanelView={conversationPanelView}
+                  initialDocumentLibraryIds={initialDocumentLibraryIds}
+                  initialPromptResourceIds={initialPromptResourceIds}
+                  initialTemplateResourceIds={initialTemplateResourceIds}
+                  initialSearchPolicy={initialSearchPolicy}
+                  initialSearchRagScope={initialSearchRagScope}
+                  initialDeepSearch={initialDeepSearch}
+                  currentAgent={currentAgent}
+                  agents={agents}
+                  onSelectNewAgent={setCurrentAgent}
+                  attachmentsPanelOpen={effectiveAttachmentsPanelOpen}
+                  onAttachmentsPanelOpenChange={setAttachmentsPanelOpen}
+                  onAttachmentCountChange={setAttachmentCount}
+                  onDeepSearchEnabledChange={(enabled) => setDeepSearchEnabled(enabled)}
+                />
+              </Box>
             </Box>
-            {/* Welcome hint */}
-            <Typography variant="h5" color="text.primary" sx={{ textAlign: "center" }}>
-              {t("chatbot.startNew", { name: currentAgent?.name ?? "assistant" })}
-            </Typography>
-            {/* Input area */}
-            <Box sx={{ width: "min(900px, 100%)" }}>
-              <UserInput
-                ref={userInputRef}
-                agentChatOptions={currentAgent.chat_options}
-                isWaiting={waitResponse}
-                onSend={handleSend}
-                onStop={stopStreaming}
-                onContextChange={handleDraftContextChange}
-                sessionId={sessionId}
-                effectiveSessionId={effectiveSessionId}
-                uploadingFiles={uploadingFiles}
-                onFilesSelected={agentSupportsAttachments ? handleFilesSelected : undefined}
-                attachmentsRefreshTick={attachmentsRefreshTick}
-                serverPrefs={sessionPrefs as any}
-                refetchServerPrefs={refetchSessionPrefs}
-                selectedChatContextIds={selectedChatContextIds}
-                onSelectedChatContextIdsChange={setSelectedChatContextIdsFromHydration}
-                initialDocumentLibraryIds={initialDocumentLibraryIds}
-                initialPromptResourceIds={initialPromptResourceIds}
-                initialTemplateResourceIds={initialTemplateResourceIds}
-                initialSearchPolicy={initialSearchPolicy}
-                initialSearchRagScope={initialSearchRagScope}
-                initialDeepSearch={initialDeepSearch}
-                currentAgent={currentAgent}
-                agents={agents}
-                onSelectNewAgent={setCurrentAgent}
-                attachmentsPanelOpen={effectiveAttachmentsPanelOpen}
-                onAttachmentsPanelOpenChange={agentSupportsAttachments ? setAttachmentsPanelOpen : undefined}
-                onAttachmentCountChange={agentSupportsAttachments ? setAttachmentCount : undefined}
-                onDeepSearchEnabledChange={(enabled) => setDeepSearchEnabled(enabled)}
-              />
-            </Box>
-          </Box>
           </Box>
         )}
 
@@ -1070,6 +1151,8 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
                   refetchServerPrefs={refetchSessionPrefs}
                   selectedChatContextIds={selectedChatContextIds}
                   onSelectedChatContextIdsChange={setSelectedChatContextIdsFromHydration}
+                  chatContextNameById={chatContextNameMap}
+                  conversationPanelView={conversationPanelView}
                   initialDocumentLibraryIds={initialDocumentLibraryIds}
                   initialPromptResourceIds={initialPromptResourceIds}
                   initialTemplateResourceIds={initialTemplateResourceIds}
@@ -1080,8 +1163,8 @@ const ChatBot = ({ sessionId, agents, onNewSessionCreated, runtimeContext: baseR
                   agents={agents}
                   onSelectNewAgent={setCurrentAgent}
                   attachmentsPanelOpen={effectiveAttachmentsPanelOpen}
-                  onAttachmentsPanelOpenChange={agentSupportsAttachments ? setAttachmentsPanelOpen : undefined}
-                  onAttachmentCountChange={agentSupportsAttachments ? setAttachmentCount : undefined}
+                  onAttachmentsPanelOpenChange={setAttachmentsPanelOpen}
+                  onAttachmentCountChange={setAttachmentCount}
                   onDeepSearchEnabledChange={(enabled) => setDeepSearchEnabled(enabled)}
                 />
               </Grid2>

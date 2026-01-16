@@ -484,7 +484,7 @@
       "betaNotice": "File attachments are in beta. Supported formats: PDF, DOCX, CSV. Please provide feedback to help us improve this feature.",
       "supportedFormats": "Supported files: PDF, DOCX, CSV",
       "count": "{{count}} attached",
-      "drawerTitle": "Manage Attachments",
+      "drawerTitle": "Attachments",
       "noAttachments": "No attachments yet",
       "tooltip": {
         "description": "Files attached to this conversation.\nThe files are processed by faster but less precise algorithms. The agent may use these files to answer.\n\nNote that this feature is in beta and may not work perfectly for all file types. For persistent corpora, consider using document libraries.",

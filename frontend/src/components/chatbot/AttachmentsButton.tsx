@@ -29,7 +29,7 @@ export interface AttachmentsButtonProps {
   setupCount?: number;
   showSetupButton?: boolean;
   setupEnabled?: boolean;
-  onOpenSetup?: (anchorEl: HTMLElement) => void;
+  onOpenSetup?: () => void;
   topSlot?: React.ReactNode;
   bottomSlot?: React.ReactNode;
 }
@@ -96,7 +96,6 @@ export const AttachmentsButton = ({
                 color={attachmentsPanelOpen ? "primary" : "default"}
                 onClick={onToggle}
                 aria-label="conversation-attachments"
-                disabled={!attachmentsEnabled}
                 sx={!attachmentsEnabled ? { opacity: 0.45 } : undefined}
               >
                 <Badge
@@ -153,9 +152,8 @@ const AttachmentsSetupButton = ({
       <span>
         <IconButton
           size="small"
-          onClick={(e) => onOpenSetup?.(e.currentTarget)}
+          onClick={() => onOpenSetup?.()}
           aria-label="conversation-libraries"
-          disabled={!setupEnabled || !onOpenSetup}
           sx={!setupEnabled ? { opacity: 0.45 } : undefined}
         >
           <Badge

@@ -22,6 +22,7 @@
  */
 
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
+import MicIcon from "@mui/icons-material/Mic";
 import StopIcon from "@mui/icons-material/Stop";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
@@ -32,11 +33,9 @@ import { Box, Grid2, IconButton, InputBase, Stack, Tooltip, useTheme } from "@mu
 
 import { useTranslation } from "react-i18next";
 import {
-  Resource,
   SearchPolicyName,
   TagWithItemsId,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
-  useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 
 // Import the new sub-components
@@ -48,8 +47,8 @@ import {
 } from "../../../slices/agentic/agenticOpenApi.ts";
 import { AgentSelector } from "./AgentSelector.tsx";
 import { UserInputAttachments } from "./UserInputAttachments.tsx";
-import { PickerView, UserInputPopover } from "./UserInputPopover.tsx";
 import { UserInputRagScope } from "./UserInputRagScope.tsx";
+import { UserInputSearchPolicy } from "./UserInputSearchPolicy.tsx";
 import { SearchRagScope } from "./types.ts";
 
 export interface UserInputContent {
@@ -66,11 +65,11 @@ export interface UserInputContent {
 }
 
 export type UserInputHandle = {
-  openSetupPopover: (anchorEl: HTMLElement, view?: PickerView) => void;
-  closeSetupPopover: () => void;
   setDeepSearchEnabled: (next: boolean) => void;
   markSessionPrefsDirty: () => void;
 };
+
+type ConversationPanelView = "chat_contexts" | "libraries" | "attachments";
 
 type PersistedCtx = {
   chatContextIds?: string[];
@@ -108,6 +107,8 @@ type UserInputProps = {
   refetchServerPrefs?: () => void;
   selectedChatContextIds?: string[];
   onSelectedChatContextIdsChange?: (ids: string[]) => void;
+  chatContextNameById?: Record<string, string>;
+  conversationPanelView?: ConversationPanelView;
   initialDocumentLibraryIds?: string[];
   initialPromptResourceIds?: string[];
   initialTemplateResourceIds?: string[];
@@ -140,6 +141,8 @@ function UserInput(
 	    refetchServerPrefs,
 	    selectedChatContextIds,
 	    onSelectedChatContextIdsChange,
+      chatContextNameById,
+      conversationPanelView = "attachments",
     initialDocumentLibraryIds,
     initialPromptResourceIds,
     initialTemplateResourceIds,
@@ -174,7 +177,9 @@ function UserInput(
   const [filesBlob, setFilesBlob] = useState<File[] | null>(null);
   // Only show the selector when the agent explicitly opts in via config (new flag, fallback to old).
   const supportsRagScopeSelection = agentChatOptions?.search_rag_scoping === true;
+  const supportsSearchPolicySelection = agentChatOptions?.search_policy_selection === true;
   const supportsDeepSearchSelection = agentChatOptions?.deep_search_delegate === true;
+  const supportsAudioRecording = agentChatOptions?.record_audio_files === true;
   const defaultRagScope: SearchRagScope = "hybrid";
 
   const [searchRagScope, setSearchRagScopeState] = useState<SearchRagScope>(initialSearchRagScope ?? defaultRagScope);
@@ -196,18 +201,6 @@ function UserInput(
   );
   const [selectedSearchPolicyName, setSelectedSearchPolicyNameState] = useState<SearchPolicyName>(initialSearchPolicy);
   const canSend = !!userInput.trim() || !!audioBlob; // files upload immediately now
-
-  const hasPopoverContent = Boolean(
-    agentChatOptions?.libraries_selection ||
-      agentChatOptions?.search_policy_selection ||
-      agentChatOptions?.record_audio_files,
-  );
-
-  const searchPolicyLabels: Record<SearchPolicyName, string> = {
-    hybrid: t("search.hybrid", "Hybrid"),
-    semantic: t("search.semantic", "Semantic"),
-    strict: t("search.strict", "Strict"),
-  };
   const defaultAgent = useMemo(() => (agents && agents.length > 0 ? agents[0] : undefined), [agents]);
 
   const [prefsDirtyTick, setPrefsDirtyTick] = useState<number>(0);
@@ -215,17 +208,17 @@ function UserInput(
   const markPrefsDirty = useCallback(() => setPrefsDirtyTick((x) => x + 1), []);
 
   // User-facing setters
+  const setChatContextIds = useCallback(
+    (ids: string[]) => {
+      if (!onSelectedChatContextIdsChange) return;
+      markPrefsDirty();
+      onSelectedChatContextIdsChange(Array.from(new Set(ids)));
+    },
+    [markPrefsDirty, onSelectedChatContextIdsChange],
+  );
   const setLibs = (next: React.SetStateAction<string[]>) => {
     markPrefsDirty();
     setSelectedDocumentLibrariesIdsState((prev) => (typeof next === "function" ? (next as any)(prev) : next));
-  };
-  const setPrompts = (next: React.SetStateAction<string[]>) => {
-    markPrefsDirty();
-    setSelectedPromptResourceIdsState((prev) => (typeof next === "function" ? (next as any)(prev) : next));
-  };
-  const setTemplates = (next: React.SetStateAction<string[]>) => {
-    markPrefsDirty();
-    setSelectedTemplateResourceIdsState((prev) => (typeof next === "function" ? (next as any)(prev) : next));
   };
   const setSearchPolicy = (next: React.SetStateAction<SearchPolicyName>) => {
     markPrefsDirty();
@@ -240,11 +233,6 @@ function UserInput(
     setDeepSearchEnabledState(next);
   };
 
-  // “+” menu popover
-  const [plusAnchor, setPlusAnchor] = useState<HTMLElement | null>(null);
-  // Inline picker view inside the same popover (replaces the old Dialogs)
-  // null -> root menu with sections; otherwise show the corresponding selector inline
-  const [pickerView, setPickerView] = useState<PickerView>(null);
   const [internalAttachmentsPanelOpen, setInternalAttachmentsPanelOpen] = useState<boolean>(false);
   const attachmentsPanelOpen = attachmentsPanelOpenProp ?? internalAttachmentsPanelOpen;
   const setAttachmentsPanelOpen = (open: boolean) => {
@@ -264,14 +252,6 @@ function UserInput(
   useImperativeHandle(
     ref,
     () => ({
-      openSetupPopover: (anchorEl: HTMLElement, view: PickerView = null) => {
-        setPickerView(view);
-        setPlusAnchor(anchorEl);
-      },
-      closeSetupPopover: () => {
-        setPickerView(null);
-        setPlusAnchor(null);
-      },
       setDeepSearchEnabled: (next: boolean) => {
         setDeepSearch(next);
       },
@@ -283,8 +263,6 @@ function UserInput(
   );
 
   // --- Fetch resource/tag names so chips can display labels instead of raw IDs
-  const { data: promptResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "prompt" });
-  const { data: templateResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "template" });
   // Libraries are "document" tags in your UI
   const { data: documentTags = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" });
 
@@ -312,12 +290,6 @@ function UserInput(
     return Array.isArray(names) ? names.map((n) => ({ id: n, name: n })) : [];
   }, [sessions, attachmentSessionId]);
   const attachmentCount = sessionAttachments.length + (uploadingFiles?.length ?? 0);
-  const hasAttachedFiles = sessionAttachments.length > 0 || (uploadingFiles?.length ?? 0) > 0;
-  useEffect(() => {
-    if (!hasAttachedFiles) {
-      setAttachmentsPanelOpen(false);
-    }
-  }, [hasAttachedFiles]);
   useEffect(() => {
     onAttachmentCountChange?.(attachmentCount);
   }, [attachmentCount, onAttachmentCountChange]);
@@ -352,8 +324,6 @@ function UserInput(
     if (currentId && currentId !== prevId) {
       lastSentJson.current = "";
       setHydratedSessionId(undefined);
-      setPickerView(null);
-      setPlusAnchor(null);
       // Important: avoid leaking selections from a previous session while the new session prefs are loading.
       setSelectedDocumentLibrariesIdsState([]);
       setSelectedPromptResourceIdsState([]);
@@ -476,14 +446,6 @@ function UserInput(
     refetchServerPrefs,
   ]);
 
-  const promptNameById = useMemo(
-    () => Object.fromEntries((promptResources as Resource[]).map((r) => [r.id, r.name])),
-    [promptResources],
-  );
-  const templateNameById = useMemo(
-    () => Object.fromEntries((templateResources as Resource[]).map((r) => [r.id, r.name])),
-    [templateResources],
-  );
   const libNameById = useMemo(
     () => Object.fromEntries((documentTags as TagWithItemsId[]).map((t) => [t.id, t.name])),
     [documentTags],
@@ -582,9 +544,14 @@ function UserInput(
   }, [attachmentsRefreshTick, attachmentSessionId]);
 
   // Audio
-  const handleAudioRecorderDisplay = () => {
-    setIsRecording((v) => !v);
+  const startAudioRecording = () => {
+    setDisplayAudioController(false);
     setDisplayAudioRecorder(true);
+    setIsRecording(true);
+    inputRef.current?.focus();
+  };
+  const stopAudioRecording = () => {
+    setIsRecording(false);
     inputRef.current?.focus();
   };
   const handleAudioChange = (content: Blob) => {
@@ -655,6 +622,28 @@ function UserInput(
             >
               {supportsRagScopeSelection && (
                 <UserInputRagScope value={searchRagScope} onChange={setRagScope} disabled={isWaiting || isHydratingSession} />
+              )}
+              {supportsSearchPolicySelection && (
+                <UserInputSearchPolicy
+                  value={selectedSearchPolicyName}
+                  onChange={(next) => setSearchPolicy(next)}
+                  disabled={isWaiting || isHydratingSession}
+                />
+              )}
+              {supportsAudioRecording && (
+                <Tooltip title={isRecording ? t("chatbot.stopRecording") : t("chatbot.recordAudio")}>
+                  <span>
+                    <IconButton
+                      aria-label="record-audio"
+                      size="small"
+                      onClick={() => (isRecording ? stopAudioRecording() : startAudioRecording())}
+                      disabled={isWaiting || isHydratingSession}
+                      color={isRecording ? "error" : "default"}
+                    >
+                      {isRecording ? <StopIcon fontSize="small" /> : <MicIcon fontSize="small" />}
+                    </IconButton>
+                  </span>
+                </Tooltip>
               )}
               {!isWaiting && !isHydratingSession && (
                 <Tooltip title={t("chatbot.sendMessage", "Send message")}>
@@ -756,37 +745,6 @@ function UserInput(
             </Box>
           </Box>
 
-          {/* Popover */}
-          {hasPopoverContent && (
-            <UserInputPopover
-              plusAnchor={plusAnchor}
-              pickerView={pickerView}
-              isRecording={isRecording}
-              selectedDocumentLibrariesIds={selectedDocumentLibrariesIds}
-              selectedPromptResourceIds={selectedPromptResourceIds}
-              selectedTemplateResourceIds={selectedTemplateResourceIds}
-              selectedSearchPolicyName={selectedSearchPolicyName}
-              libNameById={libNameById}
-              promptNameById={promptNameById}
-              templateNameById={templateNameById}
-              searchPolicyLabels={searchPolicyLabels}
-              setPickerView={setPickerView}
-              setPlusAnchor={setPlusAnchor}
-              setLibs={setLibs}
-              setPrompts={setPrompts}
-              setTemplates={setTemplates}
-              setSearchPolicy={setSearchPolicy}
-              onRemoveLib={(id) => setLibs((prev) => prev.filter((x) => x !== id))}
-              onRemovePrompt={(id) => setPrompts((prev) => prev.filter((x) => x !== id))}
-              onRemoveTemplate={(id) => setTemplates((prev) => prev.filter((x) => x !== id))}
-              onRecordAudioClick={() => {
-                handleAudioRecorderDisplay();
-                setPickerView(null);
-                setPlusAnchor(null);
-              }}
-              agentChatOptions={agentChatOptions}
-            />
-          )}
         </Grid2>
       </Box>
 
@@ -797,6 +755,9 @@ function UserInput(
         files={null}
         audio={audioBlob}
         open={attachmentsPanelOpen}
+        view={conversationPanelView}
+        attachmentsActionsEnabled={Boolean(onFilesSelected)}
+        librariesActionsEnabled={agentChatOptions?.libraries_selection === true}
         uploadDialogOpen={uploadDialogOpen}
         onToggleOpen={(open) => setAttachmentsPanelOpen(open)}
         onOpenUploadDialog={() => setUploadDialogOpen(true)}
@@ -820,6 +781,12 @@ function UserInput(
         onRefreshSessionAttachments={() => {
           refetchSessions();
         }}
+        selectedChatContextIds={selectedChatContextIds}
+        chatContextNameById={chatContextNameById}
+        onSelectedChatContextIdsChange={setChatContextIds}
+        selectedDocumentLibrariesIds={selectedDocumentLibrariesIds}
+        documentLibraryNameById={libNameById}
+        onSelectedDocumentLibrariesIdsChange={setLibs}
       />
     </Grid2>
   );

@@ -34,15 +34,13 @@ import {
 import React, { SetStateAction } from "react";
 // import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 // import DescriptionIcon from "@mui/icons-material/Description";
-import TravelExploreIcon from "@mui/icons-material/TravelExplore";
 
 import { useTranslation } from "react-i18next";
 import { AgentChatOptions } from "../../../slices/agentic/agenticOpenApi.ts";
-import { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { ChatDocumentLibrariesSelectionCard } from "../ChatDocumentLibrariesSelectionCard.tsx";
 import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard.tsx";
 
-export type PickerView = null | "libraries" | "prompts" | "templates" | "search_policy";
+export type PickerView = null | "libraries" | "prompts" | "templates";
 
 interface UserInputPopoverProps {
   plusAnchor: HTMLElement | null;
@@ -51,17 +49,14 @@ interface UserInputPopoverProps {
   selectedDocumentLibrariesIds: string[];
   selectedPromptResourceIds: string[];
   selectedTemplateResourceIds: string[];
-  selectedSearchPolicyName: SearchPolicyName;
   libNameById: Record<string, string>;
   promptNameById: Record<string, string>;
   templateNameById: Record<string, string>;
-  searchPolicyLabels: Record<SearchPolicyName, string>;
   setPickerView: React.Dispatch<SetStateAction<PickerView>>;
   setPlusAnchor: React.Dispatch<SetStateAction<HTMLElement | null>>;
   setLibs: (next: React.SetStateAction<string[]>) => void;
   setPrompts: (next: React.SetStateAction<string[]>) => void;
   setTemplates: (next: React.SetStateAction<string[]>) => void;
-  setSearchPolicy: (next: React.SetStateAction<SearchPolicyName>) => void;
   onRemoveLib: (id: string) => void;
   onRemovePrompt: (id: string) => void;
   onRemoveTemplate: (id: string) => void;
@@ -79,17 +74,14 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
   selectedDocumentLibrariesIds,
   selectedPromptResourceIds,
   selectedTemplateResourceIds,
-  selectedSearchPolicyName,
   libNameById,
   // promptNameById,
   // templateNameById,
-  searchPolicyLabels,
   setPickerView,
   setPlusAnchor,
   setLibs,
   setPrompts,
   setTemplates,
-  setSearchPolicy,
   onRemoveLib,
   // onRemovePrompt,
   // onRemoveTemplate,
@@ -236,20 +228,6 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
           </Box>
           <Divider sx={{ my: 1 }} /> */}
 
-          {agentChatOptions?.search_policy_selection && (
-            <>
-              {sectionHeader(<TravelExploreIcon fontSize="small" />, t("search.policy", "Search policy"), 1, () =>
-                setPickerView("search_policy"),
-              )}
-              <Box sx={{ mb: 1 }}>
-                <Stack direction="row" flexWrap="wrap" gap={0.75}>
-                  <Chip size="small" label={searchPolicyLabels[selectedSearchPolicyName]} />
-                </Stack>
-              </Box>
-              <Divider sx={{ my: 1 }} />
-            </>
-          )}
-
           <MenuList dense sx={{ py: 0.25 }}>
             {agentChatOptions?.record_audio_files && (
               <MenuItem onClick={onRecordAudioClick}>
@@ -285,37 +263,6 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
               selectedResourceIds={selectedTemplateResourceIds}
               setSelectedResourceIds={setTemplates}
             />
-          )}
-          {pickerView === "search_policy" && (
-            <MenuList sx={{ width: "100%" }}>
-              <MenuItem
-                onClick={() => {
-                  setSearchPolicy("hybrid");
-                  setPickerView(null);
-                }}
-                selected={selectedSearchPolicyName === "hybrid"}
-              >
-                <ListItemText primary={t("search.hybrid")} secondary={t("search.hybridDescription")} />
-              </MenuItem>
-              <MenuItem
-                onClick={() => {
-                  setSearchPolicy("semantic");
-                  setPickerView(null);
-                }}
-                selected={selectedSearchPolicyName === "semantic"}
-              >
-                <ListItemText primary={t("search.semantic")} secondary={t("search.semanticDescription")} />
-              </MenuItem>
-              <MenuItem
-                onClick={() => {
-                  setSearchPolicy("strict");
-                  setPickerView(null);
-                }}
-                selected={selectedSearchPolicyName === "strict"}
-              >
-                <ListItemText primary={t("search.strict")} secondary={t("search.strictDescription")} />
-              </MenuItem>
-            </MenuList>
           )}
         </Box>
       )}
