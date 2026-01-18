@@ -13,18 +13,18 @@
 // limitations under the License.
 
 // FredUi.tsx
-import { Box, Typography } from "@mui/material";
+import { Box, Typography, useTheme } from "@mui/material";
 import { ThemeProvider, keyframes } from "@mui/material/styles";
 import React, { useContext, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
 import { ConfirmationDialogProvider } from "../components/ConfirmationDialogProvider";
 import { DrawerProvider } from "../components/DrawerProvider";
 import { ToastProvider } from "../components/ToastProvider";
-import { darkTheme, lightTheme } from "../styles/theme";
-import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 import { AuthProvider } from "../security/AuthContext";
 import { useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery } from "../slices/agentic/agenticOpenApi";
-import { useTranslation } from "react-i18next";
+import { darkTheme, lightTheme } from "../styles/theme";
+import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 
 const pulse = keyframes`
   0% { transform: scale(1); opacity: 0.9; }
@@ -34,20 +34,17 @@ const pulse = keyframes`
 
 const LoadingScreen = ({
   label,
-  dark,
   logoName,
   logoNameDark,
   alt,
 }: {
   label: string;
-  dark: boolean;
   logoName: string;
   logoNameDark: string;
   alt: string;
 }) => {
-  const palette = dark ? darkTheme.palette : lightTheme.palette;
-  const bg = dark ? palette.background.default : palette.surfaces.soft;
-  const textColor = palette.text.primary;
+  const { darkMode } = useContext(ApplicationContext);
+  const theme = useTheme();
   const baseUrl = (import.meta.env.BASE_URL ?? "/").endsWith("/")
     ? (import.meta.env.BASE_URL ?? "/")
     : `${import.meta.env.BASE_URL ?? "/"}/`;
@@ -59,8 +56,8 @@ const LoadingScreen = ({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: bg,
-        color: textColor,
+        background: theme.palette.background.default,
+        color: theme.palette.text.primary,
         position: "relative",
         overflow: "hidden",
       }}
@@ -90,15 +87,13 @@ const LoadingScreen = ({
       >
         <Box
           component="img"
-          src={`${baseUrl}images/${dark ? logoNameDark : logoName}.svg`}
+          src={`${baseUrl}images/${darkMode ? logoNameDark : logoName}.svg`}
           alt={alt}
           sx={{
             width: 68,
             height: 68,
             animation: `${pulse} 1.8s ease-in-out infinite`,
-            filter: dark
-              ? "drop-shadow(0 6px 16px rgba(0,0,0,0.35))"
-              : "drop-shadow(0 6px 16px rgba(0,0,0,0.12))",
+            filter: darkMode ? "drop-shadow(0 6px 16px rgba(0,0,0,0.35))" : "drop-shadow(0 6px 16px rgba(0,0,0,0.12))",
           }}
         />
         <Typography
@@ -122,42 +117,23 @@ const LoadingScreen = ({
   );
 };
 
-function FredUi() {
+function FredUiContent() {
   const [router, setRouter] = useState<any>(null);
   const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
   const { t } = useTranslation();
+  const { darkMode } = useContext(ApplicationContext);
   const siteDisplayName = frontendConfig?.frontend_settings?.properties?.siteDisplayName || "Fred";
   const logoName = frontendConfig?.frontend_settings?.properties?.logoName || "fred";
   const logoNameDark = frontendConfig?.frontend_settings?.properties?.logoNameDark || "fred-dark";
   const baseUrl = (import.meta.env.BASE_URL ?? "/").endsWith("/")
     ? (import.meta.env.BASE_URL ?? "/")
     : `${import.meta.env.BASE_URL ?? "/"}/`;
-  const [prefersDark, setPrefersDark] = useState<boolean>(() => {
-    const stored = localStorage.getItem("darkMode");
-    if (stored !== null) return stored === "true";
-    return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? false;
-  });
 
   useEffect(() => {
     document.title = siteDisplayName;
     const favicon = document.getElementById("favicon") as HTMLLinkElement;
-    const isDark = window.matchMedia("(prefers-color-scheme: dark)");
-    if (isDark.matches) favicon.href = `${baseUrl}images/${logoNameDark}.svg`;
-    else favicon.href = `${baseUrl}images/${logoName}.svg`;
-
-    const listener = (event: MediaQueryListEvent) => setPrefersDark(event.matches);
-    const storageListener = (event: StorageEvent) => {
-      if (event.key === "darkMode" && event.newValue !== null) {
-        setPrefersDark(event.newValue === "true");
-      }
-    };
-    isDark.addEventListener("change", listener);
-    window.addEventListener("storage", storageListener);
-    return () => {
-      isDark.removeEventListener("change", listener);
-      window.removeEventListener("storage", storageListener);
-    };
-  }, [baseUrl, siteDisplayName, logoName, logoNameDark]);
+    favicon.href = `${baseUrl}images/${darkMode ? logoNameDark : logoName}.svg`;
+  }, [baseUrl, siteDisplayName, logoName, logoNameDark, darkMode]);
 
   useEffect(() => {
     import("../common/router").then((mod) => {
@@ -169,7 +145,6 @@ function FredUi() {
     return (
       <LoadingScreen
         label={t("app.loading.router", "Fred démarre...")}
-        dark={prefersDark}
         logoName={logoName}
         logoNameDark={logoNameDark}
         alt={siteDisplayName}
@@ -180,8 +155,7 @@ function FredUi() {
     <React.Suspense
       fallback={
         <LoadingScreen
-          label={t("app.loading.ui", "L'interface Fred se prépare...")}
-          dark={prefersDark}
+          label={t("app.loading.ui")}
           logoName={logoName}
           logoNameDark={logoNameDark}
           alt={siteDisplayName}
@@ -189,29 +163,35 @@ function FredUi() {
       }
     >
       <AuthProvider>
-        <ApplicationContextProvider>
-          <AppWithTheme router={router} />
-        </ApplicationContextProvider>
+        {/* Following providers (dialog, toast, drawer...) needs to be inside the ThemeProvider */}
+        <ConfirmationDialogProvider>
+          <ToastProvider>
+            <DrawerProvider>
+              <RouterProvider router={router} />
+            </DrawerProvider>
+          </ToastProvider>
+        </ConfirmationDialogProvider>
       </AuthProvider>
     </React.Suspense>
   );
 }
 
-function AppWithTheme({ router }: { router: any }) {
+function AppWithTheme() {
   const { darkMode } = useContext(ApplicationContext);
   const theme = darkMode ? darkTheme : lightTheme;
 
   return (
     <ThemeProvider theme={theme}>
-      {/* Following providers (dialog, toast, drawer...) needs to be inside the ThemeProvider */}
-      <ConfirmationDialogProvider>
-        <ToastProvider>
-          <DrawerProvider>
-            <RouterProvider router={router} />
-          </DrawerProvider>
-        </ToastProvider>
-      </ConfirmationDialogProvider>
+      <FredUiContent />
     </ThemeProvider>
+  );
+}
+
+function FredUi() {
+  return (
+    <ApplicationContextProvider>
+      <AppWithTheme />
+    </ApplicationContextProvider>
   );
 }
 
