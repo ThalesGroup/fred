@@ -5,9 +5,7 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 
 import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
-import VisibilityIcon from "@mui/icons-material/Visibility";
 import {
   Badge,
   Box,
@@ -27,6 +25,8 @@ import { BoxProps } from "@mui/material";
 import Popover from "@mui/material/Popover";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
+import { ViewIconButton } from "../../../shared/ui/buttons/ViewIconButton";
 import {
   Resource,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
@@ -205,7 +205,7 @@ export function ChatContextPickerPanel({
 
                   <Stack direction="row" alignItems="center" spacing={0.5}>
                     <Tooltip title={t("common.view")}>
-                      <IconButton
+                      <ViewIconButton
                         size="small"
                         onClick={(event) => {
                           event.stopPropagation();
@@ -213,21 +213,17 @@ export function ChatContextPickerPanel({
                           setPreviewAnchor(event.currentTarget);
                         }}
                         sx={{ flexShrink: 0, opacity: 0.7 }}
-                      >
-                        <VisibilityIcon fontSize="small" />
-                      </IconButton>
+                      />
                     </Tooltip>
                     <Tooltip title={t("common.remove")}>
-                      <IconButton
+                      <DeleteIconButton
                         size="small"
                         onClick={(event) => {
                           event.stopPropagation();
                           applyChatContextSelection(selectedChatContextIds.filter((id) => id !== resource.id));
                         }}
                         sx={{ flexShrink: 0, opacity: 0.7 }}
-                      >
-                        <DeleteOutlineIcon fontSize="small" />
-                      </IconButton>
+                      />
                     </Tooltip>
                   </Stack>
                 </ListItemButton>

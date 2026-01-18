@@ -38,6 +38,7 @@ from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHin
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
+    get_language,
     get_rag_knowledge_scope,
     get_search_policy,
     is_corpus_only_mode,
@@ -96,15 +97,6 @@ RAG_TUNING = AgentTuning(
                 "Today is {today}."
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
-        ),
-        FieldSpec(
-            key="prompts.response_language",
-            type="text",
-            title="Response Language",
-            description="Language to use for all answers (e.g., 'English', 'Spanish').",
-            required=False,
-            default="English",
-            ui=UIHints(group="Prompts"),
         ),
         FieldSpec(
             key="prompts.with_sources",
@@ -256,9 +248,7 @@ class Rico(AgentFlow):
         """
         Resolve the RAG system prompt from tuning; optionally append chat context text if enabled.
         """
-        response_language = (
-            self.get_tuned_text("prompts.response_language") or "English"
-        )
+        response_language = get_language(self.get_runtime_context()) or "English"
         sys_text = self._render_tuned_prompt(
             "prompts.system", response_language=response_language
         )  # token-safe rendering (e.g. {today})
@@ -314,6 +304,18 @@ class Rico(AgentFlow):
         try:
             runtime_context = self.get_runtime_context()
             rag_scope = get_rag_knowledge_scope(runtime_context)
+            response_language = get_language(runtime_context) or "English"
+            chat_context = self.chat_context_text()
+            include_chat_context = self.get_field_spec(
+                "prompts.include_chat_context"
+            ) is None or bool(self.get_tuned_any("prompts.include_chat_context"))
+            logger.debug(
+                "[AGENT] Rico prompt check: response_language=%s include_chat_context=%s system_prompt=%r chat_context=%r",
+                response_language,
+                include_chat_context,
+                self._system_prompt(),
+                chat_context,
+            )
 
             if rag_scope == "general_only":
                 logger.info("Rico: general-only mode; bypassing retrieval.")
@@ -581,7 +583,7 @@ class Rico(AgentFlow):
 
             fallback_text = guardrail_fallback_message(
                 info,
-                language=self.get_tuned_text("prompts.response_language"),
+                language=get_language(runtime_context) or "English",
                 default_message="An unexpected error occurred while searching documents. Please try again.",
             )
             fallback = await self.model.ainvoke([HumanMessage(content=fallback_text)])

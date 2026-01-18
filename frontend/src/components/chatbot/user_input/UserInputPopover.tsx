@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
 import MicIcon from "@mui/icons-material/Mic";
 import StopIcon from "@mui/icons-material/Stop";
@@ -36,8 +35,9 @@ import React, { SetStateAction } from "react";
 // import DescriptionIcon from "@mui/icons-material/Description";
 
 import { useTranslation } from "react-i18next";
+import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
 import { AgentChatOptions } from "../../../slices/agentic/agenticOpenApi.ts";
-import { ChatDocumentLibrariesSelectionCard } from "../ChatDocumentLibrariesSelectionCard.tsx";
+import { ChatDocumentLibrariesSelectionCard } from "../../../features/libraries/components/ChatDocumentLibrariesSelectionCard.tsx";
 import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard.tsx";
 
 export type PickerView = null | "libraries" | "prompts" | "templates";
@@ -113,9 +113,7 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
       <Stack direction="row" alignItems="center" spacing={0.5}>
         {onClear && count > 0 && (
           <Tooltip title={t("documentLibrary.clearSelection")}>
-            <IconButton size="small" onClick={() => onClear()}>
-              <DeleteOutlineIcon fontSize="small" />
-            </IconButton>
+            <DeleteIconButton size="small" onClick={() => onClear()} />
           </Tooltip>
         )}
         <Tooltip title={t("common.add")}>

@@ -19,5 +19,4 @@ spec:
     app: {{ .app.applicationName }}
   ports:
 {{ toYaml .app.service.ports | indent 2  }}
-
 {{ end -}}

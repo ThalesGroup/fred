@@ -72,10 +72,6 @@ function UserInput(
     onSend = () => {},
     onStop,
     isHydratingSession = false,
-    searchPolicy,
-    onSearchPolicyChange,
-    searchRagScope,
-    onSearchRagScopeChange,
     onDeepSearchEnabledChange,
     currentAgent,
     agents,
@@ -96,26 +92,9 @@ function UserInput(
   const [displayAudioController, setDisplayAudioController] = useState<boolean>(false);
   const [isRecording, setIsRecording] = useState<boolean>(false);
   // Only show the selector when the agent explicitly opts in via config (new flag, fallback to old).
-  const supportsRagScopeSelection = agentChatOptions?.search_rag_scoping === true;
-  const supportsSearchPolicySelection = agentChatOptions?.search_policy_selection === true;
   const supportsAudioRecording = agentChatOptions?.record_audio_files === true;
-  const defaultRagScope: SearchRagScope = "hybrid";
-  const resolvedSearchRagScope = searchRagScope ?? defaultRagScope;
-  const resolvedSearchPolicy = searchPolicy ?? "semantic";
   const canSend = !!userInput.trim() || !!audioBlob; // files upload immediately now
 
-  const setSearchPolicy = useCallback(
-    (next: SetStateAction<SearchPolicyName>) => {
-      onSearchPolicyChange?.(next);
-    },
-    [onSearchPolicyChange],
-  );
-  const setRagScope = useCallback(
-    (next: SearchRagScope) => {
-      onSearchRagScopeChange?.(next);
-    },
-    [onSearchRagScopeChange],
-  );
   const setDeepSearch = useCallback(
     (next: boolean) => {
       onDeepSearchEnabledChange?.(next);

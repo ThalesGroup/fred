@@ -35,7 +35,7 @@ import {
   useListUsersKnowledgeFlowV1UsersGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
-import { buildTree, findNode, TagNode } from "../../tags/tagTree";
+import { buildTree, findNode, TagNode } from "../../../shared/utils/tagTree";
 import { useToast } from "../../ToastProvider";
 import { useDocumentCommands } from "../common/useDocumentCommands";
 import { docHasAnyTag, matchesDocByName } from "./documentHelper";

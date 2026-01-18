@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined"; // optional visual parity
@@ -20,6 +19,7 @@ import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import { Box, IconButton, Tooltip, Typography } from "@mui/material";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
+import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 import { Resource } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export type ResourceRowCompactProps = {
@@ -91,9 +91,12 @@ export function ResourceRowCompact({
         )}
         {onRemoveFromLibrary && (
           <Tooltip title={t("documentLibrary.removeFromLibrary")}>
-            <IconButton size="small" onClick={() => onRemoveFromLibrary(prompt)} aria-label="remove-from-library">
-              <DeleteOutlineIcon fontSize="inherit" />
-            </IconButton>
+            <DeleteIconButton
+              size="small"
+              iconSize="inherit"
+              onClick={() => onRemoveFromLibrary(prompt)}
+              aria-label="remove-from-library"
+            />
           </Tooltip>
         )}
       </Box>

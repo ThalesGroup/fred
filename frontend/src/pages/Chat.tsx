@@ -17,6 +17,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
+
 import { useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
@@ -31,8 +32,8 @@ export default function Chat() {
     error: flowsErrObj,
   } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery(undefined, {
     refetchOnMountOrArgChange: true,
-    refetchOnFocus: true,
-    refetchOnReconnect: true,
+    refetchOnFocus: false,
+    refetchOnReconnect: false,
   });
 
   const agentsFromServer = useMemo<AnyAgent[]>(() => normalizeAgenticFlows(rawAgentsFromServer), [rawAgentsFromServer]);
@@ -77,12 +78,11 @@ export default function Chat() {
       </Box>
     );
   }
-
   return (
     <Box sx={{ height: "100vh", position: "relative", overflow: "hidden" }}>
       <Grid2>
         <ChatBot
-          sessionId={sessionId}
+          chatSessionId={sessionId}
           agents={enabledAgents}
           onNewSessionCreated={handleNewSessionCreated}
           runtimeContext={{}}

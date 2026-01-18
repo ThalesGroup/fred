@@ -38,6 +38,7 @@ from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHin
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
+    get_language,
     get_rag_knowledge_scope,
     get_search_policy,
     is_corpus_only_mode,
@@ -110,20 +111,10 @@ RAG_TUNING = AgentTuning(
                 "   - Signale si les documents se contredisent ou sont incomplets.\n"
                 "\n"
                 "Sois précis, rigoureux, factuel et orienté valeur.\n"
-                "Réponds toujours en {response_language}.\n"
                 "\n"
                 "Nous sommes le {today}.\n"
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
-        ),
-        FieldSpec(
-            key="prompts.response_language",
-            type="text",
-            title="Response Language",
-            description="Language to use for all answers (e.g., 'français', 'English').",
-            required=False,
-            default="français",
-            ui=UIHints(group="Prompts"),
         ),
         FieldSpec(
             key="prompts.with_sources",
@@ -201,15 +192,6 @@ RAG_TUNING = AgentTuning(
             ui=UIHints(group="Retrieval"),
         ),
         FieldSpec(
-            key="prompts.include_chat_context",
-            type="boolean",
-            title="Append Chat Context to System Prompt",
-            description="If true, append the runtime chat context text after the system prompt.",
-            required=False,
-            default=False,
-            ui=UIHints(group="Prompts"),
-        ),
-        FieldSpec(
             key="rag.history_max_messages",
             type="integer",
             title="Conversation Memory",
@@ -271,9 +253,8 @@ class Archie(AgentFlow):
         """
         Resolve the RAG system prompt from tuning; optionally append chat context text if enabled.
         """
-        response_language = (
-            self.get_tuned_text("prompts.response_language") or "français"
-        )
+        response_language = get_language(self.get_runtime_context()) or ""
+
         sys_text = self._render_tuned_prompt(
             "prompts.system", response_language=response_language
         )  # token-safe rendering (e.g. {today})
@@ -330,9 +311,21 @@ class Archie(AgentFlow):
         question = last.content
 
         try:
+            response_language = get_language(runtime_context) or "français"
+            chat_context = self.chat_context_text()
+            include_chat_context = self.get_field_spec(
+                "prompts.include_chat_context"
+            ) is None or bool(self.get_tuned_any("prompts.include_chat_context"))
+            logger.debug(
+                "[AGENT] archie prompt check: response_language=%s include_chat_context=%s system_prompt=%r chat_context=%r",
+                response_language,
+                include_chat_context,
+                self._system_prompt(),
+                chat_context,
+            )
             skip_rag = should_skip_rag_search(runtime_context)
             if skip_rag:
-                logger.info("Archie: general-only mode; bypassing retrieval.")
+                logger.debug("Archie: general-only mode; bypassing retrieval.")
                 sys_msg = SystemMessage(content=self._system_prompt())
                 history_max = self.get_tuned_int(
                     "rag.history_max_messages", default=6, min_value=0
@@ -388,7 +381,7 @@ class Archie(AgentFlow):
                 search_policy,
                 top_k,
             )
-            logger.info(
+            logger.debug(
                 "[AGENT][SESSION PATH] question=%r runtime_context.session_id=%s rag_scope=%s search_policy=%s doc_tag_ids=%s",
                 question,
                 runtime_context.session_id if runtime_context else None,
@@ -419,7 +412,7 @@ class Archie(AgentFlow):
                     session_id=session_id,
                     include_session_scope=True,
                 )
-            logger.debug("[AGENT]: vector search returned %d hit(s)", len(hits))
+            logger.info("[AGENT]: vector search returned %d hit(s)", len(hits))
             if hits:
                 hit_summaries = []
                 for h in hits[:10]:
@@ -599,7 +592,7 @@ class Archie(AgentFlow):
 
             fallback_text = guardrail_fallback_message(
                 info,
-                language=self.get_tuned_text("prompts.response_language"),
+                language=get_language(runtime_context) or "français",
                 default_message="An unexpected error occurred while searching documents. Please try again.",
             )
             fallback = await self.model.ainvoke([HumanMessage(content=fallback_text)])
