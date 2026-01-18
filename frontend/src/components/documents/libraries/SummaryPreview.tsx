@@ -59,20 +59,9 @@ export default function SummaryPreview({
         placement="top"
         slotProps={{
           tooltip: {
-            sx: (theme) => ({
-              background: theme.palette.surfaces.soft,
-              color: theme.palette.text.primary,
-              border: `1px solid ${theme.palette.divider}`,
-              borderRadius: 1,
-              boxShadow: "none",
+            sx: {
               maxWidth: 520,
-            }),
-          },
-          arrow: {
-            sx: (theme) => ({
-              // Tooltip arrow can't be a gradient; pick the 'to' stop for best match
-              color: theme.palette.heroBackgroundGrad?.gradientTo ?? theme.palette.background.paper,
-            }),
+            },
           },
         }}
         title={
@@ -105,13 +94,6 @@ export default function SummaryPreview({
         onClose={() => setOpen(false)}
         fullWidth
         maxWidth="md"
-        PaperProps={{
-          sx: (theme) => ({
-            background: theme.palette.surfaces.raised,
-            border: `1px solid ${theme.palette.divider}`,
-            borderRadius: 2,
-          }),
-        }}
       >
         <DialogTitle sx={{ pb: 1 }}>
           {t("documentLibrary.summary", "Summary")}

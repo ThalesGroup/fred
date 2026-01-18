@@ -12,7 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { alpha, createTheme } from "@mui/material/styles";
+import { alpha, createTheme, TypographyVariants } from "@mui/material/styles";
+
+declare module "@mui/material/styles" {
+  interface TypographyVariants {
+    markdown: {
+      h1: React.CSSProperties;
+      h2: React.CSSProperties;
+      h3: React.CSSProperties;
+      h4: React.CSSProperties;
+      p: React.CSSProperties;
+      code: React.CSSProperties;
+      a: React.CSSProperties;
+      ul: React.CSSProperties;
+      li: React.CSSProperties;
+    };
+  }
+
+  interface TypographyVariantsOptions {
+    markdown?: Partial<TypographyVariants["markdown"]>;
+  }
+}
+
+declare module "@mui/material/Typography" {
+  interface TypographyPropsVariantOverrides {
+    poster: true;
+    h3: false;
+  }
+}
+
+const markdownDefaults: TypographyVariants["markdown"] = {
+  h1: { lineHeight: 1.5, fontWeight: 500, fontSize: "1.2rem", marginBottom: "0.6rem" },
+  h2: { lineHeight: 1.5, fontWeight: 500, fontSize: "1.15rem", marginBottom: "0.6rem" },
+  h3: { lineHeight: 1.5, fontWeight: 400, fontSize: "1.10rem", marginBottom: "0.6rem" },
+  h4: { lineHeight: 1.5, fontWeight: 400, fontSize: "1.05rem", marginBottom: "0.6rem" },
+  p: { lineHeight: 1.8, fontWeight: 400, fontSize: "1.0rem", marginBottom: "0.8rem" },
+  code: { lineHeight: 1.5, fontSize: "0.9rem", borderRadius: "4px" },
+  a: { textDecoration: "underline", lineHeight: 1.6, fontWeight: 400, fontSize: "0.9rem" },
+  ul: { marginLeft: "0.2rem", lineHeight: 1.4, fontWeight: 400, fontSize: "0.9rem" },
+  li: { marginBottom: "0.5rem", lineHeight: 1.4, fontSize: "0.9rem" },
+};
 
 // MUI's original elevation overlay formula (from getOverlayAlpha.js)
 function getOverlayAlpha(elevation: number): number {
@@ -31,6 +70,9 @@ const lightTheme = createTheme({
     secondary: {
       main: "#2f3475ff",
     },
+  },
+  typography: {
+    markdown: markdownDefaults,
   },
   components: {
     MuiPaper: {
@@ -56,6 +98,9 @@ const darkTheme = createTheme({
     secondary: {
       main: "#a2a9ffff",
     },
+  },
+  typography: {
+    markdown: markdownDefaults,
   },
 });
 

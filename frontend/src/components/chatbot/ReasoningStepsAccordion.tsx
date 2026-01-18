@@ -12,29 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useMemo, useState } from "react";
+import Editor from "@monaco-editor/react";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import {
   Accordion,
-  AccordionSummary,
   AccordionDetails,
+  AccordionSummary,
   Box,
+  Divider,
   Drawer,
   IconButton,
   List,
   Stack,
   Tooltip,
   Typography,
-  Divider,
   useTheme,
 } from "@mui/material";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import Editor from "@monaco-editor/react";
+import React, { useMemo, useState } from "react";
 
+import { AnyAgent } from "../../common/agent";
 import { Channel, ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras, isToolCall, isToolResult, textPreview, toolId } from "./ChatBotUtils";
 import ReasoningStepBadge from "./ReasoningStepBadge";
-import { AnyAgent } from "../../common/agent";
 
 type Props = {
   steps: ChatMessage[];
@@ -322,12 +322,6 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
             sx: (t) => ({
               width: { xs: "100%", sm: 640 },
               display: "flex",
-              // Fred rationale:
-              // Ensure paper picks up dark surface even if a global override is missed.
-              background: t.palette.surfaces.soft,
-              // For a RIGHT drawer, the divider should be on the LEFT:
-              borderLeft: `1px solid ${t.palette.divider}`,
-              borderRight: "none",
             }),
           },
         }}
@@ -377,7 +371,7 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
         </Box>
 
         {/* Editor container should inherit a dark-ish surface */}
-        <Box sx={(t) => ({ flex: 1, minHeight: 0, background: t.palette.surfaces.soft })}>
+        <Box sx={(t) => ({ flex: 1, minHeight: 0, background: t.palette.background.default })}>
           <Editor
             height="100%"
             defaultLanguage="json"

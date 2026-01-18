@@ -69,13 +69,8 @@ export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
       {Object.entries(stepsByFile).map(([filename, fileSteps]) => (
         <Paper
           key={filename}
-          variant="outlined"
           sx={{
             p: 2,
-            borderRadius: 2,
-            boxShadow: "none",
-            borderColor: "divider",
-            backgroundColor: "background.default",
             width: "100%",
             maxWidth: "100%",
           }}

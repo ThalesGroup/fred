@@ -153,7 +153,7 @@ export function Profile() {
                                 ? theme.palette.mode === "dark"
                                   ? "rgba(25,118,210,0.14)"
                                   : "rgba(25,118,210,0.10)"
-                                : theme.palette.sidebar.hoverColor,
+                                : theme.palette.action.hover,
                           },
                         }}
                       >
@@ -161,7 +161,7 @@ export function Profile() {
                         <ListItemText
                           primary={
                             <Typography
-                              variant="sidebar"
+                              variant="body2"
                               fontWeight={activeTab === index ? 600 : 300}
                               color={activeTab === index ? "text.primary" : "text.secondary"}
                               noWrap

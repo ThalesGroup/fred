@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo, useState } from "react";
+import SellOutlinedIcon from "@mui/icons-material/SellOutlined";
 import {
   Box,
+  Button,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  Button,
+  IconButton,
   Tooltip,
   Typography,
-  IconButton,
 } from "@mui/material";
-import SellOutlinedIcon from "@mui/icons-material/SellOutlined";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export function KeywordsPreview({
@@ -82,18 +82,8 @@ export function KeywordsPreview({
         placement="top"
         slotProps={{
           tooltip: {
-            sx: (theme) => ({
-              background: theme.palette.surfaces.soft,
-              color: theme.palette.text.primary,
-              border: `1px solid ${theme.palette.divider}`,
-              borderRadius: 1,
-              boxShadow: "none",
+            sx: (_) => ({
               maxWidth: 520,
-            }),
-          },
-          arrow: {
-            sx: (theme) => ({
-              color: theme.palette.heroBackgroundGrad?.gradientTo ?? theme.palette.background.paper,
             }),
           },
         }}
@@ -112,19 +102,7 @@ export function KeywordsPreview({
       </Tooltip>
 
       {/* Dialog on SURFACE */}
-      <Dialog
-        open={open}
-        onClose={() => setOpen(false)}
-        fullWidth
-        maxWidth="md"
-        PaperProps={{
-          sx: (theme) => ({
-            background: theme.palette.surfaces.raised,
-            border: `1px solid ${theme.palette.divider}`,
-            borderRadius: 2,
-          }),
-        }}
-      >
+      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="md">
         <DialogTitle sx={{ pb: 1 }}>
           {t("documentLibrary.keywords", "Keywords")} • {list.length}
           {docTitle ? (

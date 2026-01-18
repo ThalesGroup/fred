@@ -147,9 +147,7 @@ export const UserInputAttachments: React.FC<UserInputAttachmentsProps> = ({
           display: "flex",
           flexDirection: "column",
           borderLeft: open ? `1px solid ${theme.palette.divider}` : "none",
-          background: theme.palette.surfaces?.soft
-            ? theme.palette.surfaces.soft
-            : (theme.palette.sidebar?.background ?? theme.palette.background.paper),
+          background: theme.palette.background.paper,
           boxShadow: open ? theme.shadows[3] : "none",
           zIndex: theme.zIndex.drawer,
           overflow: "hidden",
