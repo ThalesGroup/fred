@@ -232,6 +232,7 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
   const [createSession] = useCreateSessionAgenticV1ChatbotSessionPostMutation();
   // Local tick to signal attachments list to refresh after successful uploads
   const [attachmentsRefreshTick, setAttachmentsRefreshTick] = useState<number>(0);
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
@@ -658,35 +659,41 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
   const handleAddAttachments = useCallback(
     async (files: File[]) => {
       if (!files.length) return;
+      setIsUploadingAttachments(true);
       let sid = pendingSessionIdRef.current || chatSessionId;
       if (!sid) {
         try {
           sid = await ensureSessionId();
         } catch {
+          setIsUploadingAttachments(false);
           return;
         }
       }
 
-      for (const file of files) {
-        const formData = new FormData();
-        formData.append("session_id", sid);
-        formData.append("file", file);
-        try {
-          await uploadChatFile({
-            bodyUploadFileAgenticV1ChatbotUploadPost: formData as any,
-          }).unwrap();
-        } catch (err: any) {
-          const detail = err?.data?.detail ?? err?.data ?? err?.error;
-          const errMsg =
-            typeof detail === "string"
-              ? detail
-              : typeof detail === "object" && detail
-                ? detail.message || detail.upstream || detail.code || JSON.stringify(detail)
-                : (err as Error)?.message || "Unknown error";
-          showError({ summary: "Upload failed", detail: errMsg });
-        } finally {
-          // no-op
+      try {
+        for (const file of files) {
+          const formData = new FormData();
+          formData.append("session_id", sid);
+          formData.append("file", file);
+          try {
+            await uploadChatFile({
+              bodyUploadFileAgenticV1ChatbotUploadPost: formData as any,
+            }).unwrap();
+          } catch (err: any) {
+            const detail = err?.data?.detail ?? err?.data ?? err?.error;
+            const errMsg =
+              typeof detail === "string"
+                ? detail
+                : typeof detail === "object" && detail
+                  ? detail.message || detail.upstream || detail.code || JSON.stringify(detail)
+                  : (err as Error)?.message || "Unknown error";
+            showError({ summary: "Upload failed", detail: errMsg });
+          } finally {
+            // no-op
+          }
         }
+      } finally {
+        setIsUploadingAttachments(false);
       }
 
       setAttachmentsRefreshTick((tick) => tick + 1);
@@ -793,6 +800,7 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
       sessionAttachments={sessionAttachments}
       onAddAttachments={handleAddAttachments}
       onAttachmentsUpdated={handleAttachmentsUpdated}
+      isUploadingAttachments={isUploadingAttachments}
       libraryNameMap={libraryNameMap}
       libraryById={libraryById}
       promptNameMap={promptNameMap}

@@ -36,6 +36,7 @@ type ChatBotViewProps = {
   sessionAttachments: { id: string; name: string }[];
   onAddAttachments: (files: File[]) => void;
   onAttachmentsUpdated: () => void;
+  isUploadingAttachments: boolean;
   libraryNameMap: Record<string, string>;
   libraryById: Record<string, TagWithItemsId>;
   promptNameMap: Record<string, string>;
@@ -74,6 +75,7 @@ const ChatBotView = ({
   sessionAttachments,
   onAddAttachments,
   onAttachmentsUpdated,
+  isUploadingAttachments,
   libraryNameMap,
   libraryById,
   promptNameMap,
@@ -116,11 +118,20 @@ const ChatBotView = ({
   }, [greetingText, showWelcome]);
 
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [messages, chatSessionId]);
+    if (showWelcome) return;
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        bottomRef.current?.scrollIntoView({ block: "end" });
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
+  }, [messages.length, chatSessionId, showWelcome]);
 
   const { outputTokenCounts, inputTokenCounts } = useMemo(() => {
     if (!messages || messages.length === 0) return { outputTokenCounts: 0, inputTokenCounts: 0 };
@@ -148,7 +159,14 @@ const ChatBotView = ({
 
   if (isSessionLoadBlocked) {
     return (
-      <Box width="100%" height="100%" display="flex" alignItems="center" justifyContent="center" sx={{ minHeight: 0 }}>
+      <Box
+        width="100%"
+        height="100%"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        sx={{ minHeight: { xs: "50vh", md: "60vh" } }}
+      >
         <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
           <CircularProgress size={28} thickness={4} sx={{ color: theme.palette.text.secondary }} />
           <Typography variant="body2" color="text.secondary">
@@ -182,6 +200,7 @@ const ChatBotView = ({
         sessionAttachments={sessionAttachments}
         onAddAttachments={onAddAttachments}
         onAttachmentsUpdated={onAttachmentsUpdated}
+        isUploadingAttachments={isUploadingAttachments}
         libraryNameMap={libraryNameMap}
         libraryById={libraryById}
         promptNameMap={promptNameMap}
@@ -338,6 +357,7 @@ const ChatBotView = ({
                       <CircularProgress size={18} thickness={4} sx={{ color: theme.palette.text.secondary }} />
                     </Box>
                   )}
+                  <Box ref={bottomRef} />
                 </Box>
               </Box>
             </Box>

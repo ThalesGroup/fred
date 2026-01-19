@@ -149,8 +149,17 @@ const ChatDocumentLibrariesWidget = ({
         disabled={disabled}
         badgeCount={selectedCount}
         icon={<MenuBookOutlinedIcon fontSize="small" />}
-        ariaLabel={t("chatbot.libraries", "Libraries")}
-        tooltip={t("chatbot.libraries.open", "Open libraries")}
+        ariaLabel={t("knowledge.viewSelector.libraries", "Libraries")}
+        tooltipLabel={t("knowledge.viewSelector.libraries", "Libraries")}
+        tooltipDescription={t(
+          "knowledge.viewSelector.librariesTooltip",
+          "Scope document retrieval to only the selected document libraries.",
+        )}
+        tooltipDisabledReason={
+          disabled
+            ? t("knowledge.viewSelector.librariesUnsupported", "This agent does not support library scoping.")
+            : undefined
+        }
         actionLabel={t("chatbot.addLibraries", "Add libraries")}
         onAction={(event) => setPickerAnchor(event.currentTarget)}
       >
