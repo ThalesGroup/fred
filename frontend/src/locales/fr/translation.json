@@ -1,6 +1,7 @@
 {
   "common": {
     "add": "Ajouter",
+    "delete": "Supprimer",
     "noneSelected": "Aucune sélection",
     "expand": "Développer",
     "close": "Fermer",

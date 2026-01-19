@@ -1,6 +1,7 @@
 {
   "common": {
     "add": "Add",
+    "delete": "Delete",
     "noneSelected": "None selected",
     "expand": "Expand",
     "close": "Close",

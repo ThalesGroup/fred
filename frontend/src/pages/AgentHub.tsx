@@ -15,32 +15,14 @@
 import Editor from "@monaco-editor/react";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
-import FilterListIcon from "@mui/icons-material/FilterList";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import SearchIcon from "@mui/icons-material/Search";
-import StarIcon from "@mui/icons-material/Star";
 
-import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  Drawer,
-  Fade,
-  IconButton,
-  ListItemIcon,
-  Tab,
-  Tabs,
-  Typography,
-  useTheme,
-} from "@mui/material";
-import { SyntheticEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Box, Button, CardContent, Drawer, Fade, IconButton, Typography, useTheme } from "@mui/material";
+import { SyntheticEvent, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePermissions } from "../security/usePermissions";
 
-import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import Grid2 from "@mui/material/Grid2";
 import { TopBar } from "../common/TopBar";
 import { AgentCard } from "../components/agentHub/AgentCard";
@@ -53,62 +35,25 @@ import { CrewEditor } from "../components/agentHub/CrewEditor";
 // OpenAPI
 import {
   Leader,
-  useDeleteAgentAgenticV1AgentsNameDeleteMutation,
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useRestoreAgentsAgenticV1AgentsRestorePostMutation,
 } from "../slices/agentic/agenticOpenApi";
 
 // UI union facade
 import { AnyAgent, isLeader } from "../common/agent";
+import { A2aCardDialog } from "../components/agentHub/A2aCardDialog";
 import { AgentAssetManagerDrawer } from "../components/agentHub/AgentAssetManagerDrawer";
 import { CreateAgentModal } from "../components/agentHub/CreateAgentModal";
-import { A2aCardDialog } from "../components/agentHub/A2aCardDialog";
-import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
 import { useToast } from "../components/ToastProvider";
 import { useAgentUpdater } from "../hooks/useAgentUpdater";
 import { useLazyGetRuntimeSourceTextQuery } from "../slices/agentic/agenticSourceApi";
 
 type AgentCategory = { name: string; isTag?: boolean };
 
-const ActionButton = ({
-  icon,
-  children,
-  ...props
-}: {
-  icon: React.ReactNode;
-  children: React.ReactNode;
-} & React.ComponentProps<typeof Button>) => {
-  const theme = useTheme();
-  return (
-    <Button
-      startIcon={<ListItemIcon sx={{ minWidth: 0, mr: 0.75, color: "inherit" }}>{icon}</ListItemIcon>}
-      size="small"
-      {...props}
-      sx={{
-        borderRadius: 1.5,
-        textTransform: "none",
-        px: 1.25,
-        height: 32,
-        border: `1px solid ${theme.palette.divider}`,
-        bgcolor: "transparent",
-        color: "text.primary",
-        "&:hover": {
-          borderColor: theme.palette.primary.main,
-          backgroundColor: theme.palette.mode === "dark" ? "rgba(25,118,210,0.10)" : "rgba(25,118,210,0.06)",
-        },
-        ...props.sx,
-      }}
-    >
-      {children}
-    </Button>
-  );
-};
-
 export const AgentHub = () => {
   const theme = useTheme();
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
-  const { showConfirmationDialog } = useConfirmationDialog();
   const [agents, setAgents] = useState<AnyAgent[]>([]);
   const [tabValue, setTabValue] = useState(0);
   const [showElements, setShowElements] = useState(false);
@@ -121,7 +66,6 @@ export const AgentHub = () => {
   const [selected, setSelected] = useState<AnyAgent | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [crewOpen, setCrewOpen] = useState(false);
-  const [triggerDeleteAgent] = useDeleteAgentAgenticV1AgentsNameDeleteMutation();
 
   const handleOpenCreateAgent = () => {
     setCreateModalType("basic");
@@ -141,7 +85,7 @@ export const AgentHub = () => {
     agentName: null,
   });
 
-  const [triggerGetFlows, { isFetching }] = useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
+  const [triggerGetFlows, { isLoading }] = useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
   const [restoreAgents, { isLoading: isRestoring }] = useRestoreAgentsAgenticV1AgentsRestorePostMutation();
 
   const { updateEnabled } = useAgentUpdater();
@@ -151,7 +95,6 @@ export const AgentHub = () => {
   const { can } = usePermissions();
   const canEditAgents = can("agents", "update");
   const canCreateAgents = can("agents", "create");
-  const canDeleteAgents = can("agents", "delete");
   const [codeDrawer, setCodeDrawer] = useState<{
     open: boolean;
     title: string;
@@ -288,26 +231,6 @@ export const AgentHub = () => {
     setCrewOpen(true);
   };
 
-  const handleDeleteAgent = useCallback(
-    (agent: AnyAgent) => {
-      showConfirmationDialog({
-        title: t("agentHub.confirmDeleteTitle") || "Delete Agent?",
-        message:
-          t("agentHub.confirmDeleteMessage", { name: agent.name }) ||
-          `Are you sure you want to delete the agent “${agent.name}”? This action cannot be undone.`,
-        onConfirm: async () => {
-          try {
-            await triggerDeleteAgent({ name: agent.name }).unwrap();
-            fetchAgents();
-          } catch (err) {
-            console.error("Failed to delete agent:", err);
-          }
-        },
-      });
-    },
-    [showConfirmationDialog, triggerDeleteAgent, fetchAgents, t],
-  );
-
   const handleManageAssets = (agent: AnyAgent) => {
     setAgentForAssetManagement(agent);
     setAssetManagerOpen(true);
@@ -343,7 +266,7 @@ export const AgentHub = () => {
         }}
       >
         {/* Header / Tabs */}
-        <Fade in={showElements} timeout={900}>
+        {/* <Fade in={showElements} timeout={900}>
           <Card
             variant="outlined"
             sx={{
@@ -414,28 +337,28 @@ export const AgentHub = () => {
               </Tabs>
             </CardContent>
           </Card>
-        </Fade>
+        </Fade> */}
         {/* Content */}
         <Fade in={showElements} timeout={1100}>
-          <Card
-            variant="outlined"
-            sx={{
-              borderRadius: 2,
-              bgcolor: "transparent",
-              boxShadow: "none",
-              borderColor: "divider",
-            }}
+          <Box
+          // variant="outlined"
+          // sx={{
+          //   borderRadius: 2,
+          //   bgcolor: "transparent",
+          //   boxShadow: "none",
+          //   borderColor: "divider",
+          // }}
           >
             <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-              {isFetching ? (
+              {isLoading ? (
                 <Box display="flex" justifyContent="center" alignItems="center" minHeight="360px">
                   <LoadingSpinner />
                 </Box>
               ) : (
                 <>
                   {/* Section header */}
-                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                    <Box display="flex" alignItems="center" gap={1}>
+                  <Box display="flex" justifyContent="flex-end" alignItems="center" mb={2}>
+                    {/* <Box display="flex" alignItems="center" gap={1}>
                       {tabValue === 1 && <StarIcon fontSize="small" sx={{ color: "warning.main" }} />}
                       {tabValue >= 2 && <LocalOfferIcon fontSize="small" sx={{ color: "text.secondary" }} />}
                       <Typography variant="h6" fontWeight={600}>
@@ -444,32 +367,35 @@ export const AgentHub = () => {
                           ({filteredAgents.length})
                         </Typography>
                       </Typography>
-                    </Box>
+                    </Box> */}
 
                     <Box sx={{ display: "flex", gap: 1 }}>
-                      <ActionButton icon={<SearchIcon />}>{t("agentHub.search")}</ActionButton>
-                      <ActionButton icon={<FilterListIcon />}>{t("agentHub.filter")}</ActionButton>
-                      <ActionButton
-                        icon={<RefreshIcon />}
+                      {/* <ActionButton icon={<SearchIcon />}>{t("agentHub.search")}</ActionButton> */}
+                      {/* <ActionButton icon={<FilterListIcon />}>{t("agentHub.filter")}</ActionButton> */}
+                      <Button
+                        variant="outlined"
+                        startIcon={<RefreshIcon />}
                         onClick={canEditAgents ? handleRestore : undefined}
                         disabled={!canEditAgents || isRestoring}
                       >
                         {t("agentHub.restoreButton")}
-                      </ActionButton>
-                      <ActionButton
-                        icon={<AddIcon />}
-                        onClick={canCreateAgents ? handleOpenCreateAgent : undefined}
-                        disabled={!canCreateAgents}
-                      >
-                        {t("agentHub.create")}
-                      </ActionButton>
-                      <ActionButton
-                        icon={<CloudQueueIcon />}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        startIcon={<CloudQueueIcon />}
                         onClick={canCreateAgents ? handleOpenRegisterA2AAgent : undefined}
                         disabled={!canCreateAgents}
                       >
                         {t("agentHub.registerA2A")}
-                      </ActionButton>
+                      </Button>
+                      <Button
+                        variant="contained"
+                        startIcon={<AddIcon />}
+                        onClick={canCreateAgents ? handleOpenCreateAgent : undefined}
+                        disabled={!canCreateAgents}
+                      >
+                        {t("agentHub.create")}
+                      </Button>
                     </Box>
                   </Box>
 
@@ -487,7 +413,6 @@ export const AgentHub = () => {
                                 onEdit={canEditAgents ? handleEdit : undefined}
                                 onToggleEnabled={canEditAgents ? handleToggleEnabled : undefined}
                                 onManageCrew={canEditAgents && isLeader(agent) ? handleManageCrew : undefined}
-                                onDelete={canDeleteAgents ? handleDeleteAgent : undefined}
                                 onManageAssets={canEditAgents ? handleManageAssets : undefined}
                                 onInspectCode={handleInspectCode}
                                 onViewA2ACard={handleViewA2ACard}
@@ -548,10 +473,16 @@ export const AgentHub = () => {
                 </>
               )}
             </CardContent>
-          </Card>
+          </Box>
         </Fade>
         {/* Drawers / Modals */}
-        <AgentEditDrawer open={editOpen} agent={selected} onClose={() => setEditOpen(false)} onSaved={fetchAgents} />
+        <AgentEditDrawer
+          open={editOpen}
+          agent={selected}
+          onClose={() => setEditOpen(false)}
+          onSaved={fetchAgents}
+          onDeleted={fetchAgents}
+        />
         <CrewEditor
           open={crewOpen}
           leader={selected && isLeader(selected) ? (selected as Leader & { type: "leader" }) : null}

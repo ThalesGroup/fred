@@ -117,25 +117,6 @@ export const AgentChipWithIcon = ({ agent, disableTitles = false, sx }: AgentChi
         >
           {agent.name}
         </Typography>
-
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          sx={{
-            minWidth: 0,
-            maxWidth: ROLE_MAX_W,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            lineHeight: 1.1,
-            textTransform: "none",
-            textAlign: "center",
-            fontSize: "12.5px",
-          }}
-          title={disableTitles ? undefined : agent.tuning.role}
-        >
-          {agent.tuning.role}
-        </Typography>
       </Box>
     </Box>
   );

@@ -57,7 +57,7 @@ const createSimpleAgentSchema = (t: (key: string, options?: any) => string) =>
               return false;
             }
           },
-          { message: t("common.invalidUrl") }
+          { message: t("common.invalidUrl") },
         ),
     ]),
     a2a_token: z.string().optional(),
@@ -150,6 +150,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                 control={control}
                 render={({ field: f }) => (
                   <TextField
+                    autoFocus
                     {...f}
                     fullWidth
                     size="small"
