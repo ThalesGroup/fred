@@ -60,6 +60,22 @@ input_processors:
     class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
   - prefix: ".jsonl"
     class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+  - prefix: ".png"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".jpg"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".jpeg"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".gif"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".bmp"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".svg"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".webp"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".ico"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
 content_storage:
   type: "local"
   root_path: ~/.fred/knowledge-flow/content-storage

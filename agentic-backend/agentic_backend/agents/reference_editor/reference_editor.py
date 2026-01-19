@@ -103,6 +103,12 @@ Ton objectif est d'extraire des informations depuis des documents (via recherche
 - En cas de doute : effectue une recherche supplémentaire
 - JAMAIS d'invention ou d'approximation
 
+## Gestion des images de technologies
+- Pour le champ "listeTechnologies", le système peut automatiquement remplacer les noms de technologies par leurs logos/images
+- Si l'utilisateur a uploadé des images de logos (par exemple "Apple.png", "Nvidia.jpg"), ces images seront automatiquement insérées dans le document
+- Tu dois simplement lister les noms des technologies séparés par des virgules (exemple: "Nvidia, Apple, AWS")
+- Le système cherchera automatiquement les images correspondantes et les placera dans le template
+
 ## Respect des contraintes de longueur
 - Le schéma JSON définit des maxLength pour certains champs (300 caractères max pour descriptions, 50 pour noms)
 - Si une information extraite dépasse la limite : résume intelligemment en gardant l'essentiel
@@ -326,7 +332,15 @@ class ReferenceEditor(AgentFlow):
                 output_path = Path(out.name)
                 # Extract the actual data from the wrapper
                 actual_data = data.get("data", data)
-                fill_slide_from_structured_response(template_path, actual_data, output_path)
+                # Create clients for image search
+                from agentic_backend.common.vector_search_client import VectorSearchClient
+                from agentic_backend.common.kf_base_client import KfBaseClient
+                vector_search_client = VectorSearchClient()
+                kf_base_client = KfBaseClient(
+                    allowed_methods=frozenset({"GET", "POST"}),
+                    agent=self
+                )
+                fill_slide_from_structured_response(template_path, actual_data, output_path, vector_search_client, kf_base_client)
 
             # 3. Upload the generated asset to user storage
             import uuid
@@ -421,7 +435,15 @@ class ReferenceEditor(AgentFlow):
                 output_path = Path(out.name)
                 # Extract the actual data from the wrapper
                 actual_data = data.get("data", data)
-                fill_word_from_structured_response(template_path, actual_data, output_path)
+                # Create clients for image search
+                from agentic_backend.common.vector_search_client import VectorSearchClient
+                from agentic_backend.common.kf_base_client import KfBaseClient
+                vector_search_client = VectorSearchClient()
+                kf_base_client = KfBaseClient(
+                    allowed_methods=frozenset({"GET", "POST"}),
+                    agent=self
+                )
+                fill_word_from_structured_response(template_path, actual_data, output_path, vector_search_client, kf_base_client)
 
             # 3. Upload the generated asset to user storage
             import uuid

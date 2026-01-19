@@ -122,6 +122,15 @@ EXTENSION_CATEGORY = {
     ".xlsm": "tabular",
     ".duckdb": "duckdb",
     ".jsonl": "markdown",
+    # Image extensions - processed as markdown with metadata
+    ".png": "markdown",
+    ".jpg": "markdown",
+    ".jpeg": "markdown",
+    ".gif": "markdown",
+    ".bmp": "markdown",
+    ".svg": "markdown",
+    ".webp": "markdown",
+    ".ico": "markdown",
 }
 
 logger = logging.getLogger(__name__)
