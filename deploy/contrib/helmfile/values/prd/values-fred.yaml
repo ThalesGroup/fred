@@ -182,21 +182,6 @@ applications:
             - "prism-ui-prd.six.cloud.thales"
           secretName: "tls-dc2-wd1-six-prd-kns-pri"
 
-    # Increase probes delay
-    probes:
-      livenessProbe:
-        data:
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 10
-      readinessProbe:
-        data:
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 10
-
     # Disable service acount
     serviceAccount: *disable-service-account
 
@@ -321,3 +306,18 @@ applications:
       filesystem:
         <<: *content-storage
         bucket_name: filesystem
+      
+    # Increase probes delay (todo: remove)
+    probes:
+      livenessProbe:
+        data:
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 600
+          failureThreshold: 20
+      readinessProbe:
+        data:
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 600
+          failureThreshold: 20
