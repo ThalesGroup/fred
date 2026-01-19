@@ -18,6 +18,9 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
+  metrics_enabled: true
+  metrics_address: "0.0.0.0"
+  metrics_port: 9000
 
 security:
   m2m:
@@ -160,6 +163,11 @@ ai:
       type: "agent"
       class_path: "agentic_backend.agents.coach_dg.coach_dg.CoachDG"
       enabled: false
+    - name: "LogGenius"
+      type: "agent"
+      class_path: "agentic_backend.agents.log_genius.log_genius_expert.LogGenius"
+      enabled: true
+
 mcp:
   servers:
     - id: "mcp-knowledge-flow-mcp-text"

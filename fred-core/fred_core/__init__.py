@@ -55,11 +55,13 @@ from fred_core.kpi.kpi_writer_structures import (
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
+from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
 from fred_core.logs.base_log_store import BaseLogStore
 from fred_core.logs.log_setup import StoreEmitHandler, log_setup
 from fred_core.logs.log_structures import (
     InMemoryLogStorageConfig,
     LogEventDTO,
+    LogFilter,
     LogQuery,
     LogQueryResult,
     LogStorageConfig,
@@ -128,6 +130,7 @@ from fred_core.store.vector_search import VectorSearchHit
 __all__ = [
     "BaseLogStore",
     "LogEventDTO",
+    "LogFilter",
     "LogQuery",
     "LogQueryResult",
     "OpenSearchLogStore",
@@ -175,6 +178,7 @@ __all__ = [
     "ClientCredentialsProvider",
     "BearerAuth",
     "OpenSearchKPIStore",
+    "PrometheusKPIStore",
     "KPIEvent",
     "Metric",
     "MetricType",

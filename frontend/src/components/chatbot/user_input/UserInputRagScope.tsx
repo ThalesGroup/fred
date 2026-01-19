@@ -15,10 +15,12 @@
 import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
 import PublicOutlinedIcon from "@mui/icons-material/PublicOutlined";
 import SyncAltOutlinedIcon from "@mui/icons-material/SyncAltOutlined";
-import { ToggleButton, ToggleButtonGroup, Tooltip } from "@mui/material";
+import { Box, Divider, ToggleButton, ToggleButtonGroup, Tooltip, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
-import { SearchRagScope } from "./types.ts";
+import type { RuntimeContext } from "../../../slices/agentic/agenticOpenApi.ts";
+
+type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
 
 type Props = {
   value: SearchRagScope;
@@ -33,6 +35,7 @@ type Props = {
  * - general_only
  */
 export function UserInputRagScope({ value, onChange, disabled }: Props) {
+  const theme = useTheme();
   const { t } = useTranslation();
 
   const labels: Record<SearchRagScope, string> = {
@@ -47,8 +50,31 @@ export function UserInputRagScope({ value, onChange, disabled }: Props) {
     general_only: t("chatbot.ragScope.tooltipGeneral"),
   };
 
+  const renderTooltipContent = (scope: SearchRagScope) => (
+    <Box sx={{ maxWidth: 360 }}>
+      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.75 }}>
+        {labels[scope]}
+      </Typography>
+      <Divider sx={{ opacity: 0.5, mb: 0.75 }} />
+      <Box sx={{ pl: 1.25, borderLeft: `2px solid ${theme.palette.divider}` }}>
+        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
+          {tooltipByValue[scope]}
+        </Typography>
+      </Box>
+    </Box>
+  );
+
   const renderButton = (scope: SearchRagScope, icon: JSX.Element) => (
-    <Tooltip key={scope} title={tooltipByValue[scope]}>
+    <Tooltip
+      key={scope}
+      title={renderTooltipContent(scope)}
+      placement="right"
+      arrow
+      componentsProps={{
+        tooltip: { sx: { boxShadow: "none" } },
+        arrow: { sx: { color: "background.paper" } },
+      }}
+    >
       <ToggleButton value={scope} aria-label={labels[scope]}>
         {icon}
       </ToggleButton>

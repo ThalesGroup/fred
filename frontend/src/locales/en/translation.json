@@ -474,6 +474,19 @@
       "tooltipDescription": "Delegates retrieval to a specialized agent for deeper search across your knowledge.\n\nActivating this feature will result in slower but more thorough replies. A downloadable transcript of the search process will be attached to the conversation.",
       "tooltipDisabled": "This agent does not support deep search delegation."
     },
+    "logGenius": {
+      "label": "Log Genius",
+      "tooltip": "Analyze recent logs for quick diagnosis",
+      "tooltipDescription": "Analyze recent logs and summarize likely issues with next steps.",
+      "description": "Runs a short investigation over the last few minutes of logs and returns a ready-to-use diagnosis.",
+      "action": "Ask for assistance or analysis",
+      "prompt": "Analyze the last 5 minutes of logs and summarize likely issues with next steps."
+    },
+    "searchOptions": "Search options",
+    "searchOptionsTooltip": {
+      "description": "Tune how retrieval works for this conversation (RAG scope and search policy).\n\nThese settings are saved per conversation and applied only when the agent supports retrieval.",
+      "disabled": "This agent does not support search options."
+    },
     "menu": {
       "addToSetup": "Add to conversation setup"
     },
@@ -485,7 +498,7 @@
       "betaNotice": "File attachments are in beta. Supported formats: PDF, DOCX, CSV. Please provide feedback to help us improve this feature.",
       "supportedFormats": "Supported files: PDF, DOCX, CSV",
       "count": "{{count}} attached",
-      "drawerTitle": "Manage Attachments",
+      "drawerTitle": "Attachments",
       "noAttachments": "No attachments yet",
       "tooltip": {
         "description": "Files attached to this conversation.\nThe files are processed by faster but less precise algorithms. The agent may use these files to answer.\n\nNote that this feature is in beta and may not work perfectly for all file types. For persistent corpora, consider using document libraries.",
@@ -534,7 +547,13 @@
     "chatContext": "Chat context",
     "chatContextTooltip": {
       "description": "Select reusable context snippets included with every message in this conversation.\n\nThese prompt instructions is automatically included in the agents system prompt and thus works with all agents.\n\nNote that each agent also expose its internal prompt tuning options in the agent settings. Those are agent-specific and not shared across agents. Using the chat context allows to adapt agents global behavior to your needs."
-    }
+    },
+    "chatContextPreviewTitle": "Chat context preview"
+  },
+  "conversationChatContext": {
+    "add": "Add chat context",
+    "empty": "No chat contexts selected",
+    "open": "Open chat context"
   },
   "kpis": {
     "title": "Agent & AI Service Monitoring",
@@ -923,9 +942,9 @@
     "strict": "Strict",
     "hybrid": "Hybrid",
     "semantic": "Semantic",
-    "strictDescription": "Only use documents that are explicitly relevant to the query.",
-    "hybridDescription": "Combine relevant documents with semantic search results.",
-    "semanticDescription": "Use semantic search to find related documents."
+    "strictDescription": "Strict search prioritizes precision over coverage. It applies tighter constraints (e.g., stronger keyword/metadata matching and/or higher similarity thresholds) so only highly confident results are retrieved. Use this when you want to avoid ‘maybe relevant’ documents, or when your corpus is large and you prefer fewer, more exact sources. If nothing matches strongly, results may be sparse.",
+    "hybridDescription": "Hybrid search combines keyword matching (exact terms, names, IDs) with semantic similarity. It is the best option when your question contains specific terminology (component names, error codes, APIs) but also benefits from conceptual matching. Hybrid typically improves recall while keeping precision high, at the cost of slightly more computation.",
+    "semanticDescription": "Semantic search uses embeddings to retrieve passages that are conceptually similar to your question, even if they don’t share the same words. This usually finds the most relevant context for broad or exploratory questions, but it can sometimes include loosely related results when your query is very short or ambiguous."
   },
   "sourceDetails": {
     "bestScore": "best {{score}}%",

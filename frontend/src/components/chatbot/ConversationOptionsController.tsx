@@ -1,0 +1,777 @@
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import { Box, IconButton, Tooltip } from "@mui/material";
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import { useTranslation } from "react-i18next";
+import type { AnyAgent } from "../../common/agent.ts";
+import ChatDocumentLibrariesWidget from "../../features/libraries/components/ChatDocumentLibrariesWidget.tsx";
+import { useInitialChatInputContext, type InitialChatPrefs } from "../../hooks/useInitialChatInputContext.ts";
+import type { RuntimeContext } from "../../slices/agentic/agenticOpenApi.ts";
+import {
+  useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
+  useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation,
+} from "../../slices/agentic/agenticOpenApi.ts";
+import type { Resource, SearchPolicyName, TagWithItemsId } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import ChatAttachmentsWidget from "./ChatAttachmentsWidget.tsx";
+import ChatContextWidget from "./ChatContextWidget.tsx";
+import ChatLogGeniusWidget from "./ChatLogGeniusWidget.tsx";
+import ChatKnowledge from "./ChatKnowledge.tsx";
+import ChatSearchOptionsWidget from "./ChatSearchOptionsWidget.tsx";
+
+type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
+
+export type ConversationPrefs = InitialChatPrefs & {
+  chatContextIds: string[];
+};
+
+type PrefsLoadState = "idle" | "loading" | "hydrated";
+
+type PersistedCtx = {
+  chatContextIds?: string[];
+  documentLibraryIds?: string[];
+  promptResourceIds?: string[];
+  templateResourceIds?: string[];
+  searchPolicy?: SearchPolicyName;
+  searchRagScope?: SearchRagScope;
+  deepSearch?: boolean;
+  ragKnowledgeScope?: SearchRagScope;
+  skipRagSearch?: boolean;
+  agent_name?: string;
+};
+
+const serializePrefs = (p: PersistedCtx) =>
+  JSON.stringify(Object.fromEntries(Object.entries(p).sort(([a], [b]) => a.localeCompare(b))));
+
+const asStringArray = (v: unknown, fallback: string[] = []): string[] => {
+  if (!Array.isArray(v)) return fallback;
+  return v.filter((x): x is string => typeof x === "string" && x.length > 0);
+};
+
+type ControllerArgs = {
+  chatSessionId?: string;
+  prefsTargetSessionId?: string;
+  agents: AnyAgent[];
+};
+
+export type ConversationOptionsState = {
+  conversationPrefs: ConversationPrefs;
+  currentAgent: AnyAgent;
+  supportsRagScopeSelection: boolean;
+  supportsSearchPolicySelection: boolean;
+  supportsDeepSearchSelection: boolean;
+  supportsAttachments: boolean;
+  supportsLibrariesSelection: boolean;
+  isHydratingSession: boolean;
+  isSessionPrefsReady: boolean;
+  prefsTargetSessionId?: string;
+  prefsLoadState: PrefsLoadState;
+  sessionPrefs?: PersistedCtx;
+  isPrefsFetching: boolean;
+  isPrefsError: boolean;
+  prefsError: unknown;
+  defaultRagScope: SearchRagScope;
+  displayChatContextIds: string[];
+  displayDocumentLibraryIds: string[];
+  chatContextWidgetOpenDisplay: boolean;
+  attachmentsWidgetOpenDisplay: boolean;
+  searchOptionsWidgetOpenDisplay: boolean;
+  librariesWidgetOpenDisplay: boolean;
+  logGeniusWidgetOpenDisplay: boolean;
+  widgetsOpen: boolean;
+  layout: {
+    chatWidgetRail: string;
+    chatWidgetGap: string;
+    chatContentRightPadding: string;
+    chatContentWidth: string;
+    chatContentLeftPadding: number;
+  };
+  userInputContext: {
+    documentLibraryIds: string[];
+    promptResourceIds: string[];
+    templateResourceIds: string[];
+  };
+  hasContext: boolean;
+  contextOpen: boolean;
+};
+
+export type ConversationOptionsActions = {
+  setSearchPolicy: (next: SetStateAction<SearchPolicyName>) => void;
+  setSearchRagScope: (next: SearchRagScope) => void;
+  setDeepSearchEnabled: (next: boolean) => void;
+  setChatContextIds: (ids: string[]) => void;
+  setDocumentLibraryIds: (ids: string[]) => void;
+  selectAgent: (agent: AnyAgent) => Promise<void>;
+  seedSessionPrefs: (chatSessionId: string, agentName?: string) => Promise<unknown>;
+  setChatContextWidgetOpen: (open: boolean) => void;
+  setAttachmentsWidgetOpen: (open: boolean) => void;
+  setSearchOptionsWidgetOpen: (open: boolean) => void;
+  setLibrariesWidgetOpen: (open: boolean) => void;
+  setLogGeniusWidgetOpen: (open: boolean) => void;
+  setContextOpen: (open: boolean) => void;
+};
+
+export type ConversationOptionsController = {
+  state: ConversationOptionsState;
+  actions: ConversationOptionsActions;
+};
+
+export function useConversationOptionsController({
+  chatSessionId,
+  prefsTargetSessionId,
+  agents,
+}: ControllerArgs): ConversationOptionsController {
+  const defaultAgent = useMemo(() => agents[0] ?? null, [agents]);
+  const [currentAgent, setCurrentAgent] = useState<AnyAgent>(agents[0] ?? ({} as AnyAgent));
+
+  useEffect(() => {
+    if (defaultAgent && (!currentAgent || !currentAgent.name)) setCurrentAgent(defaultAgent);
+  }, [currentAgent, defaultAgent]);
+
+  const defaultRagScope: SearchRagScope = "hybrid";
+  const { prefs: initialCtx, resetToDefaults } = useInitialChatInputContext(
+    currentAgent?.name || "default",
+    chatSessionId,
+  );
+
+  const [conversationPrefs, setConversationPrefs] = useState<ConversationPrefs>(() => ({
+    chatContextIds: [],
+    documentLibraryIds: initialCtx.documentLibraryIds,
+    promptResourceIds: initialCtx.promptResourceIds,
+    templateResourceIds: initialCtx.templateResourceIds,
+    searchPolicy: initialCtx.searchPolicy,
+    searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
+    deepSearch: initialCtx.deepSearch ?? false,
+  }));
+
+  useEffect(() => {
+    if (chatSessionId) return;
+    setConversationPrefs((prev) => ({
+      ...prev,
+      chatContextIds: [],
+      documentLibraryIds: initialCtx.documentLibraryIds,
+      promptResourceIds: initialCtx.promptResourceIds,
+      templateResourceIds: initialCtx.templateResourceIds,
+      searchPolicy: initialCtx.searchPolicy,
+      searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
+      deepSearch: initialCtx.deepSearch ?? false,
+    }));
+  }, [chatSessionId, initialCtx, defaultRagScope]);
+
+  const supportsRagScopeSelection = currentAgent?.chat_options?.search_rag_scoping === true;
+  const supportsSearchPolicySelection = currentAgent?.chat_options?.search_policy_selection === true;
+  const supportsDeepSearchSelection = currentAgent?.chat_options?.deep_search_delegate === true;
+  const supportsAttachments = currentAgent?.chat_options?.attach_files === true;
+  const supportsLibrariesSelection = currentAgent?.chat_options?.libraries_selection === true;
+
+  const [persistSessionPrefs] = useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation();
+  const {
+    currentData: sessionPrefs,
+    isFetching: isPrefsFetching,
+    isError: isPrefsError,
+    error: prefsError,
+  } = useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery(
+    { sessionId: prefsTargetSessionId || "" },
+    {
+      skip: !prefsTargetSessionId,
+      refetchOnMountOrArgChange: true,
+      refetchOnReconnect: true,
+      refetchOnFocus: true,
+    },
+  );
+
+  const [chatContextWidgetOpen, setChatContextWidgetOpen] = useState<boolean>(false);
+  const [attachmentsWidgetOpen, setAttachmentsWidgetOpen] = useState<boolean>(false);
+  const [searchOptionsWidgetOpen, setSearchOptionsWidgetOpen] = useState<boolean>(false);
+  const [librariesWidgetOpen, setLibrariesWidgetOpen] = useState<boolean>(false);
+  const [logGeniusWidgetOpen, setLogGeniusWidgetOpen] = useState<boolean>(false);
+  const [contextOpen, setContextOpen] = useState<boolean>(false);
+
+  const [prefsLoadState, setPrefsLoadState] = useState<PrefsLoadState>(() =>
+    prefsTargetSessionId ? "loading" : "idle",
+  );
+  const prevPrefsTargetSessionIdRef = useRef<string | undefined>(undefined);
+  const lastSentJson = useRef<string>("");
+  const seededSessionRef = useRef<{ sessionId: string; prefs: PersistedCtx } | null>(null);
+  const isSessionPrefsReady = prefsLoadState === "hydrated";
+
+  const buildPersistedPrefs = useCallback(
+    (prefs: ConversationPrefs, agentName?: string) => ({
+      chatContextIds: prefs.chatContextIds,
+      documentLibraryIds: prefs.documentLibraryIds,
+      promptResourceIds: prefs.promptResourceIds,
+      templateResourceIds: prefs.templateResourceIds,
+      searchPolicy: prefs.searchPolicy,
+      searchRagScope: supportsRagScopeSelection ? prefs.searchRagScope : undefined,
+      deepSearch: supportsDeepSearchSelection ? prefs.deepSearch : undefined,
+      agent_name: agentName ?? currentAgent?.name ?? defaultAgent?.name,
+    }),
+    [supportsRagScopeSelection, supportsDeepSearchSelection, currentAgent?.name, defaultAgent?.name],
+  );
+
+  const savePrefs = useCallback(
+    (nextPrefs: ConversationPrefs, agentName?: string, opts: { force?: boolean } = {}) => {
+      if (!prefsTargetSessionId || prefsLoadState !== "hydrated") {
+        console.info("[PREFS] skip persist (prefs not hydrated)", {
+          sessionId: prefsTargetSessionId ?? null,
+          prefsLoadState,
+        });
+        return;
+      }
+      const prefs = buildPersistedPrefs(nextPrefs, agentName);
+      const serialized = serializePrefs(prefs);
+      if (!opts.force && serialized === lastSentJson.current) return;
+      lastSentJson.current = serialized;
+      console.log("[PREFS] persisting to backend", { session: prefsTargetSessionId, prefs });
+      persistSessionPrefs({
+        sessionId: prefsTargetSessionId,
+        sessionPreferencesPayload: { preferences: prefs },
+      })
+        .unwrap()
+        .then(() => {
+          console.log("[PREFS] persisted", { session: prefsTargetSessionId });
+        })
+        .catch((err) => {
+          console.warn("[PREFS] persist failed", err);
+        });
+    },
+    [prefsTargetSessionId, prefsLoadState, buildPersistedPrefs, persistSessionPrefs],
+  );
+  useEffect(() => {
+    // Persist only when session prefs are hydrated (your existing rule)
+    if (!prefsTargetSessionId || prefsLoadState !== "hydrated") return;
+
+    // Persist current prefs (agent_name derived from currentAgent)
+    savePrefs(conversationPrefs, currentAgent?.name);
+  }, [conversationPrefs, currentAgent?.name, prefsTargetSessionId, prefsLoadState, savePrefs]);
+
+  const seedSessionPrefs = useCallback(
+    async (chatSessionIdToSeed: string, agentName?: string) => {
+      const prefs = buildPersistedPrefs(conversationPrefs, agentName);
+      console.log("[PREFS] seeding new session", { chatSessionId: chatSessionIdToSeed, prefs });
+      const result = await persistSessionPrefs({
+        sessionId: chatSessionIdToSeed,
+        sessionPreferencesPayload: { preferences: prefs },
+      }).unwrap();
+      seededSessionRef.current = { sessionId: chatSessionIdToSeed, prefs };
+      lastSentJson.current = serializePrefs(prefs);
+      return result;
+    },
+    [buildPersistedPrefs, conversationPrefs, persistSessionPrefs],
+  );
+
+  const updatePrefs = useCallback((updater: (prev: ConversationPrefs) => ConversationPrefs) => {
+    setConversationPrefs((prev) => updater(prev));
+  }, []);
+
+  const setSearchPolicy = useCallback(
+    (next: SetStateAction<SearchPolicyName>) => {
+      updatePrefs((prev) => ({
+        ...prev,
+        searchPolicy: typeof next === "function" ? next(prev.searchPolicy) : next,
+      }));
+    },
+    [updatePrefs],
+  );
+
+  const setSearchRagScope = useCallback(
+    (next: SearchRagScope) => {
+      updatePrefs((prev) => ({
+        ...prev,
+        searchRagScope: next,
+      }));
+    },
+    [updatePrefs],
+  );
+
+  const setDeepSearchEnabled = useCallback(
+    (next: boolean) => {
+      updatePrefs((prev) => ({
+        ...prev,
+        deepSearch: next,
+      }));
+    },
+    [updatePrefs],
+  );
+
+  const setChatContextIds = useCallback(
+    (ids: string[]) => {
+      const uniqueIds = Array.from(new Set(ids));
+      console.info("[PREFS][UI] chat contexts change", { sessionId: prefsTargetSessionId ?? null, ids: uniqueIds });
+      updatePrefs((prev) => ({
+        ...prev,
+        chatContextIds: uniqueIds,
+      }));
+    },
+    [updatePrefs, prefsTargetSessionId],
+  );
+
+  const setDocumentLibraryIds = useCallback(
+    (ids: string[]) => {
+      const uniqueIds = Array.from(new Set(ids));
+      console.info("[PREFS][UI] libraries change", { sessionId: prefsTargetSessionId ?? null, ids: uniqueIds });
+      updatePrefs((prev) => ({
+        ...prev,
+        documentLibraryIds: uniqueIds,
+      }));
+    },
+    [updatePrefs, prefsTargetSessionId],
+  );
+
+  const selectAgent = useCallback(
+    async (agent: AnyAgent) => {
+      setCurrentAgent(agent);
+      if (!prefsTargetSessionId || prefsLoadState !== "hydrated") {
+        console.info("[PREFS][AGENT] skip (prefs not hydrated)", {
+          sessionId: prefsTargetSessionId ?? null,
+          prefsLoadState,
+          agent: agent.name,
+        });
+        return;
+      }
+      const prefs = buildPersistedPrefs(conversationPrefs, agent.name);
+      console.info("[PREFS][AGENT] saving", { sessionId: prefsTargetSessionId, agent: agent.name });
+      try {
+        await persistSessionPrefs({
+          sessionId: prefsTargetSessionId,
+          sessionPreferencesPayload: { preferences: prefs },
+        }).unwrap();
+        lastSentJson.current = serializePrefs(prefs);
+        console.info("[PREFS][AGENT] saved", { sessionId: prefsTargetSessionId, agent: agent.name });
+      } catch (err) {
+        console.warn("[PREFS][AGENT] save failed", { sessionId: prefsTargetSessionId, agent: agent.name, error: err });
+      }
+    },
+    [prefsTargetSessionId, prefsLoadState, buildPersistedPrefs, conversationPrefs, persistSessionPrefs],
+  );
+
+  // Prefs lifecycle:
+  // - idle: no target session -> defaults
+  // - loading: target session set, waiting for prefs -> reset UI
+  // - hydrated: prefs applied for current session -> allow persistence
+  useEffect(() => {
+    const currentId = prefsTargetSessionId;
+    const prevId = prevPrefsTargetSessionIdRef.current;
+    prevPrefsTargetSessionIdRef.current = currentId;
+
+    if (!currentId) {
+      if (prefsLoadState !== "idle") {
+        console.info("[PREFS][STATE] idle (no session)");
+      }
+      setPrefsLoadState("idle");
+      lastSentJson.current = "";
+      resetToDefaults();
+      setContextOpen(false);
+      setChatContextWidgetOpen(false);
+      setAttachmentsWidgetOpen(false);
+      setLibrariesWidgetOpen(false);
+      setSearchOptionsWidgetOpen(false);
+      setConversationPrefs((prev) => ({
+        ...prev,
+        chatContextIds: [],
+        documentLibraryIds: initialCtx.documentLibraryIds,
+        promptResourceIds: initialCtx.promptResourceIds,
+        templateResourceIds: initialCtx.templateResourceIds,
+        searchPolicy: initialCtx.searchPolicy,
+        searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
+        deepSearch: initialCtx.deepSearch ?? false,
+      }));
+      return;
+    }
+
+    if (!prevId || currentId !== prevId) {
+      const seeded = seededSessionRef.current;
+      if (seeded && seeded.sessionId === currentId) {
+        const desiredAgentName =
+          typeof seeded.prefs.agent_name === "string" && seeded.prefs.agent_name.length
+            ? seeded.prefs.agent_name
+            : undefined;
+        if (desiredAgentName) {
+          const foundAgent = agents.find((a) => a.name === desiredAgentName);
+          if (foundAgent && foundAgent.name !== currentAgent?.name) setCurrentAgent(foundAgent);
+        }
+        lastSentJson.current = serializePrefs(seeded.prefs);
+        seededSessionRef.current = null;
+        setPrefsLoadState("hydrated");
+        console.info("[PREFS][STATE] hydrated (seeded)", { sessionId: currentId, agent: desiredAgentName ?? null });
+        return;
+      }
+      console.info("[PREFS][STATE] loading (session switch)", { prevId: prevId ?? null, currentId });
+      if (prefsLoadState !== "loading") setPrefsLoadState("loading");
+      lastSentJson.current = "";
+      setContextOpen(false);
+      setChatContextWidgetOpen(false);
+      setAttachmentsWidgetOpen(false);
+      setLibrariesWidgetOpen(false);
+      setSearchOptionsWidgetOpen(false);
+      setConversationPrefs({
+        chatContextIds: [],
+        documentLibraryIds: [],
+        promptResourceIds: [],
+        templateResourceIds: [],
+        searchPolicy: initialCtx.searchPolicy,
+        searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
+        deepSearch: initialCtx.deepSearch ?? false,
+      });
+      return;
+    }
+
+    if (prefsLoadState === "loading" && sessionPrefs) {
+      const p = (sessionPrefs as PersistedCtx) || {};
+      const nextChatContextIds = asStringArray(p.chatContextIds, []);
+      const nextLibs = asStringArray(p.documentLibraryIds, []);
+      const nextPrompts = asStringArray(p.promptResourceIds, []);
+      const nextTemplates = asStringArray(p.templateResourceIds, []);
+      const nextSearchPolicy = p.searchPolicy ?? initialCtx.searchPolicy;
+      const nextRagScope = p.searchRagScope ?? p.ragKnowledgeScope ?? initialCtx.searchRagScope ?? defaultRagScope;
+      const nextDeepSearch = p.deepSearch ?? initialCtx.deepSearch ?? false;
+
+      setConversationPrefs({
+        chatContextIds: nextChatContextIds,
+        documentLibraryIds: nextLibs,
+        promptResourceIds: nextPrompts,
+        templateResourceIds: nextTemplates,
+        searchPolicy: nextSearchPolicy,
+        searchRagScope: nextRagScope,
+        deepSearch: nextDeepSearch,
+      });
+      setChatContextWidgetOpen(false);
+      setAttachmentsWidgetOpen(false);
+      setSearchOptionsWidgetOpen(false);
+      setLibrariesWidgetOpen(false);
+
+      const desiredAgentName = typeof p.agent_name === "string" && p.agent_name.length ? p.agent_name : undefined;
+      if (desiredAgentName) {
+        const foundAgent = agents.find((a) => a.name === desiredAgentName);
+        if (foundAgent && foundAgent.name !== currentAgent?.name) setCurrentAgent(foundAgent);
+      }
+
+      lastSentJson.current = serializePrefs({
+        chatContextIds: nextChatContextIds,
+        documentLibraryIds: nextLibs,
+        promptResourceIds: nextPrompts,
+        templateResourceIds: nextTemplates,
+        searchPolicy: nextSearchPolicy,
+        searchRagScope: nextRagScope,
+        deepSearch: nextDeepSearch,
+        agent_name: desiredAgentName,
+      });
+      setPrefsLoadState("hydrated");
+      console.info("[PREFS][STATE] hydrated", {
+        sessionId: currentId,
+        agent: desiredAgentName ?? null,
+        chatContextCount: nextChatContextIds.length,
+        libraryCount: nextLibs.length,
+        searchPolicy: nextSearchPolicy,
+        searchRagScope: nextRagScope,
+        deepSearch: nextDeepSearch,
+      });
+    }
+  }, [
+    prefsTargetSessionId,
+    prefsLoadState,
+    sessionPrefs,
+    initialCtx,
+    defaultRagScope,
+    resetToDefaults,
+    agents,
+    currentAgent?.name,
+  ]);
+
+  const isHydratingSession = prefsLoadState === "loading" && !isPrefsError;
+  const displayChatContextIds = isHydratingSession ? [] : conversationPrefs.chatContextIds;
+  const displayDocumentLibraryIds = isHydratingSession ? [] : conversationPrefs.documentLibraryIds;
+  const chatContextWidgetOpenDisplay = isHydratingSession ? false : chatContextWidgetOpen;
+  const attachmentsWidgetOpenDisplay = isHydratingSession ? false : supportsAttachments && attachmentsWidgetOpen;
+  const searchOptionsWidgetOpenDisplay = isHydratingSession
+    ? false
+    : (supportsRagScopeSelection || supportsSearchPolicySelection) && searchOptionsWidgetOpen;
+  const librariesWidgetOpenDisplay = isHydratingSession ? false : supportsLibrariesSelection && librariesWidgetOpen;
+  const logGeniusWidgetOpenDisplay = isHydratingSession ? false : logGeniusWidgetOpen;
+  const widgetsOpen =
+    chatContextWidgetOpenDisplay ||
+    librariesWidgetOpenDisplay ||
+    attachmentsWidgetOpenDisplay ||
+    searchOptionsWidgetOpenDisplay ||
+    logGeniusWidgetOpenDisplay;
+  const chatWidgetRail = widgetsOpen ? "18vw" : "0px";
+  const chatWidgetGap = "12px";
+  const chatContentRightPadding = widgetsOpen ? `calc(${chatWidgetRail} + ${chatWidgetGap})` : "0px";
+  const chatContentWidth = widgetsOpen ? "100%" : "80%";
+  const chatContentLeftPadding = 3;
+
+  const userInputContext = useMemo(
+    () => ({
+      documentLibraryIds: conversationPrefs.documentLibraryIds,
+      promptResourceIds: conversationPrefs.promptResourceIds,
+      templateResourceIds: conversationPrefs.templateResourceIds,
+    }),
+    [conversationPrefs.documentLibraryIds, conversationPrefs.promptResourceIds, conversationPrefs.templateResourceIds],
+  );
+  const hasContext =
+    conversationPrefs.documentLibraryIds.length > 0 ||
+    conversationPrefs.promptResourceIds.length > 0 ||
+    conversationPrefs.templateResourceIds.length > 0;
+
+  return {
+    state: {
+      conversationPrefs,
+      currentAgent,
+      supportsRagScopeSelection,
+      supportsSearchPolicySelection,
+      supportsDeepSearchSelection,
+      supportsAttachments,
+      supportsLibrariesSelection,
+      isHydratingSession,
+      isSessionPrefsReady,
+      prefsTargetSessionId,
+      prefsLoadState,
+      sessionPrefs: sessionPrefs as PersistedCtx | undefined,
+      isPrefsFetching,
+      isPrefsError,
+      prefsError,
+      defaultRagScope,
+      displayChatContextIds,
+      displayDocumentLibraryIds,
+      chatContextWidgetOpenDisplay,
+      attachmentsWidgetOpenDisplay,
+      searchOptionsWidgetOpenDisplay,
+      librariesWidgetOpenDisplay,
+      logGeniusWidgetOpenDisplay,
+      widgetsOpen,
+      layout: {
+        chatWidgetRail,
+        chatWidgetGap,
+        chatContentRightPadding,
+        chatContentWidth,
+        chatContentLeftPadding,
+      },
+      userInputContext,
+      hasContext,
+      contextOpen,
+    },
+    actions: {
+      setSearchPolicy,
+      setSearchRagScope,
+      setDeepSearchEnabled,
+      setChatContextIds,
+      setDocumentLibraryIds,
+      selectAgent,
+      seedSessionPrefs,
+      setChatContextWidgetOpen,
+      setAttachmentsWidgetOpen,
+      setSearchOptionsWidgetOpen,
+      setLibrariesWidgetOpen,
+      setLogGeniusWidgetOpen,
+      setContextOpen,
+    },
+  };
+}
+
+type ConversationOptionsPanelProps = {
+  controller: ConversationOptionsController;
+  attachmentSessionId?: string;
+  sessionAttachments: { id: string; name: string }[];
+  onAddAttachments: (files: File[]) => void;
+  onAttachmentsUpdated: () => void;
+  isUploadingAttachments: boolean;
+  onRequestLogGenius?: () => void;
+  libraryNameMap: Record<string, string>;
+  libraryById: Record<string, TagWithItemsId | undefined>;
+  promptNameMap: Record<string, string>;
+  templateNameMap: Record<string, string>;
+  chatContextNameMap: Record<string, string>;
+  chatContextResourceMap: Record<string, Resource | undefined>;
+};
+
+export function ConversationOptionsPanel({
+  controller,
+  attachmentSessionId,
+  sessionAttachments,
+  onAddAttachments,
+  onAttachmentsUpdated,
+  isUploadingAttachments,
+  onRequestLogGenius,
+  libraryNameMap,
+  libraryById,
+  promptNameMap,
+  templateNameMap,
+  chatContextNameMap,
+  chatContextResourceMap,
+}: ConversationOptionsPanelProps) {
+  const { t } = useTranslation();
+  const {
+    conversationPrefs,
+    displayChatContextIds,
+    displayDocumentLibraryIds,
+    chatContextWidgetOpenDisplay,
+    attachmentsWidgetOpenDisplay,
+    searchOptionsWidgetOpenDisplay,
+    librariesWidgetOpenDisplay,
+    logGeniusWidgetOpenDisplay,
+    isHydratingSession,
+    supportsLibrariesSelection,
+    supportsAttachments,
+    supportsRagScopeSelection,
+    supportsSearchPolicySelection,
+    defaultRagScope,
+    contextOpen,
+    hasContext,
+    userInputContext,
+  } = controller.state;
+  const {
+    setChatContextIds,
+    setDocumentLibraryIds,
+    setSearchPolicy,
+    setSearchRagScope,
+    setChatContextWidgetOpen,
+    setAttachmentsWidgetOpen,
+    setLibrariesWidgetOpen,
+    setSearchOptionsWidgetOpen,
+    setLogGeniusWidgetOpen,
+    setContextOpen,
+  } = controller.actions;
+
+  const canOpenSearchOptions = supportsRagScopeSelection || supportsSearchPolicySelection;
+  const showLogGenius = Boolean(onRequestLogGenius);
+  const allWidgetsOpen =
+    chatContextWidgetOpenDisplay &&
+    (!supportsLibrariesSelection || librariesWidgetOpenDisplay) &&
+    (!supportsAttachments || attachmentsWidgetOpenDisplay) &&
+    (!canOpenSearchOptions || searchOptionsWidgetOpenDisplay) &&
+    (!showLogGenius || logGeniusWidgetOpenDisplay);
+
+  const setAllWidgetsOpen = (open: boolean) => {
+    setChatContextWidgetOpen(open);
+    setLibrariesWidgetOpen(open && supportsLibrariesSelection);
+    setAttachmentsWidgetOpen(open && supportsAttachments);
+    setSearchOptionsWidgetOpen(open && canOpenSearchOptions);
+    setLogGeniusWidgetOpen(open && showLogGenius);
+  };
+
+  const openOnlyWidget = (target: "chat-context" | "libraries" | "attachments" | "search" | "log-genius") => {
+    setChatContextWidgetOpen(target === "chat-context");
+    setLibrariesWidgetOpen(target === "libraries" && supportsLibrariesSelection);
+    setAttachmentsWidgetOpen(target === "attachments" && supportsAttachments);
+    setSearchOptionsWidgetOpen(target === "search" && canOpenSearchOptions);
+    setLogGeniusWidgetOpen(target === "log-genius" && showLogGenius);
+  };
+  const toggleLabel = allWidgetsOpen
+    ? t("chatbot.options.collapseAll", "Collapse all")
+    : t("chatbot.options.expandAll", "Expand all");
+
+  return (
+    <>
+      <Box
+        sx={{
+          position: "fixed",
+          top: { xs: 8, md: 12 },
+          right: { xs: 8, md: 16 },
+          zIndex: 1200,
+          width: {
+            xs: "auto",
+            md: controller.state.widgetsOpen ? controller.state.layout.chatWidgetRail : "auto",
+          },
+          display: { xs: "none", md: "block" },
+        }}
+      >
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-end" }}>
+          <Tooltip title={toggleLabel}>
+            <span>
+              <IconButton
+                size="small"
+                onClick={() => setAllWidgetsOpen(!allWidgetsOpen)}
+                disabled={isHydratingSession}
+                aria-label={toggleLabel}
+                sx={{ alignSelf: "flex-end" }}
+              >
+                {allWidgetsOpen ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+              </IconButton>
+            </span>
+          </Tooltip>
+          <ChatContextWidget
+            selectedChatContextIds={displayChatContextIds}
+            onChangeSelectedChatContextIds={setChatContextIds}
+            nameById={chatContextNameMap}
+            resourceById={chatContextResourceMap}
+            open={chatContextWidgetOpenDisplay}
+            closeOnClickAway={false}
+            onOpen={() => openOnlyWidget("chat-context")}
+            onClose={() => setChatContextWidgetOpen(false)}
+          />
+          <ChatDocumentLibrariesWidget
+            selectedLibraryIds={displayDocumentLibraryIds}
+            onChangeSelectedLibraryIds={setDocumentLibraryIds}
+            nameById={libraryNameMap}
+            libraryById={libraryById}
+            open={librariesWidgetOpenDisplay}
+            closeOnClickAway={false}
+            disabled={!supportsLibrariesSelection}
+            onOpen={() => openOnlyWidget("libraries")}
+            onClose={() => setLibrariesWidgetOpen(false)}
+          />
+          <ChatAttachmentsWidget
+            attachments={sessionAttachments}
+            sessionId={attachmentSessionId}
+            open={attachmentsWidgetOpenDisplay}
+            closeOnClickAway={false}
+            disabled={!supportsAttachments}
+            isUploading={isUploadingAttachments}
+            onAddAttachments={onAddAttachments}
+            onAttachmentsUpdated={onAttachmentsUpdated}
+            onOpen={() => openOnlyWidget("attachments")}
+            onClose={() => setAttachmentsWidgetOpen(false)}
+          />
+          <ChatSearchOptionsWidget
+            searchPolicy={conversationPrefs.searchPolicy ?? "semantic"}
+            onSearchPolicyChange={setSearchPolicy}
+            searchRagScope={conversationPrefs.searchRagScope ?? defaultRagScope}
+            onSearchRagScopeChange={setSearchRagScope}
+            ragScopeDisabled={!supportsRagScopeSelection}
+            searchPolicyDisabled={!supportsSearchPolicySelection}
+            open={searchOptionsWidgetOpenDisplay}
+            closeOnClickAway={false}
+            disabled={!supportsRagScopeSelection && !supportsSearchPolicySelection}
+            onOpen={() => openOnlyWidget("search")}
+            onClose={() => setSearchOptionsWidgetOpen(false)}
+          />
+          {showLogGenius && (
+            <ChatLogGeniusWidget
+              open={logGeniusWidgetOpenDisplay}
+              closeOnClickAway={false}
+              disabled={isHydratingSession}
+              onRun={onRequestLogGenius}
+              onOpen={() => {
+                openOnlyWidget("log-genius");
+              }}
+              onClose={() => setLogGeniusWidgetOpen(false)}
+            />
+          )}
+        </Box>
+      </Box>
+
+      <ChatKnowledge
+        open={contextOpen}
+        hasContext={hasContext}
+        userInputContext={userInputContext}
+        onClose={() => setContextOpen(false)}
+        libraryNameMap={libraryNameMap}
+        promptNameMap={promptNameMap}
+        templateNameMap={templateNameMap}
+      />
+    </>
+  );
+}

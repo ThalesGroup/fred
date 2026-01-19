@@ -270,22 +270,6 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
                         : undefined
                       : undefined;
 
-                // Optional tiny debug to catch unexpected objects in extras/preview
-                if (
-                  (nodeRaw && typeof nodeRaw !== "string") ||
-                  (taskRaw && typeof taskRaw !== "string") ||
-                  (previewRaw && typeof previewRaw !== "string")
-                ) {
-                  // eslint-disable-next-line no-console
-                  console.warn("Trace value was non-string → stringified", {
-                    rank: message.rank,
-                    channel: message.channel,
-                    nodeType: typeof nodeRaw,
-                    taskType: typeof taskRaw,
-                    previewType: typeof previewRaw,
-                  });
-                }
-
                 return (
                   <React.Fragment key={key}>
                     <ReasoningStepBadge

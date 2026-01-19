@@ -324,6 +324,7 @@ export default function MessageCard({
                     <Box
                       sx={{
                         position: "relative",
+                        mt: showMetaChips || isCall || isResult ? 1.5 : 1,
                         ...(isCollapsed && {
                           maxHeight: collapsedMaxHeight,
                           overflow: "hidden",

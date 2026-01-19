@@ -710,6 +710,7 @@ export type RuntimeContext = {
   language?: string | null;
   session_id?: string | null;
   user_id?: string | null;
+  user_groups?: string[] | null;
   selected_document_libraries_ids?: string[] | null;
   selected_chat_context_ids?: string[] | null;
   search_policy?: string | null;
@@ -869,6 +870,10 @@ export type FrontendFlags = {
 export type Properties = {
   logoName?: string;
   logoNameDark?: string;
+  logoHeight?: string;
+  logoWidth?: string;
+  faviconName?: string | null;
+  faviconNameDark?: string | null;
   siteDisplayName?: string;
   /** Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'. */
   releaseBrand?: string | null;

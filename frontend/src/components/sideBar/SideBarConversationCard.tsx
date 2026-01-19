@@ -1,6 +1,5 @@
-import DeleteIcon from "@mui/icons-material/Delete";
 import PersonIcon from "@mui/icons-material/Person";
-import { Box, IconButton, Skeleton, Typography, useTheme } from "@mui/material";
+import { Box, Skeleton, Typography, useTheme } from "@mui/material";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -8,6 +7,7 @@ import {
   SessionWithFiles,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
 } from "../../slices/agentic/agenticOpenApi";
+import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 import { useToast } from "../ToastProvider";
 
 interface SideBarConversationCardProps {
@@ -103,7 +103,7 @@ export function SideBarConversationCard({ session, refetchSessions }: SideBarCon
         </Box>
 
         {/* Delete button */}
-        <IconButton
+        <DeleteIconButton
           className="delete-button"
           size="small"
           onClick={handleDelete}
@@ -111,9 +111,7 @@ export function SideBarConversationCard({ session, refetchSessions }: SideBarCon
             color: theme.palette.error.main,
             display: "none",
           }}
-        >
-          <DeleteIcon fontSize="small" />
-        </IconButton>
+        />
       </Box>
     </Box>
   );

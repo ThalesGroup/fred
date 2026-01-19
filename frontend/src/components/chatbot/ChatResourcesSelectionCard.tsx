@@ -159,7 +159,15 @@ export function ChatResourcesSelectionCard({
   }, [libraryType, t]);
 
   return (
-    <Box sx={{ width: 420, height: 460, display: "flex", flexDirection: "column" }}>
+    <Box
+      sx={{
+        width: "100%",
+        maxWidth: 420,
+        height: "min(70vh, 460px)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       {/* Search libraries */}
       <Box sx={{ mx: 2, mt: 2, mb: 1 }}>
         <TextField

@@ -20,7 +20,8 @@
     "uploading": "Téléchargement en cours...",
     "dropHere": "Déposez les fichiers ici ou cliquez pour parcourir",
     "loadingPreview": "Aperçu en cours de chargement...",
-    "loadingPreviewError": "Impossible de charger l'aperçu."
+    "loadingPreviewError": "Impossible de charger l'aperçu.",
+    "view": "Aperçu"
   },
   "dataHub": {
     "title": "Hub des Données - Lignage des documents",
@@ -474,6 +475,19 @@
       "tooltipDescription": "Délègue la recherche à un agent spécialisé pour explorer plus en profondeur votre corpus documentaire.\n\nL'activation de cette fonctionnalité peut ralentir les réponses mais les rendra plus complètes. Une transcription téléchargeable du processus de recherche sera jointe à la conversation.",
       "tooltipDisabled": "Cet agent ne supporte pas la délégation de recherche approfondie."
     },
+    "logGenius": {
+      "label": "Log Genius",
+      "tooltip": "Analyser les logs récents pour un diagnostic rapide",
+      "tooltipDescription": "Analysez les logs récents et résumez les problèmes probables avec des prochaines étapes.",
+      "description": "Lance une courte investigation sur les dernières minutes de logs et retourne un diagnostic prêt à l'emploi.",
+      "action": "Demander de l'aide ou une analyse",
+      "prompt": "Analysez les 5 dernières minutes de logs et résumez les problèmes probables avec des prochaines étapes."
+    },
+    "searchOptions": "Options de recherche",
+    "searchOptionsTooltip": {
+      "description": "Ajustez le fonctionnement de la recherche pour cette conversation (portée RAG et politique de recherche).\n\nCes réglages sont enregistrés par conversation et appliqués uniquement lorsque l'agent supporte la recherche.",
+      "disabled": "Cet agent ne supporte pas les options de recherche."
+    },
     "menu": {
       "addToSetup": "Ajouter à la configuration de la conversation"
     },
@@ -485,7 +499,7 @@
       "betaNotice": "Les pièces jointes sont en version bêta. Formats pris en charge : PDF, DOCX, CSV. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
       "supportedFormats": "Formats pris en charge : PDF, DOCX, CSV",
       "count": "{{count}} pièces jointes",
-      "drawerTitle": "Gérer les pièces jointes",
+      "drawerTitle": "Pièces jointes",
       "noAttachments": "Aucune pièce jointe pour le moment",
       "tooltip": {
         "description": "Fichiers attachés à cette conversation.\n\nLes fichiers sont traités par des algorithmes plus rapides mais moins précis. L'agent pourra utiliser ces fichiers pour répondre .\n\nNotez que cette fonctionnalité est en version bêta et peut ne pas fonctionner parfaitement pour tous les types de fichiers. Pour des corpus pérennes, envisagez d'utiliser des bibliothèques de documents.",
@@ -534,7 +548,13 @@
     "chatContext": "Contexte de conversation",
     "chatContextTooltip": {
       "description": "Ajoute des instructions (un « profil ») à cette conversation.\n\nCe contexte est injecté dans le prompt système des agents et s’applique donc à tous les agents.\n\nChaque agent possède aussi ses propres prompts internes, configurables, plus spécifiques à ses étapes : le contexte de conversation vient en complément de ces derniers et vous permet d’adapter le comportement de l’agent à votre besoin."
-    }
+    },
+    "chatContextPreviewTitle": "Aperçu du contexte de conversation"
+  },
+  "conversationChatContext": {
+    "add": "Ajouter un contexte",
+    "empty": "Aucun contexte sélectionné",
+    "open": "Ouvrir le contexte de chat"
   },
   "kpis": {
     "title": "Surveillance des agents et services IA",
@@ -923,9 +943,9 @@
     "strict": "Strict",
     "hybrid": "Hybride",
     "semantic": "Sémantique",
-    "strictDescription": "N'utiliser que des documents explicitement pertinents pour la requête.",
-    "hybridDescription": "Combiner des documents pertinents avec des résultats de recherche sémantique.",
-    "semanticDescription": "Utiliser la recherche sémantique pour trouver des documents connexes."
+    "strictDescription": "La recherche stricte privilégie la précision plutôt que la couverture. Elle applique des contraintes plus fortes (par exemple des correspondances lexicales ou de métadonnées plus exigeantes et/ou des seuils de similarité plus élevés), afin de ne retenir que les documents les plus clairement pertinents. Ce mode est adapté lorsque vous souhaitez éviter les résultats “approximatifs”, notamment sur de grands corpus, quitte à obtenir moins de résultats.",
+    "hybridDescription": "La recherche hybride combine la recherche par mots-clés (termes exacts, noms, identifiants) et la similarité sémantique. Elle est recommandée lorsque votre question contient des éléments précis (API, composants, codes d’erreur) tout en nécessitant une compréhension du contexte. Ce mode offre généralement un bon équilibre entre rappel et précision, au prix d’un traitement légèrement plus coûteux.",
+    "semanticDescription": "La recherche sémantique utilise des embeddings pour retrouver des documents ou passages dont le sens est proche de votre question, même s’ils n’emploient pas les mêmes mots. Elle est particulièrement efficace pour les questions ouvertes ou exploratoires, mais peut parfois inclure des résultats plus larges ou indirects lorsque la requête est courte ou ambiguë"
   },
   "sourceDetails": {
     "bestScore": "meilleur {{score}}%",

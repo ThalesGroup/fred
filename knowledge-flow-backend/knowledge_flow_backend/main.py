@@ -35,6 +35,8 @@ from fred_core import (
     log_setup,
     register_exception_handlers,
 )
+from prometheus_client import start_http_server
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.application_state import attach_app
@@ -157,6 +159,13 @@ def create_app() -> FastAPI:
         openapi_url=f"{configuration.app.base_url}/openapi.json",
         lifespan=lifespan,
     )
+
+    if configuration.app.metrics_enabled:
+        Instrumentator().instrument(app)
+        start_http_server(
+            configuration.app.metrics_port,
+            addr=configuration.app.metrics_address,
+        )
 
     # Register exception handlers
     register_exception_handlers(app)

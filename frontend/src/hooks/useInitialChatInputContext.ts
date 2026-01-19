@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState } from "react";
-import { SearchRagScope } from "../components/chatbot/user_input/types.ts";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { RuntimeContext } from "../slices/agentic/agenticOpenApi.ts";
 import { SearchPolicyName } from "../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+
+type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
 
 export type InitialChatPrefs = {
   documentLibraryIds: string[];
@@ -24,6 +26,8 @@ export type InitialChatPrefs = {
   searchRagScope?: SearchRagScope;
   deepSearch?: boolean;
 };
+
+const EMPTY_STRING_ARRAY: string[] = [];
 
 /**
  * Manages pre-session (draft) chat input defaults per user and agent.
@@ -37,13 +41,24 @@ export function useInitialChatInputContext(
   sessionId?: string,
   defaults: Partial<InitialChatPrefs> = {},
 ) {
-  const baseDefaults: InitialChatPrefs = {
-    documentLibraryIds: [],
-    promptResourceIds: [],
-    templateResourceIds: [],
-    searchPolicy: "semantic",
-    ...defaults,
-  };
+  const baseDefaults = useMemo<InitialChatPrefs>(
+    () => ({
+      documentLibraryIds: defaults.documentLibraryIds ?? EMPTY_STRING_ARRAY,
+      promptResourceIds: defaults.promptResourceIds ?? EMPTY_STRING_ARRAY,
+      templateResourceIds: defaults.templateResourceIds ?? EMPTY_STRING_ARRAY,
+      searchPolicy: defaults.searchPolicy ?? "semantic",
+      searchRagScope: defaults.searchRagScope,
+      deepSearch: defaults.deepSearch,
+    }),
+    [
+      defaults.documentLibraryIds,
+      defaults.promptResourceIds,
+      defaults.templateResourceIds,
+      defaults.searchPolicy,
+      defaults.searchRagScope,
+      defaults.deepSearch,
+    ],
+  );
 
   const [prefs, setPrefs] = useState<InitialChatPrefs>(baseDefaults);
 
@@ -52,9 +67,9 @@ export function useInitialChatInputContext(
     if (sessionId) return;
     setPrefs(baseDefaults);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agentName, sessionId]);
+  }, [agentName, sessionId, baseDefaults]);
 
-  const resetToDefaults = () => setPrefs(baseDefaults);
+  const resetToDefaults = useCallback(() => setPrefs(baseDefaults), [baseDefaults]);
 
   return { prefs, setPrefs, resetToDefaults };
 }

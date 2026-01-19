@@ -123,8 +123,14 @@ function FredUiContent() {
   const { t } = useTranslation();
   const { darkMode } = useContext(ApplicationContext);
   const siteDisplayName = frontendConfig?.frontend_settings?.properties?.siteDisplayName || "Fred";
-  const logoName = frontendConfig?.frontend_settings?.properties?.logoName || "fred";
-  const logoNameDark = frontendConfig?.frontend_settings?.properties?.logoNameDark || "fred-dark";
+  const faviconName =
+    frontendConfig?.frontend_settings?.properties?.faviconName ||
+    frontendConfig?.frontend_settings?.properties?.logoName ||
+    "fred";
+  const faviconNameDark =
+    frontendConfig?.frontend_settings?.properties?.faviconNameDark ||
+    frontendConfig?.frontend_settings?.properties?.logoNameDark ||
+    "fred-dark";
   const baseUrl = (import.meta.env.BASE_URL ?? "/").endsWith("/")
     ? (import.meta.env.BASE_URL ?? "/")
     : `${import.meta.env.BASE_URL ?? "/"}/`;
@@ -132,8 +138,8 @@ function FredUiContent() {
   useEffect(() => {
     document.title = siteDisplayName;
     const favicon = document.getElementById("favicon") as HTMLLinkElement;
-    favicon.href = `${baseUrl}images/${darkMode ? logoNameDark : logoName}.svg`;
-  }, [baseUrl, siteDisplayName, logoName, logoNameDark, darkMode]);
+    favicon.href = `${baseUrl}images/${darkMode ? faviconNameDark : faviconName}.svg`;
+  }, [baseUrl, siteDisplayName, faviconName, faviconNameDark, darkMode]);
 
   useEffect(() => {
     import("../common/router").then((mod) => {
@@ -145,8 +151,8 @@ function FredUiContent() {
     return (
       <LoadingScreen
         label={t("app.loading.router", "Fred démarre...")}
-        logoName={logoName}
-        logoNameDark={logoNameDark}
+        logoName={faviconName}
+        logoNameDark={faviconNameDark}
         alt={siteDisplayName}
       />
     );
@@ -155,9 +161,9 @@ function FredUiContent() {
     <React.Suspense
       fallback={
         <LoadingScreen
-          label={t("app.loading.ui")}
-          logoName={logoName}
-          logoNameDark={logoNameDark}
+          label={t("app.loading.ui", "L'interface Fred se prépare...")}
+          logoName={faviconName}
+          logoNameDark={faviconNameDark}
           alt={siteDisplayName}
         />
       }
