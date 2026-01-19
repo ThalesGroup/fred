@@ -315,9 +315,8 @@ class LogGenius(AgentFlow):
                 )
 
             if (
-                ("connection refused" in blob or "connection reset" in blob)
-                and "conn" not in seen
-            ):
+                "connection refused" in blob or "connection reset" in blob
+            ) and "conn" not in seen:
                 seen.add("conn")
                 hints.append(
                     f"- Downstream service connectivity issue (evidence: {_fmt_ts(e.ts)} {e.file}:{e.line} {e.msg})"
