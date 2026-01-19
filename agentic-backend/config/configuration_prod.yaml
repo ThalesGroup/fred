@@ -20,7 +20,7 @@ app:
   reload_dir: "."
   metrics_enabled: true
   metrics_address: "0.0.0.0"
-  metrics_port: 9765
+  metrics_port: 9000
 
 security:
   m2m:
