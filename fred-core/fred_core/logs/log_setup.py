@@ -30,6 +30,11 @@ except Exception:  # optional in prod images
 
 logger = logging.getLogger(__name__)
 
+LEVEL_MAP = {
+    "DETAIL": "DEBUG",
+    "TRACE": "DEBUG",
+}
+
 
 # --- JSON formatter kept tiny and portable ---
 class CompactJsonFormatter(logging.Formatter):
@@ -77,11 +82,14 @@ class StoreEmitHandler(logging.Handler):
                 print("Log record is not JSON: %s", raw)
                 pass  # formatter should be JSON, but we tolerate plain text
 
+            if payload:
+                mapped_level = LEVEL_MAP.get(payload.get("level"), record.levelname)
+            else:
+                mapped_level = record.levelname
+
             e = LogEventDTO(
                 ts=payload.get("ts", record.created) if payload else record.created,
-                level=payload.get("level", record.levelname)
-                if payload
-                else record.levelname,  # type: ignore
+                level=mapped_level,  # type: ignore
                 logger=payload.get("logger", record.name) if payload else record.name,
                 file=payload.get("file", record.filename)
                 if payload
