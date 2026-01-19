@@ -319,7 +319,7 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
         onClose={closeDetails}
         slotProps={{
           paper: {
-            sx: (t) => ({
+            sx: () => ({
               width: { xs: "100%", sm: 640 },
               display: "flex",
             }),

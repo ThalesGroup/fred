@@ -27,9 +27,7 @@ export function AgentSelector({ sx, currentAgent, agents, onSelectNewAgent }: Ag
       <Box
         sx={{
           border: `1px solid ${theme.palette.divider}`,
-          borderBottom: "0px",
-          borderTopLeftRadius: "16px",
-          borderTopRightRadius: "16px",
+          borderRadius: "16px",
           background: theme.palette.background.paper,
           paddingX: 2,
           paddingY: 0.5,

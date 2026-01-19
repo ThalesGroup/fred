@@ -28,7 +28,7 @@ import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo
 import AudioController from "../AudioController.tsx";
 import AudioRecorder from "../AudioRecorder.tsx";
 
-import { Box, Grid2, IconButton, InputBase, Stack, Tooltip, useTheme } from "@mui/material";
+import { Box, Grid2, IconButton, Paper, Stack, TextField, Tooltip, useTheme } from "@mui/material";
 
 import { useTranslation } from "react-i18next";
 import {
@@ -135,11 +135,11 @@ function UserInput(
     effectiveSessionId,
     uploadingFiles,
     onFilesSelected,
-	    attachmentsRefreshTick,
-	    serverPrefs: serverPrefsProp,
-	    refetchServerPrefs,
-	    selectedChatContextIds,
-	    onSelectedChatContextIdsChange,
+    attachmentsRefreshTick,
+    serverPrefs: serverPrefsProp,
+    refetchServerPrefs,
+    selectedChatContextIds,
+    onSelectedChatContextIdsChange,
     initialDocumentLibraryIds,
     initialPromptResourceIds,
     initialTemplateResourceIds,
@@ -379,8 +379,7 @@ function UserInput(
 
       if (onSelectedChatContextIdsChange) {
         const prev = selectedChatContextIds ?? [];
-        const same =
-          prev.length === nextChatContextIds.length && prev.every((id, i) => id === nextChatContextIds[i]);
+        const same = prev.length === nextChatContextIds.length && prev.every((id, i) => id === nextChatContextIds[i]);
         if (!same) onSelectedChatContextIdsChange(nextChatContextIds);
       }
       setSelectedDocumentLibrariesIdsState(nextLibs);
@@ -602,7 +601,7 @@ function UserInput(
           minWidth: 0,
           display: "flex",
           flexDirection: "column",
-          gap: 0,
+          gap: 1,
           pr: { xs: 0, md: attachmentsPanelOpen ? 1.5 : 0 },
         }}
       >
@@ -610,9 +609,7 @@ function UserInput(
           <Box
             sx={{
               border: `1px solid ${theme.palette.divider}`,
-              borderBottom: "0px",
-              borderTopLeftRadius: "16px",
-              borderTopRightRadius: "16px",
+              borderRadius: "16px",
               background: theme.palette.background.paper,
               paddingX: 2,
               paddingY: 0.5,
@@ -654,7 +651,11 @@ function UserInput(
               }}
             >
               {supportsRagScopeSelection && (
-                <UserInputRagScope value={searchRagScope} onChange={setRagScope} disabled={isWaiting || isHydratingSession} />
+                <UserInputRagScope
+                  value={searchRagScope}
+                  onChange={setRagScope}
+                  disabled={isWaiting || isHydratingSession}
+                />
               )}
               {!isWaiting && !isHydratingSession && (
                 <Tooltip title={t("chatbot.sendMessage", "Send message")}>
@@ -696,8 +697,6 @@ function UserInput(
             <Box
               sx={{
                 borderRadius: 4,
-                borderTopLeftRadius: 0,
-                border: `1px solid ${theme.palette.divider}`,
                 background:
                   theme.palette.mode === "light" ? theme.palette.common.white : theme.palette.background.default,
                 p: 0,
@@ -729,29 +728,28 @@ function UserInput(
                   </Tooltip>
                 </Stack>
               ) : (
-                <InputBase
-                  autoFocus
-                  fullWidth
-                  multiline
-                  maxRows={12}
-                  placeholder={t("chatbot.input.placeholder")}
-                  value={userInput}
-                  onKeyDown={handleKeyDown}
-                  onChange={(event) => setUserInput(event.target.value)}
-                  disabled={isWaiting || isHydratingSession}
-                  inputRef={inputRef}
-                  sx={{
-                    fontSize: "1rem",
-                    maxHeight: 600,
-                    overflow: "auto",
-                    "& .MuiInputBase-input, & .MuiInputBase-inputMultiline": {
-                      paddingTop: "12px",
-                      paddingBottom: "56px",
-                      paddingRight: "16px",
-                      paddingLeft: "12px",
-                    },
-                  }}
-                />
+                <Paper elevation={2} sx={{ px: 2, pt: 1.5, pb: 7 }}>
+                  <TextField
+                    hiddenLabel
+                    variant="standard"
+                    InputProps={{
+                      disableUnderline: true,
+                    }}
+                    autoFocus
+                    fullWidth
+                    multiline
+                    maxRows={12}
+                    placeholder={t("chatbot.input.placeholder")}
+                    value={userInput}
+                    onKeyDown={handleKeyDown}
+                    onChange={(event) => setUserInput(event.target.value)}
+                    disabled={isWaiting || isHydratingSession}
+                    inputRef={inputRef}
+                    sx={{
+                      fontSize: "1rem",
+                    }}
+                  />
+                </Paper>
               )}
             </Box>
           </Box>
