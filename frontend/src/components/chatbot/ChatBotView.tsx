@@ -53,6 +53,7 @@ type ChatBotViewProps = {
   currentAgent: AnyAgent;
   agents: AnyAgent[];
   messages: ChatMessage[];
+  hiddenUserExchangeIds?: Set<string>;
   layout: {
     chatWidgetRail: string;
     chatWidgetGap: string;
@@ -62,6 +63,7 @@ type ChatBotViewProps = {
   };
   onSend: (content: UserInputContent) => void;
   onStop: () => void;
+  onRequestLogGenius?: () => void;
   onSelectAgent: (agent: AnyAgent) => Promise<void> | void;
   setSearchPolicy: (next: SetStateAction<SearchPolicyName>) => void;
   setSearchRagScope: (next: SearchRagScope) => void;
@@ -92,9 +94,11 @@ const ChatBotView = ({
   currentAgent,
   agents,
   messages,
+  hiddenUserExchangeIds,
   layout,
   onSend,
   onStop,
+  onRequestLogGenius,
   onSelectAgent,
   setSearchPolicy,
   setSearchRagScope,
@@ -201,6 +205,7 @@ const ChatBotView = ({
         onAddAttachments={onAddAttachments}
         onAttachmentsUpdated={onAttachmentsUpdated}
         isUploadingAttachments={isUploadingAttachments}
+        onRequestLogGenius={onRequestLogGenius}
         libraryNameMap={libraryNameMap}
         libraryById={libraryById}
         promptNameMap={promptNameMap}
@@ -351,6 +356,7 @@ const ChatBotView = ({
                     isWaiting={waitResponse}
                     libraryNameById={libraryNameMap}
                     chatContextNameById={chatContextNameMap}
+                    hiddenUserExchangeIds={hiddenUserExchangeIds}
                   />
                   {showHistoryLoading && (
                     <Box mt={1} sx={{ display: "flex", justifyContent: "center" }}>
