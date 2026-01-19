@@ -302,6 +302,7 @@ class LogGenius(AgentFlow):
                 try:
                     blob += " " + json.dumps(e.extra).lower()
                 except Exception:
+                    logger.warning("LogGenius: failed to json.dumps log extra")
                     pass
 
             if (
