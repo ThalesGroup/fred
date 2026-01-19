@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import DescriptionIcon from "@mui/icons-material/Description";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import {
@@ -38,6 +37,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { TopBar } from "../common/TopBar";
 import { useToast } from "../components/ToastProvider";
+import { DeleteButton } from "../shared/ui/buttons/DeleteButton";
 import { useDeleteBenchRunMutation, useListBenchRunsQuery } from "../slices/knowledgeFlow/benchPersistApi";
 import {
   useListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,
@@ -141,7 +141,6 @@ export default function ProcessorBench() {
                 label={t("procbench.persistLabel")}
               />
               <Button
-                size="small"
                 startIcon={<PlayArrowIcon />}
                 variant="contained"
                 onClick={onRun}
@@ -155,10 +154,7 @@ export default function ProcessorBench() {
                   t("procbench.run")
                 )}
               </Button>
-              <Button
-                size="small"
-                startIcon={<DeleteOutlineIcon />}
-                variant="text"
+              <DeleteButton
                 onClick={() => {
                   setResp(null);
                   setFile(null);
@@ -166,7 +162,7 @@ export default function ProcessorBench() {
                 disabled={isRunning || (!file && !resp)}
               >
                 {t("procbench.clear")}
-              </Button>
+              </DeleteButton>
             </Stack>
           </CardContent>
         </Card>

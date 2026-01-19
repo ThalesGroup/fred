@@ -16,7 +16,6 @@
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CodeIcon from "@mui/icons-material/Code";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
-import DeleteIcon from "@mui/icons-material/Delete";
 import GroupIcon from "@mui/icons-material/Group"; // for crew
 import LocalOfferIcon from "@mui/icons-material/LocalOffer";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
@@ -27,6 +26,7 @@ import StarOutlineIcon from "@mui/icons-material/StarOutline";
 import TuneIcon from "@mui/icons-material/Tune";
 import { alpha, Box, Card, CardContent, Chip, IconButton, Stack, Tooltip, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
+import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 
 // OpenAPI types
 import { AnyAgent } from "../../common/agent";
@@ -333,17 +333,14 @@ export const AgentCard = ({
           )}
           {onDelete && (
             <Tooltip title={t("agentCard.delete")}>
-              <IconButton
+              <DeleteIconButton
                 size="small"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete(agent);
                 }}
-                sx={{ color: "text.secondary" }}
                 aria-label="delete agent"
-              >
-                <DeleteIcon fontSize="small" />
-              </IconButton>
+              />
             </Tooltip>
           )}
         </Stack>

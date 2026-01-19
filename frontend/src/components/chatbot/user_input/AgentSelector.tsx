@@ -110,15 +110,13 @@ export interface AgentPopoverPickerProps {
 export function AgentPopoverPicker({ currentAgent, agents, onSelectNewAgent }: AgentPopoverPickerProps) {
   return (
     <List>
-      {agents.map((agent) => {
-        return (
-          <AgentTooltip agent={agent}>
-            <ListItemButton onClick={() => onSelectNewAgent(agent)} selected={agent.name === currentAgent.name}>
-              <AgentChipWithIcon agent={agent} disableTitles />
-            </ListItemButton>
-          </AgentTooltip>
-        );
-      })}
+      {agents.map((agent) => (
+        <AgentTooltip key={agent.name} agent={agent}>
+          <ListItemButton onClick={() => onSelectNewAgent(agent)} selected={agent.name === currentAgent.name}>
+            <AgentChipWithIcon agent={agent} disableTitles />
+          </ListItemButton>
+        </AgentTooltip>
+      ))}
     </List>
   );
 }

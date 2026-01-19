@@ -6,6 +6,10 @@ export const knowledgeFlowApi = createApi({
   baseQuery: createDynamicBaseQuery({ backend: "knowledge" }),
   // todo: in future, use reverse proxy to avoid dynamic base query:
   // baseQuery: fetchBaseQuery({ baseUrl: "/" }),
+  keepUnusedDataFor: 0,
+  refetchOnMountOrArgChange: true,
+  refetchOnFocus: true,
+  refetchOnReconnect: true,
   endpoints: () => ({}),
   reducerPath: "knowledgeFlowApi",
   tagTypes: ["BenchRun"],

@@ -74,7 +74,9 @@ export function SideBarConversationsSection({ isSidebarOpen }: ConversationsSect
         elevation={0}
         sx={{ flexGrow: 1, overflowY: "auto", overflowX: "hidden", scrollbarWidth: "none", py: 1, px: 1 }}
       >
-        {isSidebarOpen && sortedSessions === undefined && [...Array(15)].map(() => <SideBarConversationCardSkeleton />)}
+        {isSidebarOpen &&
+          sortedSessions === undefined &&
+          [...Array(15)].map((_, index) => <SideBarConversationCardSkeleton key={`skeleton-${index}`} />)}
 
         {isSidebarOpen &&
           sortedSessions !== undefined &&

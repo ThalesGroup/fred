@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException, UploadFile, WebSocketDisconnect
 from fred_core import (
     Action,
     AuthorizationError,
@@ -264,6 +264,17 @@ class SessionOrchestrator:
                         callback=callback,
                         user_context=user,
                         runtime_context=runtime_context,
+                    )
+                except WebSocketDisconnect:
+                    had_cancelled = True
+                    error_code = "client_disconnect"
+                    kpi_dims["status"] = "cancelled"
+                    kpi_dims["error_code"] = error_code
+                    logger.info(
+                        "Agent execution cancelled by client disconnect (agent=%s session=%s exchange=%s)",
+                        agent_name,
+                        session.id,
+                        exchange_id,
                     )
                 except asyncio.CancelledError:
                     had_cancelled = True
