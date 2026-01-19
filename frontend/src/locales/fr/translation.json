@@ -474,6 +474,11 @@
       "tooltipDescription": "Délègue la recherche à un agent spécialisé pour explorer plus en profondeur votre corpus documentaire.\n\nL'activation de cette fonctionnalité peut ralentir les réponses mais les rendra plus complètes. Une transcription téléchargeable du processus de recherche sera jointe à la conversation.",
       "tooltipDisabled": "Cet agent ne supporte pas la délégation de recherche approfondie."
     },
+    "searchOptions": "Options de recherche",
+    "searchOptionsTooltip": {
+      "description": "Ajustez le fonctionnement de la recherche pour cette conversation (portée RAG et politique de recherche).\n\nCes réglages sont enregistrés par conversation et appliqués uniquement lorsque l'agent supporte la recherche.",
+      "disabled": "Cet agent ne supporte pas les options de recherche."
+    },
     "menu": {
       "addToSetup": "Ajouter à la configuration de la conversation"
     },

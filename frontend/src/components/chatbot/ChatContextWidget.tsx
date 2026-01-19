@@ -91,7 +91,11 @@ const ChatContextWidget = ({
         badgeCount={selectedCount}
         icon={<ForumOutlinedIcon fontSize="small" />}
         ariaLabel={t("settings.chatContext", "Chat context")}
-        tooltip={t("conversationChatContext.open", "Open chat context")}
+        tooltipLabel={t("settings.chatContext", "Chat context")}
+        tooltipDescription={t(
+          "settings.chatContextTooltip.description",
+          "Select reusable context snippets included with every message in this conversation.",
+        )}
         actionLabel={t("conversationChatContext.add", "Add chat context")}
         onAction={(event) => setPickerAnchor(event.currentTarget)}
       >

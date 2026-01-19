@@ -473,6 +473,11 @@
       "tooltipDescription": "Delegates retrieval to a specialized agent for deeper search across your knowledge.\n\nActivating this feature will result in slower but more thorough replies. A downloadable transcript of the search process will be attached to the conversation.",
       "tooltipDisabled": "This agent does not support deep search delegation."
     },
+    "searchOptions": "Search options",
+    "searchOptionsTooltip": {
+      "description": "Tune how retrieval works for this conversation (RAG scope and search policy).\n\nThese settings are saved per conversation and applied only when the agent supports retrieval.",
+      "disabled": "This agent does not support search options."
+    },
     "menu": {
       "addToSetup": "Add to conversation setup"
     },

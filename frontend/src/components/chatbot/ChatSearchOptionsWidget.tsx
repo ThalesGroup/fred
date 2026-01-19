@@ -6,11 +6,12 @@
 
 import CloseIcon from "@mui/icons-material/Close";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
-import { Box, ClickAwayListener, IconButton, Paper, Stack, Tooltip, Typography, useTheme } from "@mui/material";
+import { Box, ClickAwayListener, IconButton, Paper, Stack, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 import type { RuntimeContext } from "../../slices/agentic/agenticOpenApi.ts";
 import { SearchPolicyName } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+import { FeatureTooltip } from "./FeatureTooltip";
 import { UserInputRagScope } from "./user_input/UserInputRagScope.tsx";
 import { UserInputSearchPolicy } from "./user_input/UserInputSearchPolicy.tsx";
 
@@ -106,7 +107,18 @@ const ChatSearchOptionsWidget = ({
   return (
     <Box sx={{ position: "relative", width: isVisible ? "100%" : "auto" }}>
       {!isVisible && (
-        <Tooltip title={t("chatbot.searchOptions.open", "Open search options")}>
+        <FeatureTooltip
+          label={t("chatbot.searchOptions", "Search options")}
+          description={t(
+            "chatbot.searchOptionsTooltip.description",
+            "Adjust how the agent retrieves knowledge (RAG scope and search policy).",
+          )}
+          disabledReason={
+            disabled
+              ? t("chatbot.searchOptionsTooltip.disabled", "This agent does not support search options.")
+              : undefined
+          }
+        >
           <IconButton
             size="small"
             onClick={onOpen}
@@ -116,7 +128,7 @@ const ChatSearchOptionsWidget = ({
           >
             <TuneOutlinedIcon fontSize="small" />
           </IconButton>
-        </Tooltip>
+        </FeatureTooltip>
       )}
 
       {isVisible && closeOnClickAway && (

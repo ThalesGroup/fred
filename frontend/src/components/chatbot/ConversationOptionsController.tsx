@@ -579,6 +579,7 @@ type ConversationOptionsPanelProps = {
   sessionAttachments: { id: string; name: string }[];
   onAddAttachments: (files: File[]) => void;
   onAttachmentsUpdated: () => void;
+  isUploadingAttachments: boolean;
   libraryNameMap: Record<string, string>;
   libraryById: Record<string, TagWithItemsId | undefined>;
   promptNameMap: Record<string, string>;
@@ -593,6 +594,7 @@ export function ConversationOptionsPanel({
   sessionAttachments,
   onAddAttachments,
   onAttachmentsUpdated,
+  isUploadingAttachments,
   libraryNameMap,
   libraryById,
   promptNameMap,
@@ -711,6 +713,7 @@ export function ConversationOptionsPanel({
             open={attachmentsWidgetOpenDisplay}
             closeOnClickAway={false}
             disabled={!supportsAttachments}
+            isUploading={isUploadingAttachments}
             onAddAttachments={onAddAttachments}
             onAttachmentsUpdated={onAttachmentsUpdated}
             onOpen={() => openOnlyWidget("attachments")}

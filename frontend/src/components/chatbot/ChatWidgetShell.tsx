@@ -25,6 +25,8 @@ import {
   useTheme,
 } from "@mui/material";
 import type { MouseEvent, ReactElement, ReactNode } from "react";
+import { FeatureTooltip } from "./FeatureTooltip";
+import type { TooltipProps } from "@mui/material";
 
 type ChatWidgetShellProps = {
   open: boolean;
@@ -37,9 +39,14 @@ type ChatWidgetShellProps = {
   icon: ReactElement;
   ariaLabel: string;
   tooltip?: string;
+  tooltipLabel?: string;
+  tooltipDescription?: string;
+  tooltipDisabledReason?: string;
+  tooltipPlacement?: TooltipProps["placement"];
   actionLabel: string;
   onAction: (event?: MouseEvent<HTMLButtonElement>) => void;
   actionDisabled?: boolean;
+  actionStartIcon?: ReactNode;
   children: ReactNode;
 };
 
@@ -54,9 +61,14 @@ const ChatWidgetShell = ({
   icon,
   ariaLabel,
   tooltip,
+  tooltipLabel,
+  tooltipDescription,
+  tooltipDisabledReason,
+  tooltipPlacement,
   actionLabel,
   onAction,
   actionDisabled,
+  actionStartIcon,
   children,
 }: ChatWidgetShellProps) => {
   const theme = useTheme();
@@ -106,6 +118,7 @@ const ChatWidgetShell = ({
               size="small"
               onClick={onAction}
               disabled={resolvedActionDisabled}
+              startIcon={actionStartIcon}
               sx={{
                 borderRadius: "8px",
                 textTransform: "none",
@@ -131,7 +144,21 @@ const ChatWidgetShell = ({
 
   return (
     <Box sx={{ position: "relative", width: isVisible ? "100%" : "auto" }}>
-      {!isVisible && (tooltip ? <Tooltip title={tooltip}>{trigger}</Tooltip> : trigger)}
+      {!isVisible &&
+        (tooltipLabel && tooltipDescription ? (
+          <FeatureTooltip
+            label={tooltipLabel}
+            description={tooltipDescription}
+            disabledReason={tooltipDisabledReason}
+            placement={tooltipPlacement}
+          >
+            {trigger}
+          </FeatureTooltip>
+        ) : tooltip ? (
+          <Tooltip title={tooltip}>{trigger}</Tooltip>
+        ) : (
+          trigger
+        ))}
       {isVisible && closeOnClickAway && (
         <ClickAwayListener onClickAway={onClickAway ?? onClose}>
           <Box sx={{ width: "100%" }}>{widgetBody}</Box>

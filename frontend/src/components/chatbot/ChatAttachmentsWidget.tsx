@@ -13,6 +13,7 @@ import {
   useLazyGetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetQuery,
 } from "../../slices/agentic/agenticOpenApi";
 import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
+import { LoadingIcon } from "../../shared/ui/buttons/LoadingIcon";
 import { ViewIconButton } from "../../shared/ui/buttons/ViewIconButton";
 import ChatWidgetList from "./ChatWidgetList.tsx";
 import ChatWidgetShell from "./ChatWidgetShell.tsx";
@@ -28,6 +29,7 @@ export type ChatAttachmentsWidgetProps = {
   open: boolean;
   closeOnClickAway?: boolean;
   disabled?: boolean;
+  isUploading?: boolean;
   onAddAttachments?: (files: File[]) => void;
   onAttachmentsUpdated?: () => void;
   onOpen: () => void;
@@ -40,6 +42,7 @@ const ChatAttachmentsWidget = ({
   open,
   closeOnClickAway = true,
   disabled = false,
+  isUploading = false,
   onAddAttachments,
   onAttachmentsUpdated,
   onOpen,
@@ -103,7 +106,19 @@ const ChatAttachmentsWidget = ({
         badgeCount={count}
         icon={<AttachFileIcon fontSize="small" />}
         ariaLabel={t("chatbot.attachments.drawerTitle", "Attachments")}
-        actionLabel={t("chatbot.attachFiles", "Attach files")}
+        tooltipLabel={t("chatbot.attachments.drawerTitle", "Attachments")}
+        tooltipDescription={t(
+          "chatbot.attachments.tooltip.description",
+          "Files attached to this conversation.",
+        )}
+        tooltipDisabledReason={
+          disabled ? t("chatbot.attachments.tooltip.disabled", "This agent does not use attachments.") : undefined
+        }
+        actionLabel={
+          isUploading ? t("common.uploading", "Uploading...") : t("chatbot.attachFiles", "Attach files")
+        }
+        actionStartIcon={isUploading ? <LoadingIcon size={14} /> : undefined}
+        actionDisabled={disabled || isUploading}
         onAction={() => fileInputRef.current?.click()}
       >
         <ChatWidgetList items={items} emptyText={t("chatbot.attachments.noAttachments", "No attachments yet")} />
