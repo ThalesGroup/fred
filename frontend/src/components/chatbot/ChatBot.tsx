@@ -21,6 +21,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
 import { getConfig } from "../../common/config.tsx";
@@ -47,8 +48,84 @@ import { keyOf, mergeAuthoritative, toWsUrl, upsertOne } from "./ChatBotUtils.ts
 import ChatBotView from "./ChatBotView.tsx";
 import { useConversationOptionsController } from "./ConversationOptionsController.tsx";
 import { UserInputContent } from "./user_input/UserInput.tsx";
+import { toDisplayChunks } from "./messageParts.ts";
 
 const HISTORY_TEXT_LIMIT = 1200;
+const LOG_GENIUS_CONTEXT_TURNS = 3;
+const LOG_GENIUS_CONTEXT_MAX_CHARS = 4000;
+const LOG_GENIUS_TEXT_CHUNK_MAX = 600;
+const LOG_GENIUS_CODE_CHUNK_MAX = 200;
+
+const ellipsize = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}...` : text);
+
+type QueryChatOptions = {
+  suppressUserMessage?: boolean;
+  traceThought?: string;
+};
+
+const buildLogGeniusContext = (messages: ChatMessage[]): string => {
+  if (!messages.length) return "";
+
+  const sorted = [...messages].sort((a, b) => {
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    const ta = a.timestamp || "";
+    const tb = b.timestamp || "";
+    return ta.localeCompare(tb);
+  });
+
+  const groups = new Map<string, { messages: ChatMessage[]; lastIndex: number }>();
+  sorted.forEach((msg, idx) => {
+    const key = `${msg.session_id}-${msg.exchange_id}`;
+    if (!groups.has(key)) groups.set(key, { messages: [], lastIndex: idx });
+    const entry = groups.get(key)!;
+    entry.messages.push(msg);
+    entry.lastIndex = idx;
+  });
+
+  const orderedGroups = [...groups.values()].sort((a, b) => a.lastIndex - b.lastIndex);
+  const recentGroups = orderedGroups.slice(-LOG_GENIUS_CONTEXT_TURNS);
+
+  const lines: string[] = [];
+  recentGroups.forEach((group, index) => {
+    lines.push(`Turn ${index + 1}:`);
+    const groupMessages = [...group.messages].sort((a, b) => {
+      if (a.rank !== b.rank) return a.rank - b.rank;
+      const ta = a.timestamp || "";
+      const tb = b.timestamp || "";
+      return ta.localeCompare(tb);
+    });
+    for (const msg of groupMessages) {
+      const roleLabel = msg.role === "assistant" ? "Assistant" : msg.role === "user" ? "User" : msg.role;
+      const channelLabel = msg.channel && msg.channel !== "final" ? `/${msg.channel}` : "";
+      const prefix = `${roleLabel}${channelLabel}`;
+      const chunks = toDisplayChunks(msg.parts);
+      if (!chunks.length) continue;
+      for (const chunk of chunks) {
+        if (chunk.kind === "text") {
+          const text = chunk.text.trim();
+          if (!text) continue;
+          lines.push(`${prefix}: ${ellipsize(text, LOG_GENIUS_TEXT_CHUNK_MAX)}`);
+        } else if (chunk.kind === "code") {
+          const code = chunk.code.trim();
+          if (!code) continue;
+          lines.push(`${prefix} code: ${ellipsize(code, LOG_GENIUS_CODE_CHUNK_MAX)}`);
+        } else if (chunk.kind === "tool_call") {
+          lines.push(`${prefix} tool_call ${chunk.name} args=${chunk.argsPreview}`);
+        } else if (chunk.kind === "tool_result") {
+          lines.push(
+            `${prefix} tool_result ok=${chunk.ok ?? "?"} ${ellipsize(chunk.contentPreview, LOG_GENIUS_TEXT_CHUNK_MAX)}`,
+          );
+        } else if (chunk.kind === "image") {
+          lines.push(`${prefix} image: ${chunk.url}`);
+        }
+      }
+    }
+    lines.push("");
+  });
+
+  const text = lines.join("\n").trim();
+  return text.length > LOG_GENIUS_CONTEXT_MAX_CHARS ? `${text.slice(0, LOG_GENIUS_CONTEXT_MAX_CHARS)}...` : text;
+};
 
 export interface ChatBotError {
   session_id: string | null;
@@ -69,6 +146,7 @@ export interface ChatBotProps {
 const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: baseRuntimeContext }: ChatBotProps) => {
   const isNewConversation = !chatSessionId;
 
+  const { t } = useTranslation();
   const { showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
   const wsTokenRef = useRef<string | null>(null);
@@ -102,6 +180,10 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
   const chatContextResourceMap = useMemo(
     () => Object.fromEntries(chatContextResources.map((x) => [x.id, x])),
     [chatContextResources],
+  );
+  const logGeniusAgent = useMemo(
+    () => agents.find((agent) => agent.tuning?.role?.toLowerCase() === "log_genius"),
+    [agents],
   );
   const {
     currentData: history,
@@ -236,6 +318,7 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const hiddenUserExchangeIdsRef = useRef<Set<string>>(new Set());
 
   // keep state + ref in sync
   const setAllMessages = (msgs: ChatMessage[]) => {
@@ -584,22 +667,17 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
     currentAgent?.name,
   ]);
 
-  // Handle user input (text/audio)
-  const handleSend = async (content: UserInputContent) => {
-    // Init runtime context
+  const buildRuntimeContext = useCallback(() => {
     const runtimeContext: RuntimeContext = { ...(baseRuntimeContext ?? {}) };
 
-    // Add selected chat contexts
     if (conversationPrefs.chatContextIds.length) {
       runtimeContext.selected_chat_context_ids = conversationPrefs.chatContextIds;
     }
 
-    // Add selected libraries / profiles (CANONIQUES — pas de doublon)
     if (conversationPrefs.documentLibraryIds.length) {
       runtimeContext.selected_document_libraries_ids = conversationPrefs.documentLibraryIds;
     }
 
-    // Policy
     runtimeContext.search_policy = conversationPrefs.searchPolicy || "semantic";
     if (supportsRagScopeSelection && conversationPrefs.searchRagScope) {
       runtimeContext.search_rag_scope = conversationPrefs.searchRagScope;
@@ -607,6 +685,22 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
     if (supportsDeepSearchSelection && typeof conversationPrefs.deepSearch === "boolean") {
       runtimeContext.deep_search = conversationPrefs.deepSearch;
     }
+
+    return runtimeContext;
+  }, [
+    baseRuntimeContext,
+    conversationPrefs.chatContextIds,
+    conversationPrefs.documentLibraryIds,
+    conversationPrefs.searchPolicy,
+    conversationPrefs.searchRagScope,
+    conversationPrefs.deepSearch,
+    supportsRagScopeSelection,
+    supportsDeepSearchSelection,
+  ]);
+
+  // Handle user input (text/audio)
+  const handleSend = async (content: UserInputContent) => {
+    const runtimeContext = buildRuntimeContext();
 
     // Files are now uploaded immediately upon selection (not here)
 
@@ -712,7 +806,12 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
    * Backend is authoritative; we still add a brief optimistic bubble for UX.
    * The server stream replaces it using the same exchange_id.
    */
-  const queryChatBot = async (input: string, agent?: AnyAgent, runtimeContext?: RuntimeContext) => {
+  const queryChatBot = async (
+    input: string,
+    agent?: AnyAgent,
+    runtimeContext?: RuntimeContext,
+    options?: QueryChatOptions,
+  ) => {
     console.debug(`[CHATBOT] Sending message: ${input}`);
     let sid = pendingSessionIdRef.current || chatSessionId;
     if (!sid) {
@@ -723,6 +822,9 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
       }
     }
     const exchangeId = uuidv4();
+    if (options?.suppressUserMessage) {
+      hiddenUserExchangeIdsRef.current.add(exchangeId);
+    }
     const optimisticMessage: ChatMessage = {
       session_id: sid,
       exchange_id: exchangeId,
@@ -738,6 +840,26 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
     };
     const optimisticKey = keyOf(optimisticMessage);
     messagesRef.current = upsertOne(messagesRef.current, optimisticMessage);
+    if (options?.traceThought) {
+      const traceMessage: ChatMessage = {
+        session_id: sid,
+        exchange_id: exchangeId,
+        rank: optimisticMessage.rank,
+        timestamp: new Date().toISOString(),
+        role: "assistant",
+        channel: "thought",
+        parts: [{ type: "text", text: options.traceThought }],
+        metadata: {
+          agent_name: agent ? agent.name : currentAgent.name,
+          extras: {
+            task: "log_genius",
+            node: "log_genius_request",
+            label: "log_genius_request",
+          },
+        },
+      };
+      messagesRef.current = upsertOne(messagesRef.current, traceMessage);
+    }
     setMessages(messagesRef.current);
     // Show loader immediately (even while WS is connecting).
     beginWaiting();
@@ -781,6 +903,22 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
     }
   };
 
+  const handleRequestLogGenius = useCallback(() => {
+    if (!logGeniusAgent) return;
+    const prompt = t(
+      "chatbot.logGenius.prompt",
+      "Analyze the last 5 minutes of logs and summarize likely issues with next steps.",
+    );
+    const context = buildLogGeniusContext(messagesRef.current);
+    const fullPrompt = context
+      ? `${prompt}\n\nRecent conversation context (last ${LOG_GENIUS_CONTEXT_TURNS} turns, including tool calls):\n${context}`
+      : prompt;
+    queryChatBot(fullPrompt, logGeniusAgent, buildRuntimeContext(), {
+      suppressUserMessage: true,
+      traceThought: fullPrompt,
+    });
+  }, [buildRuntimeContext, logGeniusAgent, queryChatBot, t]);
+
   const loadError = (isHistoryError && historyError) || (isPrefsError && prefsError);
   const hasLoadError = Boolean(loadError);
   const isSessionLoadBlocked =
@@ -817,9 +955,11 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
       currentAgent={currentAgent}
       agents={agents}
       messages={messages}
+      hiddenUserExchangeIds={hiddenUserExchangeIdsRef.current}
       layout={layout}
       onSend={handleSend}
       onStop={stopStreaming}
+      onRequestLogGenius={logGeniusAgent ? handleRequestLogGenius : undefined}
       onSelectAgent={selectAgent}
       setSearchPolicy={setSearchPolicy}
       setSearchRagScope={setSearchRagScope}

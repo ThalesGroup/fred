@@ -474,6 +474,14 @@
       "tooltipDescription": "Délègue la recherche à un agent spécialisé pour explorer plus en profondeur votre corpus documentaire.\n\nL'activation de cette fonctionnalité peut ralentir les réponses mais les rendra plus complètes. Une transcription téléchargeable du processus de recherche sera jointe à la conversation.",
       "tooltipDisabled": "Cet agent ne supporte pas la délégation de recherche approfondie."
     },
+    "logGenius": {
+      "label": "Log Genius",
+      "tooltip": "Analyser les logs récents pour un diagnostic rapide",
+      "tooltipDescription": "Analysez les logs récents et résumez les problèmes probables avec des prochaines étapes.",
+      "description": "Lance une courte investigation sur les dernières minutes de logs et retourne un diagnostic prêt à l'emploi.",
+      "action": "Demander de l'aide ou une analyse",
+      "prompt": "Analysez les 5 dernières minutes de logs et résumez les problèmes probables avec des prochaines étapes."
+    },
     "searchOptions": "Options de recherche",
     "searchOptionsTooltip": {
       "description": "Ajustez le fonctionnement de la recherche pour cette conversation (portée RAG et politique de recherche).\n\nCes réglages sont enregistrés par conversation et appliqués uniquement lorsque l'agent supporte la recherche.",

@@ -28,6 +28,7 @@ import {
 import type { Resource, SearchPolicyName, TagWithItemsId } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import ChatAttachmentsWidget from "./ChatAttachmentsWidget.tsx";
 import ChatContextWidget from "./ChatContextWidget.tsx";
+import ChatLogGeniusWidget from "./ChatLogGeniusWidget.tsx";
 import ChatKnowledge from "./ChatKnowledge.tsx";
 import ChatSearchOptionsWidget from "./ChatSearchOptionsWidget.tsx";
 
@@ -89,6 +90,7 @@ export type ConversationOptionsState = {
   attachmentsWidgetOpenDisplay: boolean;
   searchOptionsWidgetOpenDisplay: boolean;
   librariesWidgetOpenDisplay: boolean;
+  logGeniusWidgetOpenDisplay: boolean;
   widgetsOpen: boolean;
   layout: {
     chatWidgetRail: string;
@@ -118,6 +120,7 @@ export type ConversationOptionsActions = {
   setAttachmentsWidgetOpen: (open: boolean) => void;
   setSearchOptionsWidgetOpen: (open: boolean) => void;
   setLibrariesWidgetOpen: (open: boolean) => void;
+  setLogGeniusWidgetOpen: (open: boolean) => void;
   setContextOpen: (open: boolean) => void;
 };
 
@@ -194,6 +197,7 @@ export function useConversationOptionsController({
   const [attachmentsWidgetOpen, setAttachmentsWidgetOpen] = useState<boolean>(false);
   const [searchOptionsWidgetOpen, setSearchOptionsWidgetOpen] = useState<boolean>(false);
   const [librariesWidgetOpen, setLibrariesWidgetOpen] = useState<boolean>(false);
+  const [logGeniusWidgetOpen, setLogGeniusWidgetOpen] = useState<boolean>(false);
   const [contextOpen, setContextOpen] = useState<boolean>(false);
 
   const [prefsLoadState, setPrefsLoadState] = useState<PrefsLoadState>(() =>
@@ -496,11 +500,13 @@ export function useConversationOptionsController({
     ? false
     : (supportsRagScopeSelection || supportsSearchPolicySelection) && searchOptionsWidgetOpen;
   const librariesWidgetOpenDisplay = isHydratingSession ? false : supportsLibrariesSelection && librariesWidgetOpen;
+  const logGeniusWidgetOpenDisplay = isHydratingSession ? false : logGeniusWidgetOpen;
   const widgetsOpen =
     chatContextWidgetOpenDisplay ||
     librariesWidgetOpenDisplay ||
     attachmentsWidgetOpenDisplay ||
-    searchOptionsWidgetOpenDisplay;
+    searchOptionsWidgetOpenDisplay ||
+    logGeniusWidgetOpenDisplay;
   const chatWidgetRail = widgetsOpen ? "18vw" : "0px";
   const chatWidgetGap = "12px";
   const chatContentRightPadding = widgetsOpen ? `calc(${chatWidgetRail} + ${chatWidgetGap})` : "0px";
@@ -544,6 +550,7 @@ export function useConversationOptionsController({
       attachmentsWidgetOpenDisplay,
       searchOptionsWidgetOpenDisplay,
       librariesWidgetOpenDisplay,
+      logGeniusWidgetOpenDisplay,
       widgetsOpen,
       layout: {
         chatWidgetRail,
@@ -568,6 +575,7 @@ export function useConversationOptionsController({
       setAttachmentsWidgetOpen,
       setSearchOptionsWidgetOpen,
       setLibrariesWidgetOpen,
+      setLogGeniusWidgetOpen,
       setContextOpen,
     },
   };
@@ -580,6 +588,7 @@ type ConversationOptionsPanelProps = {
   onAddAttachments: (files: File[]) => void;
   onAttachmentsUpdated: () => void;
   isUploadingAttachments: boolean;
+  onRequestLogGenius?: () => void;
   libraryNameMap: Record<string, string>;
   libraryById: Record<string, TagWithItemsId | undefined>;
   promptNameMap: Record<string, string>;
@@ -595,6 +604,7 @@ export function ConversationOptionsPanel({
   onAddAttachments,
   onAttachmentsUpdated,
   isUploadingAttachments,
+  onRequestLogGenius,
   libraryNameMap,
   libraryById,
   promptNameMap,
@@ -611,6 +621,7 @@ export function ConversationOptionsPanel({
     attachmentsWidgetOpenDisplay,
     searchOptionsWidgetOpenDisplay,
     librariesWidgetOpenDisplay,
+    logGeniusWidgetOpenDisplay,
     isHydratingSession,
     supportsLibrariesSelection,
     supportsAttachments,
@@ -630,28 +641,33 @@ export function ConversationOptionsPanel({
     setAttachmentsWidgetOpen,
     setLibrariesWidgetOpen,
     setSearchOptionsWidgetOpen,
+    setLogGeniusWidgetOpen,
     setContextOpen,
   } = controller.actions;
 
   const canOpenSearchOptions = supportsRagScopeSelection || supportsSearchPolicySelection;
+  const showLogGenius = Boolean(onRequestLogGenius);
   const allWidgetsOpen =
     chatContextWidgetOpenDisplay &&
     (!supportsLibrariesSelection || librariesWidgetOpenDisplay) &&
     (!supportsAttachments || attachmentsWidgetOpenDisplay) &&
-    (!canOpenSearchOptions || searchOptionsWidgetOpenDisplay);
+    (!canOpenSearchOptions || searchOptionsWidgetOpenDisplay) &&
+    (!showLogGenius || logGeniusWidgetOpenDisplay);
 
   const setAllWidgetsOpen = (open: boolean) => {
     setChatContextWidgetOpen(open);
     setLibrariesWidgetOpen(open && supportsLibrariesSelection);
     setAttachmentsWidgetOpen(open && supportsAttachments);
     setSearchOptionsWidgetOpen(open && canOpenSearchOptions);
+    setLogGeniusWidgetOpen(open && showLogGenius);
   };
 
-  const openOnlyWidget = (target: "chat-context" | "libraries" | "attachments" | "search") => {
+  const openOnlyWidget = (target: "chat-context" | "libraries" | "attachments" | "search" | "log-genius") => {
     setChatContextWidgetOpen(target === "chat-context");
     setLibrariesWidgetOpen(target === "libraries" && supportsLibrariesSelection);
     setAttachmentsWidgetOpen(target === "attachments" && supportsAttachments);
     setSearchOptionsWidgetOpen(target === "search" && canOpenSearchOptions);
+    setLogGeniusWidgetOpen(target === "log-genius" && showLogGenius);
   };
   const toggleLabel = allWidgetsOpen
     ? t("chatbot.options.collapseAll", "Collapse all")
@@ -732,6 +748,18 @@ export function ConversationOptionsPanel({
             onOpen={() => openOnlyWidget("search")}
             onClose={() => setSearchOptionsWidgetOpen(false)}
           />
+          {showLogGenius && (
+            <ChatLogGeniusWidget
+              open={logGeniusWidgetOpenDisplay}
+              closeOnClickAway={false}
+              disabled={isHydratingSession}
+              onRun={onRequestLogGenius}
+              onOpen={() => {
+                openOnlyWidget("log-genius");
+              }}
+              onClose={() => setLogGeniusWidgetOpen(false)}
+            />
+          )}
         </Box>
       </Box>
 
