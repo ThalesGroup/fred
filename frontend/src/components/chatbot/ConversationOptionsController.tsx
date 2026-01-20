@@ -14,7 +14,7 @@
 
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
+import TravelExploreOutlinedIcon from "@mui/icons-material/TravelExploreOutlined";
 import { Box, IconButton, Tooltip } from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
@@ -784,7 +784,7 @@ export function ConversationOptionsPanel({
                 disabled={isHydratingSession}
                 sx={{ color: isHydratingSession ? "text.disabled" : "inherit" }}
                 active={deepSearchEnabled}
-                icon={<SearchOutlinedIcon fontSize="small" />}
+                icon={<TravelExploreOutlinedIcon fontSize="small" />}
               />
             </FeatureTooltip>
           )}
