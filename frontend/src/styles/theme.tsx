@@ -53,6 +53,18 @@ const markdownDefaults: TypographyVariants["markdown"] = {
   li: { marginBottom: "0.5rem", lineHeight: 1.4, fontSize: "0.9rem" },
 };
 
+const sharedComponents = {
+  // Remove border from Drawers
+  MuiDrawer: {
+    styleOverrides: {
+      paper: {
+        borderRight: "none",
+        borderLeft: "none",
+      },
+    },
+  },
+};
+
 // MUI's original elevation overlay formula (from getOverlayAlpha.js)
 function getOverlayAlpha(elevation: number): number {
   let alphaValue: number;
@@ -75,6 +87,7 @@ const lightTheme = createTheme({
     markdown: markdownDefaults,
   },
   components: {
+    ...sharedComponents,
     MuiPaper: {
       styleOverrides: {
         root: ({ ownerState }) => {
@@ -102,6 +115,7 @@ const darkTheme = createTheme({
   typography: {
     markdown: markdownDefaults,
   },
+  components: sharedComponents,
 });
 
 export { darkTheme, lightTheme };
