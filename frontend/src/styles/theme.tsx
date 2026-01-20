@@ -63,6 +63,14 @@ const sharedComponents = {
       },
     },
   },
+  // Make Divider a bit more visible
+  MuiDivider: {
+    styleOverrides: {
+      root: {
+        borderColor: "rgba(255, 255, 255, .3)",
+      },
+    },
+  },
 };
 
 // MUI's original elevation overlay formula (from getOverlayAlpha.js)

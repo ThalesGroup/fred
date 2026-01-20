@@ -4,7 +4,7 @@ import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 import ScienceIcon from "@mui/icons-material/Science";
 import ShieldIcon from "@mui/icons-material/Shield";
-import { Box, CSSObject, Paper, styled, Theme } from "@mui/material";
+import { Box, CSSObject, Divider, Paper, styled, Theme } from "@mui/material";
 import MuiDrawer from "@mui/material/Drawer";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
@@ -16,6 +16,8 @@ import {
   SideBarNavigationList,
   SidebarProfileSection,
 } from "../components/sideBar";
+import { SideBarNewConversationButton } from "../components/sideBar/SideBarNewConversationButton";
+import { KeyCloakService } from "../security/KeycloakService";
 import { usePermissions } from "../security/usePermissions";
 import { useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { ImageComponent } from "../utils/image";
@@ -92,6 +94,9 @@ export default function SideBar() {
   const canReadRuntime = can("kpi", "create");
   const canUpdateTag = can("tag", "update");
 
+  const userRoles = KeyCloakService.GetUserRoles();
+  const isAdmin = userRoles.includes("admin");
+
   const menuItems: SideBarNavigationElement[] = [
     {
       key: "agent",
@@ -109,6 +114,8 @@ export default function SideBar() {
       url: `/knowledge`,
       tooltip: t("sidebar.tooltip.knowledge"),
     },
+  ];
+  const adminMenuItems: SideBarNavigationElement[] = [
     {
       key: "mcp",
       label: t("sidebar.mcp"),
@@ -247,10 +254,24 @@ export default function SideBar() {
           </IconButton> */}
         </DrawerHeader>
 
+        <Paper elevation={0}>
+          <SideBarNewConversationButton />
+        </Paper>
+
         {/* Nav */}
         <Paper elevation={0}>
           <SideBarNavigationList menuItems={menuItems} isSidebarOpen={open} />
         </Paper>
+        <SideBarDivider />
+        {isAdmin && (
+          <>
+            {/* Admin Nav */}
+            <Paper elevation={0}>
+              <SideBarNavigationList menuItems={adminMenuItems} isSidebarOpen={open} />
+            </Paper>
+            <SideBarDivider />
+          </>
+        )}
 
         {/* Conversations */}
         <SideBarConversationsSection isSidebarOpen={open} />
@@ -261,5 +282,13 @@ export default function SideBar() {
         </Paper>
       </Box>
     </Drawer>
+  );
+}
+
+function SideBarDivider() {
+  return (
+    <Box sx={{ px: 2 }}>
+      <Divider />
+    </Box>
   );
 }
