@@ -17,6 +17,7 @@ import {
   SidebarProfileSection,
 } from "../components/sideBar";
 import { usePermissions } from "../security/usePermissions";
+import { useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { ImageComponent } from "../utils/image";
 import { ApplicationContext } from "./ApplicationContextProvider";
 
@@ -75,6 +76,7 @@ const DrawerHeader = styled("div")(({ theme }) => ({
 
 export default function SideBar() {
   const { t } = useTranslation();
+  const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
 
   // const [open, setOpen] = useLocalStorageState("SideBar.open", true);
   // Remove collapsing for now
@@ -93,17 +95,12 @@ export default function SideBar() {
   const menuItems: SideBarNavigationElement[] = [
     {
       key: "agent",
-      label: t("sidebar.agent"),
+      label: t("sidebar.agent", {
+        agentsNickname: frontendConfig.frontend_settings.properties.agentsNicknamePlural,
+      }),
       icon: <GroupIcon />,
       url: `/agents`,
       tooltip: t("sidebar.tooltip.agent"),
-    },
-    {
-      key: "mcp",
-      label: t("sidebar.mcp"),
-      icon: <ConstructionIcon />,
-      url: `/tools`,
-      tooltip: t("sidebar.tooltip.mcp"),
     },
     {
       key: "knowledge",
@@ -111,6 +108,13 @@ export default function SideBar() {
       icon: <MenuBookIcon />,
       url: `/knowledge`,
       tooltip: t("sidebar.tooltip.knowledge"),
+    },
+    {
+      key: "mcp",
+      label: t("sidebar.mcp"),
+      icon: <ConstructionIcon />,
+      url: `/tools`,
+      tooltip: t("sidebar.tooltip.mcp"),
     },
     ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime || canUpdateTag
       ? [

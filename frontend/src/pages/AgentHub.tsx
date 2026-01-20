@@ -35,6 +35,7 @@ import { CrewEditor } from "../components/agentHub/CrewEditor";
 // OpenAPI
 import {
   Leader,
+  useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useRestoreAgentsAgenticV1AgentsRestorePostMutation,
 } from "../slices/agentic/agenticOpenApi";
@@ -237,9 +238,16 @@ export const AgentHub = () => {
     return t("agentHub.agents");
   }, [tabValue, categories, t]);
 
+  const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
+
   return (
     <>
-      <TopBar title={t("agentHub.title")} description={t("agentHub.description")} />
+      <TopBar
+        title={t("agentHub.title", {
+          agentsNicknamePlural: frontendConfig.frontend_settings.properties.agentsNicknamePlural,
+        })}
+        description={t("agentHub.description")}
+      />
 
       <Box
         sx={{

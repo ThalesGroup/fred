@@ -118,9 +118,9 @@
     "chat": "Chats",
     "monitoring": "Admin",
     "laboratory": "Laboratory",
-    "knowledge": "Resources",
+    "knowledge": "Your resources",
     "mcp": "Tools",
-    "agent": "Agents",
+    "agent": "Your {{agentsNickname}}",
     "release_notes": "Release Notes",
     "workspaces": "Workspaces",
     "account": "Profile",
@@ -320,7 +320,7 @@
     "noMcpServers": "No MCP servers are currently available."
   },
   "agentHub": {
-    "title": "Your agents",
+    "title": "Your {{agentsNicknamePlural}}",
     "confirmDeleteTitle": "Confirm deletion",
     "confirmDeleteMessage": "Delete this agent ? This action cannot be undone.",
     "description": "Explore and manage available AI agents",
@@ -662,7 +662,7 @@
     }
   },
   "knowledge": {
-    "title": "Resources",
+    "title": "Your resources",
     "description": "Manage your document and chat context libraries",
     "viewSelector": {
       "libraries": "Libraries",

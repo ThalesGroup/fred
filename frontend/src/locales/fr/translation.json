@@ -119,9 +119,9 @@
     "chat": "Conversations",
     "monitoring": "Supervision",
     "laboratory": "Laboratoire",
-    "knowledge": "Ressources",
+    "knowledge": "Vos ressources",
     "mcp": "Outils",
-    "agent": "Agents",
+    "agent": "Vos {{agentsNickname}}",
     "release_notes": "Notes de version",
     "workspaces": "Espaces de travail",
     "account": "Profil",
@@ -321,7 +321,7 @@
     "noMcpServers": "Aucun serveur MCP disponible pour le moment."
   },
   "agentHub": {
-    "title": "Vos agents",
+    "title": "Vos {{agentsNicknamePlural}}",
     "confirmDeleteTitle": "Confirmer la suppression",
     "confirmDeleteMessage": "Supprimer cet agent ? Cette action est irréversible.",
     "description": "Explorez et gérez les agents IA disponibles",
@@ -663,7 +663,7 @@
     }
   },
   "knowledge": {
-    "title": "Ressources",
+    "title": "Vos ressources",
     "description": "Gérez vos documents et contextes de conversation",
     "viewSelector": {
       "libraries": "Bibliothèques",
