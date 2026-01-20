@@ -21,8 +21,7 @@ from pathlib import Path
 from typing import Any, Callable, List, Literal, Optional, Protocol
 
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
-from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.base_lite_md_processor import BaseLiteMdProcessor
-from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import LiteMarkdownResult
+from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import BaseFastTextProcessor, FastTextResult
 
 from .models import ProcessorRunMetrics, ProcessorRunResult
 
@@ -36,7 +35,7 @@ class Adapter(Protocol):
 @dataclasses.dataclass
 class ProcessorSpec:
     id: str
-    kind: Literal["standard", "lite"]
+    kind: Literal["standard", "fast"]
     display_name: str
     file_types: List[str]  # [".pdf"], [".docx"], etc.
     # Prefer a factory to build the processor instance
@@ -132,7 +131,7 @@ class StandardProcessorAdapter:
                 pass
 
 
-class LiteAdapter:
+class FastAdapter:
     """
     Adapter to run lightweight processors (stateless, in-memory).
     """
@@ -141,18 +140,18 @@ class LiteAdapter:
         if processor_spec.factory is None:
             raise RuntimeError(f"ProcessorSpec '{processor_spec.id}' has no factory")
         inst = processor_spec.factory()
-        if not isinstance(inst, BaseLiteMdProcessor):
-            raise TypeError(f"Processor '{processor_spec.id}' is not a BaseLiteMdProcessor")
+        if not isinstance(inst, BaseFastTextProcessor):
+            raise TypeError(f"Processor '{processor_spec.id}' is not a BaseFastTextProcessor")
 
         started = time.perf_counter()
         try:
-            result: LiteMarkdownResult = inst.extract(file_path)
-            md_text = result.markdown or ""
+            result: FastTextResult = inst.extract(file_path)
+            md_text = result.text or ""
             page_count = result.page_count
             dur = int((time.perf_counter() - started) * 1000)
             stats = _analyze_markdown(md_text) if md_text else None
             logger.info(
-                "Lite adapter result | processor=%s kind=%s len=%d pages=%s duration_ms=%d",
+                "Fast adapter result | processor=%s kind=%s len=%d pages=%s duration_ms=%d",
                 processor_spec.id,
                 processor_spec.kind,
                 len(md_text),

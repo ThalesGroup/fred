@@ -25,16 +25,15 @@ import requests
 from agentic_backend.common.kf_base_client import KfBaseClient
 
 
-class KfLiteMarkdownClient(KfBaseClient):
+class KfFastTextClient(KfBaseClient):
     """
     Minimal client for Knowledge Flow's lightweight Markdown extraction endpoint.
     Usage:
         # Agent mode (unchanged):
-        client = KfLiteMarkdownClient(agent=my_agent)
+        client = KfFastTextClient(agent=my_agent)
 
         # Session mode (conversation/controller):
-        client = KfLiteMarkdownClient(access_token=session_access_token,
-                                      refresh_user_access_token=my_refresh_fn)
+        client = KfFastTextClient(access_token=session_access_token, refresh_user_access_token=my_refresh_fn)
     """
 
     def __init__(
@@ -51,7 +50,7 @@ class KfLiteMarkdownClient(KfBaseClient):
             refresh_user_access_token=refresh_user_access_token,
         )
 
-    def extract_markdown_from_bytes(
+    def extract_text_from_bytes(
         self,
         *,
         filename: str,
@@ -76,14 +75,14 @@ class KfLiteMarkdownClient(KfBaseClient):
         data = {"options_json": json.dumps(options)}
         r: requests.Response = self._request_with_token_refresh(
             method="POST",
-            path="/lite/markdown?format=text",
+            path="/fast/text?format=text",
             files=files,
             data=data,
         )
         r.raise_for_status()
         return r.text or ""
 
-    def ingest_markdown_from_bytes(
+    def ingest_text_from_bytes(
         self,
         *,
         filename: str,
@@ -93,7 +92,7 @@ class KfLiteMarkdownClient(KfBaseClient):
         options: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Fast ingest path: use the lite extractor and store vectors with scoping metadata.
+        Fast ingest path: use the fast extractor and store vectors with scoping metadata.
         Returns the backend payload (document_uid, chunks, etc.).
         """
         options_json = json.dumps(options or {})
@@ -106,7 +105,7 @@ class KfLiteMarkdownClient(KfBaseClient):
         }
         r: requests.Response = self._request_with_token_refresh(
             method="POST",
-            path="/lite/ingest",
+            path="/fast/ingest",
             files=files,
             data=data,
         )
@@ -115,15 +114,15 @@ class KfLiteMarkdownClient(KfBaseClient):
 
     def delete_ingested_vectors(self, document_uid: str) -> None:
         """
-        Delete vectors created via the lite ingest path.
+        Delete vectors created via the fast ingest path.
         """
         r: requests.Response = self._request_with_token_refresh(
             method="DELETE",
-            path=f"/lite/ingest/{document_uid}",
+            path=f"/fast/ingest/{document_uid}",
         )
         r.raise_for_status()
 
-    def extract_markdown(
+    def extract_text(
         self,
         file_path: Path,
         *,
@@ -145,7 +144,7 @@ class KfLiteMarkdownClient(KfBaseClient):
             data = {"options_json": json.dumps(options)}
             r: requests.Response = self._request_with_token_refresh(
                 method="POST",
-                path="/lite/markdown?format=text",
+                path="/fast/text?format=text",
                 files=files,
                 data=data,
             )

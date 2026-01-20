@@ -127,7 +127,6 @@ const ChatAttachmentsWidget = ({
           type="file"
           multiple
           hidden
-          accept=".pdf,.docx,.csv"
           onChange={(event) => {
             const files = Array.from(event.target.files ?? []);
             if (files.length) onAddAttachments?.(files);
