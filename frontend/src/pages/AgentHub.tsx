@@ -19,7 +19,7 @@ import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import RefreshIcon from "@mui/icons-material/Refresh";
 
 import { Box, Button, CardContent, Drawer, Fade, IconButton, Typography, useTheme } from "@mui/material";
-import { SyntheticEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePermissions } from "../security/usePermissions";
 
@@ -45,20 +45,18 @@ import { AnyAgent, isLeader } from "../common/agent";
 import { A2aCardDialog } from "../components/agentHub/A2aCardDialog";
 import { AgentAssetManagerDrawer } from "../components/agentHub/AgentAssetManagerDrawer";
 import { CreateAgentModal } from "../components/agentHub/CreateAgentModal";
+import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
 import { useToast } from "../components/ToastProvider";
 import { useAgentUpdater } from "../hooks/useAgentUpdater";
 import { useLazyGetRuntimeSourceTextQuery } from "../slices/agentic/agenticSourceApi";
-
-type AgentCategory = { name: string; isTag?: boolean };
 
 export const AgentHub = () => {
   const theme = useTheme();
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
+  const { showConfirmationDialog } = useConfirmationDialog();
   const [agents, setAgents] = useState<AnyAgent[]>([]);
-  const [tabValue, setTabValue] = useState(0);
   const [showElements, setShowElements] = useState(false);
-  const [categories, setCategories] = useState<AgentCategory[]>([{ name: "all" }]);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createModalType, setCreateModalType] = useState<"basic" | "a2a_proxy">("basic");
 
@@ -156,9 +154,6 @@ export const AgentHub = () => {
     try {
       const flows = (await triggerGetFlows().unwrap()) as unknown as AnyAgent[];
       setAgents(flows);
-
-      const tags = extractUniqueTags(flows);
-      setCategories([{ name: "all" }, ...tags.map((tag) => ({ name: tag, isTag: true }))]);
     } catch (err) {
       console.error("Error fetching agents:", err);
     }
@@ -169,8 +164,6 @@ export const AgentHub = () => {
     fetchAgents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const handleTabChange = (_event: SyntheticEvent, newValue: number) => setTabValue(newValue);
 
   const handleRestore = () => {
     showConfirmationDialog({
@@ -191,15 +184,6 @@ export const AgentHub = () => {
       },
     });
   };
-
-  const filteredAgents = useMemo(() => {
-    if (tabValue === 0) return agents;
-    if (categories.length > 1 && tabValue >= 1) {
-      const tagName = categories[tabValue].name;
-      return agents.filter((a) => a.tuning.tags?.includes(tagName));
-    }
-    return agents;
-  }, [tabValue, agents, categories]);
 
   // ---- ACTION handlers wired to card --------------------------------------
 
@@ -227,16 +211,8 @@ export const AgentHub = () => {
   const handleCloseAssetManager = () => {
     setAssetManagerOpen(false);
     setAgentForAssetManagement(null);
-    // Optional: If asset deletion/upload should refresh the main agent list (e.g., if metadata changes), uncomment the line below.
-    // fetchAgents();
   };
   // ------------------------------------------------------------------------
-
-  const sectionTitle = useMemo(() => {
-    if (tabValue === 0) return t("agentHub.allAgents");
-    if (categories.length > 1 && tabValue >= 1) return `${categories[tabValue].name} ${t("agentHub.agents")}`;
-    return t("agentHub.agents");
-  }, [tabValue, categories, t]);
 
   const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
 
@@ -259,90 +235,9 @@ export const AgentHub = () => {
           pb: { xs: 4, md: 6 },
         }}
       >
-        {/* Header / Tabs */}
-        {/* <Fade in={showElements} timeout={900}>
-          <Card
-            variant="outlined"
-            sx={{
-              borderRadius: 2,
-              bgcolor: "transparent",
-              boxShadow: "none",
-              borderColor: "divider",
-              mb: 2,
-            }}
-          >
-            <CardContent sx={{ py: 1, px: { xs: 1, md: 2 } }}>
-              <Tabs
-                value={tabValue}
-                onChange={handleTabChange}
-                variant="scrollable"
-                scrollButtons="auto"
-                sx={{
-                  minHeight: 44,
-                  "& .MuiTab-root": {
-                    textTransform: "none",
-                    fontSize: "0.9rem",
-                    minHeight: 44,
-                    minWidth: 120,
-                    color: "text.secondary",
-                  },
-                  "& .Mui-selected": { color: "text.primary", fontWeight: 600 },
-                  "& .MuiTabs-indicator": {
-                    backgroundColor: theme.palette.primary.main,
-                    height: 3,
-                    borderRadius: 1.5,
-                  },
-                }}
-              >
-                {categories.map((category, index) => {
-                  const isFav = category.name === "favorites";
-                  const label = category.isTag ? category.name : t(`agentHub.categories.${category.name}`);
-                  const count = isFav
-                    ? favoriteAgents.length
-                    : agents.filter((a) => a.tuning.tags?.includes(category.name)).length;
-
-                  return (
-                    <Tab
-                      key={`${category.name}-${index}`}
-                      label={
-                        <Box sx={{ display: "flex", alignItems: "center" }}>
-                          {isFav && <StarIcon fontSize="small" sx={{ mr: 0.5, color: "warning.main" }} />}
-                          <LocalOfferIcon fontSize="small" sx={{ mr: 0.5, color: "text.secondary" }} />
-                          <Typography variant="body2" sx={{ textTransform: "capitalize" }}>
-                            {label}
-                          </Typography>
-                          <Chip
-                            size="small"
-                            label={count}
-                            sx={{
-                              ml: 1,
-                              height: 18,
-                              fontSize: "0.7rem",
-                              bgcolor: "transparent",
-                              border: `1px solid ${theme.palette.divider}`,
-                              color: "text.secondary",
-                            }}
-                          />
-                        </Box>
-                      }
-                    />
-                  );
-                })}
-              </Tabs>
-            </CardContent>
-          </Card>
-        </Fade> */}
         {/* Content */}
         <Fade in={showElements} timeout={1100}>
-          <Box
-          // variant="outlined"
-          // sx={{
-          //   borderRadius: 2,
-          //   bgcolor: "transparent",
-          //   boxShadow: "none",
-          //   borderColor: "divider",
-          // }}
-          >
+          <Box>
             <CardContent sx={{ p: { xs: 2, md: 3 } }}>
               {isLoading ? (
                 <Box display="flex" justifyContent="center" alignItems="center" minHeight="360px">
@@ -352,20 +247,7 @@ export const AgentHub = () => {
                 <>
                   {/* Section header */}
                   <Box display="flex" justifyContent="flex-end" alignItems="center" mb={2}>
-                    {/* <Box display="flex" alignItems="center" gap={1}>
-                      {tabValue === 1 && <StarIcon fontSize="small" sx={{ color: "warning.main" }} />}
-                      {tabValue >= 2 && <LocalOfferIcon fontSize="small" sx={{ color: "text.secondary" }} />}
-                      <Typography variant="h6" fontWeight={600}>
-                        {sectionTitle}{" "}
-                        <Typography component="span" variant="body2" color="text.secondary">
-                          ({filteredAgents.length})
-                        </Typography>
-                      </Typography>
-                    </Box> */}
-
                     <Box sx={{ display: "flex", gap: 1 }}>
-                      {/* <ActionButton icon={<SearchIcon />}>{t("agentHub.search")}</ActionButton> */}
-                      {/* <ActionButton icon={<FilterListIcon />}>{t("agentHub.filter")}</ActionButton> */}
                       <Button
                         variant="outlined"
                         startIcon={<RefreshIcon />}
@@ -394,9 +276,9 @@ export const AgentHub = () => {
                   </Box>
 
                   {/* Grid */}
-                  {filteredAgents.length > 0 ? (
+                  {agents.length > 0 ? (
                     <Grid2 container spacing={2}>
-                      {filteredAgents.map((agent) => (
+                      {agents.map((agent) => (
                         <Grid2 key={agent.name} size={{ xs: 12, sm: 6, md: 4, lg: 4, xl: 4 }} sx={{ display: "flex" }}>
                           <Fade in timeout={500}>
                             <Box sx={{ width: "100%" }}>
@@ -430,11 +312,6 @@ export const AgentHub = () => {
                       <Typography variant="subtitle1" color="text.secondary" align="center">
                         {t("agentHub.noAgents")}
                       </Typography>
-                      {tabValue >= 1 && (
-                        <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 0.5 }}>
-                          {t("agentHub.noTag", { tag: categories[tabValue]?.name })}
-                        </Typography>
-                      )}
                     </Box>
                   )}
 
@@ -562,17 +439,3 @@ export const AgentHub = () => {
     </>
   );
 };
-
-function extractUniqueTags(agents: AnyAgent[]): string[] {
-  const tagsSet = new Set<string>();
-  agents.forEach((agent) => {
-    if (agent.tuning.tags && Array.isArray(agent.tuning.tags)) {
-      agent.tuning.tags.forEach((tag) => {
-        if (typeof tag === "string" && tag.trim() !== "") {
-          tagsSet.add(tag);
-        }
-      });
-    }
-  });
-  return Array.from(tagsSet);
-}
