@@ -463,9 +463,13 @@
   },
   "chatbot": {
     "ragScope": {
+      "label": "RAG scope",
       "tooltipCorpus": "Use only the selected document libraries to answer",
       "tooltipHybrid": "Use both the selected document libraries and the model general knowledge to answer",
       "tooltipGeneral": "Use only the model general knowledge to answer"
+    },
+    "searchPolicy": {
+      "label": "Search policy"
     },
     "deepSearch": {
       "label": "Deep Search",
@@ -482,6 +486,8 @@
       "prompt": "Analyze the last 5 minutes of logs and summarize likely issues with next steps."
     },
     "searchOptions": "Search options",
+    "searchOptionsReset": "Back to default",
+    "searchOptionsResetTooltip": "Reset to default values",
     "searchOptionsTooltip": {
       "description": "Tune how retrieval works for this conversation (RAG scope and search policy).\n\nThese settings are saved per conversation and applied only when the agent supports retrieval.",
       "disabled": "This agent does not support search options."
