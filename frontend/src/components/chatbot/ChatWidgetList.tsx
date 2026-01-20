@@ -74,7 +74,7 @@ const ChatWidgetList = ({ items, emptyText }: ChatWidgetListProps) => {
         >
           <ListItemText
             primary={item.label}
-            primaryTypographyProps={{ variant: "body2", noWrap: true, title: item.label }}
+            slotProps={{ primary: { variant: "body2", noWrap: true, title: item.label } }}
             sx={{ minWidth: 0 }}
           />
         </ListItem>
