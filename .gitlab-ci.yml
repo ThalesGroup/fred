@@ -1,23 +1,23 @@
 variables:
   FRONTEND_DOCKER_TAG:
-    value: "0.0.1-prism"
+    value: "0.0.4-prism"
     description: "Version of Fred frontend docker image."
   BUILD_FRONTEND_DOCKER_IMAGE:
-    value: "false"
+    value: "true"
     options: ["true", "false"]
     description: "Defines if Fred frontend docker image must be built"
   BACKEND_API_DOCKER_TAG:
-    value: "0.0.1-prism"
+    value: "0.0.4-prism"
     description: "Version of Fred backend docker image."
   BUILD_BACKEND_API_DOCKER_IMAGE:
-    value: "false"
+    value: "true"
     options: ["true", "false"]
     description: "Defines if Fred backend docker image must be built"
   BACKEND_KNOWLEDGE_DOCKER_TAG:
-    value: "0.0.1-prism"
+    value: "0.0.4-prism"
     description: "Version of Fred backend docker image."
   BUILD_BACKEND_KNOWLEDGE_DOCKER_IMAGE:
-    value: "false"
+    value: "true"
     options: ["true", "false"]
     description: "Defines if Fred backend docker image must be built"
   # KASTCTL:
