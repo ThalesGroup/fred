@@ -44,6 +44,7 @@ import { AnyAgent, isLeader } from "../common/agent";
 import { A2aCardDialog } from "../components/agentHub/A2aCardDialog";
 import { AgentAssetManagerDrawer } from "../components/agentHub/AgentAssetManagerDrawer";
 import { CreateAgentModal } from "../components/agentHub/CreateAgentModal";
+import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
 import { useToast } from "../components/ToastProvider";
 import { useAgentUpdater } from "../hooks/useAgentUpdater";
 import { useLazyGetRuntimeSourceTextQuery } from "../slices/agentic/agenticSourceApi";
@@ -54,6 +55,7 @@ export const AgentHub = () => {
   const theme = useTheme();
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
+  const { showConfirmationDialog } = useConfirmationDialog();
   const [agents, setAgents] = useState<AnyAgent[]>([]);
   const [tabValue, setTabValue] = useState(0);
   const [showElements, setShowElements] = useState(false);
