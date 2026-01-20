@@ -234,11 +234,22 @@ export default function SideBar() {
 
   return (
     <Drawer variant="permanent" open={open}>
-      <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
-        {/* Header (icon + open/close button*/}
-        <DrawerHeader>
+      <Paper sx={{ borderRadius: 0 }}>
+        <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+          {/* Header (icon + open/close button*/}
+          {/* <DrawerHeader> */}
           {open && (
-            <Box sx={{ display: "flex", width: "100%", justifyContent: "flex-start", alignItems: "center", pl: 1 }}>
+            <Box
+              sx={{
+                display: "flex",
+                width: "100%",
+                justifyContent: "flex-start",
+                alignItems: "center",
+                pl: 2,
+                py: 1.5,
+                minHeight: "56px",
+              }}
+            >
               <InvisibleLink to="/">
                 <ImageComponent
                   name={darkMode ? logoNameDark : logoName}
@@ -252,35 +263,40 @@ export default function SideBar() {
           {/* <IconButton onClick={() => setOpen((open) => !open)} sx={{ mr: open ? 0 : 1 }}>
             {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
           </IconButton> */}
-        </DrawerHeader>
+          {/* </DrawerHeader> */}
 
-        <Paper elevation={0}>
-          <SideBarNewConversationButton />
-        </Paper>
+          <Box sx={{ widht: "100%", px: 2, mb: 1 }}>
+            <SideBarNewConversationButton />
+          </Box>
 
-        {/* Nav */}
-        <Paper elevation={0}>
-          <SideBarNavigationList menuItems={menuItems} isSidebarOpen={open} />
-        </Paper>
-        <SideBarDivider />
-        {isAdmin && (
-          <>
-            {/* Admin Nav */}
-            <Paper elevation={0}>
-              <SideBarNavigationList menuItems={adminMenuItems} isSidebarOpen={open} />
+          {/* Nav */}
+          <Box>
+            <SideBarNavigationList menuItems={menuItems} isSidebarOpen={open} />
+          </Box>
+
+          <SideBarDivider />
+
+          {/* Admin Nav */}
+          {isAdmin && (
+            <>
+              <Box>
+                <SideBarNavigationList menuItems={adminMenuItems} isSidebarOpen={open} />
+              </Box>
+              <SideBarDivider />
+            </>
+          )}
+
+          {/* Conversations */}
+          <SideBarConversationsSection isSidebarOpen={open} />
+
+          {/* Profile */}
+          <Box sx={{ px: 1, pb: 1 }}>
+            <Paper elevation={4} sx={{ borderRadius: 2 }}>
+              <SidebarProfileSection isSidebarOpen={open} />
             </Paper>
-            <SideBarDivider />
-          </>
-        )}
-
-        {/* Conversations */}
-        <SideBarConversationsSection isSidebarOpen={open} />
-
-        {/* Profile */}
-        <Paper elevation={1}>
-          <SidebarProfileSection isSidebarOpen={open} />
-        </Paper>
-      </Box>
+          </Box>
+        </Box>
+      </Paper>
     </Drawer>
   );
 }

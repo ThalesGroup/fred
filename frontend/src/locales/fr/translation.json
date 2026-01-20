@@ -162,7 +162,8 @@
     "monitoring_data": "Données",
     "allAgents": "Tous les agents",
     "deleteSessionFailed": "La supression de la conversation a échoué",
-    "monitoring_graph": "Graphe"
+    "monitoring_graph": "Graphe",
+    "newChat": "Nouvelle conversation"
   },
   "chat": {
     "common": {

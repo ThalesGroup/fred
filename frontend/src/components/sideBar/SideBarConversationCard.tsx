@@ -113,7 +113,7 @@ export function SideBarConversationCard({ session, refetchSessions }: SideBarCon
           size="small"
           onClick={handleDelete}
           sx={{
-            color: theme.palette.error.main,
+            color: theme.palette.error.light,
             display: "none",
           }}
         />

@@ -1,4 +1,4 @@
-import { Box, Paper, Typography, useTheme } from "@mui/material";
+import { Box, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useGetSessionsAgenticV1ChatbotSessionsGetQuery } from "../../slices/agentic/agenticOpenApi";
 import { SideBarConversationCard, SideBarConversationCardSkeleton } from "./SideBarConversationCard";
@@ -26,20 +26,17 @@ export function SideBarConversationsSection({ isSidebarOpen }: ConversationsSect
     <>
       {/* Conversation header */}
       {isSidebarOpen && (
-        <Paper elevation={0}>
+        <Box>
           <Box sx={{ display: "flex", alignItems: "center", px: 2, py: 1 }}>
             <Typography variant="subtitle2" sx={{ color: theme.palette.text.secondary }}>
               {t("sidebar.chat")}
             </Typography>
           </Box>
-        </Paper>
+        </Box>
       )}
 
       {/* Conversation list */}
-      <Paper
-        elevation={0}
-        sx={{ flexGrow: 1, overflowY: "auto", overflowX: "hidden", scrollbarWidth: "none", pb: 1, px: 1 }}
-      >
+      <Box sx={{ flexGrow: 1, overflowY: "auto", overflowX: "hidden", scrollbarWidth: "none", pb: 1, px: 1 }}>
         {isSidebarOpen &&
           sortedSessions === undefined &&
           [...Array(15)].map((_, index) => <SideBarConversationCardSkeleton key={`skeleton-${index}`} />)}
@@ -49,7 +46,7 @@ export function SideBarConversationsSection({ isSidebarOpen }: ConversationsSect
           sortedSessions.map((session) => (
             <SideBarConversationCard key={session.id} session={session} refetchSessions={refetchSessions} />
           ))}
-      </Paper>
+      </Box>
     </>
   );
 }
