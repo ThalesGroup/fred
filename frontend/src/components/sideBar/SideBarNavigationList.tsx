@@ -55,7 +55,7 @@ export function SideBarNavigationList({ menuItems, isSidebarOpen, indentation = 
           <Fragment key={item.key}>
             <ListItemButton
               selected={active}
-              dense={indentation > 0}
+              dense
               component={hasLink ? Link : "div"}
               {...(hasLink ? { to: item.url } : {})}
               onClick={

@@ -1,12 +1,10 @@
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import GroupIcon from "@mui/icons-material/Group";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 import ScienceIcon from "@mui/icons-material/Science";
 import ShieldIcon from "@mui/icons-material/Shield";
-import { Box, CSSObject, IconButton, Paper, styled, Theme } from "@mui/material";
+import { Box, CSSObject, Paper, styled, Theme } from "@mui/material";
 import MuiDrawer from "@mui/material/Drawer";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
@@ -18,7 +16,6 @@ import {
   SideBarNavigationList,
   SidebarProfileSection,
 } from "../components/sideBar";
-import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { usePermissions } from "../security/usePermissions";
 import { ImageComponent } from "../utils/image";
 import { ApplicationContext } from "./ApplicationContextProvider";
@@ -79,7 +76,9 @@ const DrawerHeader = styled("div")(({ theme }) => ({
 export default function SideBar() {
   const { t } = useTranslation();
 
-  const [open, setOpen] = useLocalStorageState("SideBar.open", true);
+  // const [open, setOpen] = useLocalStorageState("SideBar.open", true);
+  // Remove collapsing for now
+  const open = true;
 
   // Here we set the "can" action to "create" since we want the viewer role not to see kpis and logs.
   // We also can remove the read_only allowed action to the viewer; to: kpi, opensearch & logs in rbac.py in fred_core/security
@@ -238,9 +237,10 @@ export default function SideBar() {
               </InvisibleLink>
             </Box>
           )}
-          <IconButton onClick={() => setOpen((open) => !open)} sx={{ mr: open ? 0 : 1 }}>
+          {/* Remove collapsing for now */}
+          {/* <IconButton onClick={() => setOpen((open) => !open)} sx={{ mr: open ? 0 : 1 }}>
             {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
-          </IconButton>
+          </IconButton> */}
         </DrawerHeader>
 
         {/* Nav */}
