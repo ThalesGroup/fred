@@ -596,7 +596,8 @@
     "manageAssets": "Manage Assets",
     "manageCrew": "Manage Crew",
     "inspectCode": "Inspect source code",
-    "viewA2ACard": "View A2A card"
+    "viewA2ACard": "View A2A card",
+    "enable": "Enable"
   },
   "dialogs": {
     "create": {

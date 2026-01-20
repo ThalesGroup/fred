@@ -597,7 +597,8 @@
     "manageAssets": "Gérer les ressources",
     "manageCrew": "Gérer l'équipe",
     "inspectCode": "Inspecter le code source",
-    "viewA2ACard": "Voir la carte A2A"
+    "viewA2ACard": "Voir la carte A2A",
+    "enable": "Activer"
   },
   "dialogs": {
     "create": {

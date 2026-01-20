@@ -57,8 +57,7 @@ export const AgentHub = () => {
   const [agents, setAgents] = useState<AnyAgent[]>([]);
   const [tabValue, setTabValue] = useState(0);
   const [showElements, setShowElements] = useState(false);
-  const [favoriteAgents, setFavoriteAgents] = useState<string[]>([]);
-  const [categories, setCategories] = useState<AgentCategory[]>([{ name: "all" }, { name: "favorites" }]);
+  const [categories, setCategories] = useState<AgentCategory[]>([{ name: "all" }]);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createModalType, setCreateModalType] = useState<"basic" | "a2a_proxy">("basic");
 
@@ -158,10 +157,7 @@ export const AgentHub = () => {
       setAgents(flows);
 
       const tags = extractUniqueTags(flows);
-      setCategories([{ name: "all" }, { name: "favorites" }, ...tags.map((tag) => ({ name: tag, isTag: true }))]);
-
-      const savedFavorites = localStorage.getItem("favoriteAgents");
-      if (savedFavorites) setFavoriteAgents(JSON.parse(savedFavorites));
+      setCategories([{ name: "all" }, ...tags.map((tag) => ({ name: tag, isTag: true }))]);
     } catch (err) {
       console.error("Error fetching agents:", err);
     }
@@ -197,21 +193,12 @@ export const AgentHub = () => {
 
   const filteredAgents = useMemo(() => {
     if (tabValue === 0) return agents;
-    if (tabValue === 1) return agents.filter((a) => favoriteAgents.includes(a.name));
-    if (categories.length > 2 && tabValue >= 2) {
+    if (categories.length > 1 && tabValue >= 1) {
       const tagName = categories[tabValue].name;
       return agents.filter((a) => a.tuning.tags?.includes(tagName));
     }
     return agents;
-  }, [tabValue, agents, favoriteAgents, categories]);
-
-  const toggleFavorite = (agentName: string) => {
-    const updated = favoriteAgents.includes(agentName)
-      ? favoriteAgents.filter((n) => n !== agentName)
-      : [...favoriteAgents, agentName];
-    setFavoriteAgents(updated);
-    localStorage.setItem("favoriteAgents", JSON.stringify(updated));
-  };
+  }, [tabValue, agents, categories]);
 
   // ---- ACTION handlers wired to card --------------------------------------
 
@@ -246,8 +233,7 @@ export const AgentHub = () => {
 
   const sectionTitle = useMemo(() => {
     if (tabValue === 0) return t("agentHub.allAgents");
-    if (tabValue === 1) return t("agentHub.favoriteAgents");
-    if (categories.length > 2 && tabValue >= 2) return `${categories[tabValue].name} ${t("agentHub.agents")}`;
+    if (categories.length > 1 && tabValue >= 1) return `${categories[tabValue].name} ${t("agentHub.agents")}`;
     return t("agentHub.agents");
   }, [tabValue, categories, t]);
 
@@ -408,8 +394,6 @@ export const AgentHub = () => {
                             <Box sx={{ width: "100%" }}>
                               <AgentCard
                                 agent={agent}
-                                isFavorite={favoriteAgents.includes(agent.name)}
-                                onToggleFavorite={canEditAgents ? toggleFavorite : undefined}
                                 onEdit={canEditAgents ? handleEdit : undefined}
                                 onToggleEnabled={canEditAgents ? handleToggleEnabled : undefined}
                                 onManageCrew={canEditAgents && isLeader(agent) ? handleManageCrew : undefined}
@@ -438,12 +422,7 @@ export const AgentHub = () => {
                       <Typography variant="subtitle1" color="text.secondary" align="center">
                         {t("agentHub.noAgents")}
                       </Typography>
-                      {tabValue === 1 && (
-                        <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 0.5 }}>
-                          {t("agentHub.noFavorites")}
-                        </Typography>
-                      )}
-                      {tabValue >= 2 && (
+                      {tabValue >= 1 && (
                         <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 0.5 }}>
                           {t("agentHub.noTag", { tag: categories[tabValue]?.name })}
                         </Typography>

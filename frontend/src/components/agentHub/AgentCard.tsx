@@ -21,7 +21,7 @@ import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 
 import TuneIcon from "@mui/icons-material/Tune";
-import { alpha, Box, Card, CardContent, IconButton, Stack, Tooltip, Typography, useTheme } from "@mui/material";
+import { Box, Card, CardContent, IconButton, Stack, Tooltip, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 // OpenAPI types
@@ -31,8 +31,6 @@ import { Leader } from "../../slices/agentic/agenticOpenApi";
 
 type AgentCardProps = {
   agent: AnyAgent;
-  isFavorite?: boolean;
-  onToggleFavorite?: (name: string) => void;
   onEdit?: (agent: AnyAgent) => void;
   onToggleEnabled?: (agent: AnyAgent) => void;
   onManageCrew?: (leader: Leader & { type: "leader" }) => void; // only visible for leaders
@@ -51,8 +49,6 @@ type AgentCardProps = {
  */
 export const AgentCard = ({
   agent,
-  isFavorite = false,
-  onToggleFavorite,
   onEdit,
   onToggleEnabled,
   onManageCrew,
@@ -63,13 +59,9 @@ export const AgentCard = ({
   const { t } = useTranslation();
   const theme = useTheme();
   const isEnabled = agent.enabled !== false;
-  const tags = agent.tuning.tags ?? [];
-  const tagLabel = tags.join(", ");
-  const tooltipBg = theme.palette.mode === "dark" ? "rgba(19, 23, 31, 0.94)" : theme.palette.background.paper;
   const hasA2aCard = Boolean(agent.metadata && (agent.metadata as any).a2a_card);
   const isA2A = Boolean(agent.metadata && (agent.metadata as any).a2a_base_url);
   const a2aBorder = theme.palette.success.main;
-  const baseBorderColor = isA2A ? alpha(a2aBorder, 0.45) : theme.palette.divider;
 
   return (
     <Card
@@ -140,44 +132,6 @@ export const AgentCard = ({
               <AgentChipWithIcon agent={agent} />
             )}
           </Box>
-
-          {/* Right: Tags + Favorite Star */}
-          {/* <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-            {tags.length > 0 && (
-              <Tooltip title={t("agentCard.taggedWith", { tag: tagLabel })}>
-                <Chip
-                  icon={<LocalOfferIcon fontSize="small" />}
-                  label={tagLabel}
-                  size="small"
-                  sx={{
-                    mr: 0.5,
-                    height: 22,
-                    fontSize: "0.7rem",
-                    bgcolor: "transparent",
-                    border: (th) => `1px solid ${th.palette.divider}`,
-                    "& .MuiChip-icon": { mr: 0.25 },
-                    "& .MuiChip-label": {
-                      maxWidth: 140,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    },
-                  }}
-                />
-              </Tooltip>
-            )}
-
-            {onToggleFavorite && (
-              <Tooltip title={isFavorite ? t("agentCard.unfavorite") : t("agentCard.favorite")}>
-                <IconButton
-                  size="small"
-                  onClick={() => onToggleFavorite(agent.name)}
-                  sx={{ color: isFavorite ? "warning.main" : "text.secondary" }}
-                >
-                  {isFavorite ? <StarIcon fontSize="small" /> : <StarOutlineIcon fontSize="small" />}
-                </IconButton>
-              </Tooltip>
-            )}
-          </Box> */}
         </Box>
 
         {/* ROW 2: Agent Role (Moved here) */}
@@ -280,7 +234,7 @@ export const AgentCard = ({
           )}
 
           {onToggleEnabled && (
-            <Tooltip title={isEnabled ? t("agentCard.disable") : t("agentCard.enable", "Enable")}>
+            <Tooltip title={isEnabled ? t("agentCard.disable") : t("agentCard.enable")}>
               <IconButton
                 size="small"
                 onClick={() => onToggleEnabled(agent)}

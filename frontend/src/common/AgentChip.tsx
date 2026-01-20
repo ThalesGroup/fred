@@ -55,7 +55,6 @@ export const AgentChipWithIcon = ({ agent, disableTitles = false, sx }: AgentChi
   // Visual constants
   const ICON_SIZE = 14;
   const NAME_MAX_W = 200; // allow a bit more breathing room
-  const ROLE_MAX_W = 260;
   const GAP_X = 0.75;
   const ICON_PAD = ICON_SIZE + 6;
 
