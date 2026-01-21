@@ -20,7 +20,8 @@
     "uploading": "Uploading...",
     "dropHere": "Drop files here or click to browse",
     "loadingPreview": "Loading preview...",
-    "loadingPreviewError": "Unable to load preview."
+    "loadingPreviewError": "Unable to load preview.",
+    "contactSupport": "Contact support team."
   },
   "dataHub": {
     "title": "Data Hub - Document Lineage",
@@ -1092,6 +1093,7 @@
   },
   "newChat": {
     "selectAgentTitle": "Welcome {{userName}}, who would you like to speak to?",
-    "yourAgents": "Your agents"
+    "yourAgents": "Your agents",
+    "loadingAgentError": "Failed to load agent list."
   }
 }

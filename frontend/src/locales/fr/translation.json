@@ -21,7 +21,8 @@
     "dropHere": "Déposez les fichiers ici ou cliquez pour parcourir",
     "loadingPreview": "Aperçu en cours de chargement...",
     "loadingPreviewError": "Impossible de charger l'aperçu.",
-    "view": "Aperçu"
+    "view": "Aperçu",
+    "contactSupport": "Contacter l'équipe support."
   },
   "dataHub": {
     "title": "Hub des Données - Lignage des documents",
@@ -1093,6 +1094,7 @@
   },
   "newChat": {
     "selectAgentTitle": "Bienvenue {{userName}}, à qui souhaitez-vous parler ?",
-    "yourAgents": "Vos agents"
+    "yourAgents": "Vos agents",
+    "loadingAgentError": "Impossible de charger la liste des agents."
   }
 }

@@ -251,6 +251,7 @@ class Properties(BaseModel):
         default="fred",
         description="Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'.",
     )
+    contactSupportLink: str | None = None
 
 
 class FrontendSettings(BaseModel):
