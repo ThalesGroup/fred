@@ -11,15 +11,18 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+import DeleteIcon from "@mui/icons-material/Delete";
 import { Box, Button, Divider, Drawer, Stack, TextField, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../common/agent";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
-import { FieldSpec, McpServerRef } from "../../slices/agentic/agenticOpenApi";
+import { FieldSpec, McpServerRef, useDeleteAgentAgenticV1AgentsNameDeleteMutation } from "../../slices/agentic/agenticOpenApi";
 import { TagsInput } from "./AgentTagsInput";
 import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
+import { useConfirmationDialog } from "../ConfirmationDialogProvider";
+import { usePermissions } from "../../security/usePermissions";
 
 // -----------------------------------------------------------
 // NEW TYPE FOR TUNING STATE
@@ -35,11 +38,15 @@ type Props = {
   agent: AnyAgent | null;
   onClose: () => void;
   onSaved?: () => void;
+  onDeleted?: () => void;
 };
-
-export function AgentEditDrawer({ open, agent, onClose, onSaved }: Props) {
+export function AgentEditDrawer({ open, agent, onClose, onSaved, onDeleted }: Props) {
   const { updateTuning, isLoading } = useAgentUpdater();
   const { t } = useTranslation();
+  const { showConfirmationDialog } = useConfirmationDialog();
+  const { can } = usePermissions();
+  const canDeleteAgents = can("agents", "delete");
+  const [triggerDeleteAgent] = useDeleteAgentAgenticV1AgentsNameDeleteMutation();
   // State for dynamic fields
   const [fields, setFields] = useState<FieldSpec[]>([]);
   // State for top-level Tuning properties
@@ -121,6 +128,24 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved }: Props) {
     onClose();
   };
 
+  const handleDelete = () => {
+    if (!agent) return;
+
+    showConfirmationDialog({
+      title: t("agentHub.confirmDeleteTitle"),
+      message: t("agentHub.confirmDeleteMessage"),
+      onConfirm: async () => {
+        try {
+          await triggerDeleteAgent({ name: agent.name }).unwrap();
+          onDeleted?.();
+          onClose();
+        } catch (err) {
+          console.error("Failed to delete agent:", err);
+        }
+      },
+    });
+  };
+
   const isSaveDisabled = isLoading || !agent || !topLevelTuning.role || !topLevelTuning.description;
 
   return (
@@ -198,7 +223,18 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved }: Props) {
 
         {/* Sticky footer */}
         <Divider />
-        <Box sx={{ p: 1.5, position: "sticky", bottom: 0, bgcolor: "background.paper" }}>
+        <Box sx={{ p: 1.5, position: "sticky", bottom: 0, bgcolor: "background.paper", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Stack direction="row" justifyContent="flex-start">
+            <Button
+              variant="contained"
+              color="error"
+              startIcon={<DeleteIcon />}
+              onClick={handleDelete}
+              disabled={!canDeleteAgents}
+            >
+              {t("common.delete")}
+            </Button>
+          </Stack>
           <Stack direction="row" gap={1} justifyContent="flex-end">
             <Button variant="outlined" onClick={onClose}>
               {t("dialogs.cancel")}

@@ -279,7 +279,7 @@ const ChatBotView = ({
                   }}
                 >
                   <Typography
-                    variant="h3"
+                    variant="h4"
                     sx={{
                       fontWeight: 700,
                       display: "inline-block",

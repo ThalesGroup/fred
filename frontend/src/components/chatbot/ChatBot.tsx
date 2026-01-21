@@ -47,8 +47,8 @@ import { useToast } from "../ToastProvider.tsx";
 import { keyOf, mergeAuthoritative, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import ChatBotView from "./ChatBotView.tsx";
 import { useConversationOptionsController } from "./ConversationOptionsController.tsx";
-import { UserInputContent } from "./user_input/UserInput.tsx";
 import { toDisplayChunks } from "./messageParts.ts";
+import { UserInputContent } from "./user_input/UserInput.tsx";
 
 const HISTORY_TEXT_LIMIT = 1200;
 const LOG_GENIUS_CONTEXT_TURNS = 3;
