@@ -47,8 +47,8 @@ import { useToast } from "../ToastProvider.tsx";
 import { keyOf, mergeAuthoritative, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import ChatBotView from "./ChatBotView.tsx";
 import { useConversationOptionsController } from "./ConversationOptionsController.tsx";
-import { UserInputContent } from "./user_input/UserInput.tsx";
 import { toDisplayChunks } from "./messageParts.ts";
+import { UserInputContent } from "./user_input/UserInput.tsx";
 
 const HISTORY_TEXT_LIMIT = 1200;
 const LOG_GENIUS_CONTEXT_TURNS = 3;
@@ -154,6 +154,7 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
   // When backend creates a session during first file upload, keep it locally
   // so the immediate next message uses the same session id.
   const pendingSessionIdRef = useRef<string | null>(null);
+  const clientCreatedSessionRef = useRef<string | null>(null);
 
   // Name of des libs / prompts / templates / chat-context
   const { data: docLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
@@ -649,6 +650,9 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
     if (!loadState.historyReady || !loadState.prefsReady) return;
     if (lastReadySeqRef.current === loadState.seq) return;
     lastReadySeqRef.current = loadState.seq;
+    if (clientCreatedSessionRef.current === chatSessionId) {
+      clientCreatedSessionRef.current = null;
+    }
     const elapsedMs = loadState.startedAt ? Date.now() - loadState.startedAt : 0;
     console.info("[CHATBOT][LOAD] ready", {
       seq: loadState.seq,
@@ -735,6 +739,7 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
         console.warn("[CHATBOT] Failed to seed session prefs on create", prefErr);
       }
       pendingSessionIdRef.current = session.id;
+      clientCreatedSessionRef.current = session.id;
       onNewSessionCreated(session.id);
       return session.id;
     } catch (err: any) {
@@ -921,15 +926,20 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
 
   const loadError = (isHistoryError && historyError) || (isPrefsError && prefsError);
   const hasLoadError = Boolean(loadError);
+  const isLocalSessionHydrating = Boolean(chatSessionId) && pendingSessionIdRef.current === chatSessionId;
+  const isClientCreatedSession = Boolean(chatSessionId) && clientCreatedSessionRef.current === chatSessionId;
   const isSessionLoadBlocked =
     Boolean(chatSessionId) &&
+    !isLocalSessionHydrating &&
+    !isClientCreatedSession &&
     (loadState.chatSessionId !== chatSessionId ||
       !loadState.historyReady ||
       !loadState.prefsReady ||
       Boolean(loadError));
   const showWelcome = isNewConversation && !isSessionLoadBlocked && !waitResponse && messages.length === 0;
   // Helps spot session-history fetch issues quickly in dev without adding noisy logs.
-  const showHistoryLoading = !!chatSessionId && isHistoryFetching && messages.length === 0 && !waitResponse;
+  const showHistoryLoading =
+    !!chatSessionId && isHistoryFetching && messages.length === 0 && !waitResponse && !isClientCreatedSession;
   return (
     <ChatBotView
       chatSessionId={chatSessionId}
@@ -950,7 +960,7 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
       showWelcome={showWelcome}
       showHistoryLoading={showHistoryLoading}
       waitResponse={waitResponse}
-      isHydratingSession={isHydratingSession}
+      isHydratingSession={isHydratingSession && !isClientCreatedSession}
       conversationPrefs={conversationPrefs}
       currentAgent={currentAgent}
       agents={agents}
