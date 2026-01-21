@@ -23,7 +23,6 @@ from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_
     FastTextOptions,
     FastTextResult,
     collapse_whitespace,
-    enforce_max_chars,
     trim_empty_lines,
 )
 
@@ -69,16 +68,82 @@ class FastUnstructuredTextProcessingProcessor(BaseFastTextProcessor):
                 if page_text.strip():
                     page_texts.append((page_no, page_text))
 
+            max_chars = opts.max_chars if opts.max_chars and opts.max_chars > 0 else None
             content_parts: list[str] = []
+            pages: list[FastPageText] = []
+            included_pages: list[int] = []
+            current_len = 0
+            truncated = False
+
+            def add_fragment(fragment: str) -> None:
+                nonlocal current_len
+                if content_parts:
+                    current_len += 2
+                content_parts.append(fragment)
+                current_len += len(fragment)
+
+            def remove_last_fragment() -> None:
+                nonlocal current_len
+                if not content_parts:
+                    return
+                fragment = content_parts.pop()
+                remove_len = len(fragment)
+                if content_parts:
+                    remove_len += 2
+                current_len -= remove_len
+
+            def remaining_capacity() -> int | None:
+                if max_chars is None:
+                    return None
+                sep = 2 if content_parts else 0
+                return max_chars - current_len - sep
+
             for page_no, page_text in page_texts:
                 if opts.add_page_headings:
-                    content_parts.append(f"## Page {page_no}")
-                content_parts.append(page_text)
-            content = normalize_text("\n\n".join(content_parts)) if content_parts else ""
+                    heading = f"## Page {page_no}"
+                    remaining = remaining_capacity()
+                    if remaining is not None and remaining <= 0:
+                        truncated = True
+                        break
+                    if remaining is not None and len(heading) > remaining:
+                        truncated = True
+                        break
+                    add_fragment(heading)
+                    remaining = remaining_capacity()
+                    if remaining is not None and remaining <= 0:
+                        remove_last_fragment()
+                        truncated = True
+                        break
 
-            content, truncated = enforce_max_chars(content, opts.max_chars)
-            pages = [FastPageText(page_no=page_no, text=page_text, char_count=len(page_text)) for page_no, page_text in page_texts] if opts.return_per_page else []
-            page_count = len(page_texts) if page_texts else None
+                remaining = remaining_capacity()
+                if remaining is not None:
+                    if remaining <= 0:
+                        truncated = True
+                        break
+                    if len(page_text) > remaining:
+                        page_text = page_text[:remaining]
+                        truncated = True
+
+                add_fragment(page_text)
+                if page_text.strip():
+                    included_pages.append(page_no)
+                    if opts.return_per_page:
+                        pages.append(
+                            FastPageText(
+                                page_no=page_no,
+                                text=page_text,
+                                char_count=len(page_text),
+                            )
+                        )
+
+                if max_chars is not None and current_len >= max_chars:
+                    truncated = True
+                    break
+
+            content = normalize_text("\n\n".join(content_parts)) if content_parts else ""
+            if truncated and content:
+                content = content.rstrip() + "\n…"
+            page_count = len(included_pages) if included_pages else None
             return FastTextResult(
                 document_name=file_path.name,
                 page_count=page_count,
