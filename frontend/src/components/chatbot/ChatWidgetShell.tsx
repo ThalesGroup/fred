@@ -13,20 +13,10 @@
 // limitations under the License.
 
 import CloseIcon from "@mui/icons-material/Close";
-import {
-  Badge,
-  Box,
-  Button,
-  ClickAwayListener,
-  IconButton,
-  Paper,
-  Stack,
-  Tooltip,
-  useTheme,
-} from "@mui/material";
-import type { MouseEvent, ReactElement, ReactNode } from "react";
-import { FeatureTooltip } from "./FeatureTooltip";
 import type { BadgeProps, TooltipProps } from "@mui/material";
+import { Badge, Box, Button, ClickAwayListener, IconButton, Paper, Stack, Tooltip, useTheme } from "@mui/material";
+import type { MouseEvent, ReactElement, ReactNode } from "react";
+import { FeatureTooltip } from "../../shared/tooltips/DetailedTooltip";
 
 type ChatWidgetShellProps = {
   open: boolean;

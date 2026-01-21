@@ -25,6 +25,7 @@ import { BoxProps } from "@mui/material";
 import Popover from "@mui/material/Popover";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { FeatureTooltip } from "../../../shared/tooltips/DetailedTooltip";
 import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
 import { ViewIconButton } from "../../../shared/ui/buttons/ViewIconButton";
 import {
@@ -32,7 +33,6 @@ import {
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard";
-import { FeatureTooltip } from "../FeatureTooltip";
 
 // Extend with the standard MUI prop types for styling.
 // We extend Pick<BoxProps, 'sx'> to inherit the definition of the 'sx' prop.

@@ -35,6 +35,7 @@ import { CrewEditor } from "../components/agentHub/CrewEditor";
 // OpenAPI
 import {
   Leader,
+  useDeleteAgentAgenticV1AgentsNameDeleteMutation,
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useRestoreAgentsAgenticV1AgentsRestorePostMutation,
 } from "../slices/agentic/agenticOpenApi";
@@ -87,11 +88,13 @@ export const AgentHub = () => {
 
   const { updateEnabled } = useAgentUpdater();
   const [triggerGetSource] = useLazyGetRuntimeSourceTextQuery();
+  const [deleteAgent] = useDeleteAgentAgenticV1AgentsNameDeleteMutation();
 
   // RBAC utils
   const { can } = usePermissions();
   const canEditAgents = can("agents", "update");
   const canCreateAgents = can("agents", "create");
+  const canDeleteAgents = can("agents", "delete");
   const [codeDrawer, setCodeDrawer] = useState<{
     open: boolean;
     title: string;
@@ -211,6 +214,22 @@ export const AgentHub = () => {
     setAssetManagerOpen(false);
     setAgentForAssetManagement(null);
   };
+
+  const handleDeleteAgent = (agent: AnyAgent) => {
+    showConfirmationDialog({
+      title: t("agentHub.confirmDeleteTitle"),
+      message: t("agentHub.confirmDeleteMessage"),
+      onConfirm: async () => {
+        try {
+          await deleteAgent({ name: agent.name }).unwrap();
+          fetchAgents();
+        } catch (error: any) {
+          const detail = error?.data?.detail || error?.data || error?.message || "Unknown error";
+          showError({ summary: t("common.error", "Error"), detail });
+        }
+      },
+    });
+  };
   // ------------------------------------------------------------------------
 
   return (
@@ -282,6 +301,7 @@ export const AgentHub = () => {
                                 onManageAssets={canEditAgents ? handleManageAssets : undefined}
                                 onInspectCode={handleInspectCode}
                                 onViewA2ACard={handleViewA2ACard}
+                                onDelete={canDeleteAgents ? handleDeleteAgent : undefined}
                               />
                             </Box>
                           </Fade>

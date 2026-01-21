@@ -1,7 +1,7 @@
 import { Box, Divider, Tooltip, TooltipProps, Typography, useTheme } from "@mui/material";
 import React from "react";
 
-export type FeatureTooltipProps = {
+export type DetailedTooltip = {
   label: string;
   description: string;
   disabledReason?: string;
@@ -17,8 +17,11 @@ export function FeatureTooltip({
   placement = "left-start",
   maxWidth = 460,
   children,
-}: FeatureTooltipProps) {
+}: DetailedTooltip) {
   const theme = useTheme();
+  const isLight = theme.palette.mode === "light";
+  const tooltipBg = isLight ? theme.palette.background.paper : theme.palette.grey[900];
+  const tooltipBorder = isLight ? theme.palette.divider : theme.palette.grey[800];
 
   return (
     <Tooltip
@@ -46,7 +49,18 @@ export function FeatureTooltip({
       }
       placement={placement}
       arrow
-      slotProps={{ popper: { sx: { backdropFilter: "none", WebkitBackdropFilter: "none" } } }}
+      slotProps={{
+        popper: { sx: { backdropFilter: "none", WebkitBackdropFilter: "none" } },
+        tooltip: {
+          sx: {
+            bgcolor: tooltipBg,
+            color: theme.palette.text.primary,
+            border: `1px solid ${tooltipBorder}`,
+            boxShadow: isLight ? theme.shadows[3] : theme.shadows[6],
+          },
+        },
+        arrow: { sx: { color: tooltipBg } },
+      }}
     >
       {children}
     </Tooltip>

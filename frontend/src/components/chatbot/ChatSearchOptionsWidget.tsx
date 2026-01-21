@@ -9,11 +9,11 @@ import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import { Box, ClickAwayListener, IconButton, Paper, Stack, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
-import type { RuntimeContext } from "../../slices/agentic/agenticOpenApi.ts";
-import { SearchPolicyName } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+import { FeatureTooltip } from "../../shared/tooltips/DetailedTooltip.tsx";
 import { ResetButton } from "../../shared/ui/buttons/ResetButton.tsx";
 import { ToggleIconButton } from "../../shared/ui/buttons/ToggleIconButton.tsx";
-import { FeatureTooltip } from "./FeatureTooltip";
+import type { RuntimeContext } from "../../slices/agentic/agenticOpenApi.ts";
+import { SearchPolicyName } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { UserInputRagScope } from "./user_input/UserInputRagScope.tsx";
 import { UserInputSearchPolicy } from "./user_input/UserInputSearchPolicy.tsx";
 
@@ -103,11 +103,7 @@ const ChatSearchOptionsWidget = ({
               {t("chatbot.ragScope.label", "RAG scope")}
             </Typography>
             <Box sx={{ flexShrink: 0 }}>
-              <UserInputRagScope
-                value={searchRagScope}
-                onChange={onSearchRagScopeChange}
-                disabled={ragScopeDisabled}
-              />
+              <UserInputRagScope value={searchRagScope} onChange={onSearchRagScopeChange} disabled={ragScopeDisabled} />
             </Box>
           </Box>
           <Box display="flex" alignItems="center" justifyContent="space-between" gap={1}>

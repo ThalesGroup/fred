@@ -21,6 +21,8 @@ import { useTranslation } from "react-i18next";
 import type { AnyAgent } from "../../common/agent.ts";
 import ChatDocumentLibrariesWidget from "../../features/libraries/components/ChatDocumentLibrariesWidget.tsx";
 import { useInitialChatInputContext, type InitialChatPrefs } from "../../hooks/useInitialChatInputContext.ts";
+import { FeatureTooltip } from "../../shared/tooltips/DetailedTooltip.tsx";
+import { ToggleIconButton } from "../../shared/ui/buttons/ToggleIconButton.tsx";
 import type { RuntimeContext } from "../../slices/agentic/agenticOpenApi.ts";
 import {
   useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
@@ -29,10 +31,8 @@ import {
 import type { Resource, SearchPolicyName, TagWithItemsId } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import ChatAttachmentsWidget from "./ChatAttachmentsWidget.tsx";
 import ChatContextWidget from "./ChatContextWidget.tsx";
-import ChatLogGeniusWidget from "./ChatLogGeniusWidget.tsx";
 import ChatKnowledge from "./ChatKnowledge.tsx";
-import { ToggleIconButton } from "../../shared/ui/buttons/ToggleIconButton.tsx";
-import { FeatureTooltip } from "./FeatureTooltip";
+import ChatLogGeniusWidget from "./ChatLogGeniusWidget.tsx";
 import ChatSearchOptionsWidget from "./ChatSearchOptionsWidget.tsx";
 
 type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
