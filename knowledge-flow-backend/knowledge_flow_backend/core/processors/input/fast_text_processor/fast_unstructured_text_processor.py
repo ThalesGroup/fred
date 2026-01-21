@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+from collections import defaultdict
 from pathlib import Path
 
 from unstructured.partition.auto import partition
@@ -40,22 +41,52 @@ class FastUnstructuredTextProcessingProcessor(BaseFastTextProcessor):
         opts = options or FastTextOptions()
         try:
             elements = partition(filename=str(file_path))
-            content = "\n\n".join([str(el) for el in elements])
-            if opts.normalize_whitespace:
-                content = collapse_whitespace(content)
-            if opts.trim_empty_lines:
-                content = trim_empty_lines(content)
+            page_map: dict[int, list[str]] = defaultdict(list)
+
+            for el in elements:
+                category = getattr(el, "category", None)
+                if not opts.include_tables and category == "Table":
+                    continue
+                if not opts.include_images and category in {"Image", "Figure"}:
+                    continue
+                meta = getattr(el, "metadata", None)
+                page_no = getattr(meta, "page_number", None) or 1
+                if opts.page_range and not (opts.page_range[0] <= page_no <= opts.page_range[1]):
+                    continue
+                page_map[page_no].append(str(el))
+
+            def normalize_text(text: str) -> str:
+                if opts.normalize_whitespace:
+                    text = collapse_whitespace(text)
+                if opts.trim_empty_lines:
+                    text = trim_empty_lines(text)
+                return text
+
+            page_texts: list[tuple[int, str]] = []
+            for page_no in sorted(page_map.keys()):
+                page_text = "\n\n".join(page_map[page_no])
+                page_text = normalize_text(page_text)
+                if page_text.strip():
+                    page_texts.append((page_no, page_text))
+
+            content_parts: list[str] = []
+            for page_no, page_text in page_texts:
+                if opts.add_page_headings:
+                    content_parts.append(f"## Page {page_no}")
+                content_parts.append(page_text)
+            content = normalize_text("\n\n".join(content_parts)) if content_parts else ""
+
             content, truncated = enforce_max_chars(content, opts.max_chars)
-            # TODO: Create pages for big documents
-            pages = [FastPageText(page_no=1, text=content, char_count=len(content))] if opts.return_per_page else []
+            pages = [FastPageText(page_no=page_no, text=page_text, char_count=len(page_text)) for page_no, page_text in page_texts] if opts.return_per_page else []
+            page_count = len(page_texts) if page_texts else None
             return FastTextResult(
                 document_name=file_path.name,
-                page_count=1,
+                page_count=page_count,
                 total_chars=len(content),
                 truncated=truncated,
                 text=content,
                 pages=pages,
             )
-        except Exception as e:
-            logger.error(f"Failed to extract {file_path} to text: {e}")
-            raise e
+        except Exception:
+            logger.exception("Failed to extract %s to text", file_path)
+            raise

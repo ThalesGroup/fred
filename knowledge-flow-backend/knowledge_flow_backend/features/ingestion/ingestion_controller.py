@@ -22,7 +22,7 @@ import shutil
 import tempfile
 import time
 import uuid
-from typing import List, Optional
+from typing import Dict, List, Optional, Type
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
@@ -33,7 +33,11 @@ from pydantic import BaseModel
 from knowledge_flow_backend.application_context import ApplicationContext, get_kpi_writer
 from knowledge_flow_backend.common.structures import LibraryProcessorConfig, ProcessorConfig, Status
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
-from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import FastTextOptions, FastTextResult
+from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import (
+    BaseFastTextProcessor,
+    FastTextOptions,
+    FastTextResult,
+)
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_unstructured_text_processor import FastUnstructuredTextProcessingProcessor
 from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
@@ -227,10 +231,34 @@ class IngestionController:
     This controller provides endpoints for uploading and processing documents.
     """
 
+    def _build_fast_text_registry(self) -> Dict[str, Type[BaseFastTextProcessor]]:
+        cfg = ApplicationContext.get_instance().get_config()
+        registry: Dict[str, Type[BaseFastTextProcessor]] = {}
+        if cfg.attachment_processors:
+            for entry in cfg.attachment_processors:
+                cls = _dynamic_import_processor(entry.class_path)
+                if not issubclass(cls, BaseFastTextProcessor):
+                    raise TypeError(f"{entry.class_path} is not a BaseFastTextProcessor")
+                registry[entry.prefix.lower()] = cls
+        if not registry:
+            registry["*"] = FastUnstructuredTextProcessingProcessor
+        return registry
+
+    def _get_fast_text_processor(self, filename: str) -> BaseFastTextProcessor:
+        ext = pathlib.Path(filename).suffix.lower()
+        processor_class = self._fast_text_registry.get(ext) or self._fast_text_registry.get("*")
+        if processor_class is None:
+            raise HTTPException(status_code=400, detail=f"No fast text processor configured for '{ext or filename}'")
+        class_path = f"{processor_class.__module__}.{processor_class.__name__}"
+        if class_path not in self._fast_text_instances:
+            self._fast_text_instances[class_path] = processor_class()
+        return self._fast_text_instances[class_path]
+
     def __init__(self, router: APIRouter):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.service = IngestionService()
-        self.fast_text_service = FastUnstructuredTextProcessingProcessor()
+        self._fast_text_registry = self._build_fast_text_registry()
+        self._fast_text_instances: Dict[str, BaseFastTextProcessor] = {}
         self.embedder = ApplicationContext.get_instance().get_embedder()
         self.vector_store: BaseVectorStore = ApplicationContext.get_instance().get_create_vector_store(self.embedder)
         logger.info("IngestionController initialized.")
@@ -636,7 +664,7 @@ class IngestionController:
             # Extract
             try:
                 logger.debug("[FAST TEXT] Extracting text for %s with options %s", filename, opts)
-                result = self.fast_text_service.extract(raw_path, options=opts)
+                result = self._get_fast_text_processor(filename).extract(raw_path, options=opts)
                 logger.info(
                     "[FAST TEXT] user=%s file=%s format=%s chars=%s pages=%s  truncated=%s",
                     user.uid,
@@ -727,7 +755,7 @@ class IngestionController:
             # Extract fast text
             result: FastTextResult
             try:
-                result = self.fast_text_service.extract(raw_path, options=opts)
+                result = self._get_fast_text_processor(filename).extract(raw_path, options=opts)
                 logger.info(
                     "[FAST TEXT][INGEST] user=%s file=%s chars=%s pages=%s truncated=%s",
                     user.uid,

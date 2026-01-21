@@ -71,10 +71,10 @@ def default_registry() -> Dict[str, ProcessorSpec]:
         ),
         ##################### Fast processors #####################
         ProcessorSpec(
-            id="pdf_lite_markitdown",
+            id="fast_unstructured_text",
             kind="fast",
             factory=lambda: FastUnstructuredTextProcessingProcessor(),
-            display_name="PDF → MD (Lite/MarkItDown)",
+            display_name="Fast → Text (Unstructured)",
             file_types=[".pdf", ".docx", ".pptx", ".txt", ".md"],
         ),
     ]

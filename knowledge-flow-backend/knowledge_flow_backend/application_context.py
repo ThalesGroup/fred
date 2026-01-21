@@ -71,6 +71,7 @@ from knowledge_flow_backend.common.structures import (
     WeaviateVectorStorage,
 )
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
+from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import BaseFastTextProcessor
 from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 from knowledge_flow_backend.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
@@ -227,6 +228,22 @@ def validate_library_output_processor_config(config: Configuration):
             raise ImportError(f"Library Output Processor '{entry.class_path}' could not be loaded: {e}")
 
 
+def validate_attachment_processor_config(config: Configuration):
+    """Ensure all attachment fast-text processor classes can be imported and subclass BaseFastTextProcessor."""
+    if not config.attachment_processors:
+        return
+    for entry in config.attachment_processors:
+        module_path, class_name = entry.class_path.rsplit(".", 1)
+        try:
+            module = importlib.import_module(module_path)
+            cls = getattr(module, class_name)
+            if not issubclass(cls, BaseFastTextProcessor):
+                raise TypeError(f"{entry.class_path} is not a subclass of BaseFastTextProcessor")
+            logger.debug("Validated attachment processor: %s for prefix: %s", entry.class_path, entry.prefix)
+        except (ImportError, AttributeError, TypeError) as e:
+            raise ImportError(f"Attachment Processor '{entry.class_path}' could not be loaded: {e}")
+
+
 def _require_env(var: str) -> None:
     """Log presence of a required env var or raise loudly if missing."""
     val = os.getenv(var, "")
@@ -266,6 +283,7 @@ class ApplicationContext:
         validate_input_processor_config(configuration)
         validate_output_processor_config(configuration)
         validate_library_output_processor_config(configuration)
+        validate_attachment_processor_config(configuration)
         self.input_processor_registry: Dict[str, Type[BaseInputProcessor]] = self._load_input_processor_registry()
         self.output_processor_registry: Dict[str, Type[BaseOutputProcessor]] = self._load_output_processor_registry()
         ApplicationContext._instance = self

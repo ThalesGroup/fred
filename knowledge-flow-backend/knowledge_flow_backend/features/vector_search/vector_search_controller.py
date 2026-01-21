@@ -74,6 +74,7 @@ class VectorSearchController:
                     policy_name=request.search_policy,
                     session_id=request.session_id,
                     include_session_scope=request.include_session_scope,
+                    include_corpus_scope=request.include_corpus_scope,
                 )
                 return hits
             except Exception as e:

@@ -1743,6 +1743,8 @@ export type SearchRequest = {
   session_id?: string | null;
   /** If true and session_id is provided, also search session-scoped attachment vectors (filtered by user/session). */
   include_session_scope?: boolean;
+  /** If true, also search corpus/library vectors (non-session scope). */
+  include_corpus_scope?: boolean;
 };
 export type RerankRequest = {
   question: string;

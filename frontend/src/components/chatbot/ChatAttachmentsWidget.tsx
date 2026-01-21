@@ -5,16 +5,19 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 
 import AttachFileIcon from "@mui/icons-material/AttachFile";
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from "@mui/material";
+import ToggleOffOutlinedIcon from "@mui/icons-material/ToggleOffOutlined";
+import ToggleOnOutlinedIcon from "@mui/icons-material/ToggleOnOutlined";
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Tooltip, Typography } from "@mui/material";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
+import { LoadingIcon } from "../../shared/ui/buttons/LoadingIcon";
+import { ToggleIconButton } from "../../shared/ui/buttons/ToggleIconButton";
+import { ViewIconButton } from "../../shared/ui/buttons/ViewIconButton";
 import {
   useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation,
   useLazyGetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetQuery,
 } from "../../slices/agentic/agenticOpenApi";
-import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
-import { LoadingIcon } from "../../shared/ui/buttons/LoadingIcon";
-import { ViewIconButton } from "../../shared/ui/buttons/ViewIconButton";
 import ChatWidgetList from "./ChatWidgetList.tsx";
 import ChatWidgetShell from "./ChatWidgetShell.tsx";
 
@@ -30,6 +33,9 @@ export type ChatAttachmentsWidgetProps = {
   closeOnClickAway?: boolean;
   disabled?: boolean;
   isUploading?: boolean;
+  includeInSearch: boolean;
+  onIncludeInSearchChange: (next: boolean) => void;
+  includeInSearchDisabled?: boolean;
   onAddAttachments?: (files: File[]) => void;
   onAttachmentsUpdated?: () => void;
   onOpen: () => void;
@@ -43,6 +49,9 @@ const ChatAttachmentsWidget = ({
   closeOnClickAway = true,
   disabled = false,
   isUploading = false,
+  includeInSearch,
+  onIncludeInSearchChange,
+  includeInSearchDisabled = false,
   onAddAttachments,
   onAttachmentsUpdated,
   onOpen,
@@ -57,6 +66,7 @@ const ChatAttachmentsWidget = ({
   const [summaryTitle, setSummaryTitle] = useState("");
   const [summaryText, setSummaryText] = useState("");
   const count = attachments.length;
+  const badgeColor = includeInSearch ? (disabled ? "default" : "primary") : "warning";
   const items = attachments.map((item) => ({
     id: item.id,
     label: item.name,
@@ -72,8 +82,7 @@ const ChatAttachmentsWidget = ({
             setSummaryOpen(true);
             try {
               const data = await fetchSummary({ attachmentId: item.id, sessionId }).unwrap();
-              const text =
-                typeof data === "string" ? data : (data?.summary ?? data?.content ?? JSON.stringify(data));
+              const text = typeof data === "string" ? data : (data?.summary ?? data?.content ?? JSON.stringify(data));
               setSummaryText(text || "No summary available.");
             } catch {
               setSummaryText("No summary available.");
@@ -104,22 +113,46 @@ const ChatAttachmentsWidget = ({
         closeOnClickAway={closeOnClickAway}
         disabled={disabled}
         badgeCount={count}
+        badgeColor={badgeColor}
         icon={<AttachFileIcon fontSize="small" />}
         ariaLabel={t("chatbot.attachments.drawerTitle", "Attachments")}
         tooltipLabel={t("chatbot.attachments.drawerTitle", "Attachments")}
-        tooltipDescription={t(
-          "chatbot.attachments.tooltip.description",
-          "Files attached to this conversation.",
-        )}
+        tooltipDescription={t("chatbot.attachments.tooltip.description", "Files attached to this conversation.")}
         tooltipDisabledReason={
           disabled ? t("chatbot.attachments.tooltip.disabled", "This agent does not use attachments.") : undefined
         }
-        actionLabel={
-          isUploading ? t("common.uploading", "Uploading...") : t("chatbot.attachFiles", "Attach files")
-        }
+        actionLabel={isUploading ? t("common.uploading", "Uploading...") : t("chatbot.attachFiles", "Attach files")}
         actionStartIcon={isUploading ? <LoadingIcon size={14} /> : undefined}
         actionDisabled={disabled || isUploading}
         onAction={() => fileInputRef.current?.click()}
+        headerActions={
+          <Tooltip
+            title={
+              includeInSearch
+                ? t(
+                    "chatbot.attachments.includeTooltipOn",
+                    "Attachments are included in retrieval for this conversation.",
+                  )
+                : t(
+                    "chatbot.attachments.includeTooltipOff",
+                    "Attachments are excluded from retrieval for this conversation.",
+                  )
+            }
+          >
+            <span>
+              <ToggleIconButton
+                size="small"
+                onClick={() => onIncludeInSearchChange(!includeInSearch)}
+                disabled={disabled || includeInSearchDisabled}
+                aria-label={t("chatbot.attachments.includeToggle", "Toggle attachment retrieval")}
+                icon={includeInSearch ? <ToggleOnOutlinedIcon fontSize="small" /> : <ToggleOffOutlinedIcon fontSize="small" />}
+                active={!includeInSearch}
+                indicatorColor="warning"
+                sx={{ color: includeInSearch ? "inherit" : "text.secondary" }}
+              />
+            </span>
+          </Tooltip>
+        }
       >
         <ChatWidgetList items={items} emptyText={t("chatbot.attachments.noAttachments", "No attachments yet")} />
         <input
@@ -127,6 +160,7 @@ const ChatAttachmentsWidget = ({
           type="file"
           multiple
           hidden
+          accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.csv,.tsv,.rtf,.html,.htm,.json,.jsonl,.xls,.xlsx"
           onChange={(event) => {
             const files = Array.from(event.target.files ?? []);
             if (files.length) onAddAttachments?.(files);

@@ -5,6 +5,8 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 
 import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
+import ToggleOffOutlinedIcon from "@mui/icons-material/ToggleOffOutlined";
+import ToggleOnOutlinedIcon from "@mui/icons-material/ToggleOnOutlined";
 import {
   Box,
   Button,
@@ -16,6 +18,7 @@ import {
   Paper,
   Popper,
   Stack,
+  Tooltip,
   Typography,
   useTheme,
 } from "@mui/material";
@@ -26,6 +29,7 @@ import type { TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlow
 import { buildTree } from "../../../shared/utils/tagTree";
 import { TagTreeList } from "../../../shared/ui/tree/TagTreeList";
 import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
+import { ToggleIconButton } from "../../../shared/ui/buttons/ToggleIconButton";
 import { ViewIconButton } from "../../../shared/ui/buttons/ViewIconButton";
 import { ChatDocumentLibrariesSelectionCard } from "./ChatDocumentLibrariesSelectionCard.tsx";
 import ChatWidgetList from "../../../components/chatbot/ChatWidgetList.tsx";
@@ -36,6 +40,9 @@ export type ChatDocumentLibrariesWidgetProps = {
   onChangeSelectedLibraryIds: (ids: string[]) => void;
   nameById: Record<string, string>;
   libraryById?: Record<string, TagWithItemsId | undefined>;
+  includeInSearch: boolean;
+  onIncludeInSearchChange: (next: boolean) => void;
+  includeInSearchDisabled?: boolean;
   open: boolean;
   closeOnClickAway?: boolean;
   disabled?: boolean;
@@ -48,6 +55,9 @@ const ChatDocumentLibrariesWidget = ({
   onChangeSelectedLibraryIds,
   nameById,
   libraryById,
+  includeInSearch,
+  onIncludeInSearchChange,
+  includeInSearchDisabled = false,
   open,
   closeOnClickAway = true,
   disabled = false,
@@ -62,6 +72,7 @@ const ChatDocumentLibrariesWidget = ({
 
   const isPickerOpen = Boolean(pickerAnchor);
   const selectedCount = selectedLibraryIds.length;
+  const badgeColor = includeInSearch ? (disabled ? "default" : "primary") : "warning";
 
   useEffect(() => {
     if (!open) setPickerAnchor(null);
@@ -148,6 +159,8 @@ const ChatDocumentLibrariesWidget = ({
         onClickAway={handleClickAway}
         disabled={disabled}
         badgeCount={selectedCount}
+        badgeColor={badgeColor}
+        showBadgeDotWhenEmpty
         icon={<MenuBookOutlinedIcon fontSize="small" />}
         ariaLabel={t("knowledge.viewSelector.libraries", "Libraries")}
         tooltipLabel={t("knowledge.viewSelector.libraries", "Libraries")}
@@ -162,6 +175,34 @@ const ChatDocumentLibrariesWidget = ({
         }
         actionLabel={t("chatbot.addLibraries", "Add libraries")}
         onAction={(event) => setPickerAnchor(event.currentTarget)}
+        headerActions={
+          <Tooltip
+            title={
+              includeInSearch
+                ? t(
+                    "chatbot.libraries.includeTooltipOn",
+                    "Libraries are included in retrieval for this conversation.",
+                  )
+                : t(
+                    "chatbot.libraries.includeTooltipOff",
+                    "Libraries are excluded from retrieval for this conversation.",
+                  )
+            }
+          >
+            <span>
+              <ToggleIconButton
+                size="small"
+                onClick={() => onIncludeInSearchChange(!includeInSearch)}
+                disabled={disabled || includeInSearchDisabled}
+                aria-label={t("chatbot.libraries.includeToggle", "Toggle library retrieval")}
+                icon={includeInSearch ? <ToggleOnOutlinedIcon fontSize="small" /> : <ToggleOffOutlinedIcon fontSize="small" />}
+                active={!includeInSearch}
+                indicatorColor="warning"
+                sx={{ color: includeInSearch ? "inherit" : "text.secondary" }}
+              />
+            </span>
+          </Tooltip>
+        }
       >
         {hasFullLibraryData ? (
           <Box
@@ -177,14 +218,20 @@ const ChatDocumentLibrariesWidget = ({
           >
             <TagTreeList
               tree={selectedTree}
-              emptyText={t("chatbot.libraries.empty", "No libraries selected")}
+              emptyText={t(
+                "chatbot.libraries.empty",
+                "No libraries selected. All visible document libraries will be searched.",
+              )}
               renderActions={(tag) => buildActions(tag.id)}
             />
           </Box>
         ) : (
           <ChatWidgetList
             items={fallbackItems}
-            emptyText={t("chatbot.libraries.empty", "No libraries selected")}
+            emptyText={t(
+              "chatbot.libraries.empty",
+              "No libraries selected. All visible document libraries will be searched.",
+            )}
           />
         )}
       </ChatWidgetShell>

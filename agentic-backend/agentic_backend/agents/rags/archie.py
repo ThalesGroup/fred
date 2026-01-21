@@ -41,6 +41,7 @@ from agentic_backend.core.agents.runtime_context import (
     get_language,
     get_rag_knowledge_scope,
     get_search_policy,
+    get_vector_search_scopes,
     is_corpus_only_mode,
     should_skip_rag_search,
 )
@@ -392,10 +393,14 @@ class Archie(AgentFlow):
 
             # 2) Vector search
             session_id = runtime_context.session_id if runtime_context else None
+            include_session_scope, include_corpus_scope = get_vector_search_scopes(
+                runtime_context
+            )
             if (
                 not session_id
                 and runtime_context
                 and runtime_context.attachments_markdown
+                and include_session_scope
             ):
                 logger.warning(
                     "Archie: runtime_context.session_id is missing; attached-file retrieval will be skipped."
@@ -410,7 +415,8 @@ class Archie(AgentFlow):
                     document_library_tags_ids=doc_tag_ids,
                     search_policy=search_policy,
                     session_id=session_id,
-                    include_session_scope=True,
+                    include_session_scope=include_session_scope,
+                    include_corpus_scope=include_corpus_scope,
                 )
             logger.info("[AGENT]: vector search returned %d hit(s)", len(hits))
             if hits:
