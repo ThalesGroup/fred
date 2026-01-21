@@ -1,10 +1,10 @@
 import AddIcon from "@mui/icons-material/Add";
-import { Button } from "@mui/material";
+import { Button, ButtonProps } from "@mui/material";
 import { styled } from "@mui/material/styles";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, LinkProps } from "react-router-dom";
 
-const GradientButton = styled(Button)({
+const GradientButton = styled(Button)<ButtonProps<typeof Link, LinkProps>>({
   display: "inline-flex",
   alignItems: "center",
   gap: "8px",
