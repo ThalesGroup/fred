@@ -80,6 +80,10 @@ class SearchRequest(BaseModel):
         default=True,
         description="If true and session_id is provided, also search session-scoped attachment vectors (filtered by user/session).",
     )
+    include_corpus_scope: bool = Field(
+        default=True,
+        description="If true, also search corpus/library vectors (non-session scope).",
+    )
 
 
 class RerankRequest(BaseModel):

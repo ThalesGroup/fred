@@ -51,6 +51,8 @@ type PersistedCtx = {
   searchPolicy?: SearchPolicyName;
   searchRagScope?: SearchRagScope;
   deepSearch?: boolean;
+  includeCorpusScope?: boolean;
+  includeSessionScope?: boolean;
   ragKnowledgeScope?: SearchRagScope;
   skipRagSearch?: boolean;
   agent_name?: string;
@@ -63,6 +65,8 @@ const asStringArray = (v: unknown, fallback: string[] = []): string[] => {
   if (!Array.isArray(v)) return fallback;
   return v.filter((x): x is string => typeof x === "string" && x.length > 0);
 };
+
+const asBoolean = (v: unknown, fallback: boolean): boolean => (typeof v === "boolean" ? v : fallback);
 
 type ControllerArgs = {
   chatSessionId?: string;
@@ -117,6 +121,8 @@ export type ConversationOptionsActions = {
   setSearchPolicy: (next: SetStateAction<SearchPolicyName>) => void;
   setSearchRagScope: (next: SearchRagScope) => void;
   setDeepSearchEnabled: (next: boolean) => void;
+  setIncludeCorpusScope: (next: boolean) => void;
+  setIncludeSessionScope: (next: boolean) => void;
   setChatContextIds: (ids: string[]) => void;
   setDocumentLibraryIds: (ids: string[]) => void;
   selectAgent: (agent: AnyAgent) => Promise<void>;
@@ -162,6 +168,8 @@ export function useConversationOptionsController({
     searchPolicy: initialCtx.searchPolicy,
     searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
     deepSearch: initialCtx.deepSearch ?? false,
+    includeCorpusScope: initialCtx.includeCorpusScope ?? true,
+    includeSessionScope: initialCtx.includeSessionScope ?? true,
   }));
 
   useEffect(() => {
@@ -175,6 +183,8 @@ export function useConversationOptionsController({
       searchPolicy: initialCtx.searchPolicy,
       searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
       deepSearch: initialCtx.deepSearch ?? false,
+      includeCorpusScope: initialCtx.includeCorpusScope ?? true,
+      includeSessionScope: initialCtx.includeSessionScope ?? true,
     }));
   }, [chatSessionId, initialCtx, defaultRagScope]);
 
@@ -224,9 +234,18 @@ export function useConversationOptionsController({
       searchPolicy: prefs.searchPolicy,
       searchRagScope: supportsRagScopeSelection ? prefs.searchRagScope : undefined,
       deepSearch: supportsDeepSearchSelection ? prefs.deepSearch : undefined,
+      includeCorpusScope: supportsLibrariesSelection ? prefs.includeCorpusScope : undefined,
+      includeSessionScope: supportsAttachments ? prefs.includeSessionScope : undefined,
       agent_name: agentName ?? currentAgent?.name ?? defaultAgent?.name,
     }),
-    [supportsRagScopeSelection, supportsDeepSearchSelection, currentAgent?.name, defaultAgent?.name],
+    [
+      supportsRagScopeSelection,
+      supportsDeepSearchSelection,
+      supportsLibrariesSelection,
+      supportsAttachments,
+      currentAgent?.name,
+      defaultAgent?.name,
+    ],
   );
 
   const savePrefs = useCallback(
@@ -314,6 +333,26 @@ export function useConversationOptionsController({
     [updatePrefs],
   );
 
+  const setIncludeCorpusScope = useCallback(
+    (next: boolean) => {
+      updatePrefs((prev) => ({
+        ...prev,
+        includeCorpusScope: next,
+      }));
+    },
+    [updatePrefs],
+  );
+
+  const setIncludeSessionScope = useCallback(
+    (next: boolean) => {
+      updatePrefs((prev) => ({
+        ...prev,
+        includeSessionScope: next,
+      }));
+    },
+    [updatePrefs],
+  );
+
   const setChatContextIds = useCallback(
     (ids: string[]) => {
       const uniqueIds = Array.from(new Set(ids));
@@ -395,6 +434,8 @@ export function useConversationOptionsController({
         searchPolicy: initialCtx.searchPolicy,
         searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
         deepSearch: initialCtx.deepSearch ?? false,
+        includeCorpusScope: initialCtx.includeCorpusScope ?? true,
+        includeSessionScope: initialCtx.includeSessionScope ?? true,
       }));
       return;
     }
@@ -432,6 +473,8 @@ export function useConversationOptionsController({
         searchPolicy: initialCtx.searchPolicy,
         searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
         deepSearch: initialCtx.deepSearch ?? false,
+        includeCorpusScope: initialCtx.includeCorpusScope ?? true,
+        includeSessionScope: initialCtx.includeSessionScope ?? true,
       });
       return;
     }
@@ -445,6 +488,8 @@ export function useConversationOptionsController({
       const nextSearchPolicy = p.searchPolicy ?? initialCtx.searchPolicy;
       const nextRagScope = p.searchRagScope ?? p.ragKnowledgeScope ?? initialCtx.searchRagScope ?? defaultRagScope;
       const nextDeepSearch = p.deepSearch ?? initialCtx.deepSearch ?? false;
+      const nextIncludeCorpusScope = asBoolean(p.includeCorpusScope, initialCtx.includeCorpusScope ?? true);
+      const nextIncludeSessionScope = asBoolean(p.includeSessionScope, initialCtx.includeSessionScope ?? true);
 
       setConversationPrefs({
         chatContextIds: nextChatContextIds,
@@ -454,6 +499,8 @@ export function useConversationOptionsController({
         searchPolicy: nextSearchPolicy,
         searchRagScope: nextRagScope,
         deepSearch: nextDeepSearch,
+        includeCorpusScope: nextIncludeCorpusScope,
+        includeSessionScope: nextIncludeSessionScope,
       });
       setChatContextWidgetOpen(false);
       setAttachmentsWidgetOpen(false);
@@ -474,6 +521,8 @@ export function useConversationOptionsController({
         searchPolicy: nextSearchPolicy,
         searchRagScope: nextRagScope,
         deepSearch: nextDeepSearch,
+        includeCorpusScope: nextIncludeCorpusScope,
+        includeSessionScope: nextIncludeSessionScope,
         agent_name: desiredAgentName,
       });
       setPrefsLoadState("hydrated");
@@ -485,6 +534,8 @@ export function useConversationOptionsController({
         searchPolicy: nextSearchPolicy,
         searchRagScope: nextRagScope,
         deepSearch: nextDeepSearch,
+        includeCorpusScope: nextIncludeCorpusScope,
+        includeSessionScope: nextIncludeSessionScope,
       });
     }
   }, [
@@ -576,6 +627,8 @@ export function useConversationOptionsController({
       setSearchPolicy,
       setSearchRagScope,
       setDeepSearchEnabled,
+      setIncludeCorpusScope,
+      setIncludeSessionScope,
       setChatContextIds,
       setDocumentLibraryIds,
       selectAgent,
@@ -650,6 +703,8 @@ export function ConversationOptionsPanel({
     setSearchPolicy,
     setSearchRagScope,
     setDeepSearchEnabled,
+    setIncludeCorpusScope,
+    setIncludeSessionScope,
     setChatContextWidgetOpen,
     setAttachmentsWidgetOpen,
     setLibrariesWidgetOpen,
@@ -735,6 +790,9 @@ export function ConversationOptionsPanel({
             onChangeSelectedLibraryIds={setDocumentLibraryIds}
             nameById={libraryNameMap}
             libraryById={libraryById}
+            includeInSearch={conversationPrefs.includeCorpusScope}
+            onIncludeInSearchChange={setIncludeCorpusScope}
+            includeInSearchDisabled={isHydratingSession}
             open={librariesWidgetOpenDisplay}
             closeOnClickAway={false}
             disabled={!supportsLibrariesSelection}
@@ -748,6 +806,9 @@ export function ConversationOptionsPanel({
             closeOnClickAway={false}
             disabled={!supportsAttachments}
             isUploading={isUploadingAttachments}
+            includeInSearch={conversationPrefs.includeSessionScope}
+            onIncludeInSearchChange={setIncludeSessionScope}
+            includeInSearchDisabled={isHydratingSession}
             onAddAttachments={onAddAttachments}
             onAttachmentsUpdated={onAttachmentsUpdated}
             onOpen={() => openWidget("attachments")}

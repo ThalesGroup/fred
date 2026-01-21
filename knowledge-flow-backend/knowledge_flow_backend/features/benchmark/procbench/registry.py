@@ -18,8 +18,7 @@ from typing import Dict, List
 from knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor import (
     DocxMarkdownProcessor,
 )
-from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_docx_to_md_processor import LiteDocxToMdProcessor
-from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor import LitePdfToMdProcessor
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_unstructured_text_processor import FastUnstructuredTextProcessingProcessor
 from knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor import (
     MarkdownMarkdownProcessor,
 )
@@ -34,6 +33,7 @@ from .runner import ProcessorSpec
 
 def default_registry() -> Dict[str, ProcessorSpec]:
     specs: List[ProcessorSpec] = [
+        ##################### Standard processors #####################
         ProcessorSpec(
             id="pdf_standard_docling",
             kind="standard",
@@ -42,24 +42,10 @@ def default_registry() -> Dict[str, ProcessorSpec]:
             file_types=[".pdf"],
         ),
         ProcessorSpec(
-            id="pdf_lite_markitdown",
-            kind="lite",
-            factory=lambda: LitePdfToMdProcessor(),
-            display_name="PDF → MD (Lite/MarkItDown)",
-            file_types=[".pdf"],
-        ),
-        ProcessorSpec(
             id="docx_standard_pandoc",
             kind="standard",
             factory=lambda: DocxMarkdownProcessor(),
             display_name="DOCX → MD (Standard/Pandoc)",
-            file_types=[".docx"],
-        ),
-        ProcessorSpec(
-            id="docx_lite_markitdown",
-            kind="lite",
-            factory=lambda: LiteDocxToMdProcessor(),
-            display_name="DOCX → MD (Lite/MarkItDown)",
             file_types=[".docx"],
         ),
         ProcessorSpec(
@@ -82,6 +68,14 @@ def default_registry() -> Dict[str, ProcessorSpec]:
             factory=lambda: MarkdownMarkdownProcessor(),
             display_name="Markdown → MD (Standard)",
             file_types=[".md"],
+        ),
+        ##################### Fast processors #####################
+        ProcessorSpec(
+            id="fast_unstructured_text",
+            kind="fast",
+            factory=lambda: FastUnstructuredTextProcessingProcessor(),
+            display_name="Fast → Text (Unstructured)",
+            file_types=[".pdf", ".docx", ".pptx", ".txt", ".md"],
         ),
     ]
 

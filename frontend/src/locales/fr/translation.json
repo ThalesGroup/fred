@@ -501,16 +501,28 @@
       "placeholder": "Écrivez votre message…  Entrée pour envoyer • Maj+Entrée pour un saut de ligne"
     },
     "attachFiles": "Joindre des fichiers",
+    "addLibraries": "Ajouter des bibliothèques",
     "attachments": {
-      "betaNotice": "Les pièces jointes sont en version bêta. Formats pris en charge : PDF, DOCX, CSV. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
-      "supportedFormats": "Formats pris en charge : PDF, DOCX, CSV",
+      "betaNotice": "Les pièces jointes sont en version bêta. Formats pris en charge : PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
+      "supportedFormats": "Formats pris en charge : PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX",
       "count": "{{count}} pièces jointes",
       "drawerTitle": "Pièces jointes",
       "noAttachments": "Aucune pièce jointe pour le moment",
+      "includeToggle": "Basculer la recherche sur les pièces jointes",
+      "includeTooltipOn": "Les pièces jointes sont incluses dans la recherche pour cette conversation.",
+      "includeTooltipOff": "Les pièces jointes sont exclues de la recherche pour cette conversation.",
       "tooltip": {
         "description": "Fichiers attachés à cette conversation.\n\nLes fichiers sont traités par des algorithmes plus rapides mais moins précis. L'agent pourra utiliser ces fichiers pour répondre .\n\nNotez que cette fonctionnalité est en version bêta et peut ne pas fonctionner parfaitement pour tous les types de fichiers. Pour des corpus pérennes, envisagez d'utiliser des bibliothèques de documents.",
         "disabled": "Cet agent n’utilise pas les pièces jointes."
       }
+    },
+    "libraries": {
+      "includeToggle": "Basculer la recherche sur les bibliothèques",
+      "includeTooltipOn": "Les bibliothèques sont incluses dans la recherche pour cette conversation.",
+      "includeTooltipOff": "Les bibliothèques sont exclues de la recherche pour cette conversation.",
+      "empty": "Aucune bibliothèque sélectionnée. Toutes les bibliothèques de documents visibles seront recherchées.",
+      "previewTitle": "Bibliothèque",
+      "noDescription": "Aucune description disponible."
     },
     "uploadingFile": "Téléversement de {{name}}...",
     "searchToggle": "Recherche : activé = RAG (sources), désactivé = sans recherche",

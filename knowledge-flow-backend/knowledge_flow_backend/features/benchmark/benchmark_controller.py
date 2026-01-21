@@ -32,7 +32,7 @@ from knowledge_flow_backend.features.benchmark.procbench.models import (
     SavedRunSummary,
 )
 from knowledge_flow_backend.features.benchmark.procbench.registry import default_registry
-from knowledge_flow_backend.features.benchmark.procbench.runner import LiteAdapter, StandardProcessorAdapter
+from knowledge_flow_backend.features.benchmark.procbench.runner import FastAdapter, StandardProcessorAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +138,7 @@ class BenchmarkController:
         # Run all selected processors (stateless: no persistent working dir)
         results: List[ProcessorRunResult] = []
         for spec in specs:
-            adapter = StandardProcessorAdapter() if spec.kind == "standard" else LiteAdapter()
+            adapter = StandardProcessorAdapter() if spec.kind == "standard" else FastAdapter()
             results.append(adapter.run(spec, input_path))
 
         try:

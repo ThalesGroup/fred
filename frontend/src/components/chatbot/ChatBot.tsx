@@ -689,6 +689,12 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
     if (supportsDeepSearchSelection && typeof conversationPrefs.deepSearch === "boolean") {
       runtimeContext.deep_search = conversationPrefs.deepSearch;
     }
+    if (typeof conversationPrefs.includeSessionScope === "boolean") {
+      runtimeContext.include_session_scope = conversationPrefs.includeSessionScope;
+    }
+    if (typeof conversationPrefs.includeCorpusScope === "boolean") {
+      runtimeContext.include_corpus_scope = conversationPrefs.includeCorpusScope;
+    }
 
     return runtimeContext;
   }, [
@@ -698,6 +704,8 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
     conversationPrefs.searchPolicy,
     conversationPrefs.searchRagScope,
     conversationPrefs.deepSearch,
+    conversationPrefs.includeSessionScope,
+    conversationPrefs.includeCorpusScope,
     supportsRagScopeSelection,
     supportsDeepSearchSelection,
   ]);

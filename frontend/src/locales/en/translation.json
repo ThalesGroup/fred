@@ -500,16 +500,28 @@
       "placeholder": "Write your message…  Enter to send • Shift+Enter for newline"
     },
     "attachFiles": "Attach files",
+    "addLibraries": "Add libraries",
     "attachments": {
-      "betaNotice": "File attachments are in beta. Supported formats: PDF, DOCX, CSV. Please provide feedback to help us improve this feature.",
-      "supportedFormats": "Supported files: PDF, DOCX, CSV",
+      "betaNotice": "File attachments are in beta. Supported formats: PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX. Please provide feedback to help us improve this feature.",
+      "supportedFormats": "Supported files: PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX",
       "count": "{{count}} attached",
       "drawerTitle": "Attachments",
       "noAttachments": "No attachments yet",
+      "includeToggle": "Toggle attachment retrieval",
+      "includeTooltipOn": "Attachments are included in retrieval for this conversation.",
+      "includeTooltipOff": "Attachments are excluded from retrieval for this conversation.",
       "tooltip": {
         "description": "Files attached to this conversation.\nThe files are processed by faster but less precise algorithms. The agent may use these files to answer.\n\nNote that this feature is in beta and may not work perfectly for all file types. For persistent corpora, consider using document libraries.",
         "disabled": "This agent does not use attachments."
       }
+    },
+    "libraries": {
+      "includeToggle": "Toggle library retrieval",
+      "includeTooltipOn": "Libraries are included in retrieval for this conversation.",
+      "includeTooltipOff": "Libraries are excluded from retrieval for this conversation.",
+      "empty": "No libraries selected. All visible document libraries will be searched.",
+      "previewTitle": "Library",
+      "noDescription": "No description available."
     },
     "uploadingFile": "Uploading {{name}}...",
     "searchToggle": "Toggle retrieval: on searches documents, off skips RAG",
