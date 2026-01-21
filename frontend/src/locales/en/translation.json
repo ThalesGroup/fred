@@ -1089,5 +1089,9 @@
       "router": "Fred is starting...",
       "ui": "Fred is getting the UI ready..."
     }
+  },
+  "newChat": {
+    "selectAgentTitle": "Welcome {{userName}}, who would you like to speak to?",
+    "yourAgents": "Your agents"
   }
 }

@@ -139,11 +139,12 @@ export interface ChatBotError {
 export interface ChatBotProps {
   chatSessionId?: string;
   agents: AnyAgent[];
+  initialAgent?: AnyAgent;
   runtimeContext?: RuntimeContext;
   onNewSessionCreated: (chatSessionId: string) => void;
 }
 
-const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: baseRuntimeContext }: ChatBotProps) => {
+const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, runtimeContext: baseRuntimeContext }: ChatBotProps) => {
   const isNewConversation = !chatSessionId;
 
   const { t } = useTranslation();
@@ -358,6 +359,7 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
     chatSessionId,
     prefsTargetSessionId: effectiveSessionId,
     agents,
+    initialAgent,
   });
   const {
     conversationPrefs,
