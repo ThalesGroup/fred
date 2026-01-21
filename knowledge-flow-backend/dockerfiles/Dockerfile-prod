@@ -56,7 +56,7 @@ ARG GROUP_ID=1000
 
 # System deps (minimal)
 RUN apt-get update && \
-    apt-get install -y curl pandoc inkscape --no-install-recommends && \
+    apt-get install -y curl pandoc inkscape libgl1 --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
 # Create user
@@ -79,9 +79,9 @@ ENV HF_HOME=/app/models
 RUN mkdir -p ${HF_HOME}
 
 RUN python -c "\
-from sentence_transformers import CrossEncoder; \
-import os; \
-CrossEncoder(model_name_or_path=os.environ['RERANKER_MODEL'], cache_folder=os.environ['HF_HOME'])"
+    from sentence_transformers import CrossEncoder; \
+    import os; \
+    CrossEncoder(model_name_or_path=os.environ['RERANKER_MODEL'], cache_folder=os.environ['HF_HOME'])"
 
 # Set working directory
 WORKDIR /app
