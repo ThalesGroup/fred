@@ -19,7 +19,7 @@ import json
 import logging
 import uuid
 from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 
 try:
     from langchain_postgres.vectorstores import PGVector as NewPGVector  # type: ignore
@@ -88,6 +88,67 @@ def _ensure_chunk_uid(md: Dict[str, Any]) -> str:
         cid = str(uuid.uuid4())
     md[CHUNK_ID_FIELD] = cid
     return cid
+
+
+def _as_list(values: Any) -> List[Any]:
+    if values is None:
+        return []
+    try:
+        return list(values)
+    except TypeError:
+        return [values]
+
+
+def _split_metadata_values(values: Any) -> tuple[List[Any], List[Any]]:
+    include_values: List[Any] = []
+    exclude_values: List[Any] = []
+    for v in _as_list(values):
+        if isinstance(v, str) and v.startswith("!"):
+            if v[1:]:
+                exclude_values.append(v[1:])
+        else:
+            include_values.append(v)
+    return include_values, exclude_values
+
+
+def _value_matches(meta_value: Any, values: List[Any]) -> bool:
+    if isinstance(meta_value, list):
+        return any(v in meta_value for v in values)
+    return meta_value in values
+
+
+def _matches_tag_ids(md: Dict[str, Any], tag_ids: Optional[List[str]]) -> bool:
+    if not tag_ids:
+        return True
+    doc_tags = md.get("tag_ids") or []
+    if isinstance(doc_tags, str):
+        doc_tags = [doc_tags]
+    return any(tag in doc_tags for tag in tag_ids)
+
+
+def _matches_metadata_terms(
+    md: Dict[str, Any],
+    metadata_terms: Optional[Mapping[str, Sequence[Union[str, int, float, bool]]]],
+) -> bool:
+    if not metadata_terms:
+        return True
+    for key, values in metadata_terms.items():
+        values_list = _as_list(values)
+        if not values_list:
+            continue
+        include_values, exclude_values = _split_metadata_values(values_list)
+        meta_value = md.get(key)
+
+        if key == "retrievable" and meta_value is None:
+            # Keep legacy docs without retrievable field searchable.
+            continue
+
+        if exclude_values and meta_value is not None and _value_matches(meta_value, exclude_values):
+            return False
+        if include_values:
+            if meta_value is None or not _value_matches(meta_value, include_values):
+                return False
+    return True
 
 
 def _as_vector_list(vec: Any) -> Optional[List[float]]:
@@ -341,37 +402,57 @@ class PgVectorStoreAdapter(BaseVectorStore):
         if search_filter:
             if search_filter.metadata_terms:
                 for key, values in search_filter.metadata_terms.items():
-                    if not values:
+                    include_values, _ = _split_metadata_values(values)
+                    if not include_values or key == "retrievable":
                         continue
-                    # PGVector filter is equality-based; pick the first value
-                    filt[key] = values[0]
+                    # PGVector filter is equality-based; pick the first positive value
+                    filt[key] = include_values[0]
             if search_filter.tag_ids:
                 # Equality filter; best-effort match on the list
                 filt["tag_ids"] = list(search_filter.tag_ids)
 
         filter_arg = filt or None
+        candidate_k = min(max(k * 4, k), 200)
         logger.info(
-            "[VECTOR][PGVECTOR][ANN] query=%r k=%d collection=%s filter=%s",
+            "[VECTOR][PGVECTOR][ANN] query=%r k=%d candidate_k=%d collection=%s filter=%s",
             query,
             k,
+            candidate_k,
             self.collection_name,
             filter_arg,
         )
         try:
-            hits = self._vs.similarity_search_with_relevance_scores(query, k=k, filter=filter_arg)
+            hits = self._vs.similarity_search_with_relevance_scores(query, k=candidate_k, filter=filter_arg)
         except Exception:
             logger.exception(
                 "[VECTOR][PGVECTOR] similarity search failed (k=%s, filter=%s)",
-                k,
+                candidate_k,
                 filter_arg,
             )
             return []
 
         results: List[AnnHit] = []
+        filtered_out = 0
         for doc, score in hits:
             if not doc or doc.metadata.get(CHUNK_ID_FIELD) is None:
                 continue
+            md = doc.metadata or {}
+            if search_filter:
+                if not _matches_tag_ids(md, list(search_filter.tag_ids) if search_filter.tag_ids else None):
+                    filtered_out += 1
+                    continue
+                if not _matches_metadata_terms(md, search_filter.metadata_terms):
+                    filtered_out += 1
+                    continue
             results.append(AnnHit(document=doc, score=score))
+            if len(results) >= k:
+                break
+        if filtered_out:
+            logger.info(
+                "[VECTOR][PGVECTOR][ANN] filtered_out=%d kept=%d",
+                filtered_out,
+                len(results),
+            )
         logger.info(
             "[VECTOR][PGVECTOR][ANN] returned=%d top_score=%.4f",
             len(results),
