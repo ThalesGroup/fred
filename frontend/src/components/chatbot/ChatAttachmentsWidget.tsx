@@ -67,7 +67,8 @@ const ChatAttachmentsWidget = ({
   const [summaryTitle, setSummaryTitle] = useState("");
   const [summaryText, setSummaryText] = useState("");
   const count = attachments.length;
-  const badgeColor = includeInSearch ? (disabled ? "default" : "primary") : "warning";
+  const showWarningEmptyDot = count === 0 && (!includeInSearch || disabled);
+  const badgeColor = disabled ? "warning" : includeInSearch ? "primary" : "warning";
   const items = attachments.map((item) => ({
     id: item.id,
     label: item.name,
@@ -118,6 +119,7 @@ const ChatAttachmentsWidget = ({
         disabled={disabled}
         badgeCount={count}
         badgeColor={badgeColor}
+        showBadgeDotWhenEmpty={showWarningEmptyDot}
         icon={<AttachFileIcon fontSize="small" />}
         ariaLabel={t("chatbot.attachments.drawerTitle", "Attachments")}
         tooltipLabel={t("chatbot.attachments.drawerTitle", "Attachments")}
