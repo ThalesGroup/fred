@@ -15,12 +15,7 @@ export function NewChatAgentSelection() {
     KeyCloakService.GetUserName?.() ||
     "";
 
-  const {
-    data: rawAgents,
-    isLoading: flowsLoading,
-    isError: flowsError,
-    error: flowsErrObj,
-  } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery(undefined, {
+  const { data: rawAgents } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery(undefined, {
     refetchOnMountOrArgChange: true,
   });
 
