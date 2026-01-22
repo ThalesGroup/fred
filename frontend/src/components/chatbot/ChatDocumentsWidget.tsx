@@ -5,6 +5,7 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 
 import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
+import CloseIcon from "@mui/icons-material/Close";
 import ToggleOffOutlinedIcon from "@mui/icons-material/ToggleOffOutlined";
 import ToggleOnOutlinedIcon from "@mui/icons-material/ToggleOnOutlined";
 import {
@@ -12,6 +13,7 @@ import {
   Button,
   Checkbox,
   ClickAwayListener,
+  IconButton,
   List,
   ListItemButton,
   ListItemText,
@@ -230,12 +232,18 @@ const ChatDocumentsWidget = ({
         <ClickAwayListener onClickAway={() => setPickerAnchor(null)}>
           <FloatingPanel sx={{ p: 1, width: 420, maxWidth: "90vw" }}>
             <Stack spacing={1}>
-              <TextField
-                size="small"
-                placeholder={t("chatbot.searchDocuments", "Search documents...")}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
+              <Box display="flex" alignItems="center" gap={1}>
+                <TextField
+                  size="small"
+                  placeholder={t("chatbot.searchDocuments", "Search documents...")}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  fullWidth
+                />
+                <IconButton size="small" onClick={() => setPickerAnchor(null)} aria-label={t("common.close", "Close")}>
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </Box>
               <Box sx={{ maxHeight: "50vh", overflowY: "auto" }}>
                 {filteredDocs.length === 0 && !isLoading ? (
                   <Typography variant="caption" color="text.secondary">
