@@ -189,7 +189,7 @@ export default function MessageCard({
     minWidth: "unset",
     px: 1,
     textTransform: "none",
-    borderRadius: 999,
+    borderRadius: "8px",
   };
   const toggleEdgeSx = side === "right" ? { right: 8 } : { left: 8 };
   const showLessSticky = shouldCollapse && isExpanded;
