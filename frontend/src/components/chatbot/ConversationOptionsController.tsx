@@ -16,7 +16,6 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { Box, IconButton } from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
-import { useTranslation } from "react-i18next";
 import type { AnyAgent } from "../../common/agent.ts";
 import ChatDocumentLibrariesWidget from "../../features/libraries/components/ChatDocumentLibrariesWidget.tsx";
 import { useInitialChatInputContext, type InitialChatPrefs } from "../../hooks/useInitialChatInputContext.ts";
@@ -682,7 +681,6 @@ export function ConversationOptionsPanel({
   chatContextNameMap,
   chatContextResourceMap,
 }: ConversationOptionsPanelProps) {
-  const { t } = useTranslation();
   const {
     conversationPrefs,
     displayChatContextIds,
