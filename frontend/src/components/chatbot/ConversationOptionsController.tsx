@@ -14,7 +14,7 @@
 
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import { Box, IconButton, Tooltip } from "@mui/material";
+import { Box, IconButton } from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 import type { AnyAgent } from "../../common/agent.ts";
@@ -752,9 +752,6 @@ export function ConversationOptionsPanel({
     if (target === "deep-search" && supportsDeepSearchSelection) setDeepSearchWidgetOpen(true);
     if (target === "log-genius" && showLogGenius) setLogGeniusWidgetOpen(true);
   };
-  const toggleLabel = allWidgetsOpen
-    ? t("chatbot.options.collapseAll", "Collapse all")
-    : t("chatbot.options.expandAll", "Expand all");
   const resetSearchOptions = () => {
     if (supportsSearchPolicySelection) setSearchPolicy(defaultSearchPolicy);
     if (supportsRagScopeSelection) setSearchRagScope(defaultSearchRagScope);
@@ -777,19 +774,16 @@ export function ConversationOptionsPanel({
         }}
       >
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-end" }}>
-          <Tooltip title={toggleLabel}>
-            <span>
-              <IconButton
-                size="small"
-                onClick={() => setAllWidgetsOpen(!allWidgetsOpen)}
-                disabled={isHydratingSession}
-                aria-label={toggleLabel}
-                sx={{ alignSelf: "flex-end" }}
-              >
-                {allWidgetsOpen ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
-              </IconButton>
-            </span>
-          </Tooltip>
+          <span>
+            <IconButton
+              size="small"
+              onClick={() => setAllWidgetsOpen(!allWidgetsOpen)}
+              disabled={isHydratingSession}
+              sx={{ alignSelf: "flex-end" }}
+            >
+              {allWidgetsOpen ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+            </IconButton>
+          </span>
           <ChatContextWidget
             selectedChatContextIds={displayChatContextIds}
             onChangeSelectedChatContextIds={setChatContextIds}

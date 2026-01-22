@@ -244,7 +244,12 @@ export function ChatResourcesSelectionCard({
                       {contents.map((r) => {
                         const resChecked = selectedResourceIds.includes(r.id);
                         return (
-                          <ListItem key={r.id} dense role={isMultiSelect ? undefined : "radio"} aria-checked={resChecked}>
+                          <ListItem
+                            key={r.id}
+                            dense
+                            role={isMultiSelect ? undefined : "radio"}
+                            aria-checked={resChecked}
+                          >
                             <ListItemButton
                               onClick={() => toggleSelectResource(r.id)}
                               selected={resChecked}
