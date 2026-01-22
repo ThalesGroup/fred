@@ -25,6 +25,8 @@ export type InitialChatPrefs = {
   searchPolicy: SearchPolicyName;
   searchRagScope?: SearchRagScope;
   deepSearch?: boolean;
+  includeCorpusScope: boolean;
+  includeSessionScope: boolean;
 };
 
 const EMPTY_STRING_ARRAY: string[] = [];
@@ -49,6 +51,8 @@ export function useInitialChatInputContext(
       searchPolicy: defaults.searchPolicy ?? "semantic",
       searchRagScope: defaults.searchRagScope,
       deepSearch: defaults.deepSearch,
+      includeCorpusScope: defaults.includeCorpusScope ?? true,
+      includeSessionScope: defaults.includeSessionScope ?? true,
     }),
     [
       defaults.documentLibraryIds,
@@ -57,6 +61,8 @@ export function useInitialChatInputContext(
       defaults.searchPolicy,
       defaults.searchRagScope,
       defaults.deepSearch,
+      defaults.includeCorpusScope,
+      defaults.includeSessionScope,
     ],
   );
 

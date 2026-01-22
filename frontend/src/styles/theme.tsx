@@ -14,6 +14,10 @@
 
 import { alpha, createTheme, TypographyVariants } from "@mui/material/styles";
 
+// ------------------------------------------------------------
+// Extending MUI theme to add custom typography variant for markdown rendering
+// ------------------------------------------------------------
+
 declare module "@mui/material/styles" {
   interface TypographyVariants {
     markdown: {
@@ -53,6 +57,10 @@ const markdownDefaults: TypographyVariants["markdown"] = {
   li: { marginBottom: "0.5rem", lineHeight: 1.4, fontSize: "0.9rem" },
 };
 
+// ------------------------------------------------------------
+// Component style overrides shared between light and dark themes
+// ------------------------------------------------------------
+
 const sharedComponents = {
   // Remove border from Drawers
   MuiDrawer: {
@@ -84,6 +92,10 @@ function getOverlayAlpha(elevation: number): number {
   return Math.round(alphaValue * 10) / 1000;
 }
 
+// ------------------------------------------------------------
+// Light theme
+// ------------------------------------------------------------
+
 const lightTheme = createTheme({
   palette: {
     mode: "light",
@@ -96,6 +108,11 @@ const lightTheme = createTheme({
   },
   components: {
     ...sharedComponents,
+    // In MUI, on dark theme, when Paper uses elevation, a white overlay is applied to lighten the Paper color.
+    // On light theme, there is no such Paper color modification by default (it only add shadows).
+    // To make design easier and more consistent between light and dark themes, we apply here a similar logic on light theme,
+    // but using a black overlay to slightly darken the Paper color when elevation is used.
+    // (note: there is no need to apply this logic to the dark theme, as MUI already does it by default, we are noly mimicking it on light theme).
     MuiPaper: {
       styleOverrides: {
         root: ({ ownerState }) => {
@@ -113,6 +130,10 @@ const lightTheme = createTheme({
   },
 });
 
+// ------------------------------------------------------------
+// Dark theme
+// ------------------------------------------------------------
+
 const darkTheme = createTheme({
   palette: {
     mode: "dark",
@@ -125,5 +146,9 @@ const darkTheme = createTheme({
   },
   components: sharedComponents,
 });
+
+// ------------------------------------------------------------
+// Exporting themes
+// ------------------------------------------------------------
 
 export { darkTheme, lightTheme };

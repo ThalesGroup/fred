@@ -9,9 +9,11 @@ import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import { Box, ClickAwayListener, IconButton, Paper, Stack, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
+import { ResetButton } from "../../shared/ui/buttons/ResetButton.tsx";
+import { ToggleIconButton } from "../../shared/ui/buttons/ToggleIconButton.tsx";
+import { DetailedTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
 import type { RuntimeContext } from "../../slices/agentic/agenticOpenApi.ts";
 import { SearchPolicyName } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
-import { FeatureTooltip } from "./FeatureTooltip";
 import { UserInputRagScope } from "./user_input/UserInputRagScope.tsx";
 import { UserInputSearchPolicy } from "./user_input/UserInputSearchPolicy.tsx";
 
@@ -20,8 +22,10 @@ type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
 export type ChatSearchOptionsWidgetProps = {
   searchPolicy: SearchPolicyName;
   onSearchPolicyChange: (next: SearchPolicyName) => void;
+  defaultSearchPolicy: SearchPolicyName;
   searchRagScope: SearchRagScope;
   onSearchRagScopeChange: (next: SearchRagScope) => void;
+  defaultRagScope: SearchRagScope;
   ragScopeDisabled?: boolean;
   searchPolicyDisabled?: boolean;
   open: boolean;
@@ -29,13 +33,16 @@ export type ChatSearchOptionsWidgetProps = {
   disabled?: boolean;
   onOpen: () => void;
   onClose: () => void;
+  onResetToDefaults?: () => void;
 };
 
 const ChatSearchOptionsWidget = ({
   searchPolicy,
   onSearchPolicyChange,
+  defaultSearchPolicy,
   searchRagScope,
   onSearchRagScopeChange,
+  defaultRagScope,
   ragScopeDisabled = false,
   searchPolicyDisabled = false,
   open,
@@ -43,10 +50,16 @@ const ChatSearchOptionsWidget = ({
   disabled = false,
   onOpen,
   onClose,
+  onResetToDefaults,
 }: ChatSearchOptionsWidgetProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
   const isVisible = open;
+  const hasOverrides =
+    (!ragScopeDisabled && searchRagScope !== defaultRagScope) ||
+    (!searchPolicyDisabled && searchPolicy !== defaultSearchPolicy);
+  const canReset = Boolean(onResetToDefaults) && hasOverrides && !disabled;
+  const showOverrideIndicator = hasOverrides && !disabled;
 
   const widgetBody = (
     <Paper
@@ -69,9 +82,20 @@ const ChatSearchOptionsWidget = ({
               {t("chatbot.searchOptions", "Search options")}
             </Typography>
           </Box>
-          <IconButton size="small" onClick={onClose}>
-            <CloseIcon fontSize="small" />
-          </IconButton>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <ResetButton
+              size="small"
+              onClick={onResetToDefaults}
+              disabled={!canReset}
+              aria-label={t("chatbot.searchOptionsReset", "Back to default")}
+              tooltip={t("chatbot.searchOptionsResetTooltip", "Reset to default values")}
+              tooltipPlacement="left"
+              sx={{ p: 0.5 }}
+            />
+            <IconButton size="small" onClick={onClose}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
         </Box>
 
         <Stack spacing={0.75}>
@@ -80,11 +104,7 @@ const ChatSearchOptionsWidget = ({
               {t("chatbot.ragScope.label", "RAG scope")}
             </Typography>
             <Box sx={{ flexShrink: 0 }}>
-              <UserInputRagScope
-                value={searchRagScope}
-                onChange={onSearchRagScopeChange}
-                disabled={ragScopeDisabled}
-              />
+              <UserInputRagScope value={searchRagScope} onChange={onSearchRagScopeChange} disabled={ragScopeDisabled} />
             </Box>
           </Box>
           <Box display="flex" alignItems="center" justifyContent="space-between" gap={1}>
@@ -107,7 +127,7 @@ const ChatSearchOptionsWidget = ({
   return (
     <Box sx={{ position: "relative", width: isVisible ? "100%" : "auto" }}>
       {!isVisible && (
-        <FeatureTooltip
+        <DetailedTooltip
           label={t("chatbot.searchOptions", "Search options")}
           description={t(
             "chatbot.searchOptionsTooltip.description",
@@ -119,16 +139,18 @@ const ChatSearchOptionsWidget = ({
               : undefined
           }
         >
-          <IconButton
-            size="small"
-            onClick={onOpen}
-            aria-label={t("chatbot.searchOptions", "Search options")}
-            disabled={disabled}
-            sx={{ color: disabled ? "text.disabled" : "inherit" }}
-          >
-            <TuneOutlinedIcon fontSize="small" />
-          </IconButton>
-        </FeatureTooltip>
+          <Box component="span" sx={{ display: "inline-flex" }}>
+            <ToggleIconButton
+              size="small"
+              onClick={onOpen}
+              aria-label={t("chatbot.searchOptions", "Search options")}
+              disabled={disabled}
+              sx={{ color: disabled ? "text.disabled" : "inherit" }}
+              active={showOverrideIndicator}
+              icon={<TuneOutlinedIcon fontSize="small" />}
+            />
+          </Box>
+        </DetailedTooltip>
       )}
 
       {isVisible && closeOnClickAway && (

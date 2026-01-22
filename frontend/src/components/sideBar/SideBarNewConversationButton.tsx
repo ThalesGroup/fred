@@ -63,7 +63,7 @@ export function SideBarNewConversationButton() {
   const { t } = useTranslation();
 
   return (
-    <GradientButton component={Link} to="/" startIcon={<AddIcon />} sx={{ width: "100%" }}>
+    <GradientButton component={Link} to="/new-chat" startIcon={<AddIcon />} sx={{ width: "100%" }}>
       {t("sidebar.newChat")}
     </GradientButton>
   );

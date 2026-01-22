@@ -21,7 +21,6 @@ import re
 import secrets
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
@@ -47,7 +46,7 @@ from requests import HTTPError
 from agentic_backend.application_context import (
     get_default_model,
 )
-from agentic_backend.common.kf_lite_markdown_client import KfLiteMarkdownClient
+from agentic_backend.common.kf_fast_text_client import KfFastTextClient
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
@@ -599,7 +598,7 @@ class SessionOrchestrator:
             self.attachments_store.delete_for_session(session_id)
         # Remote vector cleanup
         if doc_uids and access_token:
-            client = KfLiteMarkdownClient(access_token=access_token)
+            client = KfFastTextClient(access_token=access_token)
             for doc_uid in doc_uids:
                 try:
                     client.delete_ingested_vectors(doc_uid)
@@ -648,7 +647,7 @@ class SessionOrchestrator:
                 )
         if doc_uid and access_token:
             try:
-                client = KfLiteMarkdownClient(access_token=access_token)
+                client = KfFastTextClient(access_token=access_token)
                 client.delete_ingested_vectors(doc_uid)
                 logger.info(
                     "[SESSIONS][ATTACH] Deleted vectors for doc_uid=%s (attachment removal)",
@@ -741,8 +740,8 @@ class SessionOrchestrator:
     ) -> dict:
         """
         Fred rationale:
-        - Zero temp-files: we stream the uploaded content to Knowledge Flow 'lite/markdown'.
-        - Store compact markdown + vectors via Knowledge Flow; no in-memory cache is used.
+        - Zero temp-files: we stream the uploaded content to Knowledge Flow 'fast/text'.
+        - Store compact text + vectors via Knowledge Flow; no in-memory cache is used.
         """
         if not self.attachments_store:
             logger.error(
@@ -755,7 +754,6 @@ class SessionOrchestrator:
                     "message": "Attachment uploads are disabled (no attachment store configured).",
                 },
             )
-        supported_suffixes = {".pdf", ".docx", ".csv", ".md"}
         # Enforce per-user attachment count limit
         max_files_user = self.max_attached_files_per_user
         try:
@@ -793,20 +791,6 @@ class SessionOrchestrator:
                     "message": "Uploaded file must have a filename.",
                 },
             )
-        suffix = Path(file.filename).suffix.lower()
-        if suffix not in supported_suffixes:
-            logger.warning(
-                "Unsupported upload extension rejected: %s (user=%s)",
-                file.filename,
-                user.uid,
-            )
-            raise HTTPException(
-                status_code=415,
-                detail={
-                    "code": "unsupported_file_type",
-                    "message": f"Unsupported file type '{suffix or file.filename}'. Allowed: {', '.join(sorted(supported_suffixes))}.",
-                },
-            )
         size_limit_bytes = self.max_attached_file_size_bytes
         if size_limit_bytes is not None:
             content = await file.read(size_limit_bytes + 1)
@@ -839,15 +823,15 @@ class SessionOrchestrator:
         self._authorize_user_action_on_session(session.id, user, Action.UPDATE)
 
         # 1) Secure session-mode client for Knowledge Flow (Bearer user token)
-        client = KfLiteMarkdownClient(
+        client = KfFastTextClient(
             access_token=access_token,
             # Optional: refresh_user_access_token=lambda: self._refresh_user_token(user)
         )
 
         # 2) Ask KF to produce a compact Markdown (text-only) for conversational use
         try:
-            # Build a compact summary for UI while ingesting full lite markdown below.
-            summary_md = client.extract_markdown_from_bytes(
+            # Build a compact summary for UI while ingesting full fast text below.
+            summary_md = client.extract_text_from_bytes(
                 filename=file.filename,
                 content=content,
                 mime=file.content_type,
@@ -896,8 +880,8 @@ class SessionOrchestrator:
         # 3b) Ingest into vector store with session/user scoping
         document_uid: Optional[str] = None
         try:
-            # Ingest full lite markdown (per-page) for higher recall; no max_chars cap.
-            ingest_resp = client.ingest_markdown_from_bytes(
+            # Ingest full fast text (per-page) for higher recall; no max_chars cap.
+            ingest_resp = client.ingest_text_from_bytes(
                 filename=file.filename,
                 content=content,
                 session_id=session.id,

@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field, field_validator
 class ProcessorDescriptor(BaseModel):
     id: str
     name: str
-    kind: Literal["standard", "lite"]
+    kind: Literal["standard", "fast"]
     file_types: List[str] = Field(default_factory=list)
 
 
@@ -42,7 +42,7 @@ class ProcessorRunMetrics(BaseModel):
 class ProcessorRunResult(BaseModel):
     processor_id: str
     display_name: str
-    kind: Literal["standard", "lite"]
+    kind: Literal["standard", "fast"]
     status: Literal["ok", "error"]
     duration_ms: int
     markdown: Optional[str] = None

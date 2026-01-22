@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import AutoFixHighOutlinedIcon from "@mui/icons-material/AutoFixHighOutlined";
-import RuleOutlinedIcon from "@mui/icons-material/RuleOutlined";
-import SyncAltOutlinedIcon from "@mui/icons-material/SyncAltOutlined";
-import { Box, Divider, ToggleButton, ToggleButtonGroup, Tooltip, Typography, useTheme } from "@mui/material";
+import { ListItemText, MenuItem, Select } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 import { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
@@ -27,7 +24,6 @@ type Props = {
 };
 
 export function UserInputSearchPolicy({ value, onChange, disabled }: Props) {
-  const theme = useTheme();
   const { t } = useTranslation();
 
   const labels: Record<SearchPolicyName, string> = {
@@ -42,70 +38,69 @@ export function UserInputSearchPolicy({ value, onChange, disabled }: Props) {
     strict: t("search.strictDescription"),
   };
 
-  const renderTooltipContent = (policy: SearchPolicyName) => (
-    <Box sx={{ maxWidth: 360 }}>
-      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.75 }}>
-        {labels[policy]}
-      </Typography>
-      <Divider sx={{ opacity: 0.5, mb: 0.75 }} />
-      <Box sx={{ pl: 1.25, borderLeft: `2px solid ${theme.palette.divider}` }}>
-        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
-          {tooltipByValue[policy]}
-        </Typography>
-      </Box>
-    </Box>
-  );
-
-  const renderButton = (policy: SearchPolicyName, icon: JSX.Element) => (
-    <Tooltip
-      key={policy}
-      title={renderTooltipContent(policy)}
-      placement="right"
-      arrow
-      componentsProps={{
-        tooltip: { sx: { boxShadow: "none" } },
-        arrow: { sx: { color: "background.paper" } },
-      }}
-    >
-      <ToggleButton value={policy} aria-label={labels[policy]}>
-        {icon}
-      </ToggleButton>
-    </Tooltip>
-  );
+  const options = [
+    {
+      value: "strict" as const,
+      label: labels.strict,
+      description: tooltipByValue.strict,
+    },
+    {
+      value: "hybrid" as const,
+      label: labels.hybrid,
+      description: tooltipByValue.hybrid,
+    },
+    {
+      value: "semantic" as const,
+      label: labels.semantic,
+      description: tooltipByValue.semantic,
+    },
+  ];
 
   return (
-    <ToggleButtonGroup
-      exclusive
-      size="small"
+    <Select
       value={value}
       disabled={disabled}
-      onChange={(_, next) => {
-        if (next) onChange(next as SearchPolicyName);
-      }}
-      aria-label="search-policy"
+      size="small"
+      onChange={(event) => onChange(event.target.value as SearchPolicyName)}
+      renderValue={(selected) => labels[selected as SearchPolicyName]}
       sx={{
         borderRadius: 999,
-        overflow: "hidden",
-        "& .MuiToggleButton-root": {
-          px: 1,
+        minWidth: 150,
+        fontSize: "0.78rem",
+        "& .MuiSelect-select": {
           py: 0.35,
-          fontSize: "0.78rem",
-          textTransform: "none",
-          gap: 0.5,
-          color: "text.secondary",
-          borderColor: "divider",
-          "&.Mui-selected": {
-            color: "primary.main",
-            backgroundColor: "primary.main",
-            "& svg": { color: "common.white" },
-            "&:hover": { backgroundColor: "primary.dark" },
-          },
+          pl: 1.25,
+          pr: 3.25,
+          display: "flex",
+          alignItems: "center",
         },
+        "& .MuiOutlinedInput-notchedOutline": { borderColor: "divider" },
       }}
+      MenuProps={{
+        PaperProps: {
+          sx: { mt: 0.75, maxWidth: 360 },
+        },
+        MenuListProps: { dense: true },
+      }}
+      inputProps={{ "aria-label": "search-policy" }}
     >
-      {renderButton("hybrid", <SyncAltOutlinedIcon fontSize="small" />)}
-      {renderButton("semantic", <AutoFixHighOutlinedIcon fontSize="small" />)}
-      {renderButton("strict", <RuleOutlinedIcon fontSize="small" />)}
-    </ToggleButtonGroup>
+      {options.map((option) => (
+        <MenuItem
+          key={option.value}
+          value={option.value}
+          dense
+          sx={{ alignItems: "flex-start", whiteSpace: "normal", py: 0.75 }}
+        >
+          <ListItemText
+            primary={option.label}
+            secondary={option.description}
+            slotProps={{
+              primary: { sx: { fontSize: "0.78rem", fontWeight: 600 } },
+              secondary: { sx: { fontSize: "0.72rem", color: "text.secondary" } },
+            }}
+          />
+        </MenuItem>
+      ))}
+    </Select>
   );
 }

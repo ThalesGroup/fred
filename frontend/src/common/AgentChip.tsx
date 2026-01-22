@@ -10,7 +10,7 @@ const LETTER_SPACING = 0.2; // avoids cramped uppercase
 
 // --- THEME COLOR MAPPING ---
 // Maps the functional color hints to specific, high-contrast chart colors.
-const THEME_COLOR_MAP = (theme: Theme): Record<AgentColorHint, string> => ({
+export const THEME_COLOR_MAP = (theme: Theme): Record<AgentColorHint, string> => ({
   // Leaders: Use high-contrast purple
   leader: theme.palette.secondary.main,
 
@@ -45,7 +45,7 @@ interface AgentChipProps {
  * - Chip width is intrinsic: no fixed min/max width unless you cap it.
  * - All colors come from theme tokens (mode-safe).
  */
-export const AgentChipWithIcon = ({ agent, disableTitles = false, sx }: AgentChipProps) => {
+export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
   if (!agent) return null;
 
   const theme = useTheme();
@@ -112,7 +112,6 @@ export const AgentChipWithIcon = ({ agent, disableTitles = false, sx }: AgentChi
             maxWidth: NAME_MAX_W,
             textAlign: "center",
           }}
-          title={disableTitles ? undefined : agent.name}
         >
           {agent.name}
         </Typography>

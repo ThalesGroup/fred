@@ -243,7 +243,7 @@ export default function SideBar() {
                 minHeight: "56px",
               }}
             >
-              <InvisibleLink to="/">
+              <InvisibleLink to="/new-chat">
                 <ImageComponent
                   name={darkMode ? logoNameDark : logoName}
                   height={getProperty("logoHeight")}

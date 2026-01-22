@@ -139,11 +139,12 @@ export interface ChatBotError {
 export interface ChatBotProps {
   chatSessionId?: string;
   agents: AnyAgent[];
+  initialAgent?: AnyAgent;
   runtimeContext?: RuntimeContext;
   onNewSessionCreated: (chatSessionId: string) => void;
 }
 
-const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: baseRuntimeContext }: ChatBotProps) => {
+const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, runtimeContext: baseRuntimeContext }: ChatBotProps) => {
   const isNewConversation = !chatSessionId;
 
   const { t } = useTranslation();
@@ -154,6 +155,7 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
   // When backend creates a session during first file upload, keep it locally
   // so the immediate next message uses the same session id.
   const pendingSessionIdRef = useRef<string | null>(null);
+  const clientCreatedSessionRef = useRef<string | null>(null);
 
   // Name of des libs / prompts / templates / chat-context
   const { data: docLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
@@ -357,6 +359,7 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
     chatSessionId,
     prefsTargetSessionId: effectiveSessionId,
     agents,
+    initialAgent,
   });
   const {
     conversationPrefs,
@@ -649,6 +652,9 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
     if (!loadState.historyReady || !loadState.prefsReady) return;
     if (lastReadySeqRef.current === loadState.seq) return;
     lastReadySeqRef.current = loadState.seq;
+    if (clientCreatedSessionRef.current === chatSessionId) {
+      clientCreatedSessionRef.current = null;
+    }
     const elapsedMs = loadState.startedAt ? Date.now() - loadState.startedAt : 0;
     console.info("[CHATBOT][LOAD] ready", {
       seq: loadState.seq,
@@ -685,6 +691,12 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
     if (supportsDeepSearchSelection && typeof conversationPrefs.deepSearch === "boolean") {
       runtimeContext.deep_search = conversationPrefs.deepSearch;
     }
+    if (typeof conversationPrefs.includeSessionScope === "boolean") {
+      runtimeContext.include_session_scope = conversationPrefs.includeSessionScope;
+    }
+    if (typeof conversationPrefs.includeCorpusScope === "boolean") {
+      runtimeContext.include_corpus_scope = conversationPrefs.includeCorpusScope;
+    }
 
     return runtimeContext;
   }, [
@@ -694,6 +706,8 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
     conversationPrefs.searchPolicy,
     conversationPrefs.searchRagScope,
     conversationPrefs.deepSearch,
+    conversationPrefs.includeSessionScope,
+    conversationPrefs.includeCorpusScope,
     supportsRagScopeSelection,
     supportsDeepSearchSelection,
   ]);
@@ -735,6 +749,7 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
         console.warn("[CHATBOT] Failed to seed session prefs on create", prefErr);
       }
       pendingSessionIdRef.current = session.id;
+      clientCreatedSessionRef.current = session.id;
       onNewSessionCreated(session.id);
       return session.id;
     } catch (err: any) {
@@ -921,15 +936,20 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
 
   const loadError = (isHistoryError && historyError) || (isPrefsError && prefsError);
   const hasLoadError = Boolean(loadError);
+  const isLocalSessionHydrating = Boolean(chatSessionId) && pendingSessionIdRef.current === chatSessionId;
+  const isClientCreatedSession = Boolean(chatSessionId) && clientCreatedSessionRef.current === chatSessionId;
   const isSessionLoadBlocked =
     Boolean(chatSessionId) &&
+    !isLocalSessionHydrating &&
+    !isClientCreatedSession &&
     (loadState.chatSessionId !== chatSessionId ||
       !loadState.historyReady ||
       !loadState.prefsReady ||
       Boolean(loadError));
   const showWelcome = isNewConversation && !isSessionLoadBlocked && !waitResponse && messages.length === 0;
   // Helps spot session-history fetch issues quickly in dev without adding noisy logs.
-  const showHistoryLoading = !!chatSessionId && isHistoryFetching && messages.length === 0 && !waitResponse;
+  const showHistoryLoading =
+    !!chatSessionId && isHistoryFetching && messages.length === 0 && !waitResponse && !isClientCreatedSession;
   return (
     <ChatBotView
       chatSessionId={chatSessionId}
@@ -950,7 +970,7 @@ const ChatBot = ({ chatSessionId, agents, onNewSessionCreated, runtimeContext: b
       showWelcome={showWelcome}
       showHistoryLoading={showHistoryLoading}
       waitResponse={waitResponse}
-      isHydratingSession={isHydratingSession}
+      isHydratingSession={isHydratingSession && !isClientCreatedSession}
       conversationPrefs={conversationPrefs}
       currentAgent={currentAgent}
       agents={agents}

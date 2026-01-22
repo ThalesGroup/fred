@@ -13,20 +13,10 @@
 // limitations under the License.
 
 import CloseIcon from "@mui/icons-material/Close";
-import {
-  Badge,
-  Box,
-  Button,
-  ClickAwayListener,
-  IconButton,
-  Paper,
-  Stack,
-  Tooltip,
-  useTheme,
-} from "@mui/material";
+import type { BadgeProps, TooltipProps } from "@mui/material";
+import { Badge, Box, Button, ClickAwayListener, IconButton, Paper, Stack, Tooltip, useTheme } from "@mui/material";
 import type { MouseEvent, ReactElement, ReactNode } from "react";
-import { FeatureTooltip } from "./FeatureTooltip";
-import type { TooltipProps } from "@mui/material";
+import { DetailedTooltip } from "../../shared/ui/tooltips/Tooltips";
 
 type ChatWidgetShellProps = {
   open: boolean;
@@ -36,6 +26,9 @@ type ChatWidgetShellProps = {
   onClickAway?: () => void;
   disabled?: boolean;
   badgeCount?: number;
+  badgeColor?: BadgeProps["color"];
+  badgeVariant?: BadgeProps["variant"];
+  showBadgeDotWhenEmpty?: boolean;
   icon: ReactElement;
   ariaLabel: string;
   tooltip?: string;
@@ -47,6 +40,7 @@ type ChatWidgetShellProps = {
   onAction: (event?: MouseEvent<HTMLButtonElement>) => void;
   actionDisabled?: boolean;
   actionStartIcon?: ReactNode;
+  headerActions?: ReactNode;
   children: ReactNode;
 };
 
@@ -58,6 +52,9 @@ const ChatWidgetShell = ({
   onClickAway,
   disabled = false,
   badgeCount,
+  badgeColor,
+  badgeVariant,
+  showBadgeDotWhenEmpty = false,
   icon,
   ariaLabel,
   tooltip,
@@ -69,11 +66,17 @@ const ChatWidgetShell = ({
   onAction,
   actionDisabled,
   actionStartIcon,
+  headerActions,
   children,
 }: ChatWidgetShellProps) => {
   const theme = useTheme();
   const isVisible = open;
-  const count = badgeCount && badgeCount > 0 ? badgeCount : undefined;
+  const hasCount = typeof badgeCount === "number" && badgeCount > 0;
+  const showDot = showBadgeDotWhenEmpty && !hasCount;
+  const count = hasCount ? badgeCount : undefined;
+  const resolvedBadgeColor = badgeColor ?? (disabled ? "default" : "primary");
+  const resolvedBadgeVariant = showDot ? "dot" : (badgeVariant ?? "standard");
+  const badgeInvisible = !hasCount && !showDot;
   const resolvedActionDisabled = typeof actionDisabled === "boolean" ? actionDisabled : disabled;
 
   const trigger = (
@@ -85,11 +88,27 @@ const ChatWidgetShell = ({
       sx={{ color: disabled ? "text.disabled" : "inherit" }}
     >
       <Badge
-        color={disabled ? "default" : "primary"}
+        color={resolvedBadgeColor}
         badgeContent={count}
+        variant={resolvedBadgeVariant}
+        invisible={badgeInvisible}
         overlap="circular"
         anchorOrigin={{ vertical: "top", horizontal: "right" }}
-        sx={{ "& .MuiBadge-badge": { opacity: disabled ? 0.5 : 1 } }}
+        sx={{
+          "& .MuiBadge-badge": {
+            opacity: disabled ? 0.5 : 1,
+            fontSize: "0.6rem",
+            minWidth: 14,
+            height: 14,
+            padding: "0 4px",
+            lineHeight: "14px",
+          },
+          "& .MuiBadge-dot": {
+            minWidth: 8,
+            height: 8,
+            borderRadius: "50%",
+          },
+        }}
       >
         {icon}
       </Badge>
@@ -133,9 +152,12 @@ const ChatWidgetShell = ({
               {actionLabel}
             </Button>
           </Box>
-          <IconButton size="small" onClick={onClose}>
-            <CloseIcon fontSize="small" />
-          </IconButton>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            {headerActions}
+            <IconButton size="small" onClick={onClose}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
         </Box>
         <Box>{children}</Box>
       </Stack>
@@ -146,14 +168,14 @@ const ChatWidgetShell = ({
     <Box sx={{ position: "relative", width: isVisible ? "100%" : "auto" }}>
       {!isVisible &&
         (tooltipLabel && tooltipDescription ? (
-          <FeatureTooltip
+          <DetailedTooltip
             label={tooltipLabel}
             description={tooltipDescription}
             disabledReason={tooltipDisabledReason}
             placement={tooltipPlacement}
           >
             {trigger}
-          </FeatureTooltip>
+          </DetailedTooltip>
         ) : tooltip ? (
           <Tooltip title={tooltip}>{trigger}</Tooltip>
         ) : (

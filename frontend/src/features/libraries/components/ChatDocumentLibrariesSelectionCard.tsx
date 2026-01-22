@@ -1,25 +1,26 @@
-import * as React from "react";
-import { useCallback, useMemo, useState } from "react";
 import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
-import { Box, Checkbox, TextField, Typography, useTheme } from "@mui/material";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
+import CloseIcon from "@mui/icons-material/Close";
+import { Box, Checkbox, IconButton, TextField, Typography, useTheme } from "@mui/material";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
-import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import * as React from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { TagNode, buildTree, collectDescendantTagIds, fullPath } from "../../../shared/utils/tagTree";
 import {
   TagType,
   TagWithItemsId,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { TagNode, buildTree, collectDescendantTagIds, fullPath } from "../../../shared/utils/tagTree";
-import { treeConnectorStyles } from "../../../shared/ui/tree/treeViewStyles";
 
 export interface ChatDocumentLibrariesSelectionCardProps {
   selectedLibrariesIds: string[];
   setSelectedLibrariesIds: (ids: string[]) => void;
   libraryType: TagType;
+  onClose?: () => void;
 }
 
 function computeCheck(n: TagNode, selected: Set<string>) {
@@ -40,9 +41,7 @@ function filterTree(root: TagNode, q: string): TagNode {
       n.name.toLowerCase().includes(needle) ||
       n.full.toLowerCase().includes(needle) ||
       n.tagsHere.some(
-        (t) =>
-          (t.description ?? "").toLowerCase().includes(needle) ||
-          fullPath(t).toLowerCase().includes(needle),
+        (t) => (t.description ?? "").toLowerCase().includes(needle) || fullPath(t).toLowerCase().includes(needle),
       );
     const keptChildren = new Map<string, TagNode>();
     for (const [k, ch] of n.children) {
@@ -68,6 +67,7 @@ export function ChatDocumentLibrariesSelectionCard({
   selectedLibrariesIds,
   setSelectedLibrariesIds,
   libraryType,
+  onClose,
 }: ChatDocumentLibrariesSelectionCardProps) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -115,30 +115,30 @@ export function ChatDocumentLibrariesSelectionCard({
           e.stopPropagation();
           toggleIds(ids, !checked);
         }}
-        >
-          <Checkbox
-            size="small"
-            checked={checked}
-            indeterminate={indeterminate}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleIds(ids, !checked);
-            }}
-          />
-          {node.children.size > 0 ? (
-            isExpanded ? (
-              <FolderOpenOutlinedIcon fontSize="small" />
-            ) : (
-              <FolderOutlinedIcon fontSize="small" />
-            )
+      >
+        <Checkbox
+          size="small"
+          checked={checked}
+          indeterminate={indeterminate}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleIds(ids, !checked);
+          }}
+        />
+        {node.children.size > 0 ? (
+          isExpanded ? (
+            <FolderOpenOutlinedIcon fontSize="small" />
           ) : (
             <FolderOutlinedIcon fontSize="small" />
-          )}
-          <Box sx={{ minWidth: 0 }}>
-            <Typography variant="body2" noWrap title={leaf?.name ?? node.name}>
-              {leaf?.name ?? node.name}
-            </Typography>
-          </Box>
+          )
+        ) : (
+          <FolderOutlinedIcon fontSize="small" />
+        )}
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body2" noWrap title={leaf?.name ?? node.name}>
+            {leaf?.name ?? node.name}
+          </Typography>
+        </Box>
       </Box>
     );
   };
@@ -171,7 +171,7 @@ export function ChatDocumentLibrariesSelectionCard({
         flexDirection: "column",
       }}
     >
-      <Box sx={{ mx: 2, mt: 2, mb: 1 }}>
+      <Box sx={{ mx: 2, mt: 2, mb: 1, display: "flex", alignItems: "center", gap: 1 }}>
         <TextField
           autoFocus
           label={label}
@@ -181,6 +181,11 @@ export function ChatDocumentLibrariesSelectionCard({
           onChange={(e) => setSearch(e.target.value)}
           fullWidth
         />
+        {onClose ? (
+          <IconButton size="small" onClick={onClose} aria-label={t("common.close", "Close")}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        ) : null}
       </Box>
 
       <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", px: 1, pb: 1.5 }}>
@@ -188,7 +193,6 @@ export function ChatDocumentLibrariesSelectionCard({
           expandedItems={search ? expandedWhenSearching : expanded}
           onExpandedItemsChange={(_, ids) => setExpanded(ids as string[])}
           slots={{ expandIcon: KeyboardArrowRightIcon, collapseIcon: KeyboardArrowDownIcon }}
-          sx={treeConnectorStyles(theme)}
         >
           {renderTree(filtered)}
         </SimpleTreeView>

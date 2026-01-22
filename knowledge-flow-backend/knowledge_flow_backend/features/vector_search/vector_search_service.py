@@ -450,6 +450,7 @@ class VectorSearchService:
         policy_name: Optional[SearchPolicyName] = None,
         session_id: Optional[str] = None,
         include_session_scope: bool = True,
+        include_corpus_scope: bool = True,
     ) -> List[VectorSearchHit]:
         """
         Args:
@@ -459,6 +460,8 @@ class VectorSearchService:
             document_library_tags_ids (Optional[List[str]]): List of tag IDs to filter the search by library.
             policy_name (Optional[SearchPolicyName]): The search policy to use (hybrid, strict, semantic). Defaults to hybrid.
             document_uid (Optional[str]): Optional document UID to filter the search results by.
+            include_session_scope (bool): Whether to search session-scoped attachment vectors.
+            include_corpus_scope (bool): Whether to search corpus/library vectors.
         Returns:
             List[VectorSearchHit]: A list of VectorSearchHit objects containing the search results.
 
@@ -468,10 +471,16 @@ class VectorSearchService:
         """
         try:
             original_tag_ids = document_library_tags_ids or []
+            include_session_scope = bool(include_session_scope)
+            include_corpus_scope = bool(include_corpus_scope)
 
             policy_key = policy_name or SearchPolicyName.hybrid
             corpus_hits: List[VectorSearchHit] = []
             attachment_hits: List[VectorSearchHit] = []
+
+            if not include_session_scope and not include_corpus_scope:
+                logger.info("[VECTOR][SEARCH] both session and corpus scopes disabled; returning empty result.")
+                return []
 
             # Attachment/session-scope query (semantic vector only), optional
             if include_session_scope and session_id:
@@ -495,63 +504,67 @@ class VectorSearchService:
                     },
                 )
 
-            # Resolve library tags only if the caller provided some; otherwise stay empty so
-            # we can short-circuit when attachments already cover the request.
-            document_library_tags_ids = original_tag_ids
-            if not document_library_tags_ids:
-                logger.info(
-                    "[VECTOR][SEARCH] user=%s has not restricted library tags → fetching all visible tags",
-                    user.uid,
-                )
-                document_library_tags_ids = await self._all_document_library_tags_ids(user)
+            if include_corpus_scope:
+                # Resolve library tags only if the caller provided some; otherwise stay empty so
+                # we can short-circuit when attachments already cover the request.
+                document_library_tags_ids = original_tag_ids
+                if not document_library_tags_ids:
+                    logger.info(
+                        "[VECTOR][SEARCH] user=%s has not restricted library tags → fetching all visible tags",
+                        user.uid,
+                    )
+                    document_library_tags_ids = await self._all_document_library_tags_ids(user)
 
-            # Exclude session-scoped vectors from corpus/library search to avoid leakage across sessions
-            corpus_metadata_extra = {"scope": ["!session"]}
+                # Exclude session-scoped vectors from corpus/library search to avoid leakage across sessions
+                corpus_metadata_extra = {"scope": ["!session"]}
 
-            # Corpus/library query: only run when the user actually has accessible tags
-            if document_library_tags_ids:
-                if policy_key == SearchPolicyName.strict:
-                    logger.info(
-                        "[VECTOR][SEARCH][CORPUS] policy=strict tags=%s question=%r top_k=%d",
-                        document_library_tags_ids,
-                        question,
-                        top_k,
-                    )
-                    corpus_hits = await self._strict(
-                        question=question,
-                        user=user,
-                        k=top_k,
-                        library_tags_ids=document_library_tags_ids,
-                        metadata_terms_extra=corpus_metadata_extra,
-                    )
-                elif policy_key == SearchPolicyName.hybrid:
-                    logger.info(
-                        "[VECTOR][SEARCH][CORPUS] policy=hybrid tags=%s question=%r top_k=%d",
-                        document_library_tags_ids,
-                        question,
-                        top_k,
-                    )
-                    corpus_hits = await self._hybrid(
-                        question=question,
-                        user=user,
-                        k=top_k,
-                        library_tags_ids=document_library_tags_ids,
-                        metadata_terms_extra=corpus_metadata_extra,
-                    )
-                else:
-                    logger.info(
-                        "[VECTOR][SEARCH][CORPUS] policy=semantic tags=%s question=%r top_k=%d",
-                        document_library_tags_ids,
-                        question,
-                        top_k,
-                    )
-                    corpus_hits = await self._semantic(
-                        question=question,
-                        user=user,
-                        k=top_k,
-                        library_tags_ids=document_library_tags_ids,
-                        metadata_terms_extra=corpus_metadata_extra,
-                    )
+                # Corpus/library query: only run when the user actually has accessible tags
+                if document_library_tags_ids:
+                    if policy_key == SearchPolicyName.strict:
+                        logger.info(
+                            "[VECTOR][SEARCH][CORPUS] policy=strict tags=%s question=%r top_k=%d",
+                            document_library_tags_ids,
+                            question,
+                            top_k,
+                        )
+                        corpus_hits = await self._strict(
+                            question=question,
+                            user=user,
+                            k=top_k,
+                            library_tags_ids=document_library_tags_ids,
+                            metadata_terms_extra=corpus_metadata_extra,
+                        )
+                    elif policy_key == SearchPolicyName.hybrid:
+                        logger.info(
+                            "[VECTOR][SEARCH][CORPUS] policy=hybrid tags=%s question=%r top_k=%d",
+                            document_library_tags_ids,
+                            question,
+                            top_k,
+                        )
+                        corpus_hits = await self._hybrid(
+                            question=question,
+                            user=user,
+                            k=top_k,
+                            library_tags_ids=document_library_tags_ids,
+                            metadata_terms_extra=corpus_metadata_extra,
+                        )
+                    else:
+                        logger.info(
+                            "[VECTOR][SEARCH][CORPUS] policy=semantic tags=%s question=%r top_k=%d",
+                            document_library_tags_ids,
+                            question,
+                            top_k,
+                        )
+                        corpus_hits = await self._semantic(
+                            question=question,
+                            user=user,
+                            k=top_k,
+                            library_tags_ids=document_library_tags_ids,
+                            metadata_terms_extra=corpus_metadata_extra,
+                        )
+            else:
+                if original_tag_ids:
+                    logger.info("[VECTOR][SEARCH][CORPUS] skipping corpus search (include_corpus_scope=false).")
 
             merged = _merge_attachment_and_corpus_hits(
                 attachment_hits=attachment_hits,

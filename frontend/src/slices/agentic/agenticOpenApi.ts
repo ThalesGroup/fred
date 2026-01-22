@@ -720,6 +720,8 @@ export type RuntimeContext = {
   attachments_markdown?: string | null;
   search_rag_scope?: ("corpus_only" | "hybrid" | "general_only") | null;
   deep_search?: boolean | null;
+  include_session_scope?: boolean | null;
+  include_corpus_scope?: boolean | null;
 };
 export type ChatMetadata = {
   model?: string | null;

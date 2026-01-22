@@ -14,9 +14,8 @@
 
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import { Box, IconButton, Tooltip } from "@mui/material";
+import { Box, IconButton } from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
-import { useTranslation } from "react-i18next";
 import type { AnyAgent } from "../../common/agent.ts";
 import ChatDocumentLibrariesWidget from "../../features/libraries/components/ChatDocumentLibrariesWidget.tsx";
 import { useInitialChatInputContext, type InitialChatPrefs } from "../../hooks/useInitialChatInputContext.ts";
@@ -28,8 +27,9 @@ import {
 import type { Resource, SearchPolicyName, TagWithItemsId } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import ChatAttachmentsWidget from "./ChatAttachmentsWidget.tsx";
 import ChatContextWidget from "./ChatContextWidget.tsx";
-import ChatLogGeniusWidget from "./ChatLogGeniusWidget.tsx";
+import ChatDeepSearchWidget from "./ChatDeepSearchWidget.tsx";
 import ChatKnowledge from "./ChatKnowledge.tsx";
+import ChatLogGeniusWidget from "./ChatLogGeniusWidget.tsx";
 import ChatSearchOptionsWidget from "./ChatSearchOptionsWidget.tsx";
 
 type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
@@ -48,6 +48,8 @@ type PersistedCtx = {
   searchPolicy?: SearchPolicyName;
   searchRagScope?: SearchRagScope;
   deepSearch?: boolean;
+  includeCorpusScope?: boolean;
+  includeSessionScope?: boolean;
   ragKnowledgeScope?: SearchRagScope;
   skipRagSearch?: boolean;
   agent_name?: string;
@@ -61,10 +63,13 @@ const asStringArray = (v: unknown, fallback: string[] = []): string[] => {
   return v.filter((x): x is string => typeof x === "string" && x.length > 0);
 };
 
+const asBoolean = (v: unknown, fallback: boolean): boolean => (typeof v === "boolean" ? v : fallback);
+
 type ControllerArgs = {
   chatSessionId?: string;
   prefsTargetSessionId?: string;
   agents: AnyAgent[];
+  initialAgent?: AnyAgent;
 };
 
 export type ConversationOptionsState = {
@@ -83,13 +88,16 @@ export type ConversationOptionsState = {
   isPrefsFetching: boolean;
   isPrefsError: boolean;
   prefsError: unknown;
+  defaultSearchPolicy: SearchPolicyName;
   defaultRagScope: SearchRagScope;
+  defaultSearchRagScope: SearchRagScope;
   displayChatContextIds: string[];
   displayDocumentLibraryIds: string[];
   chatContextWidgetOpenDisplay: boolean;
   attachmentsWidgetOpenDisplay: boolean;
   searchOptionsWidgetOpenDisplay: boolean;
   librariesWidgetOpenDisplay: boolean;
+  deepSearchWidgetOpenDisplay: boolean;
   logGeniusWidgetOpenDisplay: boolean;
   widgetsOpen: boolean;
   layout: {
@@ -112,6 +120,8 @@ export type ConversationOptionsActions = {
   setSearchPolicy: (next: SetStateAction<SearchPolicyName>) => void;
   setSearchRagScope: (next: SearchRagScope) => void;
   setDeepSearchEnabled: (next: boolean) => void;
+  setIncludeCorpusScope: (next: boolean) => void;
+  setIncludeSessionScope: (next: boolean) => void;
   setChatContextIds: (ids: string[]) => void;
   setDocumentLibraryIds: (ids: string[]) => void;
   selectAgent: (agent: AnyAgent) => Promise<void>;
@@ -120,6 +130,7 @@ export type ConversationOptionsActions = {
   setAttachmentsWidgetOpen: (open: boolean) => void;
   setSearchOptionsWidgetOpen: (open: boolean) => void;
   setLibrariesWidgetOpen: (open: boolean) => void;
+  setDeepSearchWidgetOpen: (open: boolean) => void;
   setLogGeniusWidgetOpen: (open: boolean) => void;
   setContextOpen: (open: boolean) => void;
 };
@@ -133,9 +144,11 @@ export function useConversationOptionsController({
   chatSessionId,
   prefsTargetSessionId,
   agents,
+  initialAgent,
 }: ControllerArgs): ConversationOptionsController {
-  const defaultAgent = useMemo(() => agents[0] ?? null, [agents]);
-  const [currentAgent, setCurrentAgent] = useState<AnyAgent>(agents[0] ?? ({} as AnyAgent));
+  // Use initialAgent from URL if provided, otherwise fallback to agents[0]
+  const defaultAgent = useMemo(() => initialAgent ?? agents[0] ?? null, [initialAgent, agents]);
+  const [currentAgent, setCurrentAgent] = useState<AnyAgent>(initialAgent ?? agents[0] ?? ({} as AnyAgent));
 
   useEffect(() => {
     if (defaultAgent && (!currentAgent || !currentAgent.name)) setCurrentAgent(defaultAgent);
@@ -146,6 +159,8 @@ export function useConversationOptionsController({
     currentAgent?.name || "default",
     chatSessionId,
   );
+  const defaultSearchPolicy: SearchPolicyName = initialCtx.searchPolicy ?? "semantic";
+  const defaultSearchRagScope: SearchRagScope = initialCtx.searchRagScope ?? defaultRagScope;
 
   const [conversationPrefs, setConversationPrefs] = useState<ConversationPrefs>(() => ({
     chatContextIds: [],
@@ -155,6 +170,8 @@ export function useConversationOptionsController({
     searchPolicy: initialCtx.searchPolicy,
     searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
     deepSearch: initialCtx.deepSearch ?? false,
+    includeCorpusScope: initialCtx.includeCorpusScope ?? true,
+    includeSessionScope: initialCtx.includeSessionScope ?? true,
   }));
 
   useEffect(() => {
@@ -168,6 +185,8 @@ export function useConversationOptionsController({
       searchPolicy: initialCtx.searchPolicy,
       searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
       deepSearch: initialCtx.deepSearch ?? false,
+      includeCorpusScope: initialCtx.includeCorpusScope ?? true,
+      includeSessionScope: initialCtx.includeSessionScope ?? true,
     }));
   }, [chatSessionId, initialCtx, defaultRagScope]);
 
@@ -197,6 +216,7 @@ export function useConversationOptionsController({
   const [attachmentsWidgetOpen, setAttachmentsWidgetOpen] = useState<boolean>(false);
   const [searchOptionsWidgetOpen, setSearchOptionsWidgetOpen] = useState<boolean>(false);
   const [librariesWidgetOpen, setLibrariesWidgetOpen] = useState<boolean>(false);
+  const [deepSearchWidgetOpen, setDeepSearchWidgetOpen] = useState<boolean>(false);
   const [logGeniusWidgetOpen, setLogGeniusWidgetOpen] = useState<boolean>(false);
   const [contextOpen, setContextOpen] = useState<boolean>(false);
 
@@ -217,9 +237,18 @@ export function useConversationOptionsController({
       searchPolicy: prefs.searchPolicy,
       searchRagScope: supportsRagScopeSelection ? prefs.searchRagScope : undefined,
       deepSearch: supportsDeepSearchSelection ? prefs.deepSearch : undefined,
+      includeCorpusScope: supportsLibrariesSelection ? prefs.includeCorpusScope : undefined,
+      includeSessionScope: supportsAttachments ? prefs.includeSessionScope : undefined,
       agent_name: agentName ?? currentAgent?.name ?? defaultAgent?.name,
     }),
-    [supportsRagScopeSelection, supportsDeepSearchSelection, currentAgent?.name, defaultAgent?.name],
+    [
+      supportsRagScopeSelection,
+      supportsDeepSearchSelection,
+      supportsLibrariesSelection,
+      supportsAttachments,
+      currentAgent?.name,
+      defaultAgent?.name,
+    ],
   );
 
   const savePrefs = useCallback(
@@ -307,6 +336,26 @@ export function useConversationOptionsController({
     [updatePrefs],
   );
 
+  const setIncludeCorpusScope = useCallback(
+    (next: boolean) => {
+      updatePrefs((prev) => ({
+        ...prev,
+        includeCorpusScope: next,
+      }));
+    },
+    [updatePrefs],
+  );
+
+  const setIncludeSessionScope = useCallback(
+    (next: boolean) => {
+      updatePrefs((prev) => ({
+        ...prev,
+        includeSessionScope: next,
+      }));
+    },
+    [updatePrefs],
+  );
+
   const setChatContextIds = useCallback(
     (ids: string[]) => {
       const uniqueIds = Array.from(new Set(ids));
@@ -388,6 +437,8 @@ export function useConversationOptionsController({
         searchPolicy: initialCtx.searchPolicy,
         searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
         deepSearch: initialCtx.deepSearch ?? false,
+        includeCorpusScope: initialCtx.includeCorpusScope ?? true,
+        includeSessionScope: initialCtx.includeSessionScope ?? true,
       }));
       return;
     }
@@ -425,6 +476,8 @@ export function useConversationOptionsController({
         searchPolicy: initialCtx.searchPolicy,
         searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
         deepSearch: initialCtx.deepSearch ?? false,
+        includeCorpusScope: initialCtx.includeCorpusScope ?? true,
+        includeSessionScope: initialCtx.includeSessionScope ?? true,
       });
       return;
     }
@@ -438,6 +491,8 @@ export function useConversationOptionsController({
       const nextSearchPolicy = p.searchPolicy ?? initialCtx.searchPolicy;
       const nextRagScope = p.searchRagScope ?? p.ragKnowledgeScope ?? initialCtx.searchRagScope ?? defaultRagScope;
       const nextDeepSearch = p.deepSearch ?? initialCtx.deepSearch ?? false;
+      const nextIncludeCorpusScope = asBoolean(p.includeCorpusScope, initialCtx.includeCorpusScope ?? true);
+      const nextIncludeSessionScope = asBoolean(p.includeSessionScope, initialCtx.includeSessionScope ?? true);
 
       setConversationPrefs({
         chatContextIds: nextChatContextIds,
@@ -447,6 +502,8 @@ export function useConversationOptionsController({
         searchPolicy: nextSearchPolicy,
         searchRagScope: nextRagScope,
         deepSearch: nextDeepSearch,
+        includeCorpusScope: nextIncludeCorpusScope,
+        includeSessionScope: nextIncludeSessionScope,
       });
       setChatContextWidgetOpen(false);
       setAttachmentsWidgetOpen(false);
@@ -467,6 +524,8 @@ export function useConversationOptionsController({
         searchPolicy: nextSearchPolicy,
         searchRagScope: nextRagScope,
         deepSearch: nextDeepSearch,
+        includeCorpusScope: nextIncludeCorpusScope,
+        includeSessionScope: nextIncludeSessionScope,
         agent_name: desiredAgentName,
       });
       setPrefsLoadState("hydrated");
@@ -478,6 +537,8 @@ export function useConversationOptionsController({
         searchPolicy: nextSearchPolicy,
         searchRagScope: nextRagScope,
         deepSearch: nextDeepSearch,
+        includeCorpusScope: nextIncludeCorpusScope,
+        includeSessionScope: nextIncludeSessionScope,
       });
     }
   }, [
@@ -500,12 +561,14 @@ export function useConversationOptionsController({
     ? false
     : (supportsRagScopeSelection || supportsSearchPolicySelection) && searchOptionsWidgetOpen;
   const librariesWidgetOpenDisplay = isHydratingSession ? false : supportsLibrariesSelection && librariesWidgetOpen;
+  const deepSearchWidgetOpenDisplay = isHydratingSession ? false : supportsDeepSearchSelection && deepSearchWidgetOpen;
   const logGeniusWidgetOpenDisplay = isHydratingSession ? false : logGeniusWidgetOpen;
   const widgetsOpen =
     chatContextWidgetOpenDisplay ||
     librariesWidgetOpenDisplay ||
     attachmentsWidgetOpenDisplay ||
     searchOptionsWidgetOpenDisplay ||
+    deepSearchWidgetOpenDisplay ||
     logGeniusWidgetOpenDisplay;
   const chatWidgetRail = widgetsOpen ? "18vw" : "0px";
   const chatWidgetGap = "12px";
@@ -543,13 +606,16 @@ export function useConversationOptionsController({
       isPrefsFetching,
       isPrefsError,
       prefsError,
+      defaultSearchPolicy,
       defaultRagScope,
+      defaultSearchRagScope,
       displayChatContextIds,
       displayDocumentLibraryIds,
       chatContextWidgetOpenDisplay,
       attachmentsWidgetOpenDisplay,
       searchOptionsWidgetOpenDisplay,
       librariesWidgetOpenDisplay,
+      deepSearchWidgetOpenDisplay,
       logGeniusWidgetOpenDisplay,
       widgetsOpen,
       layout: {
@@ -567,6 +633,8 @@ export function useConversationOptionsController({
       setSearchPolicy,
       setSearchRagScope,
       setDeepSearchEnabled,
+      setIncludeCorpusScope,
+      setIncludeSessionScope,
       setChatContextIds,
       setDocumentLibraryIds,
       selectAgent,
@@ -575,6 +643,7 @@ export function useConversationOptionsController({
       setAttachmentsWidgetOpen,
       setSearchOptionsWidgetOpen,
       setLibrariesWidgetOpen,
+      setDeepSearchWidgetOpen,
       setLogGeniusWidgetOpen,
       setContextOpen,
     },
@@ -612,7 +681,6 @@ export function ConversationOptionsPanel({
   chatContextNameMap,
   chatContextResourceMap,
 }: ConversationOptionsPanelProps) {
-  const { t } = useTranslation();
   const {
     conversationPrefs,
     displayChatContextIds,
@@ -621,13 +689,17 @@ export function ConversationOptionsPanel({
     attachmentsWidgetOpenDisplay,
     searchOptionsWidgetOpenDisplay,
     librariesWidgetOpenDisplay,
+    deepSearchWidgetOpenDisplay,
     logGeniusWidgetOpenDisplay,
     isHydratingSession,
     supportsLibrariesSelection,
     supportsAttachments,
     supportsRagScopeSelection,
     supportsSearchPolicySelection,
+    supportsDeepSearchSelection,
+    defaultSearchPolicy,
     defaultRagScope,
+    defaultSearchRagScope,
     contextOpen,
     hasContext,
     userInputContext,
@@ -637,10 +709,14 @@ export function ConversationOptionsPanel({
     setDocumentLibraryIds,
     setSearchPolicy,
     setSearchRagScope,
+    setDeepSearchEnabled,
+    setIncludeCorpusScope,
+    setIncludeSessionScope,
     setChatContextWidgetOpen,
     setAttachmentsWidgetOpen,
     setLibrariesWidgetOpen,
     setSearchOptionsWidgetOpen,
+    setDeepSearchWidgetOpen,
     setLogGeniusWidgetOpen,
     setContextOpen,
   } = controller.actions;
@@ -652,6 +728,7 @@ export function ConversationOptionsPanel({
     (!supportsLibrariesSelection || librariesWidgetOpenDisplay) &&
     (!supportsAttachments || attachmentsWidgetOpenDisplay) &&
     (!canOpenSearchOptions || searchOptionsWidgetOpenDisplay) &&
+    (!supportsDeepSearchSelection || deepSearchWidgetOpenDisplay) &&
     (!showLogGenius || logGeniusWidgetOpenDisplay);
 
   const setAllWidgetsOpen = (open: boolean) => {
@@ -659,19 +736,25 @@ export function ConversationOptionsPanel({
     setLibrariesWidgetOpen(open && supportsLibrariesSelection);
     setAttachmentsWidgetOpen(open && supportsAttachments);
     setSearchOptionsWidgetOpen(open && canOpenSearchOptions);
+    setDeepSearchWidgetOpen(open && supportsDeepSearchSelection);
     setLogGeniusWidgetOpen(open && showLogGenius);
   };
 
-  const openOnlyWidget = (target: "chat-context" | "libraries" | "attachments" | "search" | "log-genius") => {
-    setChatContextWidgetOpen(target === "chat-context");
-    setLibrariesWidgetOpen(target === "libraries" && supportsLibrariesSelection);
-    setAttachmentsWidgetOpen(target === "attachments" && supportsAttachments);
-    setSearchOptionsWidgetOpen(target === "search" && canOpenSearchOptions);
-    setLogGeniusWidgetOpen(target === "log-genius" && showLogGenius);
+  const openWidget = (
+    target: "chat-context" | "libraries" | "attachments" | "search" | "deep-search" | "log-genius",
+  ) => {
+    if (target === "chat-context") setChatContextWidgetOpen(true);
+    if (target === "libraries" && supportsLibrariesSelection) setLibrariesWidgetOpen(true);
+    if (target === "attachments" && supportsAttachments) setAttachmentsWidgetOpen(true);
+    if (target === "search" && canOpenSearchOptions) setSearchOptionsWidgetOpen(true);
+    if (target === "deep-search" && supportsDeepSearchSelection) setDeepSearchWidgetOpen(true);
+    if (target === "log-genius" && showLogGenius) setLogGeniusWidgetOpen(true);
   };
-  const toggleLabel = allWidgetsOpen
-    ? t("chatbot.options.collapseAll", "Collapse all")
-    : t("chatbot.options.expandAll", "Expand all");
+  const resetSearchOptions = () => {
+    if (supportsSearchPolicySelection) setSearchPolicy(defaultSearchPolicy);
+    if (supportsRagScopeSelection) setSearchRagScope(defaultSearchRagScope);
+  };
+  const deepSearchEnabled = Boolean(conversationPrefs.deepSearch);
 
   return (
     <>
@@ -689,19 +772,16 @@ export function ConversationOptionsPanel({
         }}
       >
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-end" }}>
-          <Tooltip title={toggleLabel}>
-            <span>
-              <IconButton
-                size="small"
-                onClick={() => setAllWidgetsOpen(!allWidgetsOpen)}
-                disabled={isHydratingSession}
-                aria-label={toggleLabel}
-                sx={{ alignSelf: "flex-end" }}
-              >
-                {allWidgetsOpen ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
-              </IconButton>
-            </span>
-          </Tooltip>
+          <span>
+            <IconButton
+              size="small"
+              onClick={() => setAllWidgetsOpen(!allWidgetsOpen)}
+              disabled={isHydratingSession}
+              sx={{ alignSelf: "flex-end" }}
+            >
+              {allWidgetsOpen ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+            </IconButton>
+          </span>
           <ChatContextWidget
             selectedChatContextIds={displayChatContextIds}
             onChangeSelectedChatContextIds={setChatContextIds}
@@ -709,7 +789,7 @@ export function ConversationOptionsPanel({
             resourceById={chatContextResourceMap}
             open={chatContextWidgetOpenDisplay}
             closeOnClickAway={false}
-            onOpen={() => openOnlyWidget("chat-context")}
+            onOpen={() => openWidget("chat-context")}
             onClose={() => setChatContextWidgetOpen(false)}
           />
           <ChatDocumentLibrariesWidget
@@ -717,10 +797,13 @@ export function ConversationOptionsPanel({
             onChangeSelectedLibraryIds={setDocumentLibraryIds}
             nameById={libraryNameMap}
             libraryById={libraryById}
+            includeInSearch={conversationPrefs.includeCorpusScope}
+            onIncludeInSearchChange={setIncludeCorpusScope}
+            includeInSearchDisabled={isHydratingSession}
             open={librariesWidgetOpenDisplay}
             closeOnClickAway={false}
             disabled={!supportsLibrariesSelection}
-            onOpen={() => openOnlyWidget("libraries")}
+            onOpen={() => openWidget("libraries")}
             onClose={() => setLibrariesWidgetOpen(false)}
           />
           <ChatAttachmentsWidget
@@ -730,24 +813,41 @@ export function ConversationOptionsPanel({
             closeOnClickAway={false}
             disabled={!supportsAttachments}
             isUploading={isUploadingAttachments}
+            includeInSearch={conversationPrefs.includeSessionScope}
+            onIncludeInSearchChange={setIncludeSessionScope}
+            includeInSearchDisabled={isHydratingSession}
             onAddAttachments={onAddAttachments}
             onAttachmentsUpdated={onAttachmentsUpdated}
-            onOpen={() => openOnlyWidget("attachments")}
+            onOpen={() => openWidget("attachments")}
             onClose={() => setAttachmentsWidgetOpen(false)}
           />
           <ChatSearchOptionsWidget
-            searchPolicy={conversationPrefs.searchPolicy ?? "semantic"}
+            searchPolicy={conversationPrefs.searchPolicy ?? defaultSearchPolicy}
             onSearchPolicyChange={setSearchPolicy}
+            defaultSearchPolicy={defaultSearchPolicy}
             searchRagScope={conversationPrefs.searchRagScope ?? defaultRagScope}
             onSearchRagScopeChange={setSearchRagScope}
+            defaultRagScope={defaultSearchRagScope}
             ragScopeDisabled={!supportsRagScopeSelection}
             searchPolicyDisabled={!supportsSearchPolicySelection}
             open={searchOptionsWidgetOpenDisplay}
             closeOnClickAway={false}
             disabled={!supportsRagScopeSelection && !supportsSearchPolicySelection}
-            onOpen={() => openOnlyWidget("search")}
+            onOpen={() => openWidget("search")}
             onClose={() => setSearchOptionsWidgetOpen(false)}
+            onResetToDefaults={resetSearchOptions}
           />
+          {supportsDeepSearchSelection && (
+            <ChatDeepSearchWidget
+              open={deepSearchWidgetOpenDisplay}
+              closeOnClickAway={false}
+              disabled={isHydratingSession}
+              enabled={deepSearchEnabled}
+              onToggle={setDeepSearchEnabled}
+              onOpen={() => openWidget("deep-search")}
+              onClose={() => setDeepSearchWidgetOpen(false)}
+            />
+          )}
           {showLogGenius && (
             <ChatLogGeniusWidget
               open={logGeniusWidgetOpenDisplay}
@@ -755,7 +855,7 @@ export function ConversationOptionsPanel({
               disabled={isHydratingSession}
               onRun={onRequestLogGenius}
               onOpen={() => {
-                openOnlyWidget("log-genius");
+                openWidget("log-genius");
               }}
               onClose={() => setLogGeniusWidgetOpen(false)}
             />

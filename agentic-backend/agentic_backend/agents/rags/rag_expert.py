@@ -41,6 +41,7 @@ from agentic_backend.core.agents.runtime_context import (
     get_language,
     get_rag_knowledge_scope,
     get_search_policy,
+    get_vector_search_scopes,
     is_corpus_only_mode,
 )
 from agentic_backend.core.runtime_source import expose_runtime_source
@@ -180,7 +181,7 @@ RAG_TUNING = AgentTuning(
                 "If enabled, the model first extracts keywords and augments the query before vector search to widen recall."
             ),
             required=False,
-            default=True,
+            default=False,
             ui=UIHints(group="Retrieval"),
         ),
         FieldSpec(
@@ -387,6 +388,9 @@ class Rico(AgentFlow):
                 raise RuntimeError(
                     "Runtime context missing session_id; required for scoped retrieval."
                 )
+            include_session_scope, include_corpus_scope = get_vector_search_scopes(
+                runtime_context
+            )
 
             # 2) Vector search
             with self.kpi_timer(
@@ -399,7 +403,8 @@ class Rico(AgentFlow):
                     document_library_tags_ids=doc_tag_ids,
                     search_policy=search_policy,
                     session_id=runtime_context.session_id,
-                    include_session_scope=True,
+                    include_session_scope=include_session_scope,
+                    include_corpus_scope=include_corpus_scope,
                 )
             logger.debug("[AGENT] vector search returned %d hit(s)", len(hits))
             if hits:

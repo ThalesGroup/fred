@@ -49,6 +49,7 @@ from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
     get_search_policy,
+    get_vector_search_scopes,
 )
 from agentic_backend.core.chatbot.chat_schema import (
     LinkKind,
@@ -325,6 +326,9 @@ class AdvancedRico(AgentFlow):
             )
         document_library_tags_ids = get_document_library_tags_ids(runtime_context)
         search_policy = get_search_policy(runtime_context)
+        include_session_scope, include_corpus_scope = get_vector_search_scopes(
+            runtime_context
+        )
 
         try:
             # Perform search
@@ -338,7 +342,8 @@ class AdvancedRico(AgentFlow):
                     document_library_tags_ids=document_library_tags_ids,
                     search_policy=search_policy,
                     session_id=runtime_context.session_id,
-                    include_session_scope=True,
+                    include_session_scope=include_session_scope,
+                    include_corpus_scope=include_corpus_scope,
                 )
 
             if not hits:
