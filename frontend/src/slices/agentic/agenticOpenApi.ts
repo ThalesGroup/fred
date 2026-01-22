@@ -533,8 +533,6 @@ export type AgentChatOptions = {
   search_policy_selection?: boolean;
   /** Display a picker to include document libraries/knowledge sources that the agent can use for this message (session-scoped context). */
   libraries_selection?: boolean;
-  /** Display a picker to restrict retrieval to specific documents for this message. */
-  documents_selection?: boolean;
   /** Add a microphone control to record a short audio clip and attach it to the message. */
   record_audio_files?: boolean;
   /** Allow attaching local files (e.g., PDFs, images, text) to the message and show existing attachments. */
@@ -543,6 +541,8 @@ export type AgentChatOptions = {
   search_rag_scoping?: boolean;
   /** Expose a toggle to delegate RAG retrieval to a senior agent (deep search) when available. */
   deep_search_delegate?: boolean;
+  /** Display a picker to restrict retrieval to specific documents for this message. */
+  documents_selection?: boolean;
 };
 export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
