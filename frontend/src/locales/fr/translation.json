@@ -478,7 +478,10 @@
       "label": "Recherche approfondie",
       "tooltip": "Déléguer la recherche RAG à Rico Senior",
       "tooltipDescription": "Délègue la recherche à un agent spécialisé pour explorer plus en profondeur votre corpus documentaire.\n\nL'activation de cette fonctionnalité peut ralentir les réponses mais les rendra plus complètes. Une transcription téléchargeable du processus de recherche sera jointe à la conversation.",
-      "tooltipDisabled": "Cet agent ne supporte pas la délégation de recherche approfondie."
+      "tooltipDisabled": "Cet agent ne supporte pas la délégation de recherche approfondie.",
+      "description": "Lance une recherche plus approfondie avec un agent spécialisé. Réponses plus lentes mais plus complètes.",
+      "actionEnable": "Activer la recherche approfondie",
+      "actionDisable": "Désactiver la recherche approfondie"
     },
     "logGenius": {
       "label": "Log Genius",

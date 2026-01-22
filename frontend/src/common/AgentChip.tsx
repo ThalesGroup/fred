@@ -45,7 +45,7 @@ interface AgentChipProps {
  * - Chip width is intrinsic: no fixed min/max width unless you cap it.
  * - All colors come from theme tokens (mode-safe).
  */
-export const AgentChipWithIcon = ({ agent, disableTitles = false, sx }: AgentChipProps) => {
+export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
   if (!agent) return null;
 
   const theme = useTheme();
@@ -112,7 +112,6 @@ export const AgentChipWithIcon = ({ agent, disableTitles = false, sx }: AgentChi
             maxWidth: NAME_MAX_W,
             textAlign: "center",
           }}
-          title={disableTitles ? undefined : agent.name}
         >
           {agent.name}
         </Typography>

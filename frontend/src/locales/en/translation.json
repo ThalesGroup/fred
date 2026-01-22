@@ -477,7 +477,10 @@
       "label": "Deep Search",
       "tooltip": "Delegate RAG retrieval to Rico Senior",
       "tooltipDescription": "Delegates retrieval to a specialized agent for deeper search across your knowledge.\n\nActivating this feature will result in slower but more thorough replies. A downloadable transcript of the search process will be attached to the conversation.",
-      "tooltipDisabled": "This agent does not support deep search delegation."
+      "tooltipDisabled": "This agent does not support deep search delegation.",
+      "description": "Runs a deeper retrieval pass with a specialized agent. Enables slower but more thorough answers.",
+      "actionEnable": "Enable deep search",
+      "actionDisable": "Disable deep search"
     },
     "logGenius": {
       "label": "Log Genius",
@@ -1092,8 +1095,7 @@
     }
   },
   "newChat": {
-    "selectAgentTitle": "Welcome {{userName}}, who would you like to speak to?",
     "yourAgents": "Your agents",
-    "loadingAgentError": "Failed to load agent list."
+    "selectAgentTitle": "Welcome {{userName}}, who would you like to speak to?"
   }
 }
