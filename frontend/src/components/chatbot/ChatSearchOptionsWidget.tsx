@@ -139,15 +139,17 @@ const ChatSearchOptionsWidget = ({
               : undefined
           }
         >
-          <ToggleIconButton
-            size="small"
-            onClick={onOpen}
-            aria-label={t("chatbot.searchOptions", "Search options")}
-            disabled={disabled}
-            sx={{ color: disabled ? "text.disabled" : "inherit" }}
-            active={showOverrideIndicator}
-            icon={<TuneOutlinedIcon fontSize="small" />}
-          />
+          <Box component="span" sx={{ display: "inline-flex" }}>
+            <ToggleIconButton
+              size="small"
+              onClick={onOpen}
+              aria-label={t("chatbot.searchOptions", "Search options")}
+              disabled={disabled}
+              sx={{ color: disabled ? "text.disabled" : "inherit" }}
+              active={showOverrideIndicator}
+              icon={<TuneOutlinedIcon fontSize="small" />}
+            />
+          </Box>
         </DetailedTooltip>
       )}
 

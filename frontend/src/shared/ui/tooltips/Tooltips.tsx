@@ -114,7 +114,7 @@ export function DetailedTooltip({
           <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.75 }}>
             {label}
           </Typography>
-          <Box sx={{ pl: 1.25, borderLeft: `2px solid ${theme.palette.divider}` }}>
+          <Box sx={{ pl: 1.25 }}>
             <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-line" }}>
               {description}
             </Typography>
