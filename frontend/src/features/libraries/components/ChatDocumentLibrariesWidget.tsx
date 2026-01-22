@@ -15,7 +15,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Paper,
   Popper,
   Stack,
   Tooltip,
@@ -31,6 +30,7 @@ import { TagTreeList } from "../../../shared/ui/tree/TagTreeList";
 import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
 import { ToggleIconButton } from "../../../shared/ui/buttons/ToggleIconButton";
 import { ViewIconButton } from "../../../shared/ui/buttons/ViewIconButton";
+import { FloatingPanel } from "../../../shared/ui/surfaces/FloatingPanel";
 import { ChatDocumentLibrariesSelectionCard } from "./ChatDocumentLibrariesSelectionCard.tsx";
 import ChatWidgetList from "../../../components/chatbot/ChatWidgetList.tsx";
 import ChatWidgetShell from "../../../components/chatbot/ChatWidgetShell.tsx";
@@ -174,7 +174,13 @@ const ChatDocumentLibrariesWidget = ({
             : undefined
         }
         actionLabel={t("chatbot.addLibraries", "Add libraries")}
-        onAction={(event) => setPickerAnchor(event.currentTarget)}
+        onAction={(event) => {
+          if (isPickerOpen) {
+            setPickerAnchor(null);
+            return;
+          }
+          setPickerAnchor(event.currentTarget);
+        }}
         headerActions={
           <Tooltip
             title={
@@ -243,13 +249,14 @@ const ChatDocumentLibrariesWidget = ({
         sx={{ zIndex: theme.zIndex.modal + 1 }}
       >
         <ClickAwayListener onClickAway={() => setPickerAnchor(null)}>
-          <Paper elevation={6} sx={{ p: 1 }}>
+          <FloatingPanel sx={{ p: 1 }}>
             <ChatDocumentLibrariesSelectionCard
               libraryType={"document"}
               selectedLibrariesIds={selectedLibraryIds}
               setSelectedLibrariesIds={onChangeSelectedLibraryIds}
+              onClose={() => setPickerAnchor(null)}
             />
-          </Paper>
+          </FloatingPanel>
         </ClickAwayListener>
       </Popper>
 

@@ -27,12 +27,12 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
 import { ViewIconButton } from "../../../shared/ui/buttons/ViewIconButton";
+import { DetailedTooltip } from "../../../shared/ui/tooltips/DetailedTooltip";
 import {
   Resource,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard";
-import { FeatureTooltip } from "../FeatureTooltip";
 
 // Extend with the standard MUI prop types for styling.
 // We extend Pick<BoxProps, 'sx'> to inherit the definition of the 'sx' prop.
@@ -102,7 +102,7 @@ export function ChatContextPickerPanel({
     >
       {/* Trigger */}
       {isIconVariant ? (
-        <FeatureTooltip label={t("settings.chatContext")} description={t("settings.chatContextTooltip.description")}>
+        <DetailedTooltip label={t("settings.chatContext")} description={t("settings.chatContextTooltip.description")}>
           <IconButton size="small" onClick={(e) => setChatContextPickerAnchor(e.currentTarget)}>
             <Badge
               color="primary"
@@ -113,7 +113,7 @@ export function ChatContextPickerPanel({
               <ForumOutlinedIcon fontSize="small" />
             </Badge>
           </IconButton>
-        </FeatureTooltip>
+        </DetailedTooltip>
       ) : (
         !hasSelectedChatContext && (
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 0.5 }}>

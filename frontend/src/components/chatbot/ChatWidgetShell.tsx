@@ -13,20 +13,10 @@
 // limitations under the License.
 
 import CloseIcon from "@mui/icons-material/Close";
-import {
-  Badge,
-  Box,
-  Button,
-  ClickAwayListener,
-  IconButton,
-  Paper,
-  Stack,
-  Tooltip,
-  useTheme,
-} from "@mui/material";
-import type { MouseEvent, ReactElement, ReactNode } from "react";
-import { FeatureTooltip } from "./FeatureTooltip";
 import type { BadgeProps, TooltipProps } from "@mui/material";
+import { Badge, Box, Button, ClickAwayListener, IconButton, Paper, Stack, Tooltip, useTheme } from "@mui/material";
+import type { MouseEvent, ReactElement, ReactNode } from "react";
+import { DetailedTooltip } from "../../shared/ui/tooltips/DetailedTooltip";
 
 type ChatWidgetShellProps = {
   open: boolean;
@@ -178,14 +168,14 @@ const ChatWidgetShell = ({
     <Box sx={{ position: "relative", width: isVisible ? "100%" : "auto" }}>
       {!isVisible &&
         (tooltipLabel && tooltipDescription ? (
-          <FeatureTooltip
+          <DetailedTooltip
             label={tooltipLabel}
             description={tooltipDescription}
             disabledReason={tooltipDisabledReason}
             placement={tooltipPlacement}
           >
             {trigger}
-          </FeatureTooltip>
+          </DetailedTooltip>
         ) : tooltip ? (
           <Tooltip title={tooltip}>{trigger}</Tooltip>
         ) : (

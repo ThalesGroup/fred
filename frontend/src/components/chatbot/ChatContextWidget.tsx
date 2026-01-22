@@ -5,11 +5,12 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 
 import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
-import { Box, ClickAwayListener, Paper, Popper, Stack, useTheme } from "@mui/material";
+import { Box, ClickAwayListener, Popper, Stack, useTheme } from "@mui/material";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Resource } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
+import { FloatingPanel } from "../../shared/ui/surfaces/FloatingPanel";
 import { ViewIconButton } from "../../shared/ui/buttons/ViewIconButton";
 import { ChatContextEditorModal } from "../resources/ChatContextEditorModal.tsx";
 import { ChatResourcesSelectionCard } from "./ChatResourcesSelectionCard.tsx";
@@ -97,7 +98,13 @@ const ChatContextWidget = ({
           "Select reusable context snippets included with every message in this conversation.",
         )}
         actionLabel={t("conversationChatContext.add", "Add chat context")}
-        onAction={(event) => setPickerAnchor(event.currentTarget)}
+        onAction={(event) => {
+          if (isPickerOpen) {
+            setPickerAnchor(null);
+            return;
+          }
+          setPickerAnchor(event.currentTarget);
+        }}
       >
         <ChatWidgetList items={items} emptyText={t("conversationChatContext.empty", "No chat contexts selected")} />
       </ChatWidgetShell>
@@ -109,14 +116,15 @@ const ChatContextWidget = ({
         sx={{ zIndex: theme.zIndex.modal + 1 }}
       >
         <ClickAwayListener onClickAway={() => setPickerAnchor(null)}>
-          <Paper elevation={6} sx={{ p: 1 }}>
+          <FloatingPanel sx={{ p: 1 }}>
             <ChatResourcesSelectionCard
               libraryType={"chat-context"}
               selectedResourceIds={selectedChatContextIds}
               setSelectedResourceIds={onChangeSelectedChatContextIds}
               selectionMode="multiple"
+              onClose={() => setPickerAnchor(null)}
             />
-          </Paper>
+          </FloatingPanel>
         </ClickAwayListener>
       </Popper>
 

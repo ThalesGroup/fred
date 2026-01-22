@@ -82,7 +82,10 @@ const ChatAttachmentsWidget = ({
             setSummaryOpen(true);
             try {
               const data = await fetchSummary({ attachmentId: item.id, sessionId }).unwrap();
-              const text = typeof data === "string" ? data : (data?.summary ?? data?.content ?? JSON.stringify(data));
+              const text =
+                typeof data === "string"
+                  ? data
+                  : (data?.summary_md ?? data?.summary ?? data?.content ?? JSON.stringify(data));
               setSummaryText(text || "No summary available.");
             } catch {
               setSummaryText("No summary available.");
@@ -145,7 +148,13 @@ const ChatAttachmentsWidget = ({
                 onClick={() => onIncludeInSearchChange(!includeInSearch)}
                 disabled={disabled || includeInSearchDisabled}
                 aria-label={t("chatbot.attachments.includeToggle", "Toggle attachment retrieval")}
-                icon={includeInSearch ? <ToggleOnOutlinedIcon fontSize="small" /> : <ToggleOffOutlinedIcon fontSize="small" />}
+                icon={
+                  includeInSearch ? (
+                    <ToggleOnOutlinedIcon fontSize="small" />
+                  ) : (
+                    <ToggleOffOutlinedIcon fontSize="small" />
+                  )
+                }
                 active={!includeInSearch}
                 indicatorColor="warning"
                 sx={{ color: includeInSearch ? "inherit" : "text.secondary" }}
