@@ -879,9 +879,9 @@ export type Properties = {
   siteDisplayName?: string;
   /** Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'. */
   releaseBrand?: string | null;
-  agentsNicknameSingular: string;
-  agentsNicknamePlural: string;
-  agentIconPath?: string;
+  agentsNicknameSingular?: string;
+  agentsNicknamePlural?: string;
+  agentIconPath?: string | null;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;

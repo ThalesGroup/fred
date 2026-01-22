@@ -35,7 +35,6 @@ import { CrewEditor } from "../components/agentHub/CrewEditor";
 // OpenAPI
 import {
   Leader,
-  useDeleteAgentAgenticV1AgentsNameDeleteMutation,
   useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useRestoreAgentsAgenticV1AgentsRestorePostMutation,
@@ -89,7 +88,6 @@ export const AgentHub = () => {
 
   const { updateEnabled } = useAgentUpdater();
   const [triggerGetSource] = useLazyGetRuntimeSourceTextQuery();
-  const [deleteAgent] = useDeleteAgentAgenticV1AgentsNameDeleteMutation();
 
   // RBAC utils
   const { can } = usePermissions();
