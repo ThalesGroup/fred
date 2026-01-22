@@ -72,6 +72,7 @@ type ControllerArgs = {
   chatSessionId?: string;
   prefsTargetSessionId?: string;
   agents: AnyAgent[];
+  initialAgent?: AnyAgent;
 };
 
 export type ConversationOptionsState = {
@@ -144,9 +145,13 @@ export function useConversationOptionsController({
   chatSessionId,
   prefsTargetSessionId,
   agents,
+  initialAgent,
 }: ControllerArgs): ConversationOptionsController {
-  const defaultAgent = useMemo(() => agents[0] ?? null, [agents]);
-  const [currentAgent, setCurrentAgent] = useState<AnyAgent>(agents[0] ?? ({} as AnyAgent));
+  // Use initialAgent from URL if provided, otherwise fallback to agents[0]
+  const defaultAgent = useMemo(() => initialAgent ?? agents[0] ?? null, [initialAgent, agents]);
+  const [currentAgent, setCurrentAgent] = useState<AnyAgent>(
+    initialAgent ?? agents[0] ?? ({} as AnyAgent)
+  );
 
   useEffect(() => {
     if (defaultAgent && (!currentAgent || !currentAgent.name)) setCurrentAgent(defaultAgent);

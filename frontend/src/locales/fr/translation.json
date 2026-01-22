@@ -1090,5 +1090,9 @@
       "router": "Fred démarre...",
       "ui": "Fred prépare l'interface..."
     }
+  },
+  "newChat": {
+    "selectAgentTitle": "Bienvenue {{userName}}, à qui souhaitez-vous parler ?",
+    "yourAgents": "Vos agents"
   }
 }

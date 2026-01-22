@@ -229,7 +229,7 @@ export default function SideBar() {
         <DrawerHeader>
           {open && (
             <Box sx={{ display: "flex", width: "100%", justifyContent: "flex-start", alignItems: "center", pl: 1 }}>
-              <InvisibleLink to="/">
+              <InvisibleLink to="/new-chat">
                 <ImageComponent
                   name={darkMode ? logoNameDark : logoName}
                   height={getProperty("logoHeight")}
