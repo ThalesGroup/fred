@@ -29,6 +29,7 @@ class RuntimeContext(BaseModel):
     user_id: Optional[str] = None
     user_groups: list[str] | None = None
     selected_document_libraries_ids: list[str] | None = None
+    selected_document_uids: list[str] | None = None
     selected_chat_context_ids: list[str] | None = None
     search_policy: str | None = None
     access_token: Optional[str] = None
@@ -65,6 +66,13 @@ def get_search_policy(context: RuntimeContext | None) -> str:
     if not context:
         return "semantic"
     return context.search_policy if context.search_policy else "semantic"
+
+
+def get_document_uids(context: RuntimeContext | None) -> list[str] | None:
+    """Helper to extract document UIDs from context."""
+    if not context:
+        return None
+    return context.selected_document_uids
 
 
 def get_rag_knowledge_scope(context: RuntimeContext | None) -> str:

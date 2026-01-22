@@ -506,6 +506,7 @@
     },
     "attachFiles": "Joindre des fichiers",
     "addLibraries": "Ajouter des bibliothèques",
+    "addDocuments": "Ajouter des documents",
     "attachments": {
       "betaNotice": "Les pièces jointes sont en version bêta. Formats pris en charge : PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
       "supportedFormats": "Formats pris en charge : PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX",
@@ -520,7 +521,19 @@
         "disabled": "Cet agent n’utilise pas les pièces jointes."
       }
     },
+    "documents": {
+      "drawerTitle": "Documents",
+      "empty": "Aucun document sélectionné.",
+      "includeToggle": "Basculer la recherche sur les documents",
+      "includeTooltipOn": "La sélection de documents est activée pour cette conversation.",
+      "includeTooltipOff": "La sélection de documents est désactivée pour cette conversation.",
+      "tooltip": {
+        "description": "Limiter la recherche à certains documents pour cette conversation.",
+        "disabled": "Cet agent ne supporte pas la sélection de documents."
+      }
+    },
     "libraries": {
+      "disabledByDocuments": "La sélection de documents est active. Désactivez les documents pour utiliser les bibliothèques.",
       "includeToggle": "Basculer la recherche sur les bibliothèques",
       "includeTooltipOn": "Les bibliothèques sont incluses dans la recherche pour cette conversation.",
       "includeTooltipOff": "Les bibliothèques sont exclues de la recherche pour cette conversation.",
@@ -537,6 +550,7 @@
     "audioChip": "Enregistrement audio",
     "hideAudio": "Masquer le contrôleur audio",
     "searchDocumentLibraries": "Rechercher dans les bibliothèques de documents...",
+    "searchDocuments": "Rechercher des documents...",
     "searchPromptLibraries": "Rechercher dans les bibliothèques de prompts...",
     "searchChatContextLibraries": "Rechercher dans les bibliothèques de contextes de conversations...",
     "welcomeUser": "Bonjour {{username}}",
@@ -554,6 +568,7 @@
       "audio": "Audio",
       "oneRecording": "1 enregistrement",
       "libraries": "Bibliothèques ({{count}})",
+      "documents": "Documents ({{count}})",
       "prompts": "Prompts ({{count}})",
       "templates": "Templates ({{count}})"
     }

@@ -43,6 +43,7 @@ export type ChatDocumentLibrariesWidgetProps = {
   includeInSearch: boolean;
   onIncludeInSearchChange: (next: boolean) => void;
   includeInSearchDisabled?: boolean;
+  disabledReason?: string;
   open: boolean;
   closeOnClickAway?: boolean;
   disabled?: boolean;
@@ -58,6 +59,7 @@ const ChatDocumentLibrariesWidget = ({
   includeInSearch,
   onIncludeInSearchChange,
   includeInSearchDisabled = false,
+  disabledReason,
   open,
   closeOnClickAway = true,
   disabled = false,
@@ -167,7 +169,8 @@ const ChatDocumentLibrariesWidget = ({
         )}
         tooltipDisabledReason={
           disabled
-            ? t("knowledge.viewSelector.librariesUnsupported", "This agent does not support library scoping.")
+            ? (disabledReason ??
+              t("knowledge.viewSelector.librariesUnsupported", "This agent does not support library scoping."))
             : undefined
         }
         actionLabel={t("chatbot.addLibraries", "Add libraries")}

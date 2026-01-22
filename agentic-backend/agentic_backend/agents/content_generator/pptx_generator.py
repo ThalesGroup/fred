@@ -45,6 +45,7 @@ from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHin
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
+    get_document_uids,
     get_search_policy,
     get_vector_search_scopes,
 )
@@ -411,6 +412,7 @@ class Sloan(AgentFlow):
 
         try:
             doc_tag_ids = get_document_library_tags_ids(self.get_runtime_context())
+            document_uids = get_document_uids(self.get_runtime_context())
             search_policy = get_search_policy(self.get_runtime_context())
             top_k = self.get_tuned_int("rag.top_k", default=6)
 
@@ -426,6 +428,7 @@ class Sloan(AgentFlow):
                 question=question,
                 top_k=top_k,
                 document_library_tags_ids=doc_tag_ids,
+                document_uids=document_uids,
                 search_policy=search_policy,
                 session_id=runtime_ctx.session_id,
                 include_session_scope=include_session_scope,

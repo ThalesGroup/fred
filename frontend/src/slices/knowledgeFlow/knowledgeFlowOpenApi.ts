@@ -1737,6 +1737,8 @@ export type SearchRequest = {
   top_k?: number;
   /** Optional list of tag names to filter documents. Only chunks in a document with at least one of these tags will be returned. */
   document_library_tags_ids?: string[] | null;
+  /** Optional list of document UIDs to restrict results to specific documents. */
+  document_uids?: string[] | null;
   /** Optional search policy preset. If omitted, defaults to 'hybrid'. */
   search_policy?: SearchPolicyName | null;
   /** Optional chat session id to include session-scoped attachments (user/session filtered). */
