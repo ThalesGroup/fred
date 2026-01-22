@@ -9,11 +9,11 @@ import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import { Box, ClickAwayListener, IconButton, Paper, Stack, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
-import type { RuntimeContext } from "../../slices/agentic/agenticOpenApi.ts";
-import { SearchPolicyName } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { ResetButton } from "../../shared/ui/buttons/ResetButton.tsx";
 import { ToggleIconButton } from "../../shared/ui/buttons/ToggleIconButton.tsx";
-import { FeatureTooltip } from "./FeatureTooltip";
+import { DetailedTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
+import type { RuntimeContext } from "../../slices/agentic/agenticOpenApi.ts";
+import { SearchPolicyName } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { UserInputRagScope } from "./user_input/UserInputRagScope.tsx";
 import { UserInputSearchPolicy } from "./user_input/UserInputSearchPolicy.tsx";
 
@@ -89,6 +89,7 @@ const ChatSearchOptionsWidget = ({
               disabled={!canReset}
               aria-label={t("chatbot.searchOptionsReset", "Back to default")}
               tooltip={t("chatbot.searchOptionsResetTooltip", "Reset to default values")}
+              tooltipPlacement="left"
               sx={{ p: 0.5 }}
             />
             <IconButton size="small" onClick={onClose}>
@@ -103,11 +104,7 @@ const ChatSearchOptionsWidget = ({
               {t("chatbot.ragScope.label", "RAG scope")}
             </Typography>
             <Box sx={{ flexShrink: 0 }}>
-              <UserInputRagScope
-                value={searchRagScope}
-                onChange={onSearchRagScopeChange}
-                disabled={ragScopeDisabled}
-              />
+              <UserInputRagScope value={searchRagScope} onChange={onSearchRagScopeChange} disabled={ragScopeDisabled} />
             </Box>
           </Box>
           <Box display="flex" alignItems="center" justifyContent="space-between" gap={1}>
@@ -130,7 +127,7 @@ const ChatSearchOptionsWidget = ({
   return (
     <Box sx={{ position: "relative", width: isVisible ? "100%" : "auto" }}>
       {!isVisible && (
-        <FeatureTooltip
+        <DetailedTooltip
           label={t("chatbot.searchOptions", "Search options")}
           description={t(
             "chatbot.searchOptionsTooltip.description",
@@ -142,16 +139,18 @@ const ChatSearchOptionsWidget = ({
               : undefined
           }
         >
-          <ToggleIconButton
-            size="small"
-            onClick={onOpen}
-            aria-label={t("chatbot.searchOptions", "Search options")}
-            disabled={disabled}
-            sx={{ color: disabled ? "text.disabled" : "inherit" }}
-            active={showOverrideIndicator}
-            icon={<TuneOutlinedIcon fontSize="small" />}
-          />
-        </FeatureTooltip>
+          <Box component="span" sx={{ display: "inline-flex" }}>
+            <ToggleIconButton
+              size="small"
+              onClick={onOpen}
+              aria-label={t("chatbot.searchOptions", "Search options")}
+              disabled={disabled}
+              sx={{ color: disabled ? "text.disabled" : "inherit" }}
+              active={showOverrideIndicator}
+              icon={<TuneOutlinedIcon fontSize="small" />}
+            />
+          </Box>
+        </DetailedTooltip>
       )}
 
       {isVisible && closeOnClickAway && (

@@ -15,25 +15,25 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Paper,
   Popper,
   Stack,
-  Tooltip,
   Typography,
   useTheme,
 } from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
-import { buildTree } from "../../../shared/utils/tagTree";
-import { TagTreeList } from "../../../shared/ui/tree/TagTreeList";
+import ChatWidgetList from "../../../components/chatbot/ChatWidgetList.tsx";
+import ChatWidgetShell from "../../../components/chatbot/ChatWidgetShell.tsx";
 import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
 import { ToggleIconButton } from "../../../shared/ui/buttons/ToggleIconButton";
 import { ViewIconButton } from "../../../shared/ui/buttons/ViewIconButton";
+import { FloatingPanel } from "../../../shared/ui/surfaces/FloatingPanel";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
+import { TagTreeList } from "../../../shared/ui/tree/TagTreeList";
+import { buildTree } from "../../../shared/utils/tagTree";
+import type { TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { ChatDocumentLibrariesSelectionCard } from "./ChatDocumentLibrariesSelectionCard.tsx";
-import ChatWidgetList from "../../../components/chatbot/ChatWidgetList.tsx";
-import ChatWidgetShell from "../../../components/chatbot/ChatWidgetShell.tsx";
 
 export type ChatDocumentLibrariesWidgetProps = {
   selectedLibraryIds: string[];
@@ -80,13 +80,10 @@ const ChatDocumentLibrariesWidget = ({
 
   const selectedLibraries = useMemo(() => {
     if (!libraryById) return [];
-    return selectedLibraryIds
-      .map((id) => libraryById[id])
-      .filter((entry): entry is TagWithItemsId => Boolean(entry));
+    return selectedLibraryIds.map((id) => libraryById[id]).filter((entry): entry is TagWithItemsId => Boolean(entry));
   }, [libraryById, selectedLibraryIds]);
 
-  const hasFullLibraryData =
-    Boolean(libraryById) && selectedLibraries.length === selectedLibraryIds.length;
+  const hasFullLibraryData = Boolean(libraryById) && selectedLibraries.length === selectedLibraryIds.length;
 
   const selectedTree = useMemo(() => {
     if (!hasFullLibraryData || selectedLibraries.length === 0) return null;
@@ -174,20 +171,24 @@ const ChatDocumentLibrariesWidget = ({
             : undefined
         }
         actionLabel={t("chatbot.addLibraries", "Add libraries")}
-        onAction={(event) => setPickerAnchor(event.currentTarget)}
+        onAction={(event) => {
+          if (isPickerOpen) {
+            setPickerAnchor(null);
+            return;
+          }
+          setPickerAnchor(event.currentTarget);
+        }}
         headerActions={
-          <Tooltip
+          <SimpleTooltip
             title={
               includeInSearch
-                ? t(
-                    "chatbot.libraries.includeTooltipOn",
-                    "Libraries are included in retrieval for this conversation.",
-                  )
+                ? t("chatbot.libraries.includeTooltipOn", "Libraries are included in retrieval for this conversation.")
                 : t(
                     "chatbot.libraries.includeTooltipOff",
                     "Libraries are excluded from retrieval for this conversation.",
                   )
             }
+            placement="left"
           >
             <span>
               <ToggleIconButton
@@ -195,13 +196,19 @@ const ChatDocumentLibrariesWidget = ({
                 onClick={() => onIncludeInSearchChange(!includeInSearch)}
                 disabled={disabled || includeInSearchDisabled}
                 aria-label={t("chatbot.libraries.includeToggle", "Toggle library retrieval")}
-                icon={includeInSearch ? <ToggleOnOutlinedIcon fontSize="small" /> : <ToggleOffOutlinedIcon fontSize="small" />}
+                icon={
+                  includeInSearch ? (
+                    <ToggleOnOutlinedIcon fontSize="small" />
+                  ) : (
+                    <ToggleOffOutlinedIcon fontSize="small" />
+                  )
+                }
                 active={!includeInSearch}
                 indicatorColor="warning"
                 sx={{ color: includeInSearch ? "inherit" : "text.secondary" }}
               />
             </span>
-          </Tooltip>
+          </SimpleTooltip>
         }
       >
         {hasFullLibraryData ? (
@@ -243,13 +250,14 @@ const ChatDocumentLibrariesWidget = ({
         sx={{ zIndex: theme.zIndex.modal + 1 }}
       >
         <ClickAwayListener onClickAway={() => setPickerAnchor(null)}>
-          <Paper elevation={6} sx={{ p: 1 }}>
+          <FloatingPanel sx={{ p: 1 }}>
             <ChatDocumentLibrariesSelectionCard
               libraryType={"document"}
               selectedLibrariesIds={selectedLibraryIds}
               setSelectedLibrariesIds={onChangeSelectedLibraryIds}
+              onClose={() => setPickerAnchor(null)}
             />
-          </Paper>
+          </FloatingPanel>
         </ClickAwayListener>
       </Popper>
 

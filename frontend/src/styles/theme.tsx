@@ -64,6 +64,10 @@ function getOverlayAlpha(elevation: number): number {
   return Math.round(alphaValue * 10) / 1000;
 }
 
+function getPaperOverlayColor(elevation: number, base: string, scale: number): string {
+  return alpha(base, getOverlayAlpha(elevation) * scale);
+}
+
 const lightTheme = createTheme({
   palette: {
     mode: "light",
@@ -80,7 +84,7 @@ const lightTheme = createTheme({
         root: ({ ownerState }) => {
           // Apply the same elevation overlay logic as dark mode, but with black instead of white
           if (ownerState.variant === "elevation" && ownerState.elevation && ownerState.elevation > 0) {
-            const overlayColor = alpha("#000", getOverlayAlpha(ownerState.elevation));
+            const overlayColor = getPaperOverlayColor(ownerState.elevation, "#000", 0.45);
             return {
               backgroundImage: `linear-gradient(${overlayColor}, ${overlayColor})`,
             };
@@ -101,6 +105,21 @@ const darkTheme = createTheme({
   },
   typography: {
     markdown: markdownDefaults,
+  },
+  components: {
+    MuiPaper: {
+      styleOverrides: {
+        root: ({ ownerState }) => {
+          if (ownerState.variant === "elevation" && ownerState.elevation && ownerState.elevation > 0) {
+            const overlayColor = getPaperOverlayColor(ownerState.elevation, "#000", 0.75);
+            return {
+              backgroundImage: `linear-gradient(${overlayColor}, ${overlayColor})`,
+            };
+          }
+          return {};
+        },
+      },
+    },
   },
 });
 

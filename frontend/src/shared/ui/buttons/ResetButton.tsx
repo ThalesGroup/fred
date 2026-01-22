@@ -13,8 +13,9 @@
 // limitations under the License.
 
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
-import { IconButton, Tooltip } from "@mui/material";
+import { IconButton } from "@mui/material";
 import type { IconButtonProps, TooltipProps } from "@mui/material";
+import { SimpleTooltip } from "../tooltips/Tooltips";
 
 type ResetButtonProps = Omit<IconButtonProps, "children"> & {
   iconSize?: "inherit" | "small" | "medium" | "large";
@@ -39,8 +40,8 @@ export const ResetButton = ({
   if (!tooltip) return button;
 
   return (
-    <Tooltip title={tooltip} placement={tooltipPlacement}>
+    <SimpleTooltip title={tooltip} placement={tooltipPlacement}>
       <span>{button}</span>
-    </Tooltip>
+    </SimpleTooltip>
   );
 };

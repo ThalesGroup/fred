@@ -7,13 +7,14 @@
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import ToggleOffOutlinedIcon from "@mui/icons-material/ToggleOffOutlined";
 import ToggleOnOutlinedIcon from "@mui/icons-material/ToggleOnOutlined";
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Tooltip, Typography } from "@mui/material";
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from "@mui/material";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 import { LoadingIcon } from "../../shared/ui/buttons/LoadingIcon";
 import { ToggleIconButton } from "../../shared/ui/buttons/ToggleIconButton";
 import { ViewIconButton } from "../../shared/ui/buttons/ViewIconButton";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
 import {
   useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation,
   useLazyGetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetQuery,
@@ -66,7 +67,8 @@ const ChatAttachmentsWidget = ({
   const [summaryTitle, setSummaryTitle] = useState("");
   const [summaryText, setSummaryText] = useState("");
   const count = attachments.length;
-  const badgeColor = includeInSearch ? (disabled ? "default" : "primary") : "warning";
+  const showWarningEmptyDot = count === 0 && (!includeInSearch || disabled);
+  const badgeColor = disabled ? "warning" : includeInSearch ? "primary" : "warning";
   const items = attachments.map((item) => ({
     id: item.id,
     label: item.name,
@@ -82,7 +84,10 @@ const ChatAttachmentsWidget = ({
             setSummaryOpen(true);
             try {
               const data = await fetchSummary({ attachmentId: item.id, sessionId }).unwrap();
-              const text = typeof data === "string" ? data : (data?.summary ?? data?.content ?? JSON.stringify(data));
+              const text =
+                typeof data === "string"
+                  ? data
+                  : (data?.summary_md ?? data?.summary ?? data?.content ?? JSON.stringify(data));
               setSummaryText(text || "No summary available.");
             } catch {
               setSummaryText("No summary available.");
@@ -114,6 +119,7 @@ const ChatAttachmentsWidget = ({
         disabled={disabled}
         badgeCount={count}
         badgeColor={badgeColor}
+        showBadgeDotWhenEmpty={showWarningEmptyDot}
         icon={<AttachFileIcon fontSize="small" />}
         ariaLabel={t("chatbot.attachments.drawerTitle", "Attachments")}
         tooltipLabel={t("chatbot.attachments.drawerTitle", "Attachments")}
@@ -126,7 +132,7 @@ const ChatAttachmentsWidget = ({
         actionDisabled={disabled || isUploading}
         onAction={() => fileInputRef.current?.click()}
         headerActions={
-          <Tooltip
+          <SimpleTooltip
             title={
               includeInSearch
                 ? t(
@@ -138,6 +144,7 @@ const ChatAttachmentsWidget = ({
                     "Attachments are excluded from retrieval for this conversation.",
                   )
             }
+            placement="left"
           >
             <span>
               <ToggleIconButton
@@ -145,13 +152,19 @@ const ChatAttachmentsWidget = ({
                 onClick={() => onIncludeInSearchChange(!includeInSearch)}
                 disabled={disabled || includeInSearchDisabled}
                 aria-label={t("chatbot.attachments.includeToggle", "Toggle attachment retrieval")}
-                icon={includeInSearch ? <ToggleOnOutlinedIcon fontSize="small" /> : <ToggleOffOutlinedIcon fontSize="small" />}
+                icon={
+                  includeInSearch ? (
+                    <ToggleOnOutlinedIcon fontSize="small" />
+                  ) : (
+                    <ToggleOffOutlinedIcon fontSize="small" />
+                  )
+                }
                 active={!includeInSearch}
                 indicatorColor="warning"
                 sx={{ color: includeInSearch ? "inherit" : "text.secondary" }}
               />
             </span>
-          </Tooltip>
+          </SimpleTooltip>
         }
       >
         <ChatWidgetList items={items} emptyText={t("chatbot.attachments.noAttachments", "No attachments yet")} />

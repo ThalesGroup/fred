@@ -27,7 +27,6 @@ import {
   MenuList,
   Popover,
   Stack,
-  Tooltip,
   Typography,
 } from "@mui/material";
 import React, { SetStateAction } from "react";
@@ -36,6 +35,7 @@ import React, { SetStateAction } from "react";
 
 import { useTranslation } from "react-i18next";
 import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import { AgentChatOptions } from "../../../slices/agentic/agenticOpenApi.ts";
 import { ChatDocumentLibrariesSelectionCard } from "../../../features/libraries/components/ChatDocumentLibrariesSelectionCard.tsx";
 import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard.tsx";
@@ -112,15 +112,15 @@ export const UserInputPopover: React.FC<UserInputPopoverProps> = ({
       </Stack>
       <Stack direction="row" alignItems="center" spacing={0.5}>
         {onClear && count > 0 && (
-          <Tooltip title={t("documentLibrary.clearSelection")}>
+          <SimpleTooltip title={t("documentLibrary.clearSelection")}>
             <DeleteIconButton size="small" onClick={() => onClear()} />
-          </Tooltip>
+          </SimpleTooltip>
         )}
-        <Tooltip title={t("common.add")}>
+        <SimpleTooltip title={t("common.add")}>
           <IconButton size="small" onClick={onAdd}>
             <AddIcon fontSize="small" />
           </IconButton>
-        </Tooltip>
+        </SimpleTooltip>
       </Stack>
     </Stack>
   );

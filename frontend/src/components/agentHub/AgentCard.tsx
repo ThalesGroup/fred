@@ -27,6 +27,7 @@ import { useTranslation } from "react-i18next";
 // OpenAPI types
 import { AnyAgent } from "../../common/agent";
 import { AgentChipWithIcon } from "../../common/AgentChip";
+import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 import { Leader } from "../../slices/agentic/agenticOpenApi";
 
 type AgentCardProps = {
@@ -37,6 +38,7 @@ type AgentCardProps = {
   onManageAssets?: (agent: AnyAgent) => void;
   onInspectCode?: (agent: AnyAgent) => void;
   onViewA2ACard?: (agent: AnyAgent) => void;
+  onDelete?: (agent: AnyAgent) => void;
 };
 
 /**
@@ -44,7 +46,8 @@ type AgentCardProps = {
  * - The card shows **functional identity** (name, role, tags) to help users pick the right agent.
  * - Actions follow our minimal contract:
  * Edit → schema-driven tuning UI
- * Enable/Disable → operational switch (no delete)
+ * Enable/Disable → operational switch
+ * Delete → remove the agent
  * Manage Crew → leader-only relation editor (leader owns crew membership)
  */
 export const AgentCard = ({
@@ -55,6 +58,7 @@ export const AgentCard = ({
   onManageAssets,
   onInspectCode,
   onViewA2ACard,
+  onDelete,
 }: AgentCardProps) => {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -243,6 +247,17 @@ export const AgentCard = ({
               >
                 <PowerSettingsNewIcon fontSize="small" />
               </IconButton>
+            </Tooltip>
+          )}
+          {onDelete && (
+            <Tooltip title={t("agentCard.delete", "Delete agent")}>
+              <span>
+                <DeleteIconButton
+                  size="small"
+                  onClick={() => onDelete(agent)}
+                  aria-label={t("agentCard.delete", "Delete agent")}
+                />
+              </span>
             </Tooltip>
           )}
         </Stack>
