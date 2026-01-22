@@ -229,20 +229,84 @@ class JiraAgent(AgentFlow):
     async def aclose(self):
         await self.mcp.aclose()
 
+    def _extract_partial_json_array(
+        self, content: str, item_schema: dict
+    ) -> list[dict]:
+        """
+        Extract valid JSON objects from potentially malformed JSON array.
+        Uses balanced bracket matching to find complete {...} objects and validates each one.
+
+        Args:
+            content: Raw content that may contain malformed JSON array
+            item_schema: JSON schema for individual items (not the array schema)
+
+        Returns:
+            List of valid items (may be empty if no valid items found)
+        """
+        valid_items = []
+        validator = Draft7Validator(item_schema)
+
+        # Find all potential JSON objects using balanced bracket matching
+        depth = 0
+        start_idx = None
+
+        for i, char in enumerate(content):
+            if char == "{":
+                if depth == 0:
+                    start_idx = i
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0 and start_idx is not None:
+                    # Found a complete {...} block
+                    potential_obj = content[start_idx : i + 1]
+                    try:
+                        obj = json.loads(potential_obj)
+                        # Validate against item schema
+                        errors = list(validator.iter_errors(obj))
+                        if not errors:
+                            valid_items.append(obj)
+                        else:
+                            logger.debug(
+                                f"[JiraAgent] Partial extraction: object at position {start_idx} "
+                                f"failed validation: {errors[0].message}"
+                            )
+                    except json.JSONDecodeError:
+                        logger.debug(
+                            f"[JiraAgent] Partial extraction: object at position {start_idx} "
+                            f"is not valid JSON"
+                        )
+                    start_idx = None
+
+        if valid_items:
+            logger.info(
+                f"[JiraAgent] Partial extraction recovered {len(valid_items)} valid items"
+            )
+
+        return valid_items
+
     def _parse_and_validate_json(
-        self, content: str, schema: dict, tool_call_id: str
+        self,
+        content: str,
+        schema: dict,
+        tool_call_id: str,
+        state_key: str | None = None,
     ) -> tuple[list[dict] | None, Command | None]:
         """
         Parse JSON content from LLM response, clean markdown formatting, and validate against schema.
+        On JSON parse errors, attempts to extract valid items from partial/malformed output.
 
         Args:
             content: Raw LLM response content (may include markdown code blocks)
-            schema: JSON schema to validate against
+            schema: JSON schema to validate against (must be an array schema with 'items')
             tool_call_id: Tool call ID for error messages
+            state_key: Optional state key to update with partial results on recovery
 
         Returns:
             Tuple of (parsed_data, error_command). If successful, error_command is None.
-            If failed, parsed_data is None and error_command contains the error message.
+            If failed with partial recovery, parsed_data contains recovered items and
+            error_command contains message asking to continue generation.
+            If failed completely, parsed_data is None and error_command contains the error.
         """
         clean_data = content.strip()
 
@@ -257,6 +321,28 @@ class JiraAgent(AgentFlow):
         try:
             data = json.loads(clean_data)
         except json.JSONDecodeError as e:
+            # Attempt partial recovery
+            item_schema = schema.get("items", {})
+            recovered_items = self._extract_partial_json_array(clean_data, item_schema)
+
+            if recovered_items and state_key:
+                # Found some valid items - save them and ask to continue
+                last_id = recovered_items[-1].get("id", "unknown")
+                return recovered_items, Command(
+                    update={
+                        state_key: recovered_items,
+                        "messages": [
+                            ToolMessage(
+                                f"⚠️ JSON incomplet (erreur: {e.msg} à position {e.pos}). "
+                                f"{len(recovered_items)} éléments sauvegardés jusqu'à {last_id}. "
+                                f"Génère les éléments restants en continuant après {last_id}.",
+                                tool_call_id=tool_call_id,
+                            )
+                        ],
+                    }
+                )
+
+            # No recovery possible
             return None, Command(
                 update={
                     "messages": [
@@ -549,6 +635,23 @@ Exigences à respecter:
 {json.dumps(requirements, ensure_ascii=False, indent=2)}
 """
 
+            # Check for existing stories (continuation after partial recovery)
+            existing_stories = runtime.state.get("user_stories") or []
+            continuation_section = ""
+            if existing_stories:
+                last_id = existing_stories[-1].get("id", "US-000")
+                # Extract the numeric part to suggest next ID
+                id_match = re.search(r"(\d+)", last_id)
+                next_num = (
+                    int(id_match.group(1)) + 1
+                    if id_match
+                    else len(existing_stories) + 1
+                )
+                continuation_section = f"""
+CONTINUATION: {len(existing_stories)} user stories ont déjà été générées (jusqu'à {last_id}).
+Continue la génération à partir de US-{next_num:03d}. Ne régénère PAS les stories existantes.
+"""
+
             model = get_default_chat_model()
             messages = [
                 SystemMessage(
@@ -556,6 +659,7 @@ Exigences à respecter:
                         context_summary=context_summary,
                         requirements_section=requirements_section,
                     )
+                    + continuation_section
                 )
             ]
 
@@ -566,19 +670,30 @@ Exigences à respecter:
 
             response = await model.ainvoke(messages, config=config)
 
-            # Parse and validate JSON response
+            # Parse and validate JSON response (with partial recovery support)
             user_stories, error_cmd = self._parse_and_validate_json(
-                str(response.content), userStoriesSchema, runtime.tool_call_id
+                str(response.content),
+                userStoriesSchema,
+                runtime.tool_call_id,
+                state_key="user_stories",
             )
+
             if error_cmd:
+                # If partial recovery happened, user_stories contains recovered items
+                # The error_cmd already includes the state update, so return it
                 return error_cmd
+
+            # Merge with existing stories if this is a continuation
+            all_stories = existing_stories + user_stories
+            new_count = len(user_stories)
+            total_count = len(all_stories)
 
             return Command(
                 update={
-                    "user_stories": user_stories,
+                    "user_stories": all_stories,
                     "messages": [
                         ToolMessage(
-                            f"✓ {len(user_stories)} User Stories générées avec succès. "
+                            f"✓ {new_count} nouvelles User Stories générées ({total_count} au total). "
                             f"Si tu as terminé de générer tous les livrables demandés par l'utilisateur, "
                             f"appelle maintenant export_deliverables() pour fournir le lien de téléchargement.",
                             tool_call_id=runtime.tool_call_id,
