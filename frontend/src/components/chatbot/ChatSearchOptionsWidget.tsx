@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 
 import { ResetButton } from "../../shared/ui/buttons/ResetButton.tsx";
 import { ToggleIconButton } from "../../shared/ui/buttons/ToggleIconButton.tsx";
-import { DetailedTooltip } from "../../shared/ui/tooltips/DetailedTooltip.tsx";
+import { DetailedTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
 import type { RuntimeContext } from "../../slices/agentic/agenticOpenApi.ts";
 import { SearchPolicyName } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { UserInputRagScope } from "./user_input/UserInputRagScope.tsx";
@@ -89,6 +89,7 @@ const ChatSearchOptionsWidget = ({
               disabled={!canReset}
               aria-label={t("chatbot.searchOptionsReset", "Back to default")}
               tooltip={t("chatbot.searchOptionsResetTooltip", "Reset to default values")}
+              tooltipPlacement="left"
               sx={{ p: 0.5 }}
             />
             <IconButton size="small" onClick={onClose}>

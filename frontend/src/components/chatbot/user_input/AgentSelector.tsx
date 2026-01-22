@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../../common/agent";
 import { AgentChipWithIcon } from "../../../common/AgentChip";
-import { DetailedTooltip } from "../../../shared/ui/tooltips/DetailedTooltip";
+import { DetailedTooltip } from "../../../shared/ui/tooltips/Tooltips";
 export type AgentSelectorProps = AgentPopoverPickerProps & Pick<BoxProps, "sx">;
 
 export function AgentSelector({ sx, currentAgent, agents, onSelectNewAgent }: AgentSelectorProps) {

@@ -27,7 +27,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
 import { ViewIconButton } from "../../../shared/ui/buttons/ViewIconButton";
-import { DetailedTooltip } from "../../../shared/ui/tooltips/DetailedTooltip";
+import { DetailedTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import {
   Resource,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,

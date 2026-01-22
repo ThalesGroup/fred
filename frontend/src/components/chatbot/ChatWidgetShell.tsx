@@ -16,7 +16,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import type { BadgeProps, TooltipProps } from "@mui/material";
 import { Badge, Box, Button, ClickAwayListener, IconButton, Paper, Stack, Tooltip, useTheme } from "@mui/material";
 import type { MouseEvent, ReactElement, ReactNode } from "react";
-import { DetailedTooltip } from "../../shared/ui/tooltips/DetailedTooltip";
+import { DetailedTooltip } from "../../shared/ui/tooltips/Tooltips";
 
 type ChatWidgetShellProps = {
   open: boolean;

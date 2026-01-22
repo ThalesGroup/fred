@@ -7,13 +7,14 @@
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import ToggleOffOutlinedIcon from "@mui/icons-material/ToggleOffOutlined";
 import ToggleOnOutlinedIcon from "@mui/icons-material/ToggleOnOutlined";
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Tooltip, Typography } from "@mui/material";
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from "@mui/material";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 import { LoadingIcon } from "../../shared/ui/buttons/LoadingIcon";
 import { ToggleIconButton } from "../../shared/ui/buttons/ToggleIconButton";
 import { ViewIconButton } from "../../shared/ui/buttons/ViewIconButton";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
 import {
   useDeleteFileAgenticV1ChatbotUploadAttachmentIdDeleteMutation,
   useLazyGetFileSummaryAgenticV1ChatbotUploadAttachmentIdSummaryGetQuery,
@@ -129,7 +130,7 @@ const ChatAttachmentsWidget = ({
         actionDisabled={disabled || isUploading}
         onAction={() => fileInputRef.current?.click()}
         headerActions={
-          <Tooltip
+          <SimpleTooltip
             title={
               includeInSearch
                 ? t(
@@ -141,6 +142,7 @@ const ChatAttachmentsWidget = ({
                     "Attachments are excluded from retrieval for this conversation.",
                   )
             }
+            placement="left"
           >
             <span>
               <ToggleIconButton
@@ -160,7 +162,7 @@ const ChatAttachmentsWidget = ({
                 sx={{ color: includeInSearch ? "inherit" : "text.secondary" }}
               />
             </span>
-          </Tooltip>
+          </SimpleTooltip>
         }
       >
         <ChatWidgetList items={items} emptyText={t("chatbot.attachments.noAttachments", "No attachments yet")} />
