@@ -504,6 +504,7 @@
     },
     "attachFiles": "Attach files",
     "addLibraries": "Add libraries",
+    "addDocuments": "Add documents",
     "attachments": {
       "betaNotice": "File attachments are in beta. Supported formats: PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX. Please provide feedback to help us improve this feature.",
       "supportedFormats": "Supported files: PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX",
@@ -518,7 +519,19 @@
         "disabled": "This agent does not use attachments."
       }
     },
+    "documents": {
+      "drawerTitle": "Documents",
+      "empty": "No documents selected.",
+      "includeToggle": "Toggle document scoping",
+      "includeTooltipOn": "Document scoping is enabled for this conversation.",
+      "includeTooltipOff": "Document scoping is disabled for this conversation.",
+      "tooltip": {
+        "description": "Restrict retrieval to specific documents for this conversation.",
+        "disabled": "This agent does not support document scoping."
+      }
+    },
     "libraries": {
+      "disabledByDocuments": "Document scoping is active. Disable documents to use libraries.",
       "includeToggle": "Toggle library retrieval",
       "includeTooltipOn": "Libraries are included in retrieval for this conversation.",
       "includeTooltipOff": "Libraries are excluded from retrieval for this conversation.",
@@ -535,6 +548,7 @@
     "audioChip": "Audio recording",
     "hideAudio": "Hide audio controller",
     "searchDocumentLibraries": "Search document libraries...",
+    "searchDocuments": "Search documents...",
     "searchPromptLibraries": "Search prompt libraries...",
     "searchChatContextLibraries": "Search chat context libraries...",
     "welcomeUser": "Hello {{username}}",
@@ -552,6 +566,7 @@
       "audio": "Audio",
       "oneRecording": "1 recording",
       "libraries": "Libraries ({{count}})",
+      "documents": "Documents ({{count}})",
       "prompts": "Prompts ({{count}})",
       "templates": "Templates ({{count}})"
     }
