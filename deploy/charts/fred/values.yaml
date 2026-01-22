@@ -66,6 +66,18 @@ applications:
       type: ClusterIP
       port: 9000
       targetPort: 9000
+      serviceMonitor:
+        enabled: false
+        annotations: {}
+        labels: {}
+        interval: 30s
+        scrapeTimeout: 10s
+        path: /metrics
+        scheme: http
+        honorLabels: false
+        relabelings: []
+        metricRelabelings: []
+        namespaceSelector: {}
     ingress:
       enabled: false
       className: ""
@@ -523,6 +535,18 @@ applications:
       type: ClusterIP
       port: 9111
       targetPort: 9111
+      serviceMonitor:
+        enabled: false
+        annotations: {}
+        labels: {}
+        interval: 30s
+        scrapeTimeout: 10s
+        path: /metrics
+        scheme: http
+        honorLabels: false
+        relabelings: []
+        metricRelabelings: []
+        namespaceSelector: {}
     ingress:
       enabled: false
       className: ""
