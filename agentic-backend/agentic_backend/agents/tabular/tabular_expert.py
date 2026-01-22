@@ -15,9 +15,9 @@
 
 import json
 import logging
-from typing import Annotated, Any, Dict, Iterable, List, Optional, TypedDict
+from typing import Annotated, Any, Dict, List, TypedDict
 
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AnyMessage, HumanMessage, ToolMessage
 from langgraph.constants import START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
@@ -34,7 +34,6 @@ from agentic_backend.core.agents.agent_spec import (
     UIHints,
 )
 from agentic_backend.core.agents.runtime_context import RuntimeContext
-from agentic_backend.core.chatbot.chat_schema import GeoPart, TextPart
 from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
@@ -66,9 +65,6 @@ TABULAR_TUNING = AgentTuning(
                 "- Present results clearly in markdown tables.\n"
                 "- Ensure all answers are based on actual data; do not invent values. \n"
                 "- Normalize text when comparing or filtering in SQL (use LOWER()).\n\n"
-                "If the user asks for a map/visualization and you include geospatial data, the UI will render it "
-                "when you output a GeoPart. In that case, do NOT say you cannot show a map; instead confirm that "
-                "the map is displayed and keep the explanation brief.\n\n"
                 "Current date: {today}."
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
@@ -83,164 +79,6 @@ TABULAR_TUNING = AgentTuning(
 class TabularState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     database_context: Dict[str, List[Dict[str, Any]]]
-
-
-_LAT_KEYS = (
-    "lat",
-    "latitude",
-    "lat_dd",
-    "lat_deg",
-    "lat_degrees",
-    "y",
-    "y_coord",
-    "y_coordinate",
-)
-_LON_KEYS = (
-    "lon",
-    "lng",
-    "long",
-    "longitude",
-    "lon_dd",
-    "lon_deg",
-    "lon_degrees",
-    "x",
-    "x_coord",
-    "x_coordinate",
-)
-_POPUP_KEYS = (
-    "name",
-    "ship_name",
-    "vessel_name",
-    "vessel",
-    "ship",
-    "mmsi",
-    "imo",
-    "id",
-)
-
-
-def _last_user_text(messages: Iterable[AnyMessage]) -> str:
-    for msg in reversed(list(messages)):
-        if isinstance(msg, HumanMessage):
-            return str(getattr(msg, "content", "")).strip()
-        if getattr(msg, "type", "") in ("human", "user"):
-            return str(getattr(msg, "content", "")).strip()
-    return ""
-
-
-def _wants_map(text: str) -> bool:
-    lowered = text.lower()
-    return any(
-        token in lowered
-        for token in (
-            "map",
-            "plot",
-            "where",
-            "location",
-            "carte",
-            "visuel",
-            "visuelle",
-            "visuellement",
-            "visualiser",
-            "visualisation",
-            "localiser",
-            "localisation",
-            "position",
-            "positions",
-            "ou sont",
-        )
-    )
-
-
-def _iter_rows(payload: Any) -> Iterable[Dict[str, Any]]:
-    if isinstance(payload, dict):
-        rows = payload.get("rows")
-        if isinstance(rows, list):
-            for row in rows:
-                if isinstance(row, dict):
-                    yield row
-        for value in payload.values():
-            yield from _iter_rows(value)
-    elif isinstance(payload, list):
-        for item in payload:
-            yield from _iter_rows(item)
-
-
-def _to_float(value: Any) -> Optional[float]:
-    if value is None:
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        cleaned = value.strip().replace(",", ".")
-        if not cleaned:
-            return None
-        try:
-            return float(cleaned)
-        except ValueError:
-            return None
-    return None
-
-
-def _select_key(row: Dict[str, Any], candidates: tuple[str, ...]) -> Optional[str]:
-    lowered = {k.lower(): k for k in row.keys()}
-    for key in candidates:
-        if key in lowered:
-            return lowered[key]
-    return None
-
-
-def _choose_popup_property(row: Dict[str, Any]) -> Optional[str]:
-    return _select_key(row, _POPUP_KEYS)
-
-
-def _row_to_properties(row: Dict[str, Any]) -> Dict[str, Any]:
-    props: Dict[str, Any] = {}
-    for key, value in row.items():
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            props[key] = value
-        else:
-            props[key] = str(value)
-    return props
-
-
-def _build_geo_part(
-    tool_payloads: Dict[str, Any], max_points: int = 500
-) -> Optional[GeoPart]:
-    rows = list(_iter_rows(tool_payloads))
-    if not rows:
-        return None
-
-    lat_key = _select_key(rows[0], _LAT_KEYS)
-    lon_key = _select_key(rows[0], _LON_KEYS)
-    if not lat_key or not lon_key:
-        return None
-
-    features: List[Dict[str, Any]] = []
-    for row in rows:
-        lat = _to_float(row.get(lat_key))
-        lon = _to_float(row.get(lon_key))
-        if lat is None or lon is None:
-            continue
-        features.append(
-            {
-                "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": [lon, lat]},
-                "properties": _row_to_properties(row),
-            }
-        )
-        if len(features) >= max_points:
-            break
-
-    if not features:
-        return None
-
-    popup_property = _choose_popup_property(rows[0])
-    return GeoPart(
-        geojson={"type": "FeatureCollection", "features": features},
-        popup_property=popup_property,
-        fit_bounds=True,
-    )
 
 
 @expose_runtime_source("agent.Tessa")
@@ -441,18 +279,6 @@ class Tessa(AgentFlow):
             tools_md.update(tool_payloads)
             md["tools"] = tools_md
             response.response_metadata = md
-
-            user_text = _last_user_text(state.get("messages", []))
-            if _wants_map(user_text):
-                geo_part = _build_geo_part(tool_payloads)
-                if geo_part:
-                    answer_text = str(getattr(response, "content", "") or "")
-                    response = AIMessage(
-                        content=answer_text,
-                        additional_kwargs=getattr(response, "additional_kwargs", {}),
-                        response_metadata=response.response_metadata,
-                        parts=[TextPart(text=answer_text), geo_part],
-                    )
 
             return {
                 "messages": [response],
