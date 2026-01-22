@@ -1,0 +1,53 @@
+{{- define "common-library.service-monitor" -}}
+
+{{- if and .app.configuration .app.configuration.app .app.configuration.app.metrics_enabled .app.metricsService .app.metricsService.enabled .app.metricsService.serviceMonitor .app.metricsService.serviceMonitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .app.applicationName }}-metrics
+  labels:
+    app: {{ .app.applicationName }}
+    {{- if .app.metricsService.serviceMonitor.labels }}
+{{ toYaml .app.metricsService.serviceMonitor.labels | indent 4 }}
+    {{- end }}
+  {{- if .app.metricsService.serviceMonitor.annotations }}
+  annotations:
+{{ toYaml .app.metricsService.serviceMonitor.annotations | indent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .app.applicationName }}
+  {{- if .app.metricsService.serviceMonitor.namespaceSelector }}
+  namespaceSelector:
+{{ toYaml .app.metricsService.serviceMonitor.namespaceSelector | indent 4 }}
+  {{- end }}
+  endpoints:
+    - port: {{ .app.metricsService.port | default .app.configuration.app.metrics_port }}
+      {{- if .app.metricsService.serviceMonitor.path }}
+      path: {{ .app.metricsService.serviceMonitor.path }}
+      {{- end }}
+      {{- if .app.metricsService.serviceMonitor.scheme }}
+      scheme: {{ .app.metricsService.serviceMonitor.scheme }}
+      {{- end }}
+      {{- if .app.metricsService.serviceMonitor.interval }}
+      interval: {{ .app.metricsService.serviceMonitor.interval }}
+      {{- end }}
+      {{- if .app.metricsService.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ .app.metricsService.serviceMonitor.scrapeTimeout }}
+      {{- end }}
+      {{- if .app.metricsService.serviceMonitor.honorLabels }}
+      honorLabels: {{ .app.metricsService.serviceMonitor.honorLabels }}
+      {{- end }}
+      {{- if .app.metricsService.serviceMonitor.relabelings }}
+      relabelings:
+{{ toYaml .app.metricsService.serviceMonitor.relabelings | indent 8 }}
+      {{- end }}
+      {{- if .app.metricsService.serviceMonitor.metricRelabelings }}
+      metricRelabelings:
+{{ toYaml .app.metricsService.serviceMonitor.metricRelabelings | indent 8 }}
+      {{- end }}
+{{- end }}
+
+{{ end -}}

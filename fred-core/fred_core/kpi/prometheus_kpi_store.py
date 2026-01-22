@@ -70,7 +70,6 @@ def _sanitize_label_name(name: str) -> str:
     return safe
 
 
-
 class PrometheusKPIStore(BaseKPIStore):
     """
     Prometheus-backed KPI sink.
@@ -181,7 +180,9 @@ class PrometheusKPIStore(BaseKPIStore):
         base_label_names = self._label_names[(base_name, metric_type)]
         base_label_map = self._label_maps[(base_name, metric_type)]
 
-        self._emit_value(base_name, metric_type, float(event.metric.value), label_values)
+        self._emit_value(
+            base_name, metric_type, float(event.metric.value), label_values
+        )
 
         if event.cost:
             costs = event.cost.model_dump(exclude_none=True)
@@ -202,7 +203,9 @@ class PrometheusKPIStore(BaseKPIStore):
                 qty_name = (
                     f"{base_name}_quantity_{_sanitize_metric_name(str(key))}_total"
                 )
-                self._set_labeling(qty_name, "counter", base_label_names, base_label_map)
+                self._set_labeling(
+                    qty_name, "counter", base_label_names, base_label_map
+                )
                 self._emit_value(qty_name, "counter", float(value), label_values)
 
     def index_event(self, event: KPIEvent) -> None:
