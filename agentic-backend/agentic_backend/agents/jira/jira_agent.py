@@ -229,30 +229,61 @@ class JiraAgent(AgentFlow):
     async def aclose(self):
         await self.mcp.aclose()
 
-    def _has_jira_validation_error(self, messages: list) -> bool:
+    def _parse_and_validate_json(
+        self, content: str, schema: dict, tool_call_id: str
+    ) -> tuple[list[dict] | None, Command | None]:
         """
-        Check if the last messages contain a validation error from Jira tools.
+        Parse JSON content from LLM response, clean markdown formatting, and validate against schema.
 
         Args:
-            messages: List of messages to check
+            content: Raw LLM response content (may include markdown code blocks)
+            schema: JSON schema to validate against
+            tool_call_id: Tool call ID for error messages
 
         Returns:
-            True if there's a validation error, False otherwise
+            Tuple of (parsed_data, error_command). If successful, error_command is None.
+            If failed, parsed_data is None and error_command contains the error message.
         """
-        if not messages:
-            return False
+        clean_data = content.strip()
 
-        # Check the last few messages for tool error messages
-        for msg in reversed(messages[-3:]):
-            content = getattr(msg, "content", "")
-            if isinstance(content, str) and (
-                "❌ Erreur de validation JSON" in content
-                or "❌ Erreur de parsing JSON" in content
-                or "❌ Erreur de validation" in content
-            ):
-                return True
+        # Remove markdown code blocks if present
+        if clean_data.startswith("```"):
+            clean_data = re.sub(r"^```(?:json)?\n?", "", clean_data)
+            clean_data = re.sub(r"\n?```$", "", clean_data)
 
-        return False
+        # Fix invalid JSON escape sequences (e.g., \' is not valid in JSON)
+        clean_data = clean_data.replace("\\'", "'")
+
+        try:
+            data = json.loads(clean_data)
+        except json.JSONDecodeError as e:
+            return None, Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            f"❌ Erreur de parsing JSON: {e}. Veuillez réessayer.",
+                            tool_call_id=tool_call_id,
+                        )
+                    ]
+                }
+            )
+
+        validator = Draft7Validator(schema)
+        errors = list(validator.iter_errors(data))
+        if errors:
+            error_msgs = [f"{e.path}: {e.message}" for e in errors[:3]]
+            return None, Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            f"❌ Erreur de validation JSON: {'; '.join(error_msgs)}",
+                            tool_call_id=tool_call_id,
+                        )
+                    ]
+                }
+            )
+
+        return data, None
 
     async def astream_updates(self, state, *, config, **kwargs):
         """
@@ -286,8 +317,19 @@ class JiraAgent(AgentFlow):
                 # Always yield events in real-time so UI sees tool calls
                 yield event
 
+            has_jira_validation_error = False
+            # Check the last few messages for tool error messages
+            for msg in reversed(final_state_messages[-3:]):
+                content = getattr(msg, "content", "")
+                if isinstance(content, str) and (
+                    "❌ Erreur de validation JSON" in content
+                    or "❌ Erreur de parsing JSON" in content
+                    or "❌ Erreur de validation" in content
+                ):
+                    has_jira_validation_error = True
+
             # Check if there's a validation error in the final state
-            if self._has_jira_validation_error(final_state_messages):
+            if has_jira_validation_error:
                 if not is_last_attempt:
                     logger.warning(
                         f"[JiraAgent] Validation error detected on attempt {attempt + 1}. "
@@ -375,44 +417,11 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
             response = await model.ainvoke(messages, config=config)
 
             # Parse and validate JSON response
-            try:
-                clean_data = str(response.content).strip()
-                if clean_data.startswith("```"):
-                    clean_data = re.sub(r"^```(?:json)?\n?", "", clean_data)
-                    clean_data = re.sub(r"\n?```$", "", clean_data)
-
-                # Fix invalid JSON escape sequences (e.g., \' is not valid in JSON)
-                clean_data = clean_data.replace("\\'", "'")
-
-                requirements = json.loads(clean_data)
-
-                # Validate against schema
-                validator = Draft7Validator(requirementsSchema)
-                errors = list(validator.iter_errors(requirements))
-                if errors:
-                    error_msgs = [f"{e.path}: {e.message}" for e in errors[:3]]
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    f"❌ Erreur de validation JSON: {'; '.join(error_msgs)}",
-                                    tool_call_id=runtime.tool_call_id,
-                                ),
-                            ],
-                        }
-                    )
-
-            except json.JSONDecodeError as e:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"❌ Erreur de parsing JSON: {e}. Veuillez réessayer.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
-                )
+            requirements, error_cmd = self._parse_and_validate_json(
+                str(response.content), requirementsSchema, runtime.tool_call_id
+            )
+            if error_cmd:
+                return error_cmd
 
             return Command(
                 update={
@@ -558,44 +567,11 @@ Exigences à respecter:
             response = await model.ainvoke(messages, config=config)
 
             # Parse and validate JSON response
-            try:
-                clean_data = str(response.content).strip()
-                if clean_data.startswith("```"):
-                    clean_data = re.sub(r"^```(?:json)?\n?", "", clean_data)
-                    clean_data = re.sub(r"\n?```$", "", clean_data)
-
-                # Fix invalid JSON escape sequences (e.g., \' is not valid in JSON)
-                clean_data = clean_data.replace("\\'", "'")
-
-                user_stories = json.loads(clean_data)
-
-                # Validate against schema
-                validator = Draft7Validator(userStoriesSchema)
-                errors = list(validator.iter_errors(user_stories))
-                if errors:
-                    error_msgs = [f"{e.path}: {e.message}" for e in errors[:3]]
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    f"❌ Erreur de validation JSON: {'; '.join(error_msgs)}",
-                                    tool_call_id=runtime.tool_call_id,
-                                ),
-                            ],
-                        }
-                    )
-
-            except json.JSONDecodeError as e:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"❌ Erreur de parsing JSON: {e}. Veuillez réessayer.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
-                )
+            user_stories, error_cmd = self._parse_and_validate_json(
+                str(response.content), userStoriesSchema, runtime.tool_call_id
+            )
+            if error_cmd:
+                return error_cmd
 
             return Command(
                 update={
@@ -718,44 +694,11 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
             response = await model.ainvoke(messages, config=config)
 
             # Parse and validate JSON response
-            try:
-                clean_data = str(response.content).strip()
-                if clean_data.startswith("```"):
-                    clean_data = re.sub(r"^```(?:json)?\n?", "", clean_data)
-                    clean_data = re.sub(r"\n?```$", "", clean_data)
-
-                # Fix invalid JSON escape sequences (e.g., \' is not valid in JSON)
-                clean_data = clean_data.replace("\\'", "'")
-
-                tests = json.loads(clean_data)
-
-                # Validate against schema
-                validator = Draft7Validator(testsSchema)
-                errors = list(validator.iter_errors(tests))
-                if errors:
-                    error_msgs = [f"{e.path}: {e.message}" for e in errors[:3]]
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    f"❌ Erreur de validation JSON: {'; '.join(error_msgs)}",
-                                    tool_call_id=runtime.tool_call_id,
-                                ),
-                            ],
-                        }
-                    )
-
-            except json.JSONDecodeError as e:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"❌ Erreur de parsing JSON: {e}. Veuillez réessayer.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
-                )
+            tests, error_cmd = self._parse_and_validate_json(
+                str(response.content), testsSchema, runtime.tool_call_id
+            )
+            if error_cmd:
+                return error_cmd
 
             return Command(
                 update={
