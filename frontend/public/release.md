@@ -1,4 +1,4 @@
-**v1.2.1** — 2026-01-16
+**v1.2.2** — 2026-01-16
 
 - **Summary**
   This release bring in UI improvments in particular allow agents to have the UI display their options
