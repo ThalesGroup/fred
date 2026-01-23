@@ -19,6 +19,8 @@
 Entrypoint for the Agentic Backend App.
 """
 
+import asyncio
+import contextlib
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -27,6 +29,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_user_security, log_setup, register_exception_handlers
+from fred_core.kpi.kpi_process import emit_process_kpis
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -125,6 +128,19 @@ def create_app() -> FastAPI:
             history_store=application_context.get_history_store(),
             kpi=application_context.get_kpi_writer(),
         )
+        process_kpi_task = None
+        kpi_interval_env = os.getenv("KPI_PROCESS_METRICS_INTERVAL_SEC", "").strip()
+        if kpi_interval_env:
+            try:
+                interval_s = float(kpi_interval_env)
+            except ValueError:
+                interval_s = 0
+            if interval_s > 0:
+                process_kpi_task = asyncio.create_task(
+                    emit_process_kpis(
+                        interval_s, application_context.get_kpi_writer()
+                    )
+                )
         try:
             await agent_manager.bootstrap()
         except Exception:
@@ -143,6 +159,10 @@ def create_app() -> FastAPI:
         try:
             yield  # Hand control to the FastAPI server, but keep the startup task running
         finally:
+            if process_kpi_task:
+                process_kpi_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await process_kpi_task
             logger.info("🧹 Lifespan exit: orderly shutdown.")
             logger.info("✅ Shutdown complete.")
 

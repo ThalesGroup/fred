@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import List, Literal, Optional, Union
 from uuid import uuid4
@@ -411,63 +412,81 @@ async def websocket_chatbot_question(
                     session_id = ask.session_id or f"a2a-{uuid4()}"
                     # If a session_id was provided, enforce ownership to match regular agents
                     if ask.session_id:
-                        session_orchestrator._authorize_user_action_on_session(  # type: ignore[attr-defined]
-                            ask.session_id, active_user, Action.UPDATE
+                        await asyncio.to_thread(
+                            session_orchestrator._authorize_user_action_on_session,  # type: ignore[attr-defined]
+                            ask.session_id,
+                            active_user,
+                            Action.UPDATE,
                         )
                     # Get or create the persisted session just like the regular flow
-                    session = session_orchestrator._get_or_create_session(  # type: ignore[attr-defined]
+                    session = await session_orchestrator._get_or_create_session(  # type: ignore[attr-defined]
                         user_id=active_user.uid,
                         query=ask.message,
                         session_id=session_id,
                     )
-                    prior = session_orchestrator.history_store.get(session.id) or []
-                    base_rank = len(prior)
-                    exchange_id = ask.client_exchange_id or str(uuid4())
-                    rank = base_rank
+                    rank_lock = session_orchestrator.get_rank_lock(session.id)
+                    async with rank_lock:
+                        base_rank = await session_orchestrator._ensure_next_rank(
+                            session
+                        )
+                        exchange_id = ask.client_exchange_id or str(uuid4())
+                        rank = base_rank
 
-                    # Emit the user message first
-                    user_msg = make_user_text(
-                        session_id, exchange_id, rank, ask.message
-                    )
-                    collected_messages = [user_msg]
-                    if not await _safe_ws_send_text(
-                        websocket,
-                        StreamEvent(type="stream", message=user_msg).model_dump_json(),
-                    ):
-                        raise WebSocketDisconnect
-                    rank += 1
-
-                    async for msg in stream_a2a_as_chat_messages(
-                        proxy=proxy,
-                        user_id=active_user.uid,
-                        # Prefer the configured agent token; fall back to the caller token.
-                        access_token=configured_a2a_token or active_token,
-                        text=ask.message,
-                        session_id=session_id,
-                        exchange_id=exchange_id,
-                        start_rank=rank,
-                    ):
-                        rank = msg.rank + 1
-                        collected_messages.append(msg)
+                        # Emit the user message first
+                        user_msg = make_user_text(
+                            session_id, exchange_id, rank, ask.message
+                        )
+                        collected_messages = [user_msg]
                         if not await _safe_ws_send_text(
                             websocket,
-                            StreamEvent(type="stream", message=msg).model_dump_json(),
+                            StreamEvent(
+                                type="stream", message=user_msg
+                            ).model_dump_json(),
                         ):
                             raise WebSocketDisconnect
+                        rank += 1
 
-                    session.updated_at = _utcnow_dt()
-                    # Persist session + history so it behaves like regular agents
-                    session_orchestrator.session_store.save(session)
-                    session_orchestrator.history_store.save(
-                        session.id, prior + collected_messages, active_user.uid
-                    )
-                    if not await _safe_ws_send_text(
-                        websocket,
-                        FinalEvent(
-                            type="final", messages=collected_messages, session=session
-                        ).model_dump_json(),
-                    ):
-                        break
+                        async for msg in stream_a2a_as_chat_messages(
+                            proxy=proxy,
+                            user_id=active_user.uid,
+                            # Prefer the configured agent token; fall back to the caller token.
+                            access_token=configured_a2a_token or active_token,
+                            text=ask.message,
+                            session_id=session_id,
+                            exchange_id=exchange_id,
+                            start_rank=rank,
+                        ):
+                            rank = msg.rank + 1
+                            collected_messages.append(msg)
+                            if not await _safe_ws_send_text(
+                                websocket,
+                                StreamEvent(
+                                    type="stream", message=msg
+                                ).model_dump_json(),
+                            ):
+                                raise WebSocketDisconnect
+
+                        session.updated_at = _utcnow_dt()
+                        session.next_rank = base_rank + len(collected_messages)
+                        # Persist session + history so it behaves like regular agents
+                        await asyncio.to_thread(
+                            session_orchestrator.session_store.save, session
+                        )
+                        await asyncio.to_thread(
+                            session_orchestrator.history_store.save,
+                            session.id,
+                            collected_messages,
+                            active_user.uid,
+                        )
+                        if not await _safe_ws_send_text(
+                            websocket,
+                            FinalEvent(
+                                type="final",
+                                messages=collected_messages,
+                                session=session,
+                            ).model_dump_json(),
+                        ):
+                            break
 
                 else:
                     (

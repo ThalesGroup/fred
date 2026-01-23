@@ -147,6 +147,14 @@ class UvicornAccessProbeFilter(logging.Filter):
         return True
 
 
+class UvicornWebsocketNoiseFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if "WebSocket" in msg and "[accepted]" in msg:
+            return False
+        return msg not in {"connection open", "connection closed"}
+
+
 def log_setup(
     *,
     service_name: str,
@@ -165,8 +173,8 @@ def log_setup(
     # 1) Human console (Rich)
     if RichHandler is not None:
         formatter = logging.Formatter(
-            # Include custom 'task_name' attribute and standard 'threadName'
-            fmt="%(asctime)s | %(levelname)s | [%(threadName)s/%(task_name)s] | %(message)s",
+            # Include process ID, task name, and thread name for concurrency diagnostics.
+            fmt="%(asctime)s | %(levelname)s | [pid=%(process)d %(threadName)s/%(task_name)s] | %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
         console = RichHandler(
@@ -202,6 +210,9 @@ def log_setup(
         "azure.identity",
         "msal",
         "websockets",
+        "websockets.server",
+        "websockets.protocol",
+        "websockets.client",
         "httptools",
     )
     for noisy in noisy_libs:
@@ -222,5 +233,6 @@ def log_setup(
             else:
                 lg.setLevel(log_level.upper())
             lg.propagate = True  # forward to our root handlers
+        logging.getLogger("uvicorn.error").addFilter(UvicornWebsocketNoiseFilter())
 
     setattr(root, marker, True)

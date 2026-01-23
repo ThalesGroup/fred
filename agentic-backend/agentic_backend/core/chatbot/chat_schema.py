@@ -246,6 +246,7 @@ class SessionSchema(BaseModel):
     agent_name: str | None = None
     title: str
     updated_at: datetime
+    next_rank: int | None = None
     preferences: Dict[str, Any] | None = None
 
 
