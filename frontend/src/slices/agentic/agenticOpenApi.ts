@@ -541,6 +541,8 @@ export type AgentChatOptions = {
   search_rag_scoping?: boolean;
   /** Expose a toggle to delegate RAG retrieval to a senior agent (deep search) when available. */
   deep_search_delegate?: boolean;
+  /** Display a picker to restrict retrieval to specific documents for this message. */
+  documents_selection?: boolean;
 };
 export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
@@ -712,6 +714,7 @@ export type RuntimeContext = {
   user_id?: string | null;
   user_groups?: string[] | null;
   selected_document_libraries_ids?: string[] | null;
+  selected_document_uids?: string[] | null;
   selected_chat_context_ids?: string[] | null;
   search_policy?: string | null;
   access_token?: string | null;
@@ -882,6 +885,7 @@ export type Properties = {
   agentsNicknameSingular?: string;
   agentsNicknamePlural?: string;
   agentIconPath?: string | null;
+  contactSupportLink?: string | null;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;

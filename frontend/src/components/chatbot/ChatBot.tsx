@@ -366,6 +366,7 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
     currentAgent,
     supportsRagScopeSelection,
     supportsDeepSearchSelection,
+    supportsDocumentsSelection,
     isHydratingSession,
     prefsLoadState,
     sessionPrefs,
@@ -680,8 +681,16 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
       runtimeContext.selected_chat_context_ids = conversationPrefs.chatContextIds;
     }
 
-    if (conversationPrefs.documentLibraryIds.length) {
+    const documentsScopeActive =
+      supportsDocumentsSelection && conversationPrefs.includeDocumentScope && conversationPrefs.documentUids.length > 0;
+    const includeCorpusScope = documentsScopeActive ? true : conversationPrefs.includeCorpusScope;
+
+    if (conversationPrefs.documentLibraryIds.length && !documentsScopeActive) {
       runtimeContext.selected_document_libraries_ids = conversationPrefs.documentLibraryIds;
+    }
+    if (documentsScopeActive) {
+      runtimeContext.selected_document_libraries_ids = undefined;
+      runtimeContext.selected_document_uids = conversationPrefs.documentUids;
     }
 
     runtimeContext.search_policy = conversationPrefs.searchPolicy || "semantic";
@@ -694,8 +703,8 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
     if (typeof conversationPrefs.includeSessionScope === "boolean") {
       runtimeContext.include_session_scope = conversationPrefs.includeSessionScope;
     }
-    if (typeof conversationPrefs.includeCorpusScope === "boolean") {
-      runtimeContext.include_corpus_scope = conversationPrefs.includeCorpusScope;
+    if (typeof includeCorpusScope === "boolean") {
+      runtimeContext.include_corpus_scope = includeCorpusScope;
     }
 
     return runtimeContext;
@@ -703,6 +712,8 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
     baseRuntimeContext,
     conversationPrefs.chatContextIds,
     conversationPrefs.documentLibraryIds,
+    conversationPrefs.documentUids,
+    conversationPrefs.includeDocumentScope,
     conversationPrefs.searchPolicy,
     conversationPrefs.searchRagScope,
     conversationPrefs.deepSearch,
@@ -710,6 +721,7 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
     conversationPrefs.includeCorpusScope,
     supportsRagScopeSelection,
     supportsDeepSearchSelection,
+    supportsDocumentsSelection,
   ]);
 
   // Handle user input (text/audio)

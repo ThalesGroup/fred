@@ -115,6 +115,12 @@ class AgentChatOptions(BaseModel):
             "Expose a toggle to delegate RAG retrieval to a senior agent (deep search) when available."
         ),
     )
+    documents_selection: bool = Field(
+        default=False,
+        description=(
+            "Display a picker to restrict retrieval to specific documents for this message."
+        ),
+    )
 
 
 # ---------------- Base: shared identity + UX + tuning ----------------
@@ -254,6 +260,7 @@ class Properties(BaseModel):
     agentsNicknameSingular: str = "agent"
     agentsNicknamePlural: str = "agents"
     agentIconPath: str | None = None
+    contactSupportLink: str | None = None
 
 
 class FrontendSettings(BaseModel):

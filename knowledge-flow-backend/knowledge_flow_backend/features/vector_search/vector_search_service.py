@@ -447,6 +447,7 @@ class VectorSearchService:
         user: KeycloakUser,
         top_k: int = 10,
         document_library_tags_ids: Optional[List[str]] = None,
+        document_uids: Optional[List[str]] = None,
         policy_name: Optional[SearchPolicyName] = None,
         session_id: Optional[str] = None,
         include_session_scope: bool = True,
@@ -459,7 +460,7 @@ class VectorSearchService:
             top_k (int): The number of top results to return. Defaults to 10.
             document_library_tags_ids (Optional[List[str]]): List of tag IDs to filter the search by library.
             policy_name (Optional[SearchPolicyName]): The search policy to use (hybrid, strict, semantic). Defaults to hybrid.
-            document_uid (Optional[str]): Optional document UID to filter the search results by.
+            document_uids (Optional[List[str]]): Optional list of document UIDs to filter the search results by.
             include_session_scope (bool): Whether to search session-scoped attachment vectors.
             include_corpus_scope (bool): Whether to search corpus/library vectors.
         Returns:
@@ -471,6 +472,7 @@ class VectorSearchService:
         """
         try:
             original_tag_ids = document_library_tags_ids or []
+            document_uids = [uid for uid in (document_uids or []) if uid]
             include_session_scope = bool(include_session_scope)
             include_corpus_scope = bool(include_corpus_scope)
 
@@ -484,6 +486,13 @@ class VectorSearchService:
 
             # Attachment/session-scope query (semantic vector only), optional
             if include_session_scope and session_id:
+                attachment_metadata_extra = {
+                    "user_id": [user.uid],
+                    "session_id": [session_id],
+                    "scope": ["session"],
+                }
+                if document_uids:
+                    attachment_metadata_extra["document_uid"] = document_uids
                 logger.info(
                     "[VECTOR][SEARCH][ATTACH] session=%s user=%s policy=%s question=%r top_k=%d",
                     session_id,
@@ -497,11 +506,7 @@ class VectorSearchService:
                     user=user,
                     k=top_k,
                     library_tags_ids=[],  # no tag filter for attachments
-                    metadata_terms_extra={
-                        "user_id": [user.uid],
-                        "session_id": [session_id],
-                        "scope": ["session"],
-                    },
+                    metadata_terms_extra=attachment_metadata_extra,
                 )
 
             if include_corpus_scope:
@@ -517,6 +522,8 @@ class VectorSearchService:
 
                 # Exclude session-scoped vectors from corpus/library search to avoid leakage across sessions
                 corpus_metadata_extra = {"scope": ["!session"]}
+                if document_uids:
+                    corpus_metadata_extra["document_uid"] = document_uids
 
                 # Corpus/library query: only run when the user actually has accessible tags
                 if document_library_tags_ids:

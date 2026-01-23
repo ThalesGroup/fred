@@ -20,6 +20,7 @@ type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
 
 export type InitialChatPrefs = {
   documentLibraryIds: string[];
+  documentUids: string[];
   promptResourceIds: string[];
   templateResourceIds: string[];
   searchPolicy: SearchPolicyName;
@@ -27,6 +28,7 @@ export type InitialChatPrefs = {
   deepSearch?: boolean;
   includeCorpusScope: boolean;
   includeSessionScope: boolean;
+  includeDocumentScope: boolean;
 };
 
 const EMPTY_STRING_ARRAY: string[] = [];
@@ -46,6 +48,7 @@ export function useInitialChatInputContext(
   const baseDefaults = useMemo<InitialChatPrefs>(
     () => ({
       documentLibraryIds: defaults.documentLibraryIds ?? EMPTY_STRING_ARRAY,
+      documentUids: defaults.documentUids ?? EMPTY_STRING_ARRAY,
       promptResourceIds: defaults.promptResourceIds ?? EMPTY_STRING_ARRAY,
       templateResourceIds: defaults.templateResourceIds ?? EMPTY_STRING_ARRAY,
       searchPolicy: defaults.searchPolicy ?? "semantic",
@@ -53,9 +56,11 @@ export function useInitialChatInputContext(
       deepSearch: defaults.deepSearch,
       includeCorpusScope: defaults.includeCorpusScope ?? true,
       includeSessionScope: defaults.includeSessionScope ?? true,
+      includeDocumentScope: defaults.includeDocumentScope ?? true,
     }),
     [
       defaults.documentLibraryIds,
+      defaults.documentUids,
       defaults.promptResourceIds,
       defaults.templateResourceIds,
       defaults.searchPolicy,
@@ -63,6 +68,7 @@ export function useInitialChatInputContext(
       defaults.deepSearch,
       defaults.includeCorpusScope,
       defaults.includeSessionScope,
+      defaults.includeDocumentScope,
     ],
   );
 
