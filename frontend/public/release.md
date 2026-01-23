@@ -1,9 +1,28 @@
+**v1.2.2** — 2026-01-23
+
+- **Summary**
+  This release bring in UI improvments in particular allow agents to have the UI display their options
+  on a nicer and more ergonomic sidebar.
+
+  - **Features**
+
+    - allow per document search (#1022)
+    - leverage unstructured for attachement files processing (#1012)
+    - added Log Genius agent (#1004)
+
+  - **Bug fixes**
+
+    - fixe the delete UI issue not refreshin (#1026)
+    - UI improvements (#1015,#999)
+
 **v1.2.1** — 2026-01-16
 
 - **Features**
+
   - add favicon override front setting (#987)
 
 - **Improvements**
+
   - use kpi store to expose prometheus metrics (#983)
   - batch "load more" calls to max 500 docs and paginate long user chat messages (#975)
 

@@ -313,7 +313,8 @@ export default function DocumentLibraryList() {
   /* ---------------- Commands ---------------- */
   const { toggleRetrievable, removeFromLibrary, bulkRemoveFromLibraryForTag, preview, previewPdf, download } = useDocumentCommands({
     refetchTags: refetch,
-    refetchDocs: () => (currentTagId ? loadPage(currentTagId, 0, false) : Promise.resolve()),
+    refetchDocs: (tagId?: string) =>
+      tagId ? loadPage(tagId, 0, false) : currentTagId ? loadPage(currentTagId, 0, false) : Promise.resolve(),
   });
   const handleDownload = React.useCallback(
     async (doc: DocumentMetadata) => {
@@ -388,7 +389,15 @@ export default function DocumentLibraryList() {
     showConfirmationDialog({
       title: t("documentLibrary.confirmBulkRemoveTitle") || "Remove selected?",
       onConfirm: async () => {
-        const docsById = new Map<string, DocumentMetadata>((allDocuments ?? []).map((d) => [d.identity.document_uid, d]));
+        const docsById = new Map<string, DocumentMetadata>();
+        Object.values(documentsByTagId).forEach((docs) => {
+          docs.forEach((doc) => {
+            docsById.set(doc.identity.document_uid, doc);
+          });
+        });
+        (allDocuments ?? []).forEach((doc) => {
+          docsById.set(doc.identity.document_uid, doc);
+        });
         const docsByTag = new Map<string, { tag: TagWithItemsId; docs: DocumentMetadata[] }>();
 
         for (const [docUid, tag] of entries) {
@@ -410,7 +419,15 @@ export default function DocumentLibraryList() {
         setSelectedDocs({});
       },
     });
-  }, [selectedDocs, allDocuments, bulkRemoveFromLibraryForTag, setSelectedDocs, showConfirmationDialog, t]);
+  }, [
+    selectedDocs,
+    documentsByTagId,
+    allDocuments,
+    bulkRemoveFromLibraryForTag,
+    setSelectedDocs,
+    showConfirmationDialog,
+    t,
+  ]);
 
   const { confirmDeleteFolder } = useTagCommands({
     refetchTags: refetch,
