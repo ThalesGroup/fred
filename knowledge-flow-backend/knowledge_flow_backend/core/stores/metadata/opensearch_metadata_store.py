@@ -16,7 +16,7 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from fred_core import validate_index_mapping
+from fred_core import ThreadSafeLRUCache, validate_index_mapping
 from opensearchpy import OpenSearch, OpenSearchException, RequestsHttpConnection
 from pydantic import ValidationError
 
@@ -120,6 +120,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             verify_certs=verify_certs,
             connection_class=RequestsHttpConnection,
         )
+        self._cache = ThreadSafeLRUCache[str, DocumentMetadata](max_size=1000)
         self.metadata_index_name = index
 
         # Ensure index exists and mapping has the required fields (add-only).
@@ -352,11 +353,24 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         except ValidationError as e:
             raise MetadataDeserializationError(f"Invalid metadata structure: {e}") from e
 
+    def _resolve_cached_metadata(self, metadata: DocumentMetadata) -> DocumentMetadata:
+        doc_uid = metadata.identity.document_uid
+        if not doc_uid:
+            return metadata
+        cached = self._cache.get(doc_uid)
+        if cached is not None:
+            return cached
+        self._cache.set(doc_uid, metadata)
+        return metadata
+
     # ---------- reads ----------
 
     def get_metadata_by_uid(self, document_uid: str) -> Optional[DocumentMetadata]:
         if not document_uid:
             raise ValueError("Document UID must be provided.")
+        cached = self._cache.get(document_uid)
+        if cached is not None:
+            return cached
         try:
             resp = self.client.get(index=self.metadata_index_name, id=document_uid)
             if not resp.get("found"):
@@ -366,7 +380,9 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             logger.error(f"OpenSearch request failed for UID '{document_uid}': {e}")
             raise
         try:
-            return self._deserialize(source)
+            metadata = self._deserialize(source)
+            self._cache.set(document_uid, metadata)
+            return metadata
         except Exception as e:
             logger.error(f"Deserialization failed for UID '{document_uid}': {e}")
             raise MetadataDeserializationError from e
@@ -384,7 +400,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         out: List[DocumentMetadata] = []
         for h in hits:
             try:
-                out.append(self._deserialize(h["_source"]))
+                out.append(self._resolve_cached_metadata(self._deserialize(h["_source"])))
             except Exception as e:
                 logger.warning(f"Deserialization failed for doc {h.get('_id')}: {e}")
         return out
@@ -402,7 +418,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         errors = 0
         for h in hits:
             try:
-                results.append(self._deserialize(h["_source"]))
+                results.append(self._resolve_cached_metadata(self._deserialize(h["_source"])))
             except ValidationError as e:
                 errors += 1
                 doc_id = h.get("_id", "<unknown>")
@@ -422,7 +438,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             logger.error(f"OpenSearch query failed for tag '{tag_id}': {e}")
             raise
         try:
-            return [self._deserialize(hit["_source"]) for hit in hits]
+            return [self._resolve_cached_metadata(self._deserialize(hit["_source"])) for hit in hits]
         except Exception as e:
             logger.error(f"Deserialization failed for results tagged '{tag_id}': {e}")
             raise MetadataDeserializationError from e
@@ -453,7 +469,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
             raise
 
         try:
-            docs = [self._deserialize(hit["_source"]) for hit in hits]
+            docs = [self._resolve_cached_metadata(self._deserialize(hit["_source"])) for hit in hits]
             return docs, int(total_hits)
         except Exception as e:
             logger.error(f"Deserialization failed for paginated results tagged '{tag_id}': {e}")
@@ -468,12 +484,14 @@ class OpenSearchMetadataStore(BaseMetadataStore):
         body = self._serialize(metadata)
         try:
             self.client.index(index=self.metadata_index_name, id=uid, body=body)
+            self._cache.set(uid, metadata)
             logger.info(f"[METADATA] Indexed document with UID '{uid}' into '{self.metadata_index_name}'.")
         except OpenSearchException as e:
             logger.error(f"Failed to index metadata for UID '{uid}': {e}")
             raise RuntimeError(f"Failed to index metadata: {e}") from e
 
     def delete_metadata(self, document_uid: str) -> None:
+        self._cache.delete(document_uid)
         try:
             self.client.delete(index=self.metadata_index_name, id=document_uid)
             logger.info(f"Deleted metadata UID '{document_uid}' from index '{self.metadata_index_name}'.")
@@ -484,6 +502,7 @@ class OpenSearchMetadataStore(BaseMetadataStore):
     def clear(self) -> None:
         try:
             self.client.delete_by_query(index=self.metadata_index_name, body={"query": {"match_all": {}}})
+            self._cache.clear()
             logger.info(f"Cleared all documents from '{self.metadata_index_name}'.")
         except Exception as e:
             logger.error(f"Failed to clear metadata store: {e}")

@@ -17,11 +17,12 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
+
 import { useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
 export default function Chat() {
-  const { sessionId } = useParams<{ sessionId?: string }>();
+  const { sessionId, 'agent-id': agentId } = useParams<{ sessionId?: string; 'agent-id'?: string }>();
   const navigate = useNavigate();
 
   const {
@@ -31,14 +32,28 @@ export default function Chat() {
     error: flowsErrObj,
   } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery(undefined, {
     refetchOnMountOrArgChange: true,
-    refetchOnFocus: true,
-    refetchOnReconnect: true,
+    refetchOnFocus: false,
+    refetchOnReconnect: false,
   });
 
   const agentsFromServer = useMemo<AnyAgent[]>(() => normalizeAgenticFlows(rawAgentsFromServer), [rawAgentsFromServer]);
   const enabledAgents = (agentsFromServer ?? []).filter(
     (a) => a.enabled === true && !a.metadata?.deep_search_hidden_in_ui,
   );
+
+  // Find the initial agent based on URL parameter (if present)
+  const initialAgent = useMemo<AnyAgent | undefined>(() => {
+    if (!agentId || enabledAgents.length === 0) return undefined;
+
+    // Decode the URL-encoded agent name
+    const decodedAgentId = decodeURIComponent(agentId);
+
+    const match = enabledAgents.find((a) => a.name === decodedAgentId);
+    if (!match) {
+      console.warn(`[CHAT] Agent "${decodedAgentId}" not found in enabled agents. Defaulting to first agent.`);
+    }
+    return match;
+  }, [agentId, enabledAgents]);
 
   // Handle navigation when a new session is created
   const handleNewSessionCreated = (newSessionId: string) => {
@@ -77,13 +92,13 @@ export default function Chat() {
       </Box>
     );
   }
-
   return (
     <Box sx={{ height: "100vh", position: "relative", overflow: "hidden" }}>
       <Grid2>
         <ChatBot
-          sessionId={sessionId}
+          chatSessionId={sessionId}
           agents={enabledAgents}
+          initialAgent={initialAgent}
           onNewSessionCreated={handleNewSessionCreated}
           runtimeContext={{}}
         />

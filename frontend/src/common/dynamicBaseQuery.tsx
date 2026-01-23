@@ -35,22 +35,30 @@ export const createDynamicBaseQuery = (
       },
     });
 
+  const normalizeArgs = (args: string | FetchArgs): FetchArgs => {
+    if (typeof args === "string") {
+      return { url: args, cache: "no-store" };
+    }
+    return { ...args, cache: "no-store" };
+  };
+
   return async (args, api, extraOptions) => {
     const baseUrl = pickBaseUrl();
     if (!baseUrl) throw new Error(`Backend URL missing for ${options.backend} backend.`);
     const raw = makeRaw(baseUrl);
+    const requestArgs = normalizeArgs(args);
 
     // 1) Proactively ensure token is still valid before making the request.
     await KeyCloakService.ensureFreshToken(30);
 
     // 2) First attempt
-    let result = await raw(args, api, extraOptions);
+    let result = await raw(requestArgs, api, extraOptions);
 
     // 3) If unauthorized, try ONE refresh + retry
     if (result.error && result.error.status === 401) {
       const ok = await KeyCloakService.ensureFreshToken(0);
       if (ok) {
-        result = await raw(args, api, extraOptions);
+        result = await raw(requestArgs, api, extraOptions);
       }
       // 4) Still unauthorized? Clean logout to avoid a broken UI state.
       if (result.error && result.error.status === 401) {

@@ -282,7 +282,7 @@ export default function GraphHub() {
           sx={{
             overflow: "hidden",
             borderRight: (t) => `1px solid ${t.palette.divider}`,
-            bgcolor: (t) => t.palette.sidebar?.background ?? t.palette.background.paper,
+            bgcolor: (t) => t.palette.background.paper,
             display: "flex",
             flexDirection: "column",
             pointerEvents: isPanelOpen ? "auto" : "none",

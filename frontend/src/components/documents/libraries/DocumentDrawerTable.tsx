@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import DeleteIcon from "@mui/icons-material/Delete";
-import { IconButton, List, ListItem, ListItemIcon, ListItemText, SxProps, Tooltip, Typography } from "@mui/material";
+import { List, ListItem, ListItemIcon, ListItemText, SxProps, Tooltip, Typography } from "@mui/material";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { getDocumentIcon } from "../common/DocumentIcon";
+import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
 
 interface TempFile {
   name: string;
@@ -38,16 +38,14 @@ export const DocumentDrawerTable: React.FC<TempFileTableProps> = ({ files, onDel
           key={index}
           sx={{ pl: 0 }}
           secondaryAction={
-            <IconButton
+            <DeleteIconButton
               edge="end"
               onClick={(e) => {
                 e.stopPropagation();
                 onDelete(index);
               }}
               aria-label={t("documentDrawerTable.deleteFile")}
-            >
-              <DeleteIcon />
-            </IconButton>
+            />
           }
         >
           <ListItemIcon sx={{ minWidth: 32 }}>{getDocumentIcon(file.name)}</ListItemIcon>

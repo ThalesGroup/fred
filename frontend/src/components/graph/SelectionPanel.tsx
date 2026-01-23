@@ -13,9 +13,9 @@
 // limitations under the License.
 
 import React, { useMemo } from "react";
-import { IconButton, Stack, Typography } from "@mui/material";
+import { Stack, Typography } from "@mui/material";
 import ChunksAccordion from "../documents/data/ChunksAccordion.tsx";
-import DeleteIcon from "@mui/icons-material/Delete";
+import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 
 type ChunkRef = { document_uid: string; chunk_uid: string; text?: string };
 
@@ -43,15 +43,12 @@ export const SelectionPanel: React.FC<{
       {/* Selection section */}
       <Stack direction="row" alignItems="center" justifyContent="space-between">
         <Typography variant="subtitle2">{t("graphHub.selection.title", "Selection")}</Typography>
-        <IconButton
-          color="error"
+        <DeleteIconButton
           size="small"
           title={t("graphHub.deleteSelection", "Delete selection")}
           onClick={handleDeleteSelection}
           disabled={isDeleting}
-        >
-          <DeleteIcon />
-        </IconButton>
+        />
       </Stack>
       <ChunksAccordion chunks={selectedChunks} />
     </Stack>

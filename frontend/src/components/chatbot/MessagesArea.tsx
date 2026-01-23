@@ -34,6 +34,7 @@ type Props = {
   // id -> label maps
   libraryNameById?: Record<string, string>;
   chatContextNameById?: Record<string, string>;
+  hiddenUserExchangeIds?: Set<string>;
 };
 
 function TypingIndicatorRow({ agent }: { agent: AnyAgent }) {
@@ -62,6 +63,7 @@ function Area({
 
   libraryNameById,
   chatContextNameById,
+  hiddenUserExchangeIds,
 }: Props) {
   // Hover highlight in Sources (syncs with [n] markers inside MessageCard)
   const [highlightUid, setHighlightUid] = React.useState<string | null>(null);
@@ -141,7 +143,8 @@ function Area({
         others.push(msg);
       }
 
-      if (userMessage) {
+      const shouldHideUserMessage = userMessage && hiddenUserExchangeIds?.has(userMessage.exchange_id);
+      if (userMessage && !shouldHideUserMessage) {
         elements.push(
           <MessageCard
             key={`user-${userMessage.session_id}-${userMessage.exchange_id}-${userMessage.rank}`}
@@ -213,7 +216,7 @@ function Area({
               side={msg.role === "user" ? "right" : "left"}
               enableCopy
               enableThumbs
-              pending={isActiveExchange && msg.role === "assistant"}
+              pending={isActiveExchange && isWaiting && msg.role === "assistant" && !hasNonEmptyText(msg)}
               suppressText={false}
               libraryNameById={libraryNameById}
               chatContextNameById={chatContextNameById}
@@ -253,7 +256,7 @@ function Area({
             side="left"
             enableCopy
             enableThumbs
-            pending={isActiveExchange}
+            pending={isActiveExchange && isWaiting && !hasNonEmptyText(msg)}
             suppressText={false}
             libraryNameById={libraryNameById}
             chatContextNameById={chatContextNameById}
@@ -265,7 +268,16 @@ function Area({
     }
 
     return elements;
-  }, [messages, agents, currentAgent, highlightUid, libraryNameById, chatContextNameById, isWaiting]);
+  }, [
+    messages,
+    agents,
+    currentAgent,
+    highlightUid,
+    libraryNameById,
+    chatContextNameById,
+    hiddenUserExchangeIds,
+    isWaiting,
+  ]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minHeight: 0 }}>

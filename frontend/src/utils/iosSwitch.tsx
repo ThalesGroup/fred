@@ -40,7 +40,7 @@ const GreenCheckSVG = ({ theme }) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path
       d="M20 6L9 17L4 12"
-      stroke={theme.palette.chart.mediumGreen}
+      stroke={theme.palette.success.main}
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -111,7 +111,7 @@ export const IOSSwitch = styled(Switch)(({ theme }) => ({
       transform: "translateX(28px)", // Adjusted for new width
       color: "#fff",
       "& + .MuiSwitch-track": {
-        backgroundColor: theme.palette.mode === "dark" ? theme.palette.success.main : theme.palette.chart.mediumGreen,
+        backgroundColor: theme.palette.success.main,
         opacity: 1,
         border: 0,
         "&:before": {

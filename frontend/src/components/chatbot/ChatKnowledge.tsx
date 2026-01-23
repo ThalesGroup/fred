@@ -134,6 +134,17 @@ const ChatKnowledge: React.FC<ChatKnowledgeProps> = ({
           </Box>
         ) : null}
 
+        {(userInputContext?.documentUids?.length ?? 0) > 0 ? (
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>
+              {t("chatbot.knowledgePanel.documents", {
+                count: userInputContext.documentUids.length,
+              })}
+            </Typography>
+            {renderChips(userInputContext.documentUids)}
+          </Box>
+        ) : null}
+
         {(userInputContext?.promptResourceIds?.length ?? 0) > 0 ? (
           <Box>
             <Typography variant="subtitle2" gutterBottom>

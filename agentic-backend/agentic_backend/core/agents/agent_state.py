@@ -6,8 +6,10 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
+from agentic_backend.common.kf_base_client import KfBaseClient
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
+    get_access_token,
     get_chat_context_libraries_ids,
     get_document_library_tags_ids,
 )
@@ -41,10 +43,29 @@ def _split_front_matter(text: str) -> str:
     return s
 
 
-def _fetch_body(kf_base: str, rid: str, timeout: float = 8.0) -> Optional[str]:
+def _fetch_body(
+    kf_base: str,
+    rid: str,
+    *,
+    access_token: Optional[str] = None,
+    timeout: float = 8.0,
+) -> Optional[str]:
     """Return body text for a resource id, or None if not found/invalid."""
     try:
-        resp = requests.get(f"{kf_base}/resources/{rid}", timeout=timeout)
+        if access_token:
+            client = KfBaseClient(
+                allowed_methods=frozenset({"GET"}),
+                access_token=access_token,
+            )
+            client.base_url = kf_base.rstrip("/")
+            client.timeout = (timeout, timeout)
+            resp = client._request_with_token_refresh("GET", f"/resources/{rid}")
+        else:
+            logger.warning(
+                "No access token available for knowledge-flow resource fetch (rid=%s).",
+                rid,
+            )
+            resp = requests.get(f"{kf_base}/resources/{rid}", timeout=timeout)
         if resp.status_code != 200:
             logger.warning(
                 f"Failed to fetch body for resource {rid}: {resp.status_code}"
@@ -71,8 +92,9 @@ def resolve_prepared(ctx: RuntimeContext, kf_base: str) -> Prepared:
 
     # 2) Prompts: loop each id, append body when resolvable; ignore failures
     bodies: List[str] = []
+    access_token = get_access_token(ctx)
     for pid in get_chat_context_libraries_ids(ctx) or []:
-        body = _fetch_body(kf_base, pid)
+        body = _fetch_body(kf_base, pid, access_token=access_token)
         if body:
             bodies.append(body)
 

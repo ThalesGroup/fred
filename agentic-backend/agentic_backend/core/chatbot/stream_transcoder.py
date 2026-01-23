@@ -28,6 +28,7 @@ from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler
 from langgraph.graph import MessagesState
 from pydantic import TypeAdapter, ValidationError
+from starlette.websockets import WebSocketDisconnect
 
 from agentic_backend.common.rags_utils import ensure_ranks
 from agentic_backend.core.agents.agent_flow import AgentFlow
@@ -447,6 +448,9 @@ class StreamTranscoder:
         except asyncio.CancelledError:
             logger.info("StreamTranscoder: stream cancelled")
             raise
+        except WebSocketDisconnect:
+            logger.info("StreamTranscoder: client disconnected; stopping stream.")
+            raise
         except Exception as e:
             logger.error(
                 "StreamTranscoder: Agent execution failed with error: %s",
@@ -489,7 +493,12 @@ class StreamTranscoder:
                 ),
             )
             out.append(err_chat_msg)
-            await self._emit(callback, err_chat_msg)
+            try:
+                await self._emit(callback, err_chat_msg)
+            except WebSocketDisconnect:
+                logger.info(
+                    "StreamTranscoder: client disconnected before error message could be sent."
+                )
 
         return out
 

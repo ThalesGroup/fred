@@ -30,7 +30,7 @@ import { usePdfDocumentViewer } from "../../../common/usePdfDocumentViewer";
 
 type DocumentRefreshers = {
   refetchTags?: () => Promise<any>;
-  refetchDocs?: () => Promise<any>;
+  refetchDocs?: (tagId?: string) => Promise<any>;
 };
 
 export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefreshers = {}) {
@@ -45,9 +45,12 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   const { openMarkdownDocument } = useMarkdownDocumentViewer();
   const { openPdfDocument } = usePdfDocumentViewer();
   const [triggerDownloadBlob] = useLazyDownloadRawContentBlobQuery();
-  const refresh = useCallback(async () => {
-    await Promise.all([refetchTags?.(), refetchDocs ? refetchDocs() : fetchAllDocuments({ filters: {} })]);
-  }, [refetchTags, refetchDocs, fetchAllDocuments]);
+  const refresh = useCallback(
+    async (tagId?: string) => {
+      await Promise.all([refetchTags?.(), refetchDocs ? refetchDocs(tagId) : fetchAllDocuments({ filters: {} })]);
+    },
+    [refetchTags, refetchDocs, fetchAllDocuments],
+  );
 
   const toggleRetrievable = useCallback(
     async (doc: DocumentMetadata) => {
@@ -86,7 +89,7 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
             item_ids: newItemIds,
           },
         }).unwrap();
-        await refresh?.();
+        await refresh(tag.id);
         showSuccess?.({
           summary: t("documentLibrary.removeSuccess") || "Removed",
           detail: t("documentLibrary.removedOneDocument") || "Document removed from the library.",
@@ -134,7 +137,7 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
             item_ids: newItemIds,
           },
         }).unwrap();
-        await refresh?.();
+        await refresh(tag.id);
         showSuccess?.({
           summary: t("documentLibrary.removeSuccess") || "Removed",
           detail:

@@ -34,7 +34,7 @@ import {
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { EmptyState } from "../EmptyState";
-import { buildTree, findNode, TagNode } from "../tags/tagTree";
+import { buildTree, findNode, TagNode } from "../../shared/utils/tagTree";
 import { ChatContextEditorModal } from "./ChatContextEditorModal";
 import { PromptEditorModal } from "./PromptEditorModal";
 import { ResourceImportDrawer } from "./ResourceImportDrawer";

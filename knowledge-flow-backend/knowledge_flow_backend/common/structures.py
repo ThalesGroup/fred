@@ -263,6 +263,8 @@ class AppConfig(BaseModel):
     reload_dir: str = "."
     max_ingestion_workers: int = 1
     metrics_enabled: bool = True
+    metrics_address: str = "127.0.0.1"
+    metrics_port: int = 9111
 
 
 class PullProvider(str, Enum):
@@ -431,6 +433,13 @@ class Configuration(BaseModel):
     crossencoder_model: Optional[ModelConfiguration] = None
     security: SecurityConfiguration
     input_processors: List[ProcessorConfig]
+    attachment_processors: Optional[List[ProcessorConfig]] = Field(
+        default=None,
+        description=(
+            "Optional fast-text processors for attachments. Uses the same structure as input_processors, "
+            "but classes must subclass BaseFastTextProcessor. If omitted, the default fast processor is used."
+        ),
+    )
     output_processors: Optional[List[ProcessorConfig]] = None
     library_output_processors: Optional[List[LibraryProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")

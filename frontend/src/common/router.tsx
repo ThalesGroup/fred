@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { createBrowserRouter, RouteObject } from "react-router-dom";
+import { createBrowserRouter, Navigate, RouteObject } from "react-router-dom";
 import { LayoutWithSidebar } from "../app/LayoutWithSidebar";
 import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
@@ -24,6 +24,7 @@ import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { Kpis } from "../pages/Kpis";
 import Logs from "../pages/Logs";
 import { McpHub } from "../pages/McpHub";
+import { NewChatAgentSelection } from "../pages/NewChatAgentSelection.tsx";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
 import ProcessorBench from "../pages/ProcessorBench";
@@ -44,6 +45,14 @@ export const routes: RouteObject[] = [
     children: [
       {
         index: true,
+        element: <Navigate to="/new-chat" replace />,
+      },
+      {
+        path: "/new-chat",
+        element: <NewChatAgentSelection />,
+      },
+      {
+        path: "/new-chat/:agent-id",
         element: <Chat />,
       },
       {

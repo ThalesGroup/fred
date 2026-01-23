@@ -132,7 +132,7 @@ export function PluginSelector({
                             <ListItemText
                               primary={it.name}
                               secondary={it.description}
-                              secondaryTypographyProps={{ noWrap: true }}
+                              slotProps={{ secondary: { noWrap: true } }}
                             />
                           </ListItemButton>
                         </ListItem>

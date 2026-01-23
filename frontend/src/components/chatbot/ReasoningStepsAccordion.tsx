@@ -12,29 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useMemo, useState } from "react";
+import Editor from "@monaco-editor/react";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import {
   Accordion,
-  AccordionSummary,
   AccordionDetails,
+  AccordionSummary,
   Box,
+  Divider,
   Drawer,
   IconButton,
   List,
   Stack,
   Tooltip,
   Typography,
-  Divider,
   useTheme,
 } from "@mui/material";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import Editor from "@monaco-editor/react";
+import React, { useMemo, useState } from "react";
 
+import { AnyAgent } from "../../common/agent";
 import { Channel, ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras, isToolCall, isToolResult, textPreview, toolId } from "./ChatBotUtils";
 import ReasoningStepBadge from "./ReasoningStepBadge";
-import { AnyAgent } from "../../common/agent";
 
 type Props = {
   steps: ChatMessage[];
@@ -270,22 +270,6 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
                         : undefined
                       : undefined;
 
-                // Optional tiny debug to catch unexpected objects in extras/preview
-                if (
-                  (nodeRaw && typeof nodeRaw !== "string") ||
-                  (taskRaw && typeof taskRaw !== "string") ||
-                  (previewRaw && typeof previewRaw !== "string")
-                ) {
-                  // eslint-disable-next-line no-console
-                  console.warn("Trace value was non-string → stringified", {
-                    rank: message.rank,
-                    channel: message.channel,
-                    nodeType: typeof nodeRaw,
-                    taskType: typeof taskRaw,
-                    previewType: typeof previewRaw,
-                  });
-                }
-
                 return (
                   <React.Fragment key={key}>
                     <ReasoningStepBadge
@@ -319,15 +303,9 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
         onClose={closeDetails}
         slotProps={{
           paper: {
-            sx: (t) => ({
+            sx: () => ({
               width: { xs: "100%", sm: 640 },
               display: "flex",
-              // Fred rationale:
-              // Ensure paper picks up dark surface even if a global override is missed.
-              background: t.palette.surfaces.soft,
-              // For a RIGHT drawer, the divider should be on the LEFT:
-              borderLeft: `1px solid ${t.palette.divider}`,
-              borderRight: "none",
             }),
           },
         }}
@@ -377,7 +355,7 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
         </Box>
 
         {/* Editor container should inherit a dark-ish surface */}
-        <Box sx={(t) => ({ flex: 1, minHeight: 0, background: t.palette.surfaces.soft })}>
+        <Box sx={(t) => ({ flex: 1, minHeight: 0, background: t.palette.background.default })}>
           <Editor
             height="100%"
             defaultLanguage="json"

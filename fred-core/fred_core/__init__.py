@@ -61,6 +61,7 @@ from fred_core.logs.log_setup import StoreEmitHandler, log_setup
 from fred_core.logs.log_structures import (
     InMemoryLogStorageConfig,
     LogEventDTO,
+    LogFilter,
     LogQuery,
     LogQueryResult,
     LogStorageConfig,
@@ -129,6 +130,7 @@ from fred_core.store.vector_search import VectorSearchHit
 __all__ = [
     "BaseLogStore",
     "LogEventDTO",
+    "LogFilter",
     "LogQuery",
     "LogQueryResult",
     "OpenSearchLogStore",

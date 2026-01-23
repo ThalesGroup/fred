@@ -48,7 +48,9 @@ from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHin
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
+    get_document_uids,
     get_search_policy,
+    get_vector_search_scopes,
 )
 from agentic_backend.core.chatbot.chat_schema import (
     LinkKind,
@@ -324,7 +326,11 @@ class AdvancedRico(AgentFlow):
                 "Runtime context missing session_id; required for scoped retrieval."
             )
         document_library_tags_ids = get_document_library_tags_ids(runtime_context)
+        document_uids = get_document_uids(runtime_context)
         search_policy = get_search_policy(runtime_context)
+        include_session_scope, include_corpus_scope = get_vector_search_scopes(
+            runtime_context
+        )
 
         try:
             # Perform search
@@ -336,9 +342,11 @@ class AdvancedRico(AgentFlow):
                     question=question or "",
                     top_k=top_k,
                     document_library_tags_ids=document_library_tags_ids,
+                    document_uids=document_uids,
                     search_policy=search_policy,
                     session_id=runtime_context.session_id,
-                    include_session_scope=True,
+                    include_session_scope=include_session_scope,
+                    include_corpus_scope=include_corpus_scope,
                 )
 
             if not hits:
@@ -374,6 +382,8 @@ class AdvancedRico(AgentFlow):
             }
             if document_library_tags_ids:
                 call_args["tags"] = document_library_tags_ids
+            if document_uids:
+                call_args["document_uids"] = document_uids
 
             messages = [
                 mk_tool_call(call_id=call_id, name="retrieve", args=call_args),

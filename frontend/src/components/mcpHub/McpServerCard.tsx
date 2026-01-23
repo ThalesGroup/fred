@@ -1,6 +1,5 @@
 // Copyright Thales 2025
 
-import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import HttpIcon from "@mui/icons-material/Http";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
@@ -17,6 +16,7 @@ import {
 } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { McpServerConfiguration } from "../../slices/agentic/agenticOpenApi";
+import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 
 export interface McpServerCardProps {
   server: McpServerConfiguration;
@@ -117,14 +117,7 @@ export function McpServerCard({
             <IconButton size="small" onClick={() => onEdit(server)} disabled={!canEdit}>
               <EditIcon fontSize="small" />
             </IconButton>
-            <IconButton
-              size="small"
-              onClick={() => onDelete(server)}
-              disabled={!canDelete}
-              sx={{ color: "text.secondary" }}
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
+            <DeleteIconButton size="small" onClick={() => onDelete(server)} disabled={!canDelete} />
           </Stack>
         </Stack>
       </CardContent>

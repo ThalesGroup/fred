@@ -18,6 +18,9 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
+  metrics_enabled: true
+  metrics_address: "0.0.0.0"
+  metrics_port: 9111
 
 processing:
   generate_summary: false
@@ -68,6 +71,12 @@ input_processors:
     class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
   - prefix: ".jsonl"
     class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+
+# Optional: fast processors used for chat attachments (/fast/text, /fast/ingest).
+# If omitted, defaults to the Unstructured fast processor.
+attachment_processors:
+  - prefix: "*"
+    class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_unstructured_text_processor.FastUnstructuredTextProcessingProcessor
 
 content_storage:
   type: minio

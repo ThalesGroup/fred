@@ -15,7 +15,7 @@
 import logging
 import uuid
 from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 
 from langchain.embeddings.base import Embeddings
 from langchain_core.documents import Document
@@ -82,6 +82,66 @@ def _ensure_chunk_uid(md: Dict[str, Any]) -> str:
         cid = str(uuid.uuid4())
     md[CHUNK_ID_FIELD] = cid
     return cid
+
+
+def _as_list(values: Any) -> List[Any]:
+    if values is None:
+        return []
+    try:
+        return list(values)
+    except TypeError:
+        return [values]
+
+
+def _split_metadata_values(values: Any) -> tuple[List[Any], List[Any]]:
+    include_values: List[Any] = []
+    exclude_values: List[Any] = []
+    for v in _as_list(values):
+        if isinstance(v, str) and v.startswith("!"):
+            if v[1:]:
+                exclude_values.append(v[1:])
+        else:
+            include_values.append(v)
+    return include_values, exclude_values
+
+
+def _value_matches(meta_value: Any, values: List[Any]) -> bool:
+    if isinstance(meta_value, list):
+        return any(v in meta_value for v in values)
+    return meta_value in values
+
+
+def _matches_tag_ids(md: Dict[str, Any], tag_ids: Optional[List[str]]) -> bool:
+    if not tag_ids:
+        return True
+    doc_tags = md.get("tag_ids") or []
+    if isinstance(doc_tags, str):
+        doc_tags = [doc_tags]
+    return any(tag in doc_tags for tag in tag_ids)
+
+
+def _matches_metadata_terms(
+    md: Dict[str, Any],
+    metadata_terms: Optional[Mapping[str, Sequence[Union[str, int, float, bool]]]],
+) -> bool:
+    if not metadata_terms:
+        return True
+    for key, values in metadata_terms.items():
+        values_list = _as_list(values)
+        if not values_list:
+            continue
+        include_values, exclude_values = _split_metadata_values(values_list)
+        meta_value = md.get(key)
+
+        if key == "retrievable" and meta_value is None:
+            continue
+
+        if exclude_values and meta_value is not None and _value_matches(meta_value, exclude_values):
+            return False
+        if include_values:
+            if meta_value is None or not _value_matches(meta_value, include_values):
+                return False
+    return True
 
 
 # ----------------------- adapter -----------------------
@@ -202,16 +262,16 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:
         """
         ANN similarity search using LC's in-memory backend.
-        Honors SearchFilter.document_ids by applying a callable filter.
-        (metadata_terms are ignored here — no secondary index in dev store.)
+        Applies SearchFilter tag_ids and metadata_terms via a callable filter.
         """
         lc_filter = None
-        if search_filter and search_filter.tag_ids:
-            allowed = set(search_filter.tag_ids)
+        if search_filter and (search_filter.tag_ids or search_filter.metadata_terms):
+            tag_ids = list(search_filter.tag_ids) if search_filter.tag_ids else None
+            metadata_terms = search_filter.metadata_terms
 
             def _filter(doc: Document) -> bool:
-                doc_uid = doc.metadata.get("document_uid")
-                return isinstance(doc_uid, str) and doc_uid in allowed
+                md = doc.metadata or {}
+                return _matches_tag_ids(md, tag_ids) and _matches_metadata_terms(md, metadata_terms)
 
             lc_filter = _filter
 

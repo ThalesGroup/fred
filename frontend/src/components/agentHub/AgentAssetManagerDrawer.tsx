@@ -14,7 +14,6 @@
 
 import CloseIcon from "@mui/icons-material/Close";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
-import DeleteIcon from "@mui/icons-material/Delete";
 import FilePresentIcon from "@mui/icons-material/FilePresent"; // New icon for file list
 import UploadIcon from "@mui/icons-material/Upload";
 import {
@@ -34,6 +33,7 @@ import React, { useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone"; // New import
 
 import { useTranslation } from "react-i18next";
+import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 
 // --- RTK Query Hooks & Types ---
 import {
@@ -273,15 +273,12 @@ export const AgentAssetManagerDrawer: React.FC<AgentAssetManagerDrawerProps> = (
                   </Box>
 
                   {/* *** KEY CHANGE 3: Delete Button as a direct child *** */}
-                  <IconButton
+                  <DeleteIconButton
                     aria-label="delete"
                     onClick={() => handleDelete(asset.key)}
                     size="small"
-                    color="error"
                     sx={{ ml: 2, flexShrink: 0 }}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
+                  />
                 </ListItem>
               ))
             )}

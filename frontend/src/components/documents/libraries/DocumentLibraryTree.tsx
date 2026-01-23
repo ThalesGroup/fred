@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
@@ -25,9 +24,10 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { getConfig } from "../../../common/config";
-import type { DocumentMetadata, TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { KeyCloakService } from "../../../security/KeycloakService";
-import { TagNode } from "../../tags/tagTree";
+import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
+import { TagNode } from "../../../shared/utils/tagTree";
+import type { DocumentMetadata, TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DocumentRowCompact } from "./DocumentLibraryRow";
 import { DocumentLibraryShareDialog } from "./sharing/DocumentLibraryShareDialog";
 
@@ -143,7 +143,6 @@ export function DocumentLibraryTree({
   const { t } = useTranslation();
   const [shareTarget, setShareTarget] = React.useState<TagNode | null>(null);
   const currentUserId = KeyCloakService.GetUserId?.() ?? null;
-
   const { feature_flags } = getConfig();
 
   const handleCloseShareDialog = React.useCallback(() => {
@@ -158,7 +157,7 @@ export function DocumentLibraryTree({
       if (m.has(node.full)) return m.get(node.full)!;
       const tag = getPrimaryTag(node);
       const tagId = tag?.id;
-      const selfCount = tagId ? perTagTotals?.[tagId] ?? documentsByTagId[tagId]?.length ?? 0 : 0;
+      const selfCount = tagId ? (perTagTotals?.[tagId] ?? documentsByTagId[tagId]?.length ?? 0) : 0;
       let childSum = 0;
       for (const child of getChildren(node)) {
         childSum += compute(child);
@@ -213,7 +212,7 @@ export function DocumentLibraryTree({
       const directDocs = getDocsForTags(tagIdsHere, documentsByTagId);
       const folderTag = getPrimaryTag(c);
       const tagId = folderTag?.id;
-      const loadedForTag = tagId ? documentsByTagId[tagId]?.length ?? 0 : 0;
+      const loadedForTag = tagId ? (documentsByTagId[tagId]?.length ?? 0) : 0;
       const totalForTagLoad =
         tagId && isSelected && selectedFolderTotal !== undefined
           ? selectedFolderTotal
@@ -225,19 +224,17 @@ export function DocumentLibraryTree({
 
       // Folder tri-state against THIS folder’s tag.
       const subtreeDocs = docsInSubtree(c, documentsByTagId, getChildren);
-      const eligibleDocs = folderTag
-        ? subtreeDocs.filter((d) => (d.tags?.tag_ids ?? []).includes(folderTag.id))
-        : [];
+      const eligibleDocs = folderTag ? subtreeDocs.filter((d) => (d.tags?.tag_ids ?? []).includes(folderTag.id)) : [];
       const cachedTotal = folderTag ? perTagTotals?.[folderTag.id] : undefined;
       const aggregatedTotal = totalsByNode.get(c.full);
       const totalDocCount =
         isSelected && selectedFolderTotal !== undefined
           ? selectedFolderTotal
-          : aggregatedTotal ?? cachedTotal ?? new Set(subtreeDocs.map((d) => d.identity.document_uid)).size;
+          : (aggregatedTotal ?? cachedTotal ?? new Set(subtreeDocs.map((d) => d.identity.document_uid)).size);
       const selectionTotalForTag = folderTag
         ? isSelected && selectedFolderTotal !== undefined
           ? selectedFolderTotal
-          : cachedTotal ?? eligibleDocs.length
+          : (cachedTotal ?? eligibleDocs.length)
         : 0;
       const selectedForTag = folderTag
         ? eligibleDocs.filter((d) => selectedDocs[d.identity.document_uid]?.id === folderTag.id).length
@@ -253,8 +250,7 @@ export function DocumentLibraryTree({
       const hasDataForTag = folderTag
         ? Boolean(documentsByTagId[folderTag.id]?.length) || perTagTotals?.[folderTag.id] !== undefined
         : false;
-      const displayCount =
-        !isSelected && !hasDataForTag && totalDocCount === 0 ? "…" : String(totalDocCount);
+      const displayCount = !isSelected && !hasDataForTag && totalDocCount === 0 ? "…" : String(totalDocCount);
 
       return (
         <TreeItem
@@ -368,7 +364,7 @@ export function DocumentLibraryTree({
                 >
                   {/* span needed to trigger tooltip when IconButton is disabled */}
                   <span style={{ display: "inline-flex" }}>
-                    <IconButton
+                    <DeleteIconButton
                       size="small"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -376,9 +372,7 @@ export function DocumentLibraryTree({
                         onDeleteFolder(folderTag);
                       }}
                       disabled={!canBeDeleted}
-                    >
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
+                    />
                   </span>
                 </Tooltip>
               </Box>
@@ -429,11 +423,11 @@ export function DocumentLibraryTree({
                       }}
                       onToggleRetrievable={onToggleRetrievable}
                     />
-              </Box>
-          }
-        />
-      );
-    })}
+                  </Box>
+                }
+              />
+            );
+          })}
           {folderTag && hasMoreForFolder && (
             <Box sx={{ width: "100%", pl: 5, pr: 0.5, pb: 1, display: "flex", flexDirection: "column", gap: 1 }}>
               {!isLoadingHere && (

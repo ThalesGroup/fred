@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
@@ -21,6 +20,7 @@ import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import { Box, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
+import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
 
 import { usePermissions } from "../../../security/usePermissions";
 import { type DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -216,16 +216,15 @@ export function DocumentRowCompact({
         )}
         {onRemoveFromLibrary && (
           <Tooltip title={t("documentLibrary.removeFromLibrary")}>
-            <IconButton
+            <DeleteIconButton
               size="small"
               disabled={!canDeleteDocument}
               onClick={() => {
                 if (!canDeleteDocument) return;
                 onRemoveFromLibrary(doc);
               }}
-            >
-              <DeleteIcon fontSize="inherit" />
-            </IconButton>
+              iconSize="inherit"
+            />
           </Tooltip>
         )}
       </Box>
