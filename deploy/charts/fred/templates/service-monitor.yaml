@@ -24,7 +24,7 @@ spec:
 {{ toYaml .app.metricsService.serviceMonitor.namespaceSelector | indent 4 }}
   {{- end }}
   endpoints:
-    - port: {{ .app.metricsService.port | default .app.configuration.app.metrics_port }}
+    - port: {{ (.app.metricsService.port | default .app.configuration.app.metrics_port) | quote }}
       {{- if .app.metricsService.serviceMonitor.path }}
       path: {{ .app.metricsService.serviceMonitor.path }}
       {{- end }}
