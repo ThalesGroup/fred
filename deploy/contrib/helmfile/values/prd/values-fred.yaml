@@ -64,6 +64,9 @@ applications:
           faviconName: "favicon_PRISM_light"
           faviconNameDark: "favicon_PRISM_dark"
           siteDisplayName: "PRISM.AI"
+          agentsNicknameSingular: "Lumi"
+          agentsNicknamePlural: "Lumis"
+          contactSupportLink: "https://join.citadel.team/web-client/#/room/!rPdYXaGrZwwbgsEPaK:thales.citadel.team?deeplink=true"
 
       ai:
         # Set KF right url
@@ -313,7 +316,7 @@ applications:
       filesystem:
         <<: *content-storage
         bucket_name: filesystem
-      
+
     # Increase probes delay (todo: remove)
     probes:
       livenessProbe:

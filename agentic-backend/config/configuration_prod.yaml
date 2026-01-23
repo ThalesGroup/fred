@@ -54,6 +54,9 @@ frontend_settings:
     faviconName: "favicon_PRISM_light"
     faviconNameDark: "favicon_PRISM_dark"
     siteDisplayName: "PRISM.AI"
+    agentsNicknameSingular: "Lumi"
+    agentsNicknamePlural: "Lumis"
+    contactSupportLink: "https://join.citadel.team/web-client/#/room/!rPdYXaGrZwwbgsEPaK:thales.citadel.team?deeplink=true"
 
 ai:
   # In production  activate the configuration persistence mechanism
