@@ -137,9 +137,7 @@ def create_app() -> FastAPI:
                 interval_s = 0
             if interval_s > 0:
                 process_kpi_task = asyncio.create_task(
-                    emit_process_kpis(
-                        interval_s, application_context.get_kpi_writer()
-                    )
+                    emit_process_kpis(interval_s, application_context.get_kpi_writer())
                 )
         try:
             await agent_manager.bootstrap()
