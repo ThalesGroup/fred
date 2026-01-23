@@ -16,7 +16,7 @@ applications:
     # Set Carma registry and PRISM tag
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/agentic-backend
-      tag: &prism-tag "0.0.1-prism"
+      tag: &prism-tag "0.0.5-prism"
     imagePullSecrets: &carma-pull-secret
       - name: "carma-pull-secret"
 
