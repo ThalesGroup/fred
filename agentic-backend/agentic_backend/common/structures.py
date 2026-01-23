@@ -257,6 +257,9 @@ class Properties(BaseModel):
         default="fred",
         description="Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'.",
     )
+    agentsNicknameSingular: str = "agent"
+    agentsNicknamePlural: str = "agents"
+    agentIconPath: str | None = None
     contactSupportLink: str | None = None
 
 

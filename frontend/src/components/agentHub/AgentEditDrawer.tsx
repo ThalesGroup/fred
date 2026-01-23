@@ -17,12 +17,16 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../common/agent";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
-import { FieldSpec, McpServerRef, useDeleteAgentAgenticV1AgentsNameDeleteMutation } from "../../slices/agentic/agenticOpenApi";
+import { usePermissions } from "../../security/usePermissions";
+import {
+  FieldSpec,
+  McpServerRef,
+  useDeleteAgentAgenticV1AgentsNameDeleteMutation,
+} from "../../slices/agentic/agenticOpenApi";
+import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { TagsInput } from "./AgentTagsInput";
 import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
-import { useConfirmationDialog } from "../ConfirmationDialogProvider";
-import { usePermissions } from "../../security/usePermissions";
 
 // -----------------------------------------------------------
 // NEW TYPE FOR TUNING STATE
@@ -223,7 +227,17 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved, onDeleted }: Pr
 
         {/* Sticky footer */}
         <Divider />
-        <Box sx={{ p: 1.5, position: "sticky", bottom: 0, bgcolor: "background.paper", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Box
+          sx={{
+            p: 1.5,
+            position: "sticky",
+            bottom: 0,
+            bgcolor: "background.paper",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <Stack direction="row" justifyContent="flex-start">
             <Button
               variant="contained"

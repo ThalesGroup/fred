@@ -2,7 +2,7 @@
 
 - **Summary**
   This release bring in UI improvments in particular allow agents to have the UI display their options
-  on a nicer and more ergonomic sidebar.
+  on a nicer and more ergonomic conversation right side panel.
 
   - **Features**
 
@@ -13,7 +13,7 @@
   - **Bug fixes**
 
     - fixe the delete UI issue not refreshin (#1026)
-    - UI improvements (#1015,#999)
+    - UI improvements (#1015,#999,#1014)
 
 **v1.2.1** — 2026-01-16
 

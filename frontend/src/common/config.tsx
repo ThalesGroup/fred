@@ -79,7 +79,7 @@ export const loadConfig = async () => {
   if (!r.ok) throw new Error(`Cannot load frontend settings: ${r.status} ${r.statusText}`);
   const settings = (await r.json()) as FrontendConfigDto;
 
-  const frontend = settings.frontend_settings ?? { feature_flags: {}, properties: {} };
+  const frontend = settings.frontend_settings;
 
   // Assemble final config
   const feature_flags = normalizeFlags(frontend.feature_flags);

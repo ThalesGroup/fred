@@ -27,7 +27,6 @@ import { useTranslation } from "react-i18next";
 // OpenAPI types
 import { AnyAgent } from "../../common/agent";
 import { AgentChipWithIcon } from "../../common/AgentChip";
-import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 import { Leader } from "../../slices/agentic/agenticOpenApi";
 
 type AgentCardProps = {
@@ -38,7 +37,6 @@ type AgentCardProps = {
   onManageAssets?: (agent: AnyAgent) => void;
   onInspectCode?: (agent: AnyAgent) => void;
   onViewA2ACard?: (agent: AnyAgent) => void;
-  onDelete?: (agent: AnyAgent) => void;
 };
 
 /**
@@ -58,7 +56,6 @@ export const AgentCard = ({
   onManageAssets,
   onInspectCode,
   onViewA2ACard,
-  onDelete,
 }: AgentCardProps) => {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -247,17 +244,6 @@ export const AgentCard = ({
               >
                 <PowerSettingsNewIcon fontSize="small" />
               </IconButton>
-            </Tooltip>
-          )}
-          {onDelete && (
-            <Tooltip title={t("agentCard.delete", "Delete agent")}>
-              <span>
-                <DeleteIconButton
-                  size="small"
-                  onClick={() => onDelete(agent)}
-                  aria-label={t("agentCard.delete", "Delete agent")}
-                />
-              </span>
             </Tooltip>
           )}
         </Stack>

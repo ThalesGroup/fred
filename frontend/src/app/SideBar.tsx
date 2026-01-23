@@ -1,12 +1,10 @@
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import GroupIcon from "@mui/icons-material/Group";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 import ScienceIcon from "@mui/icons-material/Science";
 import ShieldIcon from "@mui/icons-material/Shield";
-import { Box, CSSObject, IconButton, Paper, styled, Theme } from "@mui/material";
+import { Box, CSSObject, Divider, Paper, styled, Theme } from "@mui/material";
 import MuiDrawer from "@mui/material/Drawer";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
@@ -18,8 +16,10 @@ import {
   SideBarNavigationList,
   SidebarProfileSection,
 } from "../components/sideBar";
-import { useLocalStorageState } from "../hooks/useLocalStorageState";
+import { SideBarNewConversationButton } from "../components/sideBar/SideBarNewConversationButton";
+import { KeyCloakService } from "../security/KeycloakService";
 import { usePermissions } from "../security/usePermissions";
+import { useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { ImageComponent } from "../utils/image";
 import { ApplicationContext } from "./ApplicationContextProvider";
 
@@ -69,17 +69,13 @@ const Drawer = styled(MuiDrawer, { shouldForwardProp: (prop) => prop !== "open" 
   ],
 }));
 
-const DrawerHeader = styled("div")(({ theme }) => ({
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "flex-end",
-  padding: theme.spacing(1, 1),
-}));
-
 export default function SideBar() {
   const { t } = useTranslation();
+  const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
 
-  const [open, setOpen] = useLocalStorageState("SideBar.open", true);
+  // const [open, setOpen] = useLocalStorageState("SideBar.open", true);
+  // Remove collapsing for now
+  const open = true;
 
   // Here we set the "can" action to "create" since we want the viewer role not to see kpis and logs.
   // We also can remove the read_only allowed action to the viewer; to: kpi, opensearch & logs in rbac.py in fred_core/security
@@ -91,20 +87,18 @@ export default function SideBar() {
   const canReadRuntime = can("kpi", "create");
   const canUpdateTag = can("tag", "update");
 
+  const userRoles = KeyCloakService.GetUserRoles();
+  const isAdmin = userRoles.includes("admin");
+
   const menuItems: SideBarNavigationElement[] = [
     {
       key: "agent",
-      label: t("sidebar.agent"),
+      label: t("sidebar.agent", {
+        agentsNickname: frontendConfig.frontend_settings.properties.agentsNicknamePlural,
+      }),
       icon: <GroupIcon />,
       url: `/agents`,
       tooltip: t("sidebar.tooltip.agent"),
-    },
-    {
-      key: "mcp",
-      label: t("sidebar.mcp"),
-      icon: <ConstructionIcon />,
-      url: `/tools`,
-      tooltip: t("sidebar.tooltip.mcp"),
     },
     {
       key: "knowledge",
@@ -112,6 +106,15 @@ export default function SideBar() {
       icon: <MenuBookIcon />,
       url: `/knowledge`,
       tooltip: t("sidebar.tooltip.knowledge"),
+    },
+  ];
+  const adminMenuItems: SideBarNavigationElement[] = [
+    {
+      key: "mcp",
+      label: t("sidebar.mcp"),
+      icon: <ConstructionIcon />,
+      url: `/tools`,
+      tooltip: t("sidebar.tooltip.mcp"),
     },
     ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime || canUpdateTag
       ? [
@@ -224,11 +227,22 @@ export default function SideBar() {
 
   return (
     <Drawer variant="permanent" open={open}>
-      <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
-        {/* Header (icon + open/close button*/}
-        <DrawerHeader>
+      <Paper sx={{ borderRadius: 0 }}>
+        <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+          {/* Header (icon + open/close button*/}
+          {/* <DrawerHeader> */}
           {open && (
-            <Box sx={{ display: "flex", width: "100%", justifyContent: "flex-start", alignItems: "center", pl: 1 }}>
+            <Box
+              sx={{
+                display: "flex",
+                width: "100%",
+                justifyContent: "flex-start",
+                alignItems: "center",
+                pl: 2,
+                py: 1.5,
+                minHeight: "56px",
+              }}
+            >
               <InvisibleLink to="/new-chat">
                 <ImageComponent
                   name={darkMode ? logoNameDark : logoName}
@@ -238,24 +252,52 @@ export default function SideBar() {
               </InvisibleLink>
             </Box>
           )}
-          <IconButton onClick={() => setOpen((open) => !open)} sx={{ mr: open ? 0 : 1 }}>
+          {/* Remove collapsing for now */}
+          {/* <IconButton onClick={() => setOpen((open) => !open)} sx={{ mr: open ? 0 : 1 }}>
             {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
-          </IconButton>
-        </DrawerHeader>
+          </IconButton> */}
+          {/* </DrawerHeader> */}
 
-        {/* Nav */}
-        <Paper elevation={0}>
-          <SideBarNavigationList menuItems={menuItems} isSidebarOpen={open} />
-        </Paper>
+          <Box sx={{ widht: "100%", px: 2, mb: 1 }}>
+            <SideBarNewConversationButton />
+          </Box>
 
-        {/* Conversations */}
-        <SideBarConversationsSection isSidebarOpen={open} />
+          {/* Nav */}
+          <Box>
+            <SideBarNavigationList menuItems={menuItems} isSidebarOpen={open} />
+          </Box>
 
-        {/* Profile */}
-        <Paper elevation={1}>
-          <SidebarProfileSection isSidebarOpen={open} />
-        </Paper>
-      </Box>
+          <SideBarDivider />
+
+          {/* Admin Nav */}
+          {isAdmin && (
+            <>
+              <Box>
+                <SideBarNavigationList menuItems={adminMenuItems} isSidebarOpen={open} />
+              </Box>
+              <SideBarDivider />
+            </>
+          )}
+
+          {/* Conversations */}
+          <SideBarConversationsSection isSidebarOpen={open} />
+
+          {/* Profile */}
+          <Box sx={{ px: 1, pb: 1 }}>
+            <Paper elevation={4} sx={{ borderRadius: 2 }}>
+              <SidebarProfileSection isSidebarOpen={open} />
+            </Paper>
+          </Box>
+        </Box>
+      </Paper>
     </Drawer>
+  );
+}
+
+function SideBarDivider() {
+  return (
+    <Box sx={{ px: 2 }}>
+      <Divider />
+    </Box>
   );
 }

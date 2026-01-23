@@ -117,12 +117,12 @@
     "facts": "Faits",
     "audit": "Audit",
     "optimize": "Optimiser",
-    "chat": "Conversations",
+    "chat": "Dernières conversations",
     "monitoring": "Supervision",
     "laboratory": "Laboratoire",
-    "knowledge": "Ressources",
+    "knowledge": "Vos ressources",
     "mcp": "Outils",
-    "agent": "Agents",
+    "agent": "Vos {{agentsNickname}}",
     "release_notes": "Notes de version",
     "workspaces": "Espaces de travail",
     "account": "Profil",
@@ -163,7 +163,8 @@
     "monitoring_data": "Données",
     "allAgents": "Tous les agents",
     "deleteSessionFailed": "La supression de la conversation a échoué",
-    "monitoring_graph": "Graphe"
+    "monitoring_graph": "Graphe",
+    "newChat": "Nouvelle conversation"
   },
   "chat": {
     "common": {
@@ -316,13 +317,13 @@
     "coreFields": "Champs de base",
     "tunableFields": "Champs réglables",
     "tagsLabel": "Tags",
-    "saveUser": "Appliquer les modifications pour mon profil",
-    "saveGlobal": "Appliquer les modifications pour tous les utilisateurs",
+    "saveUser": "Appliquer pour mon profil",
+    "saveGlobal": "Appliquer pour tous les utilisateurs",
     "selectMcpServers": "Sélectionnez des serveurs MCP",
     "noMcpServers": "Aucun serveur MCP disponible pour le moment."
   },
   "agentHub": {
-    "title": "Vos agents",
+    "title": "Vos {{agentsNicknamePlural}}",
     "confirmDeleteTitle": "Confirmer la suppression",
     "confirmDeleteMessage": "Supprimer cet agent ? Cette action est irréversible.",
     "description": "Explorez et gérez les agents IA disponibles",
@@ -700,7 +701,7 @@
     }
   },
   "knowledge": {
-    "title": "Ressources",
+    "title": "Vos ressources",
     "description": "Gérez vos documents et contextes de conversation",
     "viewSelector": {
       "libraries": "Bibliothèques",

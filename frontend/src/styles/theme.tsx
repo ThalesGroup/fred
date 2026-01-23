@@ -14,6 +14,10 @@
 
 import { alpha, createTheme, TypographyVariants } from "@mui/material/styles";
 
+// ------------------------------------------------------------
+// Extending MUI theme to add custom typography variant for markdown rendering
+// ------------------------------------------------------------
+
 declare module "@mui/material/styles" {
   interface TypographyVariants {
     markdown: {
@@ -53,6 +57,30 @@ const markdownDefaults: TypographyVariants["markdown"] = {
   li: { marginBottom: "0.5rem", lineHeight: 1.4, fontSize: "0.9rem" },
 };
 
+// ------------------------------------------------------------
+// Component style overrides shared between light and dark themes
+// ------------------------------------------------------------
+
+const sharedComponents = {
+  // Remove border from Drawers
+  MuiDrawer: {
+    styleOverrides: {
+      paper: {
+        borderRight: "none",
+        borderLeft: "none",
+      },
+    },
+  },
+  // Make Divider a bit more visible
+  MuiDivider: {
+    styleOverrides: {
+      root: {
+        borderColor: "rgba(255, 255, 255, .3)",
+      },
+    },
+  },
+};
+
 // MUI's original elevation overlay formula (from getOverlayAlpha.js)
 function getOverlayAlpha(elevation: number): number {
   let alphaValue: number;
@@ -64,9 +92,9 @@ function getOverlayAlpha(elevation: number): number {
   return Math.round(alphaValue * 10) / 1000;
 }
 
-function getPaperOverlayColor(elevation: number, base: string, scale: number): string {
-  return alpha(base, getOverlayAlpha(elevation) * scale);
-}
+// ------------------------------------------------------------
+// Light theme
+// ------------------------------------------------------------
 
 const lightTheme = createTheme({
   palette: {
@@ -79,12 +107,18 @@ const lightTheme = createTheme({
     markdown: markdownDefaults,
   },
   components: {
+    ...sharedComponents,
+    // In MUI, on dark theme, when Paper uses elevation, a white overlay is applied to lighten the Paper color.
+    // On light theme, there is no such Paper color modification by default (it only add shadows).
+    // To make design easier and more consistent between light and dark themes, we apply here a similar logic on light theme,
+    // but using a black overlay to slightly darken the Paper color when elevation is used.
+    // (note: there is no need to apply this logic to the dark theme, as MUI already does it by default, we are noly mimicking it on light theme).
     MuiPaper: {
       styleOverrides: {
         root: ({ ownerState }) => {
           // Apply the same elevation overlay logic as dark mode, but with black instead of white
           if (ownerState.variant === "elevation" && ownerState.elevation && ownerState.elevation > 0) {
-            const overlayColor = getPaperOverlayColor(ownerState.elevation, "#000", 0.45);
+            const overlayColor = alpha("#000", getOverlayAlpha(ownerState.elevation));
             return {
               backgroundImage: `linear-gradient(${overlayColor}, ${overlayColor})`,
             };
@@ -96,6 +130,10 @@ const lightTheme = createTheme({
   },
 });
 
+// ------------------------------------------------------------
+// Dark theme
+// ------------------------------------------------------------
+
 const darkTheme = createTheme({
   palette: {
     mode: "dark",
@@ -106,21 +144,11 @@ const darkTheme = createTheme({
   typography: {
     markdown: markdownDefaults,
   },
-  components: {
-    MuiPaper: {
-      styleOverrides: {
-        root: ({ ownerState }) => {
-          if (ownerState.variant === "elevation" && ownerState.elevation && ownerState.elevation > 0) {
-            const overlayColor = getPaperOverlayColor(ownerState.elevation, "#000", 0.75);
-            return {
-              backgroundImage: `linear-gradient(${overlayColor}, ${overlayColor})`,
-            };
-          }
-          return {};
-        },
-      },
-    },
-  },
+  components: sharedComponents,
 });
+
+// ------------------------------------------------------------
+// Exporting themes
+// ------------------------------------------------------------
 
 export { darkTheme, lightTheme };
