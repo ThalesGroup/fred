@@ -292,10 +292,17 @@ applications:
           index: log-index
 
         # Set tabular store to opensearch
-        tabular_store:
+        tabular_stores:
           base_database:
-            type: postgres
-            table: fred-tabular-store
+            type: "sql"
+            mode: read_and_write
+            driver: "postgresql+psycopg2"
+            host: "postgresql-primary"
+            port: 5432
+            database: "fred"
+            path: null # (important: remove the `path` default value)
+            # todo: use fred user
+            username: postgres
 
       # Enable filesystem mcp
       mcp:
