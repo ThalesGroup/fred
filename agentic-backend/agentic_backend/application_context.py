@@ -34,27 +34,29 @@ from threading import Lock
 from typing import Any, Callable, Dict, List, Optional
 
 from fred_core import (
-    BaseKPIStore,
     BaseLogStore,
     BearerAuth,
     ClientCredentialsProvider,
     DuckdbStoreConfig,
     InMemoryLogStorageConfig,
-    KpiLogStore,
-    KPIWriter,
     LogStoreConfig,
     OpenFgaRebacConfig,
     OpenSearchIndexConfig,
-    OpenSearchKPIStore,
     OpenSearchLogStore,
     PostgresTableConfig,
-    PrometheusKPIStore,
     RamLogStore,
     RebacEngine,
     SQLStorageConfig,
     get_model,
     rebac_factory,
     split_realm_url,
+)
+from fred_core.kpi import (
+    BaseKPIStore,
+    KpiLogStore,
+    KPIWriter,
+    OpenSearchKPIStore,
+    PrometheusKPIStore,
 )
 from fred_core.sql import create_engine_from_config
 from langchain_core.language_models.base import BaseLanguageModel

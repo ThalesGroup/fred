@@ -31,7 +31,8 @@ from typing import (
     cast,
 )
 
-from fred_core import KPIActor, get_keycloak_client_id, get_keycloak_url
+from fred_core import get_keycloak_client_id, get_keycloak_url
+from fred_core.kpi import KPIActor
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,

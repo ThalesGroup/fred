@@ -13,11 +13,14 @@
 # limitations under the License.
 
 import asyncio
+import logging
 import os
 import time
 from typing import Optional, Tuple
 
 from fred_core.kpi.kpi_writer_structures import KPIActor
+
+logger = logging.getLogger(__name__)
 
 
 def _get_process_memory_mb() -> Tuple[Optional[float], Optional[float]]:
@@ -31,6 +34,7 @@ def _get_process_memory_mb() -> Tuple[Optional[float], Optional[float]]:
             rss_mb = (int(parts[1]) * page_size) / (1024 * 1024)
             return rss_mb, vms_mb
     except Exception:
+        logger.warning("Failed to read /proc/self/statm for memory usage")
         pass
 
     try:

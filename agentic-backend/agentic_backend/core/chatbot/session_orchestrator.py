@@ -29,12 +29,11 @@ from fastapi import HTTPException, UploadFile, WebSocketDisconnect
 from fred_core import (
     Action,
     AuthorizationError,
-    BaseKPIWriter,
     KeycloakUser,
-    KPIActor,
     Resource,
     authorize,
 )
+from fred_core.kpi import BaseKPIWriter, KPIActor
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
