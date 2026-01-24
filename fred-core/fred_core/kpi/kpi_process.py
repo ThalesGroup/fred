@@ -63,6 +63,7 @@ def _get_memory_limit_mb() -> Optional[float]:
                 continue
             return value / (1024 * 1024)
         except Exception:
+            logger.debug("Could not read memory limit from %s", path)
             continue
 
     try:
