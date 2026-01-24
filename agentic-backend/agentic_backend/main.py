@@ -29,7 +29,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_user_security, log_setup, register_exception_handlers
-from fred_core.kpi.kpi_process import emit_process_kpis
+from fred_core.kpi import emit_process_kpis
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -129,11 +129,15 @@ def create_app() -> FastAPI:
             kpi=application_context.get_kpi_writer(),
         )
         process_kpi_task = None
-        kpi_interval_env = os.getenv("KPI_PROCESS_METRICS_INTERVAL_SEC", "").strip()
+        kpi_interval_env = configuration.app.kpi_process_metrics_interval_sec
         if kpi_interval_env:
             try:
                 interval_s = float(kpi_interval_env)
             except ValueError:
+                logger.error(
+                    "Invalid KPI process metrics interval: %s. Disabling KPI process metrics task.",
+                    kpi_interval_env,
+                )
                 interval_s = 0
             if interval_s > 0:
                 process_kpi_task = asyncio.create_task(

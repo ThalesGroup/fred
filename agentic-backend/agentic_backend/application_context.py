@@ -53,6 +53,7 @@ from fred_core import (
 )
 from fred_core.kpi import (
     BaseKPIStore,
+    KPIDefaults,
     KpiLogStore,
     KPIWriter,
     OpenSearchKPIStore,
@@ -805,7 +806,10 @@ class ApplicationContext:
         if self._kpi_writer is not None:
             return self._kpi_writer
 
-        self._kpi_writer = KPIWriter(store=self.get_kpi_store())
+        self._kpi_writer = KPIWriter(
+            store=self.get_kpi_store(),
+            defaults=KPIDefaults(static_dims={"service": "agentic"}),
+        )
         return self._kpi_writer
 
     def get_feedback_store(self) -> BaseFeedbackStore:

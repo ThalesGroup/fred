@@ -38,6 +38,7 @@ GroupByField = Literal[
     "dims.http_status",
     "dims.error_code",
     "dims.status",
+    "dims.service",
 ]
 AggOp = Literal["sum", "avg", "min", "max", "count", "value_count", "percentile"]
 OrderDir = Literal["asc", "desc"]
@@ -62,6 +63,7 @@ class FilterTerm(BaseModel):
         "dims.model",
         "dims.step",
         "dims.agent_step",
+        "dims.service",
     ]
     value: str
 

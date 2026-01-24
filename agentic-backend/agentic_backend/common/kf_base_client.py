@@ -30,6 +30,20 @@ def _session_with_retries(allowed_methods: frozenset) -> requests.Session:
     return s
 
 
+def _session_without_retries() -> requests.Session:
+    s = requests.Session()
+    retry = Retry(
+        total=0,
+        backoff_factor=0,
+        status_forcelist=(),
+        allowed_methods=frozenset(),
+        raise_on_status=False,
+    )
+    s.mount("http://", HTTPAdapter(max_retries=retry))
+    s.mount("https://", HTTPAdapter(max_retries=retry))
+    return s
+
+
 if TYPE_CHECKING:
     from agentic_backend.core.agents.agent_flow import AgentFlow
 
@@ -59,6 +73,7 @@ class KfBaseClient:
         self.timeout: float | tuple[float, float] = (connect_t, read_t)
 
         self.session = _session_with_retries(allowed_methods)
+        self.session_no_retry = _session_without_retries()
 
         self._agent = agent
         self._static_access_token = access_token
@@ -157,7 +172,9 @@ class KfBaseClient:
         headers: Dict[str, str] = kwargs.pop("headers", {})
         headers["Authorization"] = f"Bearer {token}"
 
-        return self.session.request(
+        use_no_retry = "files" in kwargs and kwargs.get("files") is not None
+        session = self.session_no_retry if use_no_retry else self.session
+        return session.request(
             method, url, timeout=self.timeout, headers=headers, **kwargs
         )
 

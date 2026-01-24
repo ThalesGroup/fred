@@ -21,7 +21,7 @@ from fred_core.kpi.kpi_reader_structures import (
     KPIQueryResult,
     TimeBucket,
 )
-from fred_core.kpi.kpi_writer import KPIWriter
+from fred_core.kpi.kpi_writer import KPIDefaults, KPIWriter
 from fred_core.kpi.kpi_writer_structures import (
     Cost,
     KPIActor,
@@ -32,14 +32,16 @@ from fred_core.kpi.kpi_writer_structures import (
     Trace,
 )
 from fred_core.kpi.log_kpi_store import KpiLogStore
-from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
+from fred_core.kpi.noop_kpi_writer import Dims, NoOpKPIWriter
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
 
 __all__ = [
     "BaseKPIStore",
     "BaseKPIWriter",
+    "Dims",
     "KPIWriter",
+    "KPIDefaults",
     "NoOpKPIWriter",
     "KPIActor",
     "KPIEvent",

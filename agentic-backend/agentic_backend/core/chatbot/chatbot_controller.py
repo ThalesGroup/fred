@@ -69,6 +69,7 @@ from agentic_backend.core.chatbot.chat_schema import (
     MessagePart,
     Role,
     SessionSchema,
+    SessionEvent,
     SessionWithFiles,
     StreamEvent,
     TextPart,
@@ -156,6 +157,7 @@ EchoPayload = Union[
     ChatMessage,
     ChatAskInput,
     StreamEvent,
+    SessionEvent,
     FinalEvent,
     ErrorEvent,
     SessionSchema,
@@ -172,6 +174,7 @@ class EchoEnvelope(BaseModel):
     kind: Literal[
         "ChatMessage",
         "StreamEvent",
+        "SessionEvent",
         "FinalEvent",
         "ErrorEvent",
         "SessionSchema",
@@ -390,6 +393,11 @@ async def websocket_chatbot_question(
                     if not await _safe_ws_send_text(websocket, event.model_dump_json()):
                         raise WebSocketDisconnect
 
+                async def ws_session_callback(session: SessionSchema):
+                    event = SessionEvent(type="session", session=session)
+                    if not await _safe_ws_send_text(websocket, event.model_dump_json()):
+                        raise WebSocketDisconnect
+
                 # Route to A2A proxy if the stub agent is selected
                 target_settings = agent_manager.get_agent_settings(target_agent_name)
                 if target_settings and is_a2a_agent(target_settings):
@@ -495,6 +503,7 @@ async def websocket_chatbot_question(
                     ) = await session_orchestrator.chat_ask_websocket(
                         user=active_user,
                         callback=ws_callback,
+                        session_callback=ws_session_callback,
                         session_id=ask.session_id,
                         message=ask.message,
                         agent_name=target_agent_name,

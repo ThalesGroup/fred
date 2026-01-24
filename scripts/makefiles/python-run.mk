@@ -19,7 +19,9 @@ run-local: ## Run the app assuming dependencies already exist
 		--host ${HOST} \
 		--port ${PORT} \
 		--log-level ${LOG_LEVEL} \
-		--loop ${UVICORN_LOOP}
+		--loop ${UVICORN_LOOP} \
+		--backlog 4096 \
+		--workers 1
 
 
 .PHONY: run

@@ -342,7 +342,21 @@ class KPIWriter(BaseKPIWriter):
         items = list(snapshot.items())
         if self._summary_top_n:
             items.sort(key=lambda item: item[1].count, reverse=True)
-            return items[: self._summary_top_n]
+            top = items[: self._summary_top_n]
+            must_include = {
+                "process.cpu.percent",
+                "process.memory.rss_mb",
+                "process.memory.vms_mb",
+                "process.memory.rss_percent",
+                "process.memory.limit_mb",
+                "process.open_fds",
+            }
+            present = {name for name, _ in top}
+            for name, rollup in items[self._summary_top_n :]:
+                if name in must_include and name not in present:
+                    top.append((name, rollup))
+                    present.add(name)
+            return top
         return sorted(items, key=lambda item: item[0])
 
     def _format_rollup_line(self, name: str, rollup: _MetricRollup) -> str:

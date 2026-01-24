@@ -18,9 +18,10 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
-  metrics_enabled: true
+  metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9000
+  kpi_process_metrics_interval_sec: 10
 
 security:
   m2m:
@@ -75,10 +76,10 @@ ai:
   # Base URL for the Knowledge Flow service
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
 
-  # Timeout settings for the client
+  # Timeout settings for the client (used for Knowledge Flow calls, including PDF/text extraction).
   timeout:
-    connect: 5 # Time to wait for a connection in seconds
-    read: 15 # Time to wait for a response in seconds
+    connect: 20 # Time to wait for a connection in seconds
+    read: 60 # Time to wait for a response in seconds (longer for large document processing)
 
   default_chat_model:
     # Required in .env:
@@ -100,6 +101,8 @@ ai:
     provider: "openai"
     name: "gpt-5.1"
     settings:
+      # Benchmark (mock OpenAI): uncomment the base_url below to target the mock server.
+      # base_url: "http://localhost:8383/v1"
       temperature: 0.0
       max_retries: 2
       request_timeout: 30
@@ -112,6 +115,8 @@ ai:
     provider: "openai"
     name: "gpt-5.1"
     settings:
+      # Benchmark (mock OpenAI): uncomment the base_url below to target the mock server.
+      # base_url: "http://localhost:8383/v1"
       temperature: 0.0
       max_retries: 2
       request_timeout: 30
@@ -229,28 +234,28 @@ storage:
     username: admin
 
   feedback_store:
-    type: "opensearch"
-    index: feedback-index
+    type: "postgres"
+    table: feedbacks
 
   agent_store:
-    type: "opensearch"
-    index: agent-index
+    type: "postgres"
+    table: agent
 
   mcp_servers_store:
-    type: "opensearch"
-    index: mcp-servers-index
+    type: "postgres"
+    table: mcp-server
 
   session_store:
-    type: "opensearch"
-    index: session-index
+    type: "postgres"
+    table: session
 
   attachments_store:
-    type: "opensearch"
-    index: session-attachments-index
+    type: "postgres"
+    table: session_attachments
 
   history_store:
-    type: "opensearch"
-    index: history-index
+    type: "postgres"
+    table: session_history
 
   kpi_store:
     type: "opensearch"

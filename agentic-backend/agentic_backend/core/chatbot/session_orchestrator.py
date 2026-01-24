@@ -33,7 +33,7 @@ from fred_core import (
     Resource,
     authorize,
 )
-from fred_core.kpi import BaseKPIWriter, KPIActor
+from fred_core.kpi import BaseKPIWriter, Dims, KPIActor
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
@@ -78,6 +78,9 @@ logger = logging.getLogger(__name__)
 
 # Callback type used by WS controller to push events to clients
 CallbackType = Callable[[dict], None] | Callable[[dict], Awaitable[None]]
+SessionCallbackType = (
+    Callable[[SessionSchema], None] | Callable[[SessionSchema], Awaitable[None]]
+)
 
 
 def _utcnow_dt() -> datetime:
@@ -85,27 +88,36 @@ def _utcnow_dt() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
 
 
-def _log_bench_phase(
+def _record_phase_metric(
     *,
+    kpi: BaseKPIWriter,
+    actor: KPIActor,
     phase: str,
     start_ts: float,
     session_id: str,
     exchange_id: str,
     agent_name: str,
-    **extras: Any,
+    user_id: str | None = None,
+    status: str | None = None,
 ) -> None:
     ms = int((time.monotonic() - start_ts) * 1000)
-    extra = " ".join(f"{k}={v}" for k, v in extras.items())
-    if extra:
-        extra = " " + extra
-    logger.info(
-        "[BENCH] phase=%s ms=%d session=%s exchange=%s agent=%s%s",
-        phase,
+    dims: Dims = {
+        "agent_id": agent_name,
+        "exchange_id": exchange_id,
+        "scope_type": "session",
+        "scope_id": session_id,
+        "agent_step": phase,
+    }
+    if user_id:
+        dims["user_id"] = user_id
+    if status:
+        dims["status"] = status
+    kpi.gauge(
+        "chat.phase_latency_ms",
         ms,
-        session_id,
-        exchange_id,
-        agent_name,
-        extra,
+        unit="ms",
+        dims=dims,
+        actor=actor,
     )
 
 
@@ -185,6 +197,7 @@ class SessionOrchestrator:
         *,
         user: KeycloakUser,
         callback: CallbackType,
+        session_callback: SessionCallbackType | None = None,
         session_id: str | None,
         message: str,
         agent_name: str,
@@ -233,22 +246,33 @@ class SessionOrchestrator:
         session = await self._get_or_create_session(
             user_id=user.uid, query=message, session_id=session_id
         )
-        _log_bench_phase(
+        _record_phase_metric(
+            kpi=self.kpi,
+            actor=actor,
             phase="session_get_create",
             start_ts=t_session,
             session_id=session.id,
             exchange_id=exchange_id,
             agent_name=agent_name,
+            user_id=user.uid,
         )
         # If this session was created with a placeholder title, refresh it now from the first prompt.
         t_title = time.monotonic()
+        old_title = session.title
         await self._maybe_refresh_title_from_prompt(session=session, prompt=message)
-        _log_bench_phase(
+        title_changed = session.title != old_title
+        if session.title != old_title:
+            session.updated_at = _utcnow_dt()
+            await asyncio.to_thread(self.session_store.save, session)
+        _record_phase_metric(
+            kpi=self.kpi,
+            actor=actor,
             phase="title_refresh",
             start_ts=t_title,
             session_id=session.id,
             exchange_id=exchange_id,
             agent_name=agent_name,
+            user_id=user.uid,
         )
         # Propagate effective session_id into runtime context so downstream calls
         # (vector search, attachments) can scope to the correct conversation.
@@ -260,13 +284,15 @@ class SessionOrchestrator:
             runtime_context=runtime_context,
             session_id=session.id,
         )
-        _log_bench_phase(
+        _record_phase_metric(
+            kpi=self.kpi,
+            actor=actor,
             phase="agent_init",
             start_ts=t_agent_init,
             session_id=session.id,
             exchange_id=exchange_id,
             agent_name=agent_name,
-            cached=is_cached,
+            user_id=user.uid,
         )
         cache_result = "hit" if is_cached else "miss"
         self.kpi.count(
@@ -277,6 +303,8 @@ class SessionOrchestrator:
         )
 
         try:
+            if title_changed and session_callback:
+                await self._emit_session(session_callback, session)
             # 3) Rebuild minimal LangChain history (user/assistant/system only),
             # This method will only restore history if the agent is not cached.
             lc_history: List[AnyMessage] = []
@@ -287,13 +315,15 @@ class SessionOrchestrator:
                     user=user,
                     session=session,
                 )
-                _log_bench_phase(
+                _record_phase_metric(
+                    kpi=self.kpi,
+                    actor=actor,
                     phase="history_restore",
                     start_ts=t_restore,
                     session_id=session.id,
                     exchange_id=exchange_id,
                     agent_name=agent_name,
-                    count=len(lc_history),
+                    user_id=user.uid,
                 )
                 label = f"agent={agent_name} session={session.id}"
                 log_agent_message_summary(lc_history, label=label)
@@ -302,13 +332,15 @@ class SessionOrchestrator:
             async with rank_lock:
                 t_rank = time.monotonic()
                 base_rank = await self._ensure_next_rank(session)
-                _log_bench_phase(
+                _record_phase_metric(
+                    kpi=self.kpi,
+                    actor=actor,
                     phase="rank_seed",
                     start_ts=t_rank,
                     session_id=session.id,
                     exchange_id=exchange_id,
                     agent_name=agent_name,
-                    base_rank=base_rank,
+                    user_id=user.uid,
                 )
 
                 # 4) Emit the user message immediately
@@ -383,12 +415,15 @@ class SessionOrchestrator:
                             stream_status = "error"
                             raise
                         finally:
-                            _log_bench_phase(
+                            _record_phase_metric(
+                                kpi=self.kpi,
+                                actor=actor,
                                 phase="stream",
                                 start_ts=stream_start,
                                 session_id=session.id,
                                 exchange_id=exchange_id,
                                 agent_name=agent_name,
+                                user_id=user.uid,
                                 status=stream_status,
                             )
                         all_msgs.extend(agent_msgs)
@@ -465,21 +500,26 @@ class SessionOrchestrator:
                 await asyncio.to_thread(
                     self.history_store.save, session.id, all_msgs, user.uid
                 )
-                _log_bench_phase(
+                _record_phase_metric(
+                    kpi=self.kpi,
+                    actor=actor,
                     phase="persist",
                     start_ts=t_persist,
                     session_id=session.id,
                     exchange_id=exchange_id,
                     agent_name=agent_name,
-                    messages=len(all_msgs),
+                    user_id=user.uid,
                 )
 
-                _log_bench_phase(
+                _record_phase_metric(
+                    kpi=self.kpi,
+                    actor=actor,
                     phase="total",
                     start_ts=t_total,
                     session_id=session.id,
                     exchange_id=exchange_id,
                     agent_name=agent_name,
+                    user_id=user.uid,
                 )
 
                 return session, all_msgs
@@ -1214,6 +1254,16 @@ class SessionOrchestrator:
           duplicating code at call sites.
         """
         result = callback(message.model_dump())
+        if asyncio.iscoroutine(result):
+            await result
+
+    async def _emit_session(
+        self, callback: SessionCallbackType, session: SessionSchema
+    ) -> None:
+        """
+        Emit a session update to the WS layer (sync or async).
+        """
+        result = callback(session)
         if asyncio.iscoroutine(result):
             await result
 

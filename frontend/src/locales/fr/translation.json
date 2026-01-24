@@ -595,7 +595,7 @@
     "open": "Ouvrir le contexte de chat"
   },
   "kpis": {
-    "title": "Surveillance des agents et services IA",
+    "title": "Supervision des services IA",
     "description": "Suivez l'utilisation, la performance et les coûts de tous les agents et services IA — y compris les tokens, la latence et les tendances d'activité."
   },
   "logs": {

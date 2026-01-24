@@ -277,6 +277,11 @@ class StreamEvent(BaseModel):
     message: ChatMessage
 
 
+class SessionEvent(BaseModel):
+    type: Literal["session"] = "session"
+    session: SessionSchema
+
+
 class FinalEvent(BaseModel):
     type: Literal["final"] = "final"
     messages: List[ChatMessage]
@@ -290,7 +295,8 @@ class ErrorEvent(BaseModel):
 
 
 ChatEvent = Annotated[
-    Union[StreamEvent, FinalEvent, ErrorEvent], Field(discriminator="type")
+    Union[StreamEvent, SessionEvent, FinalEvent, ErrorEvent],
+    Field(discriminator="type"),
 ]
 
 
