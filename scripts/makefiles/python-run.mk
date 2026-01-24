@@ -6,6 +6,7 @@
 # And `dev` rule (from `python-deps.mk`)
 
 HOST ?= 0.0.0.0
+UVICORN_OPTIONS ?=
 
 ##@ Run
 
@@ -20,10 +21,17 @@ run-local: ## Run the app assuming dependencies already exist
 		--port ${PORT} \
 		--log-level ${LOG_LEVEL} \
 		--loop ${UVICORN_LOOP} \
-		--backlog 4096 \
-		--workers 1
+		${UVICORN_OPTIONS}
 
 
 .PHONY: run
 run: dev run-local ## run the app, installing dependencies if needed
 
+.PHONY: rrun
+rrun: UVICORN_OPTIONS = --reload
+rrun: run ## run the app with uvicorn reloader
+
+.PHONY: rrun-prod
+rrun-prod: UVICORN_OPTIONS = --reload
+rrun-prod: export CONFIG_FILE = ./config/configuration_prod.yaml
+rrun-prod: run ## run the app with uvicorn reloader in production mode
