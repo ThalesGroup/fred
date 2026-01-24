@@ -123,12 +123,12 @@ class Georges(SimpleAgentFlow):
         # 5) Invoke the model
         try:
             response = await self.model.ainvoke(llm_messages)
-            logger.info("Georges: LLM call successful (await complete).")
+            logger.debug("[AGENTS] Georges: LLM call successful (await complete).")
         except Exception as e:
             info = normalize_llm_exception(e)
             log_ctx = error_log_context(info, extra={"agent": "Georges"})
             logger.exception(
-                "Georges: LLM invocation failed.", extra={"err_ctx": log_ctx}
+                "[AGENTS] Georges: LLM invocation failed.", extra={"err_ctx": log_ctx}
             )
 
             fallback_text = guardrail_fallback_message(

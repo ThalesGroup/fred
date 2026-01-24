@@ -26,7 +26,8 @@ from typing import Dict, List, Optional, Type
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
-from fred_core import KeycloakUser, KPIActor, KPIWriter, get_current_user
+from fred_core import KeycloakUser, get_current_user
+from fred_core.kpi import KPIActor, KPIWriter
 from langchain_core.documents import Document
 from pydantic import BaseModel
 

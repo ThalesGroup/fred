@@ -42,6 +42,7 @@ MAPPING = {
                 "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
             },
             "updated_at": {"type": "date"},
+            "next_rank": {"type": "long"},
             # Preferences are session-scoped UI/agent settings (agent_name, selected libraries, etc.).
             # Keep mapping permissive for forward-compatibility (new keys can appear without migrations).
             "preferences": {"type": "object", "dynamic": True},

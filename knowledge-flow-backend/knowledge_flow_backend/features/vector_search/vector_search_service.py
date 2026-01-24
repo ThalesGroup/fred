@@ -7,15 +7,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Set
 
-from fred_core import (
-    Action,
-    BaseKPIWriter,
-    KeycloakUser,
-    KPIActor,
-    Resource,
-    VectorSearchHit,
-    authorize,
-)
+from fred_core import Action, KeycloakUser, Resource, VectorSearchHit, authorize
+from fred_core.kpi import BaseKPIWriter, KPIActor
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext

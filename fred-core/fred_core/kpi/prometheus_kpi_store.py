@@ -83,7 +83,30 @@ class PrometheusKPIStore(BaseKPIStore):
         self._metrics: Dict[Tuple[str, str], Counter | Gauge | Histogram] = {}
         self._label_maps: Dict[Tuple[str, str], Dict[str, str]] = {}
         self._label_names: Dict[Tuple[str, str], Tuple[str, ...]] = {}
+        self._metric_name_map: Dict[str, str] = {}
         self._lock = threading.Lock()
+
+    def _resolve_metric_name(self, raw_name: str) -> str:
+        base_name = _sanitize_metric_name(raw_name)
+        cached = self._metric_name_map.get(base_name)
+        if cached is not None:
+            return cached
+
+        existing = getattr(REGISTRY, "_names_to_collectors", {})
+        resolved = base_name
+        if resolved in existing:
+            candidate = f"kpi_{resolved}"
+            while candidate in existing:
+                candidate = f"kpi_{candidate}"
+            logger.warning(
+                "[KPI][prometheus] Metric name '%s' collides with existing collector; "
+                "using '%s' instead.",
+                base_name,
+                candidate,
+            )
+            resolved = candidate
+        self._metric_name_map[base_name] = resolved
+        return resolved
 
     def ensure_ready(self) -> None:
         if self._delegate:
@@ -174,7 +197,7 @@ class PrometheusKPIStore(BaseKPIStore):
         if not event.metric or event.metric.value is None:
             return
 
-        base_name = _sanitize_metric_name(event.metric.name)
+        base_name = self._resolve_metric_name(event.metric.name)
         metric_type = event.metric.type
         label_values = self._resolve_labeling(base_name, metric_type, event)
         base_label_names = self._label_names[(base_name, metric_type)]
@@ -211,6 +234,10 @@ class PrometheusKPIStore(BaseKPIStore):
     def index_event(self, event: KPIEvent) -> None:
         if self._delegate:
             self._delegate.index_event(event)
+        if event.metric and event.metric.name.startswith("process."):
+            # Process KPIs are already exported by the Prometheus client; keep them in
+            # the KPI pipeline (logs/OpenSearch) but skip Prometheus to avoid clashes.
+            return
         self._record_event(event)
 
     def bulk_index(self, events: list[KPIEvent]) -> None:

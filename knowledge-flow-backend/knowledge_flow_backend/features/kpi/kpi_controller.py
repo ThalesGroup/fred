@@ -15,7 +15,8 @@
 import logging
 
 from fastapi import APIRouter, Depends
-from fred_core import Action, FilterTerm, KeycloakUser, KPIQuery, KPIQueryResult, Resource, authorize_or_raise, get_current_user
+from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
+from fred_core.kpi import FilterTerm, KPIQuery, KPIQueryResult
 
 from knowledge_flow_backend.application_context import get_app_context
 
@@ -47,4 +48,18 @@ class KPIController:
                 logger.info("[KPI][QUERY] Applying user filter for user_id=%s", user.uid)
                 body.filters.append(FilterTerm(field="dims.user_id", value=user.uid))
 
-            return self.reader.query(body)
+            # logger.info("XXX KPI_QUERY_BODY %s", body.model_dump())
+            result = self.reader.query(body)
+            # metric_names = [term.value for term in body.filters if term.field == "metric.name"]
+            # sample_group = result.rows[0].group if result.rows else {}
+            # sample_metrics = result.rows[0].metrics if result.rows else {}
+            # logger.info(
+            #    "XXX KPI_QUERY_RESULT metrics=%s rows=%d group_by=%s time_bucket=%s sample_group=%s sample_metrics=%s",
+            #    metric_names,
+            #    len(result.rows),
+            #    body.group_by,
+            #    body.time_bucket.interval if body.time_bucket else None,
+            #    sample_group,
+            #    sample_metrics,
+            # )
+            return result

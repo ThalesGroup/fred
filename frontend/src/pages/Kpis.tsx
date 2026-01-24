@@ -12,16 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { TopBar } from "../common/TopBar";
-import { useTranslation } from "react-i18next";
 import KpiDashboard from "../components/monitoring/kpi/KpiDashboard";
 
 export const Kpis = () => {
-  const { t } = useTranslation();
-
   return (
     <>
-      <TopBar title={t("kpis.title")} description={t("kpis.description")} />
       <KpiDashboard />
     </>
   );

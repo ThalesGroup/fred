@@ -1,0 +1,10 @@
+# Bench artifacts
+ws_bench
+ws_bench.exe
+
+# Go build cache/output
+*.test
+*.out
+
+# Local env files
+.env

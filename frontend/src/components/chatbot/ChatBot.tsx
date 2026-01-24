@@ -32,6 +32,7 @@ import {
   ChatMessage,
   FinalEvent,
   RuntimeContext,
+  SessionSchema,
   StreamEvent,
   useCreateSessionAgenticV1ChatbotSessionPostMutation,
   useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
@@ -131,6 +132,11 @@ export interface ChatBotError {
   session_id: string | null;
   content: string;
 }
+
+type SessionEvent = {
+  type?: "session";
+  session: SessionSchema;
+};
 
 // interface TranscriptionResponse {
 //   text?: string;
@@ -531,6 +537,17 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
               messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
               setMessages(messagesRef.current);
               endWaiting();
+              break;
+            }
+
+            case "session": {
+              const sessionEvent = response as SessionEvent;
+              const activeSessionId = activeSessionIdRef.current;
+              if (activeSessionId && sessionEvent.session?.id && sessionEvent.session.id !== activeSessionId) {
+                console.warn("Ignoring session update for another session:", sessionEvent.session.id);
+                break;
+              }
+              refetchSessions();
               break;
             }
 

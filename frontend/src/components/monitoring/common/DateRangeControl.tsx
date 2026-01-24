@@ -41,6 +41,10 @@ type Props = {
   setEndDate: (d: Dayjs) => void;
   /** Rendered quick-range buttons; pass different arrays for short/full presets */
   quickRanges: QuickRangeItem[];
+  /** Show quick-range buttons (default true) */
+  showQuickRanges?: boolean;
+  /** Show explicit from/to pickers (default true) */
+  showPickers?: boolean;
   /** Selected detection tolerance for “live-ish” windows (default 5min) */
   toleranceMs?: number;
   /** Optional: tell parent a quick range was picked (e.g., set Live=true) */
@@ -59,6 +63,8 @@ export default function DateRangeControl({
   setStartDate,
   setEndDate,
   quickRanges,
+  showQuickRanges = true,
+  showPickers = true,
   toleranceMs = 5 * 60 * 1000,
   onQuickRangePick,
   dateFormat = "YYYY-MM-DD HH:mm",
@@ -88,52 +94,56 @@ export default function DateRangeControl({
 
   return (
     <Box display="flex" flexWrap="wrap" alignItems="center" justifyContent="space-between" gap={1}>
-      <ButtonGroup
-        variant="outlined"
-        size="small"
-        sx={{
-          flexWrap: "wrap",
-          "& .MuiButtonBase-root": { height: CONTROL_H, fontSize: BTN_FONT_SIZE, paddingInline: 2 },
-        }}
-      >
-        {quickRanges.map((qr) => (
-          <QuickRangeButton
-            key={qr.id}
-            isSel={isSelected(qr)}
-            onClick={() => applyRange(qr)}
-            label={t(qr.labelKey ?? "", { defaultValue: qr.labelFallback }) as string}
-          />
-        ))}
-      </ButtonGroup>
+      {showQuickRanges && (
+        <ButtonGroup
+          variant="outlined"
+          size="small"
+          sx={{
+            flexWrap: "wrap",
+            "& .MuiButtonBase-root": { height: CONTROL_H, fontSize: BTN_FONT_SIZE, paddingInline: 2 },
+          }}
+        >
+          {quickRanges.map((qr) => (
+            <QuickRangeButton
+              key={qr.id}
+              isSel={isSelected(qr)}
+              onClick={() => applyRange(qr)}
+              label={t(qr.labelKey ?? "", { defaultValue: qr.labelFallback }) as string}
+            />
+          ))}
+        </ButtonGroup>
+      )}
 
-      <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale={i18n.language}>
-        <Box display="flex" gap={1} alignItems="center">
-          <DateTimePicker
-            label={t("metrics.from")}
-            value={startDate}
-            onChange={(v) => v && setStartDate(v)}
-            format={dateFormat}
-            slotProps={{
-              // MODIFICATION: Removed margin: "dense"
-              textField: { size: "small", sx: textFieldSx },
-              openPickerButton: { size: "small" },
-            }}
-            maxDateTime={endDate}
-          />
-          <DateTimePicker
-            label={t("metrics.to")}
-            value={endDate}
-            onChange={(v) => v && setEndDate(v)}
-            format={dateFormat}
-            slotProps={{
-              // MODIFICATION: Removed margin: "dense"
-              textField: { size: "small", sx: textFieldSx },
-              openPickerButton: { size: "small" },
-            }}
-            minDateTime={startDate}
-          />
-        </Box>
-      </LocalizationProvider>
+      {showPickers && (
+        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale={i18n.language}>
+          <Box display="flex" gap={1} alignItems="center">
+            <DateTimePicker
+              label={t("metrics.from")}
+              value={startDate}
+              onChange={(v) => v && setStartDate(v)}
+              format={dateFormat}
+              slotProps={{
+                // MODIFICATION: Removed margin: "dense"
+                textField: { size: "small", sx: textFieldSx },
+                openPickerButton: { size: "small" },
+              }}
+              maxDateTime={endDate}
+            />
+            <DateTimePicker
+              label={t("metrics.to")}
+              value={endDate}
+              onChange={(v) => v && setEndDate(v)}
+              format={dateFormat}
+              slotProps={{
+                // MODIFICATION: Removed margin: "dense"
+                textField: { size: "small", sx: textFieldSx },
+                openPickerButton: { size: "small" },
+              }}
+              minDateTime={startDate}
+            />
+          </Box>
+        </LocalizationProvider>
+      )}
     </Box>
   );
 }

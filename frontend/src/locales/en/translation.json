@@ -594,7 +594,7 @@
     "open": "Open chat context"
   },
   "kpis": {
-    "title": "Agent & AI Service Monitoring",
+    "title": "AI Service Monitoring",
     "description": "Track usage, performance, and costs across all AI agents and services — including tokens, latency, and activity trends."
   },
   "logs": {
