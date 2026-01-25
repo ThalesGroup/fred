@@ -19,7 +19,7 @@ from typing import Dict, Optional, Tuple, cast
 from pyparsing import abstractmethod
 
 from agentic_backend.common.structures import AgentSettings, Configuration, Leader
-from agentic_backend.core.agents.agent_cache import AgentCacheStats, ActiveAgentCache
+from agentic_backend.core.agents.agent_cache import ActiveAgentCache, AgentCacheStats
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_manager import AgentManager

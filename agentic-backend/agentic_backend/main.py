@@ -50,6 +50,7 @@ from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrato
 from agentic_backend.core.feedback import feedback_controller
 from agentic_backend.core.mcp import mcp_controller
 from agentic_backend.core.monitoring import monitoring_controller
+from agentic_backend.scheduler.scheduler_controller import SchedulerController
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -204,6 +205,13 @@ def create_app() -> FastAPI:
     router.include_router(monitoring_controller.router)
     router.include_router(feedback_controller.router)
     router.include_router(logs_controller.router)
+    if configuration.scheduler.enabled:
+        logger.info("🛠️ Activating agent scheduler controller.")
+        SchedulerController(router)
+    else:
+        logger.warning(
+            "🛑 Agent scheduler controller disabled via configuration.scheduler.enabled=false"
+        )
     app.include_router(router)
     logger.info("🧩 All controllers registered.")
     return app

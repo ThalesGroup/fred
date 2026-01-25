@@ -21,6 +21,15 @@ app:
   metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
+
+scheduler:
+  enabled: true
+  backend: temporal
+  temporal:
+    host: "localhost:7233"
+    namespace: "default"
+    task_queue: "agents"
+
 security:
   m2m:
     enabled: false
