@@ -331,6 +331,7 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
 
     textbox_count = 0
     replacements_made = 0
+    textbox_with_liste_tech = None  # Store textbox element containing listeTechnologies
 
     # Process all textbox content elements (both VML and DrawingML formats)
     for txbxContent in doc.element.body.iter():
@@ -359,10 +360,17 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
                     placeholder = match.group(0)
 
                     if key in flattened_data:
-                        value = str(flattened_data[key])
-                        logger.info(f"    Replacing {placeholder} with: {value}")
-                        new_text = new_text.replace(placeholder, value)
-                        replacements_made += 1
+                        # Special case: listeTechnologies with images
+                        if key == "listeTechnologies" and tech_images:
+                            logger.info(f"    Found listeTechnologies, will add images separately")
+                            new_text = new_text.replace(placeholder, "")
+                            textbox_with_liste_tech = txbxContent
+                            replacements_made += 1
+                        else:
+                            value = str(flattened_data[key])
+                            logger.info(f"    Replacing {placeholder} with: {value}")
+                            new_text = new_text.replace(placeholder, value)
+                            replacements_made += 1
                     else:
                         logger.warning(f"    Placeholder '{key}' not found in flattened data")
 
@@ -371,6 +379,11 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
                     logger.info(f"    Updated text: '{new_text}'")
 
     logger.info(f"Processed {textbox_count} textboxes, made {replacements_made} replacements")
+
+    # Add images near the textbox that contained listeTechnologies
+    if textbox_with_liste_tech is not None and tech_images:
+        logger.info(f"Adding {len(tech_images)} images near listeTechnologies textbox")
+        _add_images_near_textbox(doc, textbox_with_liste_tech, tech_images)
 
     doc.save(output_path)
     return output_path
@@ -509,6 +522,75 @@ def add_images_to_word_paragraph(paragraph, images: list[tuple[str, BytesIO | No
             paragraph.add_run(tech_name)
             if i < len(images) - 1:
                 paragraph.add_run(", ")
+
+
+def _add_images_near_textbox(doc, textbox_element, images: list[tuple[str, BytesIO | None]]):
+    """
+    Add images in a new paragraph right after the textbox containing {listeTechnologies}.
+    """
+    if not images:
+        return
+
+    from docx.oxml import OxmlElement
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    # Find the parent paragraph in the document body that contains this textbox
+    parent = textbox_element.getparent()
+    containing_paragraph = None
+
+    while parent is not None:
+        tag_name = parent.tag.split('}')[-1] if '}' in parent.tag else parent.tag
+        if tag_name == 'p':
+            grandparent = parent.getparent()
+            if grandparent is not None:
+                gp_tag = grandparent.tag.split('}')[-1] if '}' in grandparent.tag else grandparent.tag
+                if gp_tag == 'body':
+                    containing_paragraph = parent
+                    break
+        parent = parent.getparent()
+
+    if containing_paragraph is None:
+        logger.warning("Could not find containing paragraph, adding images at end")
+        paragraph = doc.add_paragraph()
+    else:
+        body = containing_paragraph.getparent()
+        para_index = list(body).index(containing_paragraph)
+        logger.info(f"Inserting images after paragraph at index {para_index}")
+
+        new_p = OxmlElement('w:p')
+        body.insert(para_index + 1, new_p)
+
+        paragraph = None
+        for p in doc.paragraphs:
+            if p._element is new_p:
+                paragraph = p
+                break
+
+        if paragraph is None:
+            logger.warning("Could not get Paragraph object, adding at end")
+            paragraph = doc.add_paragraph()
+
+    # Align to the right
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    # Filter to only keep images that have data (skip technologies without images)
+    images_with_data = [(name, data) for name, data in images if data is not None]
+
+    if not images_with_data:
+        logger.info("No images with data, skipping")
+        return
+
+    # Add only images (no text fallback for missing images)
+    for i, (tech_name, image_data) in enumerate(images_with_data):
+        try:
+            image_data.seek(0)
+            run = paragraph.add_run()
+            run.add_picture(image_data, width=Inches(0.5))
+            if i < len(images_with_data) - 1:
+                paragraph.add_run("  ")
+            logger.info(f"Added image for: {tech_name}")
+        except Exception as e:
+            logger.error(f"Failed to add image for {tech_name}: {e}")
 
 
 referenceSchema = {

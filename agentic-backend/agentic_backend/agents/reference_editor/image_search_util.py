@@ -28,24 +28,34 @@ def search_image_by_name(image_name: str, vector_search_client, kf_base_client) 
         )
 
         if hits and len(hits) > 0:
-            # Try to find exact match first (case-insensitive)
+            search_term = image_name.lower()
+
+            # Pass 1: Try to find exact match (case-insensitive)
             for hit in hits:
                 document_uid = hit.uid
                 document_name = hit.file_name or ""
 
-                # Check if document name matches (without extension)
                 if document_name:
-                    name_without_ext = document_name.rsplit(".", 1)[0]
-                    if name_without_ext.lower() == image_name.lower():
-                        logger.info(f"Found exact match image document: {document_uid} ({document_name}) for query: {image_name}")
+                    name_without_ext = document_name.rsplit(".", 1)[0].lower()
+                    if name_without_ext == search_term:
+                        logger.info(f"Found exact match: {document_uid} ({document_name}) for query: {image_name}")
                         return document_uid
 
-            # If no exact match, return the first result
-            hit = hits[0]
-            document_uid = hit.uid
-            document_name = hit.file_name or "unknown"
-            logger.info(f"Found image document: {document_uid} ({document_name}) for query: {image_name}")
-            return document_uid
+            # Pass 2: Check if search term is contained in filename or vice versa
+            for hit in hits:
+                document_uid = hit.uid
+                document_name = hit.file_name or ""
+
+                if document_name:
+                    name_without_ext = document_name.rsplit(".", 1)[0].lower()
+                    # Check both directions: "sharepoint" in "sharepoint_logo" OR "share" in "sharepoint"
+                    if search_term in name_without_ext or name_without_ext in search_term:
+                        logger.info(f"Found partial match: {document_uid} ({document_name}) for query: {image_name}")
+                        return document_uid
+
+            # No relevant match found - don't return random semantic results
+            logger.warning(f"No matching image found for: {image_name} (checked {len(hits)} results, none matched)")
+            return None
 
         logger.warning(f"No image found for name: {image_name}")
         return None
