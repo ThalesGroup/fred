@@ -22,8 +22,8 @@ from fred_core import (
     PostgresStoreConfig,
     SecurityConfiguration,
     StoreConfig,
-    TemporalSchedulerConfig,
 )
+from fred_core.scheduler import TemporalSchedulerConfig
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, Field, field_validator
 
