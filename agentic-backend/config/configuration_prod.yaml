@@ -23,6 +23,14 @@ app:
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
   kpi_process_metrics_interval_sec: 10
 
+scheduler:
+  enabled: true
+  backend: temporal
+  temporal:
+    host: "localhost:7233"
+    namespace: "default"
+    task_queue: "agents"
+
 security:
   m2m:
     enabled: true

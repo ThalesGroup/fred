@@ -279,6 +279,26 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/logs/query`, method: "POST", body: queryArg.logQuery }),
     }),
+    runAgentTaskAgenticV1SchedulerAgentTasksPost: build.mutation<
+      RunAgentTaskAgenticV1SchedulerAgentTasksPostApiResponse,
+      RunAgentTaskAgenticV1SchedulerAgentTasksPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/scheduler/agent-tasks`,
+        method: "POST",
+        body: queryArg.runAgentTaskRequest,
+      }),
+    }),
+    getAgentTaskProgressAgenticV1SchedulerAgentTasksProgressPost: build.mutation<
+      GetAgentTaskProgressAgenticV1SchedulerAgentTasksProgressPostApiResponse,
+      GetAgentTaskProgressAgenticV1SchedulerAgentTasksProgressPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/scheduler/agent-tasks/progress`,
+        method: "POST",
+        body: queryArg.agentTaskProgressRequest,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -451,6 +471,16 @@ export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiArg = {
 export type QueryLogsAgenticV1LogsQueryPostApiResponse = /** status 200 Successful Response */ LogQueryResult;
 export type QueryLogsAgenticV1LogsQueryPostApiArg = {
   logQuery: LogQuery;
+};
+export type RunAgentTaskAgenticV1SchedulerAgentTasksPostApiResponse =
+  /** status 200 Successful Response */ RunAgentTaskResponse;
+export type RunAgentTaskAgenticV1SchedulerAgentTasksPostApiArg = {
+  runAgentTaskRequest: RunAgentTaskRequest;
+};
+export type GetAgentTaskProgressAgenticV1SchedulerAgentTasksProgressPostApiResponse =
+  /** status 200 Successful Response */ AgentTaskProgressResponse;
+export type GetAgentTaskProgressAgenticV1SchedulerAgentTasksProgressPostApiArg = {
+  agentTaskProgressRequest: AgentTaskProgressRequest;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -789,9 +819,14 @@ export type SessionSchema = {
   agent_name?: string | null;
   title: string;
   updated_at: string;
+  next_rank?: number | null;
   preferences?: {
     [key: string]: any;
   } | null;
+};
+export type SessionEvent = {
+  type?: "session";
+  session: SessionSchema;
 };
 export type FinalEvent = {
   type?: "final";
@@ -813,6 +848,7 @@ export type SessionWithFiles = {
   agent_name?: string | null;
   title: string;
   updated_at: string;
+  next_rank?: number | null;
   preferences?: {
     [key: string]: any;
   } | null;
@@ -844,6 +880,7 @@ export type EchoEnvelope = {
   kind:
     | "ChatMessage"
     | "StreamEvent"
+    | "SessionEvent"
     | "FinalEvent"
     | "ErrorEvent"
     | "SessionSchema"
@@ -858,6 +895,7 @@ export type EchoEnvelope = {
     | ChatMessage
     | ChatAskInput
     | StreamEvent
+    | SessionEvent
     | FinalEvent
     | ErrorEvent
     | SessionSchema
@@ -1042,6 +1080,42 @@ export type LogQuery = {
   limit?: number;
   order?: "asc" | "desc";
 };
+export type RunAgentTaskResponse = {
+  status: string;
+  task_id: string;
+  workflow_id: string;
+  run_id?: string | null;
+};
+export type RunAgentTaskRequest = {
+  task_id?: string | null;
+  workflow_type?: string;
+  task_queue?: string | null;
+  target_agent: string;
+  payload?: {
+    [key: string]: any;
+  };
+  context?: {
+    [key: string]: any;
+  };
+  session_id?: string | null;
+  request_id?: string | null;
+};
+export type SchedulerTaskProgress = {
+  state: string;
+  percent?: number;
+  message?: string | null;
+};
+export type AgentTaskProgressResponse = {
+  task_id: string | null;
+  workflow_id: string | null;
+  run_id: string | null;
+  progress: SchedulerTaskProgress;
+};
+export type AgentTaskProgressRequest = {
+  task_id?: string | null;
+  workflow_id?: string | null;
+  run_id?: string | null;
+};
 export const {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
@@ -1096,4 +1170,6 @@ export const {
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
   useDeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteMutation,
   useQueryLogsAgenticV1LogsQueryPostMutation,
+  useRunAgentTaskAgenticV1SchedulerAgentTasksPostMutation,
+  useGetAgentTaskProgressAgenticV1SchedulerAgentTasksProgressPostMutation,
 } = injectedRtkApi;

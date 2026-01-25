@@ -22,6 +22,7 @@ from fred_core import (
     PostgresStoreConfig,
     SecurityConfiguration,
     StoreConfig,
+    TemporalSchedulerConfig,
 )
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, Field, field_validator
@@ -285,6 +286,12 @@ class AppConfig(BaseModel):
     )
 
 
+class SchedulerConfig(BaseModel):
+    enabled: bool = False
+    backend: str = "temporal"
+    temporal: TemporalSchedulerConfig = Field(default_factory=TemporalSchedulerConfig)
+
+
 class McpConfiguration(BaseModel):
     servers: List[MCPServerConfiguration] = Field(
         default_factory=list,
@@ -320,6 +327,7 @@ class Configuration(BaseModel):
         description="Microservice Communication Protocol (MCP) server configurations.",
     )
     storage: StorageConfig
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
 
 
 class ChatContextMessage(SystemMessage):

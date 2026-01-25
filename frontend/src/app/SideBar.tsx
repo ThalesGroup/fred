@@ -1,7 +1,9 @@
+import AppsIcon from "@mui/icons-material/Apps";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import GroupIcon from "@mui/icons-material/Group";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
+import ScheduleIcon from "@mui/icons-material/Schedule";
 import ScienceIcon from "@mui/icons-material/Science";
 import ShieldIcon from "@mui/icons-material/Shield";
 import { Box, CSSObject, Divider, Paper, styled, Theme } from "@mui/material";
@@ -106,6 +108,23 @@ export default function SideBar() {
       icon: <MenuBookIcon />,
       url: `/knowledge`,
       tooltip: t("sidebar.tooltip.knowledge"),
+    },
+  ];
+  const appsMenuItems: SideBarNavigationElement[] = [
+    {
+      key: "apps",
+      label: t("sidebar.apps", "Apps"),
+      icon: <AppsIcon />,
+      tooltip: t("sidebar.tooltip.apps", "Run and test app workflows"),
+      children: [
+        {
+          key: "apps-scheduler",
+          label: t("sidebar.apps_scheduler", "Scheduler"),
+          icon: <ScheduleIcon />,
+          url: `/apps/scheduler`,
+          tooltip: t("sidebar.tooltip.apps_scheduler", "Submit and track scheduled tasks"),
+        },
+      ],
     },
   ];
   const adminMenuItems: SideBarNavigationElement[] = [
@@ -265,6 +284,13 @@ export default function SideBar() {
           {/* Nav */}
           <Box>
             <SideBarNavigationList menuItems={menuItems} isSidebarOpen={open} />
+          </Box>
+
+          <SideBarDivider />
+
+          {/* Apps Nav */}
+          <Box>
+            <SideBarNavigationList menuItems={appsMenuItems} isSidebarOpen={open} />
           </Box>
 
           <SideBarDivider />
