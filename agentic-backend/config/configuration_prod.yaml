@@ -135,7 +135,7 @@ ai:
     - name: "Temporal Test Agent"
       type: "agent"
       class_path: "agentic_backend.agents.temporal_test_agent.temporal_test_agent.TemporalTestAgent"
-      enabled: true
+      enabled: false
       chat_options:
         attach_files: false
     - name: "Georges"
