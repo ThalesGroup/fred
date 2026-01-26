@@ -21,9 +21,14 @@ from langgraph.types import Command
 from agentic_backend.agents.jira.jsonschema import (
     requirementsSchema,
     testsSchema,
-    testTitlesSchema,
     userStoriesSchema,
-    userStoryTitlesSchema,
+)
+from agentic_backend.agents.jira.models import (
+    RequirementsList,
+    TestsList,
+    TestTitlesList,
+    UserStoriesList,
+    UserStoryTitlesList,
 )
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
@@ -182,172 +187,6 @@ class JiraAgent(AgentFlow):
     async def aclose(self):
         await self.mcp.aclose()
 
-    def _parse_and_validate_json(
-        self,
-        content: str,
-        schema: dict,
-        tool_call_id: str,
-    ) -> tuple[list[dict] | None, Command | None]:
-        """
-        Parse JSON content from LLM response, clean markdown formatting, and validate against schema.
-
-        Args:
-            content: Raw LLM response content (may include markdown code blocks)
-            schema: JSON schema to validate against (must be an array schema with 'items')
-            tool_call_id: Tool call ID for error messages
-
-        Returns:
-            Tuple of (parsed_data, error_command). If successful, error_command is None.
-            If failed, parsed_data is None and error_command contains the error.
-        """
-        clean_data = content.strip()
-
-        # Remove markdown code blocks if present
-        if clean_data.startswith("```"):
-            clean_data = re.sub(r"^```(?:json)?\n?", "", clean_data)
-            clean_data = re.sub(r"\n?```$", "", clean_data)
-
-        # Fix invalid JSON escape sequences that are not valid in JSON
-        # JSON only allows: \" \\ \/ \b \f \n \r \t \uXXXX
-        # LLMs sometimes produce \' which is invalid in JSON - replace with just '
-        clean_data = clean_data.replace("\\'", "'")
-
-        try:
-            data = json.loads(clean_data)
-        except json.JSONDecodeError:
-            # Try to fix unescaped quotes inside strings and retry
-            # LLMs often produce: "text": "Message 'pour "Contrôle"'"
-            # Should be: "text": "Message 'pour \"Contrôle\"'"
-            result = []
-            i = 0
-            in_string = False
-            while i < len(clean_data):
-                char = clean_data[i]
-                if char == "\\" and i + 1 < len(clean_data):
-                    result.append(char)
-                    result.append(clean_data[i + 1])
-                    i += 2
-                    continue
-                if char == '"':
-                    if not in_string:
-                        in_string = True
-                        result.append(char)
-                    else:
-                        # Check if this quote ends the string or is inside it
-                        j = i + 1
-                        while j < len(clean_data) and clean_data[j] in " \t\n\r":
-                            j += 1
-                        # If followed by : , ] } or end, it's a real delimiter
-                        if j >= len(clean_data) or clean_data[j] in ":,]}":
-                            in_string = False
-                            result.append(char)
-                        else:
-                            # Unescaped quote inside string - escape it
-                            result.append('\\"')
-                else:
-                    result.append(char)
-                i += 1
-            fixed_data = "".join(result)
-
-            try:
-                data = json.loads(fixed_data)
-                logger.info("[JiraAgent] Fixed unescaped quotes in JSON")
-            except json.JSONDecodeError as e:
-                return None, Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"❌ Erreur de parsing JSON: {e}. Veuillez réessayer.",
-                                tool_call_id=tool_call_id,
-                            )
-                        ]
-                    }
-                )
-
-        validator = Draft7Validator(schema)
-        errors = list(validator.iter_errors(data))
-        if errors:
-            error_msgs = [f"{e.path}: {e.message}" for e in errors[:3]]
-            return None, Command(
-                update={
-                    "messages": [
-                        ToolMessage(
-                            f"❌ Erreur de validation JSON: {'; '.join(error_msgs)}",
-                            tool_call_id=tool_call_id,
-                        )
-                    ]
-                }
-            )
-
-        return data, None
-
-    async def astream_updates(self, state, *, config, **kwargs):
-        """
-        Override to add validation retry logic.
-        If the agent generates a validation error, automatically retry up to 2 times.
-
-        IMPORTANT: Events are yielded in real-time so the UI sees tool calls as they happen.
-        Only on validation error do we suppress further events and retry silently.
-        """
-        max_retries = 2
-        current_state = state
-
-        for attempt in range(max_retries + 1):
-            logger.info(
-                f"[JiraAgent] Execution attempt {attempt + 1}/{max_retries + 1}"
-            )
-
-            final_state_messages = []
-            is_last_attempt = attempt >= max_retries
-
-            async for event in super().astream_updates(
-                current_state,  # type: ignore
-                config=config,
-                **kwargs,
-            ):
-                # Track messages for validation error detection
-                for node_name, node_data in event.items():
-                    if isinstance(node_data, dict) and "messages" in node_data:
-                        final_state_messages = node_data["messages"]
-
-                # Always yield events in real-time so UI sees tool calls
-                yield event
-
-            has_jira_validation_error = False
-            # Check the last few messages for tool error messages
-            for msg in reversed(final_state_messages[-3:]):
-                content = getattr(msg, "content", "")
-                if isinstance(content, str) and (
-                    "❌ Erreur de validation JSON" in content
-                    or "❌ Erreur de parsing JSON" in content
-                    or "❌ Erreur de validation" in content
-                ):
-                    has_jira_validation_error = True
-
-            # Check if there's a validation error in the final state
-            if has_jira_validation_error:
-                if not is_last_attempt:
-                    logger.warning(
-                        f"[JiraAgent] Validation error detected on attempt {attempt + 1}. "
-                        f"Retrying automatically ({attempt + 1}/{max_retries} retries used)..."
-                    )
-                    # Update state with the error message for retry
-                    current_state = {"messages": final_state_messages}
-                    continue
-                else:
-                    logger.error(
-                        f"[JiraAgent] Validation errors persist after {max_retries} retries. "
-                        f"Giving up."
-                    )
-                    break
-            else:
-                # No validation error - success!
-                if attempt > 0:
-                    logger.info(
-                        f"[JiraAgent] Succeeded after {attempt} retry(ies). Validation passed."
-                    )
-                break
-
     def get_requirements_tool(self):
         """Tool that generates requirements using a separate LLM call"""
 
@@ -394,27 +233,15 @@ Consignes :
 3. **ID Unique :** Ex: EX-FON-01 (fonctionnelle), EX-NFON-01 (non-fonctionnelle)
 4. **Priorisation :** Haute, Moyenne ou Basse
 
-IMPORTANT: Tu dois répondre UNIQUEMENT avec un tableau JSON valide, sans aucun texte avant ou après.
-
-Format JSON attendu:
-[
-  {{
-    "id": "EX-FON-01",
-    "title": "Titre court de l'exigence",
-    "description": "Description détaillée de l'exigence",
-    "priority": "Haute"
-  }}
-]
-
 Règles:
-- id: Identifiant unique (EX-FON-XXX pour fonctionnelle, EX-NFON-XXX pour non-fonctionnelle)
+- id: Identifiant unique (EX-FON-XX pour fonctionnelle, EX-NFON-XX pour non-fonctionnelle)
 - title: Titre concis
 - description: Description détaillée et testable
-- priority: "Haute", "Moyenne" ou "Basse"
+- priority: "Haute", "Moyenne" ou "Basse" """
 
-Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
-
-            model = get_default_chat_model()
+            model = get_default_chat_model().with_structured_output(
+                RequirementsList, method="json_schema"
+            )
             messages = [
                 SystemMessage(
                     content=requirements_prompt.format(context_summary=context_summary)
@@ -427,13 +254,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
             )
 
             response = await model.ainvoke(messages, config=config)
-
-            # Parse and validate JSON response
-            requirements, error_cmd = self._parse_and_validate_json(
-                str(response.content), requirementsSchema, runtime.tool_call_id
-            )
-            if error_cmd:
-                return error_cmd
+            requirements = [r.model_dump() for r in response.items]
 
             return Command(
                 update={
@@ -456,7 +277,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
 
         @tool
         async def generate_user_story_titles(
-            runtime: ToolRuntime, context_summary: str, quantity: int = 20
+            runtime: ToolRuntime, context_summary: str, quantity: int | None = None
         ):
             """
             Génère une liste de titres de User Stories pour une génération par lots.
@@ -472,7 +293,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
 
             Args:
                 context_summary: Résumé du contexte projet extrait des documents (min 200 caractères)
-                quantity: Nombre de User Stories à générer (défaut: 20)
+                quantity: Nombre de User Stories à générer (optionnel, sinon le modèle détermine le nombre approprié)
 
             Returns:
                 Message de confirmation avec la liste des titres générés
@@ -493,7 +314,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
                     }
                 )
 
-            titles_prompt = """Tu es un Product Owner expert. Génère une liste de {quantity} titres de User Stories.
+            titles_prompt = """Tu es un Product Owner expert. Génère une liste de titres de User Stories.
 
 Contexte projet extrait des documents:
 {context_summary}
@@ -507,28 +328,17 @@ Contexte projet extrait des documents:
 - Évitent les doublons et chevauchements
 - Sont regroupées par Epic logique
 - Suivent une progression fonctionnelle cohérente
+- **Sont liées aux exigences correspondantes via requirement_ids**
 
 **Règles:**
 - Chaque titre doit être concis (max 80 caractères)
 - Utiliser des verbes d'action (Créer, Afficher, Modifier, Supprimer, etc.)
 - Regrouper les stories liées sous le même Epic
+- **OBLIGATOIRE: Chaque User Story doit avoir au moins un requirement_id si des exigences existent**
 - **NE PAS générer de titres pour des fonctionnalités déjà couvertes par les User Stories existantes**
-- Les IDs doivent continuer la séquence existante (ex: si US-01 existe, commencer à US-02)
+- Les IDs doivent continuer la séquence existante (commencer à US-{next_id_hint})
 
-IMPORTANT: Tu dois répondre UNIQUEMENT avec un tableau JSON valide, sans aucun texte avant ou après.
-
-Format JSON attendu:
-[
-  {{
-    "id": "US-{next_id_hint}",
-    "title": "Créer un compte utilisateur",
-    "epic_name": "Gestion des utilisateurs"
-  }}
-]
-
-Génère exactement {quantity} NOUVEAUX titres de User Stories (en plus des existantes).
-
-Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
+{quantity_instruction}"""
 
             # Build requirements section
             requirements_section = ""
@@ -583,14 +393,22 @@ Exigences à respecter:
 Tu dois générer des User Stories COMPLÉMENTAIRES qui n'existent pas encore.
 """
 
-            model = get_default_chat_model()
+            # Build quantity instruction
+            if quantity is not None:
+                quantity_instruction = f"Génère exactement {quantity} NOUVEAUX titres de User Stories (en plus des existantes)."
+            else:
+                quantity_instruction = "Génère le nombre approprié de User Stories pour couvrir l'ensemble du périmètre fonctionnel du projet."
+
+            model = get_default_chat_model().with_structured_output(
+                UserStoryTitlesList, method="json_schema"
+            )
             messages = [
                 SystemMessage(
                     content=titles_prompt.format(
                         context_summary=context_summary,
                         requirements_section=requirements_section,
                         existing_stories_section=existing_stories_section,
-                        quantity=quantity,
+                        quantity_instruction=quantity_instruction,
                         next_id_hint=next_id_hint,
                     )
                 )
@@ -602,15 +420,7 @@ Tu dois générer des User Stories COMPLÉMENTAIRES qui n'existent pas encore.
             )
 
             response = await model.ainvoke(messages, config=config)
-
-            # Parse and validate JSON response
-            new_titles, error_cmd = self._parse_and_validate_json(
-                str(response.content),
-                userStoryTitlesSchema,
-                runtime.tool_call_id,
-            )
-            if error_cmd:
-                return error_cmd
+            new_titles = [t.model_dump() for t in response.items]
 
             # Merge with existing titles (append new ones)
             all_titles = existing_titles + new_titles
@@ -739,40 +549,14 @@ Tu dois générer des User Stories COMPLÉMENTAIRES qui n'existent pas encore.
 
 **Format Gherkin:** "Étant donné que [contexte], Quand [action], Alors [résultat attendu]"
 
+**Aspects Transverses :** aspects de sécurité (OWASP), d'accessibilité (WCAG - navigation clavier, lecteurs d'écran) et de conformité (RGPD) si pertinent.
+
 **Métadonnées:**
 - **Estimation:** Fibonacci (1, 2, 3, 5, 8, 13, 21)
 - **Priorisation:** High, Medium, Low
 
-IMPORTANT: Tu dois répondre UNIQUEMENT avec un tableau JSON valide.
-
-Format JSON attendu:
-[
-  {{
-    "id": "US-01",
-    "summary": "Titre de la User Story",
-    "description": "En tant que [persona], je veux [action], afin de [bénéfice]",
-    "issue_type": "Story",
-    "priority": "High",
-    "epic_name": "Nom de l'Epic",
-    "story_points": 3,
-    "labels": ["label1"],
-    "acceptance_criteria": [
-      {{
-        "scenario": "Nom du scénario de test",
-        "steps": [
-          "Étant donné que [contexte]",
-          "Quand [action]",
-          "Alors [résultat attendu]"
-        ]
-      }}
-    ]
-  }}
-]
-
-IMPORTANT: Génère EXACTEMENT {count} User Stories correspondant aux titres fournis.
-Utilise les mêmes IDs et epic_name que dans les titres.
-
-Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
+Génère EXACTEMENT {count} User Stories correspondant aux titres fournis.
+Utilise les mêmes IDs, epic_name et requirement_ids que dans les titres."""
 
             # Build context section
             context_section = ""
@@ -788,7 +572,9 @@ Exigences à respecter:
 {json.dumps(requirements, ensure_ascii=False, indent=2)}
 """
 
-            model = get_default_chat_model()
+            model = get_default_chat_model().with_structured_output(
+                UserStoriesList, method="json_schema"
+            )
             messages = [
                 SystemMessage(
                     content=stories_prompt.format(
@@ -808,16 +594,7 @@ Exigences à respecter:
             )
 
             response = await model.ainvoke(messages, config=config)
-
-            # Parse and validate JSON response
-            new_stories, error_cmd = self._parse_and_validate_json(
-                str(response.content),
-                userStoriesSchema,
-                runtime.tool_call_id,
-            )
-
-            if error_cmd:
-                return error_cmd
+            new_stories = [s.model_dump() for s in response.items]
 
             # Merge with existing stories
             all_stories = existing_stories + new_stories
@@ -853,7 +630,9 @@ Exigences à respecter:
         """Tool that generates test titles for batch generation"""
 
         @tool
-        async def generate_test_titles(runtime: ToolRuntime):
+        async def generate_test_titles(
+            runtime: ToolRuntime, quantity: int | None = None
+        ):
             """
             Génère une liste de titres de tests pour toutes les User Stories.
 
@@ -865,6 +644,9 @@ Exigences à respecter:
             IMPORTANT:
             - AVANT d'appeler cet outil, des User Stories doivent avoir été générées
             - Après cet outil, utilise generate_tests() pour générer les tests complets
+
+            Args:
+                quantity: Nombre de tests à générer (optionnel, sinon ~3 tests par User Story)
 
             Returns:
                 Message de confirmation avec la liste des titres générés
@@ -910,7 +692,6 @@ Exigences à respecter:
 
 Tu dois générer des titres de tests COMPLÉMENTAIRES qui n'existent pas encore.
 """
-
             titles_prompt = """Tu es un expert en tests logiciels. Génère une liste de titres de tests pour les User Stories suivantes.
 
 ## User Stories à couvrir
@@ -921,42 +702,29 @@ Tu dois générer des titres de tests COMPLÉMENTAIRES qui n'existent pas encore
 
 ## Instructions
 
-Pour chaque User Story, génère environ 3 titres de tests couvrant:
+Pour chaque User Story, génère des titres de tests couvrant:
 - **Nominal**: Cas de test du parcours nominal (happy path)
 - **Limite**: Cas de test aux limites (valeurs frontières, listes vides/longues)
 - **Erreur**: Cas de test d'erreur (validations, erreurs techniques)
-
-Tu peux varier le nombre de tests selon la complexité de la story (minimum 2, maximum 5 par story).
 
 **Règles:**
 - Chaque titre doit être concis et descriptif (max 80 caractères)
 - Les IDs doivent suivre le format SC-XXX (commencer à SC-{next_id_hint})
 - Chaque titre doit référencer sa User Story via user_story_id
 
-IMPORTANT: Tu dois répondre UNIQUEMENT avec un tableau JSON valide, sans aucun texte avant ou après.
+{quantity_instruction}"""
 
-Format JSON attendu:
-[
-  {{
-    "id": "SC-{next_id_hint}",
-    "title": "Vérifier la création d'un compte avec des données valides",
-    "user_story_id": "US-01",
-    "test_type": "Nominal"
-  }},
-  {{
-    "id": "SC-{next_id_hint_plus_1}",
-    "title": "Vérifier le rejet d'un email invalide",
-    "user_story_id": "US-01",
-    "test_type": "Erreur"
-  }}
-]
+            # Build quantity instruction
+            if quantity is not None:
+                quantity_instruction = (
+                    f"Génère exactement {quantity} titres de tests au total."
+                )
+            else:
+                quantity_instruction = "Génère environ 3 titres de tests par User Story (minimum 2, maximum 5 selon la complexité)."
 
-Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
-
-            # Calculate next_id_hint_plus_1 for the example
-            next_id_hint_plus_1 = f"{int(next_id_hint) + 1:03d}"
-
-            model = get_default_chat_model()
+            model = get_default_chat_model().with_structured_output(
+                TestTitlesList, method="json_schema"
+            )
             messages = [
                 SystemMessage(
                     content=titles_prompt.format(
@@ -965,7 +733,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
                         ),
                         existing_titles_section=existing_titles_section,
                         next_id_hint=next_id_hint,
-                        next_id_hint_plus_1=next_id_hint_plus_1,
+                        quantity_instruction=quantity_instruction,
                     )
                 )
             ]
@@ -976,15 +744,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
             )
 
             response = await model.ainvoke(messages, config=config)
-
-            # Parse and validate JSON response
-            new_titles, error_cmd = self._parse_and_validate_json(
-                str(response.content),
-                testTitlesSchema,
-                runtime.tool_call_id,
-            )
-            if error_cmd:
-                return error_cmd
+            new_titles = [t.model_dump() for t in response.items]
 
             # Merge with existing titles (append new ones)
             all_titles = existing_titles + new_titles
@@ -1126,36 +886,14 @@ Pour chaque titre de test fourni, génère le test complet avec:
 - Les données de test spécifiques
 - Le résultat attendu
 
-IMPORTANT: Tu dois répondre UNIQUEMENT avec un tableau JSON valide.
-
-Format JSON attendu:
-[
-  {{
-    "id": "SC-01",
-    "name": "Titre du scénario de test",
-    "user_story_id": "US-01",
-    "description": "Brève explication de ce que le scénario teste",
-    "preconditions": "Les états ou données nécessaires avant l'exécution du test",
-    "steps": [
-      "Étant donné que [contexte]",
-      "Lorsque [action]",
-      "Alors [résultat attendu]"
-    ],
-    "test_data": ["email: test@example.com", "password: Test123!"],
-    "priority": "Haute",
-    "test_type": "Nominal",
-    "expected_result": "Le résultat final attendu du test"
-  }}
-]
-
 Règles:
 - Génère EXACTEMENT {count} tests correspondant aux titres fournis
 - Utilise les mêmes IDs, user_story_id et test_type que dans les titres
-- priority: "Haute", "Moyenne" ou "Basse"
+- priority: "Haute", "Moyenne" ou "Basse" """
 
-Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
-
-            model = get_default_chat_model()
+            model = get_default_chat_model().with_structured_output(
+                TestsList, method="json_schema"
+            )
             messages = [
                 SystemMessage(
                     content=tests_prompt.format(
@@ -1177,15 +915,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
             )
 
             response = await model.ainvoke(messages, config=config)
-
-            # Parse and validate JSON response
-            new_tests, error_cmd = self._parse_and_validate_json(
-                str(response.content),
-                testsSchema,
-                runtime.tool_call_id,
-            )
-            if error_cmd:
-                return error_cmd
+            new_tests = [t.model_dump() for t in response.items]
 
             # Merge with existing tests
             all_tests = existing_tests + new_tests
@@ -1391,6 +1121,12 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
             lines.append(f"- **Priorité:** {story.get('priority', 'N/A')}")
             if story.get("epic_name"):
                 lines.append(f"- **Epic:** {story.get('epic_name')}")
+            if story.get("requirement_ids"):
+                req_ids = story.get("requirement_ids", [])
+                if isinstance(req_ids, list):
+                    lines.append(f"- **Exigences:** {', '.join(req_ids)}")
+                else:
+                    lines.append(f"- **Exigences:** {req_ids}")
             if story.get("story_points"):
                 lines.append(f"- **Story Points:** {story.get('story_points')}")
             if story.get("labels"):
@@ -1623,6 +1359,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
                 "Epic Link",
                 "Story Points",
                 "Labels",
+                "Requirement IDs",
             ]
             writer = csv.DictWriter(
                 output, fieldnames=fieldnames, quoting=csv.QUOTE_ALL
@@ -1652,6 +1389,11 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
                 if isinstance(labels, list):
                     labels = ",".join(labels)
 
+                # Convert requirement_ids list to comma-separated string
+                requirement_ids = story.get("requirement_ids", [])
+                if isinstance(requirement_ids, list):
+                    requirement_ids = ",".join(requirement_ids)
+
                 writer.writerow(
                     {
                         "Summary": story.get("summary", story.get("id", "")),
@@ -1666,6 +1408,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
                         else "",
                         "Story Points": story.get("story_points", ""),
                         "Labels": labels,
+                        "Requirement IDs": requirement_ids,
                     }
                 )
 

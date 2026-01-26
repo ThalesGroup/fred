@@ -7,7 +7,7 @@ requirementsSchema = {
         "properties": {
             "id": {
                 "type": "string",
-                "description": "Unique requirement ID (e.g., EX-FON-001, EX-NFON-001)",
+                "description": "Unique requirement ID (e.g., EX-FON-01, EX-NFON-01)",
             },
             "title": {
                 "type": "string",
@@ -35,7 +35,7 @@ userStoryTitlesSchema = {
         "properties": {
             "id": {
                 "type": "string",
-                "description": "Unique user story ID (e.g., US-001)",
+                "description": "Unique user story ID (e.g., US-01)",
             },
             "title": {
                 "type": "string",
@@ -44,6 +44,11 @@ userStoryTitlesSchema = {
             "epic_name": {
                 "type": "string",
                 "description": "Parent epic name for grouping related stories",
+            },
+            "requirement_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of requirement IDs this story implements (e.g., ['EX-FON-01'])",
             },
         },
         "required": ["id", "title", "epic_name"],
@@ -58,7 +63,7 @@ userStoriesSchema = {
         "properties": {
             "id": {
                 "type": "string",
-                "description": "Unique user story ID (e.g., US-001)",
+                "description": "Unique user story ID (e.g., US-01)",
             },
             "summary": {
                 "type": "string",
@@ -92,6 +97,11 @@ userStoriesSchema = {
                 "type": "array",
                 "items": {"type": "string"},
                 "description": "Labels for categorization",
+            },
+            "requirement_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of requirement IDs this story implements (e.g., ['EX-FON-01'])",
             },
             "acceptance_criteria": {
                 "type": "array",
