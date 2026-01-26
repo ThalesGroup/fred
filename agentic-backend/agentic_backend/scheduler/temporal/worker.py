@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import logging
 
+from fred_core.scheduler import (
+    TemporalSchedulerConfig,
+    build_temporal_data_converter_from_env,
+)
 from temporalio.client import Client
 from temporalio.worker import Worker
-
-from fred_core.scheduler import TemporalSchedulerConfig
 
 from agentic_backend.scheduler.temporal.activities import run_agent_task
 from agentic_backend.scheduler.temporal.workflow import AgentWorkflow
@@ -31,10 +33,18 @@ async def run_worker(config: TemporalSchedulerConfig) -> None:
     logger.info(
         "Connecting to Temporal at %s (namespace=%s)", config.host, config.namespace
     )
-    client = await Client.connect(
-        target_host=config.host,
-        namespace=config.namespace,
-    )
+    data_converter = build_temporal_data_converter_from_env()
+    if data_converter is None:
+        client = await Client.connect(
+            target_host=config.host,
+            namespace=config.namespace,
+        )
+    else:
+        client = await Client.connect(
+            target_host=config.host,
+            namespace=config.namespace,
+            data_converter=data_converter,
+        )
     logger.info(
         "Temporal connected. Registering agent worker on queue '%s'", config.task_queue
     )

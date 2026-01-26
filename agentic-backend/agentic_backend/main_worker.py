@@ -21,30 +21,25 @@ Start with:
 
 import asyncio
 import logging
-import os
 
-from dotenv import load_dotenv
 from fred_core import log_setup
 
 from agentic_backend.application_context import ApplicationContext, get_app_context
-from agentic_backend.common.structures import Configuration
-from agentic_backend.common.utils import parse_server_configuration
+from agentic_backend.common.config_loader import (
+    get_loaded_config_file_path,
+    get_loaded_env_file_path,
+    load_configuration,
+)
 from agentic_backend.scheduler.temporal.worker import run_worker
 
 logger = logging.getLogger(__name__)
 
 
-def load_configuration() -> Configuration:
-    dotenv_path = os.getenv("ENV_FILE", "./config/.env")
-    load_dotenv(dotenv_path)
-    config_file = os.getenv("CONFIG_FILE", "./config/configuration.yaml")
-    if not os.path.exists(config_file):
-        raise FileNotFoundError(f"Configuration file not found: {config_file}")
-    return parse_server_configuration(config_file)
-
-
 async def main() -> None:
     configuration = load_configuration()
+    env_file = get_loaded_env_file_path() or "<unset>"
+    config_file = get_loaded_config_file_path() or "<unset>"
+    logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
     ApplicationContext(configuration)
     app_context = get_app_context()
     log_setup(

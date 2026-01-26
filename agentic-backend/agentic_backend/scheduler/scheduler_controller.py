@@ -2,7 +2,12 @@ import logging
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from fred_core import KeycloakUser, get_current_user, raise_internal_error
+from fred_core import (
+    KeycloakUser,
+    get_current_user,
+    oauth2_scheme,
+    raise_internal_error,
+)
 from fred_core.scheduler import (
     AgentCallTask,
     BaseScheduler,
@@ -40,8 +45,14 @@ class SchedulerController:
         async def run_agent_task(
             req: RunAgentTaskRequest,
             user: KeycloakUser = Depends(get_current_user),
+            token: str | None = Depends(oauth2_scheme),
         ):
             task_id = req.task_id or f"agent-task-{uuid4()}"
+            context = dict(req.context)
+            if token:
+                context["access_token"] = token
+                context.setdefault("user_groups", user.groups)
+                context.setdefault("user_id", user.uid)
             task = AgentCallTask(
                 task_id=task_id,
                 workflow_type=req.workflow_type,
@@ -51,7 +62,7 @@ class SchedulerController:
                 session_id=req.session_id,
                 request_id=req.request_id,
                 payload=req.payload,
-                context=req.context,
+                context=context,
             )
 
             try:

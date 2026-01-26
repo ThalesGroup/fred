@@ -16,22 +16,24 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
+from typing import cast
 from uuid import uuid4
 
-from dotenv import load_dotenv
+from langchain_core.runnables import RunnableConfig
 
-from agentic_backend.application_context import ApplicationContext, get_app_context
+from agentic_backend.application_context import (
+    ApplicationContext,
+    get_agent_store,
+    get_app_context,
+)
+from agentic_backend.common.config_loader import load_configuration
 from agentic_backend.common.structures import Configuration
-from agentic_backend.common.utils import parse_server_configuration
 from agentic_backend.core.agents.agent_factory import AgentFactory
 from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_manager import AgentManager
+from agentic_backend.core.agents.execution_state import build_messages_state
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.scheduler.scheduler_structures import AgentTaskInput
-from agentic_backend.application_context import get_agent_store
-from langchain_core.runnables import RunnableConfig
-from typing import cast
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +42,7 @@ _runner: "AgentTaskRunner | None" = None
 
 
 def _load_configuration() -> Configuration:
-    dotenv_path = os.getenv("ENV_FILE", "./config/.env")
-    load_dotenv(dotenv_path)
-    config_file = os.getenv("CONFIG_FILE", "./config/configuration.yaml")
-    if not os.path.exists(config_file):
-        raise FileNotFoundError(f"Configuration file not found: {config_file}")
-    return parse_server_configuration(config_file)
+    return load_configuration()
 
 
 def _ensure_app_context() -> Configuration:
@@ -107,7 +104,17 @@ class AgentTaskRunner:
         try:
             compiled = agent.get_compiled_graph()
             payload = task.payload or {}
-            result = await compiled.ainvoke(payload, config=config)
+            try:
+                state = build_messages_state(
+                    question=payload.get("question"), payload=payload
+                )
+            except ValueError as exc:
+                raise RuntimeError(
+                    "Temporal agent payload must include a 'question' or serialized 'messages'."
+                ) from exc
+            invocation_state = dict(payload)
+            invocation_state.update(state)
+            result = await compiled.ainvoke(invocation_state, config=config)
             if isinstance(result, dict):
                 return result
             return {"result": result}

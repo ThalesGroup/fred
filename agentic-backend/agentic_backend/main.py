@@ -22,10 +22,8 @@ Entrypoint for the Agentic Backend App.
 import asyncio
 import contextlib
 import logging
-import os
 from contextlib import asynccontextmanager
 
-from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_user_security, log_setup, register_exception_handlers
@@ -38,8 +36,12 @@ from agentic_backend.application_context import (
     get_agent_store,
     get_session_store,
 )
+from agentic_backend.common.config_loader import (
+    get_loaded_config_file_path,
+    get_loaded_env_file_path,
+    load_configuration,
+)
 from agentic_backend.common.structures import Configuration
-from agentic_backend.common.utils import parse_server_configuration
 from agentic_backend.core import logs_controller
 from agentic_backend.core.agents import agent_controller
 from agentic_backend.core.agents.agent_factory import AgentFactory
@@ -64,24 +66,6 @@ def _norm_origin(o) -> str:
     return str(o).rstrip("/")
 
 
-def load_environment(dotenv_path: str = "./config/.env"):
-    if load_dotenv(dotenv_path):
-        logging.getLogger().info(f"✅ Loaded environment variables from: {dotenv_path}")
-    else:
-        logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
-
-
-def load_configuration() -> Configuration:
-    load_environment()
-    default_config_file = "./config/configuration.yaml"
-    config_file = os.environ.get("CONFIG_FILE", default_config_file)
-    if not os.path.exists(config_file):
-        raise FileNotFoundError(f"Configuration file not found: {config_file}")
-    configuration: Configuration = parse_server_configuration(config_file)
-    logger.info(f"✅ Loaded configuration from: {config_file}")
-    return configuration
-
-
 # -----------------------
 # APP CREATION
 # -----------------------
@@ -89,6 +73,9 @@ def load_configuration() -> Configuration:
 
 def create_app() -> FastAPI:
     configuration: Configuration = load_configuration()
+    env_file = get_loaded_env_file_path() or "<unset>"
+    config_file = get_loaded_config_file_path() or "<unset>"
+    logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
     base_url = configuration.app.base_url
 
     application_context = ApplicationContext(configuration)

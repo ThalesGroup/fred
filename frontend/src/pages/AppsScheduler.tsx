@@ -64,12 +64,12 @@ export const AppsScheduler = () => {
 
   const [taskId, setTaskId] = useState(storedTask.taskId || "");
   const [workflowType, setWorkflowType] = useState("AgentWorkflow");
-  const [taskQueue, setTaskQueue] = useState("");
-  const [targetAgent, setTargetAgent] = useState(storedTask.targetAgent || "");
+  const [taskQueue, setTaskQueue] = useState("agents");
+  const [targetAgent, setTargetAgent] = useState(storedTask.targetAgent || "Rico Senior");
   const [sessionId, setSessionId] = useState("");
   const [requestId, setRequestId] = useState("");
-  const [payloadText, setPayloadText] = useState('{\n  "input": "Hello from UI"\n}');
-  const [contextText, setContextText] = useState("{}");
+  const [payloadText, setPayloadText] = useState('{\n  "input": "Hi Rico Senior, can you review the attached query and summarize the key points?"\n}');
+  const [contextText, setContextText] = useState('{\n  "caller_actor": "alice"\n}');
 
   const [progressTaskId, setProgressTaskId] = useState(storedTask.taskId || "");
   const [progressWorkflowId, setProgressWorkflowId] = useState(storedTask.workflowId || "");
