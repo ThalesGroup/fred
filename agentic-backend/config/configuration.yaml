@@ -50,6 +50,8 @@ frontend_settings:
     agentsNicknameSingular: "Lumi"
     agentsNicknamePlural: "Lumis"
     contactSupportLink: "https://join.citadel.team/web-client/#/room/!rPdYXaGrZwwbgsEPaK:thales.citadel.team?deeplink=true"
+    agentIconName: "icon_lumi"
+
 ai:
   # In production  activate the configuration persistence mechanism
   # that allow users to create/update agents at runtime and change

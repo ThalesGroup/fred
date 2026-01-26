@@ -67,6 +67,7 @@ applications:
           agentsNicknameSingular: "Lumi"
           agentsNicknamePlural: "Lumis"
           contactSupportLink: "https://join.citadel.team/web-client/#/room/!rPdYXaGrZwwbgsEPaK:thales.citadel.team?deeplink=true"
+          agentIconName: "icon_lumi"
 
       ai:
         # Set KF right url
