@@ -364,14 +364,17 @@ class StreamTranscoder:
                     # Channel selection
                     if role == Role.assistant:
                         force_final = bool(raw_md.get("force_final"))
-                        ch = (
-                            Channel.final
-                            if (parts and not final_sent)
-                            or (parts and force_final)
-                            else Channel.observation
-                        )
-                        if ch == Channel.final:
+                        force_observation = bool(raw_md.get("force_observation"))
+                        if force_final and not final_sent:
+                            ch = Channel.final
                             final_sent = True
+                        elif force_observation:
+                            ch = Channel.observation
+                        elif parts and not final_sent:
+                            ch = Channel.final
+                            final_sent = True
+                        else:
+                            ch = Channel.observation
                     elif role == Role.system:
                         ch = Channel.system_note
                     elif role == Role.user:

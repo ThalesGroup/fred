@@ -114,6 +114,7 @@ class TemporalTestAgent(AgentFlow):
             response_metadata={
                 "thought": text,
                 "extras": {"task": "temporal-test", "step": step},
+                "force_observation": True,
             },
         )
         messages: List[AIMessage] = [message]
@@ -122,7 +123,8 @@ class TemporalTestAgent(AgentFlow):
                 AIMessage(
                     content="Temporal smoke test agent finished.",
                     response_metadata={
-                        "extras": {"task": "temporal-test", "status": "done"}
+                        "extras": {"task": "temporal-test", "status": "done"},
+                        "force_observation": True,
                     },
                 )
             )
