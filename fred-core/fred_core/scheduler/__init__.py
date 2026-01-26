@@ -19,14 +19,15 @@ from fred_core.scheduler.scheduler_structures import (
     AgentCallTask,
     SchedulerEventType,
     SchedulerTask,
-    SchedulerTaskProgress,
     SchedulerTaskCompletedEvent,
     SchedulerTaskEvent,
     SchedulerTaskFailedEvent,
+    SchedulerTaskProgress,
     SchedulerTaskProgressEvent,
     TemporalSchedulerConfig,
     WorkflowHandle,
 )
+from fred_core.scheduler.temporal_codec import build_temporal_data_converter_from_env
 from fred_core.scheduler.temporal_scheduler import TemporalScheduler
 from fred_core.scheduler.temporal_service import TemporalSchedulerService
 
@@ -45,6 +46,7 @@ __all__ = [
     "SchedulerTaskProgressEvent",
     "TemporalSchedulerConfig",
     "TemporalScheduler",
+    "build_temporal_data_converter_from_env",
     "TemporalSchedulerService",
     "WorkflowHandle",
 ]

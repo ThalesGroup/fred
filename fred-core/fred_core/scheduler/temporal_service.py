@@ -14,7 +14,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
+from typing import Any
 
 from temporalio.client import Client
 
@@ -24,6 +26,7 @@ from fred_core.scheduler.scheduler_structures import (
     TemporalSchedulerConfig,
     WorkflowHandle,
 )
+from fred_core.scheduler.temporal_codec import build_temporal_data_converter_from_env
 
 
 class TemporalSchedulerService:
@@ -39,11 +42,21 @@ class TemporalSchedulerService:
         if self._config.connect_timeout_seconds is not None:
             timeout = timedelta(seconds=self._config.connect_timeout_seconds)
 
-        self._client = await Client.connect(
-            target_host=self._config.host,
-            namespace=self._config.namespace,
-            rpc_timeout=timeout,
-        )
+        data_converter = build_temporal_data_converter_from_env()
+        connect_kwargs = {
+            "target_host": self._config.host,
+            "namespace": self._config.namespace,
+        }
+        if data_converter is not None:
+            connect_kwargs["data_converter"] = data_converter
+
+        connect_coro = Client.connect(**connect_kwargs)
+        if timeout is not None:
+            self._client = await asyncio.wait_for(
+                connect_coro, timeout=timeout.total_seconds()
+            )
+        else:
+            self._client = await connect_coro
         return self._client
 
     async def start_task(self, task: SchedulerTask) -> WorkflowHandle:
@@ -55,14 +68,19 @@ class TemporalSchedulerService:
         workflow_input = task.get_workflow_input()
         start_args = [] if workflow_input is None else [workflow_input]
 
+        start_kwargs: dict[str, Any] = {
+            "id": workflow_id,
+            "task_queue": task_queue,
+            "memo": task.memo or None,
+            "search_attributes": task.search_attributes or None,
+        }
+        if task.workflow_id_reuse_policy is not None:
+            start_kwargs["id_reuse_policy"] = task.workflow_id_reuse_policy
+
         workflow_handle = await client.start_workflow(
             task.workflow_type,
             *start_args,
-            id=workflow_id,
-            task_queue=task_queue,
-            id_reuse_policy=task.workflow_id_reuse_policy,
-            memo=task.memo or None,
-            search_attributes=task.search_attributes or None,
+            **start_kwargs,
         )
         return WorkflowHandle(
             workflow_id=workflow_handle.id,

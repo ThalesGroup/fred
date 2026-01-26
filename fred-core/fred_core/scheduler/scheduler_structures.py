@@ -35,6 +35,12 @@ class WorkflowHandle(BaseModel):
 
 
 class SchedulerTask(BaseModel):
+    """
+    Base model for scheduling workflows.
+
+    Subclasses set workflow-specific inputs/memos and expose `get_workflow_input`.
+    """
+
     task_id: str
     workflow_type: str
     task_queue: Optional[str] = None
@@ -50,7 +56,15 @@ class SchedulerTask(BaseModel):
 
 
 class AgentCallTask(SchedulerTask):
-    caller_actor: str = Field(validation_alias="caller_agent")
+    """
+    Descriptor for a scheduler task that launches an agent.
+
+    `caller_actor` identifies the human (e.g., UI or agent) requesting execution.
+    The workflow input is the context payload that the worker will forward to the
+    agent runtime, including session/request identifiers that help with telemetry.
+    """
+
+    caller_actor: str
     target_agent: str
     session_id: Optional[str] = None
     request_id: Optional[str] = None
