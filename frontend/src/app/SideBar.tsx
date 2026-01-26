@@ -1,5 +1,6 @@
+import AssistantIcon from "@mui/icons-material/Assistant";
 import ConstructionIcon from "@mui/icons-material/Construction";
-import GroupIcon from "@mui/icons-material/Group";
+import GroupsIcon from "@mui/icons-material/Groups";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 import ScienceIcon from "@mui/icons-material/Science";
@@ -9,6 +10,7 @@ import MuiDrawer from "@mui/material/Drawer";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { getProperty } from "../common/config";
+import { DynamicSvgIcon } from "../components/DynamicSvgIcon";
 import InvisibleLink from "../components/InvisibleLink";
 import {
   SideBarConversationsSection,
@@ -22,7 +24,6 @@ import { usePermissions } from "../security/usePermissions";
 import { useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { ImageComponent } from "../utils/image";
 import { ApplicationContext } from "./ApplicationContextProvider";
-
 const drawerWidth = 280;
 
 const openedMixin = (theme: Theme): CSSObject => ({
@@ -68,13 +69,12 @@ const Drawer = styled(MuiDrawer, { shouldForwardProp: (prop) => prop !== "open" 
     },
   ],
 }));
-
 export default function SideBar() {
   const { t } = useTranslation();
   const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
 
-  // const [open, setOpen] = useLocalStorageState("SideBar.open", true);
   // Remove collapsing for now
+  // const [open, setOpen] = useLocalStorageState("SideBar.open", true);
   const open = true;
 
   // Here we set the "can" action to "create" since we want the viewer role not to see kpis and logs.
@@ -90,22 +90,34 @@ export default function SideBar() {
   const userRoles = KeyCloakService.GetUserRoles();
   const isAdmin = userRoles.includes("admin");
 
+  const { darkMode } = useContext(ApplicationContext);
   const menuItems: SideBarNavigationElement[] = [
     {
       key: "agent",
       label: t("sidebar.agent", {
         agentsNickname: frontendConfig.frontend_settings.properties.agentsNicknamePlural,
       }),
-      icon: <GroupIcon />,
+      icon: frontendConfig?.frontend_settings.properties.agentIconName ? (
+        <DynamicSvgIcon
+          iconPath={`images/${frontendConfig.frontend_settings.properties.agentIconName}.svg`}
+          color="action"
+        />
+      ) : (
+        <AssistantIcon />
+      ),
       url: `/agents`,
-      tooltip: t("sidebar.tooltip.agent"),
     },
     {
       key: "knowledge",
       label: t("sidebar.knowledge"),
       icon: <MenuBookIcon />,
       url: `/knowledge`,
-      tooltip: t("sidebar.tooltip.knowledge"),
+    },
+    {
+      key: "teams",
+      label: t("sidebar.teams"),
+      icon: <GroupsIcon />,
+      url: `/teams`,
     },
   ];
   const adminMenuItems: SideBarNavigationElement[] = [
@@ -114,7 +126,6 @@ export default function SideBar() {
       label: t("sidebar.mcp"),
       icon: <ConstructionIcon />,
       url: `/tools`,
-      tooltip: t("sidebar.tooltip.mcp"),
     },
     ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime || canUpdateTag
       ? [
@@ -122,7 +133,6 @@ export default function SideBar() {
             key: "laboratory",
             label: t("sidebar.laboratory"),
             icon: <ScienceIcon />,
-            tooltip: t("sidebar.tooltip.laboratory"),
             children: [
               ...(canReadRuntime
                 ? [
@@ -131,7 +141,6 @@ export default function SideBar() {
                       label: t("sidebar.monitoring_graph", "Graph Hub"),
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/graph`,
-                      tooltip: t("sidebar.tooltip.monitoring_graph", "Knowledge graph view"),
                     },
                   ]
                 : []),
@@ -142,7 +151,6 @@ export default function SideBar() {
                       label: t("sidebar.monitoring_processors", "Processors"),
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/processors`,
-                      tooltip: t("sidebar.tooltip.monitoring_processors"),
                     },
                   ]
                 : []),
@@ -158,7 +166,6 @@ export default function SideBar() {
             key: "monitoring",
             label: t("sidebar.monitoring"),
             icon: <MonitorHeartIcon />,
-            tooltip: t("sidebar.tooltip.monitoring"),
             children: [
               ...(canReadKpis
                 ? [
@@ -167,7 +174,6 @@ export default function SideBar() {
                       label: t("sidebar.monitoring_kpi") || "KPI",
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/kpis`,
-                      tooltip: t("sidebar.tooltip.monitoring_kpi") || "KPI Overview",
                     },
                   ]
                 : []),
@@ -178,7 +184,6 @@ export default function SideBar() {
                       label: t("sidebar.monitoring_runtime", "Runtime"),
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/runtime`,
-                      tooltip: t("sidebar.tooltip.monitoring_runtime", "Runtime summary"),
                     },
                   ]
                 : []),
@@ -189,7 +194,6 @@ export default function SideBar() {
                       label: t("sidebar.monitoring_data", "Data Hub"),
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/data`,
-                      tooltip: t("sidebar.tooltip.monitoring_data", "Data lineage view"),
                     },
                   ]
                 : []),
@@ -200,7 +204,6 @@ export default function SideBar() {
                       label: t("sidebar.monitoring_logs") || "Logs",
                       icon: <MenuBookIcon />,
                       url: `/monitoring/logs`,
-                      tooltip: t("sidebar.tooltip.monitoring_logs"),
                     },
                   ]
                 : []),
@@ -211,7 +214,6 @@ export default function SideBar() {
                       label: t("sidebar.migration"),
                       icon: <ShieldIcon />,
                       url: `/monitoring/rebac-backfill`,
-                      tooltip: t("sidebar.tooltip.migration", "Rebuild ReBAC relations"),
                     },
                   ]
                 : []),
@@ -221,7 +223,6 @@ export default function SideBar() {
       : []),
   ];
 
-  const { darkMode } = useContext(ApplicationContext);
   const logoName = getProperty("logoName") || "fred";
   const logoNameDark = getProperty("logoNameDark") || "fred-dark";
 

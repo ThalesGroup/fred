@@ -163,7 +163,8 @@
     "allAgents": "All agents",
     "deleteSessionFailed": "Failed to delete conversation",
     "monitoring_graph": "Graph",
-    "newChat": "New chat"
+    "newChat": "New chat",
+    "teams": "Teams"
   },
   "chat": {
     "common": {

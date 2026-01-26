@@ -9,7 +9,6 @@ export type SideBarNavigationElement = {
   label: string;
   icon: React.ReactNode;
   url?: string;
-  tooltip: string;
   children?: SideBarNavigationElement[];
 };
 

@@ -789,9 +789,14 @@ export type SessionSchema = {
   agent_name?: string | null;
   title: string;
   updated_at: string;
+  next_rank?: number | null;
   preferences?: {
     [key: string]: any;
   } | null;
+};
+export type SessionEvent = {
+  type?: "session";
+  session: SessionSchema;
 };
 export type FinalEvent = {
   type?: "final";
@@ -813,6 +818,7 @@ export type SessionWithFiles = {
   agent_name?: string | null;
   title: string;
   updated_at: string;
+  next_rank?: number | null;
   preferences?: {
     [key: string]: any;
   } | null;
@@ -844,6 +850,7 @@ export type EchoEnvelope = {
   kind:
     | "ChatMessage"
     | "StreamEvent"
+    | "SessionEvent"
     | "FinalEvent"
     | "ErrorEvent"
     | "SessionSchema"
@@ -858,6 +865,7 @@ export type EchoEnvelope = {
     | ChatMessage
     | ChatAskInput
     | StreamEvent
+    | SessionEvent
     | FinalEvent
     | ErrorEvent
     | SessionSchema
@@ -886,6 +894,8 @@ export type Properties = {
   agentsNicknamePlural?: string;
   agentIconPath?: string | null;
   contactSupportLink?: string | null;
+  /** Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme. */
+  agentIconName?: string | null;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;

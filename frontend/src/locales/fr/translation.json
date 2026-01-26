@@ -164,7 +164,8 @@
     "allAgents": "Tous les agents",
     "deleteSessionFailed": "La supression de la conversation a échoué",
     "monitoring_graph": "Graphe",
-    "newChat": "Nouvelle conversation"
+    "newChat": "Nouvelle conversation",
+    "teams": "Équipes"
   },
   "chat": {
     "common": {
