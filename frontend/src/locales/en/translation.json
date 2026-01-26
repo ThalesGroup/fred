@@ -1114,5 +1114,13 @@
   "newChat": {
     "yourAgents": "Your agents",
     "selectAgentTitle": "Welcome {{userName}}, who would you like to speak to?"
+  },
+  "teamCard": {
+    "memberCountLabel": "members"
+  },
+  "teamsPage": {
+    "title": "Community teams",
+    "yourTeamsSubtitle": "Your teams",
+    "communityTeamsSubtitle": "Discover other teams"
   }
 }

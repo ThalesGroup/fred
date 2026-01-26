@@ -32,6 +32,7 @@ import ProcessorRunDetail from "../pages/ProcessorRunDetail";
 import { Profile } from "../pages/Profile";
 import RebacBackfill from "../pages/RebacBackfill";
 import Runtime from "../pages/Runtime";
+import { TeamDetailsPage } from "../pages/TeamDetailsPage.tsx";
 import { TeamsPage } from "../pages/TeamsPage.tsx";
 import { getConfig } from "./config";
 
@@ -63,6 +64,10 @@ export const routes: RouteObject[] = [
       {
         path: "teams",
         element: <TeamsPage />,
+      },
+      {
+        path: "team/:teamId",
+        element: <TeamDetailsPage />,
       },
       {
         path: "monitoring/kpis",

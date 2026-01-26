@@ -1116,5 +1116,13 @@
     "selectAgentTitle": "Bienvenue {{userName}}, à qui souhaitez-vous parler ?",
     "yourAgents": "Vos agents",
     "loadingAgentError": "Impossible de charger la liste des agents."
+  },
+  "teamCard": {
+    "memberCountLabel": "membres"
+  },
+  "teamsPage": {
+    "title": "Équipes de la communauté",
+    "yourTeamsSubtitle": "Vos équipes",
+    "communityTeamsSubtitle": "Découvrez d'autres équipes"
   }
 }
