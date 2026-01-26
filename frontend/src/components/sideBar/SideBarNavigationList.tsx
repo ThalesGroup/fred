@@ -43,7 +43,13 @@ export function SideBarNavigationList({ menuItems, isSidebarOpen, indentation = 
   }, [location.pathname]);
 
   return (
-    <List>
+    <List
+      sx={{
+        px: 1,
+        // Add margin bottom between items except the last one
+        "& > :not(:last-child)": { mb: 0.25 },
+      }}
+    >
       {menuItems.map((item) => {
         const hasChildren = !!(item.children && item.children.length > 0);
         const hasLink = !!item.url;
@@ -60,13 +66,26 @@ export function SideBarNavigationList({ menuItems, isSidebarOpen, indentation = 
               onClick={
                 hasChildren ? () => setOpenKeys((prev) => ({ ...prev, [item.key]: !prev[item.key] })) : undefined
               }
-              sx={{ pl: 2 + indentation * 2 }}
+              sx={{
+                pl: 2 + indentation * 2,
+                borderRadius: 2,
+              }}
             >
               <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.label} />
+              <ListItemText
+                primary={item.label}
+                slotProps={{
+                  primary: {
+                    sx: {
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    },
+                  },
+                }}
+              />
               {hasChildren && (isOpen ? <ExpandLess /> : <ExpandMore />)}
             </ListItemButton>
-            {true && <div></div>}
+
             {item.children && item.children.length > 0 && (
               <Collapse in={isSidebarOpen && isOpen} timeout="auto" unmountOnExit>
                 <SideBarNavigationList

@@ -1666,6 +1666,7 @@ export type GroupSummary = {
   banner_image_url?: string | null;
   owners?: UserSummary[];
   member_count?: number | null;
+  is_private?: boolean;
   total_member_count?: number | null;
   sub_groups?: GroupSummary[];
 };

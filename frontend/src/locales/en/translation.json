@@ -1116,7 +1116,8 @@
     "selectAgentTitle": "Welcome {{userName}}, who would you like to speak to?"
   },
   "teamCard": {
-    "memberCountLabel": "members"
+    "memberCountLabel": "members",
+    "privateTeamTooltip": "Private team"
   },
   "teamsPage": {
     "title": "Community teams",

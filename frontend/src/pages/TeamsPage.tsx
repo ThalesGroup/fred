@@ -6,7 +6,8 @@ import { GroupSummary } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 const teams: GroupSummary[] = [
   {
     id: "1",
-    name: "Development Team",
+    is_private: true,
+    name: "Development Team and More and Even Longer Name and Stuff",
     description:
       "Team responsible for software development. It includes frontend and backend developers. They work on building and maintaining the core features of our applications. The team collaborates closely with the design and QA teams to ensure high-quality deliverables. Today , the development team is focused on implementing new features and fixing bugs reported by users.",
     member_count: 12,

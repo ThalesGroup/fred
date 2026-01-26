@@ -1,4 +1,5 @@
 import GroupsIcon from "@mui/icons-material/Groups";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import { Avatar, AvatarGroup, Box, Paper, styled, Tooltip, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { GroupSummary } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -24,6 +25,20 @@ export interface TeamCardProps {
 
 export function TeamCard({ team, userIsMember = false }: TeamCardProps) {
   const { t } = useTranslation();
+
+  // Offset a tooltp down from 12px
+  const tooltipOffset = {
+    popper: {
+      modifiers: [
+        {
+          name: "offset",
+          options: {
+            offset: [0, -12],
+          },
+        },
+      ],
+    },
+  };
 
   const cardContent = (
     <Paper elevation={2} sx={{ borderRadius: 2, userSelect: "none" }}>
@@ -58,7 +73,22 @@ export function TeamCard({ team, userIsMember = false }: TeamCardProps) {
           }}
         >
           <Box sx={{ display: "flex", flexDirection: "column", alignItems: "stretch" }}>
-            <Typography variant="h6">{team.name}</Typography>
+            {/* Title */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Typography
+                variant="h6"
+                sx={{ flexGrow: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              >
+                {team.name}
+              </Typography>
+              {team.is_private && (
+                <Tooltip title={t("teamCard.privateTeamTooltip")} placement="top" slotProps={tooltipOffset}>
+                  <LockOutlinedIcon />
+                </Tooltip>
+              )}
+            </Box>
+
+            {/* Member count */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
               <GroupsIcon fontSize="small" />
               <Typography variant="body2">
@@ -92,18 +122,7 @@ export function TeamCard({ team, userIsMember = false }: TeamCardProps) {
                   title={`${owner.first_name} ${owner.last_name}`}
                   key={owner.id}
                   placement="top"
-                  slotProps={{
-                    popper: {
-                      modifiers: [
-                        {
-                          name: "offset",
-                          options: {
-                            offset: [0, -12],
-                          },
-                        },
-                      ],
-                    },
-                  }}
+                  slotProps={tooltipOffset}
                 >
                   <Avatar
                     sizes="small"

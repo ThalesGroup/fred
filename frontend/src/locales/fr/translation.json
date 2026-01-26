@@ -1118,7 +1118,8 @@
     "loadingAgentError": "Impossible de charger la liste des agents."
   },
   "teamCard": {
-    "memberCountLabel": "membres"
+    "memberCountLabel": "membres",
+    "privateTeamTooltip": "Équipe privée"
   },
   "teamsPage": {
     "title": "Équipes de la communauté",
