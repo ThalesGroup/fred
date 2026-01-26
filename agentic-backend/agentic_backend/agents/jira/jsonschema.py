@@ -28,6 +28,29 @@ requirementsSchema = {
     },
 }
 
+userStoryTitlesSchema = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "id": {
+                "type": "string",
+                "description": "Unique user story ID (e.g., US-001)",
+            },
+            "title": {
+                "type": "string",
+                "description": "Short, descriptive title for the user story",
+            },
+            "epic_name": {
+                "type": "string",
+                "description": "Parent epic name for grouping related stories",
+            },
+        },
+        "required": ["id", "title", "epic_name"],
+        "additionalProperties": False,
+    },
+}
+
 userStoriesSchema = {
     "type": "array",
     "items": {
@@ -72,11 +95,53 @@ userStoriesSchema = {
             },
             "acceptance_criteria": {
                 "type": "array",
-                "items": {"type": "string"},
-                "description": "List of acceptance criteria (Gherkin format preferred)",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "scenario": {
+                            "type": "string",
+                            "description": "Name/title of the acceptance scenario",
+                        },
+                        "steps": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Gherkin steps (Given/When/Then)",
+                        },
+                    },
+                    "required": ["scenario", "steps"],
+                },
+                "description": "List of acceptance criteria as structured objects with scenario name and Gherkin steps.",
             },
         },
         "required": ["id", "summary", "description", "priority"],
+        "additionalProperties": False,
+    },
+}
+
+testTitlesSchema = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "id": {
+                "type": "string",
+                "description": "Unique test ID (e.g., SC-001)",
+            },
+            "title": {
+                "type": "string",
+                "description": "Short, descriptive title for the test case",
+            },
+            "user_story_id": {
+                "type": "string",
+                "description": "Related user story ID (e.g., US-001)",
+            },
+            "test_type": {
+                "type": "string",
+                "enum": ["Nominal", "Limite", "Erreur"],
+                "description": "Type of test case",
+            },
+        },
+        "required": ["id", "title", "user_story_id", "test_type"],
         "additionalProperties": False,
     },
 }
@@ -112,7 +177,7 @@ testsSchema = {
                 "description": "Ordered list of test steps in Gherkin format",
             },
             "test_data": {
-                "type": "string",
+                "type": "array",
                 "description": "Test data required for the test",
             },
             "priority": {

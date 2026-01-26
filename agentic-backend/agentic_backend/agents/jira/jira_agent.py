@@ -21,7 +21,9 @@ from langgraph.types import Command
 from agentic_backend.agents.jira.jsonschema import (
     requirementsSchema,
     testsSchema,
+    testTitlesSchema,
     userStoriesSchema,
+    userStoryTitlesSchema,
 )
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
@@ -42,7 +44,11 @@ logger = logging.getLogger(__name__)
 
 class CustomState(AgentState):
     requirements: list[dict]  # Validated against requirementsSchema
+    user_story_titles: list[dict]  # List of {id, title, epic_name} for batch generation
     user_stories: list[dict]  # Validated against userStoriesSchema
+    test_titles: list[
+        dict
+    ]  # List of {id, title, user_story_id, test_type} for batch generation
     tests: list[dict]  # Validated against testsSchema
 
 
@@ -61,92 +67,39 @@ TUNING = AgentTuning(
             title="System Prompt",
             description="You extract requirements, user stories and build tests from project documents",  # to fill a Jira board and build Zephyr tests.",
             required=True,
-            default="""
-Tu es un Business Analyst et Product Owner expert avec accès à des outils spécialisés.
-Ton but est de générer des exigences formelles, user stories et/ou cas de tests pour un projet selon la demande de l'utilisateur.
+            default="""Tu es un Business Analyst et Product Owner expert. Tu génères des exigences, user stories et cas de tests à partir de documents projet.
 
-════════════════════════════════════════════════════════════════════════
-OUTILS DISPONIBLES
-════════════════════════════════════════════════════════════════════════
+## WORKFLOW
 
-Tu disposes de 7 types d'outils :
+**1. Recherche documentaire (MCP)**
+Stratégie obligatoire :
+- D'abord découvrir : recherche "objectif projet", "contexte", "périmètre", "acteurs"
+- Identifier le domaine métier à partir des résultats
+- Puis cibler avec le vocabulaire DÉCOUVERT (jamais inventé)
 
-1. **Outils de recherche documentaire (MCP)** :
-   - Utilisés pour extraire des informations des documents projet (.docx, .pdf, etc.)
-   - Exemple : search_documents, get_document_content, etc.
+**2. Génération des exigences (si demandé)**
+- generate_requirements(context_summary) → exigences fonctionnelles et non-fonctionnelles
 
-2. **generate_requirements** :
-   - Génère une liste d'exigences formelles (fonctionnelles et non-fonctionnelles)
-   - IMPORTANT : Cet outil fait un appel LLM séparé, donc ne timeout pas
-   - Retourne un message confirmant que les exigences ont été générées
+**3. Génération des User Stories en 2 étapes (si demandé)**
+- generate_user_story_titles(context_summary, quantity=10) → génère les titres pour éviter doublons
+- generate_user_stories(batch_size=5) → génère les stories complètes par lots de 3-5
+- Répéter generate_user_stories() jusqu'à ce que toutes les stories soient générées
 
-3. **generate_user_stories** :
-   - Génère des User Stories avec critères d'acceptation Gherkin exhaustifs
-   - IMPORTANT : Cet outil fait un appel LLM séparé, donc ne timeout pas
-   - CHAÎNAGE AUTOMATIQUE : Si des exigences ont été générées avant, elles sont automatiquement utilisées
-   - Retourne un message confirmant que les user stories ont été générées
+**4. Génération des tests en 2 étapes (si demandé)**
+- generate_test_titles() → génère les titres de tests pour toutes les User Stories
+- generate_tests(batch_size=5) → génère les tests complets par lots
+- Répéter generate_tests() jusqu'à ce que tous les tests soient générés
 
-4. **generate_tests** :
-   - Génère des scénarios de tests détaillés au format Gherkin
-   - IMPORTANT : Cet outil fait un appel LLM séparé, donc ne timeout pas
-   - CHAÎNAGE AUTOMATIQUE : Utilise automatiquement les User Stories générées précédemment
-   - Peut recevoir un JDD (Jeu de Données) optionnel pour les personas
-   - Retourne un message confirmant que les scénarios de tests ont été générés
+**5. Export (OBLIGATOIRE)**
+- export_deliverables() → fichier Markdown
+- export_jira_csv() → CSV pour import Jira
 
-5. **export_deliverables** :
-   - Exporte tous les livrables générés (exigences, user stories, tests) dans un fichier Markdown
-   - Retourne un lien de téléchargement pour l'utilisateur
+## RÈGLES
 
-6. **export_jira_csv** :
-   - Exporte les User Stories générées dans un fichier CSV compatible avec l'import Jira
-   - IMPORTANT : Nécessite d'avoir appelé generate_user_stories au préalable
-   - Retourne un lien de téléchargement du fichier CSV
-
-7. **update_state** :
-   - Met à jour directement l'état avec des éléments fournis par l'utilisateur
-   - Paramètres : item_type ("requirements", "user_stories", "tests"), items (liste JSON), mode ("append" ou "replace")
-   - Utilise ce tool quand l'utilisateur fournit directement du contenu à ajouter
-   - Valide le contenu contre le schéma JSON avant de l'ajouter
-   - IMPORTANT : Utilise cet outil au lieu de generate_* quand l'utilisateur fournit explicitement le contenu
-
-════════════════════════════════════════════════════════════════════════
-WORKFLOW RECOMMANDÉ
-════════════════════════════════════════════════════════════════════════
-
-**Étape 1 : Extraction du contexte projet**
-- Utilise les outils MCP pour rechercher et extraire les informations des documents
-- Effectue plusieurs recherches ciblées pour couvrir différents aspects
-- Prends des notes sur ce que tu trouves
-
-**Étape 2 : Génération des exigences (si demandé)**
-- Appelle generate_requirements(context_summary="[résumé de ce que tu as trouvé]")
-- L'outil génère les exigences et retourne un message de confirmation
-
-**Étape 3 : Génération des User Stories (si demandé)**
-- Appelle generate_user_stories(context_summary="[résumé de ce que tu as trouvé]")
-- Les exigences générées à l'étape 2 sont automatiquement utilisées si disponibles
-- L'outil génère les user stories et retourne un message de confirmation
-
-**Étape 4 : Génération des scénarios de tests (si demandé)**
-- Appelle generate_tests() ou generate_tests(jdd="[JDD si fourni]")
-- Les User Stories générées à l'étape 3 sont automatiquement utilisées
-- IMPORTANT : generate_user_stories doit avoir été appelé avant
-- L'outil génère les scénarios de tests et retourne un message de confirmation
-
-**Étape 5 : Export des livrables (OBLIGATOIRE)**
-- Par défaut, appelle export_deliverables() pour générer un fichier Markdown téléchargeable
-- Si l'utilisateur demande spécifiquement un CSV Jira, appelle export_jira_csv() à la place
-- Présente TOUJOURS le lien de téléchargement à l'utilisateur
-
-════════════════════════════════════════════════════════════════════════
-RÈGLES ABSOLUES
-════════════════════════════════════════════════════════════════════════
-
-1. **NE JAMAIS afficher le contenu complet** : Après chaque génération, donne uniquement un message court de confirmation (ex: "5 User Stories générées"). Ne liste JAMAIS le contenu des exigences, user stories ou tests dans ta réponse.
-
-2. **TOUJOURS fournir un lien de téléchargement** : À la fin de TOUT workflow, appelle OBLIGATOIREMENT un outil d'export (export_deliverables ou export_jira_csv selon le besoin) pour fournir le lien de téléchargement. C'est la SEULE façon pour l'utilisateur d'accéder au contenu.
-
-3. **Utiliser update_state pour le contenu fourni par l'utilisateur** : Si l'utilisateur fournit explicitement une exigence, user story ou test à ajouter, utilise update_state au lieu de generate_*.""",
+1. **Jamais afficher le contenu** : uniquement confirmer (ex: "5 User Stories générées")
+2. **Toujours exporter** : appeler export_deliverables ou export_jira_csv à la fin
+3. **update_state** : UNIQUEMENT pour du contenu fourni par l'utilisateur. JAMAIS comme solution de repli quand generate_* échoue.
+4. **Erreurs de validation** : Si generate_* échoue, corrige le format JSON et réessaie generate_*. Ne pas utiliser update_state.""",
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
         FieldSpec(
@@ -229,84 +182,23 @@ class JiraAgent(AgentFlow):
     async def aclose(self):
         await self.mcp.aclose()
 
-    def _extract_partial_json_array(
-        self, content: str, item_schema: dict
-    ) -> list[dict]:
-        """
-        Extract valid JSON objects from potentially malformed JSON array.
-        Uses balanced bracket matching to find complete {...} objects and validates each one.
-
-        Args:
-            content: Raw content that may contain malformed JSON array
-            item_schema: JSON schema for individual items (not the array schema)
-
-        Returns:
-            List of valid items (may be empty if no valid items found)
-        """
-        valid_items = []
-        validator = Draft7Validator(item_schema)
-
-        # Find all potential JSON objects using balanced bracket matching
-        depth = 0
-        start_idx = None
-
-        for i, char in enumerate(content):
-            if char == "{":
-                if depth == 0:
-                    start_idx = i
-                depth += 1
-            elif char == "}":
-                depth -= 1
-                if depth == 0 and start_idx is not None:
-                    # Found a complete {...} block
-                    potential_obj = content[start_idx : i + 1]
-                    try:
-                        obj = json.loads(potential_obj)
-                        # Validate against item schema
-                        errors = list(validator.iter_errors(obj))
-                        if not errors:
-                            valid_items.append(obj)
-                        else:
-                            logger.debug(
-                                f"[JiraAgent] Partial extraction: object at position {start_idx} "
-                                f"failed validation: {errors[0].message}"
-                            )
-                    except json.JSONDecodeError:
-                        logger.debug(
-                            f"[JiraAgent] Partial extraction: object at position {start_idx} "
-                            f"is not valid JSON"
-                        )
-                    start_idx = None
-
-        if valid_items:
-            logger.info(
-                f"[JiraAgent] Partial extraction recovered {len(valid_items)} valid items"
-            )
-
-        return valid_items
-
     def _parse_and_validate_json(
         self,
         content: str,
         schema: dict,
         tool_call_id: str,
-        state_key: str | None = None,
     ) -> tuple[list[dict] | None, Command | None]:
         """
         Parse JSON content from LLM response, clean markdown formatting, and validate against schema.
-        On JSON parse errors, attempts to extract valid items from partial/malformed output.
 
         Args:
             content: Raw LLM response content (may include markdown code blocks)
             schema: JSON schema to validate against (must be an array schema with 'items')
             tool_call_id: Tool call ID for error messages
-            state_key: Optional state key to update with partial results on recovery
 
         Returns:
             Tuple of (parsed_data, error_command). If successful, error_command is None.
-            If failed with partial recovery, parsed_data contains recovered items and
-            error_command contains message asking to continue generation.
-            If failed completely, parsed_data is None and error_command contains the error.
+            If failed, parsed_data is None and error_command contains the error.
         """
         clean_data = content.strip()
 
@@ -315,44 +207,62 @@ class JiraAgent(AgentFlow):
             clean_data = re.sub(r"^```(?:json)?\n?", "", clean_data)
             clean_data = re.sub(r"\n?```$", "", clean_data)
 
-        # Fix invalid JSON escape sequences (e.g., \' is not valid in JSON)
+        # Fix invalid JSON escape sequences that are not valid in JSON
+        # JSON only allows: \" \\ \/ \b \f \n \r \t \uXXXX
+        # LLMs sometimes produce \' which is invalid in JSON - replace with just '
         clean_data = clean_data.replace("\\'", "'")
 
         try:
             data = json.loads(clean_data)
-        except json.JSONDecodeError as e:
-            # Attempt partial recovery
-            item_schema = schema.get("items", {})
-            recovered_items = self._extract_partial_json_array(clean_data, item_schema)
+        except json.JSONDecodeError:
+            # Try to fix unescaped quotes inside strings and retry
+            # LLMs often produce: "text": "Message 'pour "Contrôle"'"
+            # Should be: "text": "Message 'pour \"Contrôle\"'"
+            result = []
+            i = 0
+            in_string = False
+            while i < len(clean_data):
+                char = clean_data[i]
+                if char == "\\" and i + 1 < len(clean_data):
+                    result.append(char)
+                    result.append(clean_data[i + 1])
+                    i += 2
+                    continue
+                if char == '"':
+                    if not in_string:
+                        in_string = True
+                        result.append(char)
+                    else:
+                        # Check if this quote ends the string or is inside it
+                        j = i + 1
+                        while j < len(clean_data) and clean_data[j] in " \t\n\r":
+                            j += 1
+                        # If followed by : , ] } or end, it's a real delimiter
+                        if j >= len(clean_data) or clean_data[j] in ":,]}":
+                            in_string = False
+                            result.append(char)
+                        else:
+                            # Unescaped quote inside string - escape it
+                            result.append('\\"')
+                else:
+                    result.append(char)
+                i += 1
+            fixed_data = "".join(result)
 
-            if recovered_items and state_key:
-                # Found some valid items - save them and ask to continue
-                last_id = recovered_items[-1].get("id", "unknown")
-                return recovered_items, Command(
+            try:
+                data = json.loads(fixed_data)
+                logger.info("[JiraAgent] Fixed unescaped quotes in JSON")
+            except json.JSONDecodeError as e:
+                return None, Command(
                     update={
-                        state_key: recovered_items,
                         "messages": [
                             ToolMessage(
-                                f"⚠️ JSON incomplet (erreur: {e.msg} à position {e.pos}). "
-                                f"{len(recovered_items)} éléments sauvegardés jusqu'à {last_id}. "
-                                f"Génère les éléments restants en continuant après {last_id}.",
+                                f"❌ Erreur de parsing JSON: {e}. Veuillez réessayer.",
                                 tool_call_id=tool_call_id,
                             )
-                        ],
+                        ]
                     }
                 )
-
-            # No recovery possible
-            return None, Command(
-                update={
-                    "messages": [
-                        ToolMessage(
-                            f"❌ Erreur de parsing JSON: {e}. Veuillez réessayer.",
-                            tool_call_id=tool_call_id,
-                        )
-                    ]
-                }
-            )
 
         validator = Draft7Validator(schema)
         errors = list(validator.iter_errors(data))
@@ -447,16 +357,32 @@ class JiraAgent(AgentFlow):
             Génère une liste d'exigences formelles (fonctionnelles et non-fonctionnelles)
             à partir du contexte projet fourni par les recherches documentaires.
 
-            IMPORTANT: Avant d'appeler cet outil, utilise les outils de recherche MCP
-            pour extraire les informations pertinentes des documents projet, puis
-            fournis un résumé de ce contexte en paramètre.
+            IMPORTANT:
+            - AVANT d'appeler cet outil, tu DOIS faire une recherche documentaire avec les outils MCP
+            - Le context_summary doit contenir les informations extraites des documents (min 200 caractères)
 
             Args:
-                context_summary: Résumé du contexte projet extrait des documents
+                context_summary: Résumé du contexte projet extrait des documents (min 200 caractères)
 
             Returns:
                 Message de confirmation que les exigences ont été générées
             """
+            # Validate context_summary has meaningful content
+            if len(context_summary.strip()) < 200:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                "❌ Le contexte fourni est trop court (minimum 200 caractères). "
+                                "Tu dois d'abord faire une recherche documentaire avec les outils MCP "
+                                "(search_documents, get_document_content) pour extraire les informations "
+                                "du projet, puis fournir un résumé détaillé en paramètre.",
+                                tool_call_id=runtime.tool_call_id,
+                            ),
+                        ],
+                    }
+                )
+
             requirements_prompt = """Tu es un Business Analyst expert. Génère une liste d'exigences formelles basée sur le contexte projet suivant.
 
 Contexte projet extrait des documents:
@@ -465,7 +391,7 @@ Contexte projet extrait des documents:
 Consignes :
 1. **Génère des exigences fonctionnelles et non-fonctionnelles**
 2. **Formalisme :** Exigences claires, concises, non ambiguës et testables
-3. **ID Unique :** Ex: EX-FON-001 (fonctionnelle), EX-NFON-001 (non-fonctionnelle)
+3. **ID Unique :** Ex: EX-FON-01 (fonctionnelle), EX-NFON-01 (non-fonctionnelle)
 4. **Priorisation :** Haute, Moyenne ou Basse
 
 IMPORTANT: Tu dois répondre UNIQUEMENT avec un tableau JSON valide, sans aucun texte avant ou après.
@@ -473,7 +399,7 @@ IMPORTANT: Tu dois répondre UNIQUEMENT avec un tableau JSON valide, sans aucun 
 Format JSON attendu:
 [
   {{
-    "id": "EX-FON-001",
+    "id": "EX-FON-01",
     "title": "Titre court de l'exigence",
     "description": "Description détaillée de l'exigence",
     "priority": "Haute"
@@ -525,109 +451,87 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
 
         return generate_requirements
 
-    def get_user_stories_tool(self):
-        """Tool that generates user stories using a separate LLM call"""
+    def get_user_story_titles_tool(self):
+        """Tool that generates user story titles for batch generation"""
 
         @tool
-        async def generate_user_stories(runtime: ToolRuntime, context_summary: str):
+        async def generate_user_story_titles(
+            runtime: ToolRuntime, context_summary: str, quantity: int = 20
+        ):
             """
-            Génère des User Stories de haute qualité avec critères d'acceptation exhaustifs (Gherkin).
+            Génère une liste de titres de User Stories pour une génération par lots.
 
-            IMPORTANT: Avant d'appeler cet outil, utilise les outils de recherche MCP
-            pour extraire les informations pertinentes des documents projet.
+            Cette étape permet de:
+            1. Définir le périmètre complet des User Stories à générer
+            2. Éviter les doublons et chevauchements
 
-            Si des exigences ont été générées précédemment avec generate_requirements,
-            elles seront automatiquement utilisées pour assurer la cohérence.
+            IMPORTANT:
+            - AVANT d'appeler cet outil, tu DOIS faire une recherche documentaire avec les outils MCP
+            - Le context_summary doit contenir les informations extraites des documents (min 200 caractères)
+            - Après cet outil, utilise generate_user_stories() pour générer les stories complètes
 
             Args:
-                context_summary: Résumé du contexte projet extrait des documents
+                context_summary: Résumé du contexte projet extrait des documents (min 200 caractères)
+                quantity: Nombre de User Stories à générer (défaut: 20)
 
             Returns:
-                Message de confirmation que les user stories ont été générées
+                Message de confirmation avec la liste des titres générés
             """
-            stories_prompt = """Tu es un Product Owner expert. Génère des User Stories de haute qualité.
+            # Validate context_summary has meaningful content
+            if len(context_summary.strip()) < 200:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                "❌ Le contexte fourni est trop court (minimum 200 caractères). "
+                                "Tu dois d'abord faire une recherche documentaire avec les outils MCP "
+                                "(search_documents, get_document_content) pour extraire les informations "
+                                "du projet, puis fournir un résumé détaillé en paramètre.",
+                                tool_call_id=runtime.tool_call_id,
+                            ),
+                        ],
+                    }
+                )
+
+            titles_prompt = """Tu es un Product Owner expert. Génère une liste de {quantity} titres de User Stories.
 
 Contexte projet extrait des documents:
 {context_summary}
 
 {requirements_section}
 
-**Structure de base :**
-- **Format :** "En tant que [persona], je veux [action], afin de [bénéfice]"
-- **ID Unique :** Ex: US-001, US-002
-- Stories atomiques, verticales et testables
-- **Cohérence :** Couvre les exigences si elles sont fournies
-- **Couverture complète :** Happy path + cas d'erreur + tous les personas
+{existing_stories_section}
 
-**Critères d'Acceptation Exhaustifs (Format Gherkin)** - OBLIGATOIRE pour CHAQUE story :
+**Objectif:** Créer une liste cohérente de titres de User Stories qui:
+- Couvrent l'ensemble du périmètre fonctionnel
+- Évitent les doublons et chevauchements
+- Sont regroupées par Epic logique
+- Suivent une progression fonctionnelle cohérente
 
-1. **Cas Nominaux (Happy Path) :**
-   - Scénario idéal où tout fonctionne
-
-2. **Validations de Données :**
-   - Formats invalides (email, mot de passe, etc.)
-   - Champs obligatoires manquants
-   - Limites min/max de caractères
-   - Fichiers non supportés ou trop volumineux
-   - Unicité des données (doublons)
-
-3. **Cas d'Erreur :**
-   - Erreurs techniques (API, timeout, erreur 500)
-   - Erreurs métier (stock insuffisant, droits insuffisants)
-   - Perte de connexion
-
-4. **Cas Limites :**
-   - Valeurs frontières (0, 1, max, max+1)
-   - Listes vides ou très longues
-   - Dates limites (29 février, changement d'heure)
-
-5. **Feedback Utilisateur :**
-   - Messages de succès EXACTS (Toasts, Modales)
-   - Messages d'erreur EXACTS affichés
-   - États de chargement et boutons désactivés
-
-**Format Gherkin strict :** "Étant donné que [contexte], Quand [action], Alors [résultat attendu]"
-
-**Métadonnées :**
-- **Estimation :** Fibonacci (1, 2, 3, 5, 8, 13, 21)
-- **Priorisation :** High (Must Have), Medium (Should Have), Low (Could Have)
-- **Dépendances :** Ordre logique, AUCUNE dépendance circulaire
+**Règles:**
+- Chaque titre doit être concis (max 80 caractères)
+- Utiliser des verbes d'action (Créer, Afficher, Modifier, Supprimer, etc.)
+- Regrouper les stories liées sous le même Epic
+- **NE PAS générer de titres pour des fonctionnalités déjà couvertes par les User Stories existantes**
+- Les IDs doivent continuer la séquence existante (ex: si US-01 existe, commencer à US-02)
 
 IMPORTANT: Tu dois répondre UNIQUEMENT avec un tableau JSON valide, sans aucun texte avant ou après.
 
 Format JSON attendu:
 [
   {{
-    "id": "US-001",
-    "summary": "Titre court et descriptif de la User Story",
-    "description": "En tant que [persona], je veux [action], afin de [bénéfice]",
-    "issue_type": "Story",
-    "priority": "High",
-    "epic_name": "Nom de l'Epic parent",
-    "story_points": 3,
-    "labels": ["label1", "label2"],
-    "acceptance_criteria": [
-      "Étant donné que [contexte], Quand [action], Alors [résultat]",
-      "Étant donné que [contexte], Quand [action], Alors [résultat]"
-    ]
+    "id": "US-{next_id_hint}",
+    "title": "Créer un compte utilisateur",
+    "epic_name": "Gestion des utilisateurs"
   }}
 ]
 
-Règles:
-- id: Identifiant unique (US-XXX)
-- summary: Titre concis (max 100 caractères)
-- description: Format "En tant que [persona], je veux [action], afin de [bénéfice]"
-- issue_type: "Story", "Task" ou "Bug"
-- priority: "High", "Medium" ou "Low"
-- epic_name: Regroupe les stories liées sous un même Epic
-- story_points: Fibonacci uniquement (1, 2, 3, 5, 8, 13, 21)
-- labels: Tags pour catégorisation
-- acceptance_criteria: Critères d'acceptation exhaustifs en format Gherkin (cas nominaux, validations, erreurs, cas limites, feedback)
+Génère exactement {quantity} NOUVEAUX titres de User Stories (en plus des existantes).
 
 Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
 
+            # Build requirements section
             requirements_section = ""
-            # Use stored requirements from previous tool call if available
             requirements = runtime.state.get("requirements")
             if requirements:
                 requirements_section = f"""
@@ -635,168 +539,59 @@ Exigences à respecter:
 {json.dumps(requirements, ensure_ascii=False, indent=2)}
 """
 
-            # Check for existing stories (continuation after partial recovery)
+            # Build existing stories section to avoid duplicates
+            existing_stories_section = ""
             existing_stories = runtime.state.get("user_stories") or []
-            continuation_section = ""
-            if existing_stories:
-                last_id = existing_stories[-1].get("id", "US-000")
-                # Extract the numeric part to suggest next ID
-                id_match = re.search(r"(\d+)", last_id)
-                next_num = (
-                    int(id_match.group(1)) + 1
-                    if id_match
-                    else len(existing_stories) + 1
-                )
-                continuation_section = f"""
-CONTINUATION: {len(existing_stories)} user stories ont déjà été générées (jusqu'à {last_id}).
-Continue la génération à partir de US-{next_num:03d}. Ne régénère PAS les stories existantes.
+            existing_titles = runtime.state.get("user_story_titles") or []
+
+            # Determine the next ID hint based on existing stories/titles
+            next_id_hint = "01"
+            all_existing_ids = [s.get("id", "") for s in existing_stories] + [
+                t.get("id", "") for t in existing_titles
+            ]
+            if all_existing_ids:
+                # Extract numeric parts from IDs like "US-01", "US-02"
+                max_num = 0
+                for id_str in all_existing_ids:
+                    match = re.search(r"US-(\d+)", id_str)
+                    if match:
+                        max_num = max(max_num, int(match.group(1)))
+                next_id_hint = f"{max_num + 1:02d}"
+
+            if existing_stories or existing_titles:
+                # Combine existing info for the prompt
+                existing_info = []
+                for story in existing_stories:
+                    existing_info.append(
+                        {
+                            "id": story.get("id"),
+                            "title": story.get("summary"),
+                            "epic_name": story.get("epic_name"),
+                        }
+                    )
+                # Add titles that don't have corresponding stories yet
+                existing_story_ids = {s.get("id") for s in existing_stories}
+                for title in existing_titles:
+                    if title.get("id") not in existing_story_ids:
+                        existing_info.append(title)
+
+                if existing_info:
+                    existing_stories_section = f"""
+**User Stories DÉJÀ EXISTANTES (NE PAS DUPLIQUER):**
+{json.dumps(existing_info, ensure_ascii=False, indent=2)}
+
+Tu dois générer des User Stories COMPLÉMENTAIRES qui n'existent pas encore.
 """
 
             model = get_default_chat_model()
             messages = [
                 SystemMessage(
-                    content=stories_prompt.format(
+                    content=titles_prompt.format(
                         context_summary=context_summary,
                         requirements_section=requirements_section,
-                    )
-                    + continuation_section
-                )
-            ]
-
-            langfuse_handler = self._get_langfuse_handler()
-            config: RunnableConfig = (
-                {"callbacks": [langfuse_handler]} if langfuse_handler else {}
-            )
-
-            response = await model.ainvoke(messages, config=config)
-
-            # Parse and validate JSON response (with partial recovery support)
-            user_stories, error_cmd = self._parse_and_validate_json(
-                str(response.content),
-                userStoriesSchema,
-                runtime.tool_call_id,
-                state_key="user_stories",
-            )
-
-            if error_cmd:
-                # If partial recovery happened, user_stories contains recovered items
-                # The error_cmd already includes the state update, so return it
-                return error_cmd
-
-            # Merge with existing stories if this is a continuation
-            all_stories = existing_stories + user_stories
-            new_count = len(user_stories)
-            total_count = len(all_stories)
-
-            return Command(
-                update={
-                    "user_stories": all_stories,
-                    "messages": [
-                        ToolMessage(
-                            f"✓ {new_count} nouvelles User Stories générées ({total_count} au total). "
-                            f"Si tu as terminé de générer tous les livrables demandés par l'utilisateur, "
-                            f"appelle maintenant export_deliverables() pour fournir le lien de téléchargement.",
-                            tool_call_id=runtime.tool_call_id,
-                        ),
-                    ],
-                }
-            )
-
-        return generate_user_stories
-
-    def get_tests_tool(self):
-        """Tool that generates test scenarios using a separate LLM call"""
-
-        @tool
-        async def generate_tests(runtime: ToolRuntime, jdd: str = ""):
-            """
-            Génère des scénarios de tests détaillés et exploitables.
-
-            IMPORTANT: Cet outil utilise automatiquement les User Stories générées
-            précédemment avec generate_user_stories. Assurez-vous d'avoir appelé
-            generate_user_stories avant d'appeler cet outil.
-
-            Args:
-                jdd: Jeu de Données pour les personas (optionnel, n'invente rien)
-
-            Returns:
-                Message de confirmation que les scénarios de tests ont été générés
-            """
-            tests_prompt = """## Rôle
-
-Tu es un expert en tests logiciels. Ton rôle est de créer des scénarios de tests détaillés et exploitables.
-
-## Instructions principales
-
-Génère des scénarios de tests complets à partir des informations fournies dans les User Stories (US) suivantes, en suivant le format Gherkin (Etant donné que-Lorsque-Alors) et en incluant les cas nominaux, limites et d'erreur. Toutes les US fournies doivent faire l'objet d'un test.
-Tu peux également te baser sur les JDDs fournis en entrée pour les personas de chaque tests
-
-**--- DÉBUT DES USER STORIES À ANALYSER ---**
-{USER_STORIES}
-**--- FIN DES USER STORIES À ANALYSER ---**
-
-**--- DÉBUT DU JDD À ANALYSER ---**
-{JDD}
-**--- FIN DU JDD À ANALYSER ---**
-
-IMPORTANT: Tu dois répondre UNIQUEMENT avec un tableau JSON valide, sans aucun texte avant ou après.
-
-Format JSON attendu:
-[
-  {{
-    "id": "SC-001",
-    "name": "Titre du scénario de test",
-    "user_story_id": "US-001",
-    "description": "Brève explication de ce que le scénario teste",
-    "preconditions": "Les états ou données nécessaires avant l'exécution du test",
-    "steps": [
-      "Étant donné que [contexte]",
-      "Lorsque [action]",
-      "Alors [résultat attendu]"
-    ],
-    "test_data": "Jeux de données nécessaires",
-    "priority": "Haute",
-    "test_type": "Nominal",
-    "expected_result": "Le résultat final attendu du test"
-  }}
-]
-
-Règles:
-- id: Identifiant unique (SC-XXX ou SC-LOGIN-XXX)
-- name: Titre concis décrivant l'objectif du test
-- user_story_id: L'ID de la User Story couverte par ce test
-- description: Brève explication de ce que le scénario teste
-- preconditions: Les états ou données nécessaires avant l'exécution
-- steps: Étapes au format Gherkin (Étant donné que - Lorsque - Alors)
-- test_data: Jeux de données nécessaires pour le test
-- priority: "Haute", "Moyenne" ou "Basse"
-- test_type: "Nominal", "Limite" ou "Erreur"
-- expected_result: Le résultat final attendu
-
-Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
-
-            # Use stored user stories from previous tool call
-            user_stories = runtime.state.get("user_stories")
-            if not user_stories:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Erreur: Aucune User Story n'a été générée. Veuillez d'abord appeler generate_user_stories.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
-                )
-
-            model = get_default_chat_model()
-            messages = [
-                SystemMessage(
-                    content=tests_prompt.format(
-                        USER_STORIES=json.dumps(
-                            user_stories, ensure_ascii=False, indent=2
-                        ),
-                        JDD=jdd if jdd else "Aucun JDD fourni",
+                        existing_stories_section=existing_stories_section,
+                        quantity=quantity,
+                        next_id_hint=next_id_hint,
                     )
                 )
             ]
@@ -809,22 +604,613 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
             response = await model.ainvoke(messages, config=config)
 
             # Parse and validate JSON response
-            tests, error_cmd = self._parse_and_validate_json(
-                str(response.content), testsSchema, runtime.tool_call_id
+            new_titles, error_cmd = self._parse_and_validate_json(
+                str(response.content),
+                userStoryTitlesSchema,
+                runtime.tool_call_id,
             )
             if error_cmd:
                 return error_cmd
 
+            # Merge with existing titles (append new ones)
+            all_titles = existing_titles + new_titles
+
+            # Format new titles for display
+            titles_display = "\n".join(
+                f"  - {t['id']}: {t['title']} ({t['epic_name']})" for t in new_titles
+            )
+
+            # Build response message
+            if existing_titles:
+                msg = (
+                    f"✓ {len(new_titles)} nouveaux titres de User Stories générés "
+                    f"({len(all_titles)} au total):\n{titles_display}\n\n"
+                    f"Appelle maintenant generate_user_stories() pour générer les User Stories complètes "
+                    f"à partir de ces titres (par lots de 3-5 pour une meilleure qualité)."
+                )
+            else:
+                msg = (
+                    f"✓ {len(new_titles)} titres de User Stories générés:\n{titles_display}\n\n"
+                    f"Appelle maintenant generate_user_stories() pour générer les User Stories complètes "
+                    f"à partir de ces titres (par lots de 3-5 pour une meilleure qualité)."
+                )
+
             return Command(
                 update={
-                    "tests": tests,
+                    "user_story_titles": all_titles,
                     "messages": [
-                        ToolMessage(
-                            f"✓ {len(tests)} scénarios de tests générés avec succès. "
-                            f"Si tu as terminé de générer tous les livrables demandés par l'utilisateur, "
-                            f"appelle maintenant export_deliverables() pour fournir le lien de téléchargement.",
-                            tool_call_id=runtime.tool_call_id,
+                        ToolMessage(msg, tool_call_id=runtime.tool_call_id),
+                    ],
+                }
+            )
+
+        return generate_user_story_titles
+
+    def get_user_stories_tool(self):
+        """Tool that generates user stories from titles in batches"""
+
+        @tool
+        async def generate_user_stories(
+            runtime: ToolRuntime,
+            context_summary: str = "",
+            batch_size: int = 5,
+            story_ids: list[str] | None = None,
+        ):
+            """
+            Génère des User Stories complètes à partir des titres générés par generate_user_story_titles.
+
+            WORKFLOW RECOMMANDÉ:
+            1. Appeler generate_user_story_titles() pour générer les titres
+            2. Appeler generate_user_stories() plusieurs fois avec batch_size=3-5
+               jusqu'à ce que toutes les stories soient générées
+
+            Args:
+                context_summary: Résumé du contexte projet
+                batch_size: Nombre de User Stories à générer par appel (défaut: 5)
+                story_ids: Liste spécifique d'IDs à générer (optionnel, sinon prend le prochain batch)
+
+            Returns:
+                Message de confirmation avec le nombre de stories générées et restantes
+            """
+            # Get titles and existing stories
+            all_titles = runtime.state.get("user_story_titles") or []
+            existing_stories = runtime.state.get("user_stories") or []
+            existing_ids = {s.get("id") for s in existing_stories}
+
+            # Determine which titles to process
+            if story_ids:
+                # User specified specific IDs
+                titles_to_process = [
+                    t
+                    for t in all_titles
+                    if t["id"] in story_ids and t["id"] not in existing_ids
+                ]
+            else:
+                # Get next batch of unprocessed titles
+                pending_titles = [t for t in all_titles if t["id"] not in existing_ids]
+                titles_to_process = pending_titles[:batch_size]
+
+            if not titles_to_process:
+                if not all_titles:
+                    return Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    "❌ Aucun titre de User Story n'a été généré. "
+                                    "Appelle d'abord generate_user_story_titles() pour définir les titres.",
+                                    tool_call_id=runtime.tool_call_id,
+                                ),
+                            ],
+                        }
+                    )
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                f"✓ Toutes les User Stories ont déjà été générées ({len(existing_stories)} au total). "
+                                f"Appelle export_deliverables() pour exporter les livrables.",
+                                tool_call_id=runtime.tool_call_id,
+                            ),
+                        ],
+                    }
+                )
+
+            stories_prompt = """Tu es un Product Owner expert. Génère des User Stories COMPLÈTES pour les titres suivants.
+
+{context_section}
+
+{requirements_section}
+
+**TITRES À DÉVELOPPER:**
+{titles_json}
+
+**Structure de base :**
+- **Format :** "En tant que [persona], je veux [action], afin de [bénéfice]"
+- Stories atomiques, verticales et testables
+- **Couverture complète :** Happy path + cas d'erreur + tous les personas
+
+**Critères d'Acceptation Exhaustifs (Format Gherkin)** - OBLIGATOIRE pour CHAQUE story :
+
+1. **Cas Nominaux (Happy Path)** - Scénario idéal
+2. **Validations de Données** - Formats invalides, champs manquants, limites
+3. **Cas d'Erreur** - Erreurs techniques et métier
+4. **Cas Limites** - Valeurs frontières, listes vides/longues
+5. **Feedback Utilisateur** - Messages de succès/erreur EXACTS
+
+**Format Gherkin:** "Étant donné que [contexte], Quand [action], Alors [résultat attendu]"
+
+**Métadonnées:**
+- **Estimation:** Fibonacci (1, 2, 3, 5, 8, 13, 21)
+- **Priorisation:** High, Medium, Low
+
+IMPORTANT: Tu dois répondre UNIQUEMENT avec un tableau JSON valide.
+
+Format JSON attendu:
+[
+  {{
+    "id": "US-01",
+    "summary": "Titre de la User Story",
+    "description": "En tant que [persona], je veux [action], afin de [bénéfice]",
+    "issue_type": "Story",
+    "priority": "High",
+    "epic_name": "Nom de l'Epic",
+    "story_points": 3,
+    "labels": ["label1"],
+    "acceptance_criteria": [
+      {{
+        "scenario": "Nom du scénario de test",
+        "steps": [
+          "Étant donné que [contexte]",
+          "Quand [action]",
+          "Alors [résultat attendu]"
+        ]
+      }}
+    ]
+  }}
+]
+
+IMPORTANT: Génère EXACTEMENT {count} User Stories correspondant aux titres fournis.
+Utilise les mêmes IDs et epic_name que dans les titres.
+
+Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
+
+            # Build context section
+            context_section = ""
+            if context_summary:
+                context_section = f"Contexte projet:\n{context_summary}"
+
+            # Build requirements section
+            requirements_section = ""
+            requirements = runtime.state.get("requirements")
+            if requirements:
+                requirements_section = f"""
+Exigences à respecter:
+{json.dumps(requirements, ensure_ascii=False, indent=2)}
+"""
+
+            model = get_default_chat_model()
+            messages = [
+                SystemMessage(
+                    content=stories_prompt.format(
+                        context_section=context_section,
+                        requirements_section=requirements_section,
+                        titles_json=json.dumps(
+                            titles_to_process, ensure_ascii=False, indent=2
                         ),
+                        count=len(titles_to_process),
+                    )
+                )
+            ]
+
+            langfuse_handler = self._get_langfuse_handler()
+            config: RunnableConfig = (
+                {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+            )
+
+            response = await model.ainvoke(messages, config=config)
+
+            # Parse and validate JSON response
+            new_stories, error_cmd = self._parse_and_validate_json(
+                str(response.content),
+                userStoriesSchema,
+                runtime.tool_call_id,
+            )
+
+            if error_cmd:
+                return error_cmd
+
+            # Merge with existing stories
+            all_stories = existing_stories + new_stories
+            remaining = len(all_titles) - len(all_stories)
+
+            # Build response message
+            if remaining > 0:
+                next_batch = min(batch_size, remaining)
+                msg = (
+                    f"✓ {len(new_stories)} User Stories générées ({len(all_stories)}/{len(all_titles)} au total). "
+                    f"Reste {remaining} stories à générer. "
+                    f"Appelle generate_user_stories() pour générer le prochain lot de {next_batch}."
+                )
+            else:
+                msg = (
+                    f"✓ {len(new_stories)} User Stories générées. "
+                    f"Toutes les {len(all_stories)} User Stories sont maintenant complètes! "
+                    f"Appelle export_deliverables() pour exporter les livrables."
+                )
+
+            return Command(
+                update={
+                    "user_stories": all_stories,
+                    "messages": [
+                        ToolMessage(msg, tool_call_id=runtime.tool_call_id),
+                    ],
+                }
+            )
+
+        return generate_user_stories
+
+    def get_test_titles_tool(self):
+        """Tool that generates test titles for batch generation"""
+
+        @tool
+        async def generate_test_titles(runtime: ToolRuntime):
+            """
+            Génère une liste de titres de tests pour toutes les User Stories.
+
+            Cette étape permet de:
+            1. Définir le périmètre complet des tests à générer
+            2. Éviter les doublons et assurer une couverture complète
+            3. Planifier les types de tests (Nominal, Limite, Erreur) pour chaque story
+
+            IMPORTANT:
+            - AVANT d'appeler cet outil, des User Stories doivent avoir été générées
+            - Après cet outil, utilise generate_tests() pour générer les tests complets
+
+            Returns:
+                Message de confirmation avec la liste des titres générés
+            """
+            # Get user stories
+            user_stories = runtime.state.get("user_stories") or []
+            if not user_stories:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                "❌ Aucune User Story n'a été générée. "
+                                "Appelle d'abord generate_user_stories() pour créer les User Stories.",
+                                tool_call_id=runtime.tool_call_id,
+                            ),
+                        ],
+                    }
+                )
+
+            # Get existing test titles and tests to avoid duplicates
+            existing_titles = runtime.state.get("test_titles") or []
+            existing_tests = runtime.state.get("tests") or []
+
+            # Determine the next ID hint based on existing tests/titles
+            next_id_hint = "01"
+            all_existing_ids = [t.get("id", "") for t in existing_tests] + [
+                t.get("id", "") for t in existing_titles
+            ]
+            if all_existing_ids:
+                max_num = 0
+                for id_str in all_existing_ids:
+                    match = re.search(r"SC-(\d+)", id_str)
+                    if match:
+                        max_num = max(max_num, int(match.group(1)))
+                next_id_hint = f"{max_num + 1:03d}"
+
+            # Build existing titles section to avoid duplicates
+            existing_titles_section = ""
+            if existing_titles:
+                existing_titles_section = f"""
+**Titres de tests DÉJÀ EXISTANTS (NE PAS DUPLIQUER):**
+{json.dumps(existing_titles, ensure_ascii=False, indent=2)}
+
+Tu dois générer des titres de tests COMPLÉMENTAIRES qui n'existent pas encore.
+"""
+
+            titles_prompt = """Tu es un expert en tests logiciels. Génère une liste de titres de tests pour les User Stories suivantes.
+
+## User Stories à couvrir
+
+{user_stories_json}
+
+{existing_titles_section}
+
+## Instructions
+
+Pour chaque User Story, génère environ 3 titres de tests couvrant:
+- **Nominal**: Cas de test du parcours nominal (happy path)
+- **Limite**: Cas de test aux limites (valeurs frontières, listes vides/longues)
+- **Erreur**: Cas de test d'erreur (validations, erreurs techniques)
+
+Tu peux varier le nombre de tests selon la complexité de la story (minimum 2, maximum 5 par story).
+
+**Règles:**
+- Chaque titre doit être concis et descriptif (max 80 caractères)
+- Les IDs doivent suivre le format SC-XXX (commencer à SC-{next_id_hint})
+- Chaque titre doit référencer sa User Story via user_story_id
+
+IMPORTANT: Tu dois répondre UNIQUEMENT avec un tableau JSON valide, sans aucun texte avant ou après.
+
+Format JSON attendu:
+[
+  {{
+    "id": "SC-{next_id_hint}",
+    "title": "Vérifier la création d'un compte avec des données valides",
+    "user_story_id": "US-01",
+    "test_type": "Nominal"
+  }},
+  {{
+    "id": "SC-{next_id_hint_plus_1}",
+    "title": "Vérifier le rejet d'un email invalide",
+    "user_story_id": "US-01",
+    "test_type": "Erreur"
+  }}
+]
+
+Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
+
+            # Calculate next_id_hint_plus_1 for the example
+            next_id_hint_plus_1 = f"{int(next_id_hint) + 1:03d}"
+
+            model = get_default_chat_model()
+            messages = [
+                SystemMessage(
+                    content=titles_prompt.format(
+                        user_stories_json=json.dumps(
+                            user_stories, ensure_ascii=False, indent=2
+                        ),
+                        existing_titles_section=existing_titles_section,
+                        next_id_hint=next_id_hint,
+                        next_id_hint_plus_1=next_id_hint_plus_1,
+                    )
+                )
+            ]
+
+            langfuse_handler = self._get_langfuse_handler()
+            config: RunnableConfig = (
+                {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+            )
+
+            response = await model.ainvoke(messages, config=config)
+
+            # Parse and validate JSON response
+            new_titles, error_cmd = self._parse_and_validate_json(
+                str(response.content),
+                testTitlesSchema,
+                runtime.tool_call_id,
+            )
+            if error_cmd:
+                return error_cmd
+
+            # Merge with existing titles (append new ones)
+            all_titles = existing_titles + new_titles
+
+            # Count tests per story for display
+            tests_per_story = {}
+            for title in new_titles:
+                story_id = title.get("user_story_id", "unknown")
+                tests_per_story[story_id] = tests_per_story.get(story_id, 0) + 1
+
+            # Build response message
+            if existing_titles:
+                msg = (
+                    f"✓ {len(new_titles)} nouveaux titres de tests générés "
+                    f"({len(all_titles)} au total) pour {len(tests_per_story)} User Stories.\n\n"
+                    f"Appelle maintenant generate_tests() pour générer les tests complets "
+                    f"à partir de ces titres (par lots de 5 pour une meilleure qualité)."
+                )
+            else:
+                msg = (
+                    f"✓ {len(new_titles)} titres de tests générés pour {len(tests_per_story)} User Stories.\n\n"
+                    f"Appelle maintenant generate_tests() pour générer les tests complets "
+                    f"à partir de ces titres (par lots de 5 pour une meilleure qualité)."
+                )
+
+            return Command(
+                update={
+                    "test_titles": all_titles,
+                    "messages": [
+                        ToolMessage(msg, tool_call_id=runtime.tool_call_id),
+                    ],
+                }
+            )
+
+        return generate_test_titles
+
+    def get_tests_tool(self):
+        """Tool that generates test scenarios from titles in batches"""
+
+        @tool
+        async def generate_tests(
+            runtime: ToolRuntime,
+            batch_size: int = 5,
+            test_ids: list[str] | None = None,
+            jdd: str = "",
+        ):
+            """
+            Génère des tests complets à partir des titres générés par generate_test_titles.
+
+            WORKFLOW RECOMMANDÉ:
+            1. Appeler generate_test_titles() pour générer les titres
+            2. Appeler generate_tests() plusieurs fois avec batch_size=5
+               jusqu'à ce que tous les tests soient générés
+
+            Args:
+                batch_size: Nombre de tests à générer par appel (défaut: 5)
+                test_ids: Liste spécifique d'IDs de tests à générer (optionnel, sinon prend le prochain batch)
+                jdd: Jeu de Données pour les personas (optionnel)
+
+            Returns:
+                Message de confirmation avec le nombre de tests générés et restants
+            """
+            # Get test titles and existing tests
+            all_titles = runtime.state.get("test_titles") or []
+            existing_tests = runtime.state.get("tests") or []
+            all_stories = runtime.state.get("user_stories") or []
+            existing_test_ids = {t.get("id") for t in existing_tests}
+
+            # Create a map of stories by ID for quick lookup
+            stories_by_id = {s.get("id"): s for s in all_stories}
+
+            # Determine which titles to process
+            if test_ids:
+                # User specified specific IDs
+                titles_to_process = [
+                    t
+                    for t in all_titles
+                    if t["id"] in test_ids and t["id"] not in existing_test_ids
+                ]
+            else:
+                # Get next batch of unprocessed titles
+                pending_titles = [
+                    t for t in all_titles if t["id"] not in existing_test_ids
+                ]
+                titles_to_process = pending_titles[:batch_size]
+
+            if not titles_to_process:
+                if not all_titles:
+                    return Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    "❌ Aucun titre de test n'a été généré. "
+                                    "Appelle d'abord generate_test_titles() pour définir les titres.",
+                                    tool_call_id=runtime.tool_call_id,
+                                ),
+                            ],
+                        }
+                    )
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                f"✓ Tous les tests ont déjà été générés ({len(existing_tests)} au total). "
+                                f"Appelle export_deliverables() pour exporter les livrables.",
+                                tool_call_id=runtime.tool_call_id,
+                            ),
+                        ],
+                    }
+                )
+
+            # Get the relevant user stories for the titles being processed
+            relevant_story_ids = {t.get("user_story_id") for t in titles_to_process}
+            relevant_stories = [
+                stories_by_id[sid] for sid in relevant_story_ids if sid in stories_by_id
+            ]
+
+            tests_prompt = """## Rôle
+
+Tu es un expert en tests logiciels. Génère des scénarios de tests COMPLETS pour les titres de tests suivants.
+
+## Titres de tests à développer
+
+{TITLES_JSON}
+
+## User Stories associées (pour contexte)
+
+{USER_STORIES}
+
+## Jeu de Données (JDD)
+
+{JDD}
+
+## Instructions
+
+Pour chaque titre de test fourni, génère le test complet avec:
+- Les étapes détaillées en format Gherkin
+- Les préconditions nécessaires
+- Les données de test spécifiques
+- Le résultat attendu
+
+IMPORTANT: Tu dois répondre UNIQUEMENT avec un tableau JSON valide.
+
+Format JSON attendu:
+[
+  {{
+    "id": "SC-01",
+    "name": "Titre du scénario de test",
+    "user_story_id": "US-01",
+    "description": "Brève explication de ce que le scénario teste",
+    "preconditions": "Les états ou données nécessaires avant l'exécution du test",
+    "steps": [
+      "Étant donné que [contexte]",
+      "Lorsque [action]",
+      "Alors [résultat attendu]"
+    ],
+    "test_data": ["email: test@example.com", "password: Test123!"],
+    "priority": "Haute",
+    "test_type": "Nominal",
+    "expected_result": "Le résultat final attendu du test"
+  }}
+]
+
+Règles:
+- Génère EXACTEMENT {count} tests correspondant aux titres fournis
+- Utilise les mêmes IDs, user_story_id et test_type que dans les titres
+- priority: "Haute", "Moyenne" ou "Basse"
+
+Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
+
+            model = get_default_chat_model()
+            messages = [
+                SystemMessage(
+                    content=tests_prompt.format(
+                        TITLES_JSON=json.dumps(
+                            titles_to_process, ensure_ascii=False, indent=2
+                        ),
+                        USER_STORIES=json.dumps(
+                            relevant_stories, ensure_ascii=False, indent=2
+                        ),
+                        JDD=jdd if jdd else "Aucun JDD fourni",
+                        count=len(titles_to_process),
+                    )
+                )
+            ]
+
+            langfuse_handler = self._get_langfuse_handler()
+            config: RunnableConfig = (
+                {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+            )
+
+            response = await model.ainvoke(messages, config=config)
+
+            # Parse and validate JSON response
+            new_tests, error_cmd = self._parse_and_validate_json(
+                str(response.content),
+                testsSchema,
+                runtime.tool_call_id,
+            )
+            if error_cmd:
+                return error_cmd
+
+            # Merge with existing tests
+            all_tests = existing_tests + new_tests
+            remaining = len(all_titles) - len(all_tests)
+
+            # Build response message
+            if remaining > 0:
+                next_batch = min(batch_size, remaining)
+                msg = (
+                    f"✓ {len(new_tests)} tests générés ({len(all_tests)}/{len(all_titles)} au total). "
+                    f"Reste {remaining} tests à générer. "
+                    f"Appelle generate_tests() pour générer le prochain lot de {next_batch}."
+                )
+            else:
+                msg = (
+                    f"✓ {len(new_tests)} tests générés. "
+                    f"Tous les {len(all_tests)} tests sont maintenant complets! "
+                    f"Appelle export_deliverables() pour exporter les livrables."
+                )
+
+            return Command(
+                update={
+                    "tests": all_tests,
+                    "messages": [
+                        ToolMessage(msg, tool_call_id=runtime.tool_call_id),
                     ],
                 }
             )
@@ -857,6 +1243,29 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
             Returns:
                 Message de confirmation avec le nombre total d'éléments
             """
+            # Block update_state if there's a recent validation error from generate_* tools
+            # This prevents the LLM from using update_state as a fallback
+            if mode != "remove":
+                messages = runtime.state.get("messages") or []
+                for msg in reversed(messages[-10:]):
+                    content = getattr(msg, "content", "")
+                    if isinstance(content, str) and (
+                        "❌ Erreur de validation JSON" in content
+                        or "❌ Erreur de parsing JSON" in content
+                    ):
+                        return Command(
+                            update={
+                                "messages": [
+                                    ToolMessage(
+                                        "❌ update_state ne peut pas être utilisé après une erreur de validation. "
+                                        "Tu dois corriger le format JSON et réessayer l'outil generate_* approprié "
+                                        "(generate_requirements, generate_user_stories, ou generate_tests).",
+                                        tool_call_id=runtime.tool_call_id,
+                                    )
+                                ]
+                            }
+                        )
+
             # Validate item_type
             valid_types = ["requirements", "user_stories", "tests"]
             if item_type not in valid_types:
@@ -997,7 +1406,12 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
             if acceptance_criteria:
                 lines.append("**Critères d'acceptation:**")
                 for criterion in acceptance_criteria:
-                    lines.append(f"- {criterion}")
+                    if isinstance(criterion, dict):
+                        lines.append(f"- **{criterion.get('scenario', 'Scénario')}**")
+                        for step in criterion.get("steps", []):
+                            lines.append(f"  - {step}")
+                    else:
+                        lines.append(f"- {criterion}")
             lines.append("")
         return "\n".join(lines)
 
@@ -1035,8 +1449,8 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
             lines.append("")
         return "\n".join(lines)
 
-    def _build_markdown_content(self, state: dict) -> str | None:
-        """Build markdown content from generated requirements, user stories, and tests."""
+    async def _generate_markdown_file(self, state: dict) -> LinkPart | None:
+        """Generate a markdown file from state and return a download link."""
         requirements = state.get("requirements")
         user_stories = state.get("user_stories")
         tests = state.get("tests")
@@ -1067,13 +1481,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
             sections.append(self._format_tests_markdown(tests))
             sections.append("\n")
 
-        return "\n".join(sections)
-
-    async def _generate_markdown_file(self, state: dict) -> LinkPart | None:
-        """Generate a markdown file from state and return a download link."""
-        content = self._build_markdown_content(state)
-        if not content:
-            return None
+        content = "\n".join(sections)
 
         # Create temp file with markdown content
         with tempfile.NamedTemporaryFile(
@@ -1226,7 +1634,15 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
                 description = story.get("description", "")
                 acceptance_criteria = story.get("acceptance_criteria", [])
                 if acceptance_criteria:
-                    criteria_text = "\n".join(f"- {c}" for c in acceptance_criteria)
+                    criteria_lines = []
+                    for c in acceptance_criteria:
+                        if isinstance(c, dict):
+                            criteria_lines.append(f"*{c.get('scenario', 'Scénario')}*")
+                            for step in c.get("steps", []):
+                                criteria_lines.append(f"  - {step}")
+                        else:
+                            criteria_lines.append(f"- {c}")
+                    criteria_text = "\n".join(criteria_lines)
                     description = (
                         f"{description}\n\n*Critères d'acceptation:*\n{criteria_text}"
                     )
@@ -1307,7 +1723,9 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
 
     def get_compiled_graph(self) -> CompiledStateGraph:
         requirements_tool = self.get_requirements_tool()
+        user_story_titles_tool = self.get_user_story_titles_tool()
         user_stories_tool = self.get_user_stories_tool()
+        test_titles_tool = self.get_test_titles_tool()
         tests_tool = self.get_tests_tool()
         update_state_tool = self.get_update_state_tool()
         export_tool = self.get_export_tool()
@@ -1318,7 +1736,9 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni backticks."""
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[
                 requirements_tool,
+                user_story_titles_tool,
                 user_stories_tool,
+                test_titles_tool,
                 tests_tool,
                 update_state_tool,
                 export_tool,
