@@ -262,7 +262,7 @@ class Properties(BaseModel):
     agentIconPath: str | None = None
     contactSupportLink: str | None = None
     agentIconName: str | None = Field(
-        None,
+        default=None,
         description="Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme.",
     )
 
