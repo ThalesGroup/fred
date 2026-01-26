@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fred_core.scheduler import SchedulerTaskProgress
+from fred_core.scheduler import AgentConversationPayload, SchedulerTaskProgress
 from pydantic import BaseModel, Field
 
 
@@ -27,6 +27,7 @@ class AgentTaskInput(BaseModel):
     context: Dict[str, Any] = Field(default_factory=dict)
     session_id: Optional[str] = None
     request_id: Optional[str] = None
+    conversation: AgentConversationPayload | None = None
 
 
 class RunAgentTaskRequest(BaseModel):
@@ -38,6 +39,7 @@ class RunAgentTaskRequest(BaseModel):
     context: Dict[str, Any] = Field(default_factory=dict)
     session_id: Optional[str] = None
     request_id: Optional[str] = None
+    conversation: AgentConversationPayload | None = None
 
 
 class RunAgentTaskResponse(BaseModel):

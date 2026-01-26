@@ -110,23 +110,7 @@ export default function SideBar() {
       tooltip: t("sidebar.tooltip.knowledge"),
     },
   ];
-  const appsMenuItems: SideBarNavigationElement[] = [
-    {
-      key: "apps",
-      label: t("sidebar.apps", "Apps"),
-      icon: <AppsIcon />,
-      tooltip: t("sidebar.tooltip.apps", "Run and test app workflows"),
-      children: [
-        {
-          key: "apps-scheduler",
-          label: t("sidebar.apps_scheduler", "Scheduler"),
-          icon: <ScheduleIcon />,
-          url: `/apps/scheduler`,
-          tooltip: t("sidebar.tooltip.apps_scheduler", "Submit and track scheduled tasks"),
-        },
-      ],
-    },
-  ];
+  const appsMenuItems: SideBarNavigationElement[] = [];
   const adminMenuItems: SideBarNavigationElement[] = [
     {
       key: "mcp",
@@ -165,6 +149,13 @@ export default function SideBar() {
                     },
                   ]
                 : []),
+              {
+                key: "laboratory-scheduler",
+                label: t("sidebar.apps_scheduler", "Scheduler"),
+                icon: <ScheduleIcon />,
+                url: `/apps/scheduler`,
+                tooltip: t("sidebar.tooltip.apps_scheduler", "Submit and track scheduled tasks"),
+              },
             ],
           },
         ]

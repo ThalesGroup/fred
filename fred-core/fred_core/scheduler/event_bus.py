@@ -27,7 +27,10 @@ class SchedulerEventBus(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def subscribe(self, task_id: str) -> AsyncIterator[SchedulerTaskEvent]:
+    def subscribe(self, task_id: str) -> AsyncIterator[SchedulerTaskEvent]:
+        """
+        Subscribe to events for a given task_id; implementations may return async iterators.
+        """
         raise NotImplementedError
 
 

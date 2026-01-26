@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence, cast
 
+from fred_core.scheduler import AgentConversationPayload
 from langchain_core.messages import AnyMessage, BaseMessage, HumanMessage
 from langgraph.graph import MessagesState
 
@@ -23,19 +24,41 @@ def build_messages_state(
     Return a MessagesState where the `messages` key always exists and ends with the human
     question. Priority: explicit messages > payload messages > payload question.
     """
-    if messages:
-        return {"messages": list(messages)}
+    conversation = build_agent_conversation_payload(
+        messages=messages, question=question, payload=payload
+    )
+    if conversation.messages:
+        return {"messages": list(conversation.messages)}
+    assert conversation.question is not None
+    return {"messages": [HumanMessage(conversation.question)]}
 
-    payload_messages = _extract_messages_from_payload(payload)
-    if payload_messages:
-        return {"messages": payload_messages}
+
+def build_agent_conversation_payload(
+    *,
+    messages: Sequence[AnyMessage] | None = None,
+    question: str | None = None,
+    payload: Mapping[str, Any] | None = None,
+) -> AgentConversationPayload:
+    """
+    Build a shared conversation payload that either carries an explicit question or
+    a sequence of LangChain messages so both websocket and Temporal paths use the
+    same seed.
+    """
+    resolved_messages: list[AnyMessage] | None = None
+    if messages:
+        resolved_messages = list(messages)
+    else:
+        resolved_messages = _extract_messages_from_payload(payload)
 
     resolved_question = _resolve_question(question=question, payload=payload)
-    if not resolved_question:
-        raise ValueError(
-            "Cannot build MessagesState: missing question and no fallback messages."
-        )
-    return {"messages": [HumanMessage(resolved_question)]}
+
+    if resolved_messages:
+        return AgentConversationPayload(messages=resolved_messages)
+    if resolved_question:
+        return AgentConversationPayload(question=resolved_question)
+    raise ValueError(
+        "Cannot build AgentConversationPayload: missing question and no fallback messages."
+    )
 
 
 def _resolve_question(

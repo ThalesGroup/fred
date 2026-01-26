@@ -43,7 +43,7 @@ class TemporalSchedulerService:
             timeout = timedelta(seconds=self._config.connect_timeout_seconds)
 
         data_converter = build_temporal_data_converter_from_env()
-        connect_kwargs = {
+        connect_kwargs: dict[str, Any] = {
             "target_host": self._config.host,
             "namespace": self._config.namespace,
         }

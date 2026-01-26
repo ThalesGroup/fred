@@ -16,6 +16,7 @@ from fred_core.scheduler import (
 )
 
 from agentic_backend.application_context import get_configuration
+from agentic_backend.core.agents.execution_state import build_agent_conversation_payload
 from agentic_backend.scheduler.scheduler_structures import (
     AgentTaskProgressRequest,
     AgentTaskProgressResponse,
@@ -53,6 +54,16 @@ class SchedulerController:
                 context["access_token"] = token
                 context.setdefault("user_groups", user.groups)
                 context.setdefault("user_id", user.uid)
+            conversation = req.conversation
+            if conversation is None:
+                try:
+                    conversation = build_agent_conversation_payload(
+                        question=req.payload.get("question"),
+                        payload=req.payload,
+                    )
+                except ValueError:
+                    conversation = None
+
             task = AgentCallTask(
                 task_id=task_id,
                 workflow_type=req.workflow_type,
@@ -63,9 +74,11 @@ class SchedulerController:
                 request_id=req.request_id,
                 payload=req.payload,
                 context=context,
+                conversation=conversation,
             )
 
             try:
+                logger.info("[SCHEDULER] Submitting agent task: %s", task)
                 handle = await self.scheduler.start_task(task)
             except Exception as e:
                 raise_internal_error(logger, "Failed to submit agent task", e)

@@ -15,9 +15,10 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
-from pydantic import BaseModel, Field
+from langchain_core.messages import AnyMessage
+from pydantic import BaseModel, Field, model_validator
 from temporalio.common import WorkflowIDReusePolicy
 
 
@@ -32,6 +33,36 @@ class TemporalSchedulerConfig(BaseModel):
 class WorkflowHandle(BaseModel):
     workflow_id: str
     run_id: Optional[str] = None
+
+
+class AgentConversationPayload(BaseModel):
+    """
+    Normalized conversational seed shared by ALL agent entry points (WS or Temporal).
+
+    Intent:
+    - Guarantee we always pass a usable question/messages list into LangGraph, no matter
+      which runner invokes the agent.
+    - Keep the contract explicit and validated (question OR messages required).
+    - Allow supplemental metadata to travel alongside without forcing agents to branch
+      on runtime.
+    """
+
+    question: Optional[str] = None
+    messages: Optional[Sequence[AnyMessage]] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    def require_question_or_messages(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        question = values.get("question")
+        messages = values.get("messages")
+        if question and isinstance(question, str) and question.strip():
+            return values
+        if messages:
+            return values
+        raise ValueError("AgentConversationPayload requires a question or messages")
+
+    class Config:
+        extra = "ignore"
 
 
 class SchedulerTask(BaseModel):
@@ -57,11 +88,13 @@ class SchedulerTask(BaseModel):
 
 class AgentCallTask(SchedulerTask):
     """
-    Descriptor for a scheduler task that launches an agent.
+    Descriptor for launching an agent via the scheduler (in-memory or Temporal).
 
-    `caller_actor` identifies the human (e.g., UI or agent) requesting execution.
-    The workflow input is the context payload that the worker will forward to the
-    agent runtime, including session/request identifiers that help with telemetry.
+    Intent:
+    - Carry caller + target agent identity plus a normalized conversation seed so the
+      worker can invoke the agent exactly as the WebSocket path would.
+    - Keep telemetry/context (session_id/request_id, caller_actor) attached for KPI and
+      logging without coupling agent code to scheduler internals.
     """
 
     caller_actor: str
@@ -70,6 +103,7 @@ class AgentCallTask(SchedulerTask):
     request_id: Optional[str] = None
     payload: Dict[str, Any] = Field(default_factory=dict)
     context: Dict[str, Any] = Field(default_factory=dict)
+    conversation: AgentConversationPayload | None = None
 
     def get_workflow_input(self) -> Dict[str, Any]:
         return {
@@ -79,6 +113,9 @@ class AgentCallTask(SchedulerTask):
             "request_id": self.request_id,
             "payload": self.payload,
             "context": self.context,
+            "conversation": self.conversation.model_dump(exclude_none=True)
+            if self.conversation
+            else None,
         }
 
 

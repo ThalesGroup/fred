@@ -103,16 +103,19 @@ class AgentTaskRunner:
 
         try:
             compiled = agent.get_compiled_graph()
-            payload = task.payload or {}
+            payload_data = dict(task.payload or {})
+            if task.conversation:
+                payload_data.update(task.conversation.model_dump(exclude_none=True))
             try:
                 state = build_messages_state(
-                    question=payload.get("question"), payload=payload
+                    question=task.conversation.question if task.conversation else None,
+                    payload=payload_data or None,
                 )
             except ValueError as exc:
                 raise RuntimeError(
                     "Temporal agent payload must include a 'question' or serialized 'messages'."
                 ) from exc
-            invocation_state = dict(payload)
+            invocation_state = dict(payload_data)
             invocation_state.update(state)
             result = await compiled.ainvoke(invocation_state, config=config)
             if isinstance(result, dict):

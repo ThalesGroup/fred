@@ -187,7 +187,16 @@
         "action": "Refresh progress",
         "loading": "Refreshing...",
         "state": "State",
-        "unknown": "No percent reported"
+        "unknown": "No percent reported",
+        "percent": "Percent",
+        "message": "Message",
+        "none": "No message",
+        "queued": "Waiting for worker to pick up the task."
+      },
+      "pending": {
+        "title": "Pending tasks",
+        "empty": "No pending tasks",
+        "noWorkflow": "no workflow id"
       },
       "fields": {
         "targetAgent": "Target agent",

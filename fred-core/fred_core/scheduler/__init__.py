@@ -17,6 +17,7 @@ from fred_core.scheduler.event_bus import InMemorySchedulerEventBus, SchedulerEv
 from fred_core.scheduler.in_memory_scheduler import InMemoryScheduler
 from fred_core.scheduler.scheduler_structures import (
     AgentCallTask,
+    AgentConversationPayload,
     SchedulerEventType,
     SchedulerTask,
     SchedulerTaskCompletedEvent,
@@ -32,6 +33,7 @@ from fred_core.scheduler.temporal_scheduler import TemporalScheduler
 from fred_core.scheduler.temporal_service import TemporalSchedulerService
 
 __all__ = [
+    "AgentConversationPayload",
     "AgentCallTask",
     "BaseScheduler",
     "InMemorySchedulerEventBus",

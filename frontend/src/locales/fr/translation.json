@@ -188,7 +188,16 @@
         "action": "Rafraîchir la progression",
         "loading": "Rafraîchissement...",
         "state": "État",
-        "unknown": "Aucun pourcentage transmis"
+        "unknown": "Aucun pourcentage transmis",
+        "percent": "Pourcentage",
+        "message": "Message",
+        "none": "Aucun message",
+        "queued": "En attente de prise en charge par le worker."
+      },
+      "pending": {
+        "title": "Tâches en attente",
+        "empty": "Aucune tâche en attente",
+        "noWorkflow": "aucun workflow id"
       },
       "fields": {
         "targetAgent": "Agent cible",
