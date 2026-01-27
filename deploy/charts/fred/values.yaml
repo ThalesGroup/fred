@@ -198,6 +198,20 @@ applications:
           # If true activate the backend and frontend modules in charge of K8
           # and frugality monitoring
           enableK8Features: false
+      scheduler:
+        # Scheduler backend driving agent workflows.
+        # - "memory": in-process queue for local/dev.
+        # - "temporal": use Temporal Cloud/self-hosted to run agent tasks asynchronously.
+        backend: "temporal"
+        temporal:
+          # Temporal frontend endpoint and namespace used by the agentic worker.
+          host: "temporal.default.svc.cluster.local:7233"
+          namespace: "default"
+          task_queue: "agents"
+          workflow_id_prefix: "task"
+          connect_timeout_seconds: 5
+        # Optional progress query name and memo/search attributes can be added here if your
+        # cluster uses custom Temporal conventions.
           # If true activate support for an electronic warfare demonstration
           enableElecWarfare: false
         properties:

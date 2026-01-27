@@ -24,6 +24,35 @@ This will:
 - Use default in-memory and local storage components
 - Let you interact with agents right away — no external dependencies required
 
+## 🧰 Temporal Worker (Long Jobs)
+
+For long-running or isolated agent tasks, start the Temporal worker as a separate process:
+
+```bash
+make run-worker
+```
+
+This starts the worker only (no FastAPI server). You can also point it at a different config:
+
+```bash
+CONFIG_FILE=./config/configuration_worker.yaml make run-worker
+```
+
+## 🔐 Temporal Payload Encryption (Recommended for Prod)
+
+Temporal stores workflow inputs in history. To protect user tokens in scheduler payloads,
+enable the payload codec by setting the same key in both the API pod and worker pod:
+
+```bash
+export FRED_TEMPORAL_CODEC_KEY="..."
+```
+
+Generate a key locally:
+
+```bash
+make temporal-key
+```
+
 ---
 
 ## Configure Your LLM Provider (Required)

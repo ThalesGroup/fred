@@ -120,6 +120,8 @@
     "monitoring": "Admin",
     "laboratory": "Laboratory",
     "knowledge": "Your resources",
+    "apps": "Apps",
+    "apps_scheduler": "Scheduler",
     "mcp": "Tools",
     "agent": "Your {{agentsNickname}}",
     "release_notes": "Release Notes",
@@ -135,6 +137,8 @@
       "monitoring": "Monitor the backend AI calls",
       "laboratory": "Explore validation and laboratory features and tools",
       "knowledge": "Consult the content of your libraries",
+      "apps": "Run and test app workflows",
+      "apps_scheduler": "Submit and track scheduled tasks",
       "mcp": "Manage MCP servers",
       "agent": "View agents",
       "release_notes": "View the latest release notes",
@@ -164,6 +168,70 @@
     "deleteSessionFailed": "Failed to delete conversation",
     "monitoring_graph": "Graph",
     "newChat": "New chat"
+  },
+  "apps": {
+    "scheduler": {
+      "title": "Apps / Scheduler",
+      "subtitle": "Submit and inspect agent tasks queued via Temporal.",
+      "submit": {
+        "title": "Schedule an agent task",
+        "action": "Submit task",
+        "loading": "Submitting..."
+      },
+      "status": {
+        "title": "Latest submission",
+        "empty": "No tasks submitted yet."
+      },
+      "progress": {
+        "title": "Progress lookup",
+        "action": "Refresh progress",
+        "loading": "Refreshing...",
+        "state": "State",
+        "unknown": "No percent reported",
+        "percent": "Percent",
+        "message": "Message",
+        "none": "No message",
+        "queued": "Waiting for worker to pick up the task."
+      },
+      "pending": {
+        "title": "Pending tasks",
+        "empty": "No pending tasks",
+        "noWorkflow": "no workflow id"
+      },
+      "completed": {
+        "title": "Last completed tasks",
+        "empty": "No completed tasks yet"
+      },
+      "recent": {
+        "title": "Recent workflows (Temporal)",
+        "empty": "No workflows visible"
+      },
+      "fields": {
+        "targetAgent": "Target agent",
+        "taskId": "Task ID (optional)",
+        "workflowType": "Workflow type",
+        "taskQueue": "Task queue (optional)",
+        "sessionId": "Session ID (optional)",
+        "requestId": "Request ID (optional)",
+        "payload": "Payload (JSON object)",
+        "context": "Context (JSON object)",
+        "progressTaskId": "Task ID",
+        "progressWorkflowId": "Workflow ID",
+        "progressRunId": "Run ID (optional)"
+      },
+      "toasts": {
+        "submitted": {
+          "title": "Task scheduled",
+          "detail": "Your agent task was submitted to the scheduler."
+        },
+        "error": {
+          "title": "Scheduler error"
+        },
+        "progressError": {
+          "title": "Progress error"
+        }
+      }
+    }
   },
   "chat": {
     "common": {

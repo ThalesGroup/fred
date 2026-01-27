@@ -121,6 +121,8 @@
     "monitoring": "Supervision",
     "laboratory": "Laboratoire",
     "knowledge": "Vos ressources",
+    "apps": "Applications",
+    "apps_scheduler": "Planificateur",
     "mcp": "Outils",
     "agent": "Vos {{agentsNickname}}",
     "release_notes": "Notes de version",
@@ -136,6 +138,8 @@
       "monitoring": "Superviser les appels IA backend",
       "laboratory": "Explorer les fonctionnalités et outils de validation et de laboratoire",
       "knowledge": "Consulter vos bibliothèques de documents et de prompts",
+      "apps": "Lancer et tester les workflows applicatifs",
+      "apps_scheduler": "Soumettre et suivre les tâches planifiées",
       "mcp": "Gérer les serveurs MCP",
       "agent": "Voir les agents",
       "release_notes": "Consulter les dernières notes de version",
@@ -165,6 +169,70 @@
     "deleteSessionFailed": "La supression de la conversation a échoué",
     "monitoring_graph": "Graphe",
     "newChat": "Nouvelle conversation"
+  },
+  "apps": {
+    "scheduler": {
+      "title": "Applications / Planificateur",
+      "subtitle": "Soumettre et inspecter les tâches d'agents via Temporal.",
+      "submit": {
+        "title": "Planifier une tâche d'agent",
+        "action": "Soumettre la tâche",
+        "loading": "Soumission..."
+      },
+      "status": {
+        "title": "Dernière soumission",
+        "empty": "Aucune tâche soumise pour le moment."
+      },
+      "progress": {
+        "title": "Suivi de progression",
+        "action": "Rafraîchir la progression",
+        "loading": "Rafraîchissement...",
+        "state": "État",
+        "unknown": "Aucun pourcentage transmis",
+        "percent": "Pourcentage",
+        "message": "Message",
+        "none": "Aucun message",
+        "queued": "En attente de prise en charge par le worker."
+      },
+      "pending": {
+        "title": "Tâches en attente",
+        "empty": "Aucune tâche en attente",
+        "noWorkflow": "aucun workflow id"
+      },
+      "completed": {
+        "title": "Dernières tâches terminées",
+        "empty": "Aucune tâche terminée pour l'instant"
+      },
+      "recent": {
+        "title": "Workflows récents (Temporal)",
+        "empty": "Aucun workflow visible"
+      },
+      "fields": {
+        "targetAgent": "Agent cible",
+        "taskId": "ID de tâche (optionnel)",
+        "workflowType": "Type de workflow",
+        "taskQueue": "File de tâches (optionnel)",
+        "sessionId": "ID de session (optionnel)",
+        "requestId": "ID de requête (optionnel)",
+        "payload": "Payload (objet JSON)",
+        "context": "Contexte (objet JSON)",
+        "progressTaskId": "ID de tâche",
+        "progressWorkflowId": "ID de workflow",
+        "progressRunId": "ID d'exécution (optionnel)"
+      },
+      "toasts": {
+        "submitted": {
+          "title": "Tâche planifiée",
+          "detail": "La tâche a été soumise au planificateur."
+        },
+        "error": {
+          "title": "Erreur du planificateur"
+        },
+        "progressError": {
+          "title": "Erreur de progression"
+        }
+      }
+    }
   },
   "chat": {
     "common": {

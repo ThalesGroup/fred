@@ -25,6 +25,7 @@ from fred_core.common.structures import (
     PostgresTableConfig,
     SQLStorageConfig,
     StoreConfig,
+    TemporalSchedulerConfig,
 )
 from fred_core.common.utils import raise_internal_error
 from fred_core.filesystem.local_filesystem import LocalFilesystem
@@ -166,6 +167,7 @@ __all__ = [
     "get_structured_chain",
     "get_embeddings",
     "ModelConfiguration",
+    "TemporalSchedulerConfig",
     "SQLStorageConfig",
     "SQLTableStore",
     "StoreInfo",
