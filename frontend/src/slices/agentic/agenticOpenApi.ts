@@ -299,6 +299,19 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.agentTaskProgressRequest,
       }),
     }),
+    listRecentAgentTasksAgenticV1SchedulerAgentTasksRecentGet: build.query<
+      ListRecentAgentTasksAgenticV1SchedulerAgentTasksRecentGetApiResponse,
+      ListRecentAgentTasksAgenticV1SchedulerAgentTasksRecentGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/scheduler/agent-tasks/recent`,
+        params: {
+          limit: queryArg.limit,
+          workflow_type: queryArg.workflowType,
+          status: queryArg.status,
+        },
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -481,6 +494,13 @@ export type GetAgentTaskProgressAgenticV1SchedulerAgentTasksProgressPostApiRespo
   /** status 200 Successful Response */ AgentTaskProgressResponse;
 export type GetAgentTaskProgressAgenticV1SchedulerAgentTasksProgressPostApiArg = {
   agentTaskProgressRequest: AgentTaskProgressRequest;
+};
+export type ListRecentAgentTasksAgenticV1SchedulerAgentTasksRecentGetApiResponse =
+  /** status 200 Successful Response */ RecentAgentTasksResponse;
+export type ListRecentAgentTasksAgenticV1SchedulerAgentTasksRecentGetApiArg = {
+  limit?: number;
+  workflowType?: string;
+  status?: string | null;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -1086,6 +1106,332 @@ export type RunAgentTaskResponse = {
   workflow_id: string;
   run_id?: string | null;
 };
+export type ToolCall = {
+  name: string;
+  args: {
+    [key: string]: any;
+  };
+  id: string | null;
+  type?: "tool_call";
+  [key: string]: any;
+};
+export type InvalidToolCall = {
+  type: "invalid_tool_call";
+  id: string | null;
+  name: string | null;
+  args: string | null;
+  error: string | null;
+  index?: number | string;
+  extras?: {
+    [key: string]: any;
+  };
+  [key: string]: any;
+};
+export type InputTokenDetails = {
+  audio?: number;
+  cache_creation?: number;
+  cache_read?: number;
+  [key: string]: any;
+};
+export type OutputTokenDetails = {
+  audio?: number;
+  reasoning?: number;
+  [key: string]: any;
+};
+export type UsageMetadata = {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  input_token_details?: InputTokenDetails;
+  output_token_details?: OutputTokenDetails;
+  [key: string]: any;
+};
+export type AiMessage = {
+  content:
+    | string
+    | (
+        | string
+        | {
+            [key: string]: any;
+          }
+      )[];
+  additional_kwargs?: {
+    [key: string]: any;
+  };
+  response_metadata?: {
+    [key: string]: any;
+  };
+  type?: "ai";
+  name?: string | null;
+  id?: string | null;
+  tool_calls?: ToolCall[];
+  invalid_tool_calls?: InvalidToolCall[];
+  usage_metadata?: UsageMetadata | null;
+  [key: string]: any;
+};
+export type HumanMessage = {
+  content:
+    | string
+    | (
+        | string
+        | {
+            [key: string]: any;
+          }
+      )[];
+  additional_kwargs?: {
+    [key: string]: any;
+  };
+  response_metadata?: {
+    [key: string]: any;
+  };
+  type?: "human";
+  name?: string | null;
+  id?: string | null;
+  [key: string]: any;
+};
+export type ChatMessage3 = {
+  content:
+    | string
+    | (
+        | string
+        | {
+            [key: string]: any;
+          }
+      )[];
+  additional_kwargs?: {
+    [key: string]: any;
+  };
+  response_metadata?: {
+    [key: string]: any;
+  };
+  type?: "chat";
+  name?: string | null;
+  id?: string | null;
+  role: string;
+  [key: string]: any;
+};
+export type SystemMessage = {
+  content:
+    | string
+    | (
+        | string
+        | {
+            [key: string]: any;
+          }
+      )[];
+  additional_kwargs?: {
+    [key: string]: any;
+  };
+  response_metadata?: {
+    [key: string]: any;
+  };
+  type?: "system";
+  name?: string | null;
+  id?: string | null;
+  [key: string]: any;
+};
+export type FunctionMessage = {
+  content:
+    | string
+    | (
+        | string
+        | {
+            [key: string]: any;
+          }
+      )[];
+  additional_kwargs?: {
+    [key: string]: any;
+  };
+  response_metadata?: {
+    [key: string]: any;
+  };
+  type?: "function";
+  name: string;
+  id?: string | null;
+  [key: string]: any;
+};
+export type ToolMessage = {
+  content:
+    | string
+    | (
+        | string
+        | {
+            [key: string]: any;
+          }
+      )[];
+  additional_kwargs?: {
+    [key: string]: any;
+  };
+  response_metadata?: {
+    [key: string]: any;
+  };
+  type?: "tool";
+  name?: string | null;
+  id?: string | null;
+  tool_call_id: string;
+  artifact?: any;
+  status?: "success" | "error";
+  [key: string]: any;
+};
+export type ToolCallChunk = {
+  name: string | null;
+  args: string | null;
+  id: string | null;
+  index: number | null;
+  type?: "tool_call_chunk";
+  [key: string]: any;
+};
+export type AiMessageChunk = {
+  content:
+    | string
+    | (
+        | string
+        | {
+            [key: string]: any;
+          }
+      )[];
+  additional_kwargs?: {
+    [key: string]: any;
+  };
+  response_metadata?: {
+    [key: string]: any;
+  };
+  type?: "AIMessageChunk";
+  name?: string | null;
+  id?: string | null;
+  tool_calls?: ToolCall[];
+  invalid_tool_calls?: InvalidToolCall[];
+  usage_metadata?: UsageMetadata | null;
+  tool_call_chunks?: ToolCallChunk[];
+  chunk_position?: "last" | null;
+  [key: string]: any;
+};
+export type HumanMessageChunk = {
+  content:
+    | string
+    | (
+        | string
+        | {
+            [key: string]: any;
+          }
+      )[];
+  additional_kwargs?: {
+    [key: string]: any;
+  };
+  response_metadata?: {
+    [key: string]: any;
+  };
+  type?: "HumanMessageChunk";
+  name?: string | null;
+  id?: string | null;
+  [key: string]: any;
+};
+export type ChatMessageChunk = {
+  content:
+    | string
+    | (
+        | string
+        | {
+            [key: string]: any;
+          }
+      )[];
+  additional_kwargs?: {
+    [key: string]: any;
+  };
+  response_metadata?: {
+    [key: string]: any;
+  };
+  type?: "ChatMessageChunk";
+  name?: string | null;
+  id?: string | null;
+  role: string;
+  [key: string]: any;
+};
+export type SystemMessageChunk = {
+  content:
+    | string
+    | (
+        | string
+        | {
+            [key: string]: any;
+          }
+      )[];
+  additional_kwargs?: {
+    [key: string]: any;
+  };
+  response_metadata?: {
+    [key: string]: any;
+  };
+  type?: "SystemMessageChunk";
+  name?: string | null;
+  id?: string | null;
+  [key: string]: any;
+};
+export type FunctionMessageChunk = {
+  content:
+    | string
+    | (
+        | string
+        | {
+            [key: string]: any;
+          }
+      )[];
+  additional_kwargs?: {
+    [key: string]: any;
+  };
+  response_metadata?: {
+    [key: string]: any;
+  };
+  type?: "FunctionMessageChunk";
+  name: string;
+  id?: string | null;
+  [key: string]: any;
+};
+export type ToolMessageChunk = {
+  content:
+    | string
+    | (
+        | string
+        | {
+            [key: string]: any;
+          }
+      )[];
+  additional_kwargs?: {
+    [key: string]: any;
+  };
+  response_metadata?: {
+    [key: string]: any;
+  };
+  type?: "ToolMessageChunk";
+  name?: string | null;
+  id?: string | null;
+  tool_call_id: string;
+  artifact?: any;
+  status?: "success" | "error";
+  [key: string]: any;
+};
+export type AgentConversationPayload = {
+  question?: string | null;
+  messages?:
+    | (
+        | AiMessage
+        | HumanMessage
+        | ChatMessage3
+        | SystemMessage
+        | FunctionMessage
+        | ToolMessage
+        | AiMessageChunk
+        | HumanMessageChunk
+        | ChatMessageChunk
+        | SystemMessageChunk
+        | FunctionMessageChunk
+        | ToolMessageChunk
+      )[]
+    | null;
+  metadata?: {
+    [key: string]: any;
+  };
+};
 export type RunAgentTaskRequest = {
   task_id?: string | null;
   workflow_type?: string;
@@ -1099,6 +1445,7 @@ export type RunAgentTaskRequest = {
   };
   session_id?: string | null;
   request_id?: string | null;
+  conversation?: AgentConversationPayload | null;
 };
 export type SchedulerTaskProgress = {
   state: string;
@@ -1115,6 +1462,16 @@ export type AgentTaskProgressRequest = {
   task_id?: string | null;
   workflow_id?: string | null;
   run_id?: string | null;
+};
+export type WorkflowSummary = {
+  workflow_id: string;
+  run_id?: string | null;
+  status?: string | null;
+  start_time?: string | null;
+  close_time?: string | null;
+};
+export type RecentAgentTasksResponse = {
+  items: WorkflowSummary[];
 };
 export const {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
@@ -1172,4 +1529,6 @@ export const {
   useQueryLogsAgenticV1LogsQueryPostMutation,
   useRunAgentTaskAgenticV1SchedulerAgentTasksPostMutation,
   useGetAgentTaskProgressAgenticV1SchedulerAgentTasksProgressPostMutation,
+  useListRecentAgentTasksAgenticV1SchedulerAgentTasksRecentGetQuery,
+  useLazyListRecentAgentTasksAgenticV1SchedulerAgentTasksRecentGetQuery,
 } = injectedRtkApi;

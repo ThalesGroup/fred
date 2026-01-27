@@ -14,9 +14,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from fred_core.scheduler import AgentConversationPayload, SchedulerTaskProgress
+from fred_core.scheduler import (
+    AgentConversationPayload,
+    SchedulerTaskProgress,
+    WorkflowSummary,
+)
 from pydantic import BaseModel, Field
 
 
@@ -60,3 +64,7 @@ class AgentTaskProgressResponse(BaseModel):
     workflow_id: Optional[str]
     run_id: Optional[str]
     progress: SchedulerTaskProgress
+
+
+class RecentAgentTasksResponse(BaseModel):
+    items: List[WorkflowSummary]

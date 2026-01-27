@@ -198,6 +198,14 @@
         "empty": "No pending tasks",
         "noWorkflow": "no workflow id"
       },
+      "completed": {
+        "title": "Last completed tasks",
+        "empty": "No completed tasks yet"
+      },
+      "recent": {
+        "title": "Recent workflows (Temporal)",
+        "empty": "No workflows visible"
+      },
       "fields": {
         "targetAgent": "Target agent",
         "taskId": "Task ID (optional)",

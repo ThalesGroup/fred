@@ -103,7 +103,7 @@ class TemporalTestAgent(AgentFlow):
         )
 
     async def _simulate_work(self) -> None:
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(10)
 
     def _build_progress_update(
         self, *, step: int, text: str, finished: bool = False

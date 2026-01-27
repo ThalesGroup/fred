@@ -20,6 +20,7 @@ import { useToast } from "../components/ToastProvider";
 import {
   AgentTaskProgressResponse,
   RunAgentTaskResponse,
+  useListRecentAgentTasksAgenticV1SchedulerAgentTasksRecentGetQuery,
   useGetAgentTaskProgressAgenticV1SchedulerAgentTasksProgressPostMutation,
   useRunAgentTaskAgenticV1SchedulerAgentTasksPostMutation,
 } from "../slices/agentic/agenticOpenApi";
@@ -39,7 +40,14 @@ export const AppsScheduler = () => {
   const [question, setQuestion] = useState("");
   const [lastRun, setLastRun] = useState<RunAgentTaskResponse | null>(null);
   const [lastProgress, setLastProgress] = useState<AgentTaskProgressResponse | null>(null);
-  const [submittedTasks, setSubmittedTasks] = useState<RunAgentTaskResponse[]>([]);
+  const [pendingTasks, setPendingTasks] = useState<RunAgentTaskResponse[]>([]);
+  const [completedTasks, setCompletedTasks] = useState<
+    { task_id: string; workflow_id?: string; state?: string; message?: string | null; run_id?: string | null }[]
+  >([]);
+  const { data: recentTasks } = useListRecentAgentTasksAgenticV1SchedulerAgentTasksRecentGetQuery({
+    limit: 5,
+    workflow_type: "AgentWorkflow",
+  });
 
   const handleSubmit = async () => {
     const trimmedQuestion = question.trim();
@@ -70,9 +78,9 @@ export const AppsScheduler = () => {
           message: t("apps.scheduler.progress.queued", "Waiting for worker to pick up the task."),
         },
       });
-      setSubmittedTasks((prev) => {
+      setPendingTasks((prev) => {
         const next = [response, ...prev];
-        return next.slice(0, 5); // keep recent few
+        return next.slice(0, 5);
       });
       showSuccess({
         summary: t("apps.scheduler.toasts.submitted.title", "Task scheduled"),
@@ -99,6 +107,27 @@ export const AppsScheduler = () => {
         },
       }).unwrap();
       setLastProgress(progress);
+      // If completed/failed, drop from pending list
+      const terminalStates = new Set(["completed", "failed", "terminated", "canceled"]);
+      if (terminalStates.has(progress.progress.state.toLowerCase?.() ?? progress.progress.state)) {
+        setPendingTasks((prev) => prev.filter((t) => t.task_id !== lastRun.task_id));
+        setCompletedTasks((prev) => {
+          if (prev.some((t) => t.task_id === lastRun.task_id)) {
+            return prev;
+          }
+          const next = [
+            {
+              task_id: lastRun.task_id,
+              workflow_id: lastRun.workflow_id,
+              run_id: lastRun.run_id,
+              state: progress.progress.state,
+              message: progress.progress.message ?? null,
+            },
+            ...prev,
+          ];
+          return next.slice(0, 5);
+        });
+      }
     } catch (error: any) {
       const detail = error?.data?.detail || error?.message || t("apps.scheduler.toasts.error.default", "Request failed.");
       showError({
@@ -171,14 +200,41 @@ export const AppsScheduler = () => {
             )}
             <Stack spacing={0.5} sx={{ border: (theme) => `1px dashed ${theme.palette.divider}`, borderRadius: 1, p: 1.25 }}>
               <Typography variant="subtitle2">{t("apps.scheduler.pending.title", "Pending tasks")}</Typography>
-              {submittedTasks.length === 0 && (
+              {pendingTasks.length === 0 && (
                 <Typography variant="body2" color="text.secondary">
                   {t("apps.scheduler.pending.empty", "No pending tasks")}
                 </Typography>
               )}
-              {submittedTasks.map((task) => (
+              {pendingTasks.map((task) => (
                 <Typography key={task.task_id} variant="body2" color="text.secondary" sx={{ fontSize: "0.85rem" }}>
                   {task.task_id} · {task.workflow_id || t("apps.scheduler.pending.noWorkflow", "no workflow id")}
+                </Typography>
+              ))}
+            </Stack>
+            <Stack spacing={0.5} sx={{ border: (theme) => `1px dashed ${theme.palette.divider}`, borderRadius: 1, p: 1.25 }}>
+              <Typography variant="subtitle2">{t("apps.scheduler.completed.title", "Last completed tasks")}</Typography>
+              {completedTasks.length === 0 && (
+                <Typography variant="body2" color="text.secondary">
+                  {t("apps.scheduler.completed.empty", "No completed tasks yet")}
+                </Typography>
+              )}
+              {completedTasks.map((task) => (
+                <Typography key={task.task_id} variant="body2" color="text.secondary" sx={{ fontSize: "0.85rem" }}>
+                  {task.task_id} · {task.workflow_id || t("apps.scheduler.pending.noWorkflow", "no workflow id")} · {task.state ?? ""}
+                  {task.message ? ` · ${task.message}` : ""}
+                </Typography>
+              ))}
+            </Stack>
+            <Stack spacing={0.5} sx={{ border: (theme) => `1px dashed ${theme.palette.divider}`, borderRadius: 1, p: 1.25 }}>
+              <Typography variant="subtitle2">{t("apps.scheduler.recent.title", "Recent workflows (Temporal)")}</Typography>
+              {!recentTasks?.items?.length && (
+                <Typography variant="body2" color="text.secondary">
+                  {t("apps.scheduler.recent.empty", "No workflows visible")}
+                </Typography>
+              )}
+              {recentTasks?.items?.map((wf) => (
+                <Typography key={`${wf.workflow_id}-${wf.run_id || "latest"}`} variant="body2" color="text.secondary" sx={{ fontSize: "0.85rem" }}>
+                  {wf.workflow_id} · {wf.status || "unknown"}
                 </Typography>
               ))}
             </Stack>

@@ -199,6 +199,14 @@
         "empty": "Aucune tâche en attente",
         "noWorkflow": "aucun workflow id"
       },
+      "completed": {
+        "title": "Dernières tâches terminées",
+        "empty": "Aucune tâche terminée pour l'instant"
+      },
+      "recent": {
+        "title": "Workflows récents (Temporal)",
+        "empty": "Aucun workflow visible"
+      },
       "fields": {
         "targetAgent": "Agent cible",
         "taskId": "ID de tâche (optionnel)",

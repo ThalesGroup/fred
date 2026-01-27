@@ -12,43 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred_core.scheduler.base_scheduler import BaseScheduler
-from fred_core.scheduler.event_bus import InMemorySchedulerEventBus, SchedulerEventBus
-from fred_core.scheduler.in_memory_scheduler import InMemoryScheduler
-from fred_core.scheduler.scheduler_structures import (
-    AgentCallTask,
-    AgentConversationPayload,
-    SchedulerEventType,
-    SchedulerTask,
-    SchedulerTaskCompletedEvent,
-    SchedulerTaskEvent,
-    SchedulerTaskFailedEvent,
-    SchedulerTaskProgress,
-    SchedulerTaskProgressEvent,
-    TemporalSchedulerConfig,
-    WorkflowHandle,
-)
-from fred_core.scheduler.temporal_codec import build_temporal_data_converter_from_env
-from fred_core.scheduler.temporal_scheduler import TemporalScheduler
-from fred_core.scheduler.temporal_service import TemporalSchedulerService
+from fred_core.scheduler.temporal_client_provider import TemporalClientProvider
 
-__all__ = [
-    "AgentConversationPayload",
-    "AgentCallTask",
-    "BaseScheduler",
-    "InMemorySchedulerEventBus",
-    "InMemoryScheduler",
-    "SchedulerEventBus",
-    "SchedulerEventType",
-    "SchedulerTask",
-    "SchedulerTaskProgress",
-    "SchedulerTaskCompletedEvent",
-    "SchedulerTaskEvent",
-    "SchedulerTaskFailedEvent",
-    "SchedulerTaskProgressEvent",
-    "TemporalSchedulerConfig",
-    "TemporalScheduler",
-    "build_temporal_data_converter_from_env",
-    "TemporalSchedulerService",
-    "WorkflowHandle",
-]
+__all__ = ["TemporalClientProvider"]

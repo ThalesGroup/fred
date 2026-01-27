@@ -22,6 +22,7 @@ from agentic_backend.scheduler.scheduler_structures import (
     AgentTaskProgressResponse,
     RunAgentTaskRequest,
     RunAgentTaskResponse,
+    RecentAgentTasksResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -140,3 +141,26 @@ class SchedulerController:
                 raise
             except Exception as e:
                 raise_internal_error(logger, "Failed to fetch agent task progress", e)
+
+        @router.get(
+            "/scheduler/agent-tasks/recent",
+            tags=["Scheduler"],
+            response_model=RecentAgentTasksResponse,
+            summary="List recent agent tasks (Temporal visibility proxy)",
+        )
+        async def list_recent_agent_tasks(
+            limit: int = 5,
+            workflow_type: str = "AgentWorkflow",
+            status: str | None = None,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                # Only Temporal scheduler supports visibility listing
+                if not isinstance(self.scheduler, TemporalScheduler):
+                    return RecentAgentTasksResponse(items=[])
+                items = await self.scheduler.list_recent_workflows(
+                    workflow_type=workflow_type, limit=limit, status=status
+                )
+                return RecentAgentTasksResponse(items=items)
+            except Exception as e:
+                raise_internal_error(logger, "Failed to list recent agent tasks", e)
