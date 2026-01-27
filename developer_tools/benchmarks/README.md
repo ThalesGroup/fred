@@ -43,7 +43,10 @@ Set `OPENAI_API_KEY` to one of the `apiKeys` in the mock server `config.yaml`.
 
 Example:
 ```bash
-export CONFIG_FILE=./agentic-backend/config/configuration_benchmarks.yaml
+# DO NOT FORGET TO CHANGE THE OPENAI URL IF YOU USE THE MOCK SERVER
+#export OPENAI_API_KEY=key-1
+# export base_url=http://localhost:8383/v1
+export CONFIG_FILE=./agentic-backend/config/configuration_prod.yaml
 export OPENAI_API_KEY=key-1
 ```
 
