@@ -227,7 +227,7 @@ class SessionOrchestrator:
         )
 
         # KPI: count incoming question early (before any work)
-        actor = KPIActor(type="human", user_id=user.uid, teams=user.groups)
+        actor = KPIActor(type="human", user_id=user.uid, groups=user.groups)
         exchange_id = client_exchange_id or str(uuid4())
         self.kpi.count(
             "chat.user_message_total",

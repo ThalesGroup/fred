@@ -83,10 +83,10 @@ class KfBaseClient:
             raise ValueError("KfBaseClient requires either `agent` or `access_token`.")
 
     def _kpi_actor(self) -> KPIActor:
-        teams = None
+        groups = None
         if self._agent:
-            teams = getattr(self._agent.runtime_context, "user_groups", None)
-        return KPIActor(type="system", teams=teams)
+            groups = getattr(self._agent.runtime_context, "user_groups", None)
+        return KPIActor(type="system", groups=groups)
 
     def _kpi_dims(self, *, method: str, path: str) -> Dict[str, Optional[str]]:
         dims: Dict[str, Optional[str]] = {

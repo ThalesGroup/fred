@@ -870,7 +870,7 @@ class AgentFlow:
             unit=unit,
             actor=KPIActor(
                 type="system",
-                teams=getattr(self.runtime_context, "user_groups", None),
+                groups=getattr(self.runtime_context, "user_groups", None),
             ),
         )
 

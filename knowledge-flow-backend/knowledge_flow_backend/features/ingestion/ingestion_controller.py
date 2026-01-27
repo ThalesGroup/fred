@@ -551,7 +551,7 @@ class IngestionController:
             with kpi.timer(
                 "api.request_latency_ms",
                 dims={"route": "/upload-process-documents", "method": "POST"},
-                actor=KPIActor(type="human", user_id=user.uid, teams=user.groups),
+                actor=KPIActor(type="human", user_id=user.uid, groups=user.groups),
             ) as d:
                 parsed_input = IngestionInput(**json.loads(metadata_json))
                 tags = parsed_input.tags
@@ -615,7 +615,7 @@ class IngestionController:
                                 value=duration_ms,
                                 unit="ms",
                                 dims={"file_type": file_type, "status": file_status, "source": "api"},
-                                actor=KPIActor(type="human", user_id=user.uid, teams=user.groups),
+                                actor=KPIActor(type="human", user_id=user.uid, groups=user.groups),
                             )
                     d["status"] = "ok" if success == total else "error"
                     overall_status = Status.SUCCESS if success == total else Status.ERROR
