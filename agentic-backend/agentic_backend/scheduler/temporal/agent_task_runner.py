@@ -35,8 +35,8 @@ from agentic_backend.scheduler.agent_contracts import (
     AgentResultStatus,
     AgentResultV1,
 )
-from agentic_backend.scheduler.temporal.temporal_bridge import TemporalHeartbeatCallback
 from agentic_backend.scheduler.task_structures import AgentTaskStatus
+from agentic_backend.scheduler.temporal.temporal_bridge import TemporalHeartbeatCallback
 
 logger = logging.getLogger(__name__)
 

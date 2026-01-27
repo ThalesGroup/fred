@@ -648,8 +648,8 @@ class ApplicationContext:
     def get_task_store(self):
         if self._task_store_instance is not None:
             return self._task_store_instance
-        from agentic_backend.scheduler.postgres_task_store import PostgresAgentTaskStore
         from agentic_backend.scheduler.memory_task_store import MemoryAgentTaskStore
+        from agentic_backend.scheduler.postgres_task_store import PostgresAgentTaskStore
 
         store_config = get_configuration().storage.task_store
         # Allow the task store to be optional for workers that don't need it.
