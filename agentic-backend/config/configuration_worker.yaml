@@ -192,6 +192,3 @@ storage:
   kpi_store:
     type: "log"
     level: "INFO"
-  task_store:
-    # Only regular agentic backend needs this. In worker, we use in-memory store.
-    type: "memory"
