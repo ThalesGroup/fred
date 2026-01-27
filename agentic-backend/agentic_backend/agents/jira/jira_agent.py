@@ -8,7 +8,6 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from jsonschema import Draft7Validator
 from langchain.agents import AgentState, create_agent
 from langchain.messages import ToolMessage
 from langchain.tools import ToolRuntime, tool
@@ -17,17 +16,16 @@ from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
+from pydantic import ValidationError
 
-from agentic_backend.agents.jira.jsonschema import (
-    requirementsSchema,
-    testsSchema,
-    userStoriesSchema,
-)
-from agentic_backend.agents.jira.models import (
+from agentic_backend.agents.jira.pydantic_models import (
+    Requirement,
     RequirementsList,
+    Test,
     TestsList,
     TestTitlesList,
     UserStoriesList,
+    UserStory,
     UserStoryTitlesList,
 )
 from agentic_backend.application_context import get_default_chat_model
@@ -57,22 +55,21 @@ class CustomState(AgentState):
     tests: list[dict]  # Validated against testsSchema
 
 
-# ---------------------------
-# Tuning spec (UI-editable)
-# ---------------------------
-TUNING = AgentTuning(
-    role="Jira backlog and test builder",
-    description="Extracts requirements and user stories from project documents to fill a Jira board and build Zephyr tests.",
-    mcp_servers=[MCPServerRef(name="mcp-knowledge-flow-mcp-text")],
-    tags=[],
-    fields=[
-        FieldSpec(
-            key="prompts.system",
-            type="prompt",
-            title="System Prompt",
-            description="You extract requirements, user stories and build tests from project documents",  # to fill a Jira board and build Zephyr tests.",
-            required=True,
-            default="""Tu es un Business Analyst et Product Owner expert. Tu génères des exigences, user stories et cas de tests à partir de documents projet.
+@expose_runtime_source("agent.Jim")
+class JiraAgent(AgentFlow):
+    tuning = AgentTuning(
+        role="Jira backlog and test builder",
+        description="Extracts requirements and user stories from project documents to fill a Jira board and build Zephyr tests.",
+        mcp_servers=[MCPServerRef(name="mcp-knowledge-flow-mcp-text")],
+        tags=[],
+        fields=[
+            FieldSpec(
+                key="prompts.system",
+                type="prompt",
+                title="System Prompt",
+                description="You extract requirements, user stories and build tests from project documents",  # to fill a Jira board and build Zephyr tests.",
+                required=True,
+                default="""Tu es un Business Analyst et Product Owner expert. Tu génères des exigences, user stories et cas de tests à partir de documents projet.
 
 ## WORKFLOW
 
@@ -105,60 +102,55 @@ Stratégie obligatoire :
 2. **Toujours exporter** : appeler export_deliverables ou export_jira_csv à la fin
 3. **update_state** : UNIQUEMENT pour du contenu fourni par l'utilisateur. JAMAIS comme solution de repli quand generate_* échoue.
 4. **Erreurs de validation** : Si generate_* échoue, corrige le format JSON et réessaie generate_*. Ne pas utiliser update_state.""",
-            ui=UIHints(group="Prompts", multiline=True, markdown=True),
-        ),
-        FieldSpec(
-            key="chat_options.attach_files",
-            type="boolean",
-            title="Allow file attachments",
-            description="Show file upload/attachment controls for this agent.",
-            required=False,
-            default=True,
-            ui=UIHints(group="Chat options"),
-        ),
-        FieldSpec(
-            key="chat_options.libraries_selection",
-            type="boolean",
-            title="Document libraries picker",
-            description="Let users select document libraries/knowledge sources for this agent.",
-            required=False,
-            default=True,
-            ui=UIHints(group="Chat options"),
-        ),
-        FieldSpec(
-            key="chat_options.search_policy_selection",
-            type="boolean",
-            title="Search policy selector",
-            description="Expose the search policy toggle (hybrid/semantic/strict).",
-            required=False,
-            default=True,
-            ui=UIHints(group="Chat options"),
-        ),
-        FieldSpec(
-            key="chat_options.search_rag_scoping",
-            type="boolean",
-            title="RAG scope selector",
-            description="Expose the RAG scope control (documents-only vs hybrid vs knowledge).",
-            required=False,
-            default=True,
-            ui=UIHints(group="Chat options"),
-        ),
-        FieldSpec(
-            key="chat_options.deep_search_delegate",
-            type="boolean",
-            title="Deep search delegate toggle",
-            description="Allow delegation to a senior agent for deep search.",
-            required=False,
-            default=False,
-            ui=UIHints(group="Chat options"),
-        ),
-    ],
-)
-
-
-@expose_runtime_source("agent.Jim")
-class JiraAgent(AgentFlow):
-    tuning = TUNING
+                ui=UIHints(group="Prompts", multiline=True, markdown=True),
+            ),
+            FieldSpec(
+                key="chat_options.attach_files",
+                type="boolean",
+                title="Allow file attachments",
+                description="Show file upload/attachment controls for this agent.",
+                required=False,
+                default=True,
+                ui=UIHints(group="Chat options"),
+            ),
+            FieldSpec(
+                key="chat_options.libraries_selection",
+                type="boolean",
+                title="Document libraries picker",
+                description="Let users select document libraries/knowledge sources for this agent.",
+                required=False,
+                default=True,
+                ui=UIHints(group="Chat options"),
+            ),
+            FieldSpec(
+                key="chat_options.search_policy_selection",
+                type="boolean",
+                title="Search policy selector",
+                description="Expose the search policy toggle (hybrid/semantic/strict).",
+                required=False,
+                default=True,
+                ui=UIHints(group="Chat options"),
+            ),
+            FieldSpec(
+                key="chat_options.search_rag_scoping",
+                type="boolean",
+                title="RAG scope selector",
+                description="Expose the RAG scope control (documents-only vs hybrid vs knowledge).",
+                required=False,
+                default=True,
+                ui=UIHints(group="Chat options"),
+            ),
+            FieldSpec(
+                key="chat_options.deep_search_delegate",
+                type="boolean",
+                title="Deep search delegate toggle",
+                description="Allow delegation to a senior agent for deep search.",
+                required=False,
+                default=False,
+                ui=UIHints(group="Chat options"),
+            ),
+        ],
+    )
     default_chat_options = AgentChatOptions(
         attach_files=True,
         libraries_selection=True,
@@ -681,7 +673,7 @@ Exigences à respecter:
                     match = re.search(r"SC-(\d+)", id_str)
                     if match:
                         max_num = max(max_num, int(match.group(1)))
-                next_id_hint = f"{max_num + 1:03d}"
+                next_id_hint = f"{max_num + 1:02d}"
 
             # Build existing titles section to avoid duplicates
             existing_titles_section = ""
@@ -1010,11 +1002,11 @@ Règles:
                     }
                 )
 
-            # Select schema based on type
-            schema_map = {
-                "requirements": requirementsSchema,
-                "user_stories": userStoriesSchema,
-                "tests": testsSchema,
+            # Select Pydantic model based on type
+            model_map = {
+                "requirements": Requirement,
+                "user_stories": UserStory,
+                "tests": Test,
             }
 
             # Translate item_type for French message
@@ -1059,16 +1051,27 @@ Règles:
                         }
                     )
 
-                # Validate items against schema
-                validator = Draft7Validator(schema_map[item_type])
-                errors = list(validator.iter_errors(items))
+                # Validate items using Pydantic model
+                model_class = model_map[item_type]
+                validated_items = []
+                errors = []
+                for i, item in enumerate(items):
+                    try:
+                        validated = model_class.model_validate(item)
+                        validated_items.append(validated.model_dump())
+                    except ValidationError as e:
+                        for err in e.errors()[:2]:
+                            loc = ".".join(str(x) for x in err["loc"])
+                            errors.append(f"item[{i}].{loc}: {err['msg']}")
+                        if len(errors) >= 3:
+                            break
+
                 if errors:
-                    error_msgs = [f"{e.path}: {e.message}" for e in errors[:3]]
                     return Command(
                         update={
                             "messages": [
                                 ToolMessage(
-                                    f"❌ Erreur de validation: {'; '.join(error_msgs)}",
+                                    f"❌ Erreur de validation: {'; '.join(errors)}",
                                     tool_call_id=runtime.tool_call_id,
                                 )
                             ]
@@ -1076,11 +1079,11 @@ Règles:
                     )
 
                 if mode == "replace":
-                    final_items = items
-                    action_msg = f"remplacé par {len(items)}"
+                    final_items = validated_items
+                    action_msg = f"remplacé par {len(validated_items)}"
                 else:  # append
-                    final_items = existing + items
-                    action_msg = f"ajout de {len(items)}"
+                    final_items = existing + validated_items
+                    action_msg = f"ajout de {len(validated_items)}"
 
             return Command(
                 update={
