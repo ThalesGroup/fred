@@ -51,7 +51,6 @@ from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
 from agentic_backend.core.agents.runtime_context import RuntimeContext
-from agentic_backend.core.agents.execution_state import build_agent_conversation_payload
 from agentic_backend.core.chatbot.chat_schema import (
     AttachmentRef,
     Channel,
@@ -303,12 +302,12 @@ class SessionOrchestrator:
             actor=actor,
         )
 
-        lc_history: List[AnyMessage] = []
         try:
             if title_changed and session_callback:
                 await self._emit_session(session_callback, session)
             # 3) Rebuild minimal LangChain history (user/assistant/system only),
             # This method will only restore history if the agent is not cached.
+            lc_history: List[AnyMessage] = []
             if not is_cached:
                 t_restore = time.monotonic()
                 lc_history = await asyncio.to_thread(
@@ -377,16 +376,7 @@ class SessionOrchestrator:
                         actor=actor,
                     ) as kpi_dims:
                         # Build input messages ensuring the last message is the Human question.
-                        all_messages: List[AnyMessage] = [
-                            *lc_history,
-                            HumanMessage(message),
-                        ]
-                        conversation_payload = build_agent_conversation_payload(
-                            messages=all_messages
-                        )
-                        input_messages: List[AnyMessage] = list(
-                            conversation_payload.messages or []
-                        )
+                        input_messages = lc_history + [HumanMessage(message)]
 
                         stream_start = time.monotonic()
                         stream_status = "ok"

@@ -22,8 +22,8 @@ from fred_core import (
     PostgresStoreConfig,
     SecurityConfiguration,
     StoreConfig,
+    TemporalSchedulerConfig,
 )
-from fred_core.scheduler import TemporalSchedulerConfig
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, Field, field_validator
 
@@ -38,6 +38,7 @@ class StorageConfig(BaseModel):
         default=None, description="Optional OpenSearch store"
     )
     agent_store: StoreConfig
+    task_store: StoreConfig
     mcp_servers_store: Optional[StoreConfig] = Field(
         default=None,
         description="Optional override for MCP servers store (defaults to agent_store backend).",

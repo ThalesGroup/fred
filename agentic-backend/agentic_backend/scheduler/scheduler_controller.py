@@ -1,166 +1,114 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+from __future__ import annotations
+
 import logging
-from uuid import uuid4
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from fred_core import (
-    KeycloakUser,
-    get_current_user,
-    oauth2_scheme,
-    raise_internal_error,
-)
-from fred_core.scheduler import (
-    AgentCallTask,
-    BaseScheduler,
-    InMemoryScheduler,
-    TemporalScheduler,
-)
+from fastapi import APIRouter, Depends, Query
+from fred_core import KeycloakUser, get_current_user, raise_internal_error
+from fred_core.scheduler import TemporalClientProvider
 
-from agentic_backend.application_context import get_configuration
-from agentic_backend.core.agents.execution_state import build_agent_conversation_payload
-from agentic_backend.scheduler.scheduler_structures import (
-    AgentTaskProgressRequest,
-    AgentTaskProgressResponse,
-    RunAgentTaskRequest,
-    RunAgentTaskResponse,
-    RecentAgentTasksResponse,
+# Import the application context to get the specific store implementation
+from agentic_backend.application_context import get_task_store
+from agentic_backend.scheduler.scheduler_service import AgentTaskService
+from agentic_backend.scheduler.task_structures import (
+    AgentTaskRecordV1,
+    AgentTaskStatus,
+    SubmitAgentTaskRequest,
+    SubmitAgentTaskResponse,
 )
 
 logger = logging.getLogger(__name__)
 
 
-class SchedulerController:
-    def __init__(self, router: APIRouter):
-        config = get_configuration().scheduler
-        if config.backend.lower() == "memory":
-            self.scheduler: BaseScheduler = InMemoryScheduler()
-        elif config.backend.lower() == "temporal":
-            self.scheduler = TemporalScheduler(config.temporal)
-        else:
-            raise ValueError(f"Unsupported scheduler backend: {config.backend}")
+class AgentTasksController:
+    """
+    FastAPI Controller for managing Agent Tasks.
+
+    Coordinates between the HTTP layer and the AgentTaskService.
+    """
+
+    def __init__(
+        self,
+        router: APIRouter,
+        temporal_client_provider: TemporalClientProvider,
+        task_queue: str,
+    ):
+        # Initialize the Service which handles the business logic and Temporal interaction
+        self.service = AgentTaskService(
+            temporal_client_provider=temporal_client_provider,
+            temporal_task_queue=task_queue,
+            task_store=get_task_store(),
+            workflow_name="AgentWorkflow",
+            workflow_id_prefix="agent",
+        )
 
         @router.post(
-            "/scheduler/agent-tasks",
-            tags=["Scheduler"],
-            response_model=RunAgentTaskResponse,
-            summary="Submit an agent task to the scheduler",
+            "/v1/agent-tasks",
+            tags=["AgentTasks"],
+            response_model=SubmitAgentTaskResponse,
+            summary="Submit a new agent task",
+            description="Creates a task record and triggers a Temporal workflow execution.",
         )
-        async def run_agent_task(
-            req: RunAgentTaskRequest,
+        async def submit_agent_task(
+            req: SubmitAgentTaskRequest,
             user: KeycloakUser = Depends(get_current_user),
-            token: str | None = Depends(oauth2_scheme),
         ):
-            task_id = req.task_id or f"agent-task-{uuid4()}"
-            context = dict(req.context)
-            if token:
-                context["access_token"] = token
-                context.setdefault("user_groups", user.groups)
-                context.setdefault("user_id", user.uid)
-            conversation = req.conversation
-            if conversation is None:
-                try:
-                    conversation = build_agent_conversation_payload(
-                        question=req.payload.get("question"),
-                        payload=req.payload,
-                    )
-                except ValueError:
-                    conversation = None
-
-            task = AgentCallTask(
-                task_id=task_id,
-                workflow_type=req.workflow_type,
-                task_queue=req.task_queue,
-                caller_actor=user.uid,
-                target_agent=req.target_agent,
-                session_id=req.session_id,
-                request_id=req.request_id,
-                payload=req.payload,
-                context=context,
-                conversation=conversation,
-            )
-
             try:
-                logger.info("[SCHEDULER] Submitting agent task: %s", task)
-                handle = await self.scheduler.start_task(task)
+                # We delegate to the service to handle persistence and workflow startup
+                record = await self.service.submit(
+                    user_id=user.uid,
+                    target_agent=req.target_agent,
+                    request_text=req.request_text,
+                    context=req.context,
+                    parameters=req.parameters,
+                    task_id=req.task_id,
+                )
+
+                return SubmitAgentTaskResponse(
+                    task_id=record.task_id,
+                    status=record.status,
+                    workflow_id=record.workflow_id,
+                    run_id=record.run_id,
+                )
             except Exception as e:
+                # Centralized error handling helper
                 raise_internal_error(logger, "Failed to submit agent task", e)
 
-            return RunAgentTaskResponse(
-                status="queued",
-                task_id=task_id,
-                workflow_id=handle.workflow_id,
-                run_id=handle.run_id,
-            )
-
-        @router.post(
-            "/scheduler/agent-tasks/progress",
-            tags=["Scheduler"],
-            response_model=AgentTaskProgressResponse,
-            summary="Get progress for a scheduled agent task",
-        )
-        async def get_agent_task_progress(
-            req: AgentTaskProgressRequest,
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            try:
-                if req.workflow_id:
-                    progress = await self.scheduler.get_progress(
-                        workflow_id=req.workflow_id,
-                        run_id=req.run_id,
-                    )
-                    return AgentTaskProgressResponse(
-                        task_id=req.task_id,
-                        workflow_id=req.workflow_id,
-                        run_id=req.run_id,
-                        progress=progress,
-                    )
-
-                if req.task_id:
-                    handle = self.scheduler.get_handle_for_task(req.task_id)
-                    progress = await self.scheduler.get_progress_for_task(req.task_id)
-                    return AgentTaskProgressResponse(
-                        task_id=req.task_id,
-                        workflow_id=handle.workflow_id if handle else None,
-                        run_id=handle.run_id if handle else None,
-                        progress=progress,
-                    )
-
-                handle = self.scheduler.get_last_handle_for_actor(user.uid)
-                if not handle:
-                    raise HTTPException(
-                        status_code=404, detail="No workflow found for caller"
-                    )
-
-                progress = await self.scheduler.get_progress_for_actor(user.uid)
-                return AgentTaskProgressResponse(
-                    task_id=None,
-                    workflow_id=handle.workflow_id,
-                    run_id=handle.run_id,
-                    progress=progress,
-                )
-            except HTTPException:
-                raise
-            except Exception as e:
-                raise_internal_error(logger, "Failed to fetch agent task progress", e)
-
         @router.get(
-            "/scheduler/agent-tasks/recent",
-            tags=["Scheduler"],
-            response_model=RecentAgentTasksResponse,
-            summary="List recent agent tasks (Temporal visibility proxy)",
+            "/v1/agent-tasks",
+            tags=["AgentTasks"],
+            response_model=List[AgentTaskRecordV1],
+            summary="List current user's agent tasks",
+            description="Returns a list of tasks owned by the authenticated user with optional filters.",
         )
-        async def list_recent_agent_tasks(
-            limit: int = 5,
-            workflow_type: str = "AgentWorkflow",
-            status: str | None = None,
+        async def list_agent_tasks(
+            limit: int = Query(default=20, ge=1, le=100),
+            status: Optional[AgentTaskStatus] = Query(default=None),
+            target_agent: Optional[str] = Query(default=None),
             user: KeycloakUser = Depends(get_current_user),
         ):
             try:
-                # Only Temporal scheduler supports visibility listing
-                if not isinstance(self.scheduler, TemporalScheduler):
-                    return RecentAgentTasksResponse(items=[])
-                items = await self.scheduler.list_recent_workflows(
-                    workflow_type=workflow_type, limit=limit, status=status
+                # Convert single status query to sequence for the store filter
+                statuses = [status] if status else None
+
+                return self.service.list_for_user(
+                    user_id=user.uid,
+                    limit=limit,
+                    statuses=statuses,
+                    target_agent=target_agent,
                 )
-                return RecentAgentTasksResponse(items=items)
             except Exception as e:
-                raise_internal_error(logger, "Failed to list recent agent tasks", e)
+                raise_internal_error(logger, "Failed to list agent tasks", e)

@@ -100,18 +100,11 @@ ai:
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:
-    - name: "Temporal Test Agent"
+    - name: "Researcher"
       type: "agent"
-      class_path: "agentic_backend.agents.temporal_test_agent.temporal_test_agent.TemporalTestAgent"
+      # Corrected module path to the existing ResearchAgent implementation
+      class_path: "agentic_backend.agents.research.research_agent.ResearchAgent"
       enabled: true
-      chat_options:
-        attach_files: false
-    - name: "Rico Senior"
-      type: "agent"
-      class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
-      enabled: true
-      metadata:
-        deep_search_hidden_in_ui: true
 
 mcp:
   servers:
@@ -199,3 +192,6 @@ storage:
   kpi_store:
     type: "log"
     level: "INFO"
+  task_store:
+    type: "postgres"
+    table: tasks

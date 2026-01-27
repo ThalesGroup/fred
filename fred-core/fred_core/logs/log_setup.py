@@ -161,6 +161,7 @@ def log_setup(
     log_level: str = "INFO",
     store: BaseLogStore,
     include_uvicorn: bool = True,
+    use_rich: bool = True,
 ) -> None:
     root = logging.getLogger()
     root.setLevel(log_level.upper())
@@ -170,25 +171,26 @@ def log_setup(
     if getattr(root, marker, False):
         return
 
-    # 1) Human console (Rich)
-    if RichHandler is not None:
-        formatter = logging.Formatter(
-            # Include process ID, task name, and thread name for concurrency diagnostics.
-            fmt="%(asctime)s | %(levelname)s | [pid=%(process)d %(threadName)s/%(task_name)s] | %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-        console = RichHandler(
+    # 1) Human console (Rich or plain)
+    formatter = logging.Formatter(
+        # Include process ID, task name, and thread name for concurrency diagnostics.
+        fmt="%(asctime)s | %(levelname)s | [pid=%(process)d %(threadName)s/%(task_name)s] | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    if use_rich and RichHandler is not None:
+        console_handler: logging.Handler = RichHandler(
             rich_tracebacks=False,
             show_time=False,  # Time is now in the custom formatter
             show_level=True,
             show_path=True,
-            # Omit other rich handler formatting controls, as the formatter handles the prefix
-            log_time_format="%Y-%m-%d %H:%M:%S",  # This can be misleading, rely on formatter time
+            log_time_format="%Y-%m-%d %H:%M:%S",
         )
-        console.setFormatter(formatter)
-        console.addFilter(TaskNameFilter())
-        console.setLevel(log_level.upper())
-        root.addHandler(console)
+    else:
+        console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    console_handler.addFilter(TaskNameFilter())
+    console_handler.setLevel(log_level.upper())
+    root.addHandler(console_handler)
 
     # 3) Store (machine)
     store_h = StoreEmitHandler(service_name=service_name, store=store)

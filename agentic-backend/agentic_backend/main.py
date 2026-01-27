@@ -28,6 +28,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_user_security, log_setup, register_exception_handlers
 from fred_core.kpi import emit_process_kpis
+from fred_core.scheduler import TemporalClientProvider
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -52,7 +53,7 @@ from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrato
 from agentic_backend.core.feedback import feedback_controller
 from agentic_backend.core.mcp import mcp_controller
 from agentic_backend.core.monitoring import monitoring_controller
-from agentic_backend.scheduler.scheduler_controller import SchedulerController
+from agentic_backend.scheduler.scheduler_controller import AgentTasksController
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -194,7 +195,17 @@ def create_app() -> FastAPI:
     router.include_router(logs_controller.router)
     if configuration.scheduler.enabled:
         logger.info("🛠️ Activating agent scheduler controller.")
-        SchedulerController(router)
+        if not configuration.scheduler.temporal:
+            raise ValueError("Scheduler enabled but Temporal configuration is missing!")
+        task_queue = configuration.scheduler.temporal.task_queue
+        if not task_queue:
+            raise ValueError(
+                "Scheduler enabled but Temporal task_queue is not set in configuration!"
+            )
+        temporal_client_provider = TemporalClientProvider(
+            configuration.scheduler.temporal
+        )
+        AgentTasksController(router, temporal_client_provider, task_queue)
     else:
         logger.warning(
             "🛑 Agent scheduler controller disabled via configuration.scheduler.enabled=false"

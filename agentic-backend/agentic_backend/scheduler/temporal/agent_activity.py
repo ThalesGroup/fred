@@ -11,23 +11,28 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from __future__ import annotations
-
 import logging
-from typing import Any, Dict
 
 from temporalio import activity
 
-from agentic_backend.scheduler.scheduler_structures import AgentTaskInput
-from agentic_backend.scheduler.temporal.runner import get_runner
+from agentic_backend.scheduler.agent_contracts import AgentInputV1, AgentResultV1
+from agentic_backend.scheduler.temporal.agent_task_runner import get_runner
 
 logger = logging.getLogger(__name__)
 
 
-@activity.defn
-async def run_agent_task(task_input: Dict[str, Any]) -> Dict[str, Any]:
-    task = AgentTaskInput.model_validate(task_input)
+@activity.defn(name="run_langgraph_activity")
+async def run_langgraph_activity(input: AgentInputV1) -> AgentResultV1:
+    """
+    Temporal Activity entry point.
+    It delegates all logic to the AgentTaskRunner.
+    """
+    logger.info(
+        f"[ACTIVITY] Starting task {input.task_id} for agent {input.target_agent}"
+    )
+
+    # Fetch the singleton runner
     runner = await get_runner()
-    logger.info("[SCHEDULER][ACTIVITY] Running agent task target=%s", task.target_agent)
-    return await runner.run_task(task)
+
+    # Execute the task
+    return await runner.run_temporal_task(input)

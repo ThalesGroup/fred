@@ -26,12 +26,12 @@ from fred_core import KeycloakUser, VectorSearchHit
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler
+from langgraph.graph import MessagesState
 from pydantic import TypeAdapter, ValidationError
 from starlette.websockets import WebSocketDisconnect
 
 from agentic_backend.common.rags_utils import ensure_ranks
 from agentic_backend.core.agents.agent_flow import AgentFlow
-from agentic_backend.core.agents.execution_state import build_messages_state
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.chatbot.chat_schema import (
     Channel,
@@ -198,7 +198,7 @@ class StreamTranscoder:
         final_sent = False
         pending_sources_payload: Optional[List[VectorSearchHit]] = None
         msgs_any: list[AnyMessage] = [cast(AnyMessage, m) for m in input_messages]
-        state = build_messages_state(messages=msgs_any)
+        state: MessagesState = {"messages": msgs_any}
         try:
             async for event in agent.astream_updates(state=state, config=config):
                 # `event` looks like: {'node_name': {'messages': [...]}} or {'end': None}
@@ -363,18 +363,13 @@ class StreamTranscoder:
 
                     # Channel selection
                     if role == Role.assistant:
-                        force_final = bool(raw_md.get("force_final"))
-                        force_observation = bool(raw_md.get("force_observation"))
-                        if force_final and not final_sent:
-                            ch = Channel.final
+                        ch = (
+                            Channel.final
+                            if (parts and not final_sent)
+                            else Channel.observation
+                        )
+                        if ch == Channel.final:
                             final_sent = True
-                        elif force_observation:
-                            ch = Channel.observation
-                        elif parts and not final_sent:
-                            ch = Channel.final
-                            final_sent = True
-                        else:
-                            ch = Channel.observation
                     elif role == Role.system:
                         ch = Channel.system_note
                     elif role == Role.user:

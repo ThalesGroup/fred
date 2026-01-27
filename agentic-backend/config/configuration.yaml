@@ -241,6 +241,10 @@ storage:
   attachments_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/session_attachments.duckdb"
+  task_store:
+    type: "postgres"
+    table: tasks
+
   kpi_store:
     type: "log"
     level: "INFO"

@@ -46,6 +46,7 @@ async def main() -> None:
         service_name="agentic-worker",
         log_level=configuration.app.log_level,
         store=app_context.get_log_store(),
+        use_rich=False,  # Temporal workflow sandbox disallows Rich imports; use plain logging.
     )
 
     if not configuration.scheduler.enabled:

@@ -12,42 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Button, Card, CardContent, CardHeader, MenuItem, Stack, TextField, Typography } from "@mui/material";
-import { useState } from "react";
+import { Box, Button, Card, CardContent, CardHeader, Stack, TextField, Typography } from "@mui/material";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TopBar } from "../common/TopBar";
 import { useToast } from "../components/ToastProvider";
 import {
-  AgentTaskProgressResponse,
-  RunAgentTaskResponse,
-  useListRecentAgentTasksAgenticV1SchedulerAgentTasksRecentGetQuery,
-  useGetAgentTaskProgressAgenticV1SchedulerAgentTasksProgressPostMutation,
-  useRunAgentTaskAgenticV1SchedulerAgentTasksPostMutation,
+  SubmitAgentTaskResponse,
+  useSubmitAgentTaskAgenticV1V1AgentTasksPostMutation,
 } from "../slices/agentic/agenticOpenApi";
 
-const AGENT_OPTIONS = [
-  { value: "Georges", label: "Georges (Generalist Expert)" },
-  { value: "Temporal Test Agent", label: "Temporal Test Agent" },
-  { value: "Rico Senior", label: "Rico Senior" },
-];
+const TARGET_AGENT = "Researcher";
 
 export const AppsScheduler = () => {
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
-  const [runTask, { isLoading }] = useRunAgentTaskAgenticV1SchedulerAgentTasksPostMutation();
-  const [fetchProgress, { isLoading: isChecking }] = useGetAgentTaskProgressAgenticV1SchedulerAgentTasksProgressPostMutation();
-  const [agent, setAgent] = useState(AGENT_OPTIONS[0].value);
+  const [submitTask, { isLoading }] = useSubmitAgentTaskAgenticV1V1AgentTasksPostMutation();
   const [question, setQuestion] = useState("");
-  const [lastRun, setLastRun] = useState<RunAgentTaskResponse | null>(null);
-  const [lastProgress, setLastProgress] = useState<AgentTaskProgressResponse | null>(null);
-  const [pendingTasks, setPendingTasks] = useState<RunAgentTaskResponse[]>([]);
-  const [completedTasks, setCompletedTasks] = useState<
-    { task_id: string; workflow_id?: string; state?: string; message?: string | null; run_id?: string | null }[]
-  >([]);
-  const { data: recentTasks } = useListRecentAgentTasksAgenticV1SchedulerAgentTasksRecentGetQuery({
-    limit: 5,
-    workflow_type: "AgentWorkflow",
-  });
+  const [lastRun, setLastRun] = useState<SubmitAgentTaskResponse | null>(null);
+
+  const helperText = useMemo(
+    () =>
+      t(
+        "apps.scheduler.tip",
+        "Submit a quick research question to the Temporal worker. The backend will route it to the Researcher agent."
+      ),
+    [t]
+  );
 
   const handleSubmit = async () => {
     const trimmedQuestion = question.trim();
@@ -59,75 +50,19 @@ export const AppsScheduler = () => {
       return;
     }
     try {
-      const response = await runTask({
-        runAgentTaskRequest: {
-          target_agent: agent,
-          payload: {
-            question: trimmedQuestion,
-          },
+      const response = await submitTask({
+        submitAgentTaskRequest: {
+          target_agent: TARGET_AGENT,
+          request_text: trimmedQuestion,
+          parameters: {},
         },
       }).unwrap();
       setLastRun(response);
-      setLastProgress({
-        task_id: response.task_id,
-        workflow_id: response.workflow_id,
-        run_id: response.run_id ?? null,
-        progress: {
-          state: "queued",
-          percent: 0,
-          message: t("apps.scheduler.progress.queued", "Waiting for worker to pick up the task."),
-        },
-      });
-      setPendingTasks((prev) => {
-        const next = [response, ...prev];
-        return next.slice(0, 5);
-      });
       showSuccess({
         summary: t("apps.scheduler.toasts.submitted.title", "Task scheduled"),
         detail: t("apps.scheduler.toasts.submitted.simple", "Your question was submitted to the scheduler."),
       });
       setQuestion("");
-    } catch (error: any) {
-      const detail = error?.data?.detail || error?.message || t("apps.scheduler.toasts.error.default", "Request failed.");
-      showError({
-        summary: t("apps.scheduler.toasts.error.title", "Scheduler error"),
-        detail,
-      });
-    }
-  };
-
-  const handleCheck = async () => {
-    if (!lastRun?.task_id) return;
-    try {
-      const progress = await fetchProgress({
-        agentTaskProgressRequest: {
-          task_id: lastRun.task_id,
-          workflow_id: lastRun.workflow_id,
-          run_id: lastRun.run_id || null,
-        },
-      }).unwrap();
-      setLastProgress(progress);
-      // If completed/failed, drop from pending list
-      const terminalStates = new Set(["completed", "failed", "terminated", "canceled"]);
-      if (terminalStates.has(progress.progress.state.toLowerCase?.() ?? progress.progress.state)) {
-        setPendingTasks((prev) => prev.filter((t) => t.task_id !== lastRun.task_id));
-        setCompletedTasks((prev) => {
-          if (prev.some((t) => t.task_id === lastRun.task_id)) {
-            return prev;
-          }
-          const next = [
-            {
-              task_id: lastRun.task_id,
-              workflow_id: lastRun.workflow_id,
-              run_id: lastRun.run_id,
-              state: progress.progress.state,
-              message: progress.progress.message ?? null,
-            },
-            ...prev,
-          ];
-          return next.slice(0, 5);
-        });
-      }
     } catch (error: any) {
       const detail = error?.data?.detail || error?.message || t("apps.scheduler.toasts.error.default", "Request failed.");
       showError({
@@ -144,19 +79,7 @@ export const AppsScheduler = () => {
         <CardHeader title={t("apps.scheduler.submit.title", "Schedule an agent task")} subheader={t("apps.scheduler.subtitle", "Fire a single agent task via Temporal.").toLowerCase()} />
         <CardContent>
           <Stack spacing={2}>
-            <TextField
-              select
-              label={t("apps.scheduler.fields.targetAgent", "Target agent")}
-              value={agent}
-              onChange={(event) => setAgent(event.target.value)}
-              fullWidth
-            >
-              {AGENT_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </TextField>
+            <TextField label={t("apps.scheduler.fields.targetAgent", "Target agent")} value={TARGET_AGENT} fullWidth disabled />
             <TextField
               label={t("apps.scheduler.fields.question", "User question")}
               placeholder={t("apps.scheduler.placeholders.question", "Describe what you want the agent to do…")}
@@ -167,10 +90,7 @@ export const AppsScheduler = () => {
               minRows={4}
             />
             <Typography variant="body2" color="text.secondary">
-              {t(
-                "apps.scheduler.tip",
-                "We persist nothing here for now. Submit the question and inspect the Temporal worker logs downstream."
-              )}
+              {helperText}
             </Typography>
             <Button variant="contained" onClick={handleSubmit} disabled={isLoading || !question.trim()}>
               {isLoading
@@ -178,66 +98,20 @@ export const AppsScheduler = () => {
                 : t("apps.scheduler.submit.action", "Submit question")}
             </Button>
             {lastRun && (
-              <Button variant="text" onClick={handleCheck} disabled={isChecking}>
-                {isChecking ? t("apps.scheduler.progress.loading", "Refreshing...") : t("apps.scheduler.progress.action", "Refresh progress")}
-              </Button>
-            )}
-            {lastProgress && (
-              <Stack spacing={0.5} sx={{ border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 1, p: 1.5 }}>
+              <Stack spacing={0.5} sx={{ border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 1, p: 1.25 }}>
                 <Typography variant="subtitle2">{t("apps.scheduler.progress.title", "Progress lookup")}</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {t("apps.scheduler.progress.state", "State")}: {lastProgress.progress.state}
+                  {t("apps.scheduler.pending.lastTaskId", "Task id")}: {lastRun.task_id}
                 </Typography>
-                {typeof lastProgress.progress.percent === "number" && (
-                  <Typography variant="body2" color="text.secondary">
-                    {t("apps.scheduler.progress.percent", "Percent")}: {lastProgress.progress.percent}%
-                  </Typography>
-                )}
                 <Typography variant="body2" color="text.secondary">
-                  {t("apps.scheduler.progress.message", "Message")}: {lastProgress.progress.message ?? t("apps.scheduler.progress.none", "No message")}
+                  {t("apps.scheduler.progress.state", "State")}: {lastRun.status}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {t("apps.scheduler.progress.message", "Message")}:{" "}
+                  {t("apps.scheduler.progress.hitTemporal", "Inspect Temporal UI or worker logs for live status.")}
                 </Typography>
               </Stack>
             )}
-            <Stack spacing={0.5} sx={{ border: (theme) => `1px dashed ${theme.palette.divider}`, borderRadius: 1, p: 1.25 }}>
-              <Typography variant="subtitle2">{t("apps.scheduler.pending.title", "Pending tasks")}</Typography>
-              {pendingTasks.length === 0 && (
-                <Typography variant="body2" color="text.secondary">
-                  {t("apps.scheduler.pending.empty", "No pending tasks")}
-                </Typography>
-              )}
-              {pendingTasks.map((task) => (
-                <Typography key={task.task_id} variant="body2" color="text.secondary" sx={{ fontSize: "0.85rem" }}>
-                  {task.task_id} · {task.workflow_id || t("apps.scheduler.pending.noWorkflow", "no workflow id")}
-                </Typography>
-              ))}
-            </Stack>
-            <Stack spacing={0.5} sx={{ border: (theme) => `1px dashed ${theme.palette.divider}`, borderRadius: 1, p: 1.25 }}>
-              <Typography variant="subtitle2">{t("apps.scheduler.completed.title", "Last completed tasks")}</Typography>
-              {completedTasks.length === 0 && (
-                <Typography variant="body2" color="text.secondary">
-                  {t("apps.scheduler.completed.empty", "No completed tasks yet")}
-                </Typography>
-              )}
-              {completedTasks.map((task) => (
-                <Typography key={task.task_id} variant="body2" color="text.secondary" sx={{ fontSize: "0.85rem" }}>
-                  {task.task_id} · {task.workflow_id || t("apps.scheduler.pending.noWorkflow", "no workflow id")} · {task.state ?? ""}
-                  {task.message ? ` · ${task.message}` : ""}
-                </Typography>
-              ))}
-            </Stack>
-            <Stack spacing={0.5} sx={{ border: (theme) => `1px dashed ${theme.palette.divider}`, borderRadius: 1, p: 1.25 }}>
-              <Typography variant="subtitle2">{t("apps.scheduler.recent.title", "Recent workflows (Temporal)")}</Typography>
-              {!recentTasks?.items?.length && (
-                <Typography variant="body2" color="text.secondary">
-                  {t("apps.scheduler.recent.empty", "No workflows visible")}
-                </Typography>
-              )}
-              {recentTasks?.items?.map((wf) => (
-                <Typography key={`${wf.workflow_id}-${wf.run_id || "latest"}`} variant="body2" color="text.secondary" sx={{ fontSize: "0.85rem" }}>
-                  {wf.workflow_id} · {wf.status || "unknown"}
-                </Typography>
-              ))}
-            </Stack>
           </Stack>
         </CardContent>
       </Card>
