@@ -1,8 +1,11 @@
 # Image settings
 image:
-  repository: ghcr.io/your-org/agentic-bench
-  tag: latest
+  repository: carma.corp.thales/proxy-docker-internal-c2/fred/benchmark-tools
+  tag: 0.0.4-prism
   pullPolicy: IfNotPresent
+imagePullSecrets: &carma-pull-secret
+      - name: "carma-pull-secret"
+
 
 # Job configuration
 job:
@@ -14,11 +17,11 @@ job:
 
 # Benchmark client flags
 bench:
-  url: ws://agentic-backend:8000/agentic/v1/chatbot/query/ws
+  url: ws://agentic-backend:80/agentic/v1/chatbot/query/ws
   agent: Georges
   message: Hello
-  clients: 5
-  requests: 50
+  clients: 20
+  requests: 100
   requestsPerClient: 0         # if >0, per-client mode; otherwise uses requests
   timeoutSeconds: 90
   insecureTLS: false
@@ -33,7 +36,7 @@ bench:
 
 # Secret that holds the bearer token
 tokenSecret:
-  name: ""                     # set to an existing Secret to populate AGENTIC_TOKEN
+  name: "bench-token-secret"                     # set to an existing Secret to populate AGENTIC_TOKEN
   key: token
   optional: false
 
@@ -41,8 +44,27 @@ serviceAccount:
   create: false
   name: ""
 
+securityContext:
+  runAsUser: 1000       
+  runAsGroup: 3000       
+  runAsNonRoot: true    
+  fsGroup: 2000          
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false 
+  runAsNonRoot: true              
+  runAsUser: 1000       
+  runAsGroup: 3000
+  capabilities:
+    drop:
+      - ALL                       
+  readOnlyRootFilesystem: false   
+    
 nodeSelector: {}
 tolerations: []
 affinity: {}
 
 resources: {}
+

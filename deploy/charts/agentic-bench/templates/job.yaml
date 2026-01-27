@@ -22,6 +22,16 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
     spec:
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+  {{ toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
+
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+
       restartPolicy: {{ .Values.job.restartPolicy }}
       {{- if or .Values.serviceAccount.create .Values.serviceAccount.name }}
       serviceAccountName: {{ default (include "agentic-bench.fullname" .) .Values.serviceAccount.name }}
@@ -30,6 +40,10 @@ spec:
         - name: bench
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          
           args:
             - "-url={{ .Values.bench.url }}"
             - "-agent={{ .Values.bench.agent }}"
