@@ -265,6 +265,10 @@ class AppConfig(BaseModel):
     metrics_enabled: bool = True
     metrics_address: str = "127.0.0.1"
     metrics_port: int = 9111
+    kpi_process_metrics_interval_sec: int = Field(
+        10,
+        description="Interval in seconds for processing and logging KPI metrics.",
+    )
 
 
 class PullProvider(str, Enum):

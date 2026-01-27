@@ -74,6 +74,7 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "index": {"type": "keyword"},
                     "file_type": {"type": "keyword"},
                     "actor_type": {"type": "keyword"},  # "human" | "system"
+                    "service": {"type": "keyword"},  # e.g., agentic | knowledge-flow
                     "scope_type": {
                         "type": "keyword"
                     },  # "session" | "project" | "library"
@@ -157,11 +158,33 @@ class OpenSearchKPIStore(BaseKPIStore):
                 logger.info(f"[OPENSEARCH][KPI] created index '{self.index}'.")
             else:
                 logger.info(f"[OPENSEARCH][KPI] index '{self.index}' already exists.")
+                self._ensure_dim_mapping("service", {"type": "keyword"})
                 # Validate existing mapping matches expected mapping
                 validate_index_mapping(self.client, self.index, KPI_INDEX_MAPPING)
         except OpenSearchException as e:
             logger.error(f"[OPENSEARCH][KPI] ensure_ready failed: {e}")
             raise
+
+    def _ensure_dim_mapping(self, name: str, mapping: Dict[str, Any]) -> None:
+        try:
+            current_mapping_resp = self.client.indices.get_mapping(index=self.index)
+            current_mapping = current_mapping_resp.get(self.index, {}).get(
+                "mappings", {}
+            )
+            dims_props = (
+                current_mapping.get("properties", {})
+                .get("dims", {})
+                .get("properties", {})
+            )
+            if name in dims_props:
+                return
+            body = {"properties": {"dims": {"properties": {name: mapping}}}}
+            self.client.indices.put_mapping(index=self.index, body=body)
+            logger.info("[OPENSEARCH][KPI] added dims.%s mapping", name)
+        except OpenSearchException as e:
+            logger.warning(
+                "[OPENSEARCH][KPI] failed to add dims.%s mapping: %s", name, e
+            )
 
     # -- writes ----------------------------------------------------------------
     def index_event(self, event: KPIEvent) -> None:

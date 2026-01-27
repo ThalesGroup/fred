@@ -12,11 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, CircularProgress, Grid2, Tooltip, Typography, useTheme } from "@mui/material";
+import BugReportIcon from "@mui/icons-material/BugReport";
+import CloseIcon from "@mui/icons-material/Close";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import {
+  Box,
+  Button,
+  CircularProgress,
+  Divider,
+  Drawer,
+  Grid2,
+  IconButton,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+  useTheme,
+} from "@mui/material";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 import type { AnyAgent } from "../../common/agent.ts";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
 import type { ChatMessage, RuntimeContext } from "../../slices/agentic/agenticOpenApi.ts";
 import type { Resource, SearchPolicyName, TagWithItemsId } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import {
@@ -68,6 +85,15 @@ type ChatBotViewProps = {
   setSearchPolicy: (next: SetStateAction<SearchPolicyName>) => void;
   setSearchRagScope: (next: SearchRagScope) => void;
   setDeepSearchEnabled: (next: boolean) => void;
+  debugWidget?: {
+    isAdmin: boolean;
+    debugDrawerOpen: boolean;
+    setDebugDrawerOpen: (open: boolean) => void;
+    debugHistoryText: string;
+    onCopyDebugHistory: () => void;
+    copyFeedback: string | null;
+    hasDebugHistory: boolean;
+  };
 };
 
 const ChatBotView = ({
@@ -103,6 +129,7 @@ const ChatBotView = ({
   setSearchPolicy,
   setSearchRagScope,
   setDeepSearchEnabled,
+  debugWidget,
 }: ChatBotViewProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -406,6 +433,83 @@ const ChatBotView = ({
           </>
         )}
       </Box>
+      {debugWidget?.isAdmin && (
+        <>
+          <Box
+            sx={{
+              position: "fixed",
+              bottom: 16,
+              right: 16,
+              zIndex: 1500,
+            }}
+          >
+            <SimpleTooltip title="Show raw WS event history">
+              <IconButton color="primary" size="medium" onClick={() => debugWidget.setDebugDrawerOpen(true)}>
+                <BugReportIcon />
+              </IconButton>
+            </SimpleTooltip>
+          </Box>
+          <Drawer
+            anchor="right"
+            open={debugWidget.debugDrawerOpen}
+            onClose={() => debugWidget.setDebugDrawerOpen(false)}
+          >
+            <Box
+              role="presentation"
+              sx={{
+                width: { xs: "90vw", sm: 480 },
+                height: "100%",
+                p: 2,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Typography variant="h6">WS Event History</Typography>
+                <IconButton size="small" onClick={() => debugWidget.setDebugDrawerOpen(false)}>
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </Stack>
+              <Typography variant="body2" color="text.secondary" mt={1}>
+                Shows the raw JSON payload for each WebSocket event received in this session.
+              </Typography>
+              <Divider sx={{ my: 1 }} />
+              <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
+                <Button
+                  startIcon={<ContentCopyIcon />}
+                  onClick={debugWidget.onCopyDebugHistory}
+                  variant="outlined"
+                  size="small"
+                  disabled={!debugWidget.hasDebugHistory}
+                >
+                  Copy JSON
+                </Button>
+                {debugWidget.copyFeedback && (
+                  <Typography variant="caption" color="text.secondary">
+                    {debugWidget.copyFeedback}
+                  </Typography>
+                )}
+              </Stack>
+              <TextField
+                value={debugWidget.debugHistoryText}
+                multiline
+                minRows={14}
+                variant="outlined"
+                fullWidth
+                margin="normal"
+                InputProps={{
+                  readOnly: true,
+                  sx: {
+                    fontFamily: "monospace",
+                    whiteSpace: "pre",
+                    fontSize: "0.75rem",
+                  },
+                }}
+              />
+            </Box>
+          </Drawer>
+        </>
+      )}
     </Box>
   );
 };

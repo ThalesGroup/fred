@@ -1,5 +1,7 @@
 # Fred
 
+[Who does what](https://github.com/orgs/ThalesGroup/projects/8/views/4)
+
 Fred is both:
 
 - An innovation lab — helping developers rapidly explore agentic patterns, domain-specific logic, and custom tools.

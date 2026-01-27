@@ -57,7 +57,10 @@ def _require_settings(settings: Dict, required: Iterable[str], context: str) -> 
 
 def _info_provider(cfg: ModelConfiguration) -> None:
     logger.info(
-        "Provider=%s Name=%s Settings=%s", cfg.provider, cfg.name, cfg.settings or {}
+        "[MODEL] Provider=%s Name=%s Settings=%s",
+        cfg.provider,
+        cfg.name,
+        cfg.settings or {},
     )
 
 

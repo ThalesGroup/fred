@@ -18,9 +18,10 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
-  metrics_enabled: true
+  metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9111
+  kpi_process_metrics_interval_sec: 10
 
 processing:
   generate_summary: false
@@ -89,22 +90,6 @@ document_sources:
   fred:
     type: push
     description: "Documents manually uploaded by users"
-
-  local:
-    type: pull
-    provider: local_path
-    base_path: ~/Documents/Fred
-    description: "Personal local documents available for pull-mode ingestion"
-
-  minio:
-    type: pull
-    provider: minio
-    description: "Documents available for pull from MinIO"
-    endpoint_url: localhost:9000
-    bucket_name: "shared-content"
-    prefix: ""
-    access_key: "admin"
-    secure: false
 
 chat_model:
   provider: openai
@@ -198,28 +183,28 @@ storage:
     username: admin
 
   catalog_store:
-    type: "opensearch"
-    index: catalog-index
+    type: "postgres"
+    table: catalog
 
   prompt_store:
-    type: "opensearch"
-    index: prompt-index
+    type: "postgres"
+    table: prompt
 
   resource_store:
-    type: "opensearch"
-    index: resource-index
+    type: "postgres"
+    table: resource
 
   kpi_store:
     type: "opensearch"
     index: kpi-index
 
   tag_store:
-    type: "opensearch"
-    index: tag-index
+    type: "postgres"
+    table: tag
 
   metadata_store:
-    type: "opensearch"
-    index: metadata-index
+    type: "postgres"
+    table: metadata
 
   vector_store:
     type: opensearch

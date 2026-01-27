@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Tuple, cast
 
 from fred_core import LogEventDTO, LogFilter, LogQuery
 from fred_core.logs.log_structures import LogLevel
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.constants import END, START
 from langgraph.graph import MessagesState, StateGraph
 
@@ -407,7 +407,11 @@ class LogGenius(AgentFlow):
             if "{log_context}" not in tpl:
                 system_text = f"{system_text}\n\nRecent logs:\n{log_context}"
 
-            history = self.recent_messages(state["messages"], max_messages=6)
+            history = [
+                m
+                for m in self.recent_messages(state["messages"], max_messages=6)
+                if isinstance(m, (HumanMessage, SystemMessage))
+            ]
             messages = self.with_system(system_text, history)
             messages = self.with_chat_context_text(messages)
 

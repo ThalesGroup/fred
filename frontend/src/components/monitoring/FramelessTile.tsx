@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Typography, Tooltip, IconButton, Stack } from "@mui/material";
 import InfoOutlined from "@mui/icons-material/InfoOutlined";
+import { Box, IconButton, Stack, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 
 export function FramelessTile({
   title,
@@ -65,11 +66,11 @@ export function FramelessTile({
           )}
         </Box>
         {help && (
-          <Tooltip title={help}>
+          <SimpleTooltip title={help}>
             <IconButton size="small" sx={{ ml: 1 }}>
               <InfoOutlined fontSize="small" />
             </IconButton>
-          </Tooltip>
+          </SimpleTooltip>
         )}
       </Stack>
       {children}

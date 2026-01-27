@@ -1,7 +1,22 @@
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import ConstructionIcon from "@mui/icons-material/Construction";
 import GroupIcon from "@mui/icons-material/Group";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
+import ScheduleIcon from "@mui/icons-material/Schedule";
 import ScienceIcon from "@mui/icons-material/Science";
 import ShieldIcon from "@mui/icons-material/Shield";
 import { Box, CSSObject, Divider, Paper, styled, Theme } from "@mui/material";
@@ -24,7 +39,6 @@ import { ImageComponent } from "../utils/image";
 import { ApplicationContext } from "./ApplicationContextProvider";
 
 const drawerWidth = 280;
-
 const openedMixin = (theme: Theme): CSSObject => ({
   width: drawerWidth,
   transition: theme.transitions.create("width", {
@@ -108,6 +122,7 @@ export default function SideBar() {
       tooltip: t("sidebar.tooltip.knowledge"),
     },
   ];
+  const appsMenuItems: SideBarNavigationElement[] = [];
   const adminMenuItems: SideBarNavigationElement[] = [
     {
       key: "mcp",
@@ -146,6 +161,13 @@ export default function SideBar() {
                     },
                   ]
                 : []),
+              {
+                key: "laboratory-scheduler",
+                label: t("sidebar.apps_scheduler", "Scheduler"),
+                icon: <ScheduleIcon />,
+                url: `/apps/scheduler`,
+                tooltip: t("sidebar.tooltip.apps_scheduler", "Submit and track scheduled tasks"),
+              },
             ],
           },
         ]
@@ -265,6 +287,13 @@ export default function SideBar() {
           {/* Nav */}
           <Box>
             <SideBarNavigationList menuItems={menuItems} isSidebarOpen={open} />
+          </Box>
+
+          <SideBarDivider />
+
+          {/* Apps Nav */}
+          <Box>
+            <SideBarNavigationList menuItems={appsMenuItems} isSidebarOpen={open} />
           </Box>
 
           <SideBarDivider />

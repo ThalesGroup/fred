@@ -20,13 +20,9 @@ from typing import Any, Dict, Optional, Type, Union
 
 from fred_core import (
     BaseFilesystem,
-    BaseKPIStore,
-    BaseKPIWriter,
     BaseLogStore,
     DuckdbStoreConfig,
     InMemoryLogStorageConfig,
-    KpiLogStore,
-    KPIWriter,
     LocalFilesystem,
     LogStoreConfig,
     MinioFilesystem,
@@ -34,10 +30,8 @@ from fred_core import (
     ModelProvider,
     OpenFgaRebacConfig,
     OpenSearchIndexConfig,
-    OpenSearchKPIStore,
     OpenSearchLogStore,
     PostgresTableConfig,
-    PrometheusKPIStore,
     RamLogStore,
     RebacEngine,
     SQLStorageConfig,
@@ -48,6 +42,7 @@ from fred_core import (
     rebac_factory,
     split_realm_url,
 )
+from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIDefaults, KpiLogStore, KPIWriter, OpenSearchKPIStore, PrometheusKPIStore
 from fred_core.sql import create_engine_from_config
 from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
@@ -736,7 +731,10 @@ class ApplicationContext:
         if self._kpi_writer is not None:
             return self._kpi_writer
 
-        self._kpi_writer = KPIWriter(store=self.get_kpi_store())
+        self._kpi_writer = KPIWriter(
+            store=self.get_kpi_store(),
+            defaults=KPIDefaults(static_dims={"service": "knowledge-flow"}),
+        )
         return self._kpi_writer
 
     def get_rebac_engine(self) -> RebacEngine:

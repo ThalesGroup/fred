@@ -1,0 +1,89 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "agentic-bench.fullname" . }}
+  labels:
+{{ include "agentic-bench.labels" . | indent 4 }}
+{{- with .Values.job.labels }}
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.job.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+  backoffLimit: {{ .Values.job.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+{{ include "agentic-bench.labels" . | indent 8 }}
+{{- with .Values.job.labels }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+    spec:
+      restartPolicy: {{ .Values.job.restartPolicy }}
+      {{- if or .Values.serviceAccount.create .Values.serviceAccount.name }}
+      serviceAccountName: {{ default (include "agentic-bench.fullname" .) .Values.serviceAccount.name }}
+      {{- end }}
+      containers:
+        - name: bench
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "-url={{ .Values.bench.url }}"
+            - "-agent={{ .Values.bench.agent }}"
+            - "-message={{ .Values.bench.message }}"
+            - "-clients={{ .Values.bench.clients }}"
+            {{- if gt (int .Values.bench.requestsPerClient) 0 }}
+            - "-requests-per-client={{ .Values.bench.requestsPerClient }}"
+            {{- else }}
+            - "-requests={{ .Values.bench.requests }}"
+            {{- end }}
+            - "-timeout={{ .Values.bench.timeoutSeconds }}s"
+            - "-session-title={{ .Values.bench.sessionTitle }}"
+            - "-prepare-concurrency={{ .Values.bench.prepareConcurrency }}"
+            {{- if not .Values.bench.createSession }}
+            - "-create-session=false"
+            {{- end }}
+            {{- if not .Values.bench.deleteSession }}
+            - "-delete-session=false"
+            {{- end }}
+            {{- if not .Values.bench.prepareSessions }}
+            - "-prepare-sessions=false"
+            {{- end }}
+            {{- if .Values.bench.insecureTLS }}
+            - "-insecure"
+            {{- end }}
+            {{- if .Values.bench.tokenInQuery }}
+            - "-token-in-query"
+            {{- end }}
+            {{- if .Values.bench.allowEmptyToken }}
+            - "-allow-empty-token"
+            {{- end }}
+            {{- with .Values.bench.extraArgs }}
+{{ toYaml . | indent 12 }}
+            {{- end }}
+          {{- if .Values.tokenSecret.name }}
+          env:
+            - name: AGENTIC_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.tokenSecret.name }}
+                  key: {{ .Values.tokenSecret.key }}
+                  optional: {{ .Values.tokenSecret.optional }}
+          {{- end }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+      {{- end }}

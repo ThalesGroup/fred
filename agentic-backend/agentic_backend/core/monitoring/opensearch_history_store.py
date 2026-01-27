@@ -231,7 +231,7 @@ class OpensearchHistoryStore(BaseHistoryStore):
             updated = _merge_unique_by_key(existing, messages)
             self._cache.set(session_id, updated)
 
-            logger.info(
+            logger.debug(
                 "[OPENSEARCH] Saved %d messages for session %s",
                 len(messages),
                 session_id,
@@ -256,7 +256,7 @@ class OpensearchHistoryStore(BaseHistoryStore):
 
             response = self.client.search(index=self.index, body=query)
             hits = response.get("hits", {}).get("hits", [])
-            logger.info(
+            logger.debug(
                 "[OPENSEARCH] Loaded %d messages for session %s",
                 len(hits),
                 session_id,

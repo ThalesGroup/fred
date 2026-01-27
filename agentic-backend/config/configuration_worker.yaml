@@ -11,13 +11,25 @@
 # limitations under the License.
 
 app:
-  name: "Agentic Backend"
-  base_url: "/agentic/v1"
-  address: "127.0.0.1"
-  port: 8000
+  name: "Agentic Worker"
+  base_url: "/agentic-worker/v1"
+  address: "0.0.0.0"
+  port: 8001
   log_level: "info"
   reload: false
   reload_dir: "."
+  metrics_enabled: false
+  metrics_address: "0.0.0.0"
+  metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
+
+scheduler:
+  enabled: true
+  backend: temporal
+  temporal:
+    host: "localhost:7233"
+    namespace: "default"
+    task_queue: "agents"
+
 security:
   m2m:
     enabled: false
@@ -44,7 +56,7 @@ ai:
   # that allow users to create/update agents at runtime and change
   # their configuration without redeploying the application.
   # Developers: you may prefer to set this to true to trust only your static configuration
-  use_static_config_only: false
+  use_static_config_only: true
 
   # Number of past exchanges to restore when initializing an agent session
   # This setting is used to limit the amount of historical context
@@ -52,14 +64,14 @@ ai:
   # or when an agent session is re-initialized for any reason.
   agentic_restore_max_exchanges: 20
 
+  # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
+  max_concurrent_agents: 128
+
   # Maximum number of files a user can attach across all sessions
   max_attached_files_per_user: 20
 
   # Maximum size (in MB) for each attached file
   max_attached_file_size_mb: 50
-
-  # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
-  max_concurrent_agents: 128
 
   # Knowledge Flow service URL. Used by agents to access tools and knowledge bases.
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
@@ -68,62 +80,30 @@ ai:
     connect: 5 # Time to wait for a connection in seconds
     read: 15 # Time to wait for a response in seconds
   default_chat_model:
-    provider: "ollama"
-    name: "granite4:3b-h"
+    # Required in .env:
+    # - OPENAI_API_KEY
+    provider: "openai"
+    name: "gpt-5.1"
     settings:
-      base_url: http://localhost:11434
       temperature: 0.0
       max_retries: 2
-      request_timeout: 30
+      request_timeout: 90
   default_language_model:
-    provider: "ollama"
-    name: "granite4:3b-h"
+    # Required in .env:
+    # - OPENAI_API_KEY
+    provider: "openai"
+    name: "gpt-5.1"
     settings:
-      base_url: http://localhost:11434
       temperature: 0.0
       max_retries: 2
-      request_timeout: 30
+      request_timeout: 90
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:
-    - name: "Georges"
+    - name: "Researcher"
       type: "agent"
-      class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
-      enabled: true
-      chat_options:
-        search_policy_selection: false
-        libraries_selection: false
-        attach_files: false
-    - name: "Sammy"
-      type: "agent"
-      class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
-      enabled: true
-    - name: "Rico"
-      type: "agent"
-      class_path: "agentic_backend.agents.rags.rag_expert.Rico"
-      enabled: true
-      chat_options:
-        search_policy_selection: true
-        libraries_selection: true
-        search_rag_scoping: true
-        deep_search_delegate: true
-        attach_files: true
-      metadata:
-        # Deep-search delegation target
-        deep_search_delegate_to: "Rico Senior"
-    - name: "Rico Senior"
-      type: "agent"
-      class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
-      enabled: true
-      metadata:
-        deep_search_hidden_in_ui: true
-    - name: "Tessa"
-      type: "agent"
-      class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
-      enabled: true
-    - name: "Travel_agent"
-      type: "agent"
-      class_path: "agentic_backend.academy.07_travel_agent.travel_agent.Travel"
+      # Corrected module path to the existing ResearchAgent implementation
+      class_path: "agentic_backend.agents.research.research_agent.ResearchAgent"
       enabled: true
 
 mcp:
@@ -206,6 +186,9 @@ storage:
   history_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/history.duckdb"
+  attachments_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/agentic/session_attachments.duckdb"
   kpi_store:
     type: "log"
     level: "INFO"

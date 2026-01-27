@@ -328,7 +328,7 @@ def decode_jwt(token: str) -> KeycloakUser:
         client_data = payload["resource_access"].get(KEYCLOAK_CLIENT_ID, {})
         client_roles = client_data.get("roles", [])
 
-    logger.info(
+    logger.debug(
         "[SECURITY] JWT token decoded: sub=%s preferred_username=%s email=%s roles=%s",
         payload.get("sub"),
         payload.get("preferred_username"),

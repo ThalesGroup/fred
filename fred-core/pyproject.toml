@@ -24,6 +24,7 @@ dependencies = [
     "openfga-sdk>=0.9.9",
     "python-keycloak>=5.8.1",
     "minio>=7.2.20",
+    "temporalio>=1.14.1",
     "uv>=0.9.15",
 ]
 
