@@ -96,6 +96,7 @@ class PostgresTableConfig(BaseModel):
         default=None, description="Optional prefix applied to the table name."
     )
 
+
 class InMemoryStoreConfig(BaseModel):
     """
     Minimal config for in-memory stores (dev/test only).
