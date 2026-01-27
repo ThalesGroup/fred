@@ -4,6 +4,10 @@ BINARY ?= agentic_bench_client.exe
 GO ?= go
 ARGS ?=
 PACKAGE ?= .
+DOCKER ?= docker
+IMAGE ?= agentic-bench:dev
+REGISTRY ?=
+IMAGE_FULL := $(if $(REGISTRY),$(REGISTRY)/,)$(IMAGE)
 
 ##@ Benchmarks
 
@@ -18,6 +22,21 @@ run: check-go ## Run the benchmark (use ARGS='...')
 .PHONY: tidy
 tidy: check-go ## Sync go.mod/go.sum
 	$(GO) mod tidy
+
+##@ Container
+
+.PHONY: docker-build
+docker-build: ## Build the benchmark Docker image
+	$(DOCKER) build -t $(IMAGE_FULL) .
+
+.PHONY: docker-smoke
+docker-smoke: docker-build ## Run -help inside the image
+	$(DOCKER) run --rm $(IMAGE_FULL) -help
+
+.PHONY: docker-run
+docker-run: ## Run the image against URL (set URL=ws://... and export AGENTIC_TOKEN)
+	@if [ -z "$(URL)" ]; then echo "URL is required (e.g. make docker-run URL=ws://host:8000/agentic/v1/chatbot/query/ws)"; exit 1; fi
+	$(DOCKER) run --rm -e AGENTIC_TOKEN $(IMAGE_FULL) -url $(URL) $(ARGS)
 
 ##@ Clean
 
