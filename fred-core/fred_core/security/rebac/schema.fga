@@ -5,8 +5,28 @@ type user
 
 type group
   relations
-    # A group can have members that are users or other groups (nested groups)
-    define member: [user, group#member]
+    # A group can have members that are users (plus inherited manager/owner)
+    define owner: [user]
+    define manager: [user] or owner
+    define member: [user] or manager or owner
+
+    # --- Permissions (computed relations) ---
+
+    # Can update group description, banner...
+    # -> must be at least owner
+    define update_info: owner
+
+    # Can manage members: add/remove members, handle join request
+    # -> must be at least manager
+    define update_members: manager
+
+    # Can upload/rename/delete group resources (file/folders)
+    # -> must be at least manager
+    define update_resources: manager
+
+    # Can create/update/delete group agents
+    # -> must be at least manager
+    define update_agents: manager
 
 type tag
   relations

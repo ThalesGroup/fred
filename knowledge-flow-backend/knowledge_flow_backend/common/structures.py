@@ -394,6 +394,7 @@ class StorageConfig(BaseModel):
     opensearch: Optional[OpenSearchStoreConfig] = Field(default=None, description="Optional OpenSearch store")
     resource_store: StoreConfig
     tag_store: StoreConfig
+    group_store: StoreConfig | None = None
     kpi_store: StoreConfig
     metadata_store: StoreConfig
     tabular_stores: Optional[Dict[str, StoreConfig]] = Field(default=None, description="Optional tabular store")

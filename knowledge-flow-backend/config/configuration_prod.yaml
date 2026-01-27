@@ -202,6 +202,10 @@ storage:
     type: "postgres"
     table: tag
 
+  group_store:
+    type: "postgres"
+    table: group_profile
+
   metadata_store:
     type: "postgres"
     table: metadata

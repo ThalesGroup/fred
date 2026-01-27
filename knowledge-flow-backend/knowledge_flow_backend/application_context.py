@@ -79,6 +79,9 @@ from knowledge_flow_backend.core.stores.content.minio_content_store import Minio
 from knowledge_flow_backend.core.stores.files.base_file_store import BaseFileStore
 from knowledge_flow_backend.core.stores.files.local_file_store import LocalFileStore
 from knowledge_flow_backend.core.stores.files.minio_file_store import MinioFileStore
+from knowledge_flow_backend.core.stores.groups.base_group_store import BaseGroupStore
+from knowledge_flow_backend.core.stores.groups.duckdb_group_store import DuckdbGroupStore
+from knowledge_flow_backend.core.stores.groups.postgres_group_store import PostgresGroupStore
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from knowledge_flow_backend.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
 from knowledge_flow_backend.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
@@ -156,6 +159,12 @@ def get_rebac_engine() -> RebacEngine:
     """Expose the shared ReBAC engine instance."""
 
     return get_app_context().get_rebac_engine()
+
+
+def get_group_store() -> BaseGroupStore | None:
+    """Expose the configured group profile store (if any)."""
+
+    return get_app_context().get_group_store()
 
 
 def get_app_context() -> "ApplicationContext":
@@ -257,6 +266,7 @@ class ApplicationContext:
     _vector_store_instance: Optional[BaseVectorStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
+    _group_store_instance: Optional[BaseGroupStore] = None
     _kpi_store_instance: Optional[BaseKPIStore] = None
     _log_store_instance: Optional[BaseLogStore] = None
     _opensearch_client: Optional[OpenSearch] = None
@@ -804,6 +814,30 @@ class ApplicationContext:
         else:
             raise ValueError("Unsupported sessions storage backend")
         return self._tag_store_instance
+
+    def get_group_store(self) -> BaseGroupStore | None:
+        if self._group_store_instance is not None:
+            return self._group_store_instance
+
+        store_config = get_configuration().storage.group_store
+        if store_config is None:
+            logger.info("[GROUPS] No group store configured; group metadata will be empty.")
+            return None
+
+        if isinstance(store_config, DuckdbStoreConfig):
+            db_path = Path(store_config.duckdb_path).expanduser()
+            self._group_store_instance = DuckdbGroupStore(db_path)
+        elif isinstance(store_config, PostgresTableConfig):
+            pg = get_configuration().storage.postgres
+            engine = create_engine_from_config(pg)
+            self._group_store_instance = PostgresGroupStore(
+                engine=engine,
+                table_name=store_config.table,
+                prefix=store_config.prefix or "",
+            )
+        else:
+            raise ValueError(f"Unsupported group storage backend: {store_config.type}")
+        return self._group_store_instance
 
     def get_resource_store(self) -> BaseResourceStore:
         if self._resource_store_instance is not None:

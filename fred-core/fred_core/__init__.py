@@ -84,6 +84,7 @@ from fred_core.security.rbac import RBACProvider
 from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
 from fred_core.security.rebac.rebac_engine import (
     DocumentPermission,
+    GroupPermission,
     RebacDisabledResult,
     RebacEngine,
     RebacPermission,
@@ -177,6 +178,7 @@ __all__ = [
     "RelationType",
     "TagPermission",
     "DocumentPermission",
+    "GroupPermission",
     "RebacPermission",
     "RebacDisabledResult",
     "RebacEngine",

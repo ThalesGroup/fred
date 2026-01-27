@@ -26,6 +26,7 @@ class RelationType(str, Enum):
     """Relationship labels encoded in the graph."""
 
     OWNER = "owner"
+    MANAGER = "manager"
     EDITOR = "editor"
     VIEWER = "viewer"
     PARENT = "parent"
@@ -58,7 +59,19 @@ class ResourcePermission(str, Enum):
     SHARE = "share"
 
 
-RebacPermission = TagPermission | DocumentPermission | ResourcePermission
+class GroupPermission(str, Enum):
+    """Group permissions encoded in the graph."""
+
+    MEMBER = "member"
+    UPDATE_INFO = "update_info"
+    UPDATE_MEMBERS = "update_members"
+    UPDATE_RESOURCES = "update_resources"
+    UPDATE_AGENTS = "update_agents"
+
+
+RebacPermission = (
+    TagPermission | DocumentPermission | ResourcePermission | GroupPermission
+)
 
 
 def _resource_for_permission(permission: RebacPermission) -> Resource:
@@ -68,6 +81,8 @@ def _resource_for_permission(permission: RebacPermission) -> Resource:
         return Resource.DOCUMENTS
     if isinstance(permission, ResourcePermission):
         return Resource.RESOURCES
+    if isinstance(permission, GroupPermission):
+        return Resource.GROUP
     raise ValueError(f"Unsupported permission type: {permission!r}")
 
 
@@ -312,24 +327,6 @@ class RebacEngine(ABC):
         relation: set[Relation] = set()
 
         for group in user.groups:
-            for parent, child in self._iterate_on_parent_child_path(group):
-                relation.add(
-                    Relation(
-                        subject=RebacReference(
-                            Resource.GROUP,
-                            (await self.keycloak_client.a_get_group_by_path(child))[
-                                "id"
-                            ],
-                        ),
-                        relation=RelationType.MEMBER,
-                        resource=RebacReference(
-                            Resource.GROUP,
-                            (await self.keycloak_client.a_get_group_by_path(parent))[
-                                "id"
-                            ],
-                        ),
-                    )
-                )
             relation.add(
                 Relation(
                     subject=RebacReference(Resource.USER, user.uid),
@@ -342,13 +339,3 @@ class RebacEngine(ABC):
             )
 
         return relation
-
-    @staticmethod
-    def _iterate_on_parent_child_path(group_path: str) -> Iterable[tuple[str, str]]:
-        """Helper to iterate over parent-child group paths."""
-        parts = group_path.strip("/").split("/")
-
-        for i in range(len(parts) - 1):
-            parent = "/".join(parts[: i + 1])
-            child = "/".join(parts[: i + 2])
-            yield parent, child
