@@ -1779,7 +1779,8 @@ export type FilterTerm = {
     | "dims.error_code"
     | "dims.model"
     | "dims.step"
-    | "dims.agent_step";
+    | "dims.agent_step"
+    | "dims.service";
   value: string;
 };
 export type SelectMetric = {
@@ -1822,6 +1823,7 @@ export type KpiQuery = {
     | "dims.http_status"
     | "dims.error_code"
     | "dims.status"
+    | "dims.service"
   )[];
   time_bucket?: TimeBucket | null;
   limit?: number;
