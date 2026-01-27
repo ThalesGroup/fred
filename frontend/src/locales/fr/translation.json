@@ -1125,5 +1125,13 @@
     "title": "Équipes de la communauté",
     "yourTeamsSubtitle": "Vos équipes",
     "communityTeamsSubtitle": "Découvrez d'autres équipes"
+  },
+  "teamDetails": {
+    "tabs": {
+      "resources": "Ressources",
+      "apps": "Apps",
+      "members": "Membres",
+      "settings": "Paramètres"
+    }
   }
 }

@@ -234,7 +234,7 @@ export default function SideBar() {
           sx={{ height: "24px", width: "24px" }}
         />
       ),
-      url: `/team/1`,
+      url: `/team/0`,
     },
     {
       key: "team-2",
@@ -245,7 +245,7 @@ export default function SideBar() {
           sx={{ height: "24px", width: "24px" }}
         />
       ),
-      url: `/team/2`,
+      url: `/team/1`,
     },
     {
       key: "team-3",
@@ -256,7 +256,7 @@ export default function SideBar() {
           sx={{ height: "24px", width: "24px" }}
         />
       ),
-      url: `/team/3`,
+      url: `/team/2`,
     },
     {
       key: "team-4",

@@ -66,7 +66,7 @@ export const routes: RouteObject[] = [
         element: <TeamsPage />,
       },
       {
-        path: "team/:teamId",
+        path: "team/:teamId/*",
         element: <TeamDetailsPage />,
       },
       {
