@@ -20,6 +20,13 @@ variables:
     value: "true"
     options: ["true", "false"]
     description: "Defines if Fred backend docker image must be built"
+  BENCHMARK_DOCKER_TAG:
+    value: "0.0.4-prism"
+    description: "Version of benchmark tools docker image."
+  BUILD_BENCHMARK_DOCKER_IMAGE:
+    value: "false"
+    options: ["true", "false"]
+    description: "Defines if benchmark tools docker image must be built"
   # KASTCTL:
   #   value: "-"
   #   options: ["-", "install", "uninstall"]
@@ -96,6 +103,16 @@ docker-backend-knowledge:
     DOCKER_FILE: knowledge-flow-backend/dockerfiles/Dockerfile-prod
   rules:
     - if: $BUILD_BACKEND_KNOWLEDGE_DOCKER_IMAGE == "true"
+
+docker-benchmark:
+  extends: .docker-default
+  variables:
+    IMAGE_NAME: benchmark-tools
+    IMAGE_TAG: ${BENCHMARK_DOCKER_TAG}
+    CONTEXT: ${CI_PROJECT_DIR}/developer_tools/benchmarks
+    DOCKER_FILE: Dockerfile
+  rules:
+    - if: $BUILD_BENCHMARK_DOCKER_IMAGE == "true"
 
 # # -----------------------------------------------------------------------------
 # # Manage helm charts with kastctl
