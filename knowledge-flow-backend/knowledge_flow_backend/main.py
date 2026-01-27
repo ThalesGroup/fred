@@ -53,7 +53,7 @@ from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.asset_controller import AssetController
 from knowledge_flow_backend.features.content.content_controller import ContentController
 from knowledge_flow_backend.features.filesystem.controller import FilesystemController
-from knowledge_flow_backend.features.groups import groups_controller
+from knowledge_flow_backend.features.teams import teams_controller
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
 from knowledge_flow_backend.features.kpi import logs_controller
 from knowledge_flow_backend.features.kpi.kpi_controller import KPIController
@@ -144,7 +144,7 @@ def create_app() -> FastAPI:
                     logger.exception("%s Scheduled Keycloak→Rebac reconciliation failed.", LOG_PREFIX)
                 await asyncio.sleep(15 * 60)
 
-        # Reconcile Keycloak groups with ReBAC every 15 minutes
+        # Reconcile Keycloak groups (teams in Fred) with ReBAC every 15 minutes
         background_task = asyncio.create_task(periodic_reconciliation())
         process_kpi_task = None
         kpi_interval_env = configuration.app.kpi_process_metrics_interval_sec
@@ -217,7 +217,7 @@ def create_app() -> FastAPI:
     ResourceController(router)
     FilesystemController(router)
     router.include_router(logs_controller.router)
-    router.include_router(groups_controller.router)
+    router.include_router(teams_controller.router)
     router.include_router(users_controller.router)
     # Developer benchmarking tools (always mounted; auth-protected)
     BenchmarkController(router)

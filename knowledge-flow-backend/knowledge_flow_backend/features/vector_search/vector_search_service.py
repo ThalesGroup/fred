@@ -81,8 +81,8 @@ class VectorSearchService:
         }
 
     def _kpi_actor(self, *, user: Optional[KeycloakUser] = None) -> KPIActor:
-        groups = user.groups if user else None
-        return KPIActor(type="system", groups=groups)
+        teams = user.groups if user else None
+        return KPIActor(type="system", teams=teams)
 
     def _record_search_stats(
         self,
