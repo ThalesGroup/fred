@@ -1,4 +1,4 @@
-import { Box, Typography } from "@mui/material";
+import { Avatar, Box, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { NavigationTabs, TabConfig } from "../components/NavigationTabs";
@@ -35,8 +35,7 @@ const teams: GroupSummary[] = [
   {
     id: "2",
     name: "Design Team",
-    description:
-      "Team responsible for UX/UI design. They create user-friendly interfaces and ensure a seamless user experience across all platforms.",
+    description: "",
     member_count: 2,
     banner_image_url: "https://www.bio.org/act-root/bio/assets/images/banner-default.png",
     owners: [
@@ -103,11 +102,23 @@ export function TeamDetailsPage() {
   ];
 
   return (
-    <Box sx={{ px: 2 }}>
-      <Box sx={{ display: "flex", alignItems: "center", height: "3rem" }}>
-        <Typography variant="h6">{team.name}</Typography>
+    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "stretch" }}>
+      {/* Header */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2, px: 3, py: 2 }}>
+        {/* Avatar banner */}
+        <Avatar variant="rounded" src={team.banner_image_url} sx={{ height: "3.5rem", width: "3.5rem" }} />
+
+        {/* Title and description */}
+        <Box sx={{ display: "flex", flexDirection: "column" }}>
+          <Typography variant="h6">{team.name}</Typography>
+          <Typography variant="body2" color="textSecondary">
+            {team.description}
+          </Typography>
+        </Box>
       </Box>
-      <NavigationTabs tabs={tabs} />
+
+      {/* Tabs */}
+      <NavigationTabs tabs={tabs} tabsContainerSx={{ px: 2, pb: 1 }} />
     </Box>
   );
 }

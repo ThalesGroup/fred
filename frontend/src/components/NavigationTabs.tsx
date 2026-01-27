@@ -12,10 +12,49 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { alpha, Box, styled, SxProps, Tabs, Theme } from "@mui/material";
 import * as React from "react";
-import { Box, Tabs } from "@mui/material";
-import { useLocation, Routes, Route, Navigate } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { LinkTab } from "./LinkTab";
+
+const BubbleTab = styled(Tabs)(({ theme }) => ({
+  "& .MuiTabs-flexContainer": {
+    gap: "2px",
+  },
+  "& .MuiTabs-indicator": {
+    display: "none", // Hide the default underline indicator
+
+    // to have a moving indicator:
+    // backgroundColor: alpha(theme.palette.primary.main, 0.16),
+    // height: "100%",
+    // borderRadius: theme.spacing(1.5),
+    // transition: theme.transitions.create(["left", "width"], {
+    //   duration: theme.transitions.duration.shorter,
+    //   easing: theme.transitions.easing.easeInOut,
+    // }),
+  },
+  "& .MuiTab-root": {
+    minHeight: 40,
+    textTransform: "none",
+    fontWeight: theme.typography.fontWeightMedium,
+    fontSize: theme.typography.pxToRem(14),
+    padding: theme.spacing(0, 2),
+    borderRadius: theme.spacing(1.5),
+    transition: theme.transitions.create(["background-color", "color"], {
+      duration: theme.transitions.duration.shortest,
+    }),
+    "&:hover": {
+      backgroundColor: theme.palette.action.hover,
+    },
+    "&.Mui-selected": {
+      color: theme.palette.text.primary,
+      backgroundColor: alpha(theme.palette.primary.main, 0.16),
+    },
+    "& .MuiTouchRipple-root": {
+      display: "none",
+    },
+  },
+}));
 
 export interface TabConfig {
   label: string;
@@ -30,9 +69,17 @@ interface NavigationTabsProps {
    * Defaults to the first tab's path.
    */
   defaultPath?: string;
+  /**
+   * Optional sx props for the tabs container Box
+   */
+  tabsContainerSx?: SxProps<Theme>;
+  /**
+   * Optional sx props for the content container Box
+   */
+  contentContainerSx?: SxProps<Theme>;
 }
 
-export function NavigationTabs({ tabs, defaultPath }: NavigationTabsProps) {
+export function NavigationTabs({ tabs, defaultPath, tabsContainerSx, contentContainerSx }: NavigationTabsProps) {
   const location = useLocation();
 
   // Find the current tab index based on the pathname
@@ -41,32 +88,32 @@ export function NavigationTabs({ tabs, defaultPath }: NavigationTabsProps) {
 
   // Extract relative paths from absolute paths for nested routing
   const getRelativePath = (absolutePath: string) => {
-    const parts = absolutePath.split('/');
+    const parts = absolutePath.split("/");
     return parts[parts.length - 1]; // Get the last segment (e.g., "drafts" from "/team/0/drafts")
   };
 
   // Use the provided default path (absolute) or the first tab's path
-  const redirectToPath = defaultPath || tabs[0]?.path || '';
+  const redirectToPath = defaultPath || tabs[0]?.path || "";
 
   return (
-    <Box>
-      <Tabs value={tabValue} aria-label="navigation tabs">
-        {tabs.map((tab) => (
-          <LinkTab key={tab.path} label={tab.label} to={tab.path} />
-        ))}
-      </Tabs>
-      <Box sx={{ mt: 2 }}>
+    <>
+      <Box sx={tabsContainerSx}>
+        <BubbleTab value={tabValue} aria-label="navigation tabs">
+          {tabs.map((tab) => (
+            <LinkTab key={tab.path} label={tab.label} to={tab.path} />
+          ))}
+        </BubbleTab>
+      </Box>
+      <Box sx={contentContainerSx}>
         <Routes>
           {tabs.map((tab) => {
             const relativePath = getRelativePath(tab.path);
-            return (
-              <Route key={relativePath} path={relativePath} element={<>{tab.component}</>} />
-            );
+            return <Route key={relativePath} path={relativePath} element={<>{tab.component}</>} />;
           })}
           <Route index element={<Navigate to={redirectToPath} replace />} />
           <Route path="*" element={<Navigate to={redirectToPath} replace />} />
         </Routes>
       </Box>
-    </Box>
+    </>
   );
 }
