@@ -18,6 +18,7 @@ import logging
 from typing import Optional
 
 from temporalio.client import Client
+from temporalio.contrib.pydantic import pydantic_data_converter
 
 from fred_core.common.structures import TemporalSchedulerConfig
 
@@ -50,5 +51,6 @@ class TemporalClientProvider:
             self._client = await Client.connect(
                 self._config.host,
                 namespace=self._config.namespace,
+                data_converter=pydantic_data_converter,
             )
             return self._client
