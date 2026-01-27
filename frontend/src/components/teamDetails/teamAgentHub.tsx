@@ -1,4 +1,7 @@
+import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../common/agent";
+import { usePermissions } from "../../security/usePermissions";
+import { AgentGridManager } from "../agentHub/AgentGridManager";
 
 // mock agents (todo: get them from back)
 const agents: AnyAgent[] = [
@@ -77,5 +80,30 @@ const agents: AnyAgent[] = [
 ];
 
 export function TeamAgentHub() {
-  return <></>;
+  const { t } = useTranslation();
+
+  // Permissions
+  // todo: base perm on ReBAC
+  const { can } = usePermissions();
+  const canEditAgents = can("agents", "update");
+  const canCreateAgents = can("agents", "create");
+
+  const handleRefetch = () => {
+    // TODO: Implement when backend is ready
+    console.log("Refresh team agents");
+  };
+
+  return (
+    <AgentGridManager
+      agents={agents}
+      isLoading={false}
+      canEdit={canEditAgents}
+      canCreate={canCreateAgents}
+      canDelete={canEditAgents}
+      onRefetchAgents={handleRefetch}
+      showRestoreButton={false}
+      showA2ACard={true}
+      emptyStateMessage={t("teamDetails.noAgents")}
+    />
+  );
 }

@@ -1132,6 +1132,7 @@
       "apps": "Apps",
       "members": "Membres",
       "settings": "Paramètres"
-    }
+    },
+    "noAgents": "Aucun agent d'équipe configuré pour le moment. Créez votre premier agent d'équipe pour commencer."
   }
 }

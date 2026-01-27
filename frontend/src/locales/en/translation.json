@@ -1130,6 +1130,7 @@
       "apps": "Apps",
       "members": "Members",
       "settings": "Settings"
-    }
+    },
+    "noAgents": "No team agents configured yet. Create your first team agent to get started."
   }
 }
