@@ -193,5 +193,5 @@ storage:
     type: "log"
     level: "INFO"
   task_store:
-    type: "postgres"
-    table: tasks
+    # Only regular agentic backend needs this. In worker, we use in-memory store.
+    type: "memory"

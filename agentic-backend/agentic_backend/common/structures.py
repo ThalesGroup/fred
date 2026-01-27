@@ -38,7 +38,10 @@ class StorageConfig(BaseModel):
         default=None, description="Optional OpenSearch store"
     )
     agent_store: StoreConfig
-    task_store: StoreConfig
+    task_store: Optional[StoreConfig] = Field(
+        default=None,
+        description="Task store backend (optional; workers may fall back to in-memory)",
+    )
     mcp_servers_store: Optional[StoreConfig] = Field(
         default=None,
         description="Optional override for MCP servers store (defaults to agent_store backend).",

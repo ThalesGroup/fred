@@ -96,6 +96,13 @@ class PostgresTableConfig(BaseModel):
         default=None, description="Optional prefix applied to the table name."
     )
 
+class InMemoryStoreConfig(BaseModel):
+    """
+    Minimal config for in-memory stores (dev/test only).
+    """
+
+    type: Literal["memory"] = "memory"
+
 
 class SQLStorageConfig(BaseModel):
     type: Literal["sql"] = "sql"
@@ -141,6 +148,7 @@ StoreConfig = Annotated[
         SQLStorageConfig,
         LogStoreConfig,
         PostgresTableConfig,
+        InMemoryStoreConfig,
     ],
     Field(discriminator="type"),
 ]

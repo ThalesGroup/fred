@@ -649,26 +649,37 @@ class ApplicationContext:
         if self._task_store_instance is not None:
             return self._task_store_instance
         from agentic_backend.scheduler.postgres_task_store import PostgresAgentTaskStore
+        from agentic_backend.scheduler.memory_task_store import MemoryAgentTaskStore
 
         store_config = get_configuration().storage.task_store
-        if isinstance(store_config, PostgresTableConfig):
-            if not os.getenv("POSTGRES_PASSWORD"):
-                logger.error(
-                    "[TASKS][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres task store)"
+        # Allow the task store to be optional for workers that don't need it.
+        try:
+            if isinstance(store_config, PostgresTableConfig):
+                if not os.getenv("POSTGRES_PASSWORD"):
+                    logger.error(
+                        "[TASKS][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres task store)"
+                    )
+                    raise RuntimeError(
+                        "POSTGRES_PASSWORD is required for Postgres task store"
+                    )
+                pg = get_configuration().storage.postgres
+                engine = create_engine_from_config(pg)
+                self._task_store_instance = PostgresAgentTaskStore(
+                    engine=engine,
+                    table_name=store_config.table,
+                    prefix=store_config.prefix or "",
                 )
-                raise RuntimeError(
-                    "POSTGRES_PASSWORD is required for Postgres task store"
-                )
-            pg = get_configuration().storage.postgres
-            engine = create_engine_from_config(pg)
-            self._task_store_instance = PostgresAgentTaskStore(
-                engine=engine,
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
-            )
-            return self._task_store_instance
-        else:
+                return self._task_store_instance
+            if getattr(store_config, "type", None) == "memory":
+                self._task_store_instance = MemoryAgentTaskStore()
+                return self._task_store_instance
             raise ValueError("Unsupported tasks storage backend")
+        except Exception as exc:
+            logger.warning(
+                "[TASKS][STORE] Falling back to in-memory store (reason: %s)", exc
+            )
+            self._task_store_instance = MemoryAgentTaskStore()
+            return self._task_store_instance
 
     def get_agent_store(self) -> BaseAgentStore:
         """
