@@ -63,3 +63,28 @@ Defaults:
 - Sessions are prepared per client before measuring.
 - Sessions are deleted after the run.
 - The benchmark target defaults to `ws://localhost:8000/agentic/v1/chatbot/query/ws`.
+
+### 4) Container + Helm (run inside Kubernetes)
+Build and push the benchmark image:
+```bash
+cd developer_tools/benchmarks
+docker build -t <registry>/agentic-bench:latest .
+docker push <registry>/agentic-bench:latest
+```
+
+Deploy as a one-off Job with the provided chart:
+```bash
+helm upgrade --install agentic-bench deploy/charts/agentic-bench \
+  --set image.repository=<registry>/agentic-bench \
+  --set image.tag=latest \
+  --set bench.url=ws://agentic-backend:8000/agentic/v1/chatbot/query/ws \
+  --set tokenSecret.name=agentic-bench-token \
+  --set tokenSecret.key=token
+```
+Create the token secret first (the client reads `AGENTIC_TOKEN`):
+```bash
+kubectl create secret generic agentic-bench-token \
+  --from-literal=token=<bearer-token> \
+  -n <namespace>
+```
+Adjust `bench.clients`, `bench.requests`, or pass `bench.tokenInQuery=true` if the server expects the token in the query string.
