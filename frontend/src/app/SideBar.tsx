@@ -19,9 +19,9 @@ import {
   SidebarProfileSection,
 } from "../components/sideBar";
 import { SideBarNewConversationButton } from "../components/sideBar/SideBarNewConversationButton";
+import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { KeyCloakService } from "../security/KeycloakService";
 import { usePermissions } from "../security/usePermissions";
-import { useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { ImageComponent } from "../utils/image";
 import { ApplicationContext } from "./ApplicationContextProvider";
 const drawerWidth = 280;
@@ -71,7 +71,7 @@ const Drawer = styled(MuiDrawer, { shouldForwardProp: (prop) => prop !== "open" 
 }));
 export default function SideBar() {
   const { t } = useTranslation();
-  const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
+  const { agentsNicknamePlural, agentIconName } = useFrontendProperties();
 
   // Remove collapsing for now
   // const [open, setOpen] = useLocalStorageState("SideBar.open", true);
@@ -95,13 +95,10 @@ export default function SideBar() {
     {
       key: "agent",
       label: t("sidebar.agent", {
-        agentsNickname: frontendConfig.frontend_settings.properties.agentsNicknamePlural,
+        agentsNickname: agentsNicknamePlural,
       }),
-      icon: frontendConfig?.frontend_settings.properties.agentIconName ? (
-        <DynamicSvgIcon
-          iconPath={`images/${frontendConfig.frontend_settings.properties.agentIconName}.svg`}
-          color="action"
-        />
+      icon: agentIconName ? (
+        <DynamicSvgIcon iconPath={`images/${agentIconName}.svg`} color="action" />
       ) : (
         <AssistantIcon />
       ),

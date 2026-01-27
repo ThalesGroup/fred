@@ -2,7 +2,7 @@ import { Box, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { NavigationTabs, TabConfig } from "../components/NavigationTabs";
-import { useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery } from "../slices/agentic/agenticOpenApi";
+import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { GroupSummary } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 // todo: remove when we wire backend
@@ -45,18 +45,19 @@ const teams: GroupSummary[] = [
     ],
   },
 ];
-const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
 
 export function TeamDetailsPage() {
   const { t } = useTranslation();
   const { teamId } = useParams<{ teamId: string }>();
+  const { agentsNicknamePlural } = useFrontendProperties();
+
   // todo: get team from backend
   const team = teams[teamId];
 
   const tabs: TabConfig[] = [
     {
-      label: frontendConfig.frontend_settings.properties.agentsNicknamePlural,
-      path: `/team/${team.id}/${frontendConfig.frontend_settings.properties.agentsNicknamePlural}`,
+      label: agentsNicknamePlural,
+      path: `/team/${team.id}/${agentsNicknamePlural}`,
       component: (
         <Box>
           <Typography>Lumis content for {team.name}</Typography>

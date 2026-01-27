@@ -35,7 +35,6 @@ import { CrewEditor } from "../components/agentHub/CrewEditor";
 // OpenAPI
 import {
   Leader,
-  useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
   useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useRestoreAgentsAgenticV1AgentsRestorePostMutation,
 } from "../slices/agentic/agenticOpenApi";
@@ -48,6 +47,7 @@ import { CreateAgentModal } from "../components/agentHub/CreateAgentModal";
 import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
 import { useToast } from "../components/ToastProvider";
 import { useAgentUpdater } from "../hooks/useAgentUpdater";
+import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { useLazyGetRuntimeSourceTextQuery } from "../slices/agentic/agenticSourceApi";
 
 export const AgentHub = () => {
@@ -213,13 +213,13 @@ export const AgentHub = () => {
     setAgentForAssetManagement(null);
   };
 
-  const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
+  const { agentsNicknamePlural } = useFrontendProperties();
 
   return (
     <>
       <TopBar
         title={t("agentHub.title", {
-          agentsNicknamePlural: frontendConfig.frontend_settings.properties.agentsNicknamePlural,
+          agentsNicknamePlural,
         })}
         description={t("agentHub.description")}
       />
