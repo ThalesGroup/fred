@@ -107,7 +107,13 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
         }
 
         with self.store.begin() as conn:
-            self.store.upsert(conn, self.table, values=values, pk_cols=["task_id"])
+            # Idempotent create: if the task already exists, return it untouched.
+            existing = conn.execute(
+                select(self.table).where(self.table.c.task_id == task_id)
+            ).fetchone()
+            if existing:
+                return self._row_to_record(existing)
+            conn.execute(self.table.insert().values(**values))
 
         return self.get(task_id)
 
