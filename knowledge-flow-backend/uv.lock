@@ -1040,6 +1040,7 @@ dependencies = [
     { name = "python-keycloak", marker = "sys_platform == 'linux'" },
     { name = "sqlalchemy", marker = "sys_platform == 'linux'" },
     { name = "sqlparse", marker = "sys_platform == 'linux'" },
+    { name = "temporalio", marker = "sys_platform == 'linux'" },
     { name = "uv", marker = "sys_platform == 'linux'" },
 ]
 
@@ -1071,6 +1072,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
     { name = "sqlalchemy", specifier = ">=2.0.42" },
     { name = "sqlparse", specifier = ">=0.5.3" },
+    { name = "temporalio", specifier = ">=1.14.1" },
     { name = "uv", specifier = ">=0.9.15" },
 ]
 provides-extras = ["dev"]
@@ -1711,7 +1713,6 @@ dependencies = [
     { name = "sentence-transformers", marker = "sys_platform == 'linux'" },
     { name = "shortuuid", marker = "sys_platform == 'linux'" },
     { name = "sqlparse", marker = "sys_platform == 'linux'" },
-    { name = "temporalio", marker = "sys_platform == 'linux'" },
     { name = "torch", version = "2.7.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'arm64' and sys_platform == 'linux')" },
     { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "torchvision", version = "0.22.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'arm64' and sys_platform == 'linux')" },
@@ -1801,7 +1802,6 @@ requires-dist = [
     { name = "sentence-transformers", specifier = "==5.1.1" },
     { name = "shortuuid", specifier = "==1.0.13" },
     { name = "sqlparse", specifier = ">=0.5.3" },
-    { name = "temporalio", specifier = ">=1.14.1" },
     { name = "torch", marker = "platform_machine == 'aarch64' or platform_machine == 'arm64'", specifier = "==2.7.1" },
     { name = "torch", marker = "platform_machine == 'x86_64'", specifier = "==2.7.1+cpu", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torchvision", marker = "platform_machine == 'aarch64' or platform_machine == 'arm64'", specifier = "==0.22.1" },

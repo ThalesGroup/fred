@@ -14,10 +14,10 @@
 
 
 import logging
-from typing import Any, Dict, List, Literal, Optional, cast
+from typing import Any, Dict, List, Literal, Optional, Sequence, cast
 
 from fred_core import VectorSearchHit
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, StateGraph
 
@@ -300,6 +300,26 @@ class AdvancedRico(AgentFlow):
 
         return builder
 
+    def _extract_question_from_messages(self, messages: Sequence[Any]) -> Optional[str]:
+        """
+        Return the most recent human question (or the last message content) from history.
+        """
+        if not messages:
+            return None
+
+        for msg in reversed(messages):
+            if isinstance(msg, HumanMessage):
+                content = getattr(msg, "content", "")
+                if isinstance(content, str) and content.strip():
+                    return content.strip()
+
+        for msg in reversed(messages):
+            content = getattr(msg, "content", None)
+            if isinstance(content, str) and content.strip():
+                return content
+
+        return None
+
     async def _retrieve(self, state: RagGraphState) -> RagGraphState:
         """
         Retrieves relevant document chunks based on the user's question using vector search.
@@ -312,9 +332,13 @@ class AdvancedRico(AgentFlow):
         """
         # Extract parameters from state
         question: Optional[str] = state.get("question")
+        message_history = state.get("messages") or []
         if question is None or question == "":
-            messages = state.get("messages")
-            question = messages[-1].content
+            question = self._extract_question_from_messages(message_history)
+            if not question:
+                raise RuntimeError(
+                    "Cannot perform retrieval: question missing from state and message history."
+                )
 
         retry_count = int(state.get("retry_count", 0) or 0)
         top_k = self.get_tuned_int("search.top_k", default=50)
