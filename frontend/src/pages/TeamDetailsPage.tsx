@@ -2,6 +2,8 @@ import { Avatar, Box, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { NavigationTabs, TabConfig } from "../components/NavigationTabs";
+import { TeamAgentHub } from "../components/teamDetails/teamAgentHub";
+import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { GroupSummary } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
@@ -57,11 +59,7 @@ export function TeamDetailsPage() {
     {
       label: agentsNicknamePlural,
       path: `/team/${team.id}/${agentsNicknamePlural}`,
-      component: (
-        <Box>
-          <Typography>Lumis content for {team.name}</Typography>
-        </Box>
-      ),
+      component: <TeamAgentHub />,
     },
     {
       label: t("teamDetails.tabs.resources"),
@@ -75,11 +73,7 @@ export function TeamDetailsPage() {
     {
       label: t("teamDetails.tabs.apps"),
       path: `/team/${team.id}/apps`,
-      component: (
-        <Box>
-          <Typography>Apps content for {team.name}</Typography>
-        </Box>
-      ),
+      component: <TeamAppsPage />,
     },
     {
       label: t("teamDetails.tabs.members"),
