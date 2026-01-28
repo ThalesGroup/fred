@@ -60,15 +60,6 @@ attachment_processors:
   - prefix: "*"
     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_unstructured_text_processor.FastUnstructuredTextProcessingProcessor
 
-content_storage:
-  type: "local"
-  root_path: ~/.fred/knowledge-flow/content-storage
-
-document_sources:
-  fred:
-    type: push
-    description: "Documents manually uploaded by users"
-
 input_processors:
   - prefix: ".pdf"
     class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
@@ -86,7 +77,34 @@ input_processors:
     class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
   - prefix: ".jsonl"
     class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
-
+  - prefix: ".png"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".jpg"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".jpeg"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".gif"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".bmp"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".svg"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".webp"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".ico"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+content_storage:
+  type: "local"
+  root_path: ~/.fred/knowledge-flow/content-storage
+document_sources:
+  fred:
+    type: push
+    description: "Documents manually uploaded by users"
+  local:
+    type: pull
+    provider: local_path
+    base_path: ~/Documents/Fred
+    description: "Personal local documents available for pull-mode ingestion"
 embedding_model:
   provider: openai
   name: text-embedding-3-large
