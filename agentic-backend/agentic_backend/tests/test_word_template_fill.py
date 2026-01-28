@@ -79,7 +79,7 @@ def test_basic_placeholder_replacement(sample_template, sample_data):
         fill_word_from_structured_response(sample_template, sample_data, output_path)
 
         # Read the output document
-        result_doc = Document(output_path)
+        result_doc = Document(str(output_path))
 
         # Check that placeholders were replaced in paragraphs
         text_content = "\n".join([p.text for p in result_doc.paragraphs])
@@ -103,7 +103,7 @@ def test_multiple_placeholders_in_paragraph(sample_template, sample_data):
     try:
         fill_word_from_structured_response(sample_template, sample_data, output_path)
 
-        result_doc = Document(output_path)
+        result_doc = Document(str(output_path))
         text_content = "\n".join([p.text for p in result_doc.paragraphs])
 
         # Check the paragraph with multiple placeholders
@@ -123,7 +123,7 @@ def test_table_placeholder_replacement(sample_template, sample_data):
     try:
         fill_word_from_structured_response(sample_template, sample_data, output_path)
 
-        result_doc = Document(output_path)
+        result_doc = Document(str(output_path))
 
         # Check table content
         table = result_doc.tables[0]
@@ -145,7 +145,7 @@ def test_header_placeholder_replacement(sample_template, sample_data):
     try:
         fill_word_from_structured_response(sample_template, sample_data, output_path)
 
-        result_doc = Document(output_path)
+        result_doc = Document(str(output_path))
         header = result_doc.sections[0].header
         header_text = "\n".join([p.text for p in header.paragraphs])
 
@@ -165,7 +165,7 @@ def test_footer_placeholder_replacement(sample_template, sample_data):
     try:
         fill_word_from_structured_response(sample_template, sample_data, output_path)
 
-        result_doc = Document(output_path)
+        result_doc = Document(str(output_path))
         footer = result_doc.sections[0].footer
         footer_text = "\n".join([p.text for p in footer.paragraphs])
 
@@ -193,7 +193,7 @@ def test_missing_placeholder_data(sample_template):
         # Should not raise an exception
         fill_word_from_structured_response(sample_template, incomplete_data, output_path)
 
-        result_doc = Document(output_path)
+        result_doc = Document(str(output_path))
         text_content = "\n".join([p.text for p in result_doc.paragraphs])
 
         # Replaced placeholders should be updated
@@ -234,7 +234,7 @@ def test_formatting_preservation():
     try:
         fill_word_from_structured_response(template_path, data, output_path)
 
-        result_doc = Document(output_path)
+        result_doc = Document(str(output_path))
         paragraph = result_doc.paragraphs[0]
 
         # Check content
@@ -267,7 +267,7 @@ def test_empty_document():
         # Should not raise an exception
         fill_word_from_structured_response(template_path, data, output_path)
 
-        result_doc = Document(output_path)
+        result_doc = Document(str(output_path))
         # Should have no paragraphs or empty paragraphs
         assert len([p for p in result_doc.paragraphs if p.text]) == 0
 
