@@ -20,7 +20,3 @@ class GroupSummary(BaseModel):
     is_private: bool | None = None
     owners: list[UserSummary] = Field(default_factory=list)
     is_member: bool | None = None
-    sub_groups: list["GroupSummary"] = Field(default_factory=list)
-
-
-GroupSummary.model_rebuild()
