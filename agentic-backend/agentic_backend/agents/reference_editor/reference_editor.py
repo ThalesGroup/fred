@@ -481,7 +481,7 @@ class ReferenceEditor(AgentFlow):
                             else None,
                         )
                     break  # Success, exit retry loop
-                except:
+                except Exception:
                     if attempt < max_retries - 1:
                         # Wait a bit before retrying
                         await asyncio.sleep(1)
