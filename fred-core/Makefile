@@ -9,3 +9,11 @@ include ../scripts/makefiles/python-code-quality.mk
 include ../scripts/makefiles/python-test.mk
 include ../scripts/makefiles/python-clean.mk
 include ../scripts/makefiles/help.mk
+
+transform-openfga-schema: # Transform OpenFga ReBAC schema from a human readable `.fga` in a `.json` readable with code
+	fga model transform --file fred_core/security/rebac/schema.fga > fred_core/security/rebac/schema.fga.json
+
+test-rebac: transform-openfga-schema # Helper that transform rebac schema and run test in one command
+	${UV} run pytest "fred_core/tests/integration/test_rebac.py::test_team_hierarchy_and_permissions[openfga]"
+	${UV} run pytest "fred_core/tests/integration/test_rebac.py::test_public_team_read_access[openfga]"
+	${UV} run pytest "fred_core/tests/integration/test_rebac.py::test_team_folder_file_hierarchy[openfga]"

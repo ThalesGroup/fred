@@ -38,6 +38,8 @@ class Resource(str, Enum):
     # Knowledge Flow Backend resources
     TAGS = "tag"
     DOCUMENTS = "document"
+    FOLDER = "folder"
+    FILE = "file"
     DOCUMENTS_SOURCES = "documents_source"
     RESOURCES = "resource"
     TABLES = "table"
@@ -52,6 +54,7 @@ class Resource(str, Enum):
     FEEDBACK = "feedback"
     PROMPT_COMPLETIONS = "prompt_completions"
     METRICS = "metrics"
+    AGENT = "agent"
     AGENTS = "agents"
     SESSIONS = "sessions"
     MESSAGE_ATTACHMENTS = "message_attachments"
@@ -60,6 +63,8 @@ class Resource(str, Enum):
     # Authorization subject
     USER = "user"
     GROUP = "group"
+    TEAM = "team"
+    PLATFORM = "platform"
 
 
 class AuthorizationError(Exception):

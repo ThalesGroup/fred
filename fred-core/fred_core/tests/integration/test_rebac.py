@@ -12,7 +12,10 @@ import pytest_asyncio
 from pydantic import AnyHttpUrl, ValidationError
 
 from fred_core import (
+    AgentPermission,
     DocumentPermission,
+    FilePermission,
+    FolderPermission,
     OpenFgaRebacConfig,
     OpenFgaRebacEngine,
     RebacDisabledResult,
@@ -22,6 +25,7 @@ from fred_core import (
     RelationType,
     Resource,
     TagPermission,
+    TeamPermission,
 )
 from fred_core.security.structure import M2MSecurity
 
@@ -463,3 +467,371 @@ async def test_list_documents_user_can_read(
         private_document,
         consistency_token=token,
     )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_team_hierarchy_and_permissions(
+    rebac_engine: RebacEngine,
+) -> None:
+    """Test team ownership, management, and permission inheritance.
+
+    This test validates:
+    - Team owner can update team info
+    - Team manager can update members
+    - Team members inherit permissions from team roles on folders and agents
+    - Platform admins inherit team ownership
+    """
+    # Create entities
+    platform = _make_reference(Resource.PLATFORM, prefix="platform")
+    platform_admin = _make_reference(Resource.USER, prefix="admin")
+    team = _make_reference(Resource.TEAM, prefix="marketing")
+    team_owner = _make_reference(Resource.USER, prefix="owner")
+    team_manager = _make_reference(Resource.USER, prefix="manager")
+    team_member = _make_reference(Resource.USER, prefix="member")
+    folder = _make_reference(Resource.FOLDER, prefix="docs")
+    agent = _make_reference(Resource.AGENT, prefix="assistant")
+
+    # Set up team hierarchy and relations
+    token = await rebac_engine.add_relations(
+        [
+            # Platform admin
+            Relation(
+                subject=platform_admin, relation=RelationType.ADMIN, resource=platform
+            ),
+            # Team hierarchy - team has a platform reference
+            Relation(subject=platform, relation=RelationType.PLATFORM, resource=team),
+            Relation(subject=team_owner, relation=RelationType.OWNER, resource=team),
+            Relation(
+                subject=team_manager, relation=RelationType.MANAGER, resource=team
+            ),
+            Relation(subject=team_member, relation=RelationType.MEMBER, resource=team),
+            # Team owns folder and agent
+            Relation(subject=team, relation=RelationType.OWNER, resource=folder),
+            Relation(subject=team, relation=RelationType.OWNER, resource=agent),
+        ]
+    )
+
+    # ~~~~~~~~~~~~~~~~~~~~
+    # Owner
+
+    # Test owner can update team info
+    assert await rebac_engine.has_permission(
+        team_owner,
+        TeamPermission.CAN_UPDATE_INFO,
+        team,
+        consistency_token=token,
+    ), "Team owner should be able to update team info"
+
+    # ~~~~~~~~~~~~~~~~~~~~
+    # Manager
+
+    # Test manager can update members
+    assert await rebac_engine.has_permission(
+        team_manager,
+        TeamPermission.CAN_UPDATE_MEMBERS,
+        team,
+        consistency_token=token,
+    ), "Team manager should be able to update members"
+
+    # Test manager can update folder via team ownership
+    assert await rebac_engine.has_permission(
+        team_manager,
+        FolderPermission.UPDATE,
+        folder,
+        consistency_token=token,
+    ), "Team manager should be able to update team folder"
+
+    # Test manager can update agent via team ownership
+    assert await rebac_engine.has_permission(
+        team_manager,
+        AgentPermission.UPDATE,
+        agent,
+        consistency_token=token,
+    ), "Team manager should be able to update team agent"
+
+    # Test owner can update team info
+    assert not await rebac_engine.has_permission(
+        team_manager,
+        TeamPermission.CAN_UPDATE_INFO,
+        team,
+        consistency_token=token,
+    ), "Team manager should not be able to update team info"
+
+    # ~~~~~~~~~~~~~~~~~~~~
+    # Members
+
+    # Test members can access team-owned folders
+    assert await rebac_engine.has_permission(
+        team_member,
+        FolderPermission.READ,
+        folder,
+        consistency_token=token,
+    ), "Team member should be able to read team folder"
+
+    # Test regular member cannot update team info
+    assert not await rebac_engine.has_permission(
+        team_member,
+        TeamPermission.CAN_UPDATE_INFO,
+        team,
+        consistency_token=token,
+    ), "Team member should not be able to update team info"
+
+    # Test member cannot update folder (needs at least editor role)
+    assert not await rebac_engine.has_permission(
+        team_member,
+        FolderPermission.UPDATE,
+        folder,
+        consistency_token=token,
+    ), "Team member should not be able to update folder"
+
+    # ~~~~~~~~~~~~~~~~~~~~
+    # Platform admin
+
+    # Test platform admin can edit team info
+    assert await rebac_engine.has_permission(
+        platform_admin,
+        TeamPermission.CAN_UPDATE_INFO,
+        team,
+        consistency_token=token,
+    ), "Platform admin should be able to update team info"
+
+    # Test platform admin can edit team info
+    assert await rebac_engine.has_permission(
+        platform_admin,
+        TeamPermission.CAN_UPDATE_MEMBERS,
+        team,
+        consistency_token=token,
+    ), "Platform admin should be able to update team members"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_team_folder_file_hierarchy(
+    rebac_engine: RebacEngine,
+) -> None:
+    """Test that team permissions cascade through folder/file hierarchy.
+
+    This test validates:
+    - Team manager can update folders owned by team
+    - Files inherit permissions from parent folders
+    - Nested folders inherit permissions correctly
+    """
+    team = _make_reference(Resource.TEAM, prefix="engineering")
+    manager = _make_reference(Resource.USER, prefix="manager")
+    member = _make_reference(Resource.USER, prefix="member")
+    root_folder = _make_reference(Resource.FOLDER, prefix="root")
+    sub_folder = _make_reference(Resource.FOLDER, prefix="subfolder")
+    file = _make_reference(Resource.FILE, prefix="document")
+
+    token = await rebac_engine.add_relations(
+        [
+            # Team structure
+            Relation(subject=manager, relation=RelationType.MANAGER, resource=team),
+            Relation(subject=member, relation=RelationType.MEMBER, resource=team),
+            # Folder hierarchy
+            Relation(subject=team, relation=RelationType.OWNER, resource=root_folder),
+            Relation(
+                subject=root_folder, relation=RelationType.PARENT, resource=sub_folder
+            ),
+            Relation(subject=sub_folder, relation=RelationType.PARENT, resource=file),
+        ]
+    )
+
+    # Test manager can update root folder via team permission
+    assert await rebac_engine.has_permission(
+        manager,
+        FolderPermission.UPDATE,
+        root_folder,
+        consistency_token=token,
+    ), "Team manager should be able to update team folder"
+
+    # Test manager can delete subfolder via parent folder permission
+    assert await rebac_engine.has_permission(
+        manager,
+        FolderPermission.DELETE,
+        sub_folder,
+        consistency_token=token,
+    ), "Team manager should be able to delete subfolder"
+
+    # Test member can read file through folder hierarchy
+    assert await rebac_engine.has_permission(
+        member,
+        FilePermission.READ,
+        file,
+        consistency_token=token,
+    ), "Team member should be able to read file in team folder"
+
+    # Test member cannot update file (needs at least editor role)
+    assert not await rebac_engine.has_permission(
+        member,
+        FilePermission.UPDATE,
+        file,
+        consistency_token=token,
+    ), "Team member should not be able to update file (needs editor role)"
+
+    # Test manager can update file via folder hierarchy
+    assert await rebac_engine.has_permission(
+        manager,
+        FilePermission.UPDATE,
+        file,
+        consistency_token=token,
+    ), "Team manager should be able to update file in team folder"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_public_team_read_access(
+    rebac_engine: RebacEngine,
+) -> None:
+    """Test that public teams can be read by anyone, but their resources remain private.
+
+    This test validates:
+    - Public teams can be read by any user (via user:* wildcard)
+    - Non-public teams cannot be read by strangers
+    - Public team's agents cannot be accessed by strangers
+    - Public team's folders cannot be accessed by strangers
+    - Public team's files cannot be accessed by strangers
+    - Public team resources can only be updated/deleted by team members
+    """
+    # Create entities
+    public_team = _make_reference(Resource.TEAM, prefix="public-team")
+    private_team = _make_reference(Resource.TEAM, prefix="private-team")
+    team_owner = _make_reference(Resource.USER, prefix="owner")
+    stranger = _make_reference(Resource.USER, prefix="stranger")
+
+    # Team-owned resources
+    agent = _make_reference(Resource.AGENT, prefix="team-agent")
+    folder = _make_reference(Resource.FOLDER, prefix="team-folder")
+    file = _make_reference(Resource.FILE, prefix="team-file")
+
+    # Set up teams and resources
+    token = await rebac_engine.add_relations(
+        [
+            # Public team setup
+            Relation(subject=team_owner, relation=RelationType.OWNER, resource=public_team),
+            Relation(
+                subject=RebacReference(Resource.USER, "*"),
+                relation=RelationType.PUBLIC,
+                resource=public_team,
+            ),
+            # Private team setup
+            Relation(subject=team_owner, relation=RelationType.OWNER, resource=private_team),
+            # Public team owns resources
+            Relation(subject=public_team, relation=RelationType.OWNER, resource=agent),
+            Relation(subject=public_team, relation=RelationType.OWNER, resource=folder),
+            Relation(subject=folder, relation=RelationType.PARENT, resource=file),
+        ]
+    )
+
+    # ~~~~~~~~~~~~~~~~~~~~
+    # Public team read access
+
+    # Test stranger CAN read public team info
+    assert await rebac_engine.has_permission(
+        stranger,
+        TeamPermission.CAN_READ,
+        public_team,
+        consistency_token=token,
+    ), "Stranger should be able to read public team info"
+
+    # Test stranger CANNOT read private team info
+    assert not await rebac_engine.has_permission(
+        stranger,
+        TeamPermission.CAN_READ,
+        private_team,
+        consistency_token=token,
+    ), "Stranger should not be able to read private team info"
+
+    # ~~~~~~~~~~~~~~~~~~~~
+    # Public team resources remain private
+
+    # Test stranger CANNOT access public team's agent
+    assert not await rebac_engine.has_permission(
+        stranger,
+        AgentPermission.UPDATE,
+        agent,
+        consistency_token=token,
+    ), "Stranger should not be able to update public team's agent"
+
+    assert not await rebac_engine.has_permission(
+        stranger,
+        AgentPermission.DELETE,
+        agent,
+        consistency_token=token,
+    ), "Stranger should not be able to delete public team's agent"
+
+    # Test stranger CANNOT access public team's folder
+    assert not await rebac_engine.has_permission(
+        stranger,
+        FolderPermission.READ,
+        folder,
+        consistency_token=token,
+    ), "Stranger should not be able to read public team's folder"
+
+    assert not await rebac_engine.has_permission(
+        stranger,
+        FolderPermission.UPDATE,
+        folder,
+        consistency_token=token,
+    ), "Stranger should not be able to update public team's folder"
+
+    assert not await rebac_engine.has_permission(
+        stranger,
+        FolderPermission.DELETE,
+        folder,
+        consistency_token=token,
+    ), "Stranger should not be able to delete public team's folder"
+
+    # Test stranger CANNOT access public team's files
+    assert not await rebac_engine.has_permission(
+        stranger,
+        FilePermission.READ,
+        file,
+        consistency_token=token,
+    ), "Stranger should not be able to read public team's file"
+
+    assert not await rebac_engine.has_permission(
+        stranger,
+        FilePermission.UPDATE,
+        file,
+        consistency_token=token,
+    ), "Stranger should not be able to update public team's file"
+
+    # ~~~~~~~~~~~~~~~~~~~~
+    # Public team cannot be modified by strangers
+
+    # Test stranger CANNOT update public team info
+    assert not await rebac_engine.has_permission(
+        stranger,
+        TeamPermission.CAN_UPDATE_INFO,
+        public_team,
+        consistency_token=token,
+    ), "Stranger should not be able to update public team info"
+
+    # Test stranger CANNOT update public team members
+    assert not await rebac_engine.has_permission(
+        stranger,
+        TeamPermission.CAN_UPDATE_MEMBERS,
+        public_team,
+        consistency_token=token,
+    ), "Stranger should not be able to update public team members"
+
+    # ~~~~~~~~~~~~~~~~~~~~
+    # Team owner retains full access
+
+    # Test owner CAN still update public team
+    assert await rebac_engine.has_permission(
+        team_owner,
+        TeamPermission.CAN_UPDATE_INFO,
+        public_team,
+        consistency_token=token,
+    ), "Team owner should still be able to update public team info"
+
+    # Test owner CAN access team resources
+    assert await rebac_engine.has_permission(
+        team_owner,
+        AgentPermission.UPDATE,
+        agent,
+        consistency_token=token,
+    ), "Team owner should be able to update public team agent"

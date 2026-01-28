@@ -26,10 +26,14 @@ class RelationType(str, Enum):
     """Relationship labels encoded in the graph."""
 
     OWNER = "owner"
+    MANAGER = "manager"
     EDITOR = "editor"
     VIEWER = "viewer"
     PARENT = "parent"
     MEMBER = "member"
+    PLATFORM = "platform"
+    ADMIN = "admin"
+    PUBLIC = "public"
 
 
 class TagPermission(str, Enum):
@@ -58,7 +62,40 @@ class ResourcePermission(str, Enum):
     SHARE = "share"
 
 
-RebacPermission = TagPermission | DocumentPermission | ResourcePermission
+class TeamPermission(str, Enum):
+    """Team permissions encoded in the graph."""
+
+    CAN_READ = "can_read"
+    CAN_UPDATE_INFO = "can_update_info"
+    CAN_UPDATE_MEMBERS = "can_update_members"
+
+
+class AgentPermission(str, Enum):
+    """Agent permissions encoded in the graph."""
+
+    UPDATE = "update"
+    DELETE = "delete"
+
+
+class FolderPermission(str, Enum):
+    """Folder permissions encoded in the graph."""
+
+    READ = "read"
+    UPDATE = "update"
+    DELETE = "delete"
+    SHARE = "share"
+
+
+class FilePermission(str, Enum):
+    """File permissions encoded in the graph."""
+
+    READ = "read"
+    UPDATE = "update"
+    DELETE = "delete"
+    PROCESS = "process"
+
+
+RebacPermission = TagPermission | DocumentPermission | ResourcePermission | TeamPermission | AgentPermission | FolderPermission | FilePermission
 
 
 def _resource_for_permission(permission: RebacPermission) -> Resource:
@@ -68,6 +105,14 @@ def _resource_for_permission(permission: RebacPermission) -> Resource:
         return Resource.DOCUMENTS
     if isinstance(permission, ResourcePermission):
         return Resource.RESOURCES
+    if isinstance(permission, TeamPermission):
+        return Resource.TEAM
+    if isinstance(permission, AgentPermission):
+        return Resource.AGENT
+    if isinstance(permission, FolderPermission):
+        return Resource.FOLDER
+    if isinstance(permission, FilePermission):
+        return Resource.FILE
     raise ValueError(f"Unsupported permission type: {permission!r}")
 
 

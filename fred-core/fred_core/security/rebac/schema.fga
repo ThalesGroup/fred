@@ -3,72 +3,128 @@ model
 
 type user
 
-type group
+type platform
   relations
-    # A group can have members that are users or other groups (nested groups)
-    define member: [user, group#member]
+    # Platform role defined from Keycloak roles
+    define admin: [user]
+    define editor: [user] or admin
+    define viewer: [user] or editor
 
-type tag
+  define can_create_team: admin
+  define can_create_agent: editor
+
+
+type team
   relations
-    define owner: [user, group#member]
-    define editor: [user, group#member]
-    define viewer: [user, group#member]
-    define parent: [tag]
+    define platform: [platform]
+
+    # A team can have members that are users or other teams (nested teams)
+    define owner: [user] or admin from platform
+    define manager: [user] or owner
+    define member: [user] or manager
+
+    # Public visibility - allows anyone to read team info
+    define public: [user:*]
 
     # --- Permissions (computed relations) ---
-    # Can read tag: see its name, description, list documents...
+    # Can read team info (name, description, banner, members...)
+    # -> must be at least member or team is public
+    define can_read: member or public
+
+    # Can update team infio (description, banner...)
+    # -> must be at least owner
+    define can_update_info: owner
+
+    # Can manage members: add/remove members, handle join request
+    # -> must be at least manager
+    define can_update_members: manager
+
+    # -- Helpers (not permission to use directly, only to help define) --
+
+    # Can upload/rename/delete team resources (file/folders)
+    # -> must be at least manager
+    define can_update_resources: manager
+
+    # Can create/update/delete team agents
+    # -> must be at least manager
+    define can_update_agents: manager
+
+type agent
+  relations
+    define owner: [user, team]
+
+    # --- Permissions (computed relations) ---
+
+
+    # Can update agent configuration
+    # -> must be owner
+    define update: owner or can_update_agents from owner
+
+    # Can delete agent
+    # -> must be owner
+    define delete: owner or can_update_agents from owner
+
+type folder
+  relations
+    define owner: [user, team]
+    define editor: [user]
+    define viewer: [user]
+    define parent: [folder]
+
+    # --- Permissions (computed relations) ---
+    # Can read folder: see its name, description, list files...
     # -> must be at least viewer
-    define read: viewer or editor or owner or read from parent
+    define read: viewer or editor or owner or read from parent or member from owner
 
-    # Can update tag: change its name, description... add or remove content (like documents) in the tag
+    # Can update folder: change its name, description... add or remove content (like files) in the folder
     # -> must be at least editor
-    define update: editor or owner or update from parent
+    define update: editor or owner or update from parent or can_update_resources from owner
 
-    # Can delete tag
+    # Can delete folder
     # -> must be owner
-    define delete: owner or delete from parent
+    define delete: owner or delete from parent or can_update_resources from owner
 
-    # Can share tag: add/remove editors/viewers
+    # Can share folder: add/remove editors/viewers
     # -> must be owner
-    define share: owner or share from parent
+    define share: owner or share from parent or can_update_resources from owner
 
-type document
+type file
   relations
-    define parent: [tag]
+    define parent: [folder]
 
     # --- Permissions (computed relations) ---
-    # Can read document: see its content
-    # -> must be able to read parent tag (at least viewer)
+    # Can read file: see its content
+    # -> must be able to read parent folder (at least viewer)
     define read: read from parent
 
-    # Can update document: change its name, content...
-    # -> must be able to manage parent tag (at least editor)
+    # Can update file: change its name, content...
+    # -> must be able to manage parent folder (at least editor)
     define update: update from parent
 
-    # Can delete document
-    # -> must be able to manage parent tag (at least editor)
+    # Can delete file
+    # -> must be able to manage parent folder (at least editor)
     define delete: update from parent
 
-    # Can process document: for RAG or SQL data extraction
-    # -> must be able to manage parent tag (at least editor)
+    # Can process file: for RAG or SQL data extraction
+    # -> must be able to manage parent folder (at least editor)
     define process: update from parent
 
 
 type resource
   relations
-    define parent: [tag]
+    define parent: [folder]
 
     # --- Permissions (computed relations) ---
     # Can read resources: see its content
-    # -> must be able to read parent tag (at least viewer)
+    # -> must be able to read parent folder (at least viewer)
     define read: read from parent
 
     # Can update resources: change its name, content...
-    # -> must be able to manage parent tag (at least editor)
+    # -> must be able to manage parent folder (at least editor)
     define update: update from parent
 
     # Can delete resources
-    # -> must be able to manage parent tag (at least editor)
+    # -> must be able to manage parent folder (at least editor)
     define delete: update from parent
 
     # Can share resources: add/remove editors/viewers
