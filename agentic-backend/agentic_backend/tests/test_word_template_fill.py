@@ -280,8 +280,10 @@ def test_empty_document():
 def test_textbox_placeholder_replacement():
     """Test that placeholders in textboxes are replaced (requires XML manipulation)"""
     import shutil
-    import xml.etree.ElementTree as ET
     import zipfile
+    from xml.etree.ElementTree import SubElement, tostring  # nosec B405
+
+    import defusedxml.ElementTree as ET
 
     # Create a document with a textbox containing a placeholder
     doc = Document()
@@ -292,7 +294,8 @@ def test_textbox_placeholder_replacement():
         original_path = Path(tmp.name)
 
     # Create a modified version with textbox
-    template_path = Path(tempfile.mktemp(suffix=".docx"))
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
+        template_path = Path(tmp.name)
     shutil.copy(original_path, template_path)
 
     # Modify the document to add textbox with placeholder
@@ -305,22 +308,22 @@ def test_textbox_placeholder_replacement():
         # Create a textbox structure
         body = root.find(".//w:body", ns)
         if body is not None:
-            p = ET.SubElement(
+            p = SubElement(
                 body, "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"
             )
-            txbxContent = ET.SubElement(
+            txbxContent = SubElement(
                 p,
                 "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}txbxContent",
             )
-            inner_p = ET.SubElement(
+            inner_p = SubElement(
                 txbxContent,
                 "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p",
             )
-            r = ET.SubElement(
+            r = SubElement(
                 inner_p,
                 "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}r",
             )
-            t = ET.SubElement(
+            t = SubElement(
                 r, "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t"
             )
             t.text = "Company: {nomSociete}"
@@ -329,7 +332,7 @@ def test_textbox_placeholder_replacement():
         with zipfile.ZipFile(template_path, "w", zipfile.ZIP_DEFLATED) as docx_write:
             # Write modified document.xml
             docx_write.writestr(
-                "word/document.xml", ET.tostring(root, encoding="unicode")
+                "word/document.xml", tostring(root, encoding="unicode")
             )
 
             # Copy all other files
