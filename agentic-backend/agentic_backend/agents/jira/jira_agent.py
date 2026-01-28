@@ -82,14 +82,12 @@ Stratégie obligatoire :
 **2. Génération des exigences (si demandé)**
 - generate_requirements(context_summary) → exigences fonctionnelles et non-fonctionnelles
 
-**3. Génération des User Stories en 2 étapes (si demandé)**
-- generate_user_story_titles(context_summary, quantity=10) → génère les titres pour éviter doublons
-- generate_user_stories(batch_size=5) → génère les stories complètes par lots de 3-5
+**3. Génération des User Stories (si demandé)**
+- generate_user_stories(context_summary, batch_size=5) → génère les stories par lots
 - Répéter generate_user_stories() jusqu'à ce que toutes les stories soient générées
 
-**4. Génération des tests en 2 étapes (si demandé)**
-- generate_test_titles() → génère les titres de tests pour toutes les User Stories
-- generate_tests(batch_size=5) → génère les tests complets par lots
+**4. Génération des tests (si demandé)**
+- generate_tests(batch_size=5) → génère les tests par lots
 - Répéter generate_tests() jusqu'à ce que tous les tests soient générés
 
 **5. Export (OBLIGATOIRE)**
@@ -264,49 +262,14 @@ Règles:
 
         return generate_requirements
 
-    def get_user_story_titles_tool(self):
-        """Tool that generates user story titles for batch generation"""
-
-        @tool
-        async def generate_user_story_titles(
-            runtime: ToolRuntime, context_summary: str, quantity: int | None = None
-        ):
-            """
-            Génère une liste de titres de User Stories pour une génération par lots.
-
-            Cette étape permet de:
-            1. Définir le périmètre complet des User Stories à générer
-            2. Éviter les doublons et chevauchements
-
-            IMPORTANT:
-            - AVANT d'appeler cet outil, tu DOIS faire une recherche documentaire avec les outils MCP
-            - Le context_summary doit contenir les informations extraites des documents (min 200 caractères)
-            - Après cet outil, utilise generate_user_stories() pour générer les stories complètes
-
-            Args:
-                context_summary: Résumé du contexte projet extrait des documents (min 200 caractères)
-                quantity: Nombre de User Stories à générer (optionnel, sinon le modèle détermine le nombre approprié)
-
-            Returns:
-                Message de confirmation avec la liste des titres générés
-            """
-            # Validate context_summary has meaningful content
-            if len(context_summary.strip()) < 200:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Le contexte fourni est trop court (minimum 200 caractères). "
-                                "Tu dois d'abord faire une recherche documentaire avec les outils MCP "
-                                "(search_documents, get_document_content) pour extraire les informations "
-                                "du projet, puis fournir un résumé détaillé en paramètre.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
-                )
-
-            titles_prompt = """Tu es un Product Owner expert. Génère une liste de titres de User Stories.
+    async def _generate_user_story_titles(
+        self,
+        runtime: ToolRuntime,
+        context_summary: str,
+        quantity: int | None = None,
+    ) -> list[dict]:
+        """Internal helper to generate user story titles."""
+        titles_prompt = """Tu es un Product Owner expert. Génère une liste de titres de User Stories.
 
 Contexte projet extrait des documents:
 {context_summary}
@@ -332,192 +295,104 @@ Contexte projet extrait des documents:
 
 {quantity_instruction}"""
 
-            # Build requirements section
-            requirements_section = ""
-            requirements = runtime.state.get("requirements")
-            if requirements:
-                requirements_section = f"""
+        # Build requirements section
+        requirements_section = ""
+        requirements = runtime.state.get("requirements")
+        if requirements:
+            requirements_section = f"""
 Exigences à respecter:
 {json.dumps(requirements, ensure_ascii=False, indent=2)}
 """
 
-            # Build existing stories section to avoid duplicates
-            existing_stories_section = ""
-            existing_stories = runtime.state.get("user_stories") or []
-            existing_titles = runtime.state.get("user_story_titles") or []
+        # Build existing stories section to avoid duplicates
+        existing_stories_section = ""
+        existing_stories = runtime.state.get("user_stories") or []
+        existing_titles = runtime.state.get("user_story_titles") or []
 
-            # Determine the next ID hint based on existing stories/titles
-            next_id_hint = "01"
-            all_existing_ids = [s.get("id", "") for s in existing_stories] + [
-                t.get("id", "") for t in existing_titles
-            ]
-            if all_existing_ids:
-                # Extract numeric parts from IDs like "US-01", "US-02"
-                max_num = 0
-                for id_str in all_existing_ids:
-                    match = re.search(r"US-(\d+)", id_str)
-                    if match:
-                        max_num = max(max_num, int(match.group(1)))
-                next_id_hint = f"{max_num + 1:02d}"
+        # Determine the next ID hint based on existing stories/titles
+        next_id_hint = "01"
+        all_existing_ids = [s.get("id", "") for s in existing_stories] + [
+            t.get("id", "") for t in existing_titles
+        ]
+        if all_existing_ids:
+            max_num = 0
+            for id_str in all_existing_ids:
+                match = re.search(r"US-(\d+)", id_str)
+                if match:
+                    max_num = max(max_num, int(match.group(1)))
+            next_id_hint = f"{max_num + 1:02d}"
 
-            if existing_stories or existing_titles:
-                # Combine existing info for the prompt
-                existing_info = []
-                for story in existing_stories:
-                    existing_info.append(
-                        {
-                            "id": story.get("id"),
-                            "title": story.get("summary"),
-                            "epic_name": story.get("epic_name"),
-                        }
-                    )
-                # Add titles that don't have corresponding stories yet
-                existing_story_ids = {s.get("id") for s in existing_stories}
-                for title in existing_titles:
-                    if title.get("id") not in existing_story_ids:
-                        existing_info.append(title)
+        if existing_stories or existing_titles:
+            existing_info = []
+            for story in existing_stories:
+                existing_info.append(
+                    {
+                        "id": story.get("id"),
+                        "title": story.get("summary"),
+                        "epic_name": story.get("epic_name"),
+                    }
+                )
+            existing_story_ids = {s.get("id") for s in existing_stories}
+            for title in existing_titles:
+                if title.get("id") not in existing_story_ids:
+                    existing_info.append(title)
 
-                if existing_info:
-                    existing_stories_section = f"""
+            if existing_info:
+                existing_stories_section = f"""
 **User Stories DÉJÀ EXISTANTES (NE PAS DUPLIQUER):**
 {json.dumps(existing_info, ensure_ascii=False, indent=2)}
 
 Tu dois générer des User Stories COMPLÉMENTAIRES qui n'existent pas encore.
 """
 
-            # Build quantity instruction
-            if quantity is not None:
-                quantity_instruction = f"Génère exactement {quantity} NOUVEAUX titres de User Stories (en plus des existantes)."
-            else:
-                quantity_instruction = "Génère le nombre approprié de User Stories pour couvrir l'ensemble du périmètre fonctionnel du projet."
+        if quantity is not None:
+            quantity_instruction = f"Génère exactement {quantity} NOUVEAUX titres de User Stories (en plus des existantes)."
+        else:
+            quantity_instruction = "Génère le nombre approprié de User Stories pour couvrir l'ensemble du périmètre fonctionnel du projet."
 
-            model = get_default_chat_model().with_structured_output(
-                UserStoryTitlesList, method="json_schema"
-            )
-            messages = [
-                SystemMessage(
-                    content=titles_prompt.format(
-                        context_summary=context_summary,
-                        requirements_section=requirements_section,
-                        existing_stories_section=existing_stories_section,
-                        quantity_instruction=quantity_instruction,
-                        next_id_hint=next_id_hint,
-                    )
+        model = get_default_chat_model().with_structured_output(
+            UserStoryTitlesList, method="json_schema"
+        )
+        messages = [
+            SystemMessage(
+                content=titles_prompt.format(
+                    context_summary=context_summary,
+                    requirements_section=requirements_section,
+                    existing_stories_section=existing_stories_section,
+                    quantity_instruction=quantity_instruction,
+                    next_id_hint=next_id_hint,
                 )
-            ]
-
-            langfuse_handler = self._get_langfuse_handler()
-            config: RunnableConfig = (
-                {"callbacks": [langfuse_handler]} if langfuse_handler else {}
             )
+        ]
 
-            response = await model.ainvoke(messages, config=config)
-            new_titles = [t.model_dump() for t in response.items]
+        langfuse_handler = self._get_langfuse_handler()
+        config: RunnableConfig = (
+            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+        )
 
-            # Merge with existing titles (append new ones)
-            all_titles = existing_titles + new_titles
+        response = await model.ainvoke(messages, config=config)
+        new_titles = [t.model_dump() for t in response.items]
+        logger.info(f"US TITLES: {existing_titles + new_titles}")
+        return existing_titles + new_titles
 
-            # Format new titles for display
-            titles_display = "\n".join(
-                f"  - {t['id']}: {t['title']} ({t['epic_name']})" for t in new_titles
-            )
+    async def _generate_user_story_batch(
+        self,
+        titles_to_process: list[dict],
+        context_summary: str,
+        requirements: list[dict] | None,
+    ) -> list[dict]:
+        """
+        Internal helper to generate a single batch of user stories.
 
-            # Build response message
-            if existing_titles:
-                msg = (
-                    f"✓ {len(new_titles)} nouveaux titres de User Stories générés "
-                    f"({len(all_titles)} au total):\n{titles_display}\n\n"
-                    f"Appelle maintenant generate_user_stories() pour générer les User Stories complètes "
-                    f"à partir de ces titres (par lots de 3-5 pour une meilleure qualité)."
-                )
-            else:
-                msg = (
-                    f"✓ {len(new_titles)} titres de User Stories générés:\n{titles_display}\n\n"
-                    f"Appelle maintenant generate_user_stories() pour générer les User Stories complètes "
-                    f"à partir de ces titres (par lots de 3-5 pour une meilleure qualité)."
-                )
+        Args:
+            titles_to_process: List of user story titles to generate stories for
+            context_summary: Project context summary
+            requirements: Optional list of requirements
 
-            return Command(
-                update={
-                    "user_story_titles": all_titles,
-                    "messages": [
-                        ToolMessage(msg, tool_call_id=runtime.tool_call_id),
-                    ],
-                }
-            )
-
-        return generate_user_story_titles
-
-    def get_user_stories_tool(self):
-        """Tool that generates user stories from titles in batches"""
-
-        @tool
-        async def generate_user_stories(
-            runtime: ToolRuntime,
-            context_summary: str = "",
-            batch_size: int = 5,
-            story_ids: list[str] | None = None,
-        ):
-            """
-            Génère des User Stories complètes à partir des titres générés par generate_user_story_titles.
-
-            WORKFLOW RECOMMANDÉ:
-            1. Appeler generate_user_story_titles() pour générer les titres
-            2. Appeler generate_user_stories() plusieurs fois avec batch_size=3-5
-               jusqu'à ce que toutes les stories soient générées
-
-            Args:
-                context_summary: Résumé du contexte projet
-                batch_size: Nombre de User Stories à générer par appel (défaut: 5)
-                story_ids: Liste spécifique d'IDs à générer (optionnel, sinon prend le prochain batch)
-
-            Returns:
-                Message de confirmation avec le nombre de stories générées et restantes
-            """
-            # Get titles and existing stories
-            all_titles = runtime.state.get("user_story_titles") or []
-            existing_stories = runtime.state.get("user_stories") or []
-            existing_ids = {s.get("id") for s in existing_stories}
-
-            # Determine which titles to process
-            if story_ids:
-                # User specified specific IDs
-                titles_to_process = [
-                    t
-                    for t in all_titles
-                    if t["id"] in story_ids and t["id"] not in existing_ids
-                ]
-            else:
-                # Get next batch of unprocessed titles
-                pending_titles = [t for t in all_titles if t["id"] not in existing_ids]
-                titles_to_process = pending_titles[:batch_size]
-
-            if not titles_to_process:
-                if not all_titles:
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    "❌ Aucun titre de User Story n'a été généré. "
-                                    "Appelle d'abord generate_user_story_titles() pour définir les titres.",
-                                    tool_call_id=runtime.tool_call_id,
-                                ),
-                            ],
-                        }
-                    )
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"✓ Toutes les User Stories ont déjà été générées ({len(existing_stories)} au total). "
-                                f"Appelle export_deliverables() pour exporter les livrables.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
-                )
-
-            stories_prompt = """Tu es un Product Owner expert. Génère des User Stories COMPLÈTES pour les titres suivants.
+        Returns:
+            List of generated user story dicts
+        """
+        stories_prompt = """Tu es un Product Owner expert. Génère des User Stories COMPLÈTES pour les titres suivants.
 
 {context_section}
 
@@ -550,66 +425,178 @@ Tu dois générer des User Stories COMPLÉMENTAIRES qui n'existent pas encore.
 Génère EXACTEMENT {count} User Stories correspondant aux titres fournis.
 Utilise les mêmes IDs, epic_name et requirement_ids que dans les titres."""
 
-            # Build context section
-            context_section = ""
-            if context_summary:
-                context_section = f"Contexte projet:\n{context_summary}"
+        # Build context section
+        context_section = ""
+        if context_summary:
+            context_section = f"Contexte projet:\n{context_summary}"
 
-            # Build requirements section
-            requirements_section = ""
-            requirements = runtime.state.get("requirements")
-            if requirements:
-                requirements_section = f"""
+        # Build requirements section
+        requirements_section = ""
+        if requirements:
+            requirements_section = f"""
 Exigences à respecter:
 {json.dumps(requirements, ensure_ascii=False, indent=2)}
 """
 
-            model = get_default_chat_model().with_structured_output(
-                UserStoriesList, method="json_schema"
+        model = get_default_chat_model().with_structured_output(
+            UserStoriesList, method="json_schema"
+        )
+        messages = [
+            SystemMessage(
+                content=stories_prompt.format(
+                    context_section=context_section,
+                    requirements_section=requirements_section,
+                    titles_json=json.dumps(
+                        titles_to_process, ensure_ascii=False, indent=2
+                    ),
+                    count=len(titles_to_process),
+                )
             )
-            messages = [
-                SystemMessage(
-                    content=stories_prompt.format(
-                        context_section=context_section,
-                        requirements_section=requirements_section,
-                        titles_json=json.dumps(
-                            titles_to_process, ensure_ascii=False, indent=2
-                        ),
-                        count=len(titles_to_process),
+        ]
+
+        langfuse_handler = self._get_langfuse_handler()
+        config: RunnableConfig = (
+            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+        )
+
+        response = await model.ainvoke(messages, config=config)
+        return [s.model_dump() for s in response.items]
+
+    def get_user_stories_tool(self):
+        """Tool that generates user stories with automatic title generation"""
+
+        @tool
+        async def generate_user_stories(
+            runtime: ToolRuntime,
+            context_summary: str,
+            batch_size: int = 10,
+            quantity: int | None = None,
+        ):
+            """
+            Génère TOUTES les User Stories complètes à partir du contexte projet en une seule invocation.
+
+            Cet outil génère automatiquement les titres de User Stories puis génère toutes les stories
+            par lots internes jusqu'à complétion. Il retourne uniquement quand toutes les stories
+            sont générées.
+
+            IMPORTANT:
+            - AVANT d'appeler cet outil, tu DOIS faire une recherche documentaire avec les outils MCP
+            - Le context_summary doit contenir les informations extraites des documents (min 200 caractères)
+            - Cet outil peut prendre du temps si beaucoup de stories sont à générer
+
+            Args:
+                context_summary: Résumé du contexte projet extrait des documents (min 200 caractères)
+                batch_size: Nombre de User Stories à générer par lot interne (défaut: 10)
+                quantity: Nombre total de User Stories à générer (optionnel)
+
+            Returns:
+                Message de confirmation avec le nombre total de stories générées
+            """
+            # Validate context_summary has meaningful content
+            if len(context_summary.strip()) < 200:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                "❌ Le contexte fourni est trop court (minimum 200 caractères). "
+                                "Tu dois d'abord faire une recherche documentaire avec les outils MCP "
+                                "(search_documents, get_document_content) pour extraire les informations "
+                                "du projet, puis fournir un résumé détaillé en paramètre.",
+                                tool_call_id=runtime.tool_call_id,
+                            ),
+                        ],
+                    }
+                )
+
+            # Get titles and existing stories
+            all_titles = runtime.state.get("user_story_titles") or []
+            existing_stories = runtime.state.get("user_stories") or []
+            requirements = runtime.state.get("requirements")
+
+            # Auto-generate titles if none exist
+            state_updates = {}
+            if not all_titles:
+                all_titles = await self._generate_user_story_titles(
+                    runtime, context_summary, quantity
+                )
+                state_updates["user_story_titles"] = all_titles
+
+            # Get all unprocessed titles
+            existing_ids = {s.get("id") for s in existing_stories}
+            pending_titles = [t for t in all_titles if t["id"] not in existing_ids]
+
+            if not pending_titles:
+                return Command(
+                    update={
+                        **state_updates,
+                        "messages": [
+                            ToolMessage(
+                                f"✓ Toutes les User Stories ont déjà été générées ({len(existing_stories)} au total). "
+                                f"Appelle export_deliverables() pour exporter les livrables.",
+                                tool_call_id=runtime.tool_call_id,
+                            ),
+                        ],
+                    }
+                )
+
+            # Internal batching loop - generate all stories without LLM re-invocation
+            all_generated_stories = list(existing_stories)
+            total_to_generate = len(pending_titles)
+            batches_completed = 0
+
+            logger.info(
+                f"[JiraAgent] Starting internal batch generation: {total_to_generate} user stories in batches of {batch_size}"
+            )
+
+            while pending_titles:
+                # Get next batch
+                titles_batch = pending_titles[:batch_size]
+                pending_titles = pending_titles[batch_size:]
+
+                # Generate this batch
+                try:
+                    new_stories = await self._generate_user_story_batch(
+                        titles_batch, context_summary, requirements
                     )
-                )
-            ]
+                    all_generated_stories.extend(new_stories)
+                    batches_completed += 1
 
-            langfuse_handler = self._get_langfuse_handler()
-            config: RunnableConfig = (
-                {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+                    logger.info(
+                        f"[JiraAgent] Batch {batches_completed} complete: "
+                        f"{len(all_generated_stories)}/{len(all_titles)} user stories generated"
+                    )
+                except Exception as e:
+                    logger.error(f"[JiraAgent] Error generating user story batch: {e}")
+                    # Return partial results on error
+                    return Command(
+                        update={
+                            **state_updates,
+                            "user_stories": all_generated_stories,
+                            "messages": [
+                                ToolMessage(
+                                    f"⚠️ Erreur lors de la génération du lot {batches_completed + 1}: {str(e)}. "
+                                    f"{len(all_generated_stories)} User Stories générées sur {len(all_titles)} prévues. "
+                                    f"Tu peux réappeler generate_user_stories() pour continuer.",
+                                    tool_call_id=runtime.tool_call_id,
+                                ),
+                            ],
+                        }
+                    )
+
+            # All stories generated successfully
+            stories_generated_this_call = len(all_generated_stories) - len(
+                existing_stories
             )
-
-            response = await model.ainvoke(messages, config=config)
-            new_stories = [s.model_dump() for s in response.items]
-
-            # Merge with existing stories
-            all_stories = existing_stories + new_stories
-            remaining = len(all_titles) - len(all_stories)
-
-            # Build response message
-            if remaining > 0:
-                next_batch = min(batch_size, remaining)
-                msg = (
-                    f"✓ {len(new_stories)} User Stories générées ({len(all_stories)}/{len(all_titles)} au total). "
-                    f"Reste {remaining} stories à générer. "
-                    f"Appelle generate_user_stories() pour générer le prochain lot de {next_batch}."
-                )
-            else:
-                msg = (
-                    f"✓ {len(new_stories)} User Stories générées. "
-                    f"Toutes les {len(all_stories)} User Stories sont maintenant complètes! "
-                    f"Appelle export_deliverables() pour exporter les livrables."
-                )
+            msg = (
+                f"✓ {stories_generated_this_call} User Stories générées en {batches_completed} lots. "
+                f"Total: {len(all_generated_stories)} User Stories complètes! "
+                f"Appelle export_deliverables() pour exporter les livrables."
+            )
 
             return Command(
                 update={
-                    "user_stories": all_stories,
+                    **state_updates,
+                    "user_stories": all_generated_stories,
                     "messages": [
                         ToolMessage(msg, tool_call_id=runtime.tool_call_id),
                     ],
@@ -618,73 +605,40 @@ Exigences à respecter:
 
         return generate_user_stories
 
-    def get_test_titles_tool(self):
-        """Tool that generates test titles for batch generation"""
+    async def _generate_test_titles(
+        self,
+        runtime: ToolRuntime,
+        quantity: int | None = None,
+    ) -> list[dict]:
+        """Internal helper to generate test titles."""
+        user_stories = runtime.state.get("user_stories") or []
+        existing_titles = runtime.state.get("test_titles") or []
+        existing_tests = runtime.state.get("tests") or []
 
-        @tool
-        async def generate_test_titles(
-            runtime: ToolRuntime, quantity: int | None = None
-        ):
-            """
-            Génère une liste de titres de tests pour toutes les User Stories.
+        # Determine the next ID hint based on existing tests/titles
+        next_id_hint = "01"
+        all_existing_ids = [t.get("id", "") for t in existing_tests] + [
+            t.get("id", "") for t in existing_titles
+        ]
+        if all_existing_ids:
+            max_num = 0
+            for id_str in all_existing_ids:
+                match = re.search(r"SC-(\d+)", id_str)
+                if match:
+                    max_num = max(max_num, int(match.group(1)))
+            next_id_hint = f"{max_num + 1:02d}"
 
-            Cette étape permet de:
-            1. Définir le périmètre complet des tests à générer
-            2. Éviter les doublons et assurer une couverture complète
-            3. Planifier les types de tests (Nominal, Limite, Erreur) pour chaque story
-
-            IMPORTANT:
-            - AVANT d'appeler cet outil, des User Stories doivent avoir été générées
-            - Après cet outil, utilise generate_tests() pour générer les tests complets
-
-            Args:
-                quantity: Nombre de tests à générer (optionnel, sinon ~3 tests par User Story)
-
-            Returns:
-                Message de confirmation avec la liste des titres générés
-            """
-            # Get user stories
-            user_stories = runtime.state.get("user_stories") or []
-            if not user_stories:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Aucune User Story n'a été générée. "
-                                "Appelle d'abord generate_user_stories() pour créer les User Stories.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
-                )
-
-            # Get existing test titles and tests to avoid duplicates
-            existing_titles = runtime.state.get("test_titles") or []
-            existing_tests = runtime.state.get("tests") or []
-
-            # Determine the next ID hint based on existing tests/titles
-            next_id_hint = "01"
-            all_existing_ids = [t.get("id", "") for t in existing_tests] + [
-                t.get("id", "") for t in existing_titles
-            ]
-            if all_existing_ids:
-                max_num = 0
-                for id_str in all_existing_ids:
-                    match = re.search(r"SC-(\d+)", id_str)
-                    if match:
-                        max_num = max(max_num, int(match.group(1)))
-                next_id_hint = f"{max_num + 1:02d}"
-
-            # Build existing titles section to avoid duplicates
-            existing_titles_section = ""
-            if existing_titles:
-                existing_titles_section = f"""
+        # Build existing titles section to avoid duplicates
+        existing_titles_section = ""
+        if existing_titles:
+            existing_titles_section = f"""
 **Titres de tests DÉJÀ EXISTANTS (NE PAS DUPLIQUER):**
 {json.dumps(existing_titles, ensure_ascii=False, indent=2)}
 
 Tu dois générer des titres de tests COMPLÉMENTAIRES qui n'existent pas encore.
 """
-            titles_prompt = """Tu es un expert en tests logiciels. Génère une liste de titres de tests pour les User Stories suivantes.
+
+        titles_prompt = """Tu es un expert en tests logiciels. Génère une liste de titres de tests pour les User Stories suivantes.
 
 ## User Stories à couvrir
 
@@ -701,160 +655,67 @@ Pour chaque User Story, génère des titres de tests couvrant:
 
 **Règles:**
 - Chaque titre doit être concis et descriptif (max 80 caractères)
-- Les IDs doivent suivre le format SC-XXX (commencer à SC-{next_id_hint})
+- Les IDs doivent suivre le format SC-XX (commencer à SC-{next_id_hint})
 - Chaque titre doit référencer sa User Story via user_story_id
 
 {quantity_instruction}"""
 
-            # Build quantity instruction
-            if quantity is not None:
-                quantity_instruction = (
-                    f"Génère exactement {quantity} titres de tests au total."
-                )
-            else:
-                quantity_instruction = "Génère environ 3 titres de tests par User Story (minimum 2, maximum 5 selon la complexité)."
-
-            model = get_default_chat_model().with_structured_output(
-                TestTitlesList, method="json_schema"
+        if quantity is not None:
+            quantity_instruction = (
+                f"Génère exactement {quantity} titres de tests au total."
             )
-            messages = [
-                SystemMessage(
-                    content=titles_prompt.format(
-                        user_stories_json=json.dumps(
-                            user_stories, ensure_ascii=False, indent=2
-                        ),
-                        existing_titles_section=existing_titles_section,
-                        next_id_hint=next_id_hint,
-                        quantity_instruction=quantity_instruction,
-                    )
-                )
-            ]
+        else:
+            quantity_instruction = "Génère environ 3 titres de tests par User Story (minimum 2, maximum 5 selon la complexité)."
 
-            langfuse_handler = self._get_langfuse_handler()
-            config: RunnableConfig = (
-                {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+        model = get_default_chat_model().with_structured_output(
+            TestTitlesList, method="json_schema"
+        )
+        messages = [
+            SystemMessage(
+                content=titles_prompt.format(
+                    user_stories_json=json.dumps(
+                        user_stories, ensure_ascii=False, indent=2
+                    ),
+                    existing_titles_section=existing_titles_section,
+                    next_id_hint=next_id_hint,
+                    quantity_instruction=quantity_instruction,
+                )
             )
+        ]
 
-            response = await model.ainvoke(messages, config=config)
-            new_titles = [t.model_dump() for t in response.items]
+        langfuse_handler = self._get_langfuse_handler()
+        config: RunnableConfig = (
+            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+        )
 
-            # Merge with existing titles (append new ones)
-            all_titles = existing_titles + new_titles
+        response = await model.ainvoke(messages, config=config)
+        new_titles = [t.model_dump() for t in response.items]
+        return existing_titles + new_titles
 
-            # Count tests per story for display
-            tests_per_story = {}
-            for title in new_titles:
-                story_id = title.get("user_story_id", "unknown")
-                tests_per_story[story_id] = tests_per_story.get(story_id, 0) + 1
+    async def _generate_test_batch(
+        self,
+        titles_to_process: list[dict],
+        stories_by_id: dict[str, dict],
+        jdd: str,
+    ) -> list[dict]:
+        """
+        Internal helper to generate a single batch of tests.
 
-            # Build response message
-            if existing_titles:
-                msg = (
-                    f"✓ {len(new_titles)} nouveaux titres de tests générés "
-                    f"({len(all_titles)} au total) pour {len(tests_per_story)} User Stories.\n\n"
-                    f"Appelle maintenant generate_tests() pour générer les tests complets "
-                    f"à partir de ces titres (par lots de 5 pour une meilleure qualité)."
-                )
-            else:
-                msg = (
-                    f"✓ {len(new_titles)} titres de tests générés pour {len(tests_per_story)} User Stories.\n\n"
-                    f"Appelle maintenant generate_tests() pour générer les tests complets "
-                    f"à partir de ces titres (par lots de 5 pour une meilleure qualité)."
-                )
+        Args:
+            titles_to_process: List of test titles to generate tests for
+            stories_by_id: Map of user story ID -> user story dict
+            jdd: Test data (Jeu de Données) string
 
-            return Command(
-                update={
-                    "test_titles": all_titles,
-                    "messages": [
-                        ToolMessage(msg, tool_call_id=runtime.tool_call_id),
-                    ],
-                }
-            )
+        Returns:
+            List of generated test dicts
+        """
+        # Get the relevant user stories for the titles being processed
+        relevant_story_ids = {t.get("user_story_id") for t in titles_to_process}
+        relevant_stories = [
+            stories_by_id[sid] for sid in relevant_story_ids if sid in stories_by_id
+        ]
 
-        return generate_test_titles
-
-    def get_tests_tool(self):
-        """Tool that generates test scenarios from titles in batches"""
-
-        @tool
-        async def generate_tests(
-            runtime: ToolRuntime,
-            batch_size: int = 5,
-            test_ids: list[str] | None = None,
-            jdd: str = "",
-        ):
-            """
-            Génère des tests complets à partir des titres générés par generate_test_titles.
-
-            WORKFLOW RECOMMANDÉ:
-            1. Appeler generate_test_titles() pour générer les titres
-            2. Appeler generate_tests() plusieurs fois avec batch_size=5
-               jusqu'à ce que tous les tests soient générés
-
-            Args:
-                batch_size: Nombre de tests à générer par appel (défaut: 5)
-                test_ids: Liste spécifique d'IDs de tests à générer (optionnel, sinon prend le prochain batch)
-                jdd: Jeu de Données pour les personas (optionnel)
-
-            Returns:
-                Message de confirmation avec le nombre de tests générés et restants
-            """
-            # Get test titles and existing tests
-            all_titles = runtime.state.get("test_titles") or []
-            existing_tests = runtime.state.get("tests") or []
-            all_stories = runtime.state.get("user_stories") or []
-            existing_test_ids = {t.get("id") for t in existing_tests}
-
-            # Create a map of stories by ID for quick lookup
-            stories_by_id = {s.get("id"): s for s in all_stories}
-
-            # Determine which titles to process
-            if test_ids:
-                # User specified specific IDs
-                titles_to_process = [
-                    t
-                    for t in all_titles
-                    if t["id"] in test_ids and t["id"] not in existing_test_ids
-                ]
-            else:
-                # Get next batch of unprocessed titles
-                pending_titles = [
-                    t for t in all_titles if t["id"] not in existing_test_ids
-                ]
-                titles_to_process = pending_titles[:batch_size]
-
-            if not titles_to_process:
-                if not all_titles:
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    "❌ Aucun titre de test n'a été généré. "
-                                    "Appelle d'abord generate_test_titles() pour définir les titres.",
-                                    tool_call_id=runtime.tool_call_id,
-                                ),
-                            ],
-                        }
-                    )
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"✓ Tous les tests ont déjà été générés ({len(existing_tests)} au total). "
-                                f"Appelle export_deliverables() pour exporter les livrables.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
-                )
-
-            # Get the relevant user stories for the titles being processed
-            relevant_story_ids = {t.get("user_story_id") for t in titles_to_process}
-            relevant_stories = [
-                stories_by_id[sid] for sid in relevant_story_ids if sid in stories_by_id
-            ]
-
-            tests_prompt = """## Rôle
+        tests_prompt = """## Rôle
 
 Tu es un expert en tests logiciels. Génère des scénarios de tests COMPLETS pour les titres de tests suivants.
 
@@ -883,54 +744,163 @@ Règles:
 - Utilise les mêmes IDs, user_story_id et test_type que dans les titres
 - priority: "Haute", "Moyenne" ou "Basse" """
 
-            model = get_default_chat_model().with_structured_output(
-                TestsList, method="json_schema"
+        model = get_default_chat_model().with_structured_output(
+            TestsList, method="json_schema"
+        )
+        messages = [
+            SystemMessage(
+                content=tests_prompt.format(
+                    TITLES_JSON=json.dumps(
+                        titles_to_process, ensure_ascii=False, indent=2
+                    ),
+                    USER_STORIES=json.dumps(
+                        relevant_stories, ensure_ascii=False, indent=2
+                    ),
+                    JDD=jdd if jdd else "Aucun JDD fourni",
+                    count=len(titles_to_process),
+                )
             )
-            messages = [
-                SystemMessage(
-                    content=tests_prompt.format(
-                        TITLES_JSON=json.dumps(
-                            titles_to_process, ensure_ascii=False, indent=2
-                        ),
-                        USER_STORIES=json.dumps(
-                            relevant_stories, ensure_ascii=False, indent=2
-                        ),
-                        JDD=jdd if jdd else "Aucun JDD fourni",
-                        count=len(titles_to_process),
+        ]
+
+        langfuse_handler = self._get_langfuse_handler()
+        config: RunnableConfig = (
+            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+        )
+
+        response = await model.ainvoke(messages, config=config)
+        return [t.model_dump() for t in response.items]
+
+    def get_tests_tool(self):
+        """Tool that generates test scenarios with automatic title generation"""
+
+        @tool
+        async def generate_tests(
+            runtime: ToolRuntime,
+            batch_size: int = 10,
+            quantity: int | None = None,
+            jdd: str = "",
+        ):
+            """
+            Génère TOUS les tests complets à partir des User Stories en une seule invocation.
+
+            Cet outil génère automatiquement les titres de tests puis génère tous les tests
+            par lots internes jusqu'à complétion. Il retourne uniquement quand tous les
+            tests sont générés.
+
+            IMPORTANT:
+            - Des User Stories doivent avoir été générées avant d'appeler cet outil
+            - Cet outil peut prendre du temps si beaucoup de tests sont à générer
+
+            Args:
+                batch_size: Nombre de tests à générer par lot interne (défaut: 10)
+                quantity: Nombre total de tests à générer (optionnel)
+                jdd: Jeu de Données pour les personas (optionnel)
+
+            Returns:
+                Message de confirmation avec le nombre total de tests générés
+            """
+            # Get test titles and existing tests
+            all_titles = runtime.state.get("test_titles") or []
+            existing_tests = runtime.state.get("tests") or []
+            all_stories = runtime.state.get("user_stories") or []
+
+            # Check if user stories exist
+            if not all_stories:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                "❌ Aucune User Story n'a été générée. "
+                                "Appelle d'abord generate_user_stories() pour créer les User Stories.",
+                                tool_call_id=runtime.tool_call_id,
+                            ),
+                        ],
+                    }
+                )
+
+            # Auto-generate titles if none exist
+            state_updates = {}
+            if not all_titles:
+                all_titles = await self._generate_test_titles(runtime, quantity)
+                state_updates["test_titles"] = all_titles
+
+            # Create a map of stories by ID for quick lookup
+            stories_by_id = {s.get("id"): s for s in all_stories}
+
+            # Get all unprocessed titles
+            existing_test_ids = {t.get("id") for t in existing_tests}
+            pending_titles = [t for t in all_titles if t["id"] not in existing_test_ids]
+
+            if not pending_titles:
+                return Command(
+                    update={
+                        **state_updates,
+                        "messages": [
+                            ToolMessage(
+                                f"✓ Tous les tests ont déjà été générés ({len(existing_tests)} au total). "
+                                f"Appelle export_deliverables() pour exporter les livrables.",
+                                tool_call_id=runtime.tool_call_id,
+                            ),
+                        ],
+                    }
+                )
+
+            # Internal batching loop - generate all tests without LLM re-invocation
+            all_generated_tests = list(existing_tests)
+            total_to_generate = len(pending_titles)
+            batches_completed = 0
+
+            logger.info(
+                f"[JiraAgent] Starting internal batch generation: {total_to_generate} tests in batches of {batch_size}"
+            )
+
+            while pending_titles:
+                # Get next batch
+                titles_batch = pending_titles[:batch_size]
+                pending_titles = pending_titles[batch_size:]
+
+                # Generate this batch
+                try:
+                    new_tests = await self._generate_test_batch(
+                        titles_batch, stories_by_id, jdd
                     )
-                )
-            ]
+                    all_generated_tests.extend(new_tests)
+                    batches_completed += 1
 
-            langfuse_handler = self._get_langfuse_handler()
-            config: RunnableConfig = (
-                {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+                    logger.info(
+                        f"[JiraAgent] Batch {batches_completed} complete: "
+                        f"{len(all_generated_tests)}/{len(all_titles)} tests generated"
+                    )
+                except Exception as e:
+                    logger.error(f"[JiraAgent] Error generating test batch: {e}")
+                    # Return partial results on error
+                    return Command(
+                        update={
+                            **state_updates,
+                            "tests": all_generated_tests,
+                            "messages": [
+                                ToolMessage(
+                                    f"⚠️ Erreur lors de la génération du lot {batches_completed + 1}: {str(e)}. "
+                                    f"{len(all_generated_tests)} tests générés sur {len(all_titles)} prévus. "
+                                    f"Tu peux réappeler generate_tests() pour continuer.",
+                                    tool_call_id=runtime.tool_call_id,
+                                ),
+                            ],
+                        }
+                    )
+
+            # All tests generated successfully
+            tests_generated_this_call = len(all_generated_tests) - len(existing_tests)
+            msg = (
+                f"✓ {tests_generated_this_call} tests générés en {batches_completed} lots. "
+                f"Total: {len(all_generated_tests)} tests complets! "
+                f"Appelle export_deliverables() pour exporter les livrables."
             )
-
-            response = await model.ainvoke(messages, config=config)
-            new_tests = [t.model_dump() for t in response.items]
-
-            # Merge with existing tests
-            all_tests = existing_tests + new_tests
-            remaining = len(all_titles) - len(all_tests)
-
-            # Build response message
-            if remaining > 0:
-                next_batch = min(batch_size, remaining)
-                msg = (
-                    f"✓ {len(new_tests)} tests générés ({len(all_tests)}/{len(all_titles)} au total). "
-                    f"Reste {remaining} tests à générer. "
-                    f"Appelle generate_tests() pour générer le prochain lot de {next_batch}."
-                )
-            else:
-                msg = (
-                    f"✓ {len(new_tests)} tests générés. "
-                    f"Tous les {len(all_tests)} tests sont maintenant complets! "
-                    f"Appelle export_deliverables() pour exporter les livrables."
-                )
 
             return Command(
                 update={
-                    "tests": all_tests,
+                    **state_updates,
+                    "tests": all_generated_tests,
                     "messages": [
                         ToolMessage(msg, tool_call_id=runtime.tool_call_id),
                     ],
@@ -1469,9 +1439,7 @@ Règles:
 
     def get_compiled_graph(self) -> CompiledStateGraph:
         requirements_tool = self.get_requirements_tool()
-        user_story_titles_tool = self.get_user_story_titles_tool()
         user_stories_tool = self.get_user_stories_tool()
-        test_titles_tool = self.get_test_titles_tool()
         tests_tool = self.get_tests_tool()
         update_state_tool = self.get_update_state_tool()
         export_tool = self.get_export_tool()
@@ -1482,9 +1450,7 @@ Règles:
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[
                 requirements_tool,
-                user_story_titles_tool,
                 user_stories_tool,
-                test_titles_tool,
                 tests_tool,
                 update_state_tool,
                 export_tool,
