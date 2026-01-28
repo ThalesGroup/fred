@@ -387,19 +387,7 @@ class ReferenceEditor(AgentFlow):
                     mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 )
             else:
-                # Upload failed - save locally and inform user
-                import shutil
-                backup_dir = Path.home() / ".fred" / "agentic-backend" / "failed_uploads"
-                backup_dir.mkdir(parents=True, exist_ok=True)
-                backup_path = backup_dir / final_key
-                shutil.copy2(output_path, backup_path)
-
-                error_msg = f"⚠️ L'upload vers le serveur a échoué, mais le fichier a été généré avec succès.\n\n"
-                error_msg += f"Le fichier est sauvegardé localement à: {backup_path}\n\n"
-                error_msg += f"Erreur technique: {str(last_error)[:200]}\n\n"
-                error_msg += "Veuillez vérifier que le backend knowledge-flow fonctionne correctement."
-
-                return error_msg
+                return last_error
 
         return template_tool
 
