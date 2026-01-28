@@ -1681,11 +1681,6 @@ export type GroupSummary = {
   owners?: UserSummary[];
   member_count?: number | null;
   is_private?: boolean;
-  total_member_count?: number | null;
-  description?: string | null;
-  banner_image_url?: string | null;
-  is_private?: boolean | null;
-  owners?: UserSummary[];
   is_member?: boolean | null;
 };
 export type TagMemberGroup = {
