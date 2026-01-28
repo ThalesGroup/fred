@@ -11,19 +11,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+import AssistantIcon from "@mui/icons-material/Assistant";
 import ConstructionIcon from "@mui/icons-material/Construction";
-import GroupIcon from "@mui/icons-material/Group";
+import GroupsIcon from "@mui/icons-material/Groups";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import ScienceIcon from "@mui/icons-material/Science";
 import ShieldIcon from "@mui/icons-material/Shield";
-import { Box, CSSObject, Divider, Paper, styled, Theme } from "@mui/material";
+import { Avatar, Box, CSSObject, Divider, Paper, styled, Theme, Typography } from "@mui/material";
 import MuiDrawer from "@mui/material/Drawer";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { getProperty } from "../common/config";
+import { DynamicSvgIcon } from "../components/DynamicSvgIcon";
 import InvisibleLink from "../components/InvisibleLink";
 import {
   SideBarConversationsSection,
@@ -32,9 +33,9 @@ import {
   SidebarProfileSection,
 } from "../components/sideBar";
 import { SideBarNewConversationButton } from "../components/sideBar/SideBarNewConversationButton";
+import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { KeyCloakService } from "../security/KeycloakService";
 import { usePermissions } from "../security/usePermissions";
-import { useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { ImageComponent } from "../utils/image";
 import { ApplicationContext } from "./ApplicationContextProvider";
 
@@ -82,13 +83,12 @@ const Drawer = styled(MuiDrawer, { shouldForwardProp: (prop) => prop !== "open" 
     },
   ],
 }));
-
 export default function SideBar() {
   const { t } = useTranslation();
-  const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
+  const { agentsNicknamePlural, agentIconName } = useFrontendProperties();
 
-  // const [open, setOpen] = useLocalStorageState("SideBar.open", true);
   // Remove collapsing for now
+  // const [open, setOpen] = useLocalStorageState("SideBar.open", true);
   const open = true;
 
   // Here we set the "can" action to "create" since we want the viewer role not to see kpis and logs.
@@ -104,22 +104,31 @@ export default function SideBar() {
   const userRoles = KeyCloakService.GetUserRoles();
   const isAdmin = userRoles.includes("admin");
 
+  const { darkMode } = useContext(ApplicationContext);
   const menuItems: SideBarNavigationElement[] = [
     {
       key: "agent",
       label: t("sidebar.agent", {
-        agentsNickname: frontendConfig.frontend_settings.properties.agentsNicknamePlural,
+        agentsNickname: agentsNicknamePlural,
       }),
-      icon: <GroupIcon />,
+      icon: agentIconName ? (
+        <DynamicSvgIcon iconPath={`images/${agentIconName}.svg`} color="action" />
+      ) : (
+        <AssistantIcon />
+      ),
       url: `/agents`,
-      tooltip: t("sidebar.tooltip.agent"),
     },
     {
       key: "knowledge",
       label: t("sidebar.knowledge"),
       icon: <MenuBookIcon />,
       url: `/knowledge`,
-      tooltip: t("sidebar.tooltip.knowledge"),
+    },
+    {
+      key: "teams",
+      label: t("sidebar.teams"),
+      icon: <GroupsIcon />,
+      url: `/teams`,
     },
   ];
   const appsMenuItems: SideBarNavigationElement[] = [];
@@ -129,7 +138,6 @@ export default function SideBar() {
       label: t("sidebar.mcp"),
       icon: <ConstructionIcon />,
       url: `/tools`,
-      tooltip: t("sidebar.tooltip.mcp"),
     },
     ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime || canUpdateTag
       ? [
@@ -137,7 +145,6 @@ export default function SideBar() {
             key: "laboratory",
             label: t("sidebar.laboratory"),
             icon: <ScienceIcon />,
-            tooltip: t("sidebar.tooltip.laboratory"),
             children: [
               ...(canReadRuntime
                 ? [
@@ -146,7 +153,6 @@ export default function SideBar() {
                       label: t("sidebar.monitoring_graph", "Graph Hub"),
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/graph`,
-                      tooltip: t("sidebar.tooltip.monitoring_graph", "Knowledge graph view"),
                     },
                   ]
                 : []),
@@ -157,7 +163,6 @@ export default function SideBar() {
                       label: t("sidebar.monitoring_processors", "Processors"),
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/processors`,
-                      tooltip: t("sidebar.tooltip.monitoring_processors"),
                     },
                   ]
                 : []),
@@ -180,7 +185,6 @@ export default function SideBar() {
             key: "monitoring",
             label: t("sidebar.monitoring"),
             icon: <MonitorHeartIcon />,
-            tooltip: t("sidebar.tooltip.monitoring"),
             children: [
               ...(canReadKpis
                 ? [
@@ -189,7 +193,6 @@ export default function SideBar() {
                       label: t("sidebar.monitoring_kpi") || "KPI",
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/kpis`,
-                      tooltip: t("sidebar.tooltip.monitoring_kpi") || "KPI Overview",
                     },
                   ]
                 : []),
@@ -200,7 +203,6 @@ export default function SideBar() {
                       label: t("sidebar.monitoring_runtime", "Runtime"),
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/runtime`,
-                      tooltip: t("sidebar.tooltip.monitoring_runtime", "Runtime summary"),
                     },
                   ]
                 : []),
@@ -211,7 +213,6 @@ export default function SideBar() {
                       label: t("sidebar.monitoring_data", "Data Hub"),
                       icon: <MonitorHeartIcon />,
                       url: `/monitoring/data`,
-                      tooltip: t("sidebar.tooltip.monitoring_data", "Data lineage view"),
                     },
                   ]
                 : []),
@@ -222,7 +223,6 @@ export default function SideBar() {
                       label: t("sidebar.monitoring_logs") || "Logs",
                       icon: <MenuBookIcon />,
                       url: `/monitoring/logs`,
-                      tooltip: t("sidebar.tooltip.monitoring_logs"),
                     },
                   ]
                 : []),
@@ -233,7 +233,6 @@ export default function SideBar() {
                       label: t("sidebar.migration"),
                       icon: <ShieldIcon />,
                       url: `/monitoring/rebac-backfill`,
-                      tooltip: t("sidebar.tooltip.migration", "Rebuild ReBAC relations"),
                     },
                   ]
                 : []),
@@ -243,7 +242,230 @@ export default function SideBar() {
       : []),
   ];
 
-  const { darkMode } = useContext(ApplicationContext);
+  // todo: retrieve teams from backend
+  const teamsMenuItem: SideBarNavigationElement[] = [
+    {
+      key: "team-1",
+      label: "Design Team",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/0`,
+    },
+    {
+      key: "team-2",
+      label: "TSN",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/1`,
+    },
+    {
+      key: "team-3",
+      label: "Engineering Core on Fred and PRISM opensource",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/2`,
+    },
+    {
+      key: "team-4",
+      label: "Product Management",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/4`,
+    },
+    {
+      key: "team-5",
+      label: "DevOps & Infrastructure",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/5`,
+    },
+    {
+      key: "team-6",
+      label: "Data Science",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/6`,
+    },
+    {
+      key: "team-7",
+      label: "Quality Assurance",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/7`,
+    },
+    {
+      key: "team-8",
+      label: "Security",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/8`,
+    },
+    {
+      key: "team-9",
+      label: "Marketing",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/9`,
+    },
+    {
+      key: "team-10",
+      label: "Customer Success",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/10`,
+    },
+    {
+      key: "team-11",
+      label: "Sales",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/11`,
+    },
+    {
+      key: "team-12",
+      label: "Finance & Operations",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/12`,
+    },
+    {
+      key: "team-13",
+      label: "Research & Development",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/13`,
+    },
+    {
+      key: "team-14",
+      label: "Frontend Guild",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/14`,
+    },
+    {
+      key: "team-15",
+      label: "Backend Guild",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/15`,
+    },
+    {
+      key: "team-16",
+      label: "Mobile Team",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/16`,
+    },
+    {
+      key: "team-17",
+      label: "AI/ML Team",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/17`,
+    },
+    {
+      key: "team-18",
+      label: "Platform Engineering",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/18`,
+    },
+    {
+      key: "team-19",
+      label: "Business Intelligence",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/19`,
+    },
+    {
+      key: "team-20",
+      label: "Legal & Compliance",
+      icon: (
+        <Avatar
+          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
+          sx={{ height: "24px", width: "24px" }}
+        />
+      ),
+      url: `/team/20`,
+    },
+  ];
+
   const logoName = getProperty("logoName") || "fred";
   const logoNameDark = getProperty("logoNameDark") || "fred-dark";
 
@@ -274,12 +496,14 @@ export default function SideBar() {
               </InvisibleLink>
             </Box>
           )}
+
           {/* Remove collapsing for now */}
           {/* <IconButton onClick={() => setOpen((open) => !open)} sx={{ mr: open ? 0 : 1 }}>
             {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
           </IconButton> */}
           {/* </DrawerHeader> */}
 
+          {/* New chat button */}
           <Box sx={{ widht: "100%", px: 2, mb: 1 }}>
             <SideBarNewConversationButton />
           </Box>
@@ -307,6 +531,25 @@ export default function SideBar() {
               <SideBarDivider />
             </>
           )}
+
+          {/* Teams */}
+          <Box sx={{ display: "flex", alignItems: "center", px: 2, pt: 1 }}>
+            <Typography variant="caption" color="textSecondary">
+              Teams
+            </Typography>
+          </Box>
+          <Box
+            sx={{
+              flexGrow: 1,
+              overflowY: "auto",
+              overflowX: "hidden",
+              scrollbarWidth: "none",
+              maxHeight: "calc(36px * 5.8)",
+            }}
+          >
+            <SideBarNavigationList menuItems={teamsMenuItem} isSidebarOpen={open} />
+          </Box>
+          <SideBarDivider />
 
           {/* Conversations */}
           <SideBarConversationsSection isSidebarOpen={open} />

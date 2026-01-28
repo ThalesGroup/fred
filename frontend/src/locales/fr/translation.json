@@ -168,7 +168,8 @@
     "allAgents": "Tous les agents",
     "deleteSessionFailed": "La supression de la conversation a échoué",
     "monitoring_graph": "Graphe",
-    "newChat": "Nouvelle conversation"
+    "newChat": "Nouvelle conversation",
+    "teams": "Équipes"
   },
   "apps": {
     "scheduler": {
@@ -1183,5 +1184,23 @@
     "selectAgentTitle": "Bienvenue {{userName}}, à qui souhaitez-vous parler ?",
     "yourAgents": "Vos agents",
     "loadingAgentError": "Impossible de charger la liste des agents."
+  },
+  "teamCard": {
+    "memberCountLabel": "membres",
+    "privateTeamTooltip": "Équipe privée"
+  },
+  "teamsPage": {
+    "title": "Équipes de la communauté",
+    "yourTeamsSubtitle": "Vos équipes",
+    "communityTeamsSubtitle": "Découvrez d'autres équipes"
+  },
+  "teamDetails": {
+    "tabs": {
+      "resources": "Ressources",
+      "apps": "Apps",
+      "members": "Membres",
+      "settings": "Paramètres"
+    },
+    "noAgents": "Aucun agent d'équipe configuré pour le moment. Créez votre premier agent d'équipe pour commencer."
   }
 }

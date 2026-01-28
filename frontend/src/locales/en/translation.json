@@ -167,7 +167,8 @@
     "allAgents": "All agents",
     "deleteSessionFailed": "Failed to delete conversation",
     "monitoring_graph": "Graph",
-    "newChat": "New chat"
+    "newChat": "New chat",
+    "teams": "Teams"
   },
   "apps": {
     "scheduler": {
@@ -1181,5 +1182,23 @@
   "newChat": {
     "yourAgents": "Your agents",
     "selectAgentTitle": "Welcome {{userName}}, who would you like to speak to?"
+  },
+  "teamCard": {
+    "memberCountLabel": "members",
+    "privateTeamTooltip": "Private team"
+  },
+  "teamsPage": {
+    "title": "Community teams",
+    "yourTeamsSubtitle": "Your teams",
+    "communityTeamsSubtitle": "Discover other teams"
+  },
+  "teamDetails": {
+    "tabs": {
+      "resources": "Resources",
+      "apps": "Apps",
+      "members": "Members",
+      "settings": "Settings"
+    },
+    "noAgents": "No team agents configured yet. Create your first team agent to get started."
   }
 }
