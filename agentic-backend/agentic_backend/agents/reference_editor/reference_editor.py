@@ -454,7 +454,7 @@ class ReferenceEditor(AgentFlow):
                             user_id_override=user_id_to_store_asset if attempt == 0 else None,
                         )
                     break  # Success, exit retry loop
-                except Exception as e:
+                except:
                     if attempt < max_retries - 1:
                         # Wait a bit before retrying
                         await asyncio.sleep(1)
