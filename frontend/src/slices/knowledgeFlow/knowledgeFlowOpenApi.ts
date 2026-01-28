@@ -554,7 +554,14 @@ const injectedRtkApi = api.injectEndpoints({
       ListGroupsKnowledgeFlowV1GroupsGetApiResponse,
       ListGroupsKnowledgeFlowV1GroupsGetApiArg
     >({
-      query: () => ({ url: `/knowledge-flow/v1/groups` }),
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/groups`,
+        params: {
+          limit: queryArg.limit,
+          offset: queryArg.offset,
+          member_only: queryArg.memberOnly,
+        },
+      }),
     }),
     listUsersKnowledgeFlowV1UsersGet: build.query<
       ListUsersKnowledgeFlowV1UsersGetApiResponse,
@@ -1124,7 +1131,14 @@ export type QueryLogsKnowledgeFlowV1LogsQueryPostApiArg = {
   logQuery: LogQuery;
 };
 export type ListGroupsKnowledgeFlowV1GroupsGetApiResponse = /** status 200 Successful Response */ GroupSummary[];
-export type ListGroupsKnowledgeFlowV1GroupsGetApiArg = void;
+export type ListGroupsKnowledgeFlowV1GroupsGetApiArg = {
+  /** Max items to return */
+  limit?: number;
+  /** Items to skip */
+  offset?: number;
+  /** Only groups the user belongs to */
+  memberOnly?: boolean;
+};
 export type ListUsersKnowledgeFlowV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
 export type ListUsersKnowledgeFlowV1UsersGetApiArg = void;
 export type ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiResponse =
@@ -1664,7 +1678,11 @@ export type GroupSummary = {
   name: string;
   member_count?: number | null;
   total_member_count?: number | null;
-  sub_groups?: GroupSummary[];
+  description?: string | null;
+  banner_image_url?: string | null;
+  is_private?: boolean | null;
+  owners?: UserSummary[];
+  is_member?: boolean | null;
 };
 export type TagMemberGroup = {
   type?: "group";

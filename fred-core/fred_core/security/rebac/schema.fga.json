@@ -7,22 +7,89 @@
         {
             "metadata": {
                 "relations": {
+                    "manager": {
+                        "directly_related_user_types": [
+                            {
+                                "type": "user"
+                            }
+                        ]
+                    },
                     "member": {
                         "directly_related_user_types": [
                             {
                                 "type": "user"
-                            },
-                            {
-                                "relation": "member",
-                                "type": "group"
                             }
                         ]
-                    }
+                    },
+                    "owner": {
+                        "directly_related_user_types": [
+                            {
+                                "type": "user"
+                            }
+                        ]
+                    },
+                    "update_agents": {},
+                    "update_info": {},
+                    "update_members": {},
+                    "update_resources": {}
                 }
             },
             "relations": {
+                "manager": {
+                    "union": {
+                        "child": [
+                            {
+                                "this": {}
+                            },
+                            {
+                                "computedUserset": {
+                                    "relation": "owner"
+                                }
+                            }
+                        ]
+                    }
+                },
                 "member": {
+                    "union": {
+                        "child": [
+                            {
+                                "this": {}
+                            },
+                            {
+                                "computedUserset": {
+                                    "relation": "manager"
+                                }
+                            },
+                            {
+                                "computedUserset": {
+                                    "relation": "owner"
+                                }
+                            }
+                        ]
+                    }
+                },
+                "owner": {
                     "this": {}
+                },
+                "update_agents": {
+                    "computedUserset": {
+                        "relation": "manager"
+                    }
+                },
+                "update_info": {
+                    "computedUserset": {
+                        "relation": "owner"
+                    }
+                },
+                "update_members": {
+                    "computedUserset": {
+                        "relation": "manager"
+                    }
+                },
+                "update_resources": {
+                    "computedUserset": {
+                        "relation": "manager"
+                    }
                 }
             },
             "type": "group"

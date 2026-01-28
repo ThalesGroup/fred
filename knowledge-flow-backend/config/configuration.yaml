@@ -160,6 +160,9 @@ storage:
   tag_store:
     type: "duckdb"
     duckdb_path: "~/.fred/knowledge-flow/tag.duckdb"
+  group_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/knowledge-flow/group.duckdb"
   metadata_store:
     type: "duckdb"
     duckdb_path: "~/.fred/knowledge-flow/metadata.duckdb"
