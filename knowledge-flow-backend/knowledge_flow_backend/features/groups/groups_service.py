@@ -50,7 +50,7 @@ async def list_groups(
     *,
     limit: int = _DEFAULT_LIMIT,
     offset: int = 0,
-    member_only: bool = False,
+    member_only: bool = True,
 ) -> list[GroupSummary]:
     admin = create_keycloak_admin(get_configuration().security.m2m)
     if isinstance(admin, KeycloackDisabled):

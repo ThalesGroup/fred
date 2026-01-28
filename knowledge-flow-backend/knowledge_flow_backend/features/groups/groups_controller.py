@@ -18,7 +18,7 @@ router = APIRouter(tags=["Groups"])
 async def list_groups(
     limit: Annotated[int, Query(ge=1, le=10000, description="Max items to return")] = 10000,
     offset: Annotated[int, Query(ge=0, description="Items to skip")] = 0,
-    member_only: Annotated[bool, Query(description="Only groups the user belongs to")] = False,
+    member_only: Annotated[bool, Query(description="Only groups the user belongs to")] = True,
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[GroupSummary]:
     return await list_groups_from_service(user, limit=limit, offset=offset, member_only=member_only)

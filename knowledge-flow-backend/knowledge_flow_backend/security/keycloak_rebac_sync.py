@@ -76,7 +76,7 @@ async def _collect_rebac_memberships(rebac_engine: RebacEngine) -> set[Membershi
 
 
 async def _collect_keycloak_memberships(admin: KeycloakAdmin) -> set[MembershipEdge]:
-    """Traverse Keycloak groups to collect all membership edges (user→group and group→group)."""
+    """Collect direct user→group memberships from Keycloak (ignores sub-groups)."""
 
     groups = await _fetch_all_groups(admin)
     if not groups:
@@ -84,15 +84,11 @@ async def _collect_keycloak_memberships(admin: KeycloakAdmin) -> set[MembershipE
         return set()
 
     edges: set[MembershipEdge] = set()
-    stack = [group for group in groups if group.get("id")]
-    seen_groups: set[str] = set()
-
-    while stack:
-        group = stack.pop()
+    for group in groups:
         group_id = group.get("id")
-        if not group_id or group_id in seen_groups:
+        if not group_id:
+            logger.debug("Skipping Keycloak group without identifier: %s", group)
             continue
-        seen_groups.add(group_id)
 
         members = await _fetch_all_group_members(admin, group_id)
         for member in members:
@@ -102,17 +98,7 @@ async def _collect_keycloak_memberships(admin: KeycloakAdmin) -> set[MembershipE
                 continue
             edges.add(MembershipEdge(Resource.USER, user_id, group_id))
 
-        detailed_group = await admin.a_get_group(group_id)
-        subgroups = detailed_group.get("subGroups") or []
-        for subgroup in subgroups:
-            subgroup_id = subgroup.get("id")
-            if not subgroup_id:
-                logger.debug("Skipping subgroup without identifier in group %s: %s", group_id, subgroup)
-                continue
-            edges.add(MembershipEdge(Resource.GROUP, subgroup_id, group_id))
-            stack.append(subgroup)
-
-    logger.info("Collected %d membership edges from Keycloak across %d groups.", len(edges), len(seen_groups))
+    logger.info("Collected %d membership edges from Keycloak across %d groups.", len(edges), len(groups))
     return edges
 
 

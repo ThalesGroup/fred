@@ -1141,6 +1141,7 @@ class ApplicationContext:
                     logger.info("     • %-14s %s", label, type(store_cfg).__name__)
 
             _describe("tag_store", st.tag_store)
+            _describe("group_store", st.group_store)
             _describe("kpi_store", st.kpi_store)
             _describe("metadata_store", st.metadata_store)
             _describe("vector_store", st.vector_store)
