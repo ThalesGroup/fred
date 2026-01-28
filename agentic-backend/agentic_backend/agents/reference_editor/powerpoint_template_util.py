@@ -547,13 +547,13 @@ def add_images_to_pptx_shape(shape, images: list[tuple[str, BytesIO | None]], sl
 
 def add_societe_image_to_pptx_shape(shape, societe_image: BytesIO, nom_societe: str, slide):
     """
-    Add the société image next to the nomSociete text in a PowerPoint shape.
+    Add the company image next to the nomSociete text in a PowerPoint shape.
     The image is placed at the beginning of the shape area (like a logo before the company name).
 
     Args:
         shape: The PowerPoint shape containing the nomSociete text
         societe_image: BytesIO object containing the image data
-        nom_societe: The name of the société (for logging)
+        nom_societe: The name of the company (for logging)
         slide: The slide object to add the image to
     """
     if not societe_image:
@@ -583,7 +583,7 @@ def add_societe_image_to_pptx_shape(shape, societe_image: BytesIO, nom_societe: 
         if image_top < 0:
             image_top = shape_top
 
-        logger.info(f"Adding société image for {nom_societe}: left={image_left}, top={image_top}, width={image_width}, height={image_height}")
+        logger.info(f"Adding company image for {nom_societe}: left={image_left}, top={image_top}, width={image_width}, height={image_height}")
         logger.info(f"Shape info: left={shape_left}, top={shape_top}, height={shape_height}")
 
         # Add the image to the slide
@@ -594,9 +594,9 @@ def add_societe_image_to_pptx_shape(shape, societe_image: BytesIO, nom_societe: 
             width=image_width,
             height=image_height
         )
-        logger.info(f"Successfully added société image for: {nom_societe}, picture shape id: {picture.shape_id}")
+        logger.info(f"Successfully added company image for: {nom_societe}, picture shape id: {picture.shape_id}")
     except Exception as e:
-        logger.error(f"Failed to add société image for {nom_societe}: {e}", exc_info=True)
+        logger.error(f"Failed to add company image for {nom_societe}: {e}", exc_info=True)
 
 
 def add_images_to_word_paragraph(paragraph, images: list[tuple[str, BytesIO | None]]):
@@ -645,12 +645,12 @@ def add_images_to_word_paragraph(paragraph, images: list[tuple[str, BytesIO | No
 
 def add_societe_image_to_word_paragraph(paragraph, societe_image: BytesIO, nom_societe: str):
     """
-    Add the société image next to the nomSociete text in a Word paragraph.
+    Add the company image next to the nomSociete text in a Word paragraph.
 
     Args:
         paragraph: The Word paragraph object
         societe_image: BytesIO object containing the image data
-        nom_societe: The name of the société (for logging)
+        nom_societe: The name of the company (for logging)
     """
     if not societe_image:
         return
@@ -665,9 +665,9 @@ def add_societe_image_to_word_paragraph(paragraph, societe_image: BytesIO, nom_s
         run = paragraph.add_run()
         run.add_picture(societe_image, width=Pt(69), height=Pt(56))
 
-        logger.info(f"Added société image for: {nom_societe} to Word paragraph (69x56 pt)")
+        logger.info(f"Added company image for: {nom_societe} to Word paragraph (69x56 pt)")
     except Exception as e:
-        logger.error(f"Failed to add société image for {nom_societe} to Word: {e}")
+        logger.error(f"Failed to add company image for {nom_societe} to Word: {e}")
 
 
 def _add_images_near_textbox(doc, textbox_element, images: list[tuple[str, BytesIO | None]]):
@@ -741,7 +741,7 @@ def _add_images_near_textbox(doc, textbox_element, images: list[tuple[str, Bytes
 
 def _add_societe_image_near_textbox(doc, textbox_element, societe_image: BytesIO, nom_societe: str):
     """
-    Add the société image in a new paragraph right after the textbox containing {nomSociete}.
+    Add the company image in a new paragraph right after the textbox containing {nomSociete}.
     """
     if not societe_image:
         return
@@ -793,9 +793,9 @@ def _add_societe_image_near_textbox(doc, textbox_element, societe_image: BytesIO
         run = paragraph.add_run()
         # Use specified image dimensions: 69x56 points (343/5 x 280/5)
         run.add_picture(societe_image, width=Pt(69), height=Pt(56))
-        logger.info(f"Added société image for: {nom_societe} near textbox (69x56 pt)")
+        logger.info(f"Added company image for: {nom_societe} near textbox (69x56 pt)")
     except Exception as e:
-        logger.error(f"Failed to add société image for {nom_societe} near textbox: {e}")
+        logger.error(f"Failed to add company image for {nom_societe} near textbox: {e}")
 
 
 referenceSchema = {
