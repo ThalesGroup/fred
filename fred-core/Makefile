@@ -17,3 +17,4 @@ test-rebac: transform-openfga-schema # Helper that transform rebac schema and ru
 	${UV} run pytest "fred_core/tests/integration/test_rebac.py::test_team_hierarchy_and_permissions[openfga]"
 	${UV} run pytest "fred_core/tests/integration/test_rebac.py::test_public_team_read_access[openfga]"
 	${UV} run pytest "fred_core/tests/integration/test_rebac.py::test_team_folder_file_hierarchy[openfga]"
+	${UV} run pytest "fred_core/tests/integration/test_rebac.py::test_team_filtering_by_visibility[openfga]"

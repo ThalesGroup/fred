@@ -835,3 +835,113 @@ async def test_public_team_read_access(
         agent,
         consistency_token=token,
     ), "Team owner should be able to update public team agent"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_team_filtering_by_visibility(
+    rebac_engine: RebacEngine,
+) -> None:
+    """Test that users can only see teams they have access to.
+
+    This test validates:
+    - Strangers can only see public teams
+    - Users can see public teams + all teams they belong to (regardless of role)
+    """
+    # Create users
+    stranger = _make_reference(Resource.USER, prefix="stranger")
+    multi_role_user = _make_reference(Resource.USER, prefix="alice")
+
+    # Create teams
+    public_team_1 = _make_reference(Resource.TEAM, prefix="public-marketing")
+    public_team_2 = _make_reference(Resource.TEAM, prefix="public-sales")
+    private_team_owned = _make_reference(Resource.TEAM, prefix="engineering")
+    private_team_managed = _make_reference(Resource.TEAM, prefix="design")
+    private_team_member = _make_reference(Resource.TEAM, prefix="hr")
+    other_private_team = _make_reference(Resource.TEAM, prefix="finance")
+
+    # Set up team visibility and memberships
+    token = await rebac_engine.add_relations(
+        [
+            # Public teams - anyone can read
+            Relation(
+                subject=RebacReference(Resource.USER, "*"),
+                relation=RelationType.PUBLIC,
+                resource=public_team_1,
+            ),
+            Relation(
+                subject=RebacReference(Resource.USER, "*"),
+                relation=RelationType.PUBLIC,
+                resource=public_team_2,
+            ),
+            # Multi-role user has different roles in different teams
+            Relation(
+                subject=multi_role_user,
+                relation=RelationType.OWNER,
+                resource=private_team_owned,
+            ),
+            Relation(
+                subject=multi_role_user,
+                relation=RelationType.MANAGER,
+                resource=private_team_managed,
+            ),
+            Relation(
+                subject=multi_role_user,
+                relation=RelationType.MEMBER,
+                resource=private_team_member,
+            ),
+            # Other private team - neither user has access
+            Relation(
+                subject=_make_reference(Resource.USER, prefix="someone-else"),
+                relation=RelationType.OWNER,
+                resource=other_private_team,
+            ),
+        ]
+    )
+
+    # ~~~~~~~~~~~~~~~~~~~~
+    # Stranger can only see public teams
+
+    stranger_teams = await rebac_engine.lookup_resources(
+        subject=stranger,
+        permission=TeamPermission.CAN_READ,
+        resource_type=Resource.TEAM,
+        consistency_token=token,
+    )
+
+    assert not isinstance(stranger_teams, RebacDisabledResult)
+    stranger_team_ids = {team.id for team in stranger_teams}
+
+    assert stranger_team_ids == {
+        public_team_1.id,
+        public_team_2.id,
+    }, f"Stranger should only see public teams, got: {stranger_team_ids}"
+
+    # ~~~~~~~~~~~~~~~~~~~~
+    # Multi-role user sees public teams + all their teams (owned, managed, member)
+
+    user_teams = await rebac_engine.lookup_resources(
+        subject=multi_role_user,
+        permission=TeamPermission.CAN_READ,
+        resource_type=Resource.TEAM,
+        consistency_token=token,
+    )
+
+    assert not isinstance(user_teams, RebacDisabledResult)
+    user_team_ids = {team.id for team in user_teams}
+
+    assert user_team_ids == {
+        public_team_1.id,
+        public_team_2.id,
+        private_team_owned.id,
+        private_team_managed.id,
+        private_team_member.id,
+    }, (
+        f"User should see all public teams + teams where they have any role, "
+        f"got: {user_team_ids}"
+    )
+
+    # Verify user does NOT see the other private team
+    assert other_private_team.id not in user_team_ids, (
+        "User should not see private teams they don't belong to"
+    )
