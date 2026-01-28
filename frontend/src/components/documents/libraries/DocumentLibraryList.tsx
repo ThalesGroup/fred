@@ -35,7 +35,7 @@ import {
   useListUsersKnowledgeFlowV1UsersGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
-import { buildTree, findNode, TagNode } from "../../tags/tagTree";
+import { buildTree, findNode, TagNode } from "../../../shared/utils/tagTree";
 import { useToast } from "../../ToastProvider";
 import { useDocumentCommands } from "../common/useDocumentCommands";
 import { docHasAnyTag, matchesDocByName } from "./documentHelper";
@@ -170,6 +170,7 @@ export default function DocumentLibraryList() {
           setTotalDocuments(computedTotalForTag ?? docs.length);
           setNextOffset(offset + docs.length);
         }
+        return { count: docs.length, total: computedTotalForTag };
       } finally {
         setTagLoading(tagId, false);
       }
@@ -221,7 +222,23 @@ export default function DocumentLibraryList() {
       const remaining = total !== undefined ? Math.max(total - offset, 0) : 0;
       if (remaining <= 0) return;
       const applyToCurrent = tagId === currentTagId;
-      void loadPage(tagId, offset, true, applyToCurrent, remaining);
+      const MAX_BATCH = 500;
+      void (async () => {
+        let currentOffset = offset;
+        let remainingCount = remaining;
+
+        while (remainingCount > 0) {
+          const batch = Math.min(remainingCount, MAX_BATCH);
+          const { count, total: updatedTotal } = await loadPage(tagId, currentOffset, true, applyToCurrent, batch);
+          if (count <= 0) break;
+          currentOffset += count;
+          if (updatedTotal !== undefined) {
+            remainingCount = Math.max(updatedTotal - currentOffset, 0);
+          } else {
+            remainingCount = Math.max(remainingCount - count, 0);
+          }
+        }
+      })();
     },
     [currentTagId, loadPage, nextOffset, perTagDocs, perTagTotals, totalDocuments],
   );
@@ -296,7 +313,8 @@ export default function DocumentLibraryList() {
   /* ---------------- Commands ---------------- */
   const { toggleRetrievable, removeFromLibrary, bulkRemoveFromLibraryForTag, preview, previewPdf, download } = useDocumentCommands({
     refetchTags: refetch,
-    refetchDocs: () => (currentTagId ? loadPage(currentTagId, 0, false) : Promise.resolve()),
+    refetchDocs: (tagId?: string) =>
+      tagId ? loadPage(tagId, 0, false) : currentTagId ? loadPage(currentTagId, 0, false) : Promise.resolve(),
   });
   const handleDownload = React.useCallback(
     async (doc: DocumentMetadata) => {
@@ -371,7 +389,15 @@ export default function DocumentLibraryList() {
     showConfirmationDialog({
       title: t("documentLibrary.confirmBulkRemoveTitle") || "Remove selected?",
       onConfirm: async () => {
-        const docsById = new Map<string, DocumentMetadata>((allDocuments ?? []).map((d) => [d.identity.document_uid, d]));
+        const docsById = new Map<string, DocumentMetadata>();
+        Object.values(documentsByTagId).forEach((docs) => {
+          docs.forEach((doc) => {
+            docsById.set(doc.identity.document_uid, doc);
+          });
+        });
+        (allDocuments ?? []).forEach((doc) => {
+          docsById.set(doc.identity.document_uid, doc);
+        });
         const docsByTag = new Map<string, { tag: TagWithItemsId; docs: DocumentMetadata[] }>();
 
         for (const [docUid, tag] of entries) {
@@ -393,7 +419,15 @@ export default function DocumentLibraryList() {
         setSelectedDocs({});
       },
     });
-  }, [selectedDocs, allDocuments, bulkRemoveFromLibraryForTag, setSelectedDocs, showConfirmationDialog, t]);
+  }, [
+    selectedDocs,
+    documentsByTagId,
+    allDocuments,
+    bulkRemoveFromLibraryForTag,
+    setSelectedDocs,
+    showConfirmationDialog,
+    t,
+  ]);
 
   const { confirmDeleteFolder } = useTagCommands({
     refetchTags: refetch,

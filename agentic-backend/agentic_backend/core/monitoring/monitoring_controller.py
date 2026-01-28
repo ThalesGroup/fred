@@ -15,12 +15,7 @@
 import logging
 from typing import Dict, List
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    HTTPException,
-    Query,
-)
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fred_core import KeycloakUser, get_current_user
 
 from agentic_backend.core.chatbot.chat_schema import ChatbotRuntimeSummary

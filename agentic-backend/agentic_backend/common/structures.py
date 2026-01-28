@@ -22,6 +22,7 @@ from fred_core import (
     PostgresStoreConfig,
     SecurityConfiguration,
     StoreConfig,
+    TemporalSchedulerConfig,
 )
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, Field, field_validator
@@ -37,6 +38,10 @@ class StorageConfig(BaseModel):
         default=None, description="Optional OpenSearch store"
     )
     agent_store: StoreConfig
+    task_store: Optional[StoreConfig] = Field(
+        default=None,
+        description="Task store backend (optional; workers may fall back to in-memory)",
+    )
     mcp_servers_store: Optional[StoreConfig] = Field(
         default=None,
         description="Optional override for MCP servers store (defaults to agent_store backend).",
@@ -113,6 +118,12 @@ class AgentChatOptions(BaseModel):
         default=False,
         description=(
             "Expose a toggle to delegate RAG retrieval to a senior agent (deep search) when available."
+        ),
+    )
+    documents_selection: bool = Field(
+        default=False,
+        description=(
+            "Display a picker to restrict retrieval to specific documents for this message."
         ),
     )
 
@@ -242,11 +253,19 @@ class FrontendFlags(BaseModel):
 class Properties(BaseModel):
     logoName: str = "fred"
     logoNameDark: str = "fred-dark"
+    logoHeight: str = "36px"
+    logoWidth: str = "36px"
+    faviconName: str | None = None
+    faviconNameDark: str | None = None
     siteDisplayName: str = "Fred"
     releaseBrand: Optional[str] = Field(
         default="fred",
         description="Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'.",
     )
+    agentsNicknameSingular: str = "agent"
+    agentsNicknamePlural: str = "agents"
+    agentIconPath: str | None = None
+    contactSupportLink: str | None = None
 
 
 class FrontendSettings(BaseModel):
@@ -262,6 +281,19 @@ class AppConfig(BaseModel):
     log_level: str = "info"
     reload: bool = False
     reload_dir: str = "."
+    metrics_enabled: bool = True
+    metrics_address: str = "127.0.0.1"
+    metrics_port: int = 9000
+    kpi_process_metrics_interval_sec: int = Field(
+        10,
+        description="Interval in seconds for processing and logging KPI metrics.",
+    )
+
+
+class SchedulerConfig(BaseModel):
+    enabled: bool = False
+    backend: str = "temporal"
+    temporal: TemporalSchedulerConfig = Field(default_factory=TemporalSchedulerConfig)
 
 
 class McpConfiguration(BaseModel):
@@ -299,6 +331,7 @@ class Configuration(BaseModel):
         description="Microservice Communication Protocol (MCP) server configurations.",
     )
     storage: StorageConfig
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
 
 
 class ChatContextMessage(SystemMessage):

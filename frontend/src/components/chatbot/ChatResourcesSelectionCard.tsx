@@ -4,6 +4,7 @@
 // You may not use this file except in compliance with the License.
 // http://www.apache.org/licenses/LICENSE-2.0
 
+import CloseIcon from "@mui/icons-material/Close";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import {
@@ -35,6 +36,7 @@ export interface ResourceLibrariesSelectionCardProps {
   selectedResourceIds: string[];
   setSelectedResourceIds: (ids: string[]) => void;
   selectionMode?: "single" | "multiple";
+  onClose?: () => void;
 }
 
 type Lib = Pick<TagWithItemsId, "id" | "name" | "path" | "description">;
@@ -44,6 +46,7 @@ export function ChatResourcesSelectionCard({
   selectedResourceIds,
   setSelectedResourceIds,
   selectionMode = "single",
+  onClose,
 }: ResourceLibrariesSelectionCardProps) {
   const { t } = useTranslation();
 
@@ -159,9 +162,17 @@ export function ChatResourcesSelectionCard({
   }, [libraryType, t]);
 
   return (
-    <Box sx={{ width: 420, height: 460, display: "flex", flexDirection: "column" }}>
+    <Box
+      sx={{
+        width: "100%",
+        maxWidth: 420,
+        height: "min(70vh, 460px)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       {/* Search libraries */}
-      <Box sx={{ mx: 2, mt: 2, mb: 1 }}>
+      <Box sx={{ mx: 2, mt: 2, mb: 1, display: "flex", alignItems: "center", gap: 1 }}>
         <TextField
           autoFocus
           size="small"
@@ -170,6 +181,11 @@ export function ChatResourcesSelectionCard({
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
+        {onClose ? (
+          <IconButton size="small" onClick={onClose} aria-label={t("common.close", "Close")}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        ) : null}
       </Box>
 
       {/* Body */}
@@ -228,7 +244,12 @@ export function ChatResourcesSelectionCard({
                       {contents.map((r) => {
                         const resChecked = selectedResourceIds.includes(r.id);
                         return (
-                          <ListItem key={r.id} dense role={isMultiSelect ? undefined : "radio"} aria-checked={resChecked}>
+                          <ListItem
+                            key={r.id}
+                            dense
+                            role={isMultiSelect ? undefined : "radio"}
+                            aria-checked={resChecked}
+                          >
                             <ListItemButton
                               onClick={() => toggleSelectResource(r.id)}
                               selected={resChecked}

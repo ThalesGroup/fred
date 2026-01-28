@@ -13,15 +13,21 @@
 app:
   name: "Knowledge Flow Backend"
   base_url: "/knowledge-flow/v1"
-  address: "127.0.0.1"
+  address: "0.0.0.0"
   port: 8111
   log_level: "info"
   reload: false
   reload_dir: "."
+  metrics_enabled: true
+  metrics_address: "0.0.0.0"
+  metrics_port: 9111
+  kpi_process_metrics_interval_sec: 10
+
 processing:
   generate_summary: false
   use_gpu: true
   process_images: false
+
 security:
   m2m:
     enabled: false
@@ -33,6 +39,10 @@ security:
     realm_url: "http://app-keycloak:8080/realms/app"
   authorized_origins:
     - "http://localhost:5173"
+  rebac:
+    enabled: false
+    type: openfga
+    api_url: "http://localhost:9080"
 
 scheduler:
   enabled: true
@@ -43,6 +53,13 @@ scheduler:
     task_queue: "ingestion"
     workflow_prefix: "pipeline"
     connect_timeout_seconds: 5
+
+# Optional: fast processors used for chat attachments (/fast/text, /fast/ingest).
+# If omitted, defaults to the Unstructured fast processor.
+attachment_processors:
+  - prefix: "*"
+    class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_unstructured_text_processor.FastUnstructuredTextProcessingProcessor
+
 input_processors:
   - prefix: ".pdf"
     class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor

@@ -77,14 +77,16 @@ class SimpleAgentFlow(AgentFlow):
     async def _run_arun_node(self, state: SimpleExpertState) -> Dict[str, Any]:
         """LangGraph node that executes the asynchronous arun method."""
 
-        logger.info(
-            f"Simple expert {self.__class__.__name__} running asynchronous arun."
+        logger.debug(
+            f"[AGENTS] Simple expert {self.__class__.__name__} running asynchronous arun."
         )
 
         # ⭐️ We use 'await' to call the actual expert logic
         result_message = await self.arun(messages=state["messages"])
 
-        logger.info(f"Simple expert {self.__class__.__name__} finished arun.")
+        logger.debug(
+            f"[AGENTS] Simple expert {self.__class__.__name__} finished asynchronous arun."
+        )
 
         # Return state update: the new message is the result
         return {"messages": [result_message]}

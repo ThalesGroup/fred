@@ -312,35 +312,35 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost,
       }),
     }),
-    lightweightMarkdownKnowledgeFlowV1LiteMarkdownPost: build.mutation<
-      LightweightMarkdownKnowledgeFlowV1LiteMarkdownPostApiResponse,
-      LightweightMarkdownKnowledgeFlowV1LiteMarkdownPostApiArg
+    fastMarkdownKnowledgeFlowV1FastTextPost: build.mutation<
+      FastMarkdownKnowledgeFlowV1FastTextPostApiResponse,
+      FastMarkdownKnowledgeFlowV1FastTextPostApiArg
     >({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/lite/markdown`,
+        url: `/knowledge-flow/v1/fast/text`,
         method: "POST",
-        body: queryArg.bodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost,
+        body: queryArg.bodyFastMarkdownKnowledgeFlowV1FastTextPost,
         params: {
           format: queryArg.format,
         },
       }),
     }),
-    lightweightIngestKnowledgeFlowV1LiteIngestPost: build.mutation<
-      LightweightIngestKnowledgeFlowV1LiteIngestPostApiResponse,
-      LightweightIngestKnowledgeFlowV1LiteIngestPostApiArg
+    fastIngestKnowledgeFlowV1FastIngestPost: build.mutation<
+      FastIngestKnowledgeFlowV1FastIngestPostApiResponse,
+      FastIngestKnowledgeFlowV1FastIngestPostApiArg
     >({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/lite/ingest`,
+        url: `/knowledge-flow/v1/fast/ingest`,
         method: "POST",
-        body: queryArg.bodyLightweightIngestKnowledgeFlowV1LiteIngestPost,
+        body: queryArg.bodyFastIngestKnowledgeFlowV1FastIngestPost,
       }),
     }),
-    deleteLiteIngestKnowledgeFlowV1LiteIngestDocumentUidDelete: build.mutation<
-      DeleteLiteIngestKnowledgeFlowV1LiteIngestDocumentUidDeleteApiResponse,
-      DeleteLiteIngestKnowledgeFlowV1LiteIngestDocumentUidDeleteApiArg
+    deleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDelete: build.mutation<
+      DeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteApiResponse,
+      DeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteApiArg
     >({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/lite/ingest/${queryArg.documentUid}`,
+        url: `/knowledge-flow/v1/fast/ingest/${queryArg.documentUid}`,
         method: "DELETE",
         params: {
           session_id: queryArg.sessionId,
@@ -968,19 +968,19 @@ export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiResp
 export type ProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostApiArg = {
   bodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost: BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost;
 };
-export type LightweightMarkdownKnowledgeFlowV1LiteMarkdownPostApiResponse = /** status 200 Successful Response */ any;
-export type LightweightMarkdownKnowledgeFlowV1LiteMarkdownPostApiArg = {
+export type FastMarkdownKnowledgeFlowV1FastTextPostApiResponse = /** status 200 Successful Response */ any;
+export type FastMarkdownKnowledgeFlowV1FastTextPostApiArg = {
   /** Response format: 'json' or 'text' */
   format?: string;
-  bodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost: BodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost;
+  bodyFastMarkdownKnowledgeFlowV1FastTextPost: BodyFastMarkdownKnowledgeFlowV1FastTextPost;
 };
-export type LightweightIngestKnowledgeFlowV1LiteIngestPostApiResponse = /** status 200 Successful Response */ any;
-export type LightweightIngestKnowledgeFlowV1LiteIngestPostApiArg = {
-  bodyLightweightIngestKnowledgeFlowV1LiteIngestPost: BodyLightweightIngestKnowledgeFlowV1LiteIngestPost;
+export type FastIngestKnowledgeFlowV1FastIngestPostApiResponse = /** status 200 Successful Response */ any;
+export type FastIngestKnowledgeFlowV1FastIngestPostApiArg = {
+  bodyFastIngestKnowledgeFlowV1FastIngestPost: BodyFastIngestKnowledgeFlowV1FastIngestPost;
 };
-export type DeleteLiteIngestKnowledgeFlowV1LiteIngestDocumentUidDeleteApiResponse =
+export type DeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteApiResponse =
   /** status 200 Successful Response */ any;
-export type DeleteLiteIngestKnowledgeFlowV1LiteIngestDocumentUidDeleteApiArg = {
+export type DeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteApiArg = {
   documentUid: string;
   /** Optional session_id for scoped cleanup */
   sessionId?: string | null;
@@ -1604,14 +1604,14 @@ export type BodyProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPost = 
   files: Blob[];
   metadata_json: string;
 };
-export type BodyLightweightMarkdownKnowledgeFlowV1LiteMarkdownPost = {
+export type BodyFastMarkdownKnowledgeFlowV1FastTextPost = {
   file: Blob;
-  /** JSON string of LiteMarkdownOptions */
+  /** JSON string of FastTextOptions */
   options_json?: string | null;
 };
-export type BodyLightweightIngestKnowledgeFlowV1LiteIngestPost = {
+export type BodyFastIngestKnowledgeFlowV1FastIngestPost = {
   file: Blob;
-  /** JSON string of LiteMarkdownOptions */
+  /** JSON string of FastTextOptions */
   options_json?: string | null;
   /** Optional chat session id for scoping */
   session_id?: string | null;
@@ -1737,12 +1737,16 @@ export type SearchRequest = {
   top_k?: number;
   /** Optional list of tag names to filter documents. Only chunks in a document with at least one of these tags will be returned. */
   document_library_tags_ids?: string[] | null;
+  /** Optional list of document UIDs to restrict results to specific documents. */
+  document_uids?: string[] | null;
   /** Optional search policy preset. If omitted, defaults to 'hybrid'. */
   search_policy?: SearchPolicyName | null;
   /** Optional chat session id to include session-scoped attachments (user/session filtered). */
   session_id?: string | null;
   /** If true and session_id is provided, also search session-scoped attachment vectors (filtered by user/session). */
   include_session_scope?: boolean;
+  /** If true, also search corpus/library vectors (non-session scope). */
+  include_corpus_scope?: boolean;
 };
 export type RerankRequest = {
   question: string;
@@ -1775,7 +1779,8 @@ export type FilterTerm = {
     | "dims.error_code"
     | "dims.model"
     | "dims.step"
-    | "dims.agent_step";
+    | "dims.agent_step"
+    | "dims.service";
   value: string;
 };
 export type SelectMetric = {
@@ -1818,6 +1823,7 @@ export type KpiQuery = {
     | "dims.http_status"
     | "dims.error_code"
     | "dims.status"
+    | "dims.service"
   )[];
   time_bucket?: TimeBucket | null;
   limit?: number;
@@ -1887,7 +1893,7 @@ export type LogQuery = {
 export type ProcessorDescriptor = {
   id: string;
   name: string;
-  kind: "standard" | "lite";
+  kind: "standard" | "fast";
   file_types?: string[];
 };
 export type ProcessorRunMetrics = {
@@ -1906,7 +1912,7 @@ export type ProcessorRunMetrics = {
 export type ProcessorRunResult = {
   processor_id: string;
   display_name: string;
-  kind: "standard" | "lite";
+  kind: "standard" | "fast";
   status: "ok" | "error";
   duration_ms: number;
   markdown?: string | null;
@@ -2132,9 +2138,9 @@ export const {
   useLazyGetLibraryPipelineKnowledgeFlowV1ProcessingPipelinesLibraryLibraryTagIdGetQuery,
   useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
-  useLightweightMarkdownKnowledgeFlowV1LiteMarkdownPostMutation,
-  useLightweightIngestKnowledgeFlowV1LiteIngestPostMutation,
-  useDeleteLiteIngestKnowledgeFlowV1LiteIngestDocumentUidDeleteMutation,
+  useFastMarkdownKnowledgeFlowV1FastTextPostMutation,
+  useFastIngestKnowledgeFlowV1FastIngestPostMutation,
+  useDeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useLazyListAllTagsKnowledgeFlowV1TagsGetQuery,
   useCreateTagKnowledgeFlowV1TagsPostMutation,

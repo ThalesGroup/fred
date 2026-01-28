@@ -1,0 +1,48 @@
+# Image settings
+image:
+  repository: ghcr.io/your-org/agentic-bench
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Job configuration
+job:
+  restartPolicy: Never
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  annotations: {}
+  labels: {}
+
+# Benchmark client flags
+bench:
+  url: ws://agentic-backend:8000/agentic/v1/chatbot/query/ws
+  agent: Georges
+  message: Hello
+  clients: 5
+  requests: 50
+  requestsPerClient: 0         # if >0, per-client mode; otherwise uses requests
+  timeoutSeconds: 90
+  insecureTLS: false
+  tokenInQuery: false
+  allowEmptyToken: false
+  sessionTitle: Benchmark
+  createSession: true
+  deleteSession: true
+  prepareSessions: true
+  prepareConcurrency: 20
+  extraArgs: []                # additional raw args, e.g. ["-session","abc"]
+
+# Secret that holds the bearer token
+tokenSecret:
+  name: ""                     # set to an existing Secret to populate AGENTIC_TOKEN
+  key: token
+  optional: false
+
+serviceAccount:
+  create: false
+  name: ""
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+resources: {}

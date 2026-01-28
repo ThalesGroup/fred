@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, TypeAlias, Union
 
 from fred_core import VectorSearchHit
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -166,7 +166,7 @@ class ToolResultPart(BaseModel):
         return v
 
 
-MessagePart = Annotated[
+MessagePart: TypeAlias = Annotated[
     Union[
         TextPart,
         CodePart,
@@ -246,6 +246,7 @@ class SessionSchema(BaseModel):
     agent_name: str | None = None
     title: str
     updated_at: datetime
+    next_rank: int | None = None
     preferences: Dict[str, Any] | None = None
 
 
@@ -276,6 +277,11 @@ class StreamEvent(BaseModel):
     message: ChatMessage
 
 
+class SessionEvent(BaseModel):
+    type: Literal["session"] = "session"
+    session: SessionSchema
+
+
 class FinalEvent(BaseModel):
     type: Literal["final"] = "final"
     messages: List[ChatMessage]
@@ -289,7 +295,8 @@ class ErrorEvent(BaseModel):
 
 
 ChatEvent = Annotated[
-    Union[StreamEvent, FinalEvent, ErrorEvent], Field(discriminator="type")
+    Union[StreamEvent, SessionEvent, FinalEvent, ErrorEvent],
+    Field(discriminator="type"),
 ]
 
 

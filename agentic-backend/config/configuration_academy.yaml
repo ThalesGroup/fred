@@ -128,10 +128,6 @@ ai:
       type: "agent"
       class_path: "agentic_backend.agents.statistics.statistics_expert.Sage"
       enabled: true
-    - name: "EcoAdviser"
-      type: "agent"
-      class_path: "agentic_backend.academy.07_ecoadviser.eco_adviser.EcoAdvisor"
-      enabled: true
 
 mcp:
   servers:
@@ -186,6 +182,9 @@ storage:
   session_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/session.duckdb"
+  attachments_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/agentic/session_attachements.duckdb"
   history_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/history.duckdb"

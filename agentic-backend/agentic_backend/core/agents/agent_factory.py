@@ -14,12 +14,12 @@
 
 import asyncio
 import logging
-from typing import Dict, Tuple, cast
+from typing import Dict, Optional, Tuple, cast
 
-from fred_core import ThreadSafeLRUCache
 from pyparsing import abstractmethod
 
 from agentic_backend.common.structures import AgentSettings, Configuration, Leader
+from agentic_backend.core.agents.agent_cache import ActiveAgentCache, AgentCacheStats
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_manager import AgentManager
@@ -43,10 +43,17 @@ class BaseAgentFactory:
     async def teardown_session_agents(self, session_id: str) -> None:
         pass
 
+    @abstractmethod
+    def release_agent(self, session_id: str, agent_name: str) -> None:
+        pass
+
     # Lightweight observability hook
     def list_active_keys(self) -> list[tuple[str, str]]:
         """List cached (session_id, agent_name) keys if implemented; empty by default."""
         return []
+
+    def get_cache_stats(self) -> Optional[AgentCacheStats]:
+        return None
 
 
 class NoOpAgentFactory(BaseAgentFactory):
@@ -57,6 +64,9 @@ class NoOpAgentFactory(BaseAgentFactory):
 
     async def teardown_session_agents(self, session_id: str) -> None:
         pass
+
+    def release_agent(self, session_id: str, agent_name: str) -> None:
+        return
 
     def list_active_keys(self) -> list[tuple[str, str]]:
         return []
@@ -71,10 +81,8 @@ class AgentFactory(BaseAgentFactory):
     def __init__(
         self, configuration: Configuration, manager: AgentManager, loader: AgentLoader
     ):
-        self._agent_cache: ThreadSafeLRUCache[Tuple[str, str], AgentFlow] = (
-            ThreadSafeLRUCache(
-                max_size=configuration.ai.max_concurrent_agents,
-            )
+        self._agent_cache: ActiveAgentCache[Tuple[str, str], AgentFlow] = (
+            ActiveAgentCache(max_size=configuration.ai.max_concurrent_agents)
         )
         self.manager = manager
         self.loader = loader
@@ -96,6 +104,7 @@ class AgentFactory(BaseAgentFactory):
         cache_key = (session_id, agent_name)
         cached = self._agent_cache.get(cache_key)
         if cached is not None:
+            self._agent_cache.acquire(cache_key)
             # Why: tokens/context may change between requests; always refresh on reuse.
             try:
                 cached.set_runtime_context(runtime_context)
@@ -121,6 +130,7 @@ class AgentFactory(BaseAgentFactory):
 
         # Cache and return
         self._agent_cache.set(cache_key, agent)
+        self._agent_cache.acquire(cache_key)
         logger.info(
             "[AGENTS] Created and cached agent '%s' for session '%s'",
             agent_name,
@@ -234,3 +244,9 @@ class AgentFactory(BaseAgentFactory):
             return list(self._agent_cache.keys())
         except Exception:
             return []
+
+    def release_agent(self, session_id: str, agent_name: str) -> None:
+        self._agent_cache.release((session_id, agent_name))
+
+    def get_cache_stats(self) -> Optional[AgentCacheStats]:
+        return self._agent_cache.stats()

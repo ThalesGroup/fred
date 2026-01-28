@@ -28,6 +28,7 @@ from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler
 from langgraph.graph import MessagesState
 from pydantic import TypeAdapter, ValidationError
+from starlette.websockets import WebSocketDisconnect
 
 from agentic_backend.common.rags_utils import ensure_ranks
 from agentic_backend.core.agents.agent_flow import AgentFlow
@@ -401,13 +402,13 @@ class StreamTranscoder:
                             # Some agents put sources in the vector-search tool result, not on the final AIMessage.
                             # In that case, carry the tool-result sources forward into the final message metadata.
                             sources_payload = pending_sources_payload
-                            logger.info(
+                            logger.debug(
                                 "[TRANSCODER][SOURCES] final: adopted %d pending sources from tool_result",
                                 pending_sources,
                             )
                         elif existing_sources > 0:
                             # Sources already present on the final AIMessage (citations can still appear in text either way).
-                            logger.info(
+                            logger.debug(
                                 "[TRANSCODER][SOURCES] final: kept %d existing sources (pending_sources=%s)",
                                 existing_sources,
                                 pending_sources
@@ -416,7 +417,7 @@ class StreamTranscoder:
                             )
                         else:
                             # No sources anywhere: neither provided by agent metadata nor parsed from tool results.
-                            logger.info(
+                            logger.debug(
                                 "[TRANSCODER][SOURCES] final: no sources present (pending_sources=%s)",
                                 pending_sources
                                 if pending_sources_payload is not None
@@ -446,6 +447,9 @@ class StreamTranscoder:
                     await self._emit(callback, msg_v2)
         except asyncio.CancelledError:
             logger.info("StreamTranscoder: stream cancelled")
+            raise
+        except WebSocketDisconnect:
+            logger.info("StreamTranscoder: client disconnected; stopping stream.")
             raise
         except Exception as e:
             logger.error(
@@ -489,7 +493,12 @@ class StreamTranscoder:
                 ),
             )
             out.append(err_chat_msg)
-            await self._emit(callback, err_chat_msg)
+            try:
+                await self._emit(callback, err_chat_msg)
+            except WebSocketDisconnect:
+                logger.info(
+                    "StreamTranscoder: client disconnected before error message could be sent."
+                )
 
         return out
 

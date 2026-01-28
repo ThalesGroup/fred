@@ -20,20 +20,26 @@ import logging
 import pathlib
 import shutil
 import tempfile
+import time
 import uuid
-from typing import List, Optional
+from typing import Dict, List, Optional, Type
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
-from fred_core import KeycloakUser, KPIActor, KPIWriter, get_current_user
+from fred_core import KeycloakUser, get_current_user
+from fred_core.kpi import KPIActor, KPIWriter
 from langchain_core.documents import Document
 from pydantic import BaseModel
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_kpi_writer
 from knowledge_flow_backend.common.structures import LibraryProcessorConfig, ProcessorConfig, Status
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
-from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import LiteMarkdownOptions
-from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_md_processing_service import LiteMdError, LiteMdProcessingService
+from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import (
+    BaseFastTextProcessor,
+    FastTextOptions,
+    FastTextResult,
+)
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_unstructured_text_processor import FastUnstructuredTextProcessingProcessor
 from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 from knowledge_flow_backend.core.stores.vector.base_vector_store import (
@@ -226,10 +232,34 @@ class IngestionController:
     This controller provides endpoints for uploading and processing documents.
     """
 
+    def _build_fast_text_registry(self) -> Dict[str, Type[BaseFastTextProcessor]]:
+        cfg = ApplicationContext.get_instance().get_config()
+        registry: Dict[str, Type[BaseFastTextProcessor]] = {}
+        if cfg.attachment_processors:
+            for entry in cfg.attachment_processors:
+                cls = _dynamic_import_processor(entry.class_path)
+                if not issubclass(cls, BaseFastTextProcessor):
+                    raise TypeError(f"{entry.class_path} is not a BaseFastTextProcessor")
+                registry[entry.prefix.lower()] = cls
+        if not registry:
+            registry["*"] = FastUnstructuredTextProcessingProcessor
+        return registry
+
+    def _get_fast_text_processor(self, filename: str) -> BaseFastTextProcessor:
+        ext = pathlib.Path(filename).suffix.lower()
+        processor_class = self._fast_text_registry.get(ext) or self._fast_text_registry.get("*")
+        if processor_class is None:
+            raise HTTPException(status_code=400, detail=f"No fast text processor configured for '{ext or filename}'")
+        class_path = f"{processor_class.__module__}.{processor_class.__name__}"
+        if class_path not in self._fast_text_instances:
+            self._fast_text_instances[class_path] = processor_class()
+        return self._fast_text_instances[class_path]
+
     def __init__(self, router: APIRouter):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.service = IngestionService()
-        self.lite_md_service = LiteMdProcessingService()
+        self._fast_text_registry = self._build_fast_text_registry()
+        self._fast_text_instances: Dict[str, BaseFastTextProcessor] = {}
         self.embedder = ApplicationContext.get_instance().get_embedder()
         self.vector_store: BaseVectorStore = ApplicationContext.get_instance().get_create_vector_store(self.embedder)
         logger.info("IngestionController initialized.")
@@ -521,7 +551,7 @@ class IngestionController:
             with kpi.timer(
                 "api.request_latency_ms",
                 dims={"route": "/upload-process-documents", "method": "POST"},
-                actor=KPIActor(type="human", user_id=user.uid),
+                actor=KPIActor(type="human", user_id=user.uid, groups=user.groups),
             ) as d:
                 parsed_input = IngestionInput(**json.loads(metadata_json))
                 tags = parsed_input.tags
@@ -540,12 +570,17 @@ class IngestionController:
                     success = 0
                     last_error: str | None = None
                     for filename, input_temp_file in preloaded_files:
+                        file_started = time.perf_counter()
+                        file_status = "error"
+                        file_type = pathlib.Path(filename).suffix.lstrip(".") or None
                         try:
                             output_temp_dir = input_temp_file.parent.parent
 
                             current_step = "metadata extraction"
                             yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                             metadata = self.service.extract_metadata(user, file_path=input_temp_file, tags=tags, source_tag=source_tag)
+                            metadata_file_type = getattr(metadata, "file_type", None)
+                            file_type = metadata_file_type or file_type
                             yield ProcessingProgress(step=current_step, status=Status.SUCCESS, filename=filename).model_dump_json() + "\n"
 
                             current_step = "input content saving"
@@ -565,12 +600,23 @@ class IngestionController:
                             yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
                             yield ProcessingProgress(step="Finished", filename=filename, status=Status.FINISHED, document_uid=metadata.document_uid).model_dump_json() + "\n"
                             success += 1
+                            file_status = "ok"
 
                         except Exception as e:
                             error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
                             last_error = error_message
                             logger.exception("Ingestion error during '%s' for file '%s'", current_step, filename, exc_info=True)
                             yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n"
+                        finally:
+                            duration_ms = (time.perf_counter() - file_started) * 1000.0
+                            kpi.emit(
+                                name="ingestion.document_duration_ms",
+                                type="timer",
+                                value=duration_ms,
+                                unit="ms",
+                                dims={"file_type": file_type, "status": file_status, "source": "api"},
+                                actor=KPIActor(type="human", user_id=user.uid, groups=user.groups),
+                            )
                     d["status"] = "ok" if success == total else "error"
                     overall_status = Status.SUCCESS if success == total else Status.ERROR
                     done_payload: dict = {"step": "done", "status": overall_status}
@@ -581,46 +627,47 @@ class IngestionController:
                 return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
         @router.post(
-            "/lite/markdown",
+            "/fast/text",
             tags=["Processing"],
-            summary="Lightweight Markdown extraction for a single file",
+            summary="Fast text extraction for a single file",
             description=(
-                "Extract a compact Markdown representation of a file without full ingestion. Supported: PDF, DOCX, CSV, PPTX, MD. Intended for agent use where fast, dependency-light text is needed."
+                """
+                Extract a compact text representation of a file without full ingestion.
+                Supported: PDF, DOCX, CSV, PPTX, MD. Intended for agent use where fast, dependency-light text is needed.
+            """
             ),
         )
-        def lightweight_markdown(
+        def fast_markdown(
             file: UploadFile = File(...),
-            options_json: Optional[str] = Form(None, description="JSON string of LiteMarkdownOptions"),
+            options_json: Optional[str] = Form(None, description="JSON string of FastTextOptions"),
             fmt: str = Query("json", alias="format", description="Response format: 'json' or 'text'"),
             user: KeycloakUser = Depends(get_current_user),
         ):
             # Validate extension
             filename = file.filename or "uploaded"
-            suffix = pathlib.Path(filename).suffix.lower()
-            if suffix not in (".pdf", ".docx", ".csv", ".pptx", ".md"):
-                raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}")
 
             # Store to temp
             raw_path = uploadfile_to_path(file)
 
             # Parse options
-            opts = LiteMarkdownOptions()
+            opts = FastTextOptions()
             if options_json:
                 try:
                     payload = _json.loads(options_json)
                     if not isinstance(payload, dict):
                         raise ValueError("options_json must be an object")
-                    allowed = {f.name for f in dataclasses.fields(LiteMarkdownOptions)}
+                    allowed = {f.name for f in dataclasses.fields(FastTextOptions)}
                     filtered = {k: v for k, v in payload.items() if k in allowed}
-                    opts = LiteMarkdownOptions(**filtered)
+                    opts = FastTextOptions(**filtered)
                 except Exception as e:
                     raise HTTPException(status_code=400, detail=f"Invalid options_json: {e}")
 
             # Extract
             try:
-                result = self.lite_md_service.extract(raw_path, options=opts)
+                logger.debug("[FAST TEXT] Extracting text for %s with options %s", filename, opts)
+                result = self._get_fast_text_processor(filename).extract(raw_path, options=opts)
                 logger.info(
-                    "[LITE_MD] user=%s file=%s format=%s chars=%s pages=%s truncated=%s",
+                    "[FAST TEXT] user=%s file=%s format=%s chars=%s pages=%s  truncated=%s",
                     user.uid,
                     filename,
                     fmt,
@@ -628,16 +675,17 @@ class IngestionController:
                     result.page_count,
                     result.truncated,
                 )
-                if not result.markdown or result.total_chars == 0:
+                if not result.text or result.total_chars == 0:
                     logger.warning(
-                        "[LITE_MD] EMPTY_MARKDOWN user=%s file=%s format=%s (page_count=%s truncated=%s)",
+                        "[FAST TEXT] EMPTY FILE user=%s file=%s format=%s (page_count=%s truncated=%s)",
                         user.uid,
                         filename,
                         fmt,
                         result.page_count,
                         result.truncated,
                     )
-            except LiteMdError as e:
+            except Exception as e:
+                logger.error(f"[FAST TEXT] Extraction failed for {filename}: {e}", exc_info=True)
                 raise HTTPException(status_code=400, detail=str(e))
             finally:
                 # Best-effort cleanup of temp file; containing dir will be removed separately if needed
@@ -652,71 +700,73 @@ class IngestionController:
                     pass
 
             if fmt.lower() == "text":
-                return Response(content=result.markdown, media_type="text/plain; charset=utf-8")
+                return Response(content=result.text, media_type="text/plain; charset=utf-8")
 
             # Default JSON payload
             return {
                 "document_name": result.document_name,
-                "page_count": result.page_count,
                 "total_chars": result.total_chars,
                 "truncated": result.truncated,
-                "markdown": result.markdown,
-                "pages": [{"page_no": p.page_no, "char_count": p.char_count, "markdown": p.markdown} for p in (result.pages or [])],
+                "text": result.text,
+                "pages": [{"page_no": p.page_no, "char_count": p.char_count, "markdown": p.text} for p in (result.pages or [])],
                 "extras": result.extras or {},
             }
 
         @router.post(
-            "/lite/ingest",
+            "/fast/ingest",
             tags=["Processing"],
-            summary="Lightweight ingest of a single file (fast path for attachments)",
-            description="Extract compact Markdown via the lite processor and store it as vectors with user/session scoping. Skips heavy pandoc/Temporal paths.",
+            summary="Fast ingest of a single file (fast path for attachments)",
+            description=(
+                """
+                Extract compact text via the fast processor and store it as vectors with user/session scoping.
+                Skips heavy pandoc/Temporal paths.
+            """
+            ),
         )
-        def lightweight_ingest(
+        def fast_ingest(
             file: UploadFile = File(...),
-            options_json: Optional[str] = Form(None, description="JSON string of LiteMarkdownOptions"),
+            options_json: Optional[str] = Form(None, description="JSON string of FastTextOptions"),
             session_id: Optional[str] = Form(None, description="Optional chat session id for scoping"),
             scope: str = Form("session", description="Logical scope label, default 'session'"),
             user: KeycloakUser = Depends(get_current_user),
         ):
             """
             Fast path for chat attachments:
-            - use lite markdown extractor (markitdown/fitz)
+            - use fast text extractor
             - store as a single vectorized document with user/session metadata
             """
             filename = file.filename or "uploaded"
-            suffix = pathlib.Path(filename).suffix.lower()
-            if suffix not in (".pdf", ".docx", ".csv", ".pptx", ".md"):
-                raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}")
 
             # Parse options
-            opts = LiteMarkdownOptions()
+            opts = FastTextOptions()
             if options_json:
                 try:
                     payload = _json.loads(options_json)
                     if not isinstance(payload, dict):
                         raise ValueError("options_json must be an object")
-                    allowed = {f.name for f in dataclasses.fields(LiteMarkdownOptions)}
+                    allowed = {f.name for f in dataclasses.fields(FastTextOptions)}
                     filtered = {k: v for k, v in payload.items() if k in allowed}
-                    opts = LiteMarkdownOptions(**filtered)
+                    opts = FastTextOptions(**filtered)
                 except Exception as e:
                     raise HTTPException(status_code=400, detail=f"Invalid options_json: {e}")
 
             # Store to temp
             raw_path = uploadfile_to_path(file)
 
-            # Extract lite markdown
+            # Extract fast text
+            result: FastTextResult
             try:
-                result = self.lite_md_service.extract(raw_path, options=opts)
+                result = self._get_fast_text_processor(filename).extract(raw_path, options=opts)
                 logger.info(
-                    "[LITE_MD][INGEST] user=%s file=%s chars=%s pages=%s truncated=%s",
+                    "[FAST TEXT][INGEST] user=%s file=%s chars=%s pages=%s truncated=%s",
                     user.uid,
                     filename,
                     result.total_chars,
                     result.page_count,
                     result.truncated,
                 )
-                markdown_text = result.markdown or ""
-            except LiteMdError as e:
+                text = result.text or ""
+            except Exception as e:
                 raise HTTPException(status_code=400, detail=str(e))
             finally:
                 try:
@@ -745,14 +795,14 @@ class IngestionController:
                         "session_id": session_id,
                         "scope": scope,
                         "retrievable": True,
-                        "source": "lite_ingest",
+                        "source": "fast_ingest",
                         "page": p.page_no,
                     }
-                    docs.append(Document(page_content=p.markdown or "", metadata=doc_meta))
+                    docs.append(Document(page_content=p.text or "", metadata=doc_meta))
             else:
                 # Single combined doc fallback
-                if not markdown_text.strip():
-                    markdown_text = "_(empty markdown extracted)_"
+                if not text.strip():
+                    text = "_(empty markdown extracted)_"
                 chunk_uid = uuid.uuid4().hex
                 doc_meta = {
                     "document_uid": document_uid,
@@ -764,15 +814,15 @@ class IngestionController:
                     "session_id": session_id,
                     "scope": scope,
                     "retrievable": True,
-                    "source": "lite_ingest",
+                    "source": "fast_ingest",
                 }
-                docs.append(Document(page_content=markdown_text, metadata=doc_meta))
+                docs.append(Document(page_content=text, metadata=doc_meta))
 
             try:
                 ids = self.vector_store.add_documents(docs)
                 chunks = len(ids) if isinstance(ids, (list, tuple, set)) else len(docs)
                 logger.info(
-                    "[LITE_MD][INGEST] Stored vectors doc_uid=%s chunks=%d user=%s session=%s scope=%s per_page=%s",
+                    "[FAST TEXT][INGEST] Stored vectors doc_uid=%s chunks=%d user=%s session=%s scope=%s per_page=%s",
                     document_uid,
                     chunks,
                     user.uid,
@@ -781,7 +831,7 @@ class IngestionController:
                     bool(result.pages),
                 )
             except Exception:
-                logger.exception("[LITE_MD][INGEST] Failed to store vectors for %s", filename)
+                logger.exception("[FAST TEXT][INGEST] Failed to store vectors for %s", filename)
                 raise HTTPException(status_code=500, detail="Failed to store vectors")
 
             return {
@@ -793,19 +843,19 @@ class IngestionController:
             }
 
         @router.delete(
-            "/lite/ingest/{document_uid}",
+            "/fast/ingest/{document_uid}",
             tags=["Processing"],
-            summary="Delete vectors for a lite-ingested document",
-            description="Remove vectors created via /lite/ingest (identified by document_uid).",
+            summary="Delete vectors for a fast ingested document",
+            description="Remove vectors created via /fast/ingest (identified by document_uid).",
         )
-        def delete_lite_ingest(
+        def delete_fast_ingest(
             document_uid: str,
             session_id: Optional[str] = Query(None, description="Optional session_id for scoped cleanup"),
             user: KeycloakUser = Depends(get_current_user),
         ):
             try:
                 logger.info(
-                    "[LITE_MD][INGEST][DELETE] user=%s doc_uid=%s session=%s backend=%s",
+                    "[FAST TEXT][INGEST][DELETE] user=%s doc_uid=%s session=%s backend=%s",
                     user.uid,
                     document_uid,
                     session_id,
@@ -813,14 +863,14 @@ class IngestionController:
                 )
                 self.vector_store.delete_vectors_for_document(document_uid=document_uid)
                 logger.info(
-                    "[LITE_MD][INGEST] Deleted vectors for doc_uid=%s user=%s session=%s",
+                    "[FAST TEXT][INGEST] Deleted vectors for doc_uid=%s user=%s session=%s",
                     document_uid,
                     user.uid,
                     session_id,
                 )
             except Exception:
                 logger.exception(
-                    "[LITE_MD][INGEST] Failed to delete vectors for doc_uid=%s",
+                    "[FAST TEXT][INGEST] Failed to delete vectors for doc_uid=%s",
                     document_uid,
                 )
                 raise HTTPException(status_code=500, detail="Failed to delete vectors")

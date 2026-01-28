@@ -13,7 +13,16 @@
 // limitations under the License.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField } from "@mui/material";
+import {
+  Button,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Stack,
+  TextField,
+} from "@mui/material";
 import yaml from "js-yaml";
 import { ResourceKind, useKindLabels } from "./resourceLabels";
 
@@ -22,7 +31,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { buildFrontMatter, buildProfileYaml, looksLikeYamlDoc, splitFrontMatter } from "./resourceYamlUtils";
+import {
+  buildFrontMatter,
+  buildProfileYaml,
+  looksLikeYamlDoc,
+  splitFrontMatter,
+} from "./resourceYamlUtils";
 const profileSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
@@ -45,6 +59,7 @@ interface ChatContextEditorModalProps {
   initial?: Partial<{ name: string; description?: string; body?: string; yaml?: string; labels?: string[] }>;
   getSuggestion?: () => Promise<string>;
   kind?: ResourceKind;
+  previewOnly?: boolean;
 }
 
 /** Modal supports two modes:
@@ -57,11 +72,19 @@ export const ChatContextEditorModal: React.FC<ChatContextEditorModalProps> = ({
   onSave,
   initial,
   kind,
+  previewOnly = false,
 }) => {
   const incomingDoc = useMemo(() => (initial as any)?.yaml ?? (initial as any)?.body ?? "", [initial]);
   const isDocMode = useMemo(() => looksLikeYamlDoc(incomingDoc), [incomingDoc]);
   const { t } = useTranslation();
   const { one: typeOne } = useKindLabels(kind ?? "chat-context");
+
+  const previewSplit = useMemo(() => splitFrontMatter(incomingDoc), [incomingDoc]);
+  const previewHeader = previewSplit.header ?? {};
+  const previewBody = previewSplit.body ?? "";
+  const previewName = initial?.name ?? previewHeader.name ?? "";
+  const previewDescription = initial?.description ?? previewHeader.description ?? "";
+  const previewLabels = initial?.labels ?? previewHeader.labels ?? [];
 
   // ----- Simple mode form (create) -----
 
@@ -140,13 +163,57 @@ export const ChatContextEditorModal: React.FC<ChatContextEditorModalProps> = ({
     onClose();
   };
 
+  const dialogTitle = previewOnly
+    ? t("settings.chatContextPreviewTitle", "Chat context preview")
+    : initial
+    ? t("resourceLibrary.editResource", { typeOne })
+    : t("resourceLibrary.createResource", { typeOne });
+
   return (
     <Dialog open={isOpen} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>
-        {initial ? t("resourceLibrary.editResource", { typeOne }) : t("resourceLibrary.createResource", { typeOne })}
-      </DialogTitle>
-      {/* Render either simple or doc form */}
-      {isDocMode ? (
+      <DialogTitle>{dialogTitle}</DialogTitle>
+      {previewOnly ? (
+        <>
+          <DialogContent>
+            <Stack spacing={2} mt={1}>
+              <TextField
+                label={t("common.name", "Name")}
+                fullWidth
+                value={previewName}
+                InputProps={{ readOnly: true }}
+              />
+              <TextField
+                label={t("common.description", "Description")}
+                fullWidth
+                multiline
+                minRows={2}
+                value={previewDescription}
+                InputProps={{ readOnly: true }}
+              />
+              {previewLabels.length > 0 && (
+                <Stack direction="row" spacing={1} flexWrap="wrap">
+                  {previewLabels.map((label) => (
+                    <Chip key={label} label={label} size="small" />
+                  ))}
+                </Stack>
+              )}
+              <TextField
+                label="Body"
+                fullWidth
+                multiline
+                minRows={10}
+                value={previewBody}
+                InputProps={{ readOnly: true }}
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={onClose} variant="contained">
+              {t("common.close", "Close")}
+            </Button>
+          </DialogActions>
+        </>
+      ) : isDocMode ? (
         <>
           <DialogContent>
             <Stack spacing={3} mt={1}>

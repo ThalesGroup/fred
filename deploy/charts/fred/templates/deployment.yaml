@@ -29,6 +29,11 @@ spec:
         {{- if .app.podAnnotations }}
 {{ toYaml .app.podAnnotations | nindent 8 }}
         {{- end }}
+        {{- if and .app.configuration .app.configuration.app .app.configuration.app.metrics_enabled (not (and .app.metricsService .app.metricsService.serviceMonitor .app.metricsService.serviceMonitor.enabled)) }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .app.configuration.app.metrics_port }}"
+        prometheus.io/path: "/metrics"
+        {{- end }}
         # BEGIN - Force refresh of the deployment when configmap is changed
         {{- if .app.configuration }}
         configmap.configurations.checksum: "{{ .app.configuration | join "," | sha256sum }}"

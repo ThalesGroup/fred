@@ -28,6 +28,7 @@ from agentic_backend.common.llm_errors import (
     normalize_llm_exception,
 )
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
+from agentic_backend.core.agents.runtime_context import get_language
 from agentic_backend.core.agents.simple_agent_flow import SimpleAgentFlow
 from agentic_backend.core.runtime_source import expose_runtime_source
 
@@ -55,15 +56,6 @@ TUNING = AgentTuning(
                 "In case of graphical representation, render mermaid diagrams code."
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
-        ),
-        FieldSpec(
-            key="prompts.response_language",
-            type="text",
-            title="Response Language",
-            description="Language to use for all answers (e.g., 'français', 'English').",
-            required=False,
-            default="English",
-            ui=UIHints(group="Prompts"),
         ),
     ],
 )
@@ -108,6 +100,18 @@ class Georges(SimpleAgentFlow):
         )
 
         # 4) Optionally add the chat context text (if available)
+        chat_context = self.chat_context_text()
+        include_chat_context = self.get_field_spec(
+            "prompts.include_chat_context"
+        ) is None or bool(self.get_tuned_any("prompts.include_chat_context"))
+        response_language = get_language(self.get_runtime_context()) or "English"
+        logger.debug(
+            "[AGENT] Georges prompt check: response_language=%s include_chat_context=%s system_prompt=%r chat_context=%r",
+            response_language,
+            include_chat_context,
+            sys,
+            chat_context,
+        )
         llm_messages = self.with_chat_context_text(llm_messages)
         logger.debug(
             f"Georges: Messages after adding context text. Final count: {len(llm_messages)}"
@@ -119,17 +123,17 @@ class Georges(SimpleAgentFlow):
         # 5) Invoke the model
         try:
             response = await self.model.ainvoke(llm_messages)
-            logger.info("Georges: LLM call successful (await complete).")
+            logger.debug("[AGENTS] Georges: LLM call successful (await complete).")
         except Exception as e:
             info = normalize_llm_exception(e)
             log_ctx = error_log_context(info, extra={"agent": "Georges"})
             logger.exception(
-                "Georges: LLM invocation failed.", extra={"err_ctx": log_ctx}
+                "[AGENTS] Georges: LLM invocation failed.", extra={"err_ctx": log_ctx}
             )
 
             fallback_text = guardrail_fallback_message(
                 info,
-                language=self.get_tuned_text("prompts.response_language"),
+                language=get_language(self.get_runtime_context()) or "English",
                 default_message="Sorry, I could not complete that request safely.",
             )
             return AIMessage(content=fallback_text)

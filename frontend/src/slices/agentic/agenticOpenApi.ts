@@ -151,7 +151,27 @@ const injectedRtkApi = api.injectEndpoints({
       GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiResponse,
       GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/chatbot/session/${queryArg.sessionId}/history` }),
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/session/${queryArg.sessionId}/history`,
+        params: {
+          limit: queryArg.limit,
+          offset: queryArg.offset,
+          text_limit: queryArg.textLimit,
+          text_offset: queryArg.textOffset,
+        },
+      }),
+    }),
+    getSessionMessageAgenticV1ChatbotSessionSessionIdMessageRankGet: build.query<
+      GetSessionMessageAgenticV1ChatbotSessionSessionIdMessageRankGetApiResponse,
+      GetSessionMessageAgenticV1ChatbotSessionSessionIdMessageRankGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/session/${queryArg.sessionId}/message/${queryArg.rank}`,
+        params: {
+          text_limit: queryArg.textLimit,
+          text_offset: queryArg.textOffset,
+        },
+      }),
     }),
     getSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGet: build.query<
       GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiResponse,
@@ -259,6 +279,29 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/logs/query`, method: "POST", body: queryArg.logQuery }),
     }),
+    submitAgentTaskAgenticV1V1AgentTasksPost: build.mutation<
+      SubmitAgentTaskAgenticV1V1AgentTasksPostApiResponse,
+      SubmitAgentTaskAgenticV1V1AgentTasksPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/v1/agent-tasks`,
+        method: "POST",
+        body: queryArg.submitAgentTaskRequest,
+      }),
+    }),
+    listAgentTasksAgenticV1V1AgentTasksGet: build.query<
+      ListAgentTasksAgenticV1V1AgentTasksGetApiResponse,
+      ListAgentTasksAgenticV1V1AgentTasksGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/v1/agent-tasks`,
+        params: {
+          limit: queryArg.limit,
+          status: queryArg.status,
+          target_agent: queryArg.targetAgent,
+        },
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -350,6 +393,18 @@ export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiRespon
   /** status 200 Successful Response */ ChatMessage2[];
 export type GetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetApiArg = {
   sessionId: string;
+  limit?: number | null;
+  offset?: number;
+  textLimit?: number | null;
+  textOffset?: number;
+};
+export type GetSessionMessageAgenticV1ChatbotSessionSessionIdMessageRankGetApiResponse =
+  /** status 200 Successful Response */ ChatMessage2;
+export type GetSessionMessageAgenticV1ChatbotSessionSessionIdMessageRankGetApiArg = {
+  sessionId: string;
+  rank: number;
+  textLimit?: number | null;
+  textOffset?: number;
 };
 export type GetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetApiResponse =
   /** status 200 Successful Response */ {
@@ -419,6 +474,18 @@ export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiArg = {
 export type QueryLogsAgenticV1LogsQueryPostApiResponse = /** status 200 Successful Response */ LogQueryResult;
 export type QueryLogsAgenticV1LogsQueryPostApiArg = {
   logQuery: LogQuery;
+};
+export type SubmitAgentTaskAgenticV1V1AgentTasksPostApiResponse =
+  /** status 200 Successful Response */ SubmitAgentTaskResponse;
+export type SubmitAgentTaskAgenticV1V1AgentTasksPostApiArg = {
+  submitAgentTaskRequest: SubmitAgentTaskRequest;
+};
+export type ListAgentTasksAgenticV1V1AgentTasksGetApiResponse =
+  /** status 200 Successful Response */ AgentTaskRecordV1[];
+export type ListAgentTasksAgenticV1V1AgentTasksGetApiArg = {
+  limit?: number;
+  status?: AgentTaskStatus | null;
+  targetAgent?: string | null;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -509,6 +576,8 @@ export type AgentChatOptions = {
   search_rag_scoping?: boolean;
   /** Expose a toggle to delegate RAG retrieval to a senior agent (deep search) when available. */
   deep_search_delegate?: boolean;
+  /** Display a picker to restrict retrieval to specific documents for this message. */
+  documents_selection?: boolean;
 };
 export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
@@ -678,7 +747,9 @@ export type RuntimeContext = {
   language?: string | null;
   session_id?: string | null;
   user_id?: string | null;
+  user_groups?: string[] | null;
   selected_document_libraries_ids?: string[] | null;
+  selected_document_uids?: string[] | null;
   selected_chat_context_ids?: string[] | null;
   search_policy?: string | null;
   access_token?: string | null;
@@ -687,6 +758,8 @@ export type RuntimeContext = {
   attachments_markdown?: string | null;
   search_rag_scope?: ("corpus_only" | "hybrid" | "general_only") | null;
   deep_search?: boolean | null;
+  include_session_scope?: boolean | null;
+  include_corpus_scope?: boolean | null;
 };
 export type ChatMetadata = {
   model?: string | null;
@@ -751,9 +824,14 @@ export type SessionSchema = {
   agent_name?: string | null;
   title: string;
   updated_at: string;
+  next_rank?: number | null;
   preferences?: {
     [key: string]: any;
   } | null;
+};
+export type SessionEvent = {
+  type?: "session";
+  session: SessionSchema;
 };
 export type FinalEvent = {
   type?: "final";
@@ -775,6 +853,7 @@ export type SessionWithFiles = {
   agent_name?: string | null;
   title: string;
   updated_at: string;
+  next_rank?: number | null;
   preferences?: {
     [key: string]: any;
   } | null;
@@ -806,6 +885,7 @@ export type EchoEnvelope = {
   kind:
     | "ChatMessage"
     | "StreamEvent"
+    | "SessionEvent"
     | "FinalEvent"
     | "ErrorEvent"
     | "SessionSchema"
@@ -820,6 +900,7 @@ export type EchoEnvelope = {
     | ChatMessage
     | ChatAskInput
     | StreamEvent
+    | SessionEvent
     | FinalEvent
     | ErrorEvent
     | SessionSchema
@@ -837,9 +918,17 @@ export type FrontendFlags = {
 export type Properties = {
   logoName?: string;
   logoNameDark?: string;
+  logoHeight?: string;
+  logoWidth?: string;
+  faviconName?: string | null;
+  faviconNameDark?: string | null;
   siteDisplayName?: string;
   /** Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'. */
   releaseBrand?: string | null;
+  agentsNicknameSingular?: string;
+  agentsNicknamePlural?: string;
+  agentIconPath?: string | null;
+  contactSupportLink?: string | null;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;
@@ -996,6 +1085,53 @@ export type LogQuery = {
   limit?: number;
   order?: "asc" | "desc";
 };
+export type AgentTaskStatus = "QUEUED" | "RUNNING" | "BLOCKED" | "COMPLETED" | "FAILED" | "CANCELED";
+export type SubmitAgentTaskResponse = {
+  task_id: string;
+  status: AgentTaskStatus;
+  workflow_id: string;
+  run_id?: string | null;
+};
+export type AgentContextRefsV1 = {
+  session_id?: string | null;
+  profile_id?: string | null;
+  project_id?: string | null;
+  tag_ids?: string[];
+  document_uids?: string[];
+};
+export type SubmitAgentTaskRequest = {
+  target_agent: string;
+  request_text: string;
+  context?: AgentContextRefsV1;
+  parameters?: {
+    [key: string]: any;
+  };
+  task_id?: string | null;
+};
+export type AgentTaskRecordV1 = {
+  task_id: string;
+  user_id: string;
+  target_agent: string;
+  status?: AgentTaskStatus;
+  request_text: string;
+  context?: AgentContextRefsV1;
+  parameters?: {
+    [key: string]: any;
+  };
+  workflow_id: string;
+  run_id?: string | null;
+  last_message?: string | null;
+  percent_complete?: number;
+  artifacts?: string[];
+  error_details?: {
+    [key: string]: any;
+  } | null;
+  blocked_details?: {
+    [key: string]: any;
+  } | null;
+  created_at: string;
+  updated_at: string;
+};
 export const {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
@@ -1027,6 +1163,8 @@ export const {
   useCreateSessionAgenticV1ChatbotSessionPostMutation,
   useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useLazyGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
+  useGetSessionMessageAgenticV1ChatbotSessionSessionIdMessageRankGetQuery,
+  useLazyGetSessionMessageAgenticV1ChatbotSessionSessionIdMessageRankGetQuery,
   useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
   useLazyGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
   useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation,
@@ -1048,4 +1186,7 @@ export const {
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
   useDeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteMutation,
   useQueryLogsAgenticV1LogsQueryPostMutation,
+  useSubmitAgentTaskAgenticV1V1AgentTasksPostMutation,
+  useListAgentTasksAgenticV1V1AgentTasksGetQuery,
+  useLazyListAgentTasksAgenticV1V1AgentTasksGetQuery,
 } = injectedRtkApi;

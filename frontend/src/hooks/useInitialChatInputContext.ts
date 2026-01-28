@@ -12,91 +12,76 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useMemo, useState } from "react";
-import { SearchRagScope } from "../components/chatbot/user_input/types.ts";
-import { KeyCloakService } from "../security/KeycloakService.ts";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { RuntimeContext } from "../slices/agentic/agenticOpenApi.ts";
 import { SearchPolicyName } from "../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+
+type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
 
 export type InitialChatPrefs = {
   documentLibraryIds: string[];
+  documentUids: string[];
   promptResourceIds: string[];
   templateResourceIds: string[];
   searchPolicy: SearchPolicyName;
   searchRagScope?: SearchRagScope;
   deepSearch?: boolean;
+  includeCorpusScope: boolean;
+  includeSessionScope: boolean;
+  includeDocumentScope: boolean;
 };
+
+const EMPTY_STRING_ARRAY: string[] = [];
 
 /**
  * Manages pre-session (draft) chat input defaults per user and agent.
- * - Loads defaults from localStorage when no session is active.
- * - Persists changes to localStorage only while there is no session id.
  * - Resets to sensible defaults on agent change.
  *
- * This hook is intentionally session-agnostic; per-session persistence stays in UserInput.
+ * This hook is intentionally session-agnostic and does not persist locally.
+ * Per-session persistence stays in UserInput / backend.
  */
 export function useInitialChatInputContext(
   agentName: string,
   sessionId?: string,
   defaults: Partial<InitialChatPrefs> = {},
 ) {
-  const storageKey = useMemo(() => {
-    const uid = KeyCloakService.GetUserId?.() || "anon";
-    return `chatctx:${uid}:${agentName || "default"}`;
-  }, [agentName]);
-
-  const baseDefaults: InitialChatPrefs = {
-    documentLibraryIds: [],
-    promptResourceIds: [],
-    templateResourceIds: [],
-    searchPolicy: "semantic",
-    ...defaults,
-  };
+  const baseDefaults = useMemo<InitialChatPrefs>(
+    () => ({
+      documentLibraryIds: defaults.documentLibraryIds ?? EMPTY_STRING_ARRAY,
+      documentUids: defaults.documentUids ?? EMPTY_STRING_ARRAY,
+      promptResourceIds: defaults.promptResourceIds ?? EMPTY_STRING_ARRAY,
+      templateResourceIds: defaults.templateResourceIds ?? EMPTY_STRING_ARRAY,
+      searchPolicy: defaults.searchPolicy ?? "semantic",
+      searchRagScope: defaults.searchRagScope,
+      deepSearch: defaults.deepSearch,
+      includeCorpusScope: defaults.includeCorpusScope ?? true,
+      includeSessionScope: defaults.includeSessionScope ?? true,
+      includeDocumentScope: defaults.includeDocumentScope ?? true,
+    }),
+    [
+      defaults.documentLibraryIds,
+      defaults.documentUids,
+      defaults.promptResourceIds,
+      defaults.templateResourceIds,
+      defaults.searchPolicy,
+      defaults.searchRagScope,
+      defaults.deepSearch,
+      defaults.includeCorpusScope,
+      defaults.includeSessionScope,
+      defaults.includeDocumentScope,
+    ],
+  );
 
   const [prefs, setPrefs] = useState<InitialChatPrefs>(baseDefaults);
-
-  // Load defaults from localStorage when there is no active session.
-  useEffect(() => {
-    if (sessionId) return;
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setPrefs({
-          documentLibraryIds: parsed.documentLibraryIds ?? baseDefaults.documentLibraryIds,
-          promptResourceIds: parsed.promptResourceIds ?? baseDefaults.promptResourceIds,
-          templateResourceIds: parsed.templateResourceIds ?? baseDefaults.templateResourceIds,
-          searchPolicy: parsed.searchPolicy ?? baseDefaults.searchPolicy,
-          searchRagScope: parsed.searchRagScope ?? baseDefaults.searchRagScope,
-          deepSearch: parsed.deepSearch ?? baseDefaults.deepSearch,
-        });
-      } else {
-        setPrefs(baseDefaults);
-      }
-    } catch (e) {
-      console.warn("[useInitialChatInputContext] Failed to load defaults:", e);
-      setPrefs(baseDefaults);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storageKey, sessionId]);
-
-  // Persist defaults only when there is no active session.
-  useEffect(() => {
-    if (sessionId) return;
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(prefs));
-    } catch (e) {
-      console.warn("[useInitialChatInputContext] Failed to save defaults:", e);
-    }
-  }, [prefs, sessionId, storageKey]);
 
   // If agent changes, reset to base defaults (will be overridden by stored values on next effect run).
   useEffect(() => {
     if (sessionId) return;
     setPrefs(baseDefaults);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agentName, sessionId]);
+  }, [agentName, sessionId, baseDefaults]);
 
-  const resetToDefaults = () => setPrefs(baseDefaults);
+  const resetToDefaults = useCallback(() => setPrefs(baseDefaults), [baseDefaults]);
 
   return { prefs, setPrefs, resetToDefaults };
 }

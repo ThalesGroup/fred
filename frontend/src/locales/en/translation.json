@@ -1,6 +1,7 @@
 {
   "common": {
     "add": "Add",
+    "delete": "Delete",
     "noneSelected": "None selected",
     "expand": "Expand",
     "close": "Close",
@@ -19,7 +20,8 @@
     "uploading": "Uploading...",
     "dropHere": "Drop files here or click to browse",
     "loadingPreview": "Loading preview...",
-    "loadingPreviewError": "Unable to load preview."
+    "loadingPreviewError": "Unable to load preview.",
+    "contactSupport": "Contact support team."
   },
   "dataHub": {
     "title": "Data Hub - Document Lineage",
@@ -114,12 +116,14 @@
     "facts": "Facts",
     "audit": "Audit",
     "optimize": "Optimize",
-    "chat": "Chats",
+    "chat": "Last chats",
     "monitoring": "Admin",
     "laboratory": "Laboratory",
-    "knowledge": "Resources",
+    "knowledge": "Your resources",
+    "apps": "Apps",
+    "apps_scheduler": "Scheduler",
     "mcp": "Tools",
-    "agent": "Agents",
+    "agent": "Your {{agentsNickname}}",
     "release_notes": "Release Notes",
     "workspaces": "Workspaces",
     "account": "Profile",
@@ -133,6 +137,8 @@
       "monitoring": "Monitor the backend AI calls",
       "laboratory": "Explore validation and laboratory features and tools",
       "knowledge": "Consult the content of your libraries",
+      "apps": "Run and test app workflows",
+      "apps_scheduler": "Submit and track scheduled tasks",
       "mcp": "Manage MCP servers",
       "agent": "View agents",
       "release_notes": "View the latest release notes",
@@ -160,7 +166,72 @@
     "monitoring_data": "Data",
     "allAgents": "All agents",
     "deleteSessionFailed": "Failed to delete conversation",
-    "monitoring_graph": "Graph"
+    "monitoring_graph": "Graph",
+    "newChat": "New chat"
+  },
+  "apps": {
+    "scheduler": {
+      "title": "Apps / Scheduler",
+      "subtitle": "Submit and inspect agent tasks queued via Temporal.",
+      "submit": {
+        "title": "Schedule an agent task",
+        "action": "Submit task",
+        "loading": "Submitting..."
+      },
+      "status": {
+        "title": "Latest submission",
+        "empty": "No tasks submitted yet."
+      },
+      "progress": {
+        "title": "Progress lookup",
+        "action": "Refresh progress",
+        "loading": "Refreshing...",
+        "state": "State",
+        "unknown": "No percent reported",
+        "percent": "Percent",
+        "message": "Message",
+        "none": "No message",
+        "queued": "Waiting for worker to pick up the task."
+      },
+      "pending": {
+        "title": "Pending tasks",
+        "empty": "No pending tasks",
+        "noWorkflow": "no workflow id"
+      },
+      "completed": {
+        "title": "Last completed tasks",
+        "empty": "No completed tasks yet"
+      },
+      "recent": {
+        "title": "Recent workflows (Temporal)",
+        "empty": "No workflows visible"
+      },
+      "fields": {
+        "targetAgent": "Target agent",
+        "taskId": "Task ID (optional)",
+        "workflowType": "Workflow type",
+        "taskQueue": "Task queue (optional)",
+        "sessionId": "Session ID (optional)",
+        "requestId": "Request ID (optional)",
+        "payload": "Payload (JSON object)",
+        "context": "Context (JSON object)",
+        "progressTaskId": "Task ID",
+        "progressWorkflowId": "Workflow ID",
+        "progressRunId": "Run ID (optional)"
+      },
+      "toasts": {
+        "submitted": {
+          "title": "Task scheduled",
+          "detail": "Your agent task was submitted to the scheduler."
+        },
+        "error": {
+          "title": "Scheduler error"
+        },
+        "progressError": {
+          "title": "Progress error"
+        }
+      }
+    }
   },
   "chat": {
     "common": {
@@ -177,7 +248,10 @@
     },
     "message": {
       "waiting": "Waiting for response...",
-      "toolResult": "Tool result"
+      "toolResult": "Tool result",
+      "showMore": "Show more",
+      "showLess": "Show less",
+      "loadError": "Failed to load full message"
     },
     "actions": {
       "copyMessage": "Copy message",
@@ -316,7 +390,7 @@
     "noMcpServers": "No MCP servers are currently available."
   },
   "agentHub": {
-    "title": "Your agents",
+    "title": "Your {{agentsNicknamePlural}}",
     "confirmDeleteTitle": "Confirm deletion",
     "confirmDeleteMessage": "Delete this agent ? This action cannot be undone.",
     "description": "Explore and manage available AI agents",
@@ -460,13 +534,37 @@
   },
   "chatbot": {
     "ragScope": {
+      "label": "RAG scope",
       "tooltipCorpus": "Use only the selected document libraries to answer",
       "tooltipHybrid": "Use both the selected document libraries and the model general knowledge to answer",
       "tooltipGeneral": "Use only the model general knowledge to answer"
     },
+    "searchPolicy": {
+      "label": "Search policy"
+    },
     "deepSearch": {
       "label": "Deep Search",
-      "tooltip": "Delegate RAG retrieval to Rico Senior"
+      "tooltip": "Delegate RAG retrieval to Rico Senior",
+      "tooltipDescription": "Delegates retrieval to a specialized agent for deeper search across your knowledge.\n\nActivating this feature will result in slower but more thorough replies. A downloadable transcript of the search process will be attached to the conversation.",
+      "tooltipDisabled": "This agent does not support deep search delegation.",
+      "description": "Runs a deeper retrieval pass with a specialized agent. Enables slower but more thorough answers.",
+      "actionEnable": "Enable deep search",
+      "actionDisable": "Disable deep search"
+    },
+    "logGenius": {
+      "label": "Log Genius",
+      "tooltip": "Analyze recent logs for quick diagnosis",
+      "tooltipDescription": "Analyze recent logs and summarize likely issues with next steps.",
+      "description": "Runs a short investigation over the last few minutes of logs and returns a ready-to-use diagnosis.",
+      "action": "Ask for assistance or analysis",
+      "prompt": "Analyze the last 5 minutes of logs and summarize likely issues with next steps."
+    },
+    "searchOptions": "Search options",
+    "searchOptionsReset": "Back to default",
+    "searchOptionsResetTooltip": "Reset to default values",
+    "searchOptionsTooltip": {
+      "description": "Tune how retrieval works for this conversation (RAG scope and search policy).\n\nThese settings are saved per conversation and applied only when the agent supports retrieval.",
+      "disabled": "This agent does not support search options."
     },
     "menu": {
       "addToSetup": "Add to conversation setup"
@@ -475,12 +573,41 @@
       "placeholder": "Write your message…  Enter to send • Shift+Enter for newline"
     },
     "attachFiles": "Attach files",
+    "addLibraries": "Add libraries",
+    "addDocuments": "Add documents",
     "attachments": {
-      "betaNotice": "File attachments are in beta. Supported formats: PDF, DOCX, CSV. Please provide feedback to help us improve this feature.",
-      "supportedFormats": "Supported files: PDF, DOCX, CSV",
+      "betaNotice": "File attachments are in beta. Supported formats: PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX. Please provide feedback to help us improve this feature.",
+      "supportedFormats": "Supported files: PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX",
       "count": "{{count}} attached",
-      "drawerTitle": "Manage Attachments",
-      "noAttachments": "No attachments yet"
+      "drawerTitle": "Attachments",
+      "noAttachments": "No attachments yet",
+      "includeToggle": "Toggle attachment retrieval",
+      "includeTooltipOn": "Attachments are included in retrieval for this conversation.",
+      "includeTooltipOff": "Attachments are excluded from retrieval for this conversation.",
+      "tooltip": {
+        "description": "Files attached to this conversation.\nThe files are processed by faster but less precise algorithms. The agent may use these files to answer.\n\nNote that this feature is in beta and may not work perfectly for all file types. For persistent corpora, consider using document libraries.",
+        "disabled": "This agent does not use attachments."
+      }
+    },
+    "documents": {
+      "drawerTitle": "Documents",
+      "empty": "No documents selected.",
+      "includeToggle": "Toggle document scoping",
+      "includeTooltipOn": "Document scoping is enabled for this conversation.",
+      "includeTooltipOff": "Document scoping is disabled for this conversation.",
+      "tooltip": {
+        "description": "Restrict retrieval to specific documents for this conversation.",
+        "disabled": "This agent does not support document scoping."
+      }
+    },
+    "libraries": {
+      "disabledByDocuments": "Document scoping is active. Disable documents to use libraries.",
+      "includeToggle": "Toggle library retrieval",
+      "includeTooltipOn": "Libraries are included in retrieval for this conversation.",
+      "includeTooltipOff": "Libraries are excluded from retrieval for this conversation.",
+      "empty": "No libraries selected. All visible document libraries will be searched.",
+      "previewTitle": "Library",
+      "noDescription": "No description available."
     },
     "uploadingFile": "Uploading {{name}}...",
     "searchToggle": "Toggle retrieval: on searches documents, off skips RAG",
@@ -491,6 +618,7 @@
     "audioChip": "Audio recording",
     "hideAudio": "Hide audio controller",
     "searchDocumentLibraries": "Search document libraries...",
+    "searchDocuments": "Search documents...",
     "searchPromptLibraries": "Search prompt libraries...",
     "searchChatContextLibraries": "Search chat context libraries...",
     "welcomeUser": "Hello {{username}}",
@@ -508,6 +636,7 @@
       "audio": "Audio",
       "oneRecording": "1 recording",
       "libraries": "Libraries ({{count}})",
+      "documents": "Documents ({{count}})",
       "prompts": "Prompts ({{count}})",
       "templates": "Templates ({{count}})"
     }
@@ -522,12 +651,18 @@
     "confirmDeleteAllTitle": "Delete all conversations?",
     "confirmDeleteAllMessage": "This action will permanently delete all conversations. Do you want to continue?",
     "chatContext": "Chat context",
-    "conversationSetup": "Conversation setup",
-    "newConversationHelp": "Start a new conversation (not yet saved)",
-    "draftNotSaved": "Draft • not yet saved"
+    "chatContextTooltip": {
+      "description": "Select reusable context snippets included with every message in this conversation.\n\nThese prompt instructions is automatically included in the agents system prompt and thus works with all agents.\n\nNote that each agent also expose its internal prompt tuning options in the agent settings. Those are agent-specific and not shared across agents. Using the chat context allows to adapt agents global behavior to your needs."
+    },
+    "chatContextPreviewTitle": "Chat context preview"
+  },
+  "conversationChatContext": {
+    "add": "Add chat context",
+    "empty": "No chat contexts selected",
+    "open": "Open chat context"
   },
   "kpis": {
-    "title": "Agent & AI Service Monitoring",
+    "title": "AI Service Monitoring",
     "description": "Track usage, performance, and costs across all AI agents and services — including tokens, latency, and activity trends."
   },
   "logs": {
@@ -567,7 +702,8 @@
     "manageAssets": "Manage Assets",
     "manageCrew": "Manage Crew",
     "inspectCode": "Inspect source code",
-    "viewA2ACard": "View A2A card"
+    "viewA2ACard": "View A2A card",
+    "enable": "Enable"
   },
   "dialogs": {
     "create": {
@@ -632,10 +768,12 @@
     }
   },
   "knowledge": {
-    "title": "Resources",
+    "title": "Your resources",
     "description": "Manage your document and chat context libraries",
     "viewSelector": {
       "libraries": "Libraries",
+      "librariesTooltip": "Scope document retrieval to only the selected document libraries.\n\nThis settings is saved per conversation and used for RAG when the selected agent supports it.",
+      "librariesUnsupported": "This agent does not support library scoping.",
       "templates": "Templates",
       "prompts": "Prompts",
       "documents": "Documents",
@@ -911,9 +1049,9 @@
     "strict": "Strict",
     "hybrid": "Hybrid",
     "semantic": "Semantic",
-    "strictDescription": "Only use documents that are explicitly relevant to the query.",
-    "hybridDescription": "Combine relevant documents with semantic search results.",
-    "semanticDescription": "Use semantic search to find related documents."
+    "strictDescription": "Strict search prioritizes precision over coverage. It applies tighter constraints (e.g., stronger keyword/metadata matching and/or higher similarity thresholds) so only highly confident results are retrieved. Use this when you want to avoid ‘maybe relevant’ documents, or when your corpus is large and you prefer fewer, more exact sources. If nothing matches strongly, results may be sparse.",
+    "hybridDescription": "Hybrid search combines keyword matching (exact terms, names, IDs) with semantic similarity. It is the best option when your question contains specific terminology (component names, error codes, APIs) but also benefits from conceptual matching. Hybrid typically improves recall while keeping precision high, at the cost of slightly more computation.",
+    "semanticDescription": "Semantic search uses embeddings to retrieve passages that are conceptually similar to your question, even if they don’t share the same words. This usually finds the most relevant context for broad or exploratory questions, but it can sometimes include loosely related results when your query is very short or ambiguous."
   },
   "sourceDetails": {
     "bestScore": "best {{score}}%",
@@ -1039,5 +1177,9 @@
       "router": "Fred is starting...",
       "ui": "Fred is getting the UI ready..."
     }
+  },
+  "newChat": {
+    "yourAgents": "Your agents",
+    "selectAgentTitle": "Welcome {{userName}}, who would you like to speak to?"
   }
 }

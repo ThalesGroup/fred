@@ -12,13 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
-import PublicOutlinedIcon from "@mui/icons-material/PublicOutlined";
-import SyncAltOutlinedIcon from "@mui/icons-material/SyncAltOutlined";
-import { ToggleButton, ToggleButtonGroup, Tooltip } from "@mui/material";
+import { ListItemText, MenuItem, Select } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
-import { SearchRagScope } from "./types.ts";
+import type { RuntimeContext } from "../../../slices/agentic/agenticOpenApi.ts";
+
+type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
 
 type Props = {
   value: SearchRagScope;
@@ -47,47 +46,69 @@ export function UserInputRagScope({ value, onChange, disabled }: Props) {
     general_only: t("chatbot.ragScope.tooltipGeneral"),
   };
 
-  const renderButton = (scope: SearchRagScope, icon: JSX.Element) => (
-    <Tooltip key={scope} title={tooltipByValue[scope]}>
-      <ToggleButton value={scope} aria-label={labels[scope]}>
-        {icon}
-      </ToggleButton>
-    </Tooltip>
-  );
+  const options = [
+    {
+      value: "corpus_only" as const,
+      label: labels.corpus_only,
+      description: tooltipByValue.corpus_only,
+    },
+    {
+      value: "hybrid" as const,
+      label: labels.hybrid,
+      description: tooltipByValue.hybrid,
+    },
+    {
+      value: "general_only" as const,
+      label: labels.general_only,
+      description: tooltipByValue.general_only,
+    },
+  ];
 
   return (
-    <ToggleButtonGroup
-      exclusive
-      size="small"
+    <Select
       value={value}
       disabled={disabled}
-      onChange={(_, next) => {
-        if (next) onChange(next as SearchRagScope);
-      }}
-      aria-label="rag-knowledge-scope"
+      size="small"
+      onChange={(event) => onChange(event.target.value as SearchRagScope)}
+      renderValue={(selected) => labels[selected as SearchRagScope]}
       sx={{
         borderRadius: 999,
-        overflow: "hidden",
-        "& .MuiToggleButton-root": {
-          px: 1,
+        minWidth: 150,
+        fontSize: "0.78rem",
+        "& .MuiSelect-select": {
           py: 0.35,
-          fontSize: "0.78rem",
-          textTransform: "none",
-          gap: 0.5,
-          color: "text.secondary",
-          borderColor: "divider",
-          "&.Mui-selected": {
-            color: "primary.main",
-            backgroundColor: "primary.main",
-            "& svg": { color: "common.white" },
-            "&:hover": { backgroundColor: "primary.dark" },
-          },
+          pl: 1.25,
+          pr: 3.25,
+          display: "flex",
+          alignItems: "center",
         },
+        "& .MuiOutlinedInput-notchedOutline": { borderColor: "divider" },
       }}
+      MenuProps={{
+        PaperProps: {
+          sx: { mt: 0.75, maxWidth: 360 },
+        },
+        MenuListProps: { dense: true },
+      }}
+      inputProps={{ "aria-label": "rag-knowledge-scope" }}
     >
-      {renderButton("corpus_only", <MenuBookOutlinedIcon fontSize="small" />)}
-      {renderButton("hybrid", <SyncAltOutlinedIcon fontSize="small" />)}
-      {renderButton("general_only", <PublicOutlinedIcon fontSize="small" />)}
-    </ToggleButtonGroup>
+      {options.map((option) => (
+        <MenuItem
+          key={option.value}
+          value={option.value}
+          dense
+          sx={{ alignItems: "flex-start", whiteSpace: "normal", py: 0.75 }}
+        >
+          <ListItemText
+            primary={option.label}
+            secondary={option.description}
+            slotProps={{
+              primary: { sx: { fontSize: "0.78rem", fontWeight: 600 } },
+              secondary: { sx: { fontSize: "0.72rem", color: "text.secondary" } },
+            }}
+          />
+        </MenuItem>
+      ))}
+    </Select>
   );
 }

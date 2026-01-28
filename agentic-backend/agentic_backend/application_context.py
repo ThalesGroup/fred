@@ -34,18 +34,14 @@ from threading import Lock
 from typing import Any, Callable, Dict, List, Optional
 
 from fred_core import (
-    BaseKPIStore,
     BaseLogStore,
     BearerAuth,
     ClientCredentialsProvider,
     DuckdbStoreConfig,
     InMemoryLogStorageConfig,
-    KpiLogStore,
-    KPIWriter,
     LogStoreConfig,
     OpenFgaRebacConfig,
     OpenSearchIndexConfig,
-    OpenSearchKPIStore,
     OpenSearchLogStore,
     PostgresTableConfig,
     RamLogStore,
@@ -54,6 +50,14 @@ from fred_core import (
     get_model,
     rebac_factory,
     split_realm_url,
+)
+from fred_core.kpi import (
+    BaseKPIStore,
+    KPIDefaults,
+    KpiLogStore,
+    KPIWriter,
+    OpenSearchKPIStore,
+    PrometheusKPIStore,
 )
 from fred_core.sql import create_engine_from_config
 from langchain_core.language_models.base import BaseLanguageModel
@@ -89,6 +93,7 @@ from agentic_backend.core.session.stores.postgres_session_attachment_store impor
 from agentic_backend.core.session.stores.postgres_session_store import (
     PostgresSessionStore,
 )
+from agentic_backend.scheduler.base_task_store import BaseAgentTaskStore
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +187,10 @@ def get_mcp_server_manager() -> "McpServerManager":
 
 def get_feedback_store() -> BaseFeedbackStore:
     return get_app_context().get_feedback_store()
+
+
+def get_task_store() -> BaseAgentTaskStore:
+    return get_app_context().get_task_store()
 
 
 def get_enabled_agent_names() -> List[str]:
@@ -286,6 +295,7 @@ class ApplicationContext:
     _service_instances: Dict[str, Any]
     _feedback_store_instance: Optional[BaseFeedbackStore] = None
     _agent_store_instance: Optional[BaseAgentStore] = None
+    _task_store_instance: Optional[BaseAgentTaskStore] = None
     _mcp_server_store_instance: Optional[BaseMcpServerStore] = None
     _mcp_server_manager: Optional[McpServerManager] = None
     _session_store_instance: Optional[BaseSessionStore] = None
@@ -620,7 +630,7 @@ class ApplicationContext:
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
-            self._kpi_store_instance = OpenSearchKPIStore(
+            store: BaseKPIStore = OpenSearchKPIStore(
                 host=opensearch_config.host,
                 username=opensearch_config.username,
                 password=password,
@@ -629,10 +639,47 @@ class ApplicationContext:
                 index=store_config.index,
             )
         elif isinstance(store_config, LogStoreConfig):
-            self._kpi_store_instance = KpiLogStore(level=store_config.level)
+            store = KpiLogStore(level=store_config.level)
         else:
             raise ValueError("Unsupported KPI storage backend")
+        self._kpi_store_instance = PrometheusKPIStore(delegate=store)
         return self._kpi_store_instance
+
+    def get_task_store(self):
+        if self._task_store_instance is not None:
+            return self._task_store_instance
+        from agentic_backend.scheduler.memory_task_store import MemoryAgentTaskStore
+        from agentic_backend.scheduler.postgres_task_store import PostgresAgentTaskStore
+
+        store_config = get_configuration().storage.task_store
+        # Allow the task store to be optional for workers that don't need it.
+        try:
+            if isinstance(store_config, PostgresTableConfig):
+                if not os.getenv("POSTGRES_PASSWORD"):
+                    logger.error(
+                        "[TASKS][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres task store)"
+                    )
+                    raise RuntimeError(
+                        "POSTGRES_PASSWORD is required for Postgres task store"
+                    )
+                pg = get_configuration().storage.postgres
+                engine = create_engine_from_config(pg)
+                self._task_store_instance = PostgresAgentTaskStore(
+                    engine=engine,
+                    table_name=store_config.table,
+                    prefix=store_config.prefix or "",
+                )
+                return self._task_store_instance
+            if getattr(store_config, "type", None) == "memory":
+                self._task_store_instance = MemoryAgentTaskStore()
+                return self._task_store_instance
+            raise ValueError("Unsupported tasks storage backend")
+        except Exception as exc:
+            logger.warning(
+                "[TASKS][STORE] Falling back to in-memory store (reason: %s)", exc
+            )
+            self._task_store_instance = MemoryAgentTaskStore()
+            return self._task_store_instance
 
     def get_agent_store(self) -> BaseAgentStore:
         """
@@ -801,7 +848,10 @@ class ApplicationContext:
         if self._kpi_writer is not None:
             return self._kpi_writer
 
-        self._kpi_writer = KPIWriter(store=self.get_kpi_store())
+        self._kpi_writer = KPIWriter(
+            store=self.get_kpi_store(),
+            defaults=KPIDefaults(static_dims={"service": "agentic"}),
+        )
         return self._kpi_writer
 
     def get_feedback_store(self) -> BaseFeedbackStore:

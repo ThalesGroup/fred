@@ -28,10 +28,13 @@ from typing import (
     List,
     Optional,
     Sequence,
+    Type,
     cast,
+    get_type_hints,
 )
 
-from fred_core import KPIActor, get_keycloak_client_id, get_keycloak_url
+from fred_core import get_keycloak_client_id, get_keycloak_url
+from fred_core.kpi import KPIActor
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
@@ -71,6 +74,7 @@ from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec
 from agentic_backend.core.agents.agent_state import Prepared, resolve_prepared
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
 from agentic_backend.core.agents.runtime_context import RuntimeContext, get_language
+from agentic_backend.scheduler.agent_contracts import AgentInputV1
 
 logger = logging.getLogger(__name__)
 
@@ -775,7 +779,8 @@ class AgentFlow:
         - Accepts AnyMessage/Sequence to play nicely with LangChain's typing.
         """
         lang = get_language(self.get_runtime_context())
-        if lang:
+        if lang and not self.chat_context_text():
+            # Only inject language preference if no chat context is present to avoid duplication.
             system_text = (
                 f"{system_text}\n\n"
                 f"User language preference: respond in '{lang}' by default unless explicitly asked otherwise."
@@ -786,18 +791,42 @@ class AgentFlow:
         self, messages: Sequence[AnyMessage]
     ) -> list[AnyMessage]:
         """
-        Wrap the chat context description in a SystemMessage at the end of the messages.
+        Wrap the chat context description in a SystemMessage near the start of the messages.
 
         Why:
-        - Force the system to take it into account.
+        - Force the system to take it into account as prompt-level context.
 
         """
         messages = [msg for msg in messages if not isinstance(msg, ChatContextMessage)]
         chat_context = self.chat_context_text()
         if not chat_context:
             return list(messages)
-        messages.append(ChatContextMessage(content=chat_context))
-        return messages
+        include_spec = self.get_field_spec("prompts.include_chat_context")
+        if include_spec is not None and not bool(
+            self.get_tuned_any("prompts.include_chat_context")
+        ):
+            logger.info(
+                "%s: chat context present but disabled by prompts.include_chat_context",
+                self,
+            )
+            return list(messages)
+
+        # Keep system-level context at the front so it is treated like a prompt.
+        insert_at = 0
+        for i, msg in enumerate(messages):
+            if isinstance(msg, SystemMessage):
+                insert_at = i + 1
+            else:
+                break
+        updated = list(messages)
+        updated.insert(insert_at, ChatContextMessage(content=chat_context))
+        logger.info(
+            "%s: chat context applied (len=%d insert_at=%d)",
+            self,
+            len(chat_context),
+            insert_at,
+        )
+        return updated
 
     def set_runtime_context(self, context: RuntimeContext) -> None:
         """Set the runtime context for this agent."""
@@ -842,7 +871,10 @@ class AgentFlow:
             name,
             dims=self._kpi_base_dims(dims),
             unit=unit,
-            actor=KPIActor(type="system"),
+            actor=KPIActor(
+                type="system",
+                groups=getattr(self.runtime_context, "user_groups", None),
+            ),
         )
 
     def __str__(self) -> str:
@@ -965,3 +997,37 @@ class AgentFlow:
         if hi is not None and val > hi:
             val = hi
         return val
+
+    def hydrate_state(self, input_data: AgentInputV1) -> Dict[str, Any]:
+        """
+        Maps AgentInputV1 into the specific TypedDict of the agent.
+        """
+        schema = self.get_state_schema()
+        # Inspect the TypedDict keys
+        expected_keys = get_type_hints(schema).keys()
+
+        # 1. Start with the mandatory message history
+        initial_state = {"messages": [HumanMessage(content=input_data.request_text)]}
+
+        # 2. Automatically map parameters and context
+        for key in expected_keys:
+            if key == "messages":
+                continue
+
+            # Priority 1: Direct parameters (e.g., research_depth)
+            if key in input_data.parameters:
+                initial_state[key] = input_data.parameters[key]
+
+            # Priority 2: Contextual references (e.g., project_id)
+            elif hasattr(input_data.context, key):
+                val = getattr(input_data.context, key)
+                if val:
+                    initial_state[key] = val
+
+        return initial_state
+
+    def get_state_schema(self) -> Type:
+        """Returns the State TypedDict class."""
+        # This can be automated by looking at the _build_graph call
+        # or explicitly defined by the dev.
+        raise NotImplementedError("Subclasses must define the state_schema")

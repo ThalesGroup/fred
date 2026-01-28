@@ -1,6 +1,7 @@
 {
   "common": {
     "add": "Ajouter",
+    "delete": "Supprimer",
     "noneSelected": "Aucune sélection",
     "expand": "Développer",
     "close": "Fermer",
@@ -19,7 +20,9 @@
     "uploading": "Téléchargement en cours...",
     "dropHere": "Déposez les fichiers ici ou cliquez pour parcourir",
     "loadingPreview": "Aperçu en cours de chargement...",
-    "loadingPreviewError": "Impossible de charger l'aperçu."
+    "loadingPreviewError": "Impossible de charger l'aperçu.",
+    "view": "Aperçu",
+    "contactSupport": "Contacter l'équipe support."
   },
   "dataHub": {
     "title": "Hub des Données - Lignage des documents",
@@ -114,12 +117,14 @@
     "facts": "Faits",
     "audit": "Audit",
     "optimize": "Optimiser",
-    "chat": "Conversations",
+    "chat": "Dernières conversations",
     "monitoring": "Supervision",
     "laboratory": "Laboratoire",
-    "knowledge": "Ressources",
+    "knowledge": "Vos ressources",
+    "apps": "Applications",
+    "apps_scheduler": "Planificateur",
     "mcp": "Outils",
-    "agent": "Agents",
+    "agent": "Vos {{agentsNickname}}",
     "release_notes": "Notes de version",
     "workspaces": "Espaces de travail",
     "account": "Profil",
@@ -133,6 +138,8 @@
       "monitoring": "Superviser les appels IA backend",
       "laboratory": "Explorer les fonctionnalités et outils de validation et de laboratoire",
       "knowledge": "Consulter vos bibliothèques de documents et de prompts",
+      "apps": "Lancer et tester les workflows applicatifs",
+      "apps_scheduler": "Soumettre et suivre les tâches planifiées",
       "mcp": "Gérer les serveurs MCP",
       "agent": "Voir les agents",
       "release_notes": "Consulter les dernières notes de version",
@@ -160,7 +167,72 @@
     "monitoring_data": "Données",
     "allAgents": "Tous les agents",
     "deleteSessionFailed": "La supression de la conversation a échoué",
-    "monitoring_graph": "Graphe"
+    "monitoring_graph": "Graphe",
+    "newChat": "Nouvelle conversation"
+  },
+  "apps": {
+    "scheduler": {
+      "title": "Applications / Planificateur",
+      "subtitle": "Soumettre et inspecter les tâches d'agents via Temporal.",
+      "submit": {
+        "title": "Planifier une tâche d'agent",
+        "action": "Soumettre la tâche",
+        "loading": "Soumission..."
+      },
+      "status": {
+        "title": "Dernière soumission",
+        "empty": "Aucune tâche soumise pour le moment."
+      },
+      "progress": {
+        "title": "Suivi de progression",
+        "action": "Rafraîchir la progression",
+        "loading": "Rafraîchissement...",
+        "state": "État",
+        "unknown": "Aucun pourcentage transmis",
+        "percent": "Pourcentage",
+        "message": "Message",
+        "none": "Aucun message",
+        "queued": "En attente de prise en charge par le worker."
+      },
+      "pending": {
+        "title": "Tâches en attente",
+        "empty": "Aucune tâche en attente",
+        "noWorkflow": "aucun workflow id"
+      },
+      "completed": {
+        "title": "Dernières tâches terminées",
+        "empty": "Aucune tâche terminée pour l'instant"
+      },
+      "recent": {
+        "title": "Workflows récents (Temporal)",
+        "empty": "Aucun workflow visible"
+      },
+      "fields": {
+        "targetAgent": "Agent cible",
+        "taskId": "ID de tâche (optionnel)",
+        "workflowType": "Type de workflow",
+        "taskQueue": "File de tâches (optionnel)",
+        "sessionId": "ID de session (optionnel)",
+        "requestId": "ID de requête (optionnel)",
+        "payload": "Payload (objet JSON)",
+        "context": "Contexte (objet JSON)",
+        "progressTaskId": "ID de tâche",
+        "progressWorkflowId": "ID de workflow",
+        "progressRunId": "ID d'exécution (optionnel)"
+      },
+      "toasts": {
+        "submitted": {
+          "title": "Tâche planifiée",
+          "detail": "La tâche a été soumise au planificateur."
+        },
+        "error": {
+          "title": "Erreur du planificateur"
+        },
+        "progressError": {
+          "title": "Erreur de progression"
+        }
+      }
+    }
   },
   "chat": {
     "common": {
@@ -177,7 +249,10 @@
     },
     "message": {
       "waiting": "En attente de réponse…",
-      "toolResult": "Résultat de l'outil"
+      "toolResult": "Résultat de l'outil",
+      "showMore": "Afficher plus",
+      "showLess": "Afficher moins",
+      "loadError": "Échec du chargement du message complet"
     },
     "actions": {
       "copyMessage": "Copier le message",
@@ -310,13 +385,13 @@
     "coreFields": "Champs de base",
     "tunableFields": "Champs réglables",
     "tagsLabel": "Tags",
-    "saveUser": "Appliquer les modifications pour mon profil",
-    "saveGlobal": "Appliquer les modifications pour tous les utilisateurs",
+    "saveUser": "Appliquer pour mon profil",
+    "saveGlobal": "Appliquer pour tous les utilisateurs",
     "selectMcpServers": "Sélectionnez des serveurs MCP",
     "noMcpServers": "Aucun serveur MCP disponible pour le moment."
   },
   "agentHub": {
-    "title": "Vos agents",
+    "title": "Vos {{agentsNicknamePlural}}",
     "confirmDeleteTitle": "Confirmer la suppression",
     "confirmDeleteMessage": "Supprimer cet agent ? Cette action est irréversible.",
     "description": "Explorez et gérez les agents IA disponibles",
@@ -460,13 +535,37 @@
   },
   "chatbot": {
     "ragScope": {
+      "label": "Portée RAG",
       "tooltipCorpus": "Utiliser seulement le corpus documentaire pour répondre",
       "tooltipHybrid": "Utiliser le corpus documentaire et les connaissances générales du modèle pour répondre",
       "tooltipGeneral": "Utiliser seulement les connaissances générales du modèle pour répondre"
     },
+    "searchPolicy": {
+      "label": "Politique de recherche"
+    },
     "deepSearch": {
       "label": "Recherche approfondie",
-      "tooltip": "Déléguer la recherche RAG à Rico Senior"
+      "tooltip": "Déléguer la recherche RAG à Rico Senior",
+      "tooltipDescription": "Délègue la recherche à un agent spécialisé pour explorer plus en profondeur votre corpus documentaire.\n\nL'activation de cette fonctionnalité peut ralentir les réponses mais les rendra plus complètes. Une transcription téléchargeable du processus de recherche sera jointe à la conversation.",
+      "tooltipDisabled": "Cet agent ne supporte pas la délégation de recherche approfondie.",
+      "description": "Lance une recherche plus approfondie avec un agent spécialisé. Réponses plus lentes mais plus complètes.",
+      "actionEnable": "Activer la recherche approfondie",
+      "actionDisable": "Désactiver la recherche approfondie"
+    },
+    "logGenius": {
+      "label": "Log Genius",
+      "tooltip": "Analyser les logs récents pour un diagnostic rapide",
+      "tooltipDescription": "Analysez les logs récents et résumez les problèmes probables avec des prochaines étapes.",
+      "description": "Lance une courte investigation sur les dernières minutes de logs et retourne un diagnostic prêt à l'emploi.",
+      "action": "Demander de l'aide ou une analyse",
+      "prompt": "Analysez les 5 dernières minutes de logs et résumez les problèmes probables avec des prochaines étapes."
+    },
+    "searchOptions": "Options de recherche",
+    "searchOptionsReset": "Réinitialiser",
+    "searchOptionsResetTooltip": "Réinitialiser les valeurs par défaut",
+    "searchOptionsTooltip": {
+      "description": "Ajustez le fonctionnement de la recherche pour cette conversation (portée RAG et politique de recherche).\n\nCes réglages sont enregistrés par conversation et appliqués uniquement lorsque l'agent supporte la recherche.",
+      "disabled": "Cet agent ne supporte pas les options de recherche."
     },
     "menu": {
       "addToSetup": "Ajouter à la configuration de la conversation"
@@ -475,12 +574,41 @@
       "placeholder": "Écrivez votre message…  Entrée pour envoyer • Maj+Entrée pour un saut de ligne"
     },
     "attachFiles": "Joindre des fichiers",
+    "addLibraries": "Ajouter des bibliothèques",
+    "addDocuments": "Ajouter des documents",
     "attachments": {
-      "betaNotice": "Les pièces jointes sont en version bêta. Formats pris en charge : PDF, DOCX, CSV. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
-      "supportedFormats": "Formats pris en charge : PDF, DOCX, CSV",
+      "betaNotice": "Les pièces jointes sont en version bêta. Formats pris en charge : PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
+      "supportedFormats": "Formats pris en charge : PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX",
       "count": "{{count}} pièces jointes",
-      "drawerTitle": "Gérer les pièces jointes",
-      "noAttachments": "Aucune pièce jointe pour le moment"
+      "drawerTitle": "Pièces jointes",
+      "noAttachments": "Aucune pièce jointe pour le moment",
+      "includeToggle": "Basculer la recherche sur les pièces jointes",
+      "includeTooltipOn": "Les pièces jointes sont incluses dans la recherche pour cette conversation.",
+      "includeTooltipOff": "Les pièces jointes sont exclues de la recherche pour cette conversation.",
+      "tooltip": {
+        "description": "Fichiers attachés à cette conversation.\n\nLes fichiers sont traités par des algorithmes plus rapides mais moins précis. L'agent pourra utiliser ces fichiers pour répondre .\n\nNotez que cette fonctionnalité est en version bêta et peut ne pas fonctionner parfaitement pour tous les types de fichiers. Pour des corpus pérennes, envisagez d'utiliser des bibliothèques de documents.",
+        "disabled": "Cet agent n’utilise pas les pièces jointes."
+      }
+    },
+    "documents": {
+      "drawerTitle": "Documents",
+      "empty": "Aucun document sélectionné.",
+      "includeToggle": "Basculer la recherche sur les documents",
+      "includeTooltipOn": "La sélection de documents est activée pour cette conversation.",
+      "includeTooltipOff": "La sélection de documents est désactivée pour cette conversation.",
+      "tooltip": {
+        "description": "Limiter la recherche à certains documents pour cette conversation.",
+        "disabled": "Cet agent ne supporte pas la sélection de documents."
+      }
+    },
+    "libraries": {
+      "disabledByDocuments": "La sélection de documents est active. Désactivez les documents pour utiliser les bibliothèques.",
+      "includeToggle": "Basculer la recherche sur les bibliothèques",
+      "includeTooltipOn": "Les bibliothèques sont incluses dans la recherche pour cette conversation.",
+      "includeTooltipOff": "Les bibliothèques sont exclues de la recherche pour cette conversation.",
+      "empty": "Aucune bibliothèque sélectionnée. Toutes les bibliothèques de documents visibles seront recherchées.",
+      "previewTitle": "Bibliothèque",
+      "noDescription": "Aucune description disponible."
     },
     "uploadingFile": "Téléversement de {{name}}...",
     "searchToggle": "Recherche : activé = RAG (sources), désactivé = sans recherche",
@@ -491,6 +619,7 @@
     "audioChip": "Enregistrement audio",
     "hideAudio": "Masquer le contrôleur audio",
     "searchDocumentLibraries": "Rechercher dans les bibliothèques de documents...",
+    "searchDocuments": "Rechercher des documents...",
     "searchPromptLibraries": "Rechercher dans les bibliothèques de prompts...",
     "searchChatContextLibraries": "Rechercher dans les bibliothèques de contextes de conversations...",
     "welcomeUser": "Bonjour {{username}}",
@@ -508,6 +637,7 @@
       "audio": "Audio",
       "oneRecording": "1 enregistrement",
       "libraries": "Bibliothèques ({{count}})",
+      "documents": "Documents ({{count}})",
       "prompts": "Prompts ({{count}})",
       "templates": "Templates ({{count}})"
     }
@@ -521,13 +651,19 @@
     "deleteAll": "Tout supprimer",
     "confirmDeleteAllTitle": "Supprimer toutes les conversations ?",
     "confirmDeleteAllMessage": "Cette action supprimera toutes les conversations définitivement. Voulez-vous continuer ?",
-    "conversationSetup": "Configuration de la conversation",
-    "newConversationHelp": "Commencer une nouvelle conversation (non encore enregistrée)",
-    "draftNotSaved": "Brouillon • non encore enregistré",
-    "chatContext": "Contexte de conversation"
+    "chatContext": "Contexte de conversation",
+    "chatContextTooltip": {
+      "description": "Ajoute des instructions (un « profil ») à cette conversation.\n\nCe contexte est injecté dans le prompt système des agents et s’applique donc à tous les agents.\n\nChaque agent possède aussi ses propres prompts internes, configurables, plus spécifiques à ses étapes : le contexte de conversation vient en complément de ces derniers et vous permet d’adapter le comportement de l’agent à votre besoin."
+    },
+    "chatContextPreviewTitle": "Aperçu du contexte de conversation"
+  },
+  "conversationChatContext": {
+    "add": "Ajouter un contexte",
+    "empty": "Aucun contexte sélectionné",
+    "open": "Ouvrir le contexte de chat"
   },
   "kpis": {
-    "title": "Surveillance des agents et services IA",
+    "title": "Supervision des services IA",
     "description": "Suivez l'utilisation, la performance et les coûts de tous les agents et services IA — y compris les tokens, la latence et les tendances d'activité."
   },
   "logs": {
@@ -567,7 +703,8 @@
     "manageAssets": "Gérer les ressources",
     "manageCrew": "Gérer l'équipe",
     "inspectCode": "Inspecter le code source",
-    "viewA2ACard": "Voir la carte A2A"
+    "viewA2ACard": "Voir la carte A2A",
+    "enable": "Activer"
   },
   "dialogs": {
     "create": {
@@ -632,10 +769,12 @@
     }
   },
   "knowledge": {
-    "title": "Ressources",
+    "title": "Vos ressources",
     "description": "Gérez vos documents et contextes de conversation",
     "viewSelector": {
       "libraries": "Bibliothèques",
+      "librariesTooltip": "Restreignez la recherche aux bibliothèques de documents sélectionnées pour cette conversation.\n\nCe paramètre est enregistré par conversation et utilisé pour les recherches RAG lorsque l’agent sélectionné le supporte.",
+      "librariesUnsupported": "Cet agent ne supporte pas le filtrage par bibliothèque.",
       "templates": "Modèles",
       "prompts": "Prompts",
       "documents": "Documents",
@@ -911,9 +1050,9 @@
     "strict": "Strict",
     "hybrid": "Hybride",
     "semantic": "Sémantique",
-    "strictDescription": "N'utiliser que des documents explicitement pertinents pour la requête.",
-    "hybridDescription": "Combiner des documents pertinents avec des résultats de recherche sémantique.",
-    "semanticDescription": "Utiliser la recherche sémantique pour trouver des documents connexes."
+    "strictDescription": "La recherche stricte privilégie la précision plutôt que la couverture. Elle applique des contraintes plus fortes (par exemple des correspondances lexicales ou de métadonnées plus exigeantes et/ou des seuils de similarité plus élevés), afin de ne retenir que les documents les plus clairement pertinents. Ce mode est adapté lorsque vous souhaitez éviter les résultats “approximatifs”, notamment sur de grands corpus, quitte à obtenir moins de résultats.",
+    "hybridDescription": "La recherche hybride combine la recherche par mots-clés (termes exacts, noms, identifiants) et la similarité sémantique. Elle est recommandée lorsque votre question contient des éléments précis (API, composants, codes d’erreur) tout en nécessitant une compréhension du contexte. Ce mode offre généralement un bon équilibre entre rappel et précision, au prix d’un traitement légèrement plus coûteux.",
+    "semanticDescription": "La recherche sémantique utilise des embeddings pour retrouver des documents ou passages dont le sens est proche de votre question, même s’ils n’emploient pas les mêmes mots. Elle est particulièrement efficace pour les questions ouvertes ou exploratoires, mais peut parfois inclure des résultats plus larges ou indirects lorsque la requête est courte ou ambiguë"
   },
   "sourceDetails": {
     "bestScore": "meilleur {{score}}%",
@@ -1039,5 +1178,10 @@
       "router": "Fred démarre...",
       "ui": "Fred prépare l'interface..."
     }
+  },
+  "newChat": {
+    "selectAgentTitle": "Bienvenue {{userName}}, à qui souhaitez-vous parler ?",
+    "yourAgents": "Vos agents",
+    "loadingAgentError": "Impossible de charger la liste des agents."
   }
 }

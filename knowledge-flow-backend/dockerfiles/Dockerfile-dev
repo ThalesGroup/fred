@@ -10,7 +10,7 @@ ARG UV_VERSION=0.7.12
 
 # Install required system dependencies
 RUN apt-get update && \
-    apt-get install -y git curl make net-tools inkscape && \
+    apt-get install -y git curl make net-tools inkscape libgl1 && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv globally

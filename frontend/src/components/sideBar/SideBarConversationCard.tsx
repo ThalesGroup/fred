@@ -1,9 +1,9 @@
-import DeleteIcon from "@mui/icons-material/Delete";
 import PersonIcon from "@mui/icons-material/Person";
-import { Box, IconButton, Skeleton, Typography, useTheme } from "@mui/material";
+import { Box, Skeleton, Typography, useTheme } from "@mui/material";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 import {
   SessionWithFiles,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
@@ -75,14 +75,6 @@ export function SideBarConversationCard({ session, refetchSessions }: SideBarCon
             flex: 1,
           }}
         >
-          {/* Agent name */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <PersonIcon sx={{ fontSize: "1rem", color: theme.palette.primary.main }} />
-            <Typography variant="caption" sx={{ color: theme.palette.primary.main }}>
-              {session.agents.length > 0 ? session.agents[0] : "..."}
-            </Typography>
-          </Box>
-
           {/* Title */}
           <Typography
             variant="body2"
@@ -96,24 +88,35 @@ export function SideBarConversationCard({ session, refetchSessions }: SideBarCon
             {session.title}
           </Typography>
 
-          {/* Date */}
-          <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
-            {dayjs(session.updated_at).format("L")}
-          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+            {/* Agent name */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+              <PersonIcon sx={{ fontSize: "1rem", color: theme.palette.primary.main }} />
+              <Typography variant="caption" sx={{ color: theme.palette.primary.main }}>
+                {session.agents.length > 0 ? session.agents[0] : "..."}
+              </Typography>
+            </Box>
+            <Typography variant="caption" color="textDisabled">
+              •
+            </Typography>
+
+            {/* Date */}
+            <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+              {dayjs(session.updated_at).format("L")}
+            </Typography>
+          </Box>
         </Box>
 
         {/* Delete button */}
-        <IconButton
+        <DeleteIconButton
           className="delete-button"
           size="small"
           onClick={handleDelete}
           sx={{
-            color: theme.palette.error.main,
+            color: theme.palette.error.light,
             display: "none",
           }}
-        >
-          <DeleteIcon fontSize="small" />
-        </IconButton>
+        />
       </Box>
     </Box>
   );

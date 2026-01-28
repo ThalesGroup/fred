@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
@@ -24,9 +23,10 @@ import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { getConfig } from "../../common/config";
+import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 
 import { Resource, TagWithItemsId } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { TagNode } from "../tags/tagTree";
+import { TagNode } from "../../shared/utils/tagTree";
 import { ResourceRowCompact } from "./ResourceRowCompact";
 import { DocumentLibraryShareDialog } from "../documents/libraries/sharing/DocumentLibraryShareDialog";
 
@@ -253,16 +253,14 @@ export function ResourceLibraryTree({
                   }
                   enterTouchDelay={10}
                 >
-                  <IconButton
+                  <DeleteIconButton
                     size="small"
                     disabled={!canBeDeleted}
                     onClick={(e) => {
                       e.stopPropagation();
                       onDeleteFolder(hereTag);
                     }}
-                  >
-                    <DeleteOutlineIcon fontSize="small" />
-                  </IconButton>
+                  />
                 </Tooltip>
               </Box>
             </Box>

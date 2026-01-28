@@ -14,7 +14,11 @@
 // limitations under the License.
 
 import React, { memo, useMemo } from "react";
+import { Box, Grid2, Tooltip } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { AnyAgent } from "../../common/agent";
+import { AgentChipMini } from "../../common/AgentChip";
+import DotsLoader from "../../common/DotsLoader";
 import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras, hasNonEmptyText } from "./ChatBotUtils";
 import MessageCard from "./MessageCard";
@@ -25,19 +29,41 @@ type Props = {
   messages: ChatMessage[];
   agents: AnyAgent[];
   currentAgent: AnyAgent;
+  isWaiting?: boolean;
 
   // id -> label maps
   libraryNameById?: Record<string, string>;
   chatContextNameById?: Record<string, string>;
+  hiddenUserExchangeIds?: Set<string>;
 };
+
+function TypingIndicatorRow({ agent }: { agent: AnyAgent }) {
+  const theme = useTheme();
+  return (
+    <Grid2 container marginBottom={1} sx={{ position: "relative" }}>
+      <Grid2 size="auto" paddingTop={2}>
+        <Tooltip title={`${agent.name}: ${agent.tuning.role}`}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+            <AgentChipMini agent={agent} />
+            <Box sx={{ display: "flex", alignItems: "center", transform: "translateY(1px) scale(0.9)" }}>
+              <DotsLoader dotSize="4px" dotColor={theme.palette.text.secondary} />
+            </Box>
+          </Box>
+        </Tooltip>
+      </Grid2>
+    </Grid2>
+  );
+}
 
 function Area({
   messages,
   agents,
   currentAgent,
+  isWaiting = false,
 
   libraryNameById,
   chatContextNameById,
+  hiddenUserExchangeIds,
 }: Props) {
   // Hover highlight in Sources (syncs with [n] markers inside MessageCard)
   const [highlightUid, setHighlightUid] = React.useState<string | null>(null);
@@ -49,6 +75,8 @@ function Area({
 
   const content = useMemo(() => {
     const sorted = [...messages].sort((a, b) => a.rank - b.rank);
+    const activeExchangeKey =
+      isWaiting && sorted.length ? `${sorted[sorted.length - 1].session_id}-${sorted[sorted.length - 1].exchange_id}` : null;
 
     const grouped = new Map<string, ChatMessage[]>();
     for (const msg of sorted) {
@@ -65,6 +93,8 @@ function Area({
       const others: ChatMessage[] = [];
       let userMessage: ChatMessage | undefined;
       let keptSources: any[] | undefined;
+      const groupKey = `${group[0].session_id}-${group[0].exchange_id}`;
+      const isActiveExchange = !!activeExchangeKey && groupKey === activeExchangeKey;
 
       for (const msg of group) {
         if (msg.role === "user" && msg.channel === "final") {
@@ -113,7 +143,8 @@ function Area({
         others.push(msg);
       }
 
-      if (userMessage) {
+      const shouldHideUserMessage = userMessage && hiddenUserExchangeIds?.has(userMessage.exchange_id);
+      if (userMessage && !shouldHideUserMessage) {
         elements.push(
           <MessageCard
             key={`user-${userMessage.session_id}-${userMessage.exchange_id}-${userMessage.rank}`}
@@ -122,6 +153,7 @@ function Area({
             side="right"
             enableCopy
             enableThumbs
+            pending={isActiveExchange}
             suppressText={false}
             libraryNameById={libraryNameById}
             chatContextNameById={chatContextNameById}
@@ -140,6 +172,12 @@ function Area({
             resolveAgent={resolveAgent}
           />,
         );
+      }
+
+      const hasAssistantReply = finals.some((m) => m.role === "assistant") || others.some((m) => m.role === "assistant");
+      if (isActiveExchange && isWaiting && !hasAssistantReply) {
+        const indicatorAgent = resolveAgent(userMessage ?? group[group.length - 1]);
+        elements.push(<TypingIndicatorRow key={`typing-${groupKey}`} agent={indicatorAgent} />);
       }
 
       // If we already have a curated set and there is no final yet, show it early
@@ -178,6 +216,7 @@ function Area({
               side={msg.role === "user" ? "right" : "left"}
               enableCopy
               enableThumbs
+              pending={isActiveExchange && isWaiting && msg.role === "assistant" && !hasNonEmptyText(msg)}
               suppressText={false}
               libraryNameById={libraryNameById}
               chatContextNameById={chatContextNameById}
@@ -217,6 +256,7 @@ function Area({
             side="left"
             enableCopy
             enableThumbs
+            pending={isActiveExchange && isWaiting && !hasNonEmptyText(msg)}
             suppressText={false}
             libraryNameById={libraryNameById}
             chatContextNameById={chatContextNameById}
@@ -228,11 +268,21 @@ function Area({
     }
 
     return elements;
-  }, [messages, agents, currentAgent, highlightUid, libraryNameById, chatContextNameById]);
+  }, [
+    messages,
+    agents,
+    currentAgent,
+    highlightUid,
+    libraryNameById,
+    chatContextNameById,
+    hiddenUserExchangeIds,
+    isWaiting,
+  ]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minHeight: 0 }}>
       {content}
+      {isWaiting && messages.length === 0 && <TypingIndicatorRow agent={currentAgent} />}
       <div style={{ height: "1px", marginTop: "8px" }} />
     </div>
   );

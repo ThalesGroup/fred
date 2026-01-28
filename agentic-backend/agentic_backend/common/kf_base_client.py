@@ -7,7 +7,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 import requests
-from fred_core import KPIActor
+from fred_core.kpi import KPIActor
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -23,6 +23,20 @@ def _session_with_retries(allowed_methods: frozenset) -> requests.Session:
         backoff_factor=0.3,
         status_forcelist=(429, 500, 502, 503, 504),
         allowed_methods=allowed_methods,
+        raise_on_status=False,
+    )
+    s.mount("http://", HTTPAdapter(max_retries=retry))
+    s.mount("https://", HTTPAdapter(max_retries=retry))
+    return s
+
+
+def _session_without_retries() -> requests.Session:
+    s = requests.Session()
+    retry = Retry(
+        total=0,
+        backoff_factor=0,
+        status_forcelist=(),
+        allowed_methods=frozenset(),
         raise_on_status=False,
     )
     s.mount("http://", HTTPAdapter(max_retries=retry))
@@ -59,6 +73,7 @@ class KfBaseClient:
         self.timeout: float | tuple[float, float] = (connect_t, read_t)
 
         self.session = _session_with_retries(allowed_methods)
+        self.session_no_retry = _session_without_retries()
 
         self._agent = agent
         self._static_access_token = access_token
@@ -68,7 +83,10 @@ class KfBaseClient:
             raise ValueError("KfBaseClient requires either `agent` or `access_token`.")
 
     def _kpi_actor(self) -> KPIActor:
-        return KPIActor(type="system")
+        groups = None
+        if self._agent:
+            groups = getattr(self._agent.runtime_context, "user_groups", None)
+        return KPIActor(type="system", groups=groups)
 
     def _kpi_dims(self, *, method: str, path: str) -> Dict[str, Optional[str]]:
         dims: Dict[str, Optional[str]] = {
@@ -154,7 +172,9 @@ class KfBaseClient:
         headers: Dict[str, str] = kwargs.pop("headers", {})
         headers["Authorization"] = f"Bearer {token}"
 
-        return self.session.request(
+        use_no_retry = "files" in kwargs and kwargs.get("files") is not None
+        session = self.session_no_retry if use_no_retry else self.session
+        return session.request(
             method, url, timeout=self.timeout, headers=headers, **kwargs
         )
 
