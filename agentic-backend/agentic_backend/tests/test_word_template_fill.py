@@ -331,9 +331,7 @@ def test_textbox_placeholder_replacement():
         # Write to new file
         with zipfile.ZipFile(template_path, "w", zipfile.ZIP_DEFLATED) as docx_write:
             # Write modified document.xml
-            docx_write.writestr(
-                "word/document.xml", tostring(root, encoding="unicode")
-            )
+            docx_write.writestr("word/document.xml", tostring(root, encoding="unicode"))
 
             # Copy all other files
             for item in docx_read.namelist():
