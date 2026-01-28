@@ -257,7 +257,12 @@ class ReferenceEditor(AgentFlow):
         return create_agent(
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
-            tools=[template_tool, word_template_tool, validator_tool, *self.mcp.get_tools()],
+            tools=[
+                template_tool,
+                word_template_tool,
+                validator_tool,
+                *self.mcp.get_tools(),
+            ],
             checkpointer=self.streaming_memory,
             middleware=[],
         )
@@ -337,16 +342,23 @@ class ReferenceEditor(AgentFlow):
                 from agentic_backend.common.vector_search_client import (
                     VectorSearchClient,
                 )
+
                 vector_search_client = VectorSearchClient()
                 kf_base_client = KfBaseClient(
-                    allowed_methods=frozenset({"GET", "POST"}),
-                    agent=self
+                    allowed_methods=frozenset({"GET", "POST"}), agent=self
                 )
-                fill_slide_from_structured_response(template_path, actual_data, output_path, vector_search_client, kf_base_client)
+                fill_slide_from_structured_response(
+                    template_path,
+                    actual_data,
+                    output_path,
+                    vector_search_client,
+                    kf_base_client,
+                )
 
             # 3. Upload the generated asset to user storage
             import asyncio
             import uuid
+
             user_id_to_store_asset = self.get_end_user_id()
             # Use UUID to generate a unique filename that won't trigger versioning conflicts
             unique_id = str(uuid.uuid4())
@@ -365,7 +377,9 @@ class ReferenceEditor(AgentFlow):
                             file_content=f_out,
                             filename=final_key,  # Use the same unique filename to avoid versioning conflicts
                             content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                            user_id_override=user_id_to_store_asset if attempt == 0 else None,
+                            user_id_override=user_id_to_store_asset
+                            if attempt == 0
+                            else None,
                         )
                     upload_succeeded = True
                     break  # Success, exit retry loop
@@ -430,16 +444,23 @@ class ReferenceEditor(AgentFlow):
                 from agentic_backend.common.vector_search_client import (
                     VectorSearchClient,
                 )
+
                 vector_search_client = VectorSearchClient()
                 kf_base_client = KfBaseClient(
-                    allowed_methods=frozenset({"GET", "POST"}),
-                    agent=self
+                    allowed_methods=frozenset({"GET", "POST"}), agent=self
                 )
-                fill_word_from_structured_response(template_path, actual_data, output_path, vector_search_client, kf_base_client)
+                fill_word_from_structured_response(
+                    template_path,
+                    actual_data,
+                    output_path,
+                    vector_search_client,
+                    kf_base_client,
+                )
 
             # 3. Upload the generated asset to user storage
             import asyncio
             import uuid
+
             user_id_to_store_asset = self.get_end_user_id()
             # Use UUID to generate a unique filename that won't trigger versioning conflicts
             unique_id = str(uuid.uuid4())
@@ -455,7 +476,9 @@ class ReferenceEditor(AgentFlow):
                             file_content=f_out,
                             filename=final_key,  # Use the same unique filename to avoid versioning conflicts
                             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            user_id_override=user_id_to_store_asset if attempt == 0 else None,
+                            user_id_override=user_id_to_store_asset
+                            if attempt == 0
+                            else None,
                         )
                     break  # Success, exit retry loop
                 except:

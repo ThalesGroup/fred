@@ -5,7 +5,9 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-def search_image_by_name(image_name: str, vector_search_client, kf_base_client) -> Optional[str]:
+def search_image_by_name(
+    image_name: str, vector_search_client, kf_base_client
+) -> Optional[str]:
     """
     Search for an image document by its name in the knowledge flow backend.
 
@@ -22,9 +24,7 @@ def search_image_by_name(image_name: str, vector_search_client, kf_base_client) 
 
         # Use VectorSearchClient.search() method
         hits = vector_search_client.search(
-            question=image_name,
-            top_k=5,
-            search_policy="semantic"
+            question=image_name, top_k=5, search_policy="semantic"
         )
 
         if hits and len(hits) > 0:
@@ -38,7 +38,9 @@ def search_image_by_name(image_name: str, vector_search_client, kf_base_client) 
                 if document_name:
                     name_without_ext = document_name.rsplit(".", 1)[0].lower()
                     if name_without_ext == search_term:
-                        logger.info(f"Found exact match: {document_uid} ({document_name}) for query: {image_name}")
+                        logger.info(
+                            f"Found exact match: {document_uid} ({document_name}) for query: {image_name}"
+                        )
                         return document_uid
 
             # Pass 2: Check if search term is contained in filename or vice versa
@@ -49,12 +51,19 @@ def search_image_by_name(image_name: str, vector_search_client, kf_base_client) 
                 if document_name:
                     name_without_ext = document_name.rsplit(".", 1)[0].lower()
                     # Check both directions: "sharepoint" in "sharepoint_logo" OR "share" in "sharepoint"
-                    if search_term in name_without_ext or name_without_ext in search_term:
-                        logger.info(f"Found partial match: {document_uid} ({document_name}) for query: {image_name}")
+                    if (
+                        search_term in name_without_ext
+                        or name_without_ext in search_term
+                    ):
+                        logger.info(
+                            f"Found partial match: {document_uid} ({document_name}) for query: {image_name}"
+                        )
                         return document_uid
 
             # No relevant match found - don't return random semantic results
-            logger.warning(f"No matching image found for: {image_name} (checked {len(hits)} results, none matched)")
+            logger.warning(
+                f"No matching image found for: {image_name} (checked {len(hits)} results, none matched)"
+            )
             return None
 
         logger.warning(f"No image found for name: {image_name}")
@@ -81,13 +90,14 @@ def download_image(document_uid: str, kf_base_client) -> Optional[io.BytesIO]:
 
         # Use the internal method to make authenticated GET request
         response = kf_base_client._request_with_token_refresh(
-            "GET",
-            f"/raw_content/{document_uid}"
+            "GET", f"/raw_content/{document_uid}"
         )
 
         if response and response.content:
             image_data = io.BytesIO(response.content)
-            logger.info(f"Successfully downloaded image: {document_uid}, size: {len(response.content)} bytes")
+            logger.info(
+                f"Successfully downloaded image: {document_uid}, size: {len(response.content)} bytes"
+            )
             return image_data
 
         logger.error(f"Failed to download image {document_uid}: Invalid response")
@@ -98,7 +108,9 @@ def download_image(document_uid: str, kf_base_client) -> Optional[io.BytesIO]:
         return None
 
 
-def get_image_for_technology(technology_name: str, vector_search_client, kf_base_client) -> Optional[io.BytesIO]:
+def get_image_for_technology(
+    technology_name: str, vector_search_client, kf_base_client
+) -> Optional[io.BytesIO]:
     """
     High-level function to search and download an image for a given technology name.
 
@@ -116,7 +128,9 @@ def get_image_for_technology(technology_name: str, vector_search_client, kf_base
     logger.info(f"Getting image for technology: {clean_name}")
 
     # Search for the image
-    document_uid = search_image_by_name(clean_name, vector_search_client, kf_base_client)
+    document_uid = search_image_by_name(
+        clean_name, vector_search_client, kf_base_client
+    )
 
     if not document_uid:
         logger.warning(f"Could not find image for technology: {clean_name}")

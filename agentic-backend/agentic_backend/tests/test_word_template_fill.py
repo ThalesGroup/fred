@@ -1,4 +1,5 @@
 """Test suite for fill_word_from_structured_response function"""
+
 import tempfile
 from pathlib import Path
 
@@ -54,19 +55,19 @@ def sample_data():
             "nomProjet": "Project Phoenix",
             "dateProjet": "2024-01-15",
             "nombrePersonnes": "25",
-            "enjeuFinancier": "2.5M EUR"
+            "enjeuFinancier": "2.5M EUR",
         },
         "contexte": {
             "presentationClient": "Leading tech company",
             "presentationContexte": "Digital transformation initiative",
-            "listeTechnologies": "Python, React, Docker, Kubernetes"
+            "listeTechnologies": "Python, React, Docker, Kubernetes",
         },
         "syntheseProjet": {
             "enjeux": "Modernize legacy systems",
             "activiteSolutions": "Cloud migration and API development",
             "beneficeClients": "Reduced costs and improved scalability",
-            "pointsForts": "Expert team with proven track record"
-        }
+            "pointsForts": "Expert team with proven track record",
+        },
     }
 
 
@@ -107,7 +108,9 @@ def test_multiple_placeholders_in_paragraph(sample_template, sample_data):
         text_content = "\n".join([p.text for p in result_doc.paragraphs])
 
         # Check the paragraph with multiple placeholders
-        expected_text = "Project Project Phoenix for TechCorp Inc. started on 2024-01-15"
+        expected_text = (
+            "Project Project Phoenix for TechCorp Inc. started on 2024-01-15"
+        )
         assert expected_text in text_content
 
     finally:
@@ -191,7 +194,9 @@ def test_missing_placeholder_data(sample_template):
 
     try:
         # Should not raise an exception
-        fill_word_from_structured_response(sample_template, incomplete_data, output_path)
+        fill_word_from_structured_response(
+            sample_template, incomplete_data, output_path
+        )
 
         result_doc = Document(str(output_path))
         text_content = "\n".join([p.text for p in result_doc.paragraphs])
@@ -222,11 +227,7 @@ def test_formatting_preservation():
         doc.save(tmp.name)
         template_path = Path(tmp.name)
 
-    data = {
-        "informationsProjet": {
-            "nomSociete": "TechCorp"
-        }
-    }
+    data = {"informationsProjet": {"nomSociete": "TechCorp"}}
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as out:
         output_path = Path(out.name)
@@ -295,30 +296,45 @@ def test_textbox_placeholder_replacement():
     shutil.copy(original_path, template_path)
 
     # Modify the document to add textbox with placeholder
-    with zipfile.ZipFile(original_path, 'r') as docx_read:
-        xml_content = docx_read.read('word/document.xml')
+    with zipfile.ZipFile(original_path, "r") as docx_read:
+        xml_content = docx_read.read("word/document.xml")
         root = ET.fromstring(xml_content)
 
-        ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 
         # Create a textbox structure
-        body = root.find('.//w:body', ns)
+        body = root.find(".//w:body", ns)
         if body is not None:
-            p = ET.SubElement(body, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p')
-            txbxContent = ET.SubElement(p, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}txbxContent')
-            inner_p = ET.SubElement(txbxContent, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p')
-            r = ET.SubElement(inner_p, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}r')
-            t = ET.SubElement(r, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t')
+            p = ET.SubElement(
+                body, "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"
+            )
+            txbxContent = ET.SubElement(
+                p,
+                "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}txbxContent",
+            )
+            inner_p = ET.SubElement(
+                txbxContent,
+                "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p",
+            )
+            r = ET.SubElement(
+                inner_p,
+                "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}r",
+            )
+            t = ET.SubElement(
+                r, "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t"
+            )
             t.text = "Company: {nomSociete}"
 
         # Write to new file
-        with zipfile.ZipFile(template_path, 'w', zipfile.ZIP_DEFLATED) as docx_write:
+        with zipfile.ZipFile(template_path, "w", zipfile.ZIP_DEFLATED) as docx_write:
             # Write modified document.xml
-            docx_write.writestr('word/document.xml', ET.tostring(root, encoding='unicode'))
+            docx_write.writestr(
+                "word/document.xml", ET.tostring(root, encoding="unicode")
+            )
 
             # Copy all other files
             for item in docx_read.namelist():
-                if item != 'word/document.xml':
+                if item != "word/document.xml":
                     docx_write.writestr(item, docx_read.read(item))
 
     original_path.unlink()
@@ -332,14 +348,14 @@ def test_textbox_placeholder_replacement():
         fill_word_from_structured_response(template_path, data, output_path)
 
         # Verify via XML that the placeholder was replaced
-        with zipfile.ZipFile(output_path, 'r') as docx:
-            result_xml = docx.read('word/document.xml')
+        with zipfile.ZipFile(output_path, "r") as docx:
+            result_xml = docx.read("word/document.xml")
 
         result_root = ET.fromstring(result_xml)
-        ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 
         # Check that placeholder is gone and value is there
-        all_text = ''.join([t.text or '' for t in result_root.findall('.//w:t', ns)])
+        all_text = "".join([t.text or "" for t in result_root.findall(".//w:t", ns)])
 
         assert "TechCorp Inc" in all_text or len(all_text) > 0  # Content exists
         assert "{nomSociete}" not in all_text  # Placeholder is replaced
