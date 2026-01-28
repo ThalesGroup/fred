@@ -1683,6 +1683,7 @@ export type GroupSummary = {
   is_private?: boolean | null;
   owners?: UserSummary[];
   is_member?: boolean | null;
+  sub_groups?: GroupSummary[];
 };
 export type TagMemberGroup = {
   type?: "group";
