@@ -1211,5 +1211,18 @@
     "headerInfoTooltip": "Seuls les propriétaires de l’équipe peuvent gérer ces applications, qui sont accessibles uniquement à ses membres.",
     "noAppDescription": "Les propriétaires de l’équipe n’ont configuré aucune application pour ce groupe pour le moment.",
     "noAppTitle": "Aucune app"
+  },
+  "teamSettingsPage": {
+    "teamBanner": {
+      "label": "Bannière de l'équipe",
+      "buttonLabel": "Fichier..."
+    },
+    "description": {
+      "label": "Description de l'équipe",
+      "placeholder": "Décrivez ici la raison d'être de votre équipe ainsi que ses enjeux. "
+    },
+    "private": {
+      "label": "Équipe privée"
+    }
   }
 }

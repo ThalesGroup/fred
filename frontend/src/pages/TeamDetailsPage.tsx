@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 import { NavigationTabs, TabConfig } from "../components/NavigationTabs";
 import { TeamAgentHub } from "../components/teamDetails/teamAgentHub";
 import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
+import { TeamSettingsPage } from "../components/teamDetails/TeamSettingsPage";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { GroupSummary } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
@@ -87,11 +88,7 @@ export function TeamDetailsPage() {
     {
       label: t("teamDetails.tabs.settings"),
       path: `/team/${team.id}/settings`,
-      component: (
-        <Box>
-          <Typography>Settings content for {team.name}</Typography>
-        </Box>
-      ),
+      component: <TeamSettingsPage team={team} />,
     },
   ];
 
@@ -113,7 +110,18 @@ export function TeamDetailsPage() {
         {/* Title and description */}
         <Box sx={{ display: "flex", flexDirection: "column" }}>
           <Typography variant="h6">{team.name}</Typography>
-          <Typography variant="body2" color="textSecondary">
+          <Typography
+            variant="body2"
+            color="textSecondary"
+            sx={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              display: "-webkit-box",
+              WebkitBoxOrient: "vertical",
+              WebkitLineClamp: 2,
+              maxWidth: "90ch",
+            }}
+          >
             {team.description}
           </Typography>
         </Box>

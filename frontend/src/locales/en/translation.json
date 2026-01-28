@@ -1209,5 +1209,18 @@
     "headerInfoTooltip": "These apps are only available to your team and are managed by team owners.",
     "noAppTitle": "No app",
     "noAppDescription": "The team owners have not configured any applications for this group at this time."
+  },
+  "teamSettingsPage": {
+    "teamBanner": {
+      "label": "Team banner",
+      "buttonLabel": "File..."
+    },
+    "description": {
+      "label": "Team description",
+      "placeholder": "Describe here the purpose of your team and its key challenges."
+    },
+    "private": {
+      "label": "Private team"
+    }
   }
 }

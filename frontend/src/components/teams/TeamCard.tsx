@@ -124,12 +124,7 @@ export function TeamCard({ team, userIsMember = false }: TeamCardProps) {
                   placement="top"
                   slotProps={tooltipOffset}
                 >
-                  <Avatar
-                    sizes="small"
-                    sx={{ width: 24, height: 24, fontSize: "0.75rem" }}
-                    // Set border to the same color as the Paper
-                    style={{ borderColor: "#232323" }}
-                  >
+                  <Avatar sizes="small" sx={{ width: 24, height: 24, fontSize: "0.75rem" }}>
                     {getInitials(owner.username)}
                   </Avatar>
                 </Tooltip>
