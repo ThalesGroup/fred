@@ -131,7 +131,6 @@ export default function SideBar() {
       url: `/teams`,
     },
   ];
-  const appsMenuItems: SideBarNavigationElement[] = [];
   const adminMenuItems: SideBarNavigationElement[] = [
     {
       key: "mcp",
@@ -511,13 +510,6 @@ export default function SideBar() {
           {/* Nav */}
           <Box>
             <SideBarNavigationList menuItems={menuItems} isSidebarOpen={open} />
-          </Box>
-
-          <SideBarDivider />
-
-          {/* Apps Nav */}
-          <Box>
-            <SideBarNavigationList menuItems={appsMenuItems} isSidebarOpen={open} />
           </Box>
 
           <SideBarDivider />
