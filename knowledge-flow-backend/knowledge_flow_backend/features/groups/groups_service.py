@@ -65,7 +65,7 @@ async def list_groups(
         if not group_id:
             logger.debug("Skipping Keycloak group without identifier: %s", raw_group)
             continue
-        group = await _build_group_summary(admin, group_id)
+        group, _ = await _build_group_tree(admin, group_id)
         if group:
             groups.append(group)
 
@@ -78,16 +78,12 @@ async def list_groups(
 
     _apply_group_metadata(groups, profiles, owners, member_group_ids)
 
-    filtered = [
-        group
-        for group in groups
-        if _is_group_visible(
-            group,
-            is_admin=is_admin,
-            member_only=member_only,
-            readable_group_ids=readable_group_ids,
-        )
-    ]
+    filtered = _filter_group_tree(
+        groups,
+        is_admin=is_admin,
+        member_only=member_only,
+        readable_group_ids=readable_group_ids,
+    )
 
     if offset < 0:
         offset = 0
@@ -112,7 +108,7 @@ async def get_groups_by_ids(group_ids: Iterable[str]) -> dict[str, GroupSummary]
 
     ordered_ids = sorted(unique_ids)
 
-    coroutines = {group_id: _build_group_summary(admin, group_id) for group_id in ordered_ids}
+    coroutines = {group_id: _build_group_tree(admin, group_id) for group_id in ordered_ids}
     results = await asyncio.gather(*coroutines.values(), return_exceptions=True)
 
     summaries: dict[str, GroupSummary] = {}
@@ -123,7 +119,7 @@ async def get_groups_by_ids(group_ids: Iterable[str]) -> dict[str, GroupSummary]
                 continue
             raise result
 
-        summary = cast(GroupSummary | None, result)
+        summary, _ = cast(tuple[GroupSummary | None, set[str]], result)
         if summary:
             summaries[group_id] = summary
     return summaries
@@ -147,21 +143,37 @@ async def _fetch_root_groups(admin: KeycloakAdmin) -> list[dict]:
     return groups
 
 
-async def _build_group_summary(admin: KeycloakAdmin, group_id: str) -> GroupSummary | None:
+async def _build_group_tree(admin: KeycloakAdmin, group_id: str) -> tuple[GroupSummary | None, set[str]]:
     detailed_group = await admin.a_get_group(group_id)
     if not detailed_group:
         logger.debug("Keycloak returned empty group payload for id %s", group_id)
-        return None
+        return None, set()
+    subgroups_payload = detailed_group.get("subGroups") or []
+
+    sub_groups: list[GroupSummary] = []
+    aggregated_members: set[str] = set()
+    for subgroup in subgroups_payload:
+        child_id = subgroup.get("id")
+        if not child_id:
+            logger.debug("Skipping Keycloak subgroup without identifier under group %s: %s", group_id, subgroup)
+            continue
+        child_summary, child_members = await _build_group_tree(admin, child_id)
+        if child_summary:
+            sub_groups.append(child_summary)
+            aggregated_members.update(child_members)
 
     direct_members = await _fetch_group_member_ids(admin, group_id)
+    aggregated_members.update(direct_members)
 
-    return GroupSummary(
+    summary = GroupSummary(
         id=group_id,
         name=_sanitize_name(detailed_group.get("name"), fallback=group_id),
         member_count=len(direct_members),
-        total_member_count=len(direct_members),
+        total_member_count=len(aggregated_members),
         description=_extract_group_description(detailed_group),
+        sub_groups=sub_groups,
     )
+    return summary, aggregated_members
 
 
 def _sanitize_name(value: object, fallback: str) -> str:
@@ -207,7 +219,14 @@ async def _fetch_group_member_ids(admin: KeycloakAdmin, group_id: str) -> set[st
 
 
 def _collect_group_ids(groups: Iterable[GroupSummary]) -> list[str]:
-    return [group.id for group in groups]
+    ids: list[str] = []
+    stack = list(groups)
+    while stack:
+        group = stack.pop()
+        ids.append(group.id)
+        if group.sub_groups:
+            stack.extend(group.sub_groups)
+    return ids
 
 
 def _fetch_group_profiles(group_ids: Iterable[str]) -> dict[str, GroupProfile]:
@@ -317,7 +336,9 @@ def _apply_group_metadata(
     owners: dict[str, list[UserSummary]],
     member_group_ids: set[str],
 ) -> None:
-    for group in groups:
+    stack = list(groups)
+    while stack:
+        group = stack.pop()
         profile = profiles.get(group.id)
         if profile:
             if profile.description is not None:
@@ -326,6 +347,39 @@ def _apply_group_metadata(
             group.is_private = profile.is_private
         group.owners = owners.get(group.id, [])
         group.is_member = group.id in member_group_ids
+        if group.sub_groups:
+            stack.extend(group.sub_groups)
+
+
+def _filter_group_tree(
+    groups: Iterable[GroupSummary],
+    *,
+    is_admin: bool,
+    member_only: bool,
+    readable_group_ids: set[str],
+) -> list[GroupSummary]:
+    filtered: list[GroupSummary] = []
+    for group in groups:
+        if group.sub_groups:
+            group.sub_groups = _filter_group_tree(
+                group.sub_groups,
+                is_admin=is_admin,
+                member_only=member_only,
+                readable_group_ids=readable_group_ids,
+            )
+
+        visible = _is_group_visible(
+            group,
+            is_admin=is_admin,
+            member_only=member_only,
+            readable_group_ids=readable_group_ids,
+        )
+        if visible:
+            filtered.append(group)
+        elif group.sub_groups:
+            filtered.extend(group.sub_groups)
+
+    return filtered
 
 
 def _is_group_visible(
