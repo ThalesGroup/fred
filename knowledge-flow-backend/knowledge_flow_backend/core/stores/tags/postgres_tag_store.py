@@ -79,9 +79,9 @@ class PostgresTagStore(BaseTagStore, PydanticJsonMixin):
     # CRUD implementation mirroring DuckDB store
 
     def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
-        owner_id = getattr(user, "uid", None) or getattr(user, "id", None) or getattr(user, "sub", None)
         with self.store.begin() as conn:
-            rows = conn.execute(select(self.table.c.doc).where(self.table.c.owner_id == owner_id).order_by(self.table.c.path.nullsfirst(), self.table.c.name)).fetchall()
+            # Fetch every tag; ReBAC filtering happens at the service layer so shared tags remain visible.
+            rows = conn.execute(select(self.table.c.doc).order_by(self.table.c.path.nullsfirst(), self.table.c.name)).fetchall()
         return [self._from_dict(r[0]) for r in rows]
 
     def get_tag_by_id(self, tag_id: str) -> Tag:
