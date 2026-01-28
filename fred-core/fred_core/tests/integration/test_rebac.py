@@ -847,10 +847,15 @@ async def test_team_filtering_by_visibility(
     This test validates:
     - Strangers can only see public teams
     - Users can see public teams + all teams they belong to (regardless of role)
+    - Platform admins can see all teams (public and private)
     """
     # Create users
     stranger = _make_reference(Resource.USER, prefix="stranger")
     multi_role_user = _make_reference(Resource.USER, prefix="alice")
+    platform_admin = _make_reference(Resource.USER, prefix="admin")
+
+    # Create platform
+    platform = _make_reference(Resource.PLATFORM, prefix="main-platform")
 
     # Create teams
     public_team_1 = _make_reference(Resource.TEAM, prefix="public-marketing")
@@ -863,6 +868,19 @@ async def test_team_filtering_by_visibility(
     # Set up team visibility and memberships
     token = await rebac_engine.add_relations(
         [
+            # Platform admin setup
+            Relation(
+                subject=platform_admin,
+                relation=RelationType.ADMIN,
+                resource=platform,
+            ),
+            # Link all teams to platform
+            Relation(subject=platform, relation=RelationType.PLATFORM, resource=public_team_1),
+            Relation(subject=platform, relation=RelationType.PLATFORM, resource=public_team_2),
+            Relation(subject=platform, relation=RelationType.PLATFORM, resource=private_team_owned),
+            Relation(subject=platform, relation=RelationType.PLATFORM, resource=private_team_managed),
+            Relation(subject=platform, relation=RelationType.PLATFORM, resource=private_team_member),
+            Relation(subject=platform, relation=RelationType.PLATFORM, resource=other_private_team),
             # Public teams - anyone can read
             Relation(
                 subject=RebacReference(Resource.USER, "*"),
@@ -890,7 +908,7 @@ async def test_team_filtering_by_visibility(
                 relation=RelationType.MEMBER,
                 resource=private_team_member,
             ),
-            # Other private team - neither user has access
+            # Other private team - only accessible by platform admin and its owner
             Relation(
                 subject=_make_reference(Resource.USER, prefix="someone-else"),
                 relation=RelationType.OWNER,
@@ -944,4 +962,29 @@ async def test_team_filtering_by_visibility(
     # Verify user does NOT see the other private team
     assert other_private_team.id not in user_team_ids, (
         "User should not see private teams they don't belong to"
+    )
+
+    # ~~~~~~~~~~~~~~~~~~~~
+    # Platform admin sees ALL teams (public and private)
+
+    admin_teams = await rebac_engine.lookup_resources(
+        subject=platform_admin,
+        permission=TeamPermission.CAN_READ,
+        resource_type=Resource.TEAM,
+        consistency_token=token,
+    )
+
+    assert not isinstance(admin_teams, RebacDisabledResult)
+    admin_team_ids = {team.id for team in admin_teams}
+
+    assert admin_team_ids == {
+        public_team_1.id,
+        public_team_2.id,
+        private_team_owned.id,
+        private_team_managed.id,
+        private_team_member.id,
+        other_private_team.id,
+    }, (
+        f"Platform admin should see all teams (public and private), "
+        f"got: {admin_team_ids}"
     )
