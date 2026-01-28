@@ -149,7 +149,7 @@ def fill_slide_from_structured_response(ppt_path, structured_responses, output_p
 
             # After text replacement, if this shape contained nomSociete, add image next to it
             if has_nom_societe and societe_image:
-                logger.info(f"Adding nomSociete image to PowerPoint shape")
+                logger.info("Adding nomSociete image to PowerPoint shape")
                 add_societe_image_to_pptx_shape(shape, societe_image, flattened_data.get("nomSociete", ""), slide)
 
     prs.save(output_path)
@@ -335,7 +335,7 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
 
         # After text replacement, if this paragraph contained nomSociete, add image next to it
         if has_nom_societe and societe_image:
-            logger.info(f"Adding nomSociete image to Word paragraph")
+            logger.info("Adding nomSociete image to Word paragraph")
             add_societe_image_to_word_paragraph(paragraph, societe_image, flattened_data.get("nomSociete", ""))
 
         logger.info(f"Final paragraph text after replacement: '{paragraph.text}'")
@@ -415,7 +415,7 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
                     if key in flattened_data:
                         # Special case: listeTechnologies with images
                         if key == "listeTechnologies" and tech_images:
-                            logger.info(f"    Found listeTechnologies, will add images separately")
+                            logger.info("    Found listeTechnologies, will add images separately")
                             new_text = new_text.replace(placeholder, "")
                             textbox_with_liste_tech = txbxContent
                             replacements_made += 1
@@ -447,7 +447,7 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
 
     # Add image near the textbox that contained nomSociete
     if textbox_with_nom_societe is not None and societe_image:
-        logger.info(f"Adding nomSociete image near textbox")
+        logger.info("Adding nomSociete image near textbox")
         _add_societe_image_near_textbox(doc, textbox_with_nom_societe, societe_image, flattened_data.get("nomSociete", ""))
 
     doc.save(output_path)
