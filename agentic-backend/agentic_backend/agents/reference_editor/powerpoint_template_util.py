@@ -5,14 +5,23 @@ from io import BytesIO
 from docx import Document
 from docx.shared import Inches, Pt
 from pptx import Presentation
-from pptx.util import Inches as PptxInches, Pt as PptxPt
+from pptx.util import Inches as PptxInches
+from pptx.util import Pt as PptxPt
 
-from agentic_backend.agents.reference_editor.image_search_util import get_image_for_technology
+from agentic_backend.agents.reference_editor.image_search_util import (
+    get_image_for_technology,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def fill_slide_from_structured_response(ppt_path, structured_responses, output_path, vector_search_client=None, kf_base_client=None):
+def fill_slide_from_structured_response(
+    ppt_path,
+    structured_responses,
+    output_path,
+    vector_search_client=None,
+    kf_base_client=None,
+):
     prs = Presentation(ppt_path)
     pattern = re.compile(r"\{([^}]+)\}")
 
@@ -31,17 +40,25 @@ def fill_slide_from_structured_response(ppt_path, structured_responses, output_p
 
     # Pre-fetch images for listeTechnologies if present
     tech_images = []
-    if "listeTechnologies" in flattened_data and vector_search_client and kf_base_client:
+    if (
+        "listeTechnologies" in flattened_data
+        and vector_search_client
+        and kf_base_client
+    ):
         technologies_text = flattened_data["listeTechnologies"]
         logger.info(f"Detected listeTechnologies field with value: {technologies_text}")
-        tech_images = parse_technologies_and_fetch_images(technologies_text, vector_search_client, kf_base_client)
+        tech_images = parse_technologies_and_fetch_images(
+            technologies_text, vector_search_client, kf_base_client
+        )
 
     # Pre-fetch image for nomSociete if present
     societe_image = None
     if "nomSociete" in flattened_data and vector_search_client and kf_base_client:
         nom_societe = flattened_data["nomSociete"]
         logger.info(f"Detected nomSociete field with value: {nom_societe}")
-        societe_image = get_image_for_technology(nom_societe, vector_search_client, kf_base_client)
+        societe_image = get_image_for_technology(
+            nom_societe, vector_search_client, kf_base_client
+        )
         if societe_image:
             logger.info(f"Successfully fetched image for nomSociete: {nom_societe}")
         else:
@@ -144,19 +161,29 @@ def fill_slide_from_structured_response(ppt_path, structured_responses, output_p
 
             # After text replacement, if this shape contained listeTechnologies, add images
             if has_liste_technologies and tech_images:
-                logger.info(f"Adding {len(tech_images)} technology images to PowerPoint shape")
+                logger.info(
+                    f"Adding {len(tech_images)} technology images to PowerPoint shape"
+                )
                 add_images_to_pptx_shape(shape, tech_images, slide)
 
             # After text replacement, if this shape contained nomSociete, add image next to it
             if has_nom_societe and societe_image:
                 logger.info("Adding nomSociete image to PowerPoint shape")
-                add_societe_image_to_pptx_shape(shape, societe_image, flattened_data.get("nomSociete", ""), slide)
+                add_societe_image_to_pptx_shape(
+                    shape, societe_image, flattened_data.get("nomSociete", ""), slide
+                )
 
     prs.save(output_path)
     return output_path
 
 
-def fill_word_from_structured_response(docx_path, structured_responses, output_path, vector_search_client=None, kf_base_client=None):
+def fill_word_from_structured_response(
+    docx_path,
+    structured_responses,
+    output_path,
+    vector_search_client=None,
+    kf_base_client=None,
+):
     doc = Document(docx_path)
     pattern = re.compile(r"\{([^}]+)\}")
 
@@ -180,7 +207,9 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
             for col_idx, cell in enumerate(row.cells):
                 for para in cell.paragraphs:
                     if para.text.strip():
-                        logger.info(f"Template Table {i}[{row_idx},{col_idx}]: {para.text}")
+                        logger.info(
+                            f"Template Table {i}[{row_idx},{col_idx}]: {para.text}"
+                        )
                         placeholders = pattern.findall(para.text)
                         if placeholders:
                             total_placeholders_in_template += len(placeholders)
@@ -205,17 +234,25 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
 
     # Pre-fetch images for listeTechnologies if present
     tech_images = []
-    if "listeTechnologies" in flattened_data and vector_search_client and kf_base_client:
+    if (
+        "listeTechnologies" in flattened_data
+        and vector_search_client
+        and kf_base_client
+    ):
         technologies_text = flattened_data["listeTechnologies"]
         logger.info(f"Detected listeTechnologies field with value: {technologies_text}")
-        tech_images = parse_technologies_and_fetch_images(technologies_text, vector_search_client, kf_base_client)
+        tech_images = parse_technologies_and_fetch_images(
+            technologies_text, vector_search_client, kf_base_client
+        )
 
     # Pre-fetch image for nomSociete if present
     societe_image = None
     if "nomSociete" in flattened_data and vector_search_client and kf_base_client:
         nom_societe = flattened_data["nomSociete"]
         logger.info(f"Detected nomSociete field with value: {nom_societe}")
-        societe_image = get_image_for_technology(nom_societe, vector_search_client, kf_base_client)
+        societe_image = get_image_for_technology(
+            nom_societe, vector_search_client, kf_base_client
+        )
         if societe_image:
             logger.info(f"Successfully fetched image for nomSociete: {nom_societe}")
         else:
@@ -280,7 +317,9 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
             return
 
         # Sort placeholders by position
-        sorted_placeholders = sorted(placeholder_replacements.items(), key=lambda x: x[0])
+        sorted_placeholders = sorted(
+            placeholder_replacements.items(), key=lambda x: x[0]
+        )
 
         # Process each run and replace placeholder text while preserving formatting
         char_position = 0
@@ -308,9 +347,7 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
                         offset += len(replacement["value"]) - placeholder_len
                     else:
                         # Placeholder spans multiple runs - replace the start
-                        new_run_text = (
-                            new_run_text[:local_start] + replacement["value"]
-                        )
+                        new_run_text = new_run_text[:local_start] + replacement["value"]
                         offset = len(new_run_text) - local_start
 
                 # Case 2: This run is in the middle/end of a placeholder
@@ -330,13 +367,17 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
 
         # After text replacement, if this paragraph contained listeTechnologies, add images
         if has_liste_technologies and tech_images:
-            logger.info(f"Adding {len(tech_images)} technology images to Word paragraph")
+            logger.info(
+                f"Adding {len(tech_images)} technology images to Word paragraph"
+            )
             add_images_to_word_paragraph(paragraph, tech_images)
 
         # After text replacement, if this paragraph contained nomSociete, add image next to it
         if has_nom_societe and societe_image:
             logger.info("Adding nomSociete image to Word paragraph")
-            add_societe_image_to_word_paragraph(paragraph, societe_image, flattened_data.get("nomSociete", ""))
+            add_societe_image_to_word_paragraph(
+                paragraph, societe_image, flattened_data.get("nomSociete", "")
+            )
 
         logger.info(f"Final paragraph text after replacement: '{paragraph.text}'")
 
@@ -389,8 +430,12 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
     # Process all textbox content elements (both VML and DrawingML formats)
     for txbxContent in doc.element.body.iter():
         # Check if this is a textbox content element
-        tag_name = txbxContent.tag.split('}')[-1] if '}' in txbxContent.tag else txbxContent.tag
-        if tag_name != 'txbxContent':
+        tag_name = (
+            txbxContent.tag.split("}")[-1]
+            if "}" in txbxContent.tag
+            else txbxContent.tag
+        )
+        if tag_name != "txbxContent":
             continue
 
         textbox_count += 1
@@ -398,13 +443,15 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
 
         # Find all text elements in this textbox
         for t_elem in txbxContent.iter():
-            t_tag = t_elem.tag.split('}')[-1] if '}' in t_elem.tag else t_elem.tag
-            if t_tag != 't':
+            t_tag = t_elem.tag.split("}")[-1] if "}" in t_elem.tag else t_elem.tag
+            if t_tag != "t":
                 continue
 
-            if t_elem.text and ('{' in t_elem.text or '}' in t_elem.text):
+            if t_elem.text and ("{" in t_elem.text or "}" in t_elem.text):
                 original_text = t_elem.text
-                logger.info(f"  Found text with potential placeholders: '{original_text}'")
+                logger.info(
+                    f"  Found text with potential placeholders: '{original_text}'"
+                )
 
                 # Find and replace all placeholders in this text element
                 new_text = original_text
@@ -415,14 +462,18 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
                     if key in flattened_data:
                         # Special case: listeTechnologies with images
                         if key == "listeTechnologies" and tech_images:
-                            logger.info("    Found listeTechnologies, will add images separately")
+                            logger.info(
+                                "    Found listeTechnologies, will add images separately"
+                            )
                             new_text = new_text.replace(placeholder, "")
                             textbox_with_liste_tech = txbxContent
                             replacements_made += 1
                         elif key == "nomSociete" and societe_image:
                             # Replace with value, and mark for image addition
                             value = str(flattened_data[key])
-                            logger.info(f"    Replacing {placeholder} with: {value} (will add image)")
+                            logger.info(
+                                f"    Replacing {placeholder} with: {value} (will add image)"
+                            )
                             new_text = new_text.replace(placeholder, value)
                             textbox_with_nom_societe = txbxContent
                             replacements_made += 1
@@ -432,13 +483,17 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
                             new_text = new_text.replace(placeholder, value)
                             replacements_made += 1
                     else:
-                        logger.warning(f"    Placeholder '{key}' not found in flattened data")
+                        logger.warning(
+                            f"    Placeholder '{key}' not found in flattened data"
+                        )
 
                 if new_text != original_text:
                     t_elem.text = new_text
                     logger.info(f"    Updated text: '{new_text}'")
 
-    logger.info(f"Processed {textbox_count} textboxes, made {replacements_made} replacements")
+    logger.info(
+        f"Processed {textbox_count} textboxes, made {replacements_made} replacements"
+    )
 
     # Add images near the textbox that contained listeTechnologies
     if textbox_with_liste_tech is not None and tech_images:
@@ -448,13 +503,20 @@ def fill_word_from_structured_response(docx_path, structured_responses, output_p
     # Add image near the textbox that contained nomSociete
     if textbox_with_nom_societe is not None and societe_image:
         logger.info("Adding nomSociete image near textbox")
-        _add_societe_image_near_textbox(doc, textbox_with_nom_societe, societe_image, flattened_data.get("nomSociete", ""))
+        _add_societe_image_near_textbox(
+            doc,
+            textbox_with_nom_societe,
+            societe_image,
+            flattened_data.get("nomSociete", ""),
+        )
 
     doc.save(output_path)
     return output_path
 
 
-def parse_technologies_and_fetch_images(technologies_text: str, vector_search_client, kf_base_client) -> list[tuple[str, BytesIO | None]]:
+def parse_technologies_and_fetch_images(
+    technologies_text: str, vector_search_client, kf_base_client
+) -> list[tuple[str, BytesIO | None]]:
     """
     Parse a comma-separated list of technologies and fetch their corresponding images.
 
@@ -469,23 +531,31 @@ def parse_technologies_and_fetch_images(technologies_text: str, vector_search_cl
         return []
 
     # Split by commas and clean each technology name
-    technologies = [tech.strip() for tech in technologies_text.split(",") if tech.strip()]
+    technologies = [
+        tech.strip() for tech in technologies_text.split(",") if tech.strip()
+    ]
 
     logger.info(f"Parsing {len(technologies)} technologies: {technologies}")
 
     results = []
     for tech_name in technologies:
         logger.info(f"Fetching image for technology: {tech_name}")
-        image_data = get_image_for_technology(tech_name, vector_search_client, kf_base_client)
+        image_data = get_image_for_technology(
+            tech_name, vector_search_client, kf_base_client
+        )
 
         if image_data:
             logger.info(f"Successfully fetched image for: {tech_name}")
             results.append((tech_name, image_data))
         else:
-            logger.warning(f"Could not fetch image for: {tech_name}, will use text instead")
+            logger.warning(
+                f"Could not fetch image for: {tech_name}, will use text instead"
+            )
             results.append((tech_name, None))
 
-    logger.info(f"Fetched {sum(1 for _, img in results if img is not None)} images out of {len(technologies)} technologies")
+    logger.info(
+        f"Fetched {sum(1 for _, img in results if img is not None)} images out of {len(technologies)} technologies"
+    )
     return results
 
 
@@ -537,7 +607,7 @@ def add_images_to_pptx_shape(shape, images: list[tuple[str, BytesIO | None]], sl
                     current_left,
                     top + (height - image_height) // 2,  # Center vertically
                     width=image_width,
-                    height=image_height
+                    height=image_height,
                 )
                 current_left += image_width
                 logger.info(f"Added image for technology: {tech_name}")
@@ -545,7 +615,9 @@ def add_images_to_pptx_shape(shape, images: list[tuple[str, BytesIO | None]], sl
                 logger.error(f"Failed to add image for {tech_name}: {e}")
 
 
-def add_societe_image_to_pptx_shape(shape, societe_image: BytesIO, nom_societe: str, slide):
+def add_societe_image_to_pptx_shape(
+    shape, societe_image: BytesIO, nom_societe: str, slide
+):
     """
     Add the company image next to the nomSociete text in a PowerPoint shape.
     The image is placed at the beginning of the shape area (like a logo before the company name).
@@ -583,20 +655,24 @@ def add_societe_image_to_pptx_shape(shape, societe_image: BytesIO, nom_societe: 
         if image_top < 0:
             image_top = shape_top
 
-        logger.info(f"Adding company image for {nom_societe}: left={image_left}, top={image_top}, width={image_width}, height={image_height}")
-        logger.info(f"Shape info: left={shape_left}, top={shape_top}, height={shape_height}")
+        logger.info(
+            f"Adding company image for {nom_societe}: left={image_left}, top={image_top}, width={image_width}, height={image_height}"
+        )
+        logger.info(
+            f"Shape info: left={shape_left}, top={shape_top}, height={shape_height}"
+        )
 
         # Add the image to the slide
         picture = slide.shapes.add_picture(
-            image_copy,
-            image_left,
-            image_top,
-            width=image_width,
-            height=image_height
+            image_copy, image_left, image_top, width=image_width, height=image_height
         )
-        logger.info(f"Successfully added company image for: {nom_societe}, picture shape id: {picture.shape_id}")
+        logger.info(
+            f"Successfully added company image for: {nom_societe}, picture shape id: {picture.shape_id}"
+        )
     except Exception as e:
-        logger.error(f"Failed to add company image for {nom_societe}: {e}", exc_info=True)
+        logger.error(
+            f"Failed to add company image for {nom_societe}: {e}", exc_info=True
+        )
 
 
 def add_images_to_word_paragraph(paragraph, images: list[tuple[str, BytesIO | None]]):
@@ -643,7 +719,9 @@ def add_images_to_word_paragraph(paragraph, images: list[tuple[str, BytesIO | No
                 paragraph.add_run(", ")
 
 
-def add_societe_image_to_word_paragraph(paragraph, societe_image: BytesIO, nom_societe: str):
+def add_societe_image_to_word_paragraph(
+    paragraph, societe_image: BytesIO, nom_societe: str
+):
     """
     Add the company image next to the nomSociete text in a Word paragraph.
 
@@ -665,32 +743,40 @@ def add_societe_image_to_word_paragraph(paragraph, societe_image: BytesIO, nom_s
         run = paragraph.add_run()
         run.add_picture(societe_image, width=Pt(69), height=Pt(56))
 
-        logger.info(f"Added company image for: {nom_societe} to Word paragraph (69x56 pt)")
+        logger.info(
+            f"Added company image for: {nom_societe} to Word paragraph (69x56 pt)"
+        )
     except Exception as e:
         logger.error(f"Failed to add company image for {nom_societe} to Word: {e}")
 
 
-def _add_images_near_textbox(doc, textbox_element, images: list[tuple[str, BytesIO | None]]):
+def _add_images_near_textbox(
+    doc, textbox_element, images: list[tuple[str, BytesIO | None]]
+):
     """
     Add images in a new paragraph right after the textbox containing {listeTechnologies}.
     """
     if not images:
         return
 
-    from docx.oxml import OxmlElement
     from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml import OxmlElement
 
     # Find the parent paragraph in the document body that contains this textbox
     parent = textbox_element.getparent()
     containing_paragraph = None
 
     while parent is not None:
-        tag_name = parent.tag.split('}')[-1] if '}' in parent.tag else parent.tag
-        if tag_name == 'p':
+        tag_name = parent.tag.split("}")[-1] if "}" in parent.tag else parent.tag
+        if tag_name == "p":
             grandparent = parent.getparent()
             if grandparent is not None:
-                gp_tag = grandparent.tag.split('}')[-1] if '}' in grandparent.tag else grandparent.tag
-                if gp_tag == 'body':
+                gp_tag = (
+                    grandparent.tag.split("}")[-1]
+                    if "}" in grandparent.tag
+                    else grandparent.tag
+                )
+                if gp_tag == "body":
                     containing_paragraph = parent
                     break
         parent = parent.getparent()
@@ -703,7 +789,7 @@ def _add_images_near_textbox(doc, textbox_element, images: list[tuple[str, Bytes
         para_index = list(body).index(containing_paragraph)
         logger.info(f"Inserting images after paragraph at index {para_index}")
 
-        new_p = OxmlElement('w:p')
+        new_p = OxmlElement("w:p")
         body.insert(para_index + 1, new_p)
 
         paragraph = None
@@ -739,40 +825,48 @@ def _add_images_near_textbox(doc, textbox_element, images: list[tuple[str, Bytes
             logger.error(f"Failed to add image for {tech_name}: {e}")
 
 
-def _add_societe_image_near_textbox(doc, textbox_element, societe_image: BytesIO, nom_societe: str):
+def _add_societe_image_near_textbox(
+    doc, textbox_element, societe_image: BytesIO, nom_societe: str
+):
     """
     Add the company image in a new paragraph right after the textbox containing {nomSociete}.
     """
     if not societe_image:
         return
 
-    from docx.oxml import OxmlElement
     from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml import OxmlElement
 
     # Find the parent paragraph in the document body that contains this textbox
     parent = textbox_element.getparent()
     containing_paragraph = None
 
     while parent is not None:
-        tag_name = parent.tag.split('}')[-1] if '}' in parent.tag else parent.tag
-        if tag_name == 'p':
+        tag_name = parent.tag.split("}")[-1] if "}" in parent.tag else parent.tag
+        if tag_name == "p":
             grandparent = parent.getparent()
             if grandparent is not None:
-                gp_tag = grandparent.tag.split('}')[-1] if '}' in grandparent.tag else grandparent.tag
-                if gp_tag == 'body':
+                gp_tag = (
+                    grandparent.tag.split("}")[-1]
+                    if "}" in grandparent.tag
+                    else grandparent.tag
+                )
+                if gp_tag == "body":
                     containing_paragraph = parent
                     break
         parent = parent.getparent()
 
     if containing_paragraph is None:
-        logger.warning("Could not find containing paragraph for nomSociete, adding image at end")
+        logger.warning(
+            "Could not find containing paragraph for nomSociete, adding image at end"
+        )
         paragraph = doc.add_paragraph()
     else:
         body = containing_paragraph.getparent()
         para_index = list(body).index(containing_paragraph)
         logger.info(f"Inserting nomSociete image after paragraph at index {para_index}")
 
-        new_p = OxmlElement('w:p')
+        new_p = OxmlElement("w:p")
         body.insert(para_index + 1, new_p)
 
         paragraph = None
@@ -782,7 +876,9 @@ def _add_societe_image_near_textbox(doc, textbox_element, societe_image: BytesIO
                 break
 
         if paragraph is None:
-            logger.warning("Could not get Paragraph object for nomSociete, adding at end")
+            logger.warning(
+                "Could not get Paragraph object for nomSociete, adding at end"
+            )
             paragraph = doc.add_paragraph()
 
     # Align to the left (near the text)

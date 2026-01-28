@@ -333,8 +333,10 @@ class ReferenceEditor(AgentFlow):
                 # Extract the actual data from the wrapper
                 actual_data = data.get("data", data)
                 # Create clients for image search
-                from agentic_backend.common.vector_search_client import VectorSearchClient
                 from agentic_backend.common.kf_base_client import KfBaseClient
+                from agentic_backend.common.vector_search_client import (
+                    VectorSearchClient,
+                )
                 vector_search_client = VectorSearchClient()
                 kf_base_client = KfBaseClient(
                     allowed_methods=frozenset({"GET", "POST"}),
@@ -343,8 +345,8 @@ class ReferenceEditor(AgentFlow):
                 fill_slide_from_structured_response(template_path, actual_data, output_path, vector_search_client, kf_base_client)
 
             # 3. Upload the generated asset to user storage
-            import uuid
             import asyncio
+            import uuid
             user_id_to_store_asset = self.get_end_user_id()
             # Use UUID to generate a unique filename that won't trigger versioning conflicts
             unique_id = str(uuid.uuid4())
@@ -424,8 +426,10 @@ class ReferenceEditor(AgentFlow):
                 # Extract the actual data from the wrapper
                 actual_data = data.get("data", data)
                 # Create clients for image search
-                from agentic_backend.common.vector_search_client import VectorSearchClient
                 from agentic_backend.common.kf_base_client import KfBaseClient
+                from agentic_backend.common.vector_search_client import (
+                    VectorSearchClient,
+                )
                 vector_search_client = VectorSearchClient()
                 kf_base_client = KfBaseClient(
                     allowed_methods=frozenset({"GET", "POST"}),
@@ -434,8 +438,8 @@ class ReferenceEditor(AgentFlow):
                 fill_word_from_structured_response(template_path, actual_data, output_path, vector_search_client, kf_base_client)
 
             # 3. Upload the generated asset to user storage
-            import uuid
             import asyncio
+            import uuid
             user_id_to_store_asset = self.get_end_user_id()
             # Use UUID to generate a unique filename that won't trigger versioning conflicts
             unique_id = str(uuid.uuid4())

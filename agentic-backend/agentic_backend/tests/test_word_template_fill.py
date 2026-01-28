@@ -278,9 +278,9 @@ def test_empty_document():
 
 def test_textbox_placeholder_replacement():
     """Test that placeholders in textboxes are replaced (requires XML manipulation)"""
-    import zipfile
-    import xml.etree.ElementTree as ET
     import shutil
+    import xml.etree.ElementTree as ET
+    import zipfile
 
     # Create a document with a textbox containing a placeholder
     doc = Document()
