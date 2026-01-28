@@ -28,7 +28,7 @@ export function SideBarConversationsSection({ isSidebarOpen }: ConversationsSect
       {isSidebarOpen && (
         <Box>
           <Box sx={{ display: "flex", alignItems: "center", px: 2, py: 1 }}>
-            <Typography variant="subtitle2" sx={{ color: theme.palette.text.secondary }}>
+            <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
               {t("sidebar.chat")}
             </Typography>
           </Box>
