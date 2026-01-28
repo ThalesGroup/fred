@@ -31,7 +31,7 @@ export const EmptyState = ({ icon, title, description, actionButton }: EmptyStat
   return (
     <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" py={8} gap={1}>
       {React.cloneElement(icon as React.ReactElement, {
-        sx: { fontSize: 64, color: "text.secondary", ...(icon as any)?.props?.sx },
+        sx: { fontSize: 48, color: "text.secondary", ...(icon as any)?.props?.sx },
       })}
       <Typography variant="h6" color="text.secondary">
         {title}

@@ -96,7 +96,15 @@ export function TeamDetailsPage() {
   ];
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "stretch" }}>
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "stretch",
+        flex: 1,
+        overflow: "hidden",
+      }}
+    >
       {/* Header */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 2, px: 3, py: 2 }}>
         {/* Avatar banner */}
@@ -112,7 +120,11 @@ export function TeamDetailsPage() {
       </Box>
 
       {/* Tabs */}
-      <NavigationTabs tabs={tabs} tabsContainerSx={{ px: 2, pb: 1 }} />
+      <NavigationTabs
+        tabs={tabs}
+        tabsContainerSx={{ px: 2, pb: 1 }}
+        contentContainerSx={{ flex: 1, overflow: "auto" }}
+      />
     </Box>
   );
 }

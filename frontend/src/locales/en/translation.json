@@ -1200,5 +1200,14 @@
       "settings": "Settings"
     },
     "noAgents": "No team agents configured yet. Create your first team agent to get started."
+  },
+  "appCard": {
+    "launch": "Start"
+  },
+  "teamAppsPage": {
+    "headerSubtitle": "Team's apps",
+    "headerInfoTooltip": "These apps are only available to your team and are managed by team owners.",
+    "noAppTitle": "No app",
+    "noAppDescription": "The team owners have not configured any applications for this group at this time."
   }
 }
