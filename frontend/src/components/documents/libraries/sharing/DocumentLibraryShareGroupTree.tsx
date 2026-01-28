@@ -90,7 +90,7 @@ export function DocumentLibraryShareGroupTree({
               <ListItemText
                 primary={group.name}
                 secondary={t("documentLibraryShareDialog.groupMembersCount", {
-                  count: group.total_member_count ?? group.member_count ?? 0,
+                  count: group.member_count ?? 0,
                 })}
               />
             </Box>

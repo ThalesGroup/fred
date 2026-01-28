@@ -31,7 +31,7 @@ export function GroupListItem({ group, ...listItemProps }: GroupListElementProps
         primary={group.name}
         secondary={
           <Typography variant="body2" color="text.secondary">
-            {group.total_member_count} members
+            {group.member_count ?? 0} members
           </Typography>
         }
       />
