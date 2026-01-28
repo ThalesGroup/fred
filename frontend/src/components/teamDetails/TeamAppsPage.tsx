@@ -18,5 +18,17 @@ const apps: App[] = [
 ];
 
 export function TeamAppsPage() {
-  return <></>;
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" }}>
+      {apps.map((app) => (
+        <div
+          key={app.name}
+        >
+          <a href={app.url} target="_blank" rel="noreferrer" style={{ fontSize: 14, color: "#1976d2" }}>
+            Open {app.url}
+          </a>
+        </div>
+      ))}
+    </div>
+  );
 }

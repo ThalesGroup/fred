@@ -3,8 +3,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from fred_core import KeycloakUser, get_current_user
 
-from knowledge_flow_backend.features.groups.groups_service import list_groups as list_groups_from_service
-from knowledge_flow_backend.features.groups.groups_structures import GroupSummary
+from knowledge_flow_backend.features.groups.groups_service import (
+    list_groups as list_groups_from_service,
+    upsert_group_profile as upsert_group_profile_from_service,
+)
+from knowledge_flow_backend.features.groups.groups_structures import GroupProfile, GroupProfileUpdate, GroupSummary
 
 router = APIRouter(tags=["Groups"])
 
@@ -22,3 +25,16 @@ async def list_groups(
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[GroupSummary]:
     return await list_groups_from_service(user, limit=limit, offset=offset, member_only=member_only)
+
+
+@router.put(
+    "/groups/{group_id}/profile",
+    response_model=GroupProfile,
+    summary="Create or update a group profile (description, banner, privacy)",
+)
+async def upsert_group_profile(
+    group_id: str,
+    payload: GroupProfileUpdate,
+    user: KeycloakUser = Depends(get_current_user),
+) -> GroupProfile:
+    return await upsert_group_profile_from_service(user, group_id, payload)

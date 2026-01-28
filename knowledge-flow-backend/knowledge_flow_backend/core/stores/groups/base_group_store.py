@@ -30,3 +30,8 @@ class BaseGroupStore(ABC):
     @abstractmethod
     def list_group_profiles(self, group_ids: Iterable[str]) -> dict[str, GroupProfile]:
         pass
+
+    @abstractmethod
+    def upsert_group_profile(self, profile: GroupProfile) -> None:
+        """Create or update a group profile."""
+        pass

@@ -104,3 +104,17 @@ class DuckdbGroupStore(BaseGroupStore):
             )
             for row in rows
         }
+
+    def upsert_group_profile(self, profile: GroupProfile) -> None:
+        with self.store._connect() as conn:
+            conn.execute(
+                f"""
+                INSERT INTO "{self._table()}" (group_id, banner_image_url, is_private, description)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(group_id) DO UPDATE SET
+                    banner_image_url=excluded.banner_image_url,
+                    is_private=excluded.is_private,
+                    description=excluded.description
+                """,
+                [profile.id, profile.banner_image_url, profile.is_private, profile.description],
+            )

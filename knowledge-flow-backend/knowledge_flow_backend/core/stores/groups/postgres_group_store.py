@@ -19,6 +19,7 @@ from collections.abc import Iterable
 
 from fred_core.sql import BaseSqlStore
 from sqlalchemy import Boolean, Column, MetaData, String, Table, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Engine
 
 from knowledge_flow_backend.core.stores.groups.base_group_store import BaseGroupStore
@@ -95,3 +96,22 @@ class PostgresGroupStore(BaseGroupStore):
             )
             for row in rows
         }
+
+    def upsert_group_profile(self, profile: GroupProfile) -> None:
+        values = {
+            "group_id": profile.id,
+            "banner_image_url": profile.banner_image_url,
+            "is_private": profile.is_private,
+            "description": profile.description,
+        }
+        with self.store.begin() as conn:
+            upsert_query = pg_insert(self.table).values(**values)
+            upsert_query = upsert_query.on_conflict_do_update(
+                index_elements=[self.table.c.group_id],
+                set_={
+                    "banner_image_url": values["banner_image_url"],
+                    "is_private": values["is_private"],
+                    "description": values["description"],
+                },
+            )
+            conn.execute(upsert_query)

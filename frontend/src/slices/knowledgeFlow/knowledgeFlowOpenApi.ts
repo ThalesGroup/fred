@@ -563,6 +563,16 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    upsertGroupProfileKnowledgeFlowV1GroupsGroupIdProfilePut: build.mutation<
+      UpsertGroupProfileKnowledgeFlowV1GroupsGroupIdProfilePutApiResponse,
+      UpsertGroupProfileKnowledgeFlowV1GroupsGroupIdProfilePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/groups/${queryArg.groupId}/profile`,
+        method: "PUT",
+        body: queryArg.groupProfileUpdate,
+      }),
+    }),
     listUsersKnowledgeFlowV1UsersGet: build.query<
       ListUsersKnowledgeFlowV1UsersGetApiResponse,
       ListUsersKnowledgeFlowV1UsersGetApiArg
@@ -1138,6 +1148,12 @@ export type ListGroupsKnowledgeFlowV1GroupsGetApiArg = {
   offset?: number;
   /** Only groups the user belongs to */
   memberOnly?: boolean;
+};
+export type UpsertGroupProfileKnowledgeFlowV1GroupsGroupIdProfilePutApiResponse =
+  /** status 200 Successful Response */ GroupProfile;
+export type UpsertGroupProfileKnowledgeFlowV1GroupsGroupIdProfilePutApiArg = {
+  groupId: string;
+  groupProfileUpdate: GroupProfileUpdate;
 };
 export type ListUsersKnowledgeFlowV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
 export type ListUsersKnowledgeFlowV1UsersGetApiArg = void;
@@ -1907,6 +1923,17 @@ export type LogQuery = {
   limit?: number;
   order?: "asc" | "desc";
 };
+export type GroupProfile = {
+  id: string;
+  banner_image_url?: string | null;
+  is_private?: boolean | null;
+  description?: string | null;
+};
+export type GroupProfileUpdate = {
+  banner_image_url?: string | null;
+  is_private?: boolean | null;
+  description?: string | null;
+};
 export type ProcessorDescriptor = {
   id: string;
   name: string;
@@ -2202,6 +2229,7 @@ export const {
   useQueryLogsKnowledgeFlowV1LogsQueryPostMutation,
   useListGroupsKnowledgeFlowV1GroupsGetQuery,
   useLazyListGroupsKnowledgeFlowV1GroupsGetQuery,
+  useUpsertGroupProfileKnowledgeFlowV1GroupsGroupIdProfilePutMutation,
   useListUsersKnowledgeFlowV1UsersGetQuery,
   useLazyListUsersKnowledgeFlowV1UsersGetQuery,
   useListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,

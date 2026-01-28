@@ -33,7 +33,7 @@ from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakGetError
 
 from knowledge_flow_backend.application_context import get_configuration, get_group_store, get_rebac_engine
-from knowledge_flow_backend.features.groups.groups_structures import GroupProfile, GroupSummary
+from knowledge_flow_backend.features.groups.groups_structures import GroupProfile, GroupProfileUpdate, GroupSummary
 from knowledge_flow_backend.features.users.users_service import get_users_by_ids
 from knowledge_flow_backend.features.users.users_structures import UserSummary
 
@@ -94,6 +94,31 @@ async def list_groups(
     if limit <= 0:
         return filtered[offset:]
     return filtered[offset : offset + limit]
+
+
+@authorize(Action.UPDATE, Resource.GROUP)
+async def upsert_group_profile(
+    user: KeycloakUser,
+    group_id: str,
+    payload: GroupProfileUpdate,
+) -> GroupProfile:
+    """
+    Store group profile data (description, banner, privacy) with ReBAC check.
+    """
+    rebac = get_rebac_engine()
+    await rebac.check_user_permission_or_raise(user, GroupPermission.UPDATE_INFO, group_id)
+
+    store = get_group_store()
+    if store is None:
+        raise ValueError("No group store configured.")
+
+    existing = store.get_group_profile(group_id) or GroupProfile(id=group_id)
+
+    updated = existing.model_copy(
+        update=payload.model_dump(exclude_unset=True),
+    )
+    store.upsert_group_profile(updated)
+    return updated
 
 
 async def get_groups_by_ids(group_ids: Iterable[str]) -> dict[str, GroupSummary]:
@@ -159,7 +184,6 @@ async def _build_group_summary(admin: KeycloakAdmin, group_id: str) -> GroupSumm
         id=group_id,
         name=_sanitize_name(detailed_group.get("name"), fallback=group_id),
         member_count=len(direct_members),
-        total_member_count=len(direct_members),
         description=_extract_group_description(detailed_group),
     )
 
@@ -323,7 +347,8 @@ def _apply_group_metadata(
             if profile.description is not None:
                 group.description = profile.description
             group.banner_image_url = profile.banner_image_url
-            group.is_private = profile.is_private
+            if profile.is_private is not None:
+                group.is_private = profile.is_private
         group.owners = owners.get(group.id, [])
         group.is_member = group.id in member_group_ids
 
