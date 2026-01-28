@@ -27,6 +27,7 @@ import { AnyAgent } from "../../common/agent.ts";
 import { getConfig } from "../../common/config.tsx";
 import { useSessionChange } from "../../hooks/useSessionChange.ts";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
+import { useAuth } from "../../security/AuthContext.tsx";
 import {
   ChatAskInput,
   ChatMessage,
@@ -56,6 +57,7 @@ const LOG_GENIUS_CONTEXT_TURNS = 3;
 const LOG_GENIUS_CONTEXT_MAX_CHARS = 4000;
 const LOG_GENIUS_TEXT_CHUNK_MAX = 600;
 const LOG_GENIUS_CODE_CHUNK_MAX = 200;
+const MAX_DEBUG_EVENTS = 60;
 
 const ellipsize = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}...` : text);
 
@@ -136,6 +138,11 @@ export interface ChatBotError {
 type SessionEvent = {
   type?: "session";
   session: SessionSchema;
+};
+
+type DebugEventEntry = {
+  timestamp: string;
+  payload: unknown;
 };
 
 // interface TranscriptionResponse {
@@ -339,6 +346,73 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
   const waitStartedAtRef = useRef<number>(0);
   const waitSeqRef = useRef<number>(0);
   const debugLoader = false;
+  const { roles } = useAuth();
+  const isAdmin = roles.includes("admin");
+  const [debugEvents, setDebugEvents] = useState<DebugEventEntry[]>([]);
+  const [debugDrawerOpen, setDebugDrawerOpen] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyFeedbackTimerRef.current) {
+        clearTimeout(copyFeedbackTimerRef.current);
+      }
+    };
+  }, []);
+
+  const appendDebugEvent = useCallback((payload: unknown) => {
+    setDebugEvents((prev) => {
+      const entry: DebugEventEntry = {
+        timestamp: new Date().toISOString(),
+        payload,
+      };
+      const next = [...prev, entry];
+      if (next.length > MAX_DEBUG_EVENTS) {
+        return next.slice(next.length - MAX_DEBUG_EVENTS);
+      }
+      return next;
+    });
+  }, []);
+
+  const debugHistoryText = useMemo(() => {
+    if (debugEvents.length === 0) {
+      return "No WS events captured yet.";
+    }
+    return debugEvents
+      .map(
+        (entry) =>
+          `[${entry.timestamp}] ${(entry.payload as { type?: string }).type ?? "unknown"}\n` +
+          JSON.stringify(entry.payload, null, 2),
+      )
+      .join("\n\n");
+  }, [debugEvents]);
+
+  const handleCopyDebugHistory = useCallback(async () => {
+    if (debugEvents.length === 0) {
+      setCopyFeedback("No events to copy");
+      copyFeedbackTimerRef.current = setTimeout(() => setCopyFeedback(null), 2500);
+      return;
+    }
+
+    if (copyFeedbackTimerRef.current) {
+      clearTimeout(copyFeedbackTimerRef.current);
+    }
+
+    try {
+      if (navigator?.clipboard) {
+        await navigator.clipboard.writeText(debugHistoryText);
+        setCopyFeedback("Copied!");
+      } else {
+        setCopyFeedback("Clipboard unavailable");
+      }
+    } catch (err) {
+      console.error("Failed to copy debug history", err);
+      setCopyFeedback("Copy failed");
+    }
+
+    copyFeedbackTimerRef.current = setTimeout(() => setCopyFeedback(null), 2500);
+  }, [debugEvents.length, debugHistoryText]);
 
   // --- Session preferences are handled by ConversationOptionsController ---
   const effectiveSessionId = pendingSessionIdRef.current || chatSessionId || undefined;
@@ -490,10 +564,15 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
         webSocketRef.current = socket;
         resolve(socket);
       };
+
       socket.onmessage = (event) => {
         if (connectSeq !== wsConnectSeqRef.current) return;
         try {
           const response = JSON.parse(event.data);
+
+          if (isAdmin) {
+            appendDebugEvent(response);
+          }
 
           switch (response.type) {
             case "stream": {
@@ -979,6 +1058,15 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
   // Helps spot session-history fetch issues quickly in dev without adding noisy logs.
   const showHistoryLoading =
     !!chatSessionId && isHistoryFetching && messages.length === 0 && !waitResponse && !isClientCreatedSession;
+  const debugWidgetProps = {
+    isAdmin,
+    debugDrawerOpen,
+    setDebugDrawerOpen,
+    debugHistoryText,
+    onCopyDebugHistory: handleCopyDebugHistory,
+    copyFeedback,
+    hasDebugHistory: debugEvents.length > 0,
+  };
   return (
     <ChatBotView
       chatSessionId={chatSessionId}
@@ -1013,6 +1101,7 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
       setSearchPolicy={setSearchPolicy}
       setSearchRagScope={setSearchRagScope}
       setDeepSearchEnabled={setDeepSearchEnabled}
+      debugWidget={debugWidgetProps}
     />
   );
 };

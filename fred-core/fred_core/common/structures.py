@@ -23,6 +23,14 @@ class BaseModelWithId(BaseModel):
     id: str
 
 
+class TemporalSchedulerConfig(BaseModel):
+    host: str = "localhost:7233"
+    namespace: str = "default"
+    task_queue: str = "default"
+    workflow_id_prefix: str = "task"
+    connect_timeout_seconds: Optional[int] = 5
+
+
 class ModelConfiguration(BaseModel):
     provider: Optional[str] = Field(
         None, description="Provider of the AI model, e.g., openai, ollama, azure."
@@ -89,6 +97,14 @@ class PostgresTableConfig(BaseModel):
     )
 
 
+class InMemoryStoreConfig(BaseModel):
+    """
+    Minimal config for in-memory stores (dev/test only).
+    """
+
+    type: Literal["memory"] = "memory"
+
+
 class SQLStorageConfig(BaseModel):
     type: Literal["sql"] = "sql"
     driver: str
@@ -133,6 +149,7 @@ StoreConfig = Annotated[
         SQLStorageConfig,
         LogStoreConfig,
         PostgresTableConfig,
+        InMemoryStoreConfig,
     ],
     Field(discriminator="type"),
 ]

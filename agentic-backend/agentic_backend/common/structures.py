@@ -22,6 +22,7 @@ from fred_core import (
     PostgresStoreConfig,
     SecurityConfiguration,
     StoreConfig,
+    TemporalSchedulerConfig,
 )
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, Field, field_validator
@@ -37,6 +38,10 @@ class StorageConfig(BaseModel):
         default=None, description="Optional OpenSearch store"
     )
     agent_store: StoreConfig
+    task_store: Optional[StoreConfig] = Field(
+        default=None,
+        description="Task store backend (optional; workers may fall back to in-memory)",
+    )
     mcp_servers_store: Optional[StoreConfig] = Field(
         default=None,
         description="Optional override for MCP servers store (defaults to agent_store backend).",
@@ -289,6 +294,12 @@ class AppConfig(BaseModel):
     )
 
 
+class SchedulerConfig(BaseModel):
+    enabled: bool = False
+    backend: str = "temporal"
+    temporal: TemporalSchedulerConfig = Field(default_factory=TemporalSchedulerConfig)
+
+
 class McpConfiguration(BaseModel):
     servers: List[MCPServerConfiguration] = Field(
         default_factory=list,
@@ -324,6 +335,7 @@ class Configuration(BaseModel):
         description="Microservice Communication Protocol (MCP) server configurations.",
     )
     storage: StorageConfig
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
 
 
 class ChatContextMessage(SystemMessage):

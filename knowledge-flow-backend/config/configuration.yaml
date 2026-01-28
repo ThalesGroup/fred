@@ -68,11 +68,6 @@ document_sources:
   fred:
     type: push
     description: "Documents manually uploaded by users"
-  local:
-    type: pull
-    provider: local_path
-    base_path: ~/Documents/Fred
-    description: "Personal local documents available for pull-mode ingestion"
 
 input_processors:
   - prefix: ".pdf"
@@ -91,6 +86,7 @@ input_processors:
     class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
   - prefix: ".jsonl"
     class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+
 embedding_model:
   provider: openai
   name: text-embedding-3-large

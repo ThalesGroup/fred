@@ -279,6 +279,29 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/logs/query`, method: "POST", body: queryArg.logQuery }),
     }),
+    submitAgentTaskAgenticV1V1AgentTasksPost: build.mutation<
+      SubmitAgentTaskAgenticV1V1AgentTasksPostApiResponse,
+      SubmitAgentTaskAgenticV1V1AgentTasksPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/v1/agent-tasks`,
+        method: "POST",
+        body: queryArg.submitAgentTaskRequest,
+      }),
+    }),
+    listAgentTasksAgenticV1V1AgentTasksGet: build.query<
+      ListAgentTasksAgenticV1V1AgentTasksGetApiResponse,
+      ListAgentTasksAgenticV1V1AgentTasksGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/v1/agent-tasks`,
+        params: {
+          limit: queryArg.limit,
+          status: queryArg.status,
+          target_agent: queryArg.targetAgent,
+        },
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -451,6 +474,18 @@ export type DeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteApiArg = {
 export type QueryLogsAgenticV1LogsQueryPostApiResponse = /** status 200 Successful Response */ LogQueryResult;
 export type QueryLogsAgenticV1LogsQueryPostApiArg = {
   logQuery: LogQuery;
+};
+export type SubmitAgentTaskAgenticV1V1AgentTasksPostApiResponse =
+  /** status 200 Successful Response */ SubmitAgentTaskResponse;
+export type SubmitAgentTaskAgenticV1V1AgentTasksPostApiArg = {
+  submitAgentTaskRequest: SubmitAgentTaskRequest;
+};
+export type ListAgentTasksAgenticV1V1AgentTasksGetApiResponse =
+  /** status 200 Successful Response */ AgentTaskRecordV1[];
+export type ListAgentTasksAgenticV1V1AgentTasksGetApiArg = {
+  limit?: number;
+  status?: AgentTaskStatus | null;
+  targetAgent?: string | null;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -1052,6 +1087,53 @@ export type LogQuery = {
   limit?: number;
   order?: "asc" | "desc";
 };
+export type AgentTaskStatus = "QUEUED" | "RUNNING" | "BLOCKED" | "COMPLETED" | "FAILED" | "CANCELED";
+export type SubmitAgentTaskResponse = {
+  task_id: string;
+  status: AgentTaskStatus;
+  workflow_id: string;
+  run_id?: string | null;
+};
+export type AgentContextRefsV1 = {
+  session_id?: string | null;
+  profile_id?: string | null;
+  project_id?: string | null;
+  tag_ids?: string[];
+  document_uids?: string[];
+};
+export type SubmitAgentTaskRequest = {
+  target_agent: string;
+  request_text: string;
+  context?: AgentContextRefsV1;
+  parameters?: {
+    [key: string]: any;
+  };
+  task_id?: string | null;
+};
+export type AgentTaskRecordV1 = {
+  task_id: string;
+  user_id: string;
+  target_agent: string;
+  status?: AgentTaskStatus;
+  request_text: string;
+  context?: AgentContextRefsV1;
+  parameters?: {
+    [key: string]: any;
+  };
+  workflow_id: string;
+  run_id?: string | null;
+  last_message?: string | null;
+  percent_complete?: number;
+  artifacts?: string[];
+  error_details?: {
+    [key: string]: any;
+  } | null;
+  blocked_details?: {
+    [key: string]: any;
+  } | null;
+  created_at: string;
+  updated_at: string;
+};
 export const {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
@@ -1106,4 +1188,7 @@ export const {
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
   useDeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteMutation,
   useQueryLogsAgenticV1LogsQueryPostMutation,
+  useSubmitAgentTaskAgenticV1V1AgentTasksPostMutation,
+  useListAgentTasksAgenticV1V1AgentTasksGetQuery,
+  useLazyListAgentTasksAgenticV1V1AgentTasksGetQuery,
 } = injectedRtkApi;
