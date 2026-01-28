@@ -307,6 +307,8 @@ class ApplicationContext:
     _kpi_writer: Optional[KPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
     _io_executor: ThreadPoolExecutor | None = None
+    _default_chat_model_instance: Optional[BaseChatModel] = None
+    _default_model_instance: Optional[BaseLanguageModel] = None
 
     def __new__(cls, configuration: Configuration):
         with cls._lock:
@@ -368,7 +370,15 @@ class ApplicationContext:
         """
         Retrieves the default chat model instance.
         """
-        return get_model(self.configuration.ai.default_chat_model)
+        if self._default_chat_model_instance is None:
+            self._default_chat_model_instance = get_model(
+                self.configuration.ai.default_chat_model
+            )
+            logger.info(
+                "[MODEL] cached default chat model instance %s",
+                type(self._default_chat_model_instance).__name__,
+            )
+        return self._default_chat_model_instance
 
     def get_default_model(self) -> BaseLanguageModel:
         """
@@ -382,7 +392,15 @@ class ApplicationContext:
                 "Please set 'default_language_model' in the AI configuration to avoid this warning."
             )
             return self.get_default_chat_model()
-        return get_model(self.configuration.ai.default_language_model)
+        if self._default_model_instance is None:
+            self._default_model_instance = get_model(
+                self.configuration.ai.default_language_model
+            )
+            logger.info(
+                "[MODEL] cached default language model instance %s",
+                type(self._default_model_instance).__name__,
+            )
+        return self._default_model_instance
 
     # --- Agent classes ---
 

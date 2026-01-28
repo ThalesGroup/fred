@@ -289,6 +289,11 @@ class KPIWriter(BaseKPIWriter):
     def _start_summary_thread_if_enabled(self) -> None:
         if not self._summary_interval_s:
             return
+        logger.warning(
+            "[KPI] Starting summary logger: interval=%.1fs top_n=%s",
+            self._summary_interval_s,
+            str(self._summary_top_n or "all"),
+        )
         t = threading.Thread(
             target=self._summary_loop,
             name="kpi-summary",
@@ -305,6 +310,15 @@ class KPIWriter(BaseKPIWriter):
             return
         metric_type = event.metric.type
         name = event.metric.name
+        # Preserve per-phase visibility for chat phases
+        if name == "chat.phase_latency_ms":
+            dims = event.dims or {}
+            parts = [name]
+            if dims.get("agent_step"):
+                parts.append(f"step={dims['agent_step']}")
+            if dims.get("status"):
+                parts.append(f"status={dims['status']}")
+            name = "|".join(parts)
         value = float(event.metric.value)
         with self._summary_lock:
             rollup = self._summary_rollups.get(name)
@@ -319,13 +333,13 @@ class KPIWriter(BaseKPIWriter):
             snapshot, elapsed = self._drain_summary()
             if not snapshot:
                 continue
-            summary_logger.info(
-                "[KPI][summary] interval=%.1fs metrics=%d",
+            summary_logger.debug(
+                "[KPI][SUMMARY] interval=%.1fs metrics=%d",
                 elapsed,
                 len(snapshot),
             )
             for name, rollup in self._format_summary(snapshot):
-                summary_logger.info("%s", self._format_rollup_line(name, rollup))
+                summary_logger.warning("%s", self._format_rollup_line(name, rollup))
 
     def _drain_summary(self) -> tuple[Dict[str, _MetricRollup], float]:
         now = time.monotonic()
@@ -361,17 +375,28 @@ class KPIWriter(BaseKPIWriter):
 
     def _format_rollup_line(self, name: str, rollup: _MetricRollup) -> str:
         if rollup.metric_type == "gauge":
-            return f"[KPI][summary] gauge {name} last={rollup.last_value:.4f} count={rollup.count}"
+            avg = rollup.total / rollup.count if rollup.count else 0.0
+            return (
+                "[KPI][SUMMARY] gauge %s count=%d last=%.4f avg=%.2f min=%.2f max=%.2f"
+                % (
+                    name,
+                    rollup.count,
+                    rollup.last_value,
+                    avg,
+                    rollup.min_value,
+                    rollup.max_value,
+                )
+            )
         if rollup.metric_type == "timer":
             avg = rollup.total / rollup.count if rollup.count else 0.0
-            return "[KPI][summary] timer %s count=%d avg=%.2f min=%.2f max=%.2f" % (
+            return "[KPI][SUMMARY] timer %s count=%d avg=%.2f min=%.2f max=%.2f" % (
                 name,
                 rollup.count,
                 avg,
                 rollup.min_value,
                 rollup.max_value,
             )
-        return "[KPI][summary] counter %s count=%d sum=%.2f" % (
+        return "[KPI][SUMMARY] counter %s count=%d sum=%.2f" % (
             name,
             rollup.count,
             rollup.total,
