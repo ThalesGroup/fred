@@ -1,3 +1,19 @@
+**v1.2.3** — 2026-01-25
+
+- **Summary**
+  This release bring in new KPIs, a bench tools to stress the agentic fred backend.
+
+  - **Features**
+
+    - new KPIs and bench logging, finer grain http outgoing configurability (#1059)
+    - new bench tools (#1049)
+    - new core temporal agentic API (#1038)
+
+  - **Improvments**
+
+    - use of shared http clients (#1055)
+    - reshaping of prometheus metrics (#1023)
+
 **v1.2.2** — 2026-01-23
 
 - **Summary**
