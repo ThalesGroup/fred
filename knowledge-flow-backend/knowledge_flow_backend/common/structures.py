@@ -269,6 +269,14 @@ class AppConfig(BaseModel):
         10,
         description="Interval in seconds for processing and logging KPI metrics.",
     )
+    kpi_log_summary_interval_sec: float = Field(
+        default=0.0,
+        description="Emit KPI summary logs every N seconds (bench/debug). Set 0 to disable.",
+    )
+    kpi_log_summary_top_n: int = Field(
+        default=0,
+        description="Top-N metrics to show in KPI summary logs. 0 means all / disabled.",
+    )
 
 
 class PullProvider(str, Enum):

@@ -21,7 +21,10 @@ app:
   metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
-  kpi_process_metrics_interval_sec: 10
+  # KPI settings for local benchmarks and debugging.
+  kpi_process_metrics_interval_sec: 5
+  kpi_log_summary_interval_sec: 5.0
+  kpi_log_summary_top_n: 20
 
 scheduler:
   enabled: true
@@ -113,8 +116,11 @@ ai:
       max_retries: 0
       # Benchmark (mock OpenAI): uncomment the base_url below to target the mock server.
       base_url: "http://localhost:8383/v1"
+      timeout:
+        connect: 10.0
+        read: 30.0
       http_client_limits:
-        max_connections: 1000
+        max_connections: 500
         max_keepalive_connections: 0
         keepalive_expiry_seconds: 10
       temperature: 0.0
@@ -130,8 +136,12 @@ ai:
       # Benchmark (mock OpenAI): uncomment the base_url below to target the mock server.
       base_url: "http://localhost:8383/v1"
       temperature: 0.0
-      max_retries: 2
-      request_timeout: 30
+      max_retries: 0
+      timeout: 30.0
+      http_client_limits:
+        max_connections: 500
+        max_keepalive_connections: 0
+        keepalive_expiry_seconds: 10
 
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model

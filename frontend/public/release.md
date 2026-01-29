@@ -1,3 +1,30 @@
+**v1.2.3** — 2026-01-25
+
+- **Summary**
+  This release bring in new KPIs, a bench tools to stress the agentic fred backend. As part of KPIs and performance improvements,
+  the various langchain dependencies have been updated:
+
+  - "langchain>=1.2.7",
+  - "langchain-community>=0.4.1",
+  - "langchain-mcp-adapters>=0.2.1",
+  - "langchain-core>=1.2.7",
+  - "langchain-ollama>=1.0.1",
+  - "langchain-openai>=1.1.7",
+  - "langchain-text-splitters>=1.1.0",
+  - "langchain-postgres>=0.0.16",
+
+- **Features**
+
+  - new KPIs and bench logging, finer grain http outgoing configurability (#1059)
+  - new bench tools (#1049)
+  - new core temporal agentic API (#1038)
+
+- **Improvements**
+
+  - use of shared http clients (#1055)
+  - reshaping of prometheus metrics (#1023)
+  - updated langchain version to latest (#1059)
+
 **v1.2.2** — 2026-01-23
 
 - **Summary**
