@@ -21,7 +21,10 @@ app:
   metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
-  kpi_process_metrics_interval_sec: 10
+  # KPI settings for local benchmarks and debugging. Disable in production.
+  kpi_process_metrics_interval_sec: 0
+  kpi_log_summary_interval_sec: 0.0
+  kpi_log_summary_top_n: 0
 
 scheduler:
   enabled: true

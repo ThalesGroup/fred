@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import threading
 import time
 from contextlib import AbstractContextManager
@@ -265,26 +264,12 @@ class KPIWriter(BaseKPIWriter):
     def _resolve_summary_interval(self, value: Optional[float]) -> Optional[float]:
         if value is not None:
             return value if value > 0 else None
-        env_val = os.getenv("KPI_LOG_SUMMARY_INTERVAL_SEC")
-        if not env_val:
-            return None
-        try:
-            parsed = float(env_val)
-        except ValueError:
-            return None
-        return parsed if parsed > 0 else None
+        return None
 
     def _resolve_summary_top_n(self, value: Optional[int]) -> Optional[int]:
         if value is not None:
             return value if value > 0 else None
-        env_val = os.getenv("KPI_LOG_SUMMARY_TOP_N")
-        if not env_val:
-            return None
-        try:
-            parsed = int(env_val)
-        except ValueError:
-            return None
-        return parsed if parsed > 0 else None
+        return None
 
     def _start_summary_thread_if_enabled(self) -> None:
         if not self._summary_interval_s:

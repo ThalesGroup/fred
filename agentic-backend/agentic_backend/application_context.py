@@ -869,6 +869,8 @@ class ApplicationContext:
         self._kpi_writer = KPIWriter(
             store=self.get_kpi_store(),
             defaults=KPIDefaults(static_dims={"service": "agentic"}),
+            summary_interval_s=self.configuration.app.kpi_log_summary_interval_sec,
+            summary_top_n=self.configuration.app.kpi_log_summary_top_n,
         )
         return self._kpi_writer
 
