@@ -13,17 +13,17 @@
   - "langchain-text-splitters>=1.1.0",
   - "langchain-postgres>=0.0.16",
 
-  - **Features**
+- **Features**
 
-    - new KPIs and bench logging, finer grain http outgoing configurability (#1059)
-    - new bench tools (#1049)
-    - new core temporal agentic API (#1038)
+  - new KPIs and bench logging, finer grain http outgoing configurability (#1059)
+  - new bench tools (#1049)
+  - new core temporal agentic API (#1038)
 
-  - **Improvments**
+- **Improvements**
 
-    - use of shared http clients (#1055)
-    - reshaping of prometheus metrics (#1023)
-    - updated langchain version to latest (#1059)
+  - use of shared http clients (#1055)
+  - reshaping of prometheus metrics (#1023)
+  - updated langchain version to latest (#1059)
 
 **v1.2.2** — 2026-01-23
 
