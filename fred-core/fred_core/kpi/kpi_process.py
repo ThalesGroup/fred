@@ -161,8 +161,8 @@ async def emit_process_kpis(interval_s: float, kpi_writer) -> None:
                 last_cpu_time = None
                 last_ts = now
 
-            logger.debug(
-                "[KPI][process] cpu_pct=%s rss_mb=%s rss_pct=%s vms_mb=%s open_fds=%s",
+            logger.warning(
+                "[KPI][SUMMARY] cpu_pct=%s rss_mb=%s rss_pct=%s vms_mb=%s open_fds=%s",
                 f"{cpu_pct_value:.2f}" if cpu_pct_value is not None else "n/a",
                 f"{rss_mb:.2f}" if rss_mb is not None else "n/a",
                 f"{rss_pct_value:.2f}" if rss_pct_value is not None else "n/a",

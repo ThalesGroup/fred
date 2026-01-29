@@ -285,8 +285,16 @@ class AppConfig(BaseModel):
     metrics_address: str = "127.0.0.1"
     metrics_port: int = 9000
     kpi_process_metrics_interval_sec: int = Field(
-        10,
+        0,
         description="Interval in seconds for processing and logging KPI metrics.",
+    )
+    kpi_log_summary_interval_sec: float = Field(
+        default=0.0,
+        description="Emit KPI summary logs every N seconds (bench/debug). Set 0 to disable.",
+    )
+    kpi_log_summary_top_n: int = Field(
+        default=0,
+        description="Top-N metrics to show in KPI summary logs. 0 means all / disabled.",
     )
 
 

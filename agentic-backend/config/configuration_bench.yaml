@@ -15,16 +15,16 @@ app:
   base_url: "/agentic/v1"
   address: "127.0.0.1"
   port: 8000
-  log_level: "info"
+  log_level: "debug"
   reload: false
   reload_dir: "."
   metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
-  # KPI settings for local benchmarks and debugging. Disable in production.
-  kpi_process_metrics_interval_sec: 0
-  kpi_log_summary_interval_sec: 0.0
-  kpi_log_summary_top_n: 0
+  # KPI settings for local benchmarks and debugging.
+  kpi_process_metrics_interval_sec: 5
+  kpi_log_summary_interval_sec: 5.0
+  kpi_log_summary_top_n: 20
 
 scheduler:
   enabled: true
@@ -36,18 +36,18 @@ scheduler:
 
 security:
   m2m:
-    enabled: true
+    enabled: false
     client_id: "agentic"
     realm_url: "http://app-keycloak:8080/realms/app"
     secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET # pragma: allowlist secret (env var name only)
   user:
-    enabled: true
+    enabled: false
     client_id: "app"
     realm_url: "http://app-keycloak:8080/realms/app"
   authorized_origins:
     - "http://localhost:5173"
   rebac:
-    enabled: true
+    enabled: false
     type: openfga
     api_url: "http://localhost:9080"
 
@@ -59,17 +59,8 @@ frontend_settings:
     # If true activate support for an electronic warfare demonstration
     enableElecWarfare: false
   properties:
-    logoName: "logo_PRISM_light"
-    logoNameDark: "logo_PRISM_dark"
-    logoHeight: "24px"
-    logoWidth: "129px"
-    faviconName: "favicon_PRISM_light"
-    faviconNameDark: "favicon_PRISM_dark"
-    siteDisplayName: "PRISM.AI"
-    agentsNicknameSingular: "Lumi"
-    agentsNicknamePlural: "Lumis"
-    contactSupportLink: "https://join.citadel.team/web-client/#/room/!rPdYXaGrZwwbgsEPaK:thales.citadel.team?deeplink=true"
-    agentIconName: "icon_lumi"
+    logoName: "fred"
+    siteDisplayName: "Fred"
 
 ai:
   # In production  activate the configuration persistence mechanism
@@ -85,7 +76,7 @@ ai:
   agentic_restore_max_exchanges: 20
 
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
-  max_concurrent_agents: 128
+  max_concurrent_agents: 1024
 
   # Maximum number of files a user can attach across all sessions
   max_attached_files_per_user: 20
@@ -119,13 +110,20 @@ ai:
     #   azure_ad_client_id: "your-client-id"
     #   azure_ad_client_scope: "api://your-client-id/.default"
     provider: "openai"
-    name: "gpt-5.1"
+    name: "model-2"
     settings:
+      request_timeout: 5
+      max_retries: 0
       # Benchmark (mock OpenAI): uncomment the base_url below to target the mock server.
-      # base_url: "http://localhost:8383/v1"
+      base_url: "http://localhost:8383/v1"
+      timeout:
+        connect: 10.0
+        read: 30.0
+      http_client_limits:
+        max_connections: 500
+        max_keepalive_connections: 0
+        keepalive_expiry_seconds: 10
       temperature: 0.0
-      max_retries: 2
-      request_timeout: 30
 
   # Default language model used for non-chat interactions. This one is optional
   # and if not set, the default_chat_model will be used as fallback.
@@ -133,13 +131,17 @@ ai:
     # Required in .env:
     # - OPENAI_API_KEY
     provider: "openai"
-    name: "gpt-5.1"
+    name: "model-2"
     settings:
       # Benchmark (mock OpenAI): uncomment the base_url below to target the mock server.
-      # base_url: "http://localhost:8383/v1"
+      base_url: "http://localhost:8383/v1"
       temperature: 0.0
-      max_retries: 2
-      request_timeout: 30
+      max_retries: 0
+      timeout: 30.0
+      http_client_limits:
+        max_connections: 500
+        max_keepalive_connections: 0
+        keepalive_expiry_seconds: 10
 
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
@@ -286,9 +288,8 @@ storage:
     table: tasks
 
   kpi_store:
-    type: "opensearch"
-    index: kpi-index
+    type: "log"
+    level: "INFO"
 
   log_store:
-    type: "opensearch"
-    index: log-index
+    type: "in_memory"
