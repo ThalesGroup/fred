@@ -19,6 +19,7 @@ from typing import Optional
 
 from fastapi import BackgroundTasks
 from fred_core import KeycloakUser
+from fred_core.scheduler import TemporalClientProvider
 from temporalio.client import Client
 
 from knowledge_flow_backend.common.structures import SchedulerConfig
@@ -40,9 +41,18 @@ class TemporalScheduler(BaseScheduler):
     - Starts a Temporal workflow that orchestrates ingestion.
     """
 
-    def __init__(self, scheduler_config: SchedulerConfig, metadata_service: MetadataService) -> None:
+    def __init__(
+        self,
+        scheduler_config: SchedulerConfig,
+        metadata_service: MetadataService,
+        temporal_client_provider: Optional[TemporalClientProvider] = None,
+    ) -> None:
         super().__init__(metadata_service)
         self._scheduler_config = scheduler_config
+        # Prefer a shared Temporal client provider (mirrors agentic backend pattern)
+        self._client_provider = temporal_client_provider or TemporalClientProvider(
+            scheduler_config.temporal
+        )
 
     async def start_document_processing(
         self,
@@ -52,17 +62,13 @@ class TemporalScheduler(BaseScheduler):
     ) -> WorkflowHandle:
         handle = self._register_workflow(user, definition)
 
-        temporal_cfg = self._scheduler_config.temporal
-        client = await Client.connect(
-            target_host=temporal_cfg.host,
-            namespace=temporal_cfg.namespace,
-        )
+        client: Client = await self._client_provider.get_client()
 
         workflow_handle = await client.start_workflow(
             Process.run,
             definition,
             id=handle.workflow_id,
-            task_queue=temporal_cfg.task_queue,
+            task_queue=self._scheduler_config.temporal.task_queue,
         )
 
         logger.info("🛠️ started temporal workflow=%s", workflow_handle.id)

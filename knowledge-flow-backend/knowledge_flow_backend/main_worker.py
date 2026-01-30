@@ -13,99 +13,45 @@
 # limitations under the License.
 
 """
-Knowledge Flow Backend – API Entry Point
+Entrypoint for the Knowledge Flow Temporal worker.
 
-This module launches the main FastAPI web server used by the Knowledge Flow backend.
-
-Responsibilities:
------------------
-- Load configuration and environment variables (via `configuration.yaml` and `.env`)
-- Initialize the shared application context (singleton for config, stores, processors, etc.)
-- Register FastAPI routes and controllers (e.g., ingestion, metadata, vector search)
-- Start Uvicorn HTTP server to expose REST and MCP endpoints
-- Optionally: spawn a background Temporal worker thread if enabled in config
-
-Temporal Worker (Optional):
----------------------------
-If `scheduler.enabled = true` and `scheduler.backend = temporal` is set in the configuration,
-this entry point also starts a Temporal worker in a background thread. This worker:
-
-- Connects to the Temporal server (e.g., localhost:7233)
-- Registers ingestion-related workflows and activities
-- Listens on the `ingestion` task queue
-- Processes long-running ingestion pipelines asynchronously
-
-This hybrid mode is convenient for local development and test environments.
-
-Production Note:
-----------------
-In a production environment, it is recommended to split this into two separate processes:
-- `main_api.py` → for the FastAPI HTTP server
-- `main_worker.py` → for the dedicated Temporal worker service
-
-This separation supports independent scaling and better resource management in Kubernetes or other orchestration platforms.
+Start with:
+  CONFIG_FILE=./config/configuration.yaml uv run python -m knowledge_flow_backend.main_worker
 """
 
 import asyncio
 import logging
-import os
 
-from dotenv import load_dotenv
-from rich.logging import RichHandler
+from fred_core import log_setup
 
-from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.structures import Configuration
-from knowledge_flow_backend.common.utils import parse_server_configuration
+from knowledge_flow_backend.application_context import ApplicationContext, get_app_context
+from knowledge_flow_backend.main import load_configuration
 from knowledge_flow_backend.features.scheduler.worker import run_worker
-
-# -----------------------
-# LOGGING + ENVIRONMENT
-# -----------------------
 
 logger = logging.getLogger(__name__)
 
 
-def configure_logging(log_level: str):
-    logging.basicConfig(
-        level=log_level.upper(),
-        format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        handlers=[RichHandler(rich_tracebacks=False, show_time=False, show_path=False)],
-    )
-    logging.getLogger(__name__).info(f"Logging configured at {log_level.upper()} level.")
-
-
-def load_environment(dotenv_path: str = "./config/.env"):
-    if load_dotenv(dotenv_path):
-        logging.getLogger().info(f"✅ Loaded environment variables from: {dotenv_path}")
-    else:
-        logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
-
-
-# -----------------------
-# MAIN ENTRYPOINT
-# -----------------------
-
-
-async def main():
-    load_environment()
-    config_file = os.environ["CONFIG_FILE"]
-    configuration: Configuration = parse_server_configuration(config_file)
-    configure_logging(configuration.app.log_level)
+async def main() -> None:
+    configuration = load_configuration()
     ApplicationContext(configuration)
+    app_context = get_app_context()
+    log_setup(
+        service_name="knowledge-flow-worker",
+        log_level=configuration.app.log_level,
+        store=app_context.get_log_store(),
+        use_rich=False,  # Temporal workflow sandbox disallows Rich imports; use plain logging.
+    )
 
-    if configuration.scheduler.enabled:
-        if configuration.scheduler.backend == "temporal":
-            logger.info("🛠️ Launching Temporal ingestion scheduler (backend: temporal)")
-            await run_worker(configuration.scheduler.temporal)
-        else:
-            raise ValueError(f"Scheduler is enabled but unsupported backend '{configuration.scheduler.backend}' was provided. Expected: 'temporal'. Please check your configuration.yaml.")
+    if not configuration.scheduler.enabled:
+        logger.warning("Scheduler disabled via configuration.scheduler.enabled=false")
+        return
+    if configuration.scheduler.backend.lower() != "temporal":
+        raise ValueError(
+            f"Scheduler backend '{configuration.scheduler.backend}' not supported; expected 'temporal'."
+        )
+
+    await run_worker(configuration.scheduler.temporal)
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-# Note: We do not define a global `app = FastAPI()` for ASGI (e.g., `uvicorn app.main:app`)
-# because this application is always launched via the CLI `main()` function.
-# This allows full control over configuration (e.g., --config-path, --base-url) and avoids
-# the need for a static app instance required by ASGI-based servers like Uvicorn in import mode.

@@ -26,6 +26,7 @@ from fred_core import (
     SecurityConfiguration,
     StoreConfig,
 )
+from fred_core.common.structures import TemporalSchedulerConfig
 from pydantic import BaseModel, Field, model_validator
 
 """
@@ -237,14 +238,6 @@ class MCPConfig(BaseModel):
         default=False,
         description="Expose agent filesystem utils endpoints and the corresponding MCP server.",
     )
-
-
-class TemporalSchedulerConfig(BaseModel):
-    host: str = "localhost:7233"
-    namespace: str = "default"
-    task_queue: str = "ingestion"
-    workflow_prefix: str = "pipeline"
-    connect_timeout_seconds: Optional[int] = 5
 
 
 class SchedulerConfig(BaseModel):
