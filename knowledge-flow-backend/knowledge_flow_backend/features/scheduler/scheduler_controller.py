@@ -21,6 +21,7 @@ from fred_core.scheduler import TemporalClientProvider
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.metadata.service import MetadataService
+from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     ProcessDocumentsProgressRequest,
     ProcessDocumentsProgressResponse,
@@ -29,7 +30,6 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     ProcessLibraryRequest,
     ProcessLibraryResponse,
 )
-from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
 
 logger = logging.getLogger(__name__)
 

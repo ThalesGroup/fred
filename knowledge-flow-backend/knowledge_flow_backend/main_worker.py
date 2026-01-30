@@ -25,8 +25,8 @@ import logging
 from fred_core import log_setup
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_app_context
-from knowledge_flow_backend.main import load_configuration
 from knowledge_flow_backend.features.scheduler.worker import run_worker
+from knowledge_flow_backend.main import load_configuration
 
 logger = logging.getLogger(__name__)
 
