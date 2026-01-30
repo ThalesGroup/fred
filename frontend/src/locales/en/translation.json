@@ -1222,5 +1222,21 @@
     "private": {
       "label": "Private team"
     }
+  },
+  "teamMembersPage": {
+    "tableHeader": {
+      "username": "Username",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "role": "Role",
+      "actions": "Actions"
+    },
+    "headerTitle": "Team members",
+    "headerInfoTooltip": "Here are the members of this team. A member can belong to multiple teams at the same time.",
+    "teamRole": {
+      "member": "Member",
+      "manager": "Manager",
+      "owner": "Owner"
+    }
   }
 }

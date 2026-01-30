@@ -2,11 +2,13 @@ import { Avatar, Box, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { NavigationTabs, TabConfig } from "../components/NavigationTabs";
-import { TeamAgentHub } from "../components/teamDetails/teamAgentHub";
+import { TeamAgentHub } from "../components/teamDetails/TeamAgentHub";
 import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
+import { TeamMembersPage } from "../components/teamDetails/TeamMembersPage";
 import { TeamSettingsPage } from "../components/teamDetails/TeamSettingsPage";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { GroupSummary } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { capitalize } from "../utils/capitalize";
 
 // todo: remove when we wire backend
 const teams: GroupSummary[] = [
@@ -58,7 +60,8 @@ export function TeamDetailsPage() {
 
   const tabs: TabConfig[] = [
     {
-      label: agentsNicknamePlural,
+      // todo: capitalize in label
+      label: capitalize(agentsNicknamePlural),
       path: `/team/${team.id}/${agentsNicknamePlural}`,
       component: <TeamAgentHub />,
     },
@@ -79,11 +82,7 @@ export function TeamDetailsPage() {
     {
       label: t("teamDetails.tabs.members"),
       path: `/team/${team.id}/members`,
-      component: (
-        <Box>
-          <Typography>Members content for {team.name}</Typography>
-        </Box>
-      ),
+      component: <TeamMembersPage />,
     },
     {
       label: t("teamDetails.tabs.settings"),
