@@ -333,76 +333,24 @@ class SessionOrchestrator:
 
                 # Stream agent responses via the transcoder
                 agent_msgs: List[ChatMessage] = []
+
+                # Build input messages ensuring the last message is the Human question.
+                input_messages = lc_history + [HumanMessage(message)]
+                stream_start = time.monotonic()
                 try:
-                    # Build input messages ensuring the last message is the Human question.
-                    input_messages = lc_history + [HumanMessage(message)]
-                    stream_start = time.monotonic()
-                    try:
-                        agent_msgs = await self.transcoder.stream_agent_response(
-                            agent=agent,
-                            input_messages=input_messages,
-                            session_id=session.id,
-                            exchange_id=exchange_id,
-                            agent_name=agent_name,
-                            base_rank=base_rank,
-                            start_seq=1,  # user message already consumed rank=base_rank
-                            callback=callback,
-                            user_context=user,
-                            runtime_context=runtime_context,
-                        )
-                    except WebSocketDisconnect:
-                        self.kpi.count(
-                            "chat.exchange_error",
-                            1,
-                            dims={
-                                "agent_name": agent_name,
-                            },
-                            actor=PHASE_METRIC_ACTOR,
-                        )
-                        logger.error(
-                            "Agent execution cancelled by client disconnect (agent=%s session=%s exchange=%s)",
-                            agent_name,
-                            session.id,
-                            exchange_id,
-                        )
-                        # do we need raise here ?
-                    except asyncio.CancelledError:
-                        self.kpi.count(
-                            "chat.exchange_error",
-                            1,
-                            dims={
-                                "agent_name": agent_name,
-                            },
-                            actor=PHASE_METRIC_ACTOR,
-                        )
-                        raise
-                    except Exception:
-                        self.kpi.count(
-                            "chat.exchange_error",
-                            1,
-                            dims={
-                                "agent_name": agent_name,
-                            },
-                            actor=PHASE_METRIC_ACTOR,
-                        )
-                        raise
-                    finally:
-                        _record_phase_metric(
-                            kpi=self.kpi,
-                            phase="stream",
-                            start_ts=stream_start,
-                            agent_name=agent_name,
-                        )
-                    all_msgs.extend(agent_msgs)
-                except asyncio.CancelledError:
-                    logger.info(
-                        "Agent execution cancelled by client (agent=%s session=%s exchange=%s)",
-                        agent_name,
-                        session.id,
-                        exchange_id,
+                    agent_msgs = await self.transcoder.stream_agent_response(
+                        agent=agent,
+                        input_messages=input_messages,
+                        session_id=session.id,
+                        exchange_id=exchange_id,
+                        agent_name=agent_name,
+                        base_rank=base_rank,
+                        start_seq=1,  # user message already consumed rank=base_rank
+                        callback=callback,
+                        user_context=user,
+                        runtime_context=runtime_context,
                     )
-                    raise
-                except Exception:
+                except WebSocketDisconnect:
                     self.kpi.count(
                         "chat.exchange_error",
                         1,
@@ -411,16 +359,64 @@ class SessionOrchestrator:
                         },
                         actor=PHASE_METRIC_ACTOR,
                     )
-                    logger.exception("Agent execution failed")
-                finally:
+                    logger.error(
+                        "Agent execution cancelled by client disconnect (agent=%s session=%s exchange=%s)",
+                        agent_name,
+                        session.id,
+                        exchange_id,
+                    )
+                    # do we need raise here ?
+                except asyncio.CancelledError:
                     self.kpi.count(
-                        "chat.exchange_total",
+                        "chat.exchange_error",
                         1,
                         dims={
                             "agent_name": agent_name,
                         },
                         actor=PHASE_METRIC_ACTOR,
                     )
+                    raise
+                except Exception as e:
+                    err_text = str(e)
+                    user_msg = (
+                        "I encountered an unexpected error. Please try again later."
+                    )
+                    if "timeout" in err_text.lower() or "timed out" in err_text.lower():
+                        user_msg = "The operation timed out because it took too long. Please try reducing the scope of your request or the number of documents."
+                    elif "context length" in err_text.lower():
+                        user_msg = "The request exceeded the model's context limit. Please try with shorter documents or fewer attachments."
+                    elif "rate limit" in err_text.lower():
+                        user_msg = "I'm receiving too many requests right now. Please wait a moment and try again."
+                    agent_msgs.append(
+                        ChatMessage(
+                            session_id=session.id,
+                            exchange_id=exchange_id,
+                            rank=base_rank + len(agent_msgs),
+                            timestamp=_utcnow_dt(),
+                            role=Role.assistant,
+                            channel=Channel.final,
+                            parts=[
+                                TextPart(text=user_msg),
+                            ],
+                            metadata=ChatMetadata(),
+                        )
+                    )
+                    self.kpi.count(
+                        "chat.exchange_error",
+                        1,
+                        dims={
+                            "agent_name": agent_name,
+                        },
+                        actor=PHASE_METRIC_ACTOR,
+                    )
+                finally:
+                    _record_phase_metric(
+                        kpi=self.kpi,
+                        phase="stream",
+                        start_ts=stream_start,
+                        agent_name=agent_name,
+                    )
+                all_msgs.extend(agent_msgs)
 
                 # 6) Attach the raw runtime context (single source of truth)
                 self._attach_runtime_context(
