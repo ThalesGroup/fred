@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import inspect
 import json
 import logging
@@ -26,10 +25,8 @@ from fred_core import KeycloakUser, VectorSearchHit
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler
-from langgraph.graph import MessagesState
 from langgraph.types import Command
 from pydantic import TypeAdapter, ValidationError
-from starlette.websockets import WebSocketDisconnect
 
 from agentic_backend.common.rags_utils import ensure_ranks
 from agentic_backend.core.agents.agent_flow import AgentFlow
@@ -441,22 +438,17 @@ class StreamTranscoder:
                         checkpointer=getattr(agent, "streaming_memory", None),
                     )
 
-                # `event` looks like: {'node_name': {'messages': [...]}} or {'end': None}
+                # `event` looks like: {'node_name': {'messages': [...]} } or {'end': None}
                 key = next(iter(event))
                 payload = event[key]
                 if not isinstance(payload, dict):
                     continue
 
                 block = payload.get("messages", []) or []
-                if not block:
-                    continue
-
                 for msg in block:
                     raw_md = getattr(msg, "response_metadata", {}) or {}
                     usage_raw = getattr(msg, "usage_metadata", {}) or {}
-                    additional_kwargs = (
-                        getattr(msg, "additional_kwargs", {}) or {}
-                    )  # NEW
+                    additional_kwargs = getattr(msg, "additional_kwargs", {}) or {}  # NEW
 
                     model_name = raw_md.get("model_name") or raw_md.get("model")
                     finish_reason = coerce_finish_reason(raw_md.get("finish_reason"))
@@ -627,18 +619,13 @@ class StreamTranscoder:
                             continue
 
                     if role == Role.assistant and ch == Channel.final:
-                        existing_sources = (
-                            len(sources_payload) if sources_payload else 0
-                        )
+                        existing_sources = len(sources_payload) if sources_payload else 0
                         pending_sources = (
                             len(pending_sources_payload)
                             if pending_sources_payload is not None
                             else 0
                         )
-                        if (
-                            existing_sources == 0
-                            and pending_sources_payload is not None
-                        ):
+                        if existing_sources == 0 and pending_sources_payload is not None:
                             # Some agents put sources in the vector-search tool result, not on the final AIMessage.
                             # In that case, carry the tool-result sources forward into the final message metadata.
                             sources_payload = pending_sources_payload
@@ -665,32 +652,26 @@ class StreamTranscoder:
                             )
                         pending_sources_payload = None
 
-                    msg_v2 = ChatMessage(
-                        session_id=session_id,
-                        exchange_id=exchange_id,
-                        rank=base_rank + seq,
-                        timestamp=_utcnow_dt(),
-                        role=role,
-                        channel=ch,
-                        parts=parts or [TextPart(text="")],
-                        metadata=ChatMetadata(
-                            model=model_name,
-                            token_usage=token_usage,
-                            agent_name=agent_name,
-                            finish_reason=finish_reason,
-                            extras=raw_md.get("extras") or {},
-                            sources=sources_payload,
-                        ),
-                    )
-                    out.append(msg_v2)
-                    seq += 1
-                    await self._emit(callback, msg_v2)
-        except asyncio.CancelledError:
-            logger.info("StreamTranscoder: stream cancelled")
-            raise
-        except WebSocketDisconnect:
-            logger.info("StreamTranscoder: client disconnected; stopping stream.")
-            raise
+                        msg_v2 = ChatMessage(
+                            session_id=session_id,
+                            exchange_id=exchange_id,
+                            rank=base_rank + seq,
+                            timestamp=_utcnow_dt(),
+                            role=role,
+                            channel=ch,
+                            parts=parts or [TextPart(text="")],
+                            metadata=ChatMetadata(
+                                model=model_name,
+                                token_usage=token_usage,
+                                agent_name=agent_name,
+                                finish_reason=finish_reason,
+                                extras=raw_md.get("extras") or {},
+                                sources=sources_payload,
+                            ),
+                        )
+                        out.append(msg_v2)
+                        seq += 1
+                        await self._emit(callback, msg_v2)
         except InterruptRaised:
             # Expected control-flow for HITL; let caller handle without logging an error.
             logger.info(
@@ -700,54 +681,6 @@ class StreamTranscoder:
                 exchange_id,
             )
             raise
-        except Exception as e:
-            logger.error(
-                "StreamTranscoder: Agent execution failed with error: %s",
-                e,
-                exc_info=True,
-            )
-
-            # Heuristic for friendly error messages
-            err_text = str(e)
-            user_msg = "I encountered an unexpected error. Please try again later."
-            error_code = "error"
-
-            if "timeout" in err_text.lower() or "timed out" in err_text.lower():
-                user_msg = "The operation timed out because it took too long. Please try reducing the scope of your request or the number of documents."
-                error_code = "timeout"
-            elif "context length" in err_text.lower():
-                user_msg = "The request exceeded the model's context limit. Please try with shorter documents or fewer attachments."
-                error_code = "context_length"
-            elif "rate limit" in err_text.lower():
-                user_msg = "I'm receiving too many requests right now. Please wait a moment and try again."
-                error_code = "rate_limit"
-
-            # Emit error message
-            err_chat_msg = ChatMessage(
-                session_id=session_id,
-                exchange_id=exchange_id,
-                rank=base_rank + seq,
-                timestamp=_utcnow_dt(),
-                role=Role.assistant,
-                channel=Channel.final,
-                parts=[TextPart(text=f"**Error**: {user_msg}")],
-                metadata=ChatMetadata(
-                    agent_name=agent_name,
-                    finish_reason=None,
-                    extras={
-                        "error": True,
-                        "error_code": error_code,
-                        "raw_error": err_text,
-                    },
-                ),
-            )
-            out.append(err_chat_msg)
-            try:
-                await self._emit(callback, err_chat_msg)
-            except WebSocketDisconnect:
-                logger.info(
-                    "StreamTranscoder: client disconnected before error message could be sent."
-                )
 
         return out
 

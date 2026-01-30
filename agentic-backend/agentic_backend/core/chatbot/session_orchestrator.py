@@ -81,6 +81,7 @@ from agentic_backend.core.session.stores.base_session_attachment_store import (
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 
 logger = logging.getLogger(__name__)
+PHASE_METRIC_ACTOR = KPIActor(type="system", user_id=None, groups=None)
 
 # Callback type used by WS controller to push events to clients
 CallbackType = Callable[[dict], None] | Callable[[dict], Awaitable[None]]
@@ -97,33 +98,23 @@ def _utcnow_dt() -> datetime:
 def _record_phase_metric(
     *,
     kpi: BaseKPIWriter,
-    actor: KPIActor,
     phase: str,
     start_ts: float,
-    session_id: str,
-    exchange_id: str,
     agent_name: str,
-    user_id: str | None = None,
-    status: str | None = None,
 ) -> None:
     ms = int((time.monotonic() - start_ts) * 1000)
+    # Keep cardinality low for Prometheus: only agent + phase + status.
     dims: Dims = {
-        "agent_id": agent_name,
-        "exchange_id": exchange_id,
-        "scope_type": "session",
-        "scope_id": session_id,
-        "agent_step": phase,
+        "agent_name": agent_name,
+        "phase": phase,
     }
-    if user_id:
-        dims["user_id"] = user_id
-    if status:
-        dims["status"] = status
-    kpi.gauge(
-        "chat.phase_latency_ms",
-        ms,
+    kpi.emit(
+        name="chat.phase_latency_ms",
+        type="timer",
+        value=ms,
         unit="ms",
         dims=dims,
-        actor=actor,
+        actor=PHASE_METRIC_ACTOR,
     )
 
 
@@ -239,28 +230,20 @@ class SessionOrchestrator:
             "chat.user_message_total",
             1,
             dims={
-                "agent_id": agent_name,
-                "scope_type": "session",
-                "scope_id": session_id,
-                "exchange_id": exchange_id,
+                "agent_name": agent_name,
             },
             actor=actor,
         )
-        t_total = time.monotonic()
         # 1) Get or create the session. We receive a None session_id for new sessions.
-        t_session = time.monotonic()
+        t_initial = time.monotonic()
         session = await self._get_or_create_session(
             user_id=user.uid, query=message, session_id=session_id
         )
         _record_phase_metric(
             kpi=self.kpi,
-            actor=actor,
             phase="session_get_create",
-            start_ts=t_session,
-            session_id=session.id,
-            exchange_id=exchange_id,
+            start_ts=t_initial,
             agent_name=agent_name,
-            user_id=user.uid,
         )
         # If this session was created with a placeholder title, refresh it now from the first prompt.
         t_title = time.monotonic()
@@ -272,13 +255,9 @@ class SessionOrchestrator:
             await asyncio.to_thread(self.session_store.save, session)
         _record_phase_metric(
             kpi=self.kpi,
-            actor=actor,
             phase="title_refresh",
             start_ts=t_title,
-            session_id=session.id,
-            exchange_id=exchange_id,
             agent_name=agent_name,
-            user_id=user.uid,
         )
         # Propagate effective session_id into runtime context so downstream calls
         # (vector search, attachments) can scope to the correct conversation.
@@ -292,21 +271,24 @@ class SessionOrchestrator:
         )
         _record_phase_metric(
             kpi=self.kpi,
-            actor=actor,
             phase="agent_init",
             start_ts=t_agent_init,
-            session_id=session.id,
-            exchange_id=exchange_id,
             agent_name=agent_name,
-            user_id=user.uid,
         )
-        cache_result = "hit" if is_cached else "miss"
-        self.kpi.count(
-            "agent.cache_lookup_total",
-            1,
-            dims={"agent_id": agent_name, "result": cache_result},
-            actor=actor,
-        )
+        if is_cached:
+            self.kpi.count(
+                "agent.cache_hit",
+                1,
+                dims={"agent_name": agent_name},
+                actor=actor,
+            )
+        else:
+            self.kpi.count(
+                "agent.cache_miss",
+                1,
+                dims={"agent_name": agent_name},
+                actor=actor,
+            )
 
         try:
             if title_changed and session_callback:
@@ -323,13 +305,9 @@ class SessionOrchestrator:
                 )
                 _record_phase_metric(
                     kpi=self.kpi,
-                    actor=actor,
                     phase="history_restore",
                     start_ts=t_restore,
-                    session_id=session.id,
-                    exchange_id=exchange_id,
                     agent_name=agent_name,
-                    user_id=user.uid,
                 )
                 label = f"agent={agent_name} session={session.id}"
                 log_agent_message_summary(lc_history, label=label)
@@ -340,13 +318,9 @@ class SessionOrchestrator:
                 base_rank = await self._ensure_next_rank(session)
                 _record_phase_metric(
                     kpi=self.kpi,
-                    actor=actor,
                     phase="rank_seed",
                     start_ts=t_rank,
-                    session_id=session.id,
-                    exchange_id=exchange_id,
                     agent_name=agent_name,
-                    user_id=user.uid,
                 )
 
                 # 4) Emit the user message immediately
@@ -364,150 +338,110 @@ class SessionOrchestrator:
                 await self._emit(callback, user_msg)
 
                 # Stream agent responses via the transcoder
-                saw_final_assistant = False
                 agent_msgs: List[ChatMessage] = []
-                had_error = False
-                had_cancelled = False
-                error_code: Optional[str] = None
-                try:
-                    # Timer covers the entire exchange; default status="ok" unless overridden.
-                    with self.kpi.timer(
-                        "chat.exchange_latency_ms",
-                        dims={
-                            "agent_id": agent_name,
-                            "user_id": user.uid,
-                            "session_id": session.id,
-                            "exchange_id": exchange_id,
-                        },
-                        actor=actor,
-                    ) as kpi_dims:
-                        # Build input messages ensuring the last message is the Human question.
-                        input_messages = lc_history + [HumanMessage(message)]
 
-                        stream_start = time.monotonic()
-                        stream_status = "ok"
-                        had_interrupt = False
-                        logger.info(
-                            "[SESSIONS] streaming start agent=%s session=%s exchange=%s base_rank=%s",
-                            agent_name,
-                            session.id,
-                            exchange_id,
-                            base_rank,
-                        )
-                        try:
-                            agent_msgs = await self.transcoder.stream_agent_response(
-                                agent=agent,
-                                input_messages=input_messages,
-                                session_id=session.id,
-                                exchange_id=exchange_id,
-                                agent_name=agent_name,
-                                base_rank=base_rank,
-                                start_seq=1,  # user message already consumed rank=base_rank
-                                callback=callback,
-                                user_context=user,
-                                runtime_context=runtime_context,
-                                interrupt_handler=self._make_streaming_interrupt_handler(
-                                    session.id, exchange_id, callback
-                                ),
-                            )
-                        except WebSocketDisconnect:
-                            stream_status = "disconnect"
-                            had_cancelled = True
-                            error_code = "client_disconnect"
-                            kpi_dims["status"] = "cancelled"
-                            kpi_dims["error_code"] = error_code
-                            logger.info(
-                                "Agent execution cancelled by client disconnect (agent=%s session=%s exchange=%s)",
-                                agent_name,
-                                session.id,
-                                exchange_id,
-                            )
-                        except asyncio.CancelledError:
-                            stream_status = "cancelled"
-                            had_cancelled = True
-                            error_code = "cancelled"
-                            kpi_dims["error_code"] = error_code
-                            raise
-                        except InterruptRaised:
-                            had_interrupt = True
-                            stream_status = "awaiting_human"
-                            kpi_dims["status"] = stream_status
-                        except Exception:
-                            stream_status = "error"
-                            raise
-                        finally:
-                            _record_phase_metric(
-                                kpi=self.kpi,
-                                actor=actor,
-                                phase="stream",
-                                start_ts=stream_start,
-                                session_id=session.id,
-                                exchange_id=exchange_id,
-                                agent_name=agent_name,
-                                user_id=user.uid,
-                                status=stream_status,
-                            )
-                        all_msgs.extend(agent_msgs)
-                        # Success signal: exactly one assistant/final per exchange (enforced by transcoder)
-                        saw_final_assistant = any(
-                            (m.role == Role.assistant and m.channel == Channel.final)
-                            for m in agent_msgs
-                        )
-                        # Error signal: explicit error marker from the transcoder.
-                        for msg in agent_msgs:
-                            extras = msg.metadata.extras if msg.metadata else {}
-                            if (
-                                extras.get("error") is True
-                                or msg.channel == Channel.error
-                            ):
-                                had_error = True
-                                error_code = extras.get("error_code") or error_code
-                                break
-                        if had_error:
-                            kpi_dims["status"] = "error"
-                            if error_code:
-                                kpi_dims["error_code"] = error_code
-                except asyncio.CancelledError:
-                    logger.info(
-                        "Agent execution cancelled by client (agent=%s session=%s exchange=%s)",
+                # Build input messages ensuring the last message is the Human question.
+                input_messages = lc_history + [HumanMessage(message)]
+                stream_start = time.monotonic()
+                try:
+                    agent_msgs = await self.transcoder.stream_agent_response(
+                        agent=agent,
+                        input_messages=input_messages,
+                        session_id=session.id,
+                        exchange_id=exchange_id,
+                        agent_name=agent_name,
+                        base_rank=base_rank,
+                        start_seq=1,  # user message already consumed rank=base_rank
+                        callback=callback,
+                        user_context=user,
+                        runtime_context=runtime_context,
+                        interrupt_handler=self._make_streaming_interrupt_handler(
+                            session.id, exchange_id, callback
+                        ),
+                    )
+                except WebSocketDisconnect:
+                    self.kpi.count(
+                        "chat.exchange_error",
+                        1,
+                        dims={
+                            "agent_name": agent_name,
+                        },
+                        actor=PHASE_METRIC_ACTOR,
+                    )
+                    logger.error(
+                        "Agent execution cancelled by client disconnect (agent=%s session=%s exchange=%s)",
                         agent_name,
                         session.id,
                         exchange_id,
                     )
+                    # do we need raise here ?
+                except InterruptRaised:
+                    # Persist what we already streamed (user + any partial agent msgs)
+                    all_msgs.extend(agent_msgs)
+                    session.updated_at = _utcnow_dt()
+                    session.next_rank = base_rank + len(all_msgs)
+                    await asyncio.to_thread(self.session_store.save, session)
+                    await asyncio.to_thread(
+                        self.history_store.save, session.id, all_msgs, user.uid
+                    )
+                    logger.info(
+                        "[SESSIONS] interrupt persisted session=%s exchange=%s msgs=%d",
+                        session.id,
+                        exchange_id,
+                        len(all_msgs),
+                    )
                     raise
-                except Exception:
-                    logger.exception("Agent execution failed")
-                    # KPI timer already recorded status="error" on exception
-                finally:
-                    # Count the exchange outcome
-                    exchange_status = (
-                        "awaiting_human"
-                        if had_interrupt
-                        else (
-                            "cancelled"
-                            if had_cancelled
-                            else (
-                                "error"
-                                if had_error
-                                else ("ok" if saw_final_assistant else "error")
-                            )
+                except asyncio.CancelledError:
+                    self.kpi.count(
+                        "chat.exchange_error",
+                        1,
+                        dims={
+                            "agent_name": agent_name,
+                        },
+                        actor=PHASE_METRIC_ACTOR,
+                    )
+                    raise
+                except Exception as e:
+                    err_text = str(e)
+                    user_msg = (
+                        "I encountered an unexpected error. Please try again later."
+                    )
+                    if "timeout" in err_text.lower() or "timed out" in err_text.lower():
+                        user_msg = "The operation timed out because it took too long. Please try reducing the scope of your request or the number of documents."
+                    elif "context length" in err_text.lower():
+                        user_msg = "The request exceeded the model's context limit. Please try with shorter documents or fewer attachments."
+                    elif "rate limit" in err_text.lower():
+                        user_msg = "I'm receiving too many requests right now. Please wait a moment and try again."
+                    agent_msgs.append(
+                        ChatMessage(
+                            session_id=session.id,
+                            exchange_id=exchange_id,
+                            rank=base_rank + len(agent_msgs),
+                            timestamp=_utcnow_dt(),
+                            role=Role.assistant,
+                            channel=Channel.final,
+                            parts=[
+                                TextPart(text=user_msg),
+                            ],
+                            metadata=ChatMetadata(),
                         )
                     )
-                    exchange_dims: Dict[str, str | None] = {
-                        "agent_id": agent_name,
-                        "user_id": user.uid,
-                        "session_id": session.id,
-                        "exchange_id": exchange_id,
-                        "status": exchange_status,
-                    }
-                    if exchange_status in {"error", "cancelled"} and error_code:
-                        exchange_dims["error_code"] = error_code
                     self.kpi.count(
-                        "chat.exchange_total",
+                        "chat.exchange_error",
                         1,
-                        dims=exchange_dims,
-                        actor=actor,
+                        dims={
+                            "agent_name": agent_name,
+                        },
+                        actor=PHASE_METRIC_ACTOR,
                     )
+                finally:
+                    _record_phase_metric(
+                        kpi=self.kpi,
+                        phase="stream",
+                        start_ts=stream_start,
+                        agent_name=agent_name,
+                    )
+                all_msgs.extend(agent_msgs)
 
                 # 6) Attach the raw runtime context (single source of truth)
                 self._attach_runtime_context(
@@ -527,28 +461,19 @@ class SessionOrchestrator:
                 )
                 _record_phase_metric(
                     kpi=self.kpi,
-                    actor=actor,
                     phase="persist",
                     start_ts=t_persist,
-                    session_id=session.id,
-                    exchange_id=exchange_id,
                     agent_name=agent_name,
-                    user_id=user.uid,
-                )
-
-                _record_phase_metric(
-                    kpi=self.kpi,
-                    actor=actor,
-                    phase="total",
-                    start_ts=t_total,
-                    session_id=session.id,
-                    exchange_id=exchange_id,
-                    agent_name=agent_name,
-                    user_id=user.uid,
                 )
 
                 return session, all_msgs
         finally:
+            _record_phase_metric(
+                kpi=self.kpi,
+                phase="total",
+                start_ts=t_initial,
+                agent_name=agent_name,
+            )
             self.agent_factory.release_agent(session.id, agent_name)
             stats = self.agent_factory.get_cache_stats()
             if stats:
@@ -654,6 +579,20 @@ class SessionOrchestrator:
             is_cached,
             session.id,
         )
+        if not is_cached:
+            logger.warning(
+                "[SESSIONS] resume aborted: agent cache miss session=%s exchange=%s agent=%s",
+                session.id,
+                exchange_id,
+                actual_agent_name,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "resume_unavailable",
+                    "message": "Cannot resume this exchange because the agent state is unavailable. Please restart the request.",
+                },
+            )
 
         # Optional: fetch checkpoint from the agent's in-memory saver (best-effort) to observe state reuse.
         checkpoint_obj: dict | None = None
@@ -678,9 +617,10 @@ class SessionOrchestrator:
                 )
                 if isinstance(resume_payload, dict):
                     resume_payload.setdefault(
-                        "checkpoint", checkpoint_obj.get("checkpoint", checkpoint_obj)
+                        "checkpoint",
+                        checkpoint_obj.get("checkpoint", checkpoint_obj)
                         if isinstance(checkpoint_obj, dict)
-                        else checkpoint_obj
+                        else checkpoint_obj,
                     )
         except Exception as cp_err:
             logger.warning(

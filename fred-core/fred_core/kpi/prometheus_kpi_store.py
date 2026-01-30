@@ -34,35 +34,6 @@ def _sanitize_metric_name(name: str) -> str:
     return safe
 
 
-_DEFAULT_DIM_LABELS: Tuple[str, ...] = (
-    "env",
-    "cluster",
-    "actor_type",
-    "user_id",
-    "groups",
-    "status",
-    "http_status",
-    "error_code",
-    "exception_type",
-    "route",
-    "method",
-    "scope_type",
-    "scope_id",
-    "exchange_id",
-    "agent_id",
-    "model",
-    "doc_uid",
-    "doc_source",
-    "file_type",
-    "index",
-    "tool_name",
-    "agent_step",
-    "policy",
-    "step",
-    "source",
-)
-
-
 def _sanitize_label_name(name: str) -> str:
     safe = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in name)
     if not safe or safe[0].isdigit():
@@ -163,9 +134,8 @@ class PrometheusKPIStore(BaseKPIStore):
         label_names = self._label_names.get(key)
         label_map = self._label_maps.get(key)
         if label_names is None or label_map is None:
-            raw_keys = set(_DEFAULT_DIM_LABELS)
-            if event.dims:
-                raw_keys.update(event.dims.keys())
+            # Use only the dims provided on the event (no global defaults).
+            raw_keys = set(event.dims.keys() if event.dims else [])
             label_map = {}
             for raw_key in sorted(raw_keys):
                 safe_key = _sanitize_label_name(raw_key)
