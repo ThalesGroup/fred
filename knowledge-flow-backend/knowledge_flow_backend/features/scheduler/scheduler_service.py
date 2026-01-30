@@ -59,9 +59,7 @@ class IngestionTaskService:
         elif backend == "temporal":
             # Reuse the shared Temporal client provider if provided (preferred),
             # otherwise create a local one from configuration.
-            self._client_provider = self._client_provider or TemporalClientProvider(
-                scheduler_config.temporal
-            )
+            self._client_provider = self._client_provider or TemporalClientProvider(scheduler_config.temporal)
             self._task_queue = scheduler_config.temporal.task_queue
             self._scheduler = TemporalScheduler(
                 scheduler_config,

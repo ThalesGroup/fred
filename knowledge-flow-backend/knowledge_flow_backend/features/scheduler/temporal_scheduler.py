@@ -50,9 +50,7 @@ class TemporalScheduler(BaseScheduler):
         super().__init__(metadata_service)
         self._scheduler_config = scheduler_config
         # Prefer a shared Temporal client provider (mirrors agentic backend pattern)
-        self._client_provider = temporal_client_provider or TemporalClientProvider(
-            scheduler_config.temporal
-        )
+        self._client_provider = temporal_client_provider or TemporalClientProvider(scheduler_config.temporal)
 
     async def start_document_processing(
         self,
