@@ -229,14 +229,14 @@ class SessionOrchestrator:
             actor=actor,
         )
         # 1) Get or create the session. We receive a None session_id for new sessions.
-        t_session = time.monotonic()
+        t_initial = time.monotonic()
         session = await self._get_or_create_session(
             user_id=user.uid, query=message, session_id=session_id
         )
         _record_phase_metric(
             kpi=self.kpi,
             phase="session_get_create",
-            start_ts=t_session,
+            start_ts=t_initial,
             agent_name=agent_name,
         )
         # If this session was created with a placeholder title, refresh it now from the first prompt.
@@ -447,6 +447,12 @@ class SessionOrchestrator:
 
                 return session, all_msgs
         finally:
+            _record_phase_metric(
+                kpi=self.kpi,
+                phase="total",
+                start_ts=t_initial,
+                agent_name=agent_name,
+            )
             self.agent_factory.release_agent(session.id, agent_name)
             stats = self.agent_factory.get_cache_stats()
             if stats:
