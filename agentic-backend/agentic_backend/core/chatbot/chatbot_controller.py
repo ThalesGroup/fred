@@ -14,10 +14,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import List, Literal, Optional, Union
-from uuid import uuid4
 
 from fastapi import (
     APIRouter,
@@ -34,7 +32,6 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fred_core import (
-    Action,
     KeycloakUser,
     RBACProvider,
     UserSecurity,
@@ -43,29 +40,27 @@ from fred_core import (
     get_current_user,
     oauth2_scheme,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 from starlette.websockets import WebSocketState
 
 from agentic_backend.application_context import get_configuration, get_rebac_engine
 from agentic_backend.common.structures import AgentSettings, FrontendSettings
 from agentic_backend.common.utils import log_exception
-from agentic_backend.core.a2a.a2a_bridge import (
-    get_proxy_for_agent,
-    is_a2a_agent,
-    stream_a2a_as_chat_messages,
-)
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
-    get_deep_search_enabled,
-    get_rag_knowledge_scope,
+    # get_deep_search_enabled,
+    # get_rag_knowledge_scope,
 )
 from agentic_backend.core.chatbot.chat_schema import (
+    AwaitingHumanEvent,
     ChatAskInput,
     ChatbotRuntimeSummary,
     ChatMessage,
+    ChatWsInput,
     ErrorEvent,
     FinalEvent,
+    HumanResumeInput,
     MessagePart,
     Role,
     SessionEvent,
@@ -73,7 +68,6 @@ from agentic_backend.core.chatbot.chat_schema import (
     SessionWithFiles,
     StreamEvent,
     TextPart,
-    make_user_text,
 )
 from agentic_backend.core.chatbot.metric_structures import (
     MetricsBucket,
@@ -81,8 +75,8 @@ from agentic_backend.core.chatbot.metric_structures import (
 )
 from agentic_backend.core.chatbot.session_orchestrator import (
     SessionOrchestrator,
-    _utcnow_dt,
 )
+from agentic_backend.core.chatbot.stream_transcoder import InterruptRaised
 
 logger = logging.getLogger(__name__)
 
@@ -280,6 +274,58 @@ def get_agentic_flows(
     return flows
 
 
+def _update_tokens_from_request(
+    user: KeycloakUser,
+    token: str,
+    obj: Union[ChatAskInput, HumanResumeInput],
+) -> tuple[KeycloakUser, str, str | None]:
+    """
+    Update active access/refresh tokens (and user) if the payload brings newer ones.
+    Keeps behavior identical while shortening the main flow.
+    """
+    refresh_token: str | None = None
+    incoming_token = getattr(obj, "access_token", None)
+    incoming_refresh = getattr(obj, "refresh_token", None)
+
+    if incoming_token and incoming_token != token:
+        try:
+            refreshed_user = decode_jwt(incoming_token)
+        except HTTPException:
+            logger.warning("Rejected invalid token provided via ChatAskInput payload.")
+        else:
+            if refreshed_user.uid != user.uid:
+                logger.warning(
+                    "WS token subject mismatch (current=%s new=%s); keeping previous token.",
+                    user.uid,
+                    refreshed_user.uid,
+                )
+            else:
+                token = incoming_token
+                user = refreshed_user
+                if incoming_refresh:
+                    refresh_token = incoming_refresh
+    elif incoming_refresh:
+        refresh_token = incoming_refresh
+    return user, token, refresh_token
+
+
+def _hydrate_runtime_context(
+    runtime_context: Optional[RuntimeContext],
+    token: str,
+    refresh_token: str | None,
+    user: KeycloakUser,
+) -> RuntimeContext:
+    """
+    Ensure runtime_context carries the latest auth/user information.
+    """
+    ctx = runtime_context or RuntimeContext()
+    ctx.access_token = token
+    ctx.refresh_token = refresh_token
+    ctx.user_id = user.uid
+    ctx.user_groups = user.groups or None
+    return ctx
+
+
 @router.websocket("/chatbot/query/ws")
 async def websocket_chatbot_question(
     websocket: WebSocket,
@@ -316,212 +362,210 @@ async def websocket_chatbot_question(
         await websocket.close(code=4401)
         return
 
-    active_token = token
-    active_user = user
-    active_refresh_token: str | None = None
+    ws_input_adapter = TypeAdapter(ChatWsInput)
+
+    async def process_human_resume(
+        user: KeycloakUser,
+        payload: HumanResumeInput,
+        runtime_context: RuntimeContext,
+    ):
+        """
+        Handles the 'human_resume' flow:
+        1. Delegates to the orchestrator to resume the interrupted graph execution.
+        2. Streams events via callbacks and sends the FinalEvent upon completion.
+        """
+        (
+            session,
+            final_messages,
+        ) = await session_orchestrator.resume_interrupted_exchange(
+            user=user,
+            callback=ws_callback,
+            session_callback=ws_session_callback,
+            session_id=payload.session_id,
+            exchange_id=payload.exchange_id,
+            agent_name=payload.agent_name,
+            resume_payload=payload.payload or {},
+            runtime_context=runtime_context,
+        )
+        if not await _safe_ws_send_text(
+            websocket,
+            FinalEvent(
+                type="final", messages=final_messages, session=session
+            ).model_dump_json(),
+        ):
+            raise WebSocketDisconnect
+
+    async def process_agentic_ask(
+        user: KeycloakUser, payload: ChatAskInput, runtime_context: RuntimeContext
+    ):
+        """
+        Regular agentic flow. We process a regular question from the user.
+        1. Calls session_orchestrator.chat_ask_websocket() with the right params
+        2. Forwards StreamEvents via ws_callback
+        3. Sends FinalEvent at the end
+        """
+        session, final_messages = await session_orchestrator.chat_ask_websocket(
+            user=user,
+            callback=ws_callback,
+            session_callback=ws_session_callback,
+            session_id=payload.session_id,
+            message=payload.message,
+            agent_name=payload.agent_name,
+            runtime_context=runtime_context,
+            client_exchange_id=payload.client_exchange_id,
+        )
+        if not await _safe_ws_send_text(
+            websocket,
+            FinalEvent(
+                type="final", messages=final_messages, session=session
+            ).model_dump_json(),
+        ):
+            raise WebSocketDisconnect
 
     try:
         while True:
+            # We loop here receiving and replying with the same WebSocket connection
             client_request = None
             try:
                 client_request = await websocket.receive_json()
-                ask = ChatAskInput(**client_request)
-
-                incoming_token = ask.access_token
-                incoming_refresh = ask.refresh_token
-                if incoming_token and incoming_token != active_token:
-                    try:
-                        refreshed_user = decode_jwt(incoming_token)
-                    except HTTPException:
-                        logger.warning(
-                            "Rejected invalid token provided via ChatAskInput payload."
-                        )
-                    else:
-                        if refreshed_user.uid != active_user.uid:
-                            logger.warning(
-                                "WS token subject mismatch (current=%s new=%s); keeping previous token.",
-                                active_user.uid,
-                                refreshed_user.uid,
-                            )
-                        else:
-                            active_token = incoming_token
-                            active_user = refreshed_user
-                            if incoming_refresh:
-                                active_refresh_token = incoming_refresh
-                elif incoming_refresh:
-                    active_refresh_token = incoming_refresh
-
-                # TODO HACK SEND THE TOKEN DIRECTLY IN RUNTIME CONTEXT
-                if not ask.runtime_context:
-                    ask.runtime_context = RuntimeContext()
-                ask.runtime_context.access_token = active_token
-                ask.runtime_context.refresh_token = active_refresh_token
-                ask.runtime_context.user_id = active_user.uid
-                ask.runtime_context.user_groups = active_user.groups or None
-
-                target_agent_name = ask.agent_name
-                if get_deep_search_enabled(ask.runtime_context):
-                    rag_scope = get_rag_knowledge_scope(ask.runtime_context)
-                    if rag_scope == "general_only":
-                        logger.info(
-                            "[CHATBOT] Deep search ignored because RAG scope is general-only."
-                        )
-                    else:
-                        base_settings = agent_manager.get_agent_settings(ask.agent_name)
-                        delegate_to = (
-                            base_settings.metadata.get("deep_search_delegate_to")
-                            if base_settings and base_settings.metadata
-                            else None
-                        )
-                        if delegate_to:
-                            if agent_manager.get_agent_settings(delegate_to):
-                                target_agent_name = delegate_to
-                                logger.info(
-                                    "[CHATBOT] Deep search enabled; delegating %s request to %s.",
-                                    ask.agent_name,
-                                    delegate_to,
-                                )
-                            else:
-                                logger.warning(
-                                    "[CHATBOT] Deep search requested for %s but delegate '%s' is not configured; falling back.",
-                                    ask.agent_name,
-                                    delegate_to,
-                                )
+                logger.info(
+                    "[CHATBOT WS] recv raw session_id=%s payload=%s",
+                    client_request.get("session_id")
+                    if isinstance(client_request, dict)
+                    else None,
+                    client_request,
+                )
 
                 async def ws_callback(msg_dict: dict):
+                    # Callback to stream agent tokens/messages back to the client
+                    # It handles both ChatMessage payloads and AwaitingHumanEvent emitted by interrupts.
+                    logger.info(
+                        "[CHATBOT WS] ws_callback session=%s exchange=%s type=%s keys=%s",
+                        msg_dict.get("session_id"),
+                        msg_dict.get("exchange_id"),
+                        msg_dict.get("type") or "stream",
+                        list(msg_dict.keys()),
+                    )
+                    msg_type = msg_dict.get("type")
+                    if msg_type == "awaiting_human":
+                        logger.info(
+                            "[CHATBOT WS] awaiting_human outbound session=%s exchange=%s payload_keys=%s",
+                            msg_dict.get("session_id"),
+                            msg_dict.get("exchange_id"),
+                            list((msg_dict.get("payload") or {}).keys()),
+                        )
+                        event = AwaitingHumanEvent(**msg_dict)
+                        if not await _safe_ws_send_text(
+                            websocket, event.model_dump_json()
+                        ):
+                            raise WebSocketDisconnect
+                        return
+
                     event = StreamEvent(type="stream", message=ChatMessage(**msg_dict))
                     if not await _safe_ws_send_text(websocket, event.model_dump_json()):
                         raise WebSocketDisconnect
 
                 async def ws_session_callback(session: SessionSchema):
+                    # Callback to push session updates (e.g. title change)
                     event = SessionEvent(type="session", session=session)
                     if not await _safe_ws_send_text(websocket, event.model_dump_json()):
                         raise WebSocketDisconnect
 
-                # Route to A2A proxy if the stub agent is selected
-                target_settings = agent_manager.get_agent_settings(target_agent_name)
-                if target_settings and is_a2a_agent(target_settings):
-                    meta = target_settings.metadata or {}
-                    base_url = meta.get("a2a_base_url")
-                    configured_a2a_token = meta.get("a2a_token")
-                    force_disable_streaming = bool(meta.get("a2a_disable_streaming"))
-                    if not base_url:
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Agent '{target_agent_name}' is marked as A2A but is missing 'a2a_base_url' metadata.",
-                        )
-                    proxy = get_proxy_for_agent(
-                        websocket.app,
-                        target_agent_name,
-                        base_url,
-                        token,
-                        force_disable_streaming=force_disable_streaming,
+                try:
+                    # 1. Input Parsing: Validate against the Union of possible inputs
+                    parsed = ws_input_adapter.validate_python(client_request)
+                except ValidationError:
+                    # Fallback: Assume it's a standard Ask input (backward compatibility)
+                    parsed = ChatAskInput(**client_request)
+
+                # 2. Security: Update user/tokens if the payload contains refreshed credentials
+                user, token, active_refresh_token = _update_tokens_from_request(
+                    user=user,
+                    token=token,
+                    obj=parsed,
+                )
+
+                # 3. Context Hydration: Prepare the runtime context with latest auth info
+                runtime_context = _hydrate_runtime_context(
+                    runtime_context=parsed.runtime_context,
+                    token=token,
+                    refresh_token=active_refresh_token,
+                    user=user,
+                )
+                logger.info(
+                    "[CHATBOT WS] parsed type=%s session_id=%s exchange_id=%s agent=%s has_runtime_ctx=%s",
+                    type(parsed).__name__,
+                    getattr(parsed, "session_id", None)
+                    if hasattr(parsed, "session_id")
+                    else None,
+                    getattr(parsed, "exchange_id", None)
+                    if hasattr(parsed, "exchange_id")
+                    else None,
+                    getattr(parsed, "agent_name", None)
+                    if hasattr(parsed, "agent_name")
+                    else None,
+                    parsed.runtime_context is not None,
+                )
+
+                # 4. Dispatch Logic
+                if isinstance(parsed, HumanResumeInput):
+                    # Case A: Human-in-the-loop Resume
+                    # The user is providing input to resume a paused agent execution.
+                    await process_human_resume(
+                        user=user, payload=parsed, runtime_context=runtime_context
                     )
-                    session_id = ask.session_id or f"a2a-{uuid4()}"
-                    # If a session_id was provided, enforce ownership to match regular agents
-                    if ask.session_id:
-                        await asyncio.to_thread(
-                            session_orchestrator._authorize_user_action_on_session,  # type: ignore[attr-defined]
-                            ask.session_id,
-                            active_user,
-                            Action.UPDATE,
-                        )
-                    # Get or create the persisted session just like the regular flow
-                    session = await session_orchestrator._get_or_create_session(  # type: ignore[attr-defined]
-                        user_id=active_user.uid,
-                        query=ask.message,
-                        session_id=session_id,
+                    # We then proceed with the next receive loop
+                    continue
+                elif isinstance(parsed, ChatAskInput):
+                    # Case B: Standard Question
+                    # The user is asking a new question to an agent.
+                    await process_agentic_ask(
+                        user=user, payload=parsed, runtime_context=runtime_context
                     )
-                    rank_lock = session_orchestrator.get_rank_lock(session.id)
-                    async with rank_lock:
-                        base_rank = await session_orchestrator._ensure_next_rank(
-                            session
-                        )
-                        exchange_id = ask.client_exchange_id or str(uuid4())
-                        rank = base_rank
-
-                        # Emit the user message first
-                        user_msg = make_user_text(
-                            session_id, exchange_id, rank, ask.message
-                        )
-                        collected_messages = [user_msg]
-                        if not await _safe_ws_send_text(
-                            websocket,
-                            StreamEvent(
-                                type="stream", message=user_msg
-                            ).model_dump_json(),
-                        ):
-                            raise WebSocketDisconnect
-                        rank += 1
-
-                        async for msg in stream_a2a_as_chat_messages(
-                            proxy=proxy,
-                            user_id=active_user.uid,
-                            # Prefer the configured agent token; fall back to the caller token.
-                            access_token=configured_a2a_token or active_token,
-                            text=ask.message,
-                            session_id=session_id,
-                            exchange_id=exchange_id,
-                            start_rank=rank,
-                        ):
-                            rank = msg.rank + 1
-                            collected_messages.append(msg)
-                            if not await _safe_ws_send_text(
-                                websocket,
-                                StreamEvent(
-                                    type="stream", message=msg
-                                ).model_dump_json(),
-                            ):
-                                raise WebSocketDisconnect
-
-                        session.updated_at = _utcnow_dt()
-                        session.next_rank = base_rank + len(collected_messages)
-                        # Persist session + history so it behaves like regular agents
-                        await asyncio.to_thread(
-                            session_orchestrator.session_store.save, session
-                        )
-                        await asyncio.to_thread(
-                            session_orchestrator.history_store.save,
-                            session.id,
-                            collected_messages,
-                            active_user.uid,
-                        )
-                        if not await _safe_ws_send_text(
-                            websocket,
-                            FinalEvent(
-                                type="final",
-                                messages=collected_messages,
-                                session=session,
-                            ).model_dump_json(),
-                        ):
-                            break
-
+                    continue
                 else:
-                    (
-                        session,
-                        final_messages,
-                    ) = await session_orchestrator.chat_ask_websocket(
-                        user=active_user,
-                        callback=ws_callback,
-                        session_callback=ws_session_callback,
-                        session_id=ask.session_id,
-                        message=ask.message,
-                        agent_name=target_agent_name,
-                        runtime_context=ask.runtime_context,
-                        client_exchange_id=ask.client_exchange_id,
-                    )
+                    raise ValueError("Unsupported WebSocket input type.")
 
-                    if not await _safe_ws_send_text(
-                        websocket,
-                        FinalEvent(
-                            type="final", messages=final_messages, session=session
-                        ).model_dump_json(),
-                    ):
-                        break
+                # if get_deep_search_enabled(ask.runtime_context):
+                #     rag_scope = get_rag_knowledge_scope(ask.runtime_context)
+                #     if rag_scope == "general_only":
+                #         logger.info(
+                #             "[CHATBOT] Deep search ignored because RAG scope is general-only."
+                #         )
+                #     else:
+                #         base_settings = agent_manager.get_agent_settings(ask.agent_name)
+                #         delegate_to = (
+                #             base_settings.metadata.get("deep_search_delegate_to")
+                #             if base_settings and base_settings.metadata
+                #             else None
+                #         )
+                #         if delegate_to:
+                #             if agent_manager.get_agent_settings(delegate_to):
+                #                 target_agent_name = delegate_to
+                #                 logger.info(
+                #                     "[CHATBOT] Deep search enabled; delegating %s request to %s.",
+                #                     ask.agent_name,
+                #                     delegate_to,
+                #                 )
+                #             else:
+                #                 logger.warning(
+                #                     "[CHATBOT] Deep search requested for %s but delegate '%s' is not configured; falling back.",
+                #                     ask.agent_name,
+                #                     delegate_to,
+                #                 )
 
             except WebSocketDisconnect:
                 logger.debug("Client disconnected from chatbot WebSocket")
                 break
+            except InterruptRaised:
+                logger.info(
+                    "[CHATBOT WS] interrupt raised; awaiting human response session=%s",
+                    client_request.get("session_id", "unknown-session")
+                    if isinstance(client_request, dict)
+                    else "unknown-session",
+                )
+                # Control-flow: awaiting_human already sent to client.
+                continue
             except Exception as e:
                 summary = log_exception(
                     e, "INTERNAL Error processing chatbot client query"

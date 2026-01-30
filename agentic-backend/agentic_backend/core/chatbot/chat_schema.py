@@ -208,14 +208,32 @@ class ChatMetadata(BaseModel):
 # ---------- Message ----------
 
 
-class ChatAskInput(BaseModel):
-    session_id: Optional[str] = None
-    message: str
+class BaseWsInput(BaseModel):
     agent_name: str
     runtime_context: Optional[RuntimeContext] = None
-    client_exchange_id: str | None = None
     access_token: Optional[str] = None
     refresh_token: Optional[str] = None
+
+
+class ChatAskInput(BaseWsInput):
+    type: Literal["ask"] = "ask"
+    session_id: Optional[str] = None  # optionnel côté ask, requis côté resume
+    message: str
+    client_exchange_id: Optional[str] = (
+        None  # le front l’envoie; sinon backend génère l’exchange_id
+    )
+
+
+class HumanResumeInput(BaseWsInput):
+    type: Literal["human_resume"] = "human_resume"
+    session_id: str = Field(..., description="Required session id for resume")
+    exchange_id: str
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+ChatWsInput = Annotated[
+    Union[ChatAskInput, HumanResumeInput], Field(discriminator="type")
+]
 
 
 class ChatMessage(BaseModel):
@@ -294,8 +312,20 @@ class ErrorEvent(BaseModel):
     session_id: Optional[str] = None
 
 
+class AwaitingHumanEvent(BaseModel):
+    """
+    Emitted when an agent interrupts and awaits human input (HITL).
+    The payload is agent-defined (e.g., question + data snapshot).
+    """
+
+    type: Literal["awaiting_human"] = "awaiting_human"
+    session_id: str
+    exchange_id: str
+    payload: Dict[str, Any]
+
+
 ChatEvent = Annotated[
-    Union[StreamEvent, SessionEvent, FinalEvent, ErrorEvent],
+    Union[StreamEvent, SessionEvent, FinalEvent, ErrorEvent, AwaitingHumanEvent],
     Field(discriminator="type"),
 ]
 

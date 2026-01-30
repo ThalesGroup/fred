@@ -50,6 +50,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Command
 
 from agentic_backend.application_context import (
     get_app_context,
@@ -109,6 +110,7 @@ class AgentFlow:
 
     _tuning: AgentTuning
     run_config: RunnableConfig = {}  # Use an empty dict as the default/initial value
+    middlewares: list = []  # Optional LangChain/LangGraph middlewares (HITL, etc.)
 
     def __init__(self, agent_settings: AgentSettings):
         """
@@ -141,20 +143,41 @@ class AgentFlow:
         #     # Set to None if disabled
         #     self.langfuse_client = None
 
-    def get_compiled_graph(self) -> CompiledStateGraph:
+    def get_compiled_graph(
+        self, checkpointer: Optional[object] = None
+    ) -> CompiledStateGraph:
         """
         Compile and return the agent's graph (idempotent).
         Subclasses must set `self._graph` in async_init().
         """
-        if self.compiled_graph is not None:
+        cp = checkpointer or self.streaming_memory
+        logger.info(
+            "[AGENT_FLOW] get_compiled_graph agent=%s checkpointer=%s id=%s cached=%s",
+            self.get_name(),
+            type(cp).__name__,
+            hex(id(cp)),
+            self.compiled_graph is not None,
+        )
+        # Reuse compiled graph when no external checkpointer is provided.
+        if checkpointer is None and self.compiled_graph is not None:
             return self.compiled_graph
         if self._graph is None:
             # Strong, early signal to devs wiring the agent: you must build the graph in async_init()
             raise RuntimeError(
                 f"{type(self).__name__}: _graph is None. Did you forget to set it in async_init()?"
             )
-        self.compiled_graph = self._graph.compile(checkpointer=self.streaming_memory)
-        return self.compiled_graph
+        compiled = self._graph.compile(
+            checkpointer=checkpointer or self.streaming_memory
+        )
+        if checkpointer is None:
+            self.compiled_graph = compiled
+        logger.info(
+            "[AGENT_FLOW] compiled graph ready agent=%s checkpointer=%s id=%s",
+            self.get_name(),
+            type(cp).__name__,
+            hex(id(cp)),
+        )
+        return compiled
 
     def apply_settings(self, new_settings: AgentSettings) -> None:
         """
@@ -166,6 +189,13 @@ class AgentFlow:
         self._tuning = self.agent_settings.tuning or type(self).tuning
         # Keep .tuning coherent on the settings object held by the instance
         self.agent_settings.tuning = self._tuning
+
+    def set_middlewares(self, middlewares: list) -> None:
+        """
+        Configure LangChain/LangGraph middlewares (e.g., HumanInTheLoop).
+        These will be injected into the run_config at execution time.
+        """
+        self.middlewares = list(middlewares or [])
 
     async def async_init(self, runtime_context: RuntimeContext):
         """
@@ -249,7 +279,7 @@ class AgentFlow:
 
     async def astream_updates(
         self,
-        state: MessagesState,
+        state: Any,
         *,
         config: Optional[RunnableConfig] = None,
         **kwargs: Any,
@@ -259,7 +289,30 @@ class AgentFlow:
         """
         # 1. Start with the incoming config, ensuring it's not None
         self.run_config = config if config is not None else {}
-        compiled = self.get_compiled_graph()
+        logger.info(
+            "[AGENT_FLOW] astream_updates run_config configurable=%s thread_id=%s",
+            self.run_config.get("configurable"),
+            (self.run_config.get("configurable") or {}).get("thread_id"),
+        )
+        logger.info(
+            "[AGENT_FLOW] astream_updates resume=%s config_keys=%s",
+            isinstance(state, Command),
+            list((self.run_config or {}).keys()),
+        )
+        # Inject optional middlewares (e.g., HumanInTheLoop) if configured on the agent
+        logger.info(
+            "[AGENT_FLOW] astream_updates start agent=%s thread_id=%s using_memory_saver=%s",
+            self.get_name(),
+            (self.run_config.get("configurable") or {}).get("thread_id"),
+            True,
+        )
+        # Force a checkpointer for HITL/interrupt resume. Using the per-instance MemorySaver by default.
+        compiled = self.get_compiled_graph(checkpointer=self.streaming_memory)
+        logger.info(
+            "[AGENT_FLOW] astream_updates compiled graph agent=%s checkpointer=%s",
+            self.get_name(),
+            type(self.streaming_memory).__name__,
+        )
 
         # 2. Instantiate the Langfuse Handler
         # CallbackHandler expects an optional public_key (str | None); do not pass the Langfuse client instance here.

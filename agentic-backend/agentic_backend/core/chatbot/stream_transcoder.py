@@ -20,13 +20,14 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, List, Optional, cast
+from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
 from fred_core import KeycloakUser, VectorSearchHit
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler
 from langgraph.graph import MessagesState
+from langgraph.types import Command
 from pydantic import TypeAdapter, ValidationError
 from starlette.websockets import WebSocketDisconnect
 
@@ -50,6 +51,7 @@ from agentic_backend.core.chatbot.message_part import (
     hydrate_fred_parts,
     parts_from_raw_content,
 )
+from agentic_backend.core.interrupts.base_interrupt_handler import InterruptHandler
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +149,14 @@ def _normalize_sources_payload(raw: Any) -> List[VectorSearchHit]:
     return hits
 
 
+class InterruptRaised(Exception):
+    """Internal control-flow exception for LangGraph interrupts."""
+
+    def __init__(self, payload: Dict[str, Any]):
+        self.payload = payload
+        super().__init__("LangGraph interrupt")
+
+
 class StreamTranscoder:
     """
     Purpose:
@@ -163,6 +173,178 @@ class StreamTranscoder:
       - Session lifecycle, KPI, persistence (owned by SessionOrchestrator)
     """
 
+    async def _handle_interrupt(
+        self,
+        *,
+        event: Dict[str, Any],
+        key: str,
+        session_id: str,
+        exchange_id: str,
+        agent_name: str,
+        interrupt_handler: Optional[InterruptHandler],
+        checkpointer: Optional[Any],
+    ) -> None:
+        """
+        Normalize LangGraph interrupt payload, enforce checkpoint presence,
+        emit awaiting_human via the handler, then raise InterruptRaised to unwind the loop.
+        """
+        interrupt_payload = event[key]
+        logger.info(
+            "[TRANSCODER] raw interrupt payload type=%s payload=%s",
+            type(interrupt_payload).__name__,
+            interrupt_payload,
+        )
+
+        payload_obj: Any = None
+        checkpoint_obj: Any = None
+        checkpoint_id: Optional[str] = None
+
+        # Accept only well-known shapes.
+        if isinstance(interrupt_payload, list):
+            if not interrupt_payload:
+                raise InterruptRaised(
+                    {
+                        "reason": "interrupt",
+                        "error": "invalid_interrupt_format",
+                        "detail": "Empty interrupt list",
+                    }
+                )
+            interrupt_payload = interrupt_payload[0]
+
+        if isinstance(interrupt_payload, tuple):
+            if len(interrupt_payload) == 2:
+                payload_obj, checkpoint_obj = interrupt_payload
+                checkpoint_id = getattr(interrupt_payload[1], "id", None) or getattr(
+                    interrupt_payload[1], "checkpoint_id", None
+                )
+            elif len(interrupt_payload) == 1:
+                first = interrupt_payload[0]
+                payload_obj = getattr(first, "value", first)
+                checkpoint_obj = getattr(first, "checkpoint", None)
+                checkpoint_id = getattr(first, "id", None) or getattr(
+                    first, "interrupt_id", None
+                )
+                logger.info(
+                    "[TRANSCODER] interrupt tuple len=1 attrs=%s dict=%s",
+                    dir(first),
+                    getattr(first, "__dict__", {}),
+                )
+            else:
+                raise InterruptRaised(
+                    {
+                        "reason": "interrupt",
+                        "error": "invalid_interrupt_format",
+                        "detail": f"Unexpected interrupt tuple len={len(interrupt_payload)}",
+                    }
+                )
+        elif isinstance(interrupt_payload, dict):
+            payload_obj = interrupt_payload.get("value", interrupt_payload)
+            checkpoint_obj = interrupt_payload.get("checkpoint")
+            checkpoint_id = (
+                interrupt_payload.get("checkpoint_id")
+                or interrupt_payload.get("id")
+                or interrupt_payload.get("interrupt_id")
+            )
+            logger.info(
+                "[TRANSCODER] interrupt dict keys value_keys=%s checkpoint_keys=%s",
+                list(interrupt_payload.get("value", {}).keys())
+                if isinstance(interrupt_payload.get("value"), dict)
+                else type(interrupt_payload.get("value")).__name__,
+                list(interrupt_payload.get("checkpoint", {}).keys())
+                if isinstance(interrupt_payload.get("checkpoint"), dict)
+                else type(interrupt_payload.get("checkpoint")).__name__,
+            )
+        else:
+            raise InterruptRaised(
+                {
+                    "reason": "interrupt",
+                    "error": "invalid_interrupt_format",
+                    "detail": f"Unexpected interrupt payload type={type(interrupt_payload).__name__}",
+                }
+            )
+
+        logger.info(
+            "[TRANSCODER] interrupt normalized payload_type=%s checkpoint_type=%s checkpoint_present=%s checkpoint_id=%s",
+            type(payload_obj).__name__,
+            type(checkpoint_obj).__name__ if checkpoint_obj is not None else None,
+            checkpoint_obj is not None,
+            checkpoint_id,
+        )
+
+        if checkpoint_obj is None and checkpointer is not None:
+            # Attempt to retrieve persisted checkpoint from the checkpointer (best-effort).
+            try:
+                retrieved = None
+                if hasattr(checkpointer, "get"):
+                    retrieved = checkpointer.get(
+                        {"configurable": {"thread_id": session_id}}
+                    )
+                elif hasattr(checkpointer, "get_state"):
+                    retrieved = checkpointer.get_state(
+                        {"configurable": {"thread_id": session_id}}
+                    )
+                checkpoint_obj = (
+                    retrieved.get("checkpoint")
+                    if isinstance(retrieved, dict) and "checkpoint" in retrieved
+                    else retrieved
+                )
+                if checkpoint_id is None and isinstance(checkpoint_obj, dict):
+                    checkpoint_id = checkpoint_obj.get("id") or checkpoint_obj.get(
+                        "checkpoint_id"
+                    )
+                logger.info(
+                    "[TRANSCODER] checkpoint fetched from checkpointer type=%s id=%s keys=%s",
+                    type(checkpointer).__name__,
+                    checkpoint_id,
+                    list(checkpoint_obj.keys())
+                    if isinstance(checkpoint_obj, dict)
+                    else None,
+                )
+            except Exception as fetch_err:
+                logger.warning(
+                    "[TRANSCODER] failed to fetch checkpoint from checkpointer for session=%s: %s",
+                    session_id,
+                    fetch_err,
+                )
+
+        if checkpoint_obj is None and checkpoint_id is None:
+            logger.info(
+                "[TRANSCODER] No checkpoint found in interrupt payload (agent=%s session=%s). "
+                "Assuming server-side persistence via thread_id.",
+                agent_name,
+                session_id,
+            )
+
+        # Enrich payload with checkpoint_id so the client can echo it back on resume.
+        if checkpoint_id and isinstance(payload_obj, dict):
+            payload_obj = dict(payload_obj)
+            payload_obj.setdefault("checkpoint_id", checkpoint_id)
+
+        if interrupt_handler:
+            logger.info(
+                "[TRANSCODER] interrupt_handler_present=True handler=%s",
+                interrupt_handler,
+            )
+            logger.info(
+                "[TRANSCODER] emitting awaiting_human via handler session=%s exchange=%s payload_keys=%s checkpoint_keys=%s",
+                session_id,
+                exchange_id,
+                list((payload_obj or {}).keys())
+                if isinstance(payload_obj, dict)
+                else "<non-dict>",
+                list((checkpoint_obj or {}).keys())
+                if isinstance(checkpoint_obj, dict)
+                else "<non-dict>",
+            )
+            await interrupt_handler.handle(
+                session_id=session_id,
+                exchange_id=exchange_id,
+                payload=payload_obj,
+                checkpoint=checkpoint_obj or {},
+            )
+
+        raise InterruptRaised({"reason": "interrupt", "message": "LangGraph interrupt"})
+
     async def stream_agent_response(
         self,
         *,
@@ -176,7 +358,19 @@ class StreamTranscoder:
         callback: CallbackType,
         user_context: KeycloakUser,
         runtime_context: RuntimeContext,
+        interrupt_handler: Optional[InterruptHandler] = None,
+        resume_payload: Optional[Dict[str, Any]] = None,
     ) -> List[ChatMessage]:
+        logger.info(
+            "[TRANSCODER] start agent=%s session=%s exchange=%s base_rank=%s start_seq=%s interrupt_handler=%s resume=%s",
+            agent_name,
+            session_id,
+            exchange_id,
+            base_rank,
+            start_seq,
+            interrupt_handler is not None,
+            resume_payload is not None,
+        )
         config: RunnableConfig = {
             "configurable": {
                 "thread_id": session_id,
@@ -186,6 +380,18 @@ class StreamTranscoder:
             },
             "recursion_limit": 100,
         }
+
+        # When resuming, clean up the payload but DO NOT set checkpoint_id in config.
+        # We rely on thread_id to find the latest interrupted state.
+        if resume_payload and isinstance(resume_payload, dict):
+            resume_payload.pop("checkpoint_id", None)
+            resume_payload.pop("checkpoint", None)
+
+        logger.info(
+            "[TRANSCODER] run_config configurable=%s resume_payload_keys=%s",
+            config.get("configurable"),
+            list(resume_payload.keys()) if isinstance(resume_payload, dict) else None,
+        )
 
         # If Langfuse is configured, add the callback handler
         if os.getenv("LANGFUSE_SECRET_KEY") and os.getenv("LANGFUSE_PUBLIC_KEY"):
@@ -198,9 +404,43 @@ class StreamTranscoder:
         final_sent = False
         pending_sources_payload: Optional[List[VectorSearchHit]] = None
         msgs_any: list[AnyMessage] = [cast(AnyMessage, m) for m in input_messages]
-        state: MessagesState = {"messages": msgs_any}
+
+        # Determine graph input: Command for resume, or State dict for start
+        graph_input: Any
+        if resume_payload is not None:
+            graph_input = Command(resume=resume_payload)
+            logger.info(
+                "[TRANSCODER] resume mode: passing Command(resume=...) as input"
+            )
+        else:
+            graph_input = {"messages": msgs_any}
+
         try:
-            async for event in agent.astream_updates(state=state, config=config):
+            async for event in agent.astream_updates(
+                state=graph_input,
+                config=config,
+            ):
+                # Handle LangGraph interrupt events explicitly
+                key = next(iter(event))
+                logger.info(
+                    "[TRANSCODER] event key=%s session=%s exchange=%s agent=%s",
+                    key,
+                    session_id,
+                    exchange_id,
+                    agent_name,
+                )
+                # LangGraph can emit "interrupt" or "__interrupt__" depending on source.
+                if key in {"interrupt", "__interrupt__"}:
+                    await self._handle_interrupt(
+                        event=event,
+                        key=key,
+                        session_id=session_id,
+                        exchange_id=exchange_id,
+                        agent_name=agent_name,
+                        interrupt_handler=interrupt_handler,
+                        checkpointer=getattr(agent, "streaming_memory", None),
+                    )
+
                 # `event` looks like: {'node_name': {'messages': [...]}} or {'end': None}
                 key = next(iter(event))
                 payload = event[key]
@@ -450,6 +690,15 @@ class StreamTranscoder:
             raise
         except WebSocketDisconnect:
             logger.info("StreamTranscoder: client disconnected; stopping stream.")
+            raise
+        except InterruptRaised:
+            # Expected control-flow for HITL; let caller handle without logging an error.
+            logger.info(
+                "StreamTranscoder: interrupt raised agent=%s session=%s exchange=%s",
+                agent_name,
+                session_id,
+                exchange_id,
+            )
             raise
         except Exception as e:
             logger.error(

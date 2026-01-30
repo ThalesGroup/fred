@@ -65,7 +65,13 @@ from agentic_backend.core.chatbot.chat_schema import (
     ToolResultPart,
 )
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
-from agentic_backend.core.chatbot.stream_transcoder import StreamTranscoder
+from agentic_backend.core.chatbot.stream_transcoder import (
+    InterruptRaised,
+    StreamTranscoder,
+)
+from agentic_backend.core.interrupts.streaming_interrupt_handler import (
+    StreamingInterruptHandler,
+)
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.session.attachement_processing import AttachementProcessing
 from agentic_backend.core.session.stores.base_session_attachment_store import (
@@ -380,6 +386,14 @@ class SessionOrchestrator:
 
                         stream_start = time.monotonic()
                         stream_status = "ok"
+                        had_interrupt = False
+                        logger.info(
+                            "[SESSIONS] streaming start agent=%s session=%s exchange=%s base_rank=%s",
+                            agent_name,
+                            session.id,
+                            exchange_id,
+                            base_rank,
+                        )
                         try:
                             agent_msgs = await self.transcoder.stream_agent_response(
                                 agent=agent,
@@ -392,6 +406,9 @@ class SessionOrchestrator:
                                 callback=callback,
                                 user_context=user,
                                 runtime_context=runtime_context,
+                                interrupt_handler=self._make_streaming_interrupt_handler(
+                                    session.id, exchange_id, callback
+                                ),
                             )
                         except WebSocketDisconnect:
                             stream_status = "disconnect"
@@ -411,6 +428,10 @@ class SessionOrchestrator:
                             error_code = "cancelled"
                             kpi_dims["error_code"] = error_code
                             raise
+                        except InterruptRaised:
+                            had_interrupt = True
+                            stream_status = "awaiting_human"
+                            kpi_dims["status"] = stream_status
                         except Exception:
                             stream_status = "error"
                             raise
@@ -460,12 +481,16 @@ class SessionOrchestrator:
                 finally:
                     # Count the exchange outcome
                     exchange_status = (
-                        "cancelled"
-                        if had_cancelled
+                        "awaiting_human"
+                        if had_interrupt
                         else (
-                            "error"
-                            if had_error
-                            else ("ok" if saw_final_assistant else "error")
+                            "cancelled"
+                            if had_cancelled
+                            else (
+                                "error"
+                                if had_error
+                                else ("ok" if saw_final_assistant else "error")
+                            )
                         )
                     )
                     exchange_dims: Dict[str, str | None] = {
@@ -527,31 +552,203 @@ class SessionOrchestrator:
             self.agent_factory.release_agent(session.id, agent_name)
             stats = self.agent_factory.get_cache_stats()
             if stats:
+                self.kpi.gauge("agent.cache_entries", stats.size, actor=actor)
                 self.kpi.gauge(
-                    "agent.cache_entries",
-                    stats.size,
-                    actor=actor,
+                    "agent.cache_inflight_total", stats.in_use_total, actor=actor
                 )
                 self.kpi.gauge(
-                    "agent.cache_inflight_total",
-                    stats.in_use_total,
-                    actor=actor,
+                    "agent.cache_inflight_entries", stats.in_use_entries, actor=actor
                 )
                 self.kpi.gauge(
-                    "agent.cache_inflight_entries",
-                    stats.in_use_entries,
-                    actor=actor,
-                )
-                self.kpi.gauge(
-                    "agent.cache_evictions_total",
-                    stats.evictions,
-                    actor=actor,
+                    "agent.cache_evictions_total", stats.evictions, actor=actor
                 )
                 self.kpi.gauge(
                     "agent.cache_blocked_evictions_total",
                     stats.blocked_evictions,
                     actor=actor,
                 )
+
+    @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
+    @authorize(action=Action.UPDATE, resource=Resource.SESSIONS)
+    async def resume_interrupted_exchange(
+        self,
+        *,
+        user: KeycloakUser,
+        callback: CallbackType,
+        session_callback: SessionCallbackType | None = None,
+        session_id: str,
+        exchange_id: str,
+        agent_name: str | None,
+        resume_payload: Dict[str, Any],
+        runtime_context: RuntimeContext | None = None,
+    ) -> Tuple[SessionSchema, List[ChatMessage]]:
+        """
+        Resumes an execution that was interrupted (e.g. for Human-in-the-loop).
+        Delegates to the transcoder with the resume payload.
+        """
+        logger.info(
+            "[SESSIONS] resume_interrupted_exchange start session=%s exchange=%s agent=%s user=%s resume_keys=%s",
+            session_id,
+            exchange_id,
+            agent_name,
+            user.uid,
+            list((resume_payload or {}).keys()),
+        )
+        # 1. Authorize
+        await asyncio.to_thread(
+            self._authorize_user_action_on_session, session_id, user, Action.UPDATE
+        )
+
+        logger.info(
+            "resume_interrupted_exchange user_id=%s session_id=%s exchange_id=%s",
+            user.uid,
+            session_id,
+            exchange_id,
+        )
+
+        # 2. Retrieve Session
+        session = self.session_store.get(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "session_not_found",
+                    "message": f"Session {session_id} not found.",
+                },
+            )
+
+        # 3. Resolve Agent
+        actual_agent_name = agent_name or session.agent_name
+        if not actual_agent_name:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "agent_not_specified",
+                    "message": "No agent specified for resume.",
+                },
+            )
+
+        # 4. Setup Context
+        if runtime_context:
+            runtime_context.session_id = session.id
+        else:
+            runtime_context = RuntimeContext(session_id=session.id)
+        logger.info(
+            "[SESSIONS] resume runtime_context session_id=%s has_tokens=%s",
+            runtime_context.session_id,
+            bool(runtime_context.access_token),
+        )
+
+        # 5. KPI Actor
+        actor = KPIActor(type="human", user_id=user.uid, groups=user.groups)
+
+        # 6. Get Agent (Must be cached for in-memory checkpointer to work)
+        agent, is_cached = await self.agent_factory.create_and_init(
+            agent_name=actual_agent_name,
+            runtime_context=runtime_context,
+            session_id=session.id,
+        )
+        logger.info(
+            "[SESSIONS] resume agent_ready agent=%s cached=%s session=%s",
+            actual_agent_name,
+            is_cached,
+            session.id,
+        )
+
+        # Optional: fetch checkpoint from the agent's in-memory saver (best-effort) to observe state reuse.
+        checkpoint_obj: dict | None = None
+        try:
+            streaming_mem = getattr(agent, "streaming_memory", None)
+            if streaming_mem and hasattr(streaming_mem, "get"):
+                checkpoint_obj = streaming_mem.get(
+                    {"configurable": {"thread_id": session.id}}
+                )
+            elif streaming_mem and hasattr(streaming_mem, "get_state"):
+                checkpoint_obj = streaming_mem.get_state(
+                    {"configurable": {"thread_id": session.id}}
+                )
+            if checkpoint_obj:
+                logger.info(
+                    "[SESSIONS] resume checkpoint fetched agent=%s session=%s checkpoint_keys=%s",
+                    actual_agent_name,
+                    session.id,
+                    list(checkpoint_obj.keys())
+                    if isinstance(checkpoint_obj, dict)
+                    else type(checkpoint_obj).__name__,
+                )
+                if isinstance(resume_payload, dict):
+                    resume_payload.setdefault(
+                        "checkpoint", checkpoint_obj.get("checkpoint", checkpoint_obj)
+                        if isinstance(checkpoint_obj, dict)
+                        else checkpoint_obj
+                    )
+        except Exception as cp_err:
+            logger.warning(
+                "[SESSIONS] resume could not fetch checkpoint agent=%s session=%s err=%s",
+                actual_agent_name,
+                session.id,
+                cp_err,
+            )
+
+        try:
+            rank_lock = self.get_rank_lock(session.id)
+            async with rank_lock:
+                base_rank = await self._ensure_next_rank(session)
+                logger.info(
+                    "[SESSIONS] resume base_rank=%s next_rank=%s session=%s",
+                    base_rank,
+                    session.next_rank,
+                    session.id,
+                )
+                all_msgs: List[ChatMessage] = []
+
+                with self.kpi.timer(
+                    "chat.resume_latency_ms",
+                    dims={
+                        "agent_id": actual_agent_name,
+                        "user_id": user.uid,
+                        "session_id": session.id,
+                        "exchange_id": exchange_id,
+                    },
+                    actor=actor,
+                ):
+                    agent_msgs = await self.transcoder.stream_agent_response(
+                        agent=agent,
+                        input_messages=[],  # Resume does not inject new messages into state
+                        session_id=session.id,
+                        exchange_id=exchange_id,
+                        agent_name=actual_agent_name,
+                        base_rank=base_rank,
+                        start_seq=0,
+                        callback=callback,
+                        user_context=user,
+                        runtime_context=runtime_context,
+                        interrupt_handler=self._make_streaming_interrupt_handler(
+                            session.id, exchange_id, callback
+                        ),
+                        resume_payload=resume_payload,
+                    )
+                    all_msgs.extend(agent_msgs)
+                    logger.info(
+                        "[SESSIONS] resume completed agent_msgs=%d session=%s exchange=%s",
+                        len(agent_msgs),
+                        session.id,
+                        exchange_id,
+                    )
+
+                # 7. Persist
+                if all_msgs:
+                    session.updated_at = _utcnow_dt()
+                    session.next_rank = base_rank + len(all_msgs)
+                    await asyncio.to_thread(self.session_store.save, session)
+                    await asyncio.to_thread(
+                        self.history_store.save, session.id, all_msgs, user.uid
+                    )
+
+                return session, all_msgs
+
+        finally:
+            self.agent_factory.release_agent(session.id, actual_agent_name)
 
     # ---------------- Session/History helpers (intentionally here) ----------------
 
@@ -1246,6 +1443,16 @@ class SessionOrchestrator:
         # For now, ignore action, only owners can access their sessions
         # action is passed for future flexibility (ex: session sharing with attached permissions)
         return session.user_id == user.uid
+
+    def _make_streaming_interrupt_handler(
+        self, session_id: str, exchange_id: str, callback: CallbackType
+    ) -> StreamingInterruptHandler:
+        async def emit(event):
+            await self._emit(callback, event)
+
+        # Checkpoint persistence is already done by the agent's MemorySaver;
+        # we don't need an extra saver here for the PoC.
+        return StreamingInterruptHandler(emit=emit)
 
     async def _emit(self, callback: CallbackType, message: ChatMessage) -> None:
         """

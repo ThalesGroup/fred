@@ -7,6 +7,7 @@ from typing import Annotated, List, Type, TypedDict
 from langchain_core.messages import AIMessage, BaseMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
+from langgraph.types import interrupt
 
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_flow import AgentFlow
@@ -82,13 +83,18 @@ class ResearchAgent(AgentFlow):
 
         # Define Nodes
         builder.add_node("gather", self.gather_information)
+        builder.add_node("validate_gather", self.validate_after_gather)
         builder.add_node("analyze", self.analyze_data)
+        builder.add_node("validate_analyze", self.validate_after_analyze)
+        builder.add_node("validate_draft", self.validate_before_draft)
         builder.add_node("draft", self.draft_report)
 
         # Define Edges
         builder.set_entry_point("gather")
-        builder.add_edge("gather", "analyze")
-        builder.add_edge("analyze", "draft")
+        builder.add_edge("gather", "validate_gather")
+        builder.add_edge("validate_gather", "analyze")
+        builder.add_edge("analyze", "validate_draft")
+        builder.add_edge("validate_draft", "draft")
         builder.add_edge("draft", END)
 
         return builder
@@ -103,7 +109,12 @@ class ResearchAgent(AgentFlow):
         p_id = state.get("project_id", "Default-Project")
         depth = state.get("research_depth", 1)
 
-        logger.info(f"[{p_id}] Starting deep search with depth {depth}...")
+        logger.info(
+            "[Researcher] gather_information project_id=%s depth=%s state_keys=%s",
+            p_id,
+            depth,
+            list(state.keys()),
+        )
 
         await asyncio.sleep(2)  # Simulate long-running work
         return {
@@ -113,6 +124,22 @@ class ResearchAgent(AgentFlow):
             "research_data": "raw_html_content_mock",
         }
 
+    async def validate_after_gather(self, state: ResearchAgentState):
+        """
+        HITL pause after data gathering: ask user to validate collected data.
+        """
+        logger.info(
+            "[Researcher] validate_after_gather invoked state_keys=%s",
+            list(state.keys()),
+        )
+        interrupt(
+            {
+                "stage": "gather",
+                "question": "Les données récoltées sont-elles correctes ?",
+                "data": state.get("research_data"),
+            }
+        )
+
     async def analyze_data(self, state: ResearchAgentState):
         """Simulates CPU intensive analysis."""
         logger.info(f"[{state.get('project_id')}] Analyzing content...")
@@ -120,6 +147,38 @@ class ResearchAgent(AgentFlow):
         return {
             "messages": [AIMessage(content="Analyzed data. Key trend: AI is growing.")]
         }
+
+    async def validate_after_analyze(self, state: ResearchAgentState):
+        """
+        HITL pause after analysis: ask user to validate insights.
+        """
+        logger.info(
+            "[Researcher] validate_after_analyze invoked state_keys=%s",
+            list(state.keys()),
+        )
+        interrupt(
+            {
+                "stage": "analyze",
+                "question": "Validez-vous l'analyse réalisée ?",
+                "data": state.get("messages", []),
+            }
+        )
+
+    async def validate_before_draft(self, state: ResearchAgentState):
+        """
+        HITL pause before drafting the final report: request final approval.
+        """
+        logger.info(
+            "[Researcher] validate_before_draft invoked state_keys=%s",
+            list(state.keys()),
+        )
+        interrupt(
+            {
+                "stage": "draft",
+                "question": "Souhaitez-vous que je génère le rapport final avec ces éléments ?",
+                "data": state.get("messages", []),
+            }
+        )
 
     async def draft_report(self, state: ResearchAgentState):
         """Finalizes the output using the initial human request."""

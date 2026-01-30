@@ -59,6 +59,13 @@ const LOG_GENIUS_TEXT_CHUNK_MAX = 600;
 const LOG_GENIUS_CODE_CHUNK_MAX = 200;
 const MAX_DEBUG_EVENTS = 60;
 
+type AwaitingHumanEvent = {
+  type: "awaiting_human";
+  session_id: string;
+  exchange_id: string;
+  payload: any;
+};
+
 const ellipsize = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}...` : text);
 
 type QueryChatOptions = {
@@ -346,6 +353,7 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
   const waitStartedAtRef = useRef<number>(0);
   const waitSeqRef = useRef<number>(0);
   const debugLoader = false;
+  const [pendingHitl, setPendingHitl] = useState<AwaitingHumanEvent | null>(null);
   const { roles } = useAuth();
   const isAdmin = roles.includes("admin");
   const [debugEvents, setDebugEvents] = useState<DebugEventEntry[]>([]);
@@ -633,6 +641,13 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
             case "error": {
               showError({ summary: "Error", detail: response.content });
               console.error("[RCV ERROR ChatBot] WebSocket error:", response);
+              endWaiting({ immediate: true });
+              break;
+            }
+
+            case "awaiting_human": {
+              const awaiting = response as AwaitingHumanEvent;
+              setPendingHitl(awaiting);
               endWaiting({ immediate: true });
               break;
             }
@@ -993,6 +1008,7 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
     const refreshToken = KeyCloakService.GetRefreshToken();
     const accessToken = KeyCloakService.GetToken();
     const eventBase: ChatAskInput = {
+      type: "ask",
       message: input,
       agent_name: agent ? agent.name : currentAgent.name,
       // Use the already-resolved sid (may come from ensureSessionId()) to avoid any drift
@@ -1025,6 +1041,48 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
       endWaiting({ immediate: true });
     }
   };
+
+  const respondHumanInLoop = useCallback(
+    async (answer: boolean, eventOverride?: AwaitingHumanEvent | null) => {
+      const target = eventOverride || pendingHitl;
+      if (!target || !chatSessionId) return;
+      try {
+        const socket = await setupWebSocket();
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+          throw new Error("WebSocket not open");
+        }
+        const refreshToken = KeyCloakService.GetRefreshToken();
+        const accessToken = KeyCloakService.GetToken();
+        const payload = {
+          type: "human_resume",
+          session_id: chatSessionId,
+          exchange_id: target.exchange_id,
+          payload: { answer, checkpoint_id: (target as any)?.payload?.checkpoint_id },
+          agent_name: currentAgent?.name,
+          access_token: accessToken || undefined,
+          refresh_token: refreshToken || undefined,
+        };
+        console.info("[CHATBOT][HITL] send human_resume", {
+          session_id: chatSessionId,
+          exchange_id: target.exchange_id,
+          checkpoint_id: (target as any)?.payload?.checkpoint_id,
+        });
+        socket.send(JSON.stringify(payload));
+        console.info("[CHATBOT] WS send human_resume", {
+          session_id: chatSessionId,
+          exchange_id: target.exchange_id,
+          payload,
+          ws_state: socket.readyState,
+        });
+        setPendingHitl(null);
+        beginWaiting();
+      } catch (err) {
+      console.error("[CHATBOT] Failed to send HITL resume", err);
+      showError({ summary: "Connection Error", detail: "Could not send your answer — connection failed." });
+      }
+    },
+    [beginWaiting, chatSessionId, currentAgent, pendingHitl, setupWebSocket, showError],
+  );
 
   const handleRequestLogGenius = useCallback(() => {
     if (!logGeniusAgent) return;
@@ -1068,41 +1126,94 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
     hasDebugHistory: debugEvents.length > 0,
   };
   return (
-    <ChatBotView
-      chatSessionId={chatSessionId}
-      options={options}
-      attachmentSessionId={attachmentSessionId}
-      sessionAttachments={sessionAttachments}
-      onAddAttachments={handleAddAttachments}
-      onAttachmentsUpdated={handleAttachmentsUpdated}
-      isUploadingAttachments={isUploadingAttachments}
-      libraryNameMap={libraryNameMap}
-      libraryById={libraryById}
-      promptNameMap={promptNameMap}
-      templateNameMap={templateNameMap}
-      chatContextNameMap={chatContextNameMap}
-      chatContextResourceMap={chatContextResourceMap}
-      isSessionLoadBlocked={isSessionLoadBlocked}
-      loadError={hasLoadError}
-      showWelcome={showWelcome}
-      showHistoryLoading={showHistoryLoading}
-      waitResponse={waitResponse}
-      isHydratingSession={isHydratingSession && !isClientCreatedSession}
-      conversationPrefs={conversationPrefs}
-      currentAgent={currentAgent}
-      agents={agents}
-      messages={messages}
-      hiddenUserExchangeIds={hiddenUserExchangeIdsRef.current}
-      layout={layout}
-      onSend={handleSend}
-      onStop={stopStreaming}
-      onRequestLogGenius={logGeniusAgent ? handleRequestLogGenius : undefined}
-      onSelectAgent={selectAgent}
-      setSearchPolicy={setSearchPolicy}
-      setSearchRagScope={setSearchRagScope}
-      setDeepSearchEnabled={setDeepSearchEnabled}
-      debugWidget={debugWidgetProps}
-    />
+    <>
+      <ChatBotView
+        chatSessionId={chatSessionId}
+        options={options}
+        attachmentSessionId={attachmentSessionId}
+        sessionAttachments={sessionAttachments}
+        onAddAttachments={handleAddAttachments}
+        onAttachmentsUpdated={handleAttachmentsUpdated}
+        isUploadingAttachments={isUploadingAttachments}
+        libraryNameMap={libraryNameMap}
+        libraryById={libraryById}
+        promptNameMap={promptNameMap}
+        templateNameMap={templateNameMap}
+        chatContextNameMap={chatContextNameMap}
+        chatContextResourceMap={chatContextResourceMap}
+        isSessionLoadBlocked={isSessionLoadBlocked}
+        loadError={hasLoadError}
+        showWelcome={showWelcome}
+        showHistoryLoading={showHistoryLoading}
+        waitResponse={waitResponse}
+        isHydratingSession={isHydratingSession && !isClientCreatedSession}
+        conversationPrefs={conversationPrefs}
+        currentAgent={currentAgent}
+        agents={agents}
+        messages={messages}
+        hiddenUserExchangeIds={hiddenUserExchangeIdsRef.current}
+        layout={layout}
+        onSend={handleSend}
+        onStop={stopStreaming}
+        onRequestLogGenius={logGeniusAgent ? handleRequestLogGenius : undefined}
+        onSelectAgent={selectAgent}
+        setSearchPolicy={setSearchPolicy}
+        setSearchRagScope={setSearchRagScope}
+        setDeepSearchEnabled={setDeepSearchEnabled}
+        debugWidget={debugWidgetProps}
+      />
+      {pendingHitl ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 8,
+              padding: 24,
+              maxWidth: 520,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+            }}
+          >
+            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Validation requise</h3>
+            <p style={{ marginTop: 0 }}>
+              {pendingHitl.payload?.question ||
+                pendingHitl.payload?.prompt ||
+                pendingHitl.payload?.message ||
+                "Confirmez-vous cette étape ?"}
+            </p>
+            <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+              <button
+                onClick={() => respondHumanInLoop(true, pendingHitl)}
+                style={{ padding: "8px 14px", background: "#0b6efd", color: "#fff", border: "none", borderRadius: 6 }}
+              >
+                Oui
+              </button>
+              <button
+                onClick={() => respondHumanInLoop(false, pendingHitl)}
+                style={{ padding: "8px 14px", background: "#f44336", color: "#fff", border: "none", borderRadius: 6 }}
+              >
+                Non
+              </button>
+              <button
+                onClick={() => setPendingHitl(null)}
+                style={{ padding: "8px 14px", background: "#e0e0e0", border: "none", borderRadius: 6 }}
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 };
 
