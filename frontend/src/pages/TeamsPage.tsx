@@ -1,9 +1,9 @@
 import { Box, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { TeamCard } from "../components/teams/TeamCard";
-import { GroupSummary } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { Team } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
-const teams: GroupSummary[] = [
+const teams: Team[] = [
   {
     id: "1",
     is_private: true,
@@ -19,6 +19,7 @@ const teams: GroupSummary[] = [
   },
   {
     id: "2",
+    is_private: false,
     name: "Marketing Team",
     description:
       "Team responsible for marketing strategies. It focuses on promoting our products and services to increase brand awareness and drive sales.",
@@ -31,6 +32,7 @@ const teams: GroupSummary[] = [
   },
   {
     id: "3",
+    is_private: false,
     name: "Design Team",
     description:
       "Team responsible for UX/UI design. They create user-friendly interfaces and ensure a seamless user experience across all platforms.",

@@ -170,7 +170,6 @@ export default function SideBar() {
                 label: t("sidebar.apps_scheduler", "Scheduler"),
                 icon: <ScheduleIcon />,
                 url: `/apps/scheduler`,
-                tooltip: t("sidebar.tooltip.apps_scheduler", "Submit and track scheduled tasks"),
               },
             ],
           },

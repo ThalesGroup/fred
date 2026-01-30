@@ -7,11 +7,11 @@ import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
 import { TeamMembersPage } from "../components/teamDetails/TeamMembersPage";
 import { TeamSettingsPage } from "../components/teamDetails/TeamSettingsPage";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
-import { GroupSummary } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { Team } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { capitalize } from "../utils/capitalize";
 
 // todo: remove when we wire backend
-const teams: GroupSummary[] = [
+const teams: Team[] = [
   {
     id: "0",
     is_private: true,
@@ -27,6 +27,7 @@ const teams: GroupSummary[] = [
   },
   {
     id: "1",
+    is_private: false,
     name: "Marketing Team",
     description:
       "Team responsible for marketing strategies. It focuses on promoting our products and services to increase brand awareness and drive sales.",
@@ -39,6 +40,7 @@ const teams: GroupSummary[] = [
   },
   {
     id: "2",
+    is_private: false,
     name: "Design Team",
     description: "",
     member_count: 2,

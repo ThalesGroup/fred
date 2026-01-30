@@ -1,321 +1,334 @@
 {
-    "schema_version": "1.1",
-    "type_definitions": [
-        {
-            "type": "user"
-        },
-        {
-            "metadata": {
-                "relations": {
-                    "member": {
-                        "directly_related_user_types": [
-                            {
-                                "type": "user"
-                            },
-                            {
-                                "relation": "member",
-                                "type": "group"
-                            }
-                        ]
-                    }
-                }
-            },
-            "relations": {
-                "member": {
-                    "this": {}
-                }
-            },
-            "type": "group"
-        },
-        {
-            "metadata": {
-                "relations": {
-                    "delete": {},
-                    "editor": {
-                        "directly_related_user_types": [
-                            {
-                                "type": "user"
-                            },
-                            {
-                                "relation": "member",
-                                "type": "group"
-                            }
-                        ]
-                    },
-                    "owner": {
-                        "directly_related_user_types": [
-                            {
-                                "type": "user"
-                            },
-                            {
-                                "relation": "member",
-                                "type": "group"
-                            }
-                        ]
-                    },
-                    "parent": {
-                        "directly_related_user_types": [
-                            {
-                                "type": "tag"
-                            }
-                        ]
-                    },
-                    "read": {},
-                    "share": {},
-                    "update": {},
-                    "viewer": {
-                        "directly_related_user_types": [
-                            {
-                                "type": "user"
-                            },
-                            {
-                                "relation": "member",
-                                "type": "group"
-                            }
-                        ]
-                    }
-                }
-            },
-            "relations": {
-                "delete": {
-                    "union": {
-                        "child": [
-                            {
-                                "computedUserset": {
-                                    "relation": "owner"
-                                }
-                            },
-                            {
-                                "tupleToUserset": {
-                                    "computedUserset": {
-                                        "relation": "delete"
-                                    },
-                                    "tupleset": {
-                                        "relation": "parent"
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                },
-                "editor": {
-                    "this": {}
-                },
-                "owner": {
-                    "this": {}
-                },
-                "parent": {
-                    "this": {}
-                },
-                "read": {
-                    "union": {
-                        "child": [
-                            {
-                                "computedUserset": {
-                                    "relation": "viewer"
-                                }
-                            },
-                            {
-                                "computedUserset": {
-                                    "relation": "editor"
-                                }
-                            },
-                            {
-                                "computedUserset": {
-                                    "relation": "owner"
-                                }
-                            },
-                            {
-                                "tupleToUserset": {
-                                    "computedUserset": {
-                                        "relation": "read"
-                                    },
-                                    "tupleset": {
-                                        "relation": "parent"
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                },
-                "share": {
-                    "union": {
-                        "child": [
-                            {
-                                "computedUserset": {
-                                    "relation": "owner"
-                                }
-                            },
-                            {
-                                "tupleToUserset": {
-                                    "computedUserset": {
-                                        "relation": "share"
-                                    },
-                                    "tupleset": {
-                                        "relation": "parent"
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                },
-                "update": {
-                    "union": {
-                        "child": [
-                            {
-                                "computedUserset": {
-                                    "relation": "editor"
-                                }
-                            },
-                            {
-                                "computedUserset": {
-                                    "relation": "owner"
-                                }
-                            },
-                            {
-                                "tupleToUserset": {
-                                    "computedUserset": {
-                                        "relation": "update"
-                                    },
-                                    "tupleset": {
-                                        "relation": "parent"
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                },
-                "viewer": {
-                    "this": {}
-                }
-            },
-            "type": "tag"
-        },
-        {
-            "metadata": {
-                "relations": {
-                    "delete": {},
-                    "parent": {
-                        "directly_related_user_types": [
-                            {
-                                "type": "tag"
-                            }
-                        ]
-                    },
-                    "process": {},
-                    "read": {},
-                    "update": {}
-                }
-            },
-            "relations": {
-                "delete": {
-                    "tupleToUserset": {
-                        "computedUserset": {
-                            "relation": "update"
-                        },
-                        "tupleset": {
-                            "relation": "parent"
-                        }
-                    }
-                },
-                "parent": {
-                    "this": {}
-                },
-                "process": {
-                    "tupleToUserset": {
-                        "computedUserset": {
-                            "relation": "update"
-                        },
-                        "tupleset": {
-                            "relation": "parent"
-                        }
-                    }
-                },
-                "read": {
-                    "tupleToUserset": {
-                        "computedUserset": {
-                            "relation": "read"
-                        },
-                        "tupleset": {
-                            "relation": "parent"
-                        }
-                    }
-                },
-                "update": {
-                    "tupleToUserset": {
-                        "computedUserset": {
-                            "relation": "update"
-                        },
-                        "tupleset": {
-                            "relation": "parent"
-                        }
-                    }
-                }
-            },
-            "type": "document"
-        },
-        {
-            "metadata": {
-                "relations": {
-                    "delete": {},
-                    "parent": {
-                        "directly_related_user_types": [
-                            {
-                                "type": "tag"
-                            }
-                        ]
-                    },
-                    "read": {},
-                    "share": {},
-                    "update": {}
-                }
-            },
-            "relations": {
-                "delete": {
-                    "tupleToUserset": {
-                        "computedUserset": {
-                            "relation": "update"
-                        },
-                        "tupleset": {
-                            "relation": "parent"
-                        }
-                    }
-                },
-                "parent": {
-                    "this": {}
-                },
-                "read": {
-                    "tupleToUserset": {
-                        "computedUserset": {
-                            "relation": "read"
-                        },
-                        "tupleset": {
-                            "relation": "parent"
-                        }
-                    }
-                },
-                "share": {
-                    "tupleToUserset": {
-                        "computedUserset": {
-                            "relation": "share"
-                        },
-                        "tupleset": {
-                            "relation": "parent"
-                        }
-                    }
-                },
-                "update": {
-                    "tupleToUserset": {
-                        "computedUserset": {
-                            "relation": "update"
-                        },
-                        "tupleset": {
-                            "relation": "parent"
-                        }
-                    }
-                }
-            },
-            "type": "resource"
+  "schema_version": "1.1",
+  "type_definitions": [
+    { "type": "user" },
+    {
+      "metadata": {
+        "relations": {
+          "admin": { "directly_related_user_types": [{ "type": "user" }] },
+          "can_create_agent": {},
+          "can_create_team": {},
+          "editor": { "directly_related_user_types": [{ "type": "user" }] },
+          "viewer": { "directly_related_user_types": [{ "type": "user" }] }
         }
-    ]
+      },
+      "relations": {
+        "admin": { "this": {} },
+        "can_create_agent": { "computedUserset": { "relation": "editor" } },
+        "can_create_team": { "computedUserset": { "relation": "admin" } },
+        "editor": {
+          "union": {
+            "child": [
+              { "this": {} },
+              { "computedUserset": { "relation": "admin" } }
+            ]
+          }
+        },
+        "viewer": {
+          "union": {
+            "child": [
+              { "this": {} },
+              { "computedUserset": { "relation": "editor" } }
+            ]
+          }
+        }
+      },
+      "type": "platform"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "can_read": {},
+          "can_update_agents": {},
+          "can_update_info": {},
+          "can_update_members": {},
+          "can_update_resources": {},
+          "manager": { "directly_related_user_types": [{ "type": "user" }] },
+          "member": { "directly_related_user_types": [{ "type": "user" }] },
+          "owner": { "directly_related_user_types": [{ "type": "user" }] },
+          "platform": {
+            "directly_related_user_types": [{ "type": "platform" }]
+          },
+          "public": {
+            "directly_related_user_types": [{ "type": "user", "wildcard": {} }]
+          }
+        }
+      },
+      "relations": {
+        "can_read": {
+          "union": {
+            "child": [
+              { "computedUserset": { "relation": "member" } },
+              { "computedUserset": { "relation": "public" } }
+            ]
+          }
+        },
+        "can_update_agents": { "computedUserset": { "relation": "manager" } },
+        "can_update_info": { "computedUserset": { "relation": "owner" } },
+        "can_update_members": { "computedUserset": { "relation": "manager" } },
+        "can_update_resources": {
+          "computedUserset": { "relation": "manager" }
+        },
+        "manager": {
+          "union": {
+            "child": [
+              { "this": {} },
+              { "computedUserset": { "relation": "owner" } }
+            ]
+          }
+        },
+        "member": {
+          "union": {
+            "child": [
+              { "this": {} },
+              { "computedUserset": { "relation": "manager" } }
+            ]
+          }
+        },
+        "owner": {
+          "union": {
+            "child": [
+              { "this": {} },
+              {
+                "tupleToUserset": {
+                  "computedUserset": { "relation": "admin" },
+                  "tupleset": { "relation": "platform" }
+                }
+              }
+            ]
+          }
+        },
+        "platform": { "this": {} },
+        "public": { "this": {} }
+      },
+      "type": "team"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "delete": {},
+          "owner": {
+            "directly_related_user_types": [
+              { "type": "user" },
+              { "type": "team" }
+            ]
+          },
+          "update": {}
+        }
+      },
+      "relations": {
+        "delete": {
+          "union": {
+            "child": [
+              { "computedUserset": { "relation": "owner" } },
+              {
+                "tupleToUserset": {
+                  "computedUserset": { "relation": "can_update_agents" },
+                  "tupleset": { "relation": "owner" }
+                }
+              }
+            ]
+          }
+        },
+        "owner": { "this": {} },
+        "update": {
+          "union": {
+            "child": [
+              { "computedUserset": { "relation": "owner" } },
+              {
+                "tupleToUserset": {
+                  "computedUserset": { "relation": "can_update_agents" },
+                  "tupleset": { "relation": "owner" }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "type": "agent"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "delete": {},
+          "editor": { "directly_related_user_types": [{ "type": "user" }] },
+          "owner": {
+            "directly_related_user_types": [
+              { "type": "user" },
+              { "type": "team" }
+            ]
+          },
+          "parent": { "directly_related_user_types": [{ "type": "tag" }] },
+          "read": {},
+          "share": {},
+          "update": {},
+          "viewer": { "directly_related_user_types": [{ "type": "user" }] }
+        }
+      },
+      "relations": {
+        "delete": {
+          "union": {
+            "child": [
+              { "computedUserset": { "relation": "owner" } },
+              {
+                "tupleToUserset": {
+                  "computedUserset": { "relation": "delete" },
+                  "tupleset": { "relation": "parent" }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": { "relation": "can_update_resources" },
+                  "tupleset": { "relation": "owner" }
+                }
+              }
+            ]
+          }
+        },
+        "editor": { "this": {} },
+        "owner": { "this": {} },
+        "parent": { "this": {} },
+        "read": {
+          "union": {
+            "child": [
+              { "computedUserset": { "relation": "viewer" } },
+              { "computedUserset": { "relation": "editor" } },
+              { "computedUserset": { "relation": "owner" } },
+              {
+                "tupleToUserset": {
+                  "computedUserset": { "relation": "read" },
+                  "tupleset": { "relation": "parent" }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": { "relation": "member" },
+                  "tupleset": { "relation": "owner" }
+                }
+              }
+            ]
+          }
+        },
+        "share": {
+          "union": {
+            "child": [
+              { "computedUserset": { "relation": "owner" } },
+              {
+                "tupleToUserset": {
+                  "computedUserset": { "relation": "share" },
+                  "tupleset": { "relation": "parent" }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": { "relation": "can_update_resources" },
+                  "tupleset": { "relation": "owner" }
+                }
+              }
+            ]
+          }
+        },
+        "update": {
+          "union": {
+            "child": [
+              { "computedUserset": { "relation": "editor" } },
+              { "computedUserset": { "relation": "owner" } },
+              {
+                "tupleToUserset": {
+                  "computedUserset": { "relation": "update" },
+                  "tupleset": { "relation": "parent" }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": { "relation": "can_update_resources" },
+                  "tupleset": { "relation": "owner" }
+                }
+              }
+            ]
+          }
+        },
+        "viewer": { "this": {} }
+      },
+      "type": "tag"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "delete": {},
+          "parent": { "directly_related_user_types": [{ "type": "tag" }] },
+          "process": {},
+          "read": {},
+          "update": {}
+        }
+      },
+      "relations": {
+        "delete": {
+          "tupleToUserset": {
+            "computedUserset": { "relation": "update" },
+            "tupleset": { "relation": "parent" }
+          }
+        },
+        "parent": { "this": {} },
+        "process": {
+          "tupleToUserset": {
+            "computedUserset": { "relation": "update" },
+            "tupleset": { "relation": "parent" }
+          }
+        },
+        "read": {
+          "tupleToUserset": {
+            "computedUserset": { "relation": "read" },
+            "tupleset": { "relation": "parent" }
+          }
+        },
+        "update": {
+          "tupleToUserset": {
+            "computedUserset": { "relation": "update" },
+            "tupleset": { "relation": "parent" }
+          }
+        }
+      },
+      "type": "document"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "delete": {},
+          "parent": { "directly_related_user_types": [{ "type": "tag" }] },
+          "read": {},
+          "share": {},
+          "update": {}
+        }
+      },
+      "relations": {
+        "delete": {
+          "tupleToUserset": {
+            "computedUserset": { "relation": "update" },
+            "tupleset": { "relation": "parent" }
+          }
+        },
+        "parent": { "this": {} },
+        "read": {
+          "tupleToUserset": {
+            "computedUserset": { "relation": "read" },
+            "tupleset": { "relation": "parent" }
+          }
+        },
+        "share": {
+          "tupleToUserset": {
+            "computedUserset": { "relation": "share" },
+            "tupleset": { "relation": "parent" }
+          }
+        },
+        "update": {
+          "tupleToUserset": {
+            "computedUserset": { "relation": "update" },
+            "tupleset": { "relation": "parent" }
+          }
+        }
+      },
+      "type": "resource"
+    }
+  ]
 }

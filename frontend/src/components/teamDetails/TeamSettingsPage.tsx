@@ -1,10 +1,10 @@
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import { alpha, Box, Button, FormControlLabel, Paper, Switch, TextField, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
-import { GroupSummary } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { Team } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface TeamSettingsPageProps {
-  team: GroupSummary;
+  team: Team;
 }
 
 export function TeamSettingsPage({ team }: TeamSettingsPageProps) {

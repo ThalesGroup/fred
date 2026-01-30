@@ -2,7 +2,7 @@ import GroupsIcon from "@mui/icons-material/Groups";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import { Avatar, AvatarGroup, Box, Paper, styled, Tooltip, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
-import { GroupSummary } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { Team } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { getInitials } from "../../utils/getInitials";
 import InvisibleLink from "../InvisibleLink";
 
@@ -19,7 +19,7 @@ const HoverBox = styled(Box)<{ userIsMember: boolean }>(({ theme, userIsMember }
 });
 
 export interface TeamCardProps {
-  team: GroupSummary;
+  team: Team;
   userIsMember?: boolean;
 }
 

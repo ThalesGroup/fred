@@ -550,11 +550,11 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/logs/query`, method: "POST", body: queryArg.logQuery }),
     }),
-    listGroupsKnowledgeFlowV1GroupsGet: build.query<
-      ListGroupsKnowledgeFlowV1GroupsGetApiResponse,
-      ListGroupsKnowledgeFlowV1GroupsGetApiArg
+    listTeamsKnowledgeFlowV1TeamsGet: build.query<
+      ListTeamsKnowledgeFlowV1TeamsGetApiResponse,
+      ListTeamsKnowledgeFlowV1TeamsGetApiArg
     >({
-      query: () => ({ url: `/knowledge-flow/v1/groups` }),
+      query: () => ({ url: `/knowledge-flow/v1/teams` }),
     }),
     listUsersKnowledgeFlowV1UsersGet: build.query<
       ListUsersKnowledgeFlowV1UsersGetApiResponse,
@@ -1123,8 +1123,8 @@ export type QueryLogsKnowledgeFlowV1LogsQueryPostApiResponse = /** status 200 Su
 export type QueryLogsKnowledgeFlowV1LogsQueryPostApiArg = {
   logQuery: LogQuery;
 };
-export type ListGroupsKnowledgeFlowV1GroupsGetApiResponse = /** status 200 Successful Response */ GroupSummary[];
-export type ListGroupsKnowledgeFlowV1GroupsGetApiArg = void;
+export type ListTeamsKnowledgeFlowV1TeamsGetApiResponse = /** status 200 Successful Response */ Team[];
+export type ListTeamsKnowledgeFlowV1TeamsGetApiArg = void;
 export type ListUsersKnowledgeFlowV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
 export type ListUsersKnowledgeFlowV1UsersGetApiArg = void;
 export type ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiResponse =
@@ -1659,27 +1659,10 @@ export type TagMemberUser = {
   relation: UserTagRelation;
   user: UserSummary;
 };
-export type GroupSummary = {
-  id: string;
-  name: string;
-  description?: string | null;
-  banner_image_url?: string | null;
-  owners?: UserSummary[];
-  member_count?: number | null;
-  is_private?: boolean;
-  total_member_count?: number | null;
-  sub_groups?: GroupSummary[];
-};
-export type TagMemberGroup = {
-  type?: "group";
-  relation: UserTagRelation;
-  group: GroupSummary;
-};
 export type TagMembersResponse = {
   users?: TagMemberUser[];
-  groups?: TagMemberGroup[];
 };
-export type ShareTargetResource = "user" | "group";
+export type ShareTargetResource = "user";
 export type TagShareRequest = {
   target_id: string;
   target_type: ShareTargetResource;
@@ -1893,6 +1876,15 @@ export type LogQuery = {
   filters?: LogFilter;
   limit?: number;
   order?: "asc" | "desc";
+};
+export type Team = {
+  id: string;
+  name: string;
+  description?: string | null;
+  banner_image_url?: string | null;
+  owners?: UserSummary[];
+  member_count?: number | null;
+  is_private: boolean;
 };
 export type ProcessorDescriptor = {
   id: string;
@@ -2187,8 +2179,8 @@ export const {
   useLazyPrintRootDirectoryQuery,
   useCreateDirectoryMutation,
   useQueryLogsKnowledgeFlowV1LogsQueryPostMutation,
-  useListGroupsKnowledgeFlowV1GroupsGetQuery,
-  useLazyListGroupsKnowledgeFlowV1GroupsGetQuery,
+  useListTeamsKnowledgeFlowV1TeamsGetQuery,
+  useLazyListTeamsKnowledgeFlowV1TeamsGetQuery,
   useListUsersKnowledgeFlowV1UsersGetQuery,
   useLazyListUsersKnowledgeFlowV1UsersGetQuery,
   useListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,
