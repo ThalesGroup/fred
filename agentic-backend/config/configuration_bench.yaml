@@ -15,15 +15,15 @@ app:
   base_url: "/agentic/v1"
   address: "127.0.0.1"
   port: 8000
-  log_level: "debug"
+  log_level: "info"
   reload: false
   reload_dir: "."
-  metrics_enabled: false
+  metrics_enabled: true
   metrics_address: "0.0.0.0"
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
   # KPI settings for local benchmarks and debugging.
-  kpi_process_metrics_interval_sec: 5
-  kpi_log_summary_interval_sec: 5.0
+  kpi_process_metrics_interval_sec: 10
+  kpi_log_summary_interval_sec: 10.0
   kpi_log_summary_top_n: 20
 
 scheduler:
