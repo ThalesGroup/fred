@@ -9,3 +9,6 @@ include ../scripts/makefiles/python-code-quality.mk
 include ../scripts/makefiles/python-test.mk
 include ../scripts/makefiles/python-clean.mk
 include ../scripts/makefiles/help.mk
+
+transform-openfga-schema: # Transform OpenFga ReBAC schema from a human readable `.fga` in a `.json` readable with code
+	fga model transform --file fred_core/security/rebac/schema.fga > fred_core/security/rebac/schema.fga.json

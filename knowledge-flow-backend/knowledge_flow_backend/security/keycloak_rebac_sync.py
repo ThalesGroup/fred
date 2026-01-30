@@ -27,7 +27,7 @@ class MembershipEdge(NamedTuple):
         return Relation(
             subject=RebacReference(self.subject_type, self.subject_id),
             relation=RelationType.MEMBER,
-            resource=RebacReference(Resource.GROUP, self.group_id),
+            resource=RebacReference(Resource.TEAM, self.group_id),
         )
 
 
@@ -67,7 +67,7 @@ async def reconcile_keycloak_groups_with_rebac() -> None:
 
 async def _collect_rebac_memberships(rebac_engine: RebacEngine) -> set[MembershipEdge]:
     relations = await rebac_engine.list_relations(
-        resource_type=Resource.GROUP,
+        resource_type=Resource.TEAM,
         relation=RelationType.MEMBER,
     )
     if isinstance(relations, RebacDisabledResult):
@@ -109,7 +109,7 @@ async def _collect_keycloak_memberships(admin: KeycloakAdmin) -> set[MembershipE
             if not subgroup_id:
                 logger.debug("Skipping subgroup without identifier in group %s: %s", group_id, subgroup)
                 continue
-            edges.add(MembershipEdge(Resource.GROUP, subgroup_id, group_id))
+            edges.add(MembershipEdge(Resource.TEAM, subgroup_id, group_id))
             stack.append(subgroup)
 
     logger.info("Collected %d membership edges from Keycloak across %d groups.", len(edges), len(seen_groups))

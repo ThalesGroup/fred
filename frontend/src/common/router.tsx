@@ -33,6 +33,8 @@ import ProcessorRunDetail from "../pages/ProcessorRunDetail";
 import { Profile } from "../pages/Profile";
 import RebacBackfill from "../pages/RebacBackfill";
 import Runtime from "../pages/Runtime";
+import { TeamDetailsPage } from "../pages/TeamDetailsPage.tsx";
+import { TeamsPage } from "../pages/TeamsPage.tsx";
 import { getConfig } from "./config";
 
 const basename = getConfig().frontend_basename;
@@ -59,6 +61,14 @@ export const routes: RouteObject[] = [
       {
         path: "chat/:sessionId",
         element: <Chat />,
+      },
+      {
+        path: "teams",
+        element: <TeamsPage />,
+      },
+      {
+        path: "team/:teamId/*",
+        element: <TeamDetailsPage />,
       },
       {
         path: "monitoring/kpis",

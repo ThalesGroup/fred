@@ -34,14 +34,11 @@ from fred_core import (
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.resources.base_resource_store import ResourceNotFoundError
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError
-from knowledge_flow_backend.features.groups.groups_service import get_groups_by_ids
-from knowledge_flow_backend.features.groups.groups_structures import GroupSummary
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.resources.service import ResourceService
 from knowledge_flow_backend.features.tag.structure import (
     Tag,
     TagCreate,
-    TagMemberGroup,
     TagMemberUser,
     TagType,
     TagUpdate,
@@ -229,7 +226,7 @@ class TagService:
 
         # TODO: remove all relation of this tag in ReBAC
 
-    async def share_tag_with_user_or_group(
+    async def share_tag_with_user(
         self,
         user: KeycloakUser,
         tag_id: str,
@@ -238,7 +235,7 @@ class TagService:
         relation: UserTagRelation,
     ) -> None:
         """
-        Share a tag with another user or group by adding a relation in the ReBAC engine.
+        Share a tag with another user by adding a relation in the ReBAC engine.
         """
         await self.rebac.check_user_permission_or_raise(user, TagPermission.SHARE, tag_id)
         await self.rebac.add_relation(
@@ -249,9 +246,9 @@ class TagService:
             )
         )
 
-    async def unshare_tag_with_user_or_group(self, user: KeycloakUser, tag_id: str, target_id: str, target_type: Resource) -> None:
+    async def unshare_tag_with_user(self, user: KeycloakUser, tag_id: str, target_id: str, target_type: Resource) -> None:
         """
-        Revoke tag access previously granted to another user or group.
+        Revoke tag access previously granted to another user.
         Removes any user-tag relation regardless of the level originally assigned.
         """
         await self.rebac.check_user_permission_or_raise(user, TagPermission.SHARE, tag_id)
@@ -276,32 +273,25 @@ class TagService:
         return [permission for permission in TagPermission if await self.rebac.has_permission(user_reference, permission, tag_reference)]
 
     @authorize(Action.READ, Resource.TAGS)
-    async def list_tag_members(self, tag_id: str, user: KeycloakUser) -> tuple[list[TagMemberUser], list[TagMemberGroup]]:
+    async def list_tag_members(self, tag_id: str, user: KeycloakUser) -> list[TagMemberUser]:
         """
-        List users and groups who have access to the tag along with their relation level.
+        List users who have access to the tag along with their relation level.
         """
         await self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
 
-        # Fetch user and group relations
+        # Fetch user relations
         user_relations = await self._get_tag_members_by_type(tag_id, Resource.USER)
-        group_relations = await self._get_tag_members_by_type(tag_id, Resource.GROUP)
 
-        # Fetch user and group summaries
+        # Fetch user summaries
         user_summaries = await get_users_by_ids(user_relations.keys())
-        group_summaries = await get_groups_by_ids(group_relations.keys())
 
         # Compose result
         users: list[TagMemberUser] = []
-        groups: list[TagMemberGroup] = []
         for user_id, relation in user_relations.items():
             summary = user_summaries.get(user_id) or UserSummary(id=user_id)
             users.append(TagMemberUser(relation=relation, user=summary))
 
-        for group_id, relation in group_relations.items():
-            profile = group_summaries.get(group_id) or GroupSummary(id=group_id, name=group_id)
-            groups.append(TagMemberGroup(relation=relation, group=profile))
-
-        return users, groups
+        return users
 
     @authorize(Action.UPDATE, Resource.TAGS)
     async def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:

@@ -222,9 +222,6 @@ class OpenFgaRebacEngine(RebacEngine):
         client = await self.get_client()
 
         userFilters = [UserTypeFilter(type=subject_type.value)]
-        # When a group acts as a subject we must point to its "member" relation set.
-        if subject_type == Resource.GROUP:
-            userFilters[0].relation = "member"
 
         body = ClientListUsersRequest(
             object=FgaObject(type=resource.type.value, id=resource.id),
@@ -370,10 +367,6 @@ class OpenFgaRebacEngine(RebacEngine):
     def _relation_to_tuple(relation: Relation) -> ClientTuple:
         subject_id = OpenFgaRebacEngine._reference_to_openfga_id(relation.subject)
         object_id = OpenFgaRebacEngine._reference_to_openfga_id(relation.resource)
-
-        # When a group acts as a subject we must point to its "member" relation set.
-        if relation.subject.type == Resource.GROUP:
-            subject_id += "#member"
 
         return ClientTuple(
             user=subject_id,
