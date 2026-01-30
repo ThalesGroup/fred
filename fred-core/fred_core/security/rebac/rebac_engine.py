@@ -270,13 +270,16 @@ class RebacEngine(ABC):
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
         """Convenience helper to lookup resources for a user."""
-        group_relations = await self.groups_list_to_relations(user)
+        group_relations, org_relations = await asyncio.gather(
+            self.groups_list_to_relations(user),
+            self.user_role_to_organization_relation(user),
+        )
 
         return await self.lookup_resources(
             subject=RebacReference(Resource.USER, user.uid),
             permission=permission,
             resource_type=_resource_for_permission(permission),
-            contextual_relations=group_relations,
+            contextual_relations=group_relations | org_relations,
             consistency_token=consistency_token,
         )
 
@@ -322,14 +325,17 @@ class RebacEngine(ABC):
         consistency_token: str | None = None,
     ) -> None:
         """Convenience helper to check permission for a user, raising if unauthorized."""
-        group_relations = await self.groups_list_to_relations(user)
+        group_relations, org_relations = await asyncio.gather(
+            self.groups_list_to_relations(user),
+            self.user_role_to_organization_relation(user),
+        )
 
         resource_type = _resource_for_permission(permission)
         await self.check_permission_or_raise(
             RebacReference(Resource.USER, user.uid),
             permission,
             RebacReference(resource_type, resource_id),
-            contextual_relations=group_relations,
+            contextual_relations=group_relations | org_relations,
             consistency_token=consistency_token,
         )
 
@@ -353,3 +359,41 @@ class RebacEngine(ABC):
             )
 
         return relation
+
+    async def user_role_to_organization_relation(
+        self, user: KeycloakUser
+    ) -> set[Relation]:
+        """Helper to convert user role to organization relation.
+
+        Creates a relation between the user and the singleton 'fred' organization
+        based on the user's Keycloak role (admin, editor, or viewer).
+        """
+        if isinstance(self.keycloak_client, KeycloackDisabled):
+            return set()
+
+        relations: set[Relation] = set()
+        organization_id = "fred"
+
+        # Map Keycloak roles to organization relations based on the schema
+        for role in user.roles:
+            try:
+                relation_type = RelationType(role)
+                if relation_type in (
+                    RelationType.ADMIN,
+                    RelationType.EDITOR,
+                    RelationType.VIEWER,
+                ):
+                    relations.add(
+                        Relation(
+                            subject=RebacReference(Resource.USER, user.uid),
+                            relation=relation_type,
+                            resource=RebacReference(
+                                Resource.ORGANIZATION, organization_id
+                            ),
+                        )
+                    )
+            except ValueError:
+                # Role is not a valid RelationType, skip it
+                continue
+
+        return relations
