@@ -24,6 +24,7 @@
   - use of shared http clients (#1055)
   - reshaping of prometheus metrics (#1023)
   - updated langchain version to latest (#1059)
+  - improve applicative KPIs (#1066)
 
 **v1.2.2** — 2026-01-23
 
