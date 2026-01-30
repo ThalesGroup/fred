@@ -20,6 +20,7 @@ from typing import cast
 from fred_core import (
     Action,
     GroupPermission,
+    Relation,
     KeycloackDisabled,
     KeycloakUser,
     RebacDisabledResult,
@@ -33,7 +34,7 @@ from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakGetError
 
 from knowledge_flow_backend.application_context import get_configuration, get_group_store, get_rebac_engine
-from knowledge_flow_backend.features.groups.groups_structures import GroupProfile, GroupProfileUpdate, GroupSummary
+from knowledge_flow_backend.features.groups.groups_structures import GroupProfile, GroupProfileUpdate, GroupRelationRequest, GroupSummary
 from knowledge_flow_backend.features.users.users_service import get_users_by_ids
 from knowledge_flow_backend.features.users.users_structures import UserSummary
 
@@ -76,7 +77,24 @@ async def list_groups(
     readable_group_ids = set() if is_admin else await _fetch_readable_group_ids(user)
     member_group_ids = await _resolve_user_group_ids(admin, user)
 
-    _apply_group_metadata(groups, profiles, owners, member_group_ids)
+    # Ensure membership relations exist in ReBAC for KC group memberships
+    rebac = get_rebac_engine()
+    if getattr(rebac, "enabled", True):
+        if member_group_ids:
+            logger.info("[GROUPS][REBAC] Ensuring member relations for user=%s groups=%s", user.uid, list(member_group_ids))
+            results = await asyncio.gather(
+                *(rebac.add_user_relation(user, RelationType.MEMBER, resource_type=Resource.GROUP, resource_id=gid) for gid in member_group_ids),
+                return_exceptions=True,
+            )
+            for gid, res in zip(member_group_ids, results):
+                if isinstance(res, BaseException):
+                    logger.warning("[GROUPS][REBAC] Failed to ensure member relation user=%s group=%s: %s", user.uid, gid, res)
+                else:
+                    logger.info("[GROUPS][REBAC] Ensured member relation user=%s group=%s", user.uid, gid)
+        else:
+            logger.info("[GROUPS][REBAC] No Keycloak group ids found for user=%s; skipping relation add", user.uid)
+
+    _apply_group_metadata(groups, profiles, owners, member_group_ids, readable_group_ids)
 
     filtered = [
         group
@@ -94,6 +112,24 @@ async def list_groups(
     if limit <= 0:
         return filtered[offset:]
     return filtered[offset : offset + limit]
+
+
+@authorize(Action.UPDATE, Resource.GROUP)
+async def add_group_relation(
+    user: KeycloakUser,
+    group_id: str,
+    request: GroupRelationRequest,
+) -> None:
+    rebac = get_rebac_engine()
+    await rebac.check_user_permission_or_raise(user, GroupPermission.UPDATE_MEMBERS, group_id)
+
+    await rebac.add_relation(
+        Relation(
+            subject=RebacReference(type=request.target_type, id=request.target_id),
+            relation=request.relation,
+            resource=RebacReference(type=Resource.GROUP, id=group_id),
+        )
+    )
 
 
 @authorize(Action.UPDATE, Resource.GROUP)
@@ -297,36 +333,17 @@ async def _fetch_readable_group_ids(user: KeycloakUser) -> set[str]:
 
 
 async def _resolve_user_group_ids(admin: KeycloakAdmin, user: KeycloakUser) -> set[str]:
-    raw_paths = [str(path).strip() for path in (user.groups or []) if str(path).strip()]
-    if not raw_paths:
-        return set()
-
-    normalized_paths = set()
-    for path in raw_paths:
-        normalized = _normalize_group_path(path)
-        if not normalized:
-            continue
-        normalized_paths.add(normalized)
-
-    if not normalized_paths:
-        return set()
-
-    coroutines = {path: admin.a_get_group_by_path(path) for path in sorted(normalized_paths)}
-    results = await asyncio.gather(*coroutines.values(), return_exceptions=True)
-
     group_ids: set[str] = set()
-    for path, result in zip(coroutines.keys(), results):
-        if isinstance(result, BaseException):
-            if isinstance(result, KeycloakGetError) and result.response_code == 404:
-                logger.debug("Group path %s not found in Keycloak.", path)
-                continue
-            logger.debug("Failed to resolve group path %s: %s", path, result)
-            continue
-        if not isinstance(result, dict):
-            continue
-        group_id = result.get("id")
-        if group_id:
-            group_ids.add(group_id)
+    try:
+        kc_groups = await admin.a_get_user_groups(user.uid, {"briefRepresentation": True})
+    except Exception as exc:
+        logger.debug("Failed to fetch user groups from Keycloak for user %s: %s", user.uid, exc)
+        return set()
+
+    for g in kc_groups or []:
+        gid = g.get("id")
+        if gid:
+            group_ids.add(gid)
 
     return group_ids
 
@@ -340,6 +357,7 @@ def _apply_group_metadata(
     profiles: dict[str, GroupProfile],
     owners: dict[str, list[UserSummary]],
     member_group_ids: set[str],
+    readable_group_ids: set[str],
 ) -> None:
     for group in groups:
         profile = profiles.get(group.id)
@@ -350,7 +368,7 @@ def _apply_group_metadata(
             if profile.is_private is not None:
                 group.is_private = profile.is_private
         group.owners = owners.get(group.id, [])
-        group.is_member = group.id in member_group_ids
+        group.is_member = group.id in member_group_ids or group.id in readable_group_ids
 
 
 def _is_group_visible(

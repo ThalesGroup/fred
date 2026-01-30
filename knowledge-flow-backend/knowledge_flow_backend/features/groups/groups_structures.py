@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from fred_core import RelationType, Resource
 
 from knowledge_flow_backend.features.users.users_structures import UserSummary
 
@@ -26,4 +27,10 @@ class GroupSummary(BaseModel):
     owners: list[UserSummary] = Field(default_factory=list)
     member_count: int | None = None
     is_private: bool = False
-    is_member: bool | None = None
+    is_member: bool = False
+
+
+class GroupRelationRequest(BaseModel):
+    target_id: str
+    target_type: Resource = Resource.USER
+    relation: RelationType = RelationType.MEMBER

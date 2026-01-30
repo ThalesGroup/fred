@@ -147,6 +147,12 @@ export default function SideBar() {
       icon: <ConstructionIcon />,
       url: `/tools`,
     },
+    {
+      key: "admin-group-roles",
+      label: t("sidebar.groupRoles", "Group roles"),
+      icon: <GroupsIcon />,
+      url: "/admin/group-roles",
+    },
     ...(canReadKpis || canReadOpenSearch || canReadLogs || canReadRuntime || canUpdateTag
       ? [
           {
@@ -243,16 +249,21 @@ export default function SideBar() {
                     },
                   ]
                 : []),
+              {
+                key: "monitoring-group-roles",
+                label: t("sidebar.groupRoles", "Group roles"),
+                icon: <GroupsIcon />,
+                url: `/admin/group-roles`,
+              },
             ],
           },
         ]
       : []),
   ];
 
-  const visibleGroups = groups.filter((g) => g.is_member === true);
   const teamsMenuItem: SideBarNavigationElement[] =
-    visibleGroups.length > 0
-      ? visibleGroups.map((g) => ({
+    groups.length > 0
+      ? groups.map((g) => ({
           key: `team-${g.id}`,
           label: g.name,
           icon: (

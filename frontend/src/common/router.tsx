@@ -35,6 +35,7 @@ import RebacBackfill from "../pages/RebacBackfill";
 import Runtime from "../pages/Runtime";
 import { TeamDetailsPage } from "../pages/TeamDetailsPage.tsx";
 import { TeamsPage } from "../pages/TeamsPage.tsx";
+import { AdminGroupRolesPage } from "../pages/AdminGroupRolesPage";
 import { getConfig } from "./config";
 
 const basename = getConfig().frontend_basename;
@@ -161,6 +162,10 @@ export const routes: RouteObject[] = [
       {
         path: "apps/scheduler",
         element: <AppsScheduler />,
+      },
+      {
+        path: "admin/group-roles",
+        element: <AdminGroupRolesPage />,
       },
     ].filter(Boolean),
   },
