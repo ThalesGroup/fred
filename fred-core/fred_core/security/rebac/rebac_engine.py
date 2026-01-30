@@ -31,7 +31,7 @@ class RelationType(str, Enum):
     VIEWER = "viewer"
     PARENT = "parent"
     MEMBER = "member"
-    PLATFORM = "platform"
+    ORGANIZATION = "organization"
     ADMIN = "admin"
     PUBLIC = "public"
 

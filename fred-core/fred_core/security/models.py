@@ -61,7 +61,7 @@ class Resource(str, Enum):
     # Authorization subject
     USER = "user"
     TEAM = "team"
-    PLATFORM = "platform"
+    ORGANIZATION = "organization"
 
 
 class AuthorizationError(Exception):

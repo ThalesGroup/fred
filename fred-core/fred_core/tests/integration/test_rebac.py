@@ -408,11 +408,11 @@ async def test_team_hierarchy_and_permissions(
     - Team owner can update team info
     - Team manager can update members
     - Team members inherit permissions from team roles on tags and agents
-    - Platform admins inherit team ownership
+    - Organization admins inherit team ownership
     """
     # Create entities
-    platform = _make_reference(Resource.PLATFORM, prefix="platform")
-    platform_admin = _make_reference(Resource.USER, prefix="admin")
+    organization = _make_reference(Resource.ORGANIZATION, prefix="organization")
+    organization_admin = _make_reference(Resource.USER, prefix="admin")
     team = _make_reference(Resource.TEAM, prefix="marketing")
     team_owner = _make_reference(Resource.USER, prefix="owner")
     team_manager = _make_reference(Resource.USER, prefix="manager")
@@ -423,12 +423,16 @@ async def test_team_hierarchy_and_permissions(
     # Set up team hierarchy and relations
     token = await rebac_engine.add_relations(
         [
-            # Platform admin
+            # Organization admin
             Relation(
-                subject=platform_admin, relation=RelationType.ADMIN, resource=platform
+                subject=organization_admin,
+                relation=RelationType.ADMIN,
+                resource=organization,
             ),
-            # Team hierarchy - team has a platform reference
-            Relation(subject=platform, relation=RelationType.PLATFORM, resource=team),
+            # Team hierarchy - team has a organization reference
+            Relation(
+                subject=organization, relation=RelationType.ORGANIZATION, resource=team
+            ),
             Relation(subject=team_owner, relation=RelationType.OWNER, resource=team),
             Relation(
                 subject=team_manager, relation=RelationType.MANAGER, resource=team
@@ -514,23 +518,23 @@ async def test_team_hierarchy_and_permissions(
     ), "Team member should not be able to update tag"
 
     # ~~~~~~~~~~~~~~~~~~~~
-    # Platform admin
+    # Organization admin
 
-    # Test platform admin can edit team info
+    # Test organization admin can edit team info
     assert await rebac_engine.has_permission(
-        platform_admin,
+        organization_admin,
         TeamPermission.CAN_UPDATE_INFO,
         team,
         consistency_token=token,
-    ), "Platform admin should be able to update team info"
+    ), "Organization admin should be able to update team info"
 
-    # Test platform admin can edit team info
+    # Test organization admin can edit team info
     assert await rebac_engine.has_permission(
-        platform_admin,
+        organization_admin,
         TeamPermission.CAN_UPDATE_MEMBERS,
         team,
         consistency_token=token,
-    ), "Platform admin should be able to update team members"
+    ), "Organization admin should be able to update team members"
 
 
 @pytest.mark.integration
@@ -777,15 +781,15 @@ async def test_team_filtering_by_visibility(
     This test validates:
     - Strangers can only see public teams
     - Users can see public teams + all teams they belong to (regardless of role)
-    - Platform admins can see all teams (public and private)
+    - Organization admins can see all teams (public and private)
     """
     # Create users
     stranger = _make_reference(Resource.USER, prefix="stranger")
     multi_role_user = _make_reference(Resource.USER, prefix="alice")
-    platform_admin = _make_reference(Resource.USER, prefix="admin")
+    organization_admin = _make_reference(Resource.USER, prefix="admin")
 
-    # Create platform
-    platform = _make_reference(Resource.PLATFORM, prefix="main-platform")
+    # Create organization
+    organization = _make_reference(Resource.ORGANIZATION, prefix="main-organization")
 
     # Create teams
     public_team_1 = _make_reference(Resource.TEAM, prefix="public-marketing")
@@ -798,37 +802,41 @@ async def test_team_filtering_by_visibility(
     # Set up team visibility and memberships
     token = await rebac_engine.add_relations(
         [
-            # Platform admin setup
+            # Organization admin setup
             Relation(
-                subject=platform_admin,
+                subject=organization_admin,
                 relation=RelationType.ADMIN,
-                resource=platform,
+                resource=organization,
             ),
-            # Link all teams to platform
+            # Link all teams to organization
             Relation(
-                subject=platform, relation=RelationType.PLATFORM, resource=public_team_1
+                subject=organization,
+                relation=RelationType.ORGANIZATION,
+                resource=public_team_1,
             ),
             Relation(
-                subject=platform, relation=RelationType.PLATFORM, resource=public_team_2
+                subject=organization,
+                relation=RelationType.ORGANIZATION,
+                resource=public_team_2,
             ),
             Relation(
-                subject=platform,
-                relation=RelationType.PLATFORM,
+                subject=organization,
+                relation=RelationType.ORGANIZATION,
                 resource=private_team_owned,
             ),
             Relation(
-                subject=platform,
-                relation=RelationType.PLATFORM,
+                subject=organization,
+                relation=RelationType.ORGANIZATION,
                 resource=private_team_managed,
             ),
             Relation(
-                subject=platform,
-                relation=RelationType.PLATFORM,
+                subject=organization,
+                relation=RelationType.ORGANIZATION,
                 resource=private_team_member,
             ),
             Relation(
-                subject=platform,
-                relation=RelationType.PLATFORM,
+                subject=organization,
+                relation=RelationType.ORGANIZATION,
                 resource=other_private_team,
             ),
             # Public teams - anyone can read
@@ -858,7 +866,7 @@ async def test_team_filtering_by_visibility(
                 relation=RelationType.MEMBER,
                 resource=private_team_member,
             ),
-            # Other private team - only accessible by platform admin and its owner
+            # Other private team - only accessible by organization admin and its owner
             Relation(
                 subject=_make_reference(Resource.USER, prefix="someone-else"),
                 relation=RelationType.OWNER,
@@ -915,10 +923,10 @@ async def test_team_filtering_by_visibility(
     )
 
     # ~~~~~~~~~~~~~~~~~~~~
-    # Platform admin sees ALL teams (public and private)
+    # Organization admin sees ALL teams (public and private)
 
     admin_teams = await rebac_engine.lookup_resources(
-        subject=platform_admin,
+        subject=organization_admin,
         permission=TeamPermission.CAN_READ,
         resource_type=Resource.TEAM,
         consistency_token=token,
@@ -935,6 +943,6 @@ async def test_team_filtering_by_visibility(
         private_team_member.id,
         other_private_team.id,
     }, (
-        f"Platform admin should see all teams (public and private), "
+        f"Organization admin should see all teams (public and private), "
         f"got: {admin_team_ids}"
     )

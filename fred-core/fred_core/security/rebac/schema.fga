@@ -3,9 +3,9 @@ model
 
 type user
 
-type platform
+type organization
   relations
-    # Platform role defined from Keycloak roles
+    # organization role defined from Keycloak roles
     define admin: [user]
     define editor: [user] or admin
     define viewer: [user] or editor
@@ -16,10 +16,10 @@ type platform
 
 type team
   relations
-    define platform: [platform]
+    define organization: [organization]
 
     # A team can have members that are users or other teams (nested teams)
-    define owner: [user] or admin from platform
+    define owner: [user] or admin from organization
     define manager: [user] or owner
     define member: [user] or manager
 

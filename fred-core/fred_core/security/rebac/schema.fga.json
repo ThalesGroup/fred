@@ -33,7 +33,7 @@
           }
         }
       },
-      "type": "platform"
+      "type": "organization"
     },
     {
       "metadata": {
@@ -45,10 +45,10 @@
           "can_update_resources": {},
           "manager": { "directly_related_user_types": [{ "type": "user" }] },
           "member": { "directly_related_user_types": [{ "type": "user" }] },
-          "owner": { "directly_related_user_types": [{ "type": "user" }] },
-          "platform": {
-            "directly_related_user_types": [{ "type": "platform" }]
+          "organization": {
+            "directly_related_user_types": [{ "type": "organization" }]
           },
+          "owner": { "directly_related_user_types": [{ "type": "user" }] },
           "public": {
             "directly_related_user_types": [{ "type": "user", "wildcard": {} }]
           }
@@ -85,6 +85,7 @@
             ]
           }
         },
+        "organization": { "this": {} },
         "owner": {
           "union": {
             "child": [
@@ -92,13 +93,12 @@
               {
                 "tupleToUserset": {
                   "computedUserset": { "relation": "admin" },
-                  "tupleset": { "relation": "platform" }
+                  "tupleset": { "relation": "organization" }
                 }
               }
             ]
           }
         },
-        "platform": { "this": {} },
         "public": { "this": {} }
       },
       "type": "team"
