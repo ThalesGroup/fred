@@ -25,7 +25,7 @@ dependencies = [
   "pypandoc-binary==1.15",
   "pypandoc==1.15",
   "pandas==2.2.3",
-  "pypdf==6.6.0",
+  "pypdf==6.6.2",
   "python-pptx==1.0.2",
   "google-cloud-storage==3.1.0",
   "rich==14.0.0",
