@@ -438,7 +438,7 @@ async def websocket_chatbot_question(
             client_request = None
             try:
                 client_request = await websocket.receive_json()
-                logger.info(
+                logger.debug(
                     "[CHATBOT WS] recv raw session_id=%s payload=%s",
                     client_request.get("session_id")
                     if isinstance(client_request, dict)

@@ -16,6 +16,7 @@ import logging
 import math
 import sys
 import tempfile
+import time
 from datetime import datetime
 from functools import partial
 from importlib.resources import files
@@ -271,10 +272,17 @@ class AgentFlow:
                     "Could not set access_token_expires_at on runtime_context; skipping attribute assignment."
                 )
 
+        ttl = None
+        try:
+            ttl = int(expires_at) - int(time.time()) if expires_at else None
+        except Exception:
+            ttl = None
+
+        ttl_msg = f" ttl={ttl}s" if ttl is not None else ""
         logger.info(
-            "[SECURITY] User access token refreshed successfully [token=%s] [expires_at=%s]",
-            new_access_token,
+            "[SECURITY] User access token refreshed successfully [expires_at=%s]%s",
             expires_at,
+            ttl_msg,
         )
         return new_access_token
 
@@ -290,7 +298,7 @@ class AgentFlow:
         """
         # 1. Start with the incoming config, ensuring it's not None
         self.run_config = config if config is not None else {}
-        logger.info(
+        logger.debug(
             "[AGENT_FLOW] astream_updates run_config configurable=%s thread_id=%s",
             self.run_config.get("configurable"),
             (self.run_config.get("configurable") or {}).get("thread_id"),
@@ -343,7 +351,7 @@ class AgentFlow:
         # 5. Execute the graph using the MODIFIED config (self.run_config)
         async for event in compiled.astream(
             state,
-            config=self.run_config,  # <--- CORRECT: Pass the updated config
+            config=self.run_config,
             stream_mode="updates",
             **kwargs,
         ):

@@ -155,6 +155,15 @@ class InterruptRaised(Exception):
         super().__init__("LangGraph interrupt")
 
 
+class StreamAgentError(Exception):
+    """Wraps a streaming failure while preserving already emitted messages."""
+
+    def __init__(self, partial_messages: List[ChatMessage], original: Exception):
+        self.partial_messages = partial_messages
+        self.original = original
+        super().__init__(str(original))
+
+
 class StreamTranscoder:
     """
     Purpose:
@@ -396,7 +405,7 @@ class StreamTranscoder:
             resume_payload.pop("checkpoint_id", None)
             resume_payload.pop("checkpoint", None)
 
-        logger.info(
+        logger.debug(
             "[TRANSCODER] run_config configurable=%s resume_payload_keys=%s",
             config.get("configurable"),
             list(resume_payload.keys()) if isinstance(resume_payload, dict) else None,
@@ -475,6 +484,16 @@ class StreamTranscoder:
                     # ---------- TOOL CALLS ----------
                     tool_calls = extract_tool_calls(msg)
                     if tool_calls:
+                        logger.info(
+                            "[TRANSCODER][TOOL_CALLS] session=%s exchange=%s count=%d calls=%s",
+                            session_id,
+                            exchange_id,
+                            len(tool_calls),
+                            [
+                                {"id": tc.get("call_id"), "name": tc.get("name")}
+                                for tc in tool_calls
+                            ],
+                        )
                         for tc in tool_calls:
                             tc_msg = ChatMessage(
                                 session_id=session_id,
@@ -512,6 +531,13 @@ class StreamTranscoder:
                             getattr(msg, "tool_call_id", None)
                             or raw_md.get("tool_call_id")
                             or "t?"
+                        )
+                        logger.info(
+                            "[TRANSCODER][TOOL_RESULT_EVT] session=%s exchange=%s call_id=%s raw_type=%s",
+                            session_id,
+                            exchange_id,
+                            call_id,
+                            type(getattr(msg, "content", None)).__name__,
                         )
                         raw_content = getattr(msg, "content", None)
                         new_hits = _extract_vector_search_hits(raw_content)
@@ -568,6 +594,18 @@ class StreamTranscoder:
                     }.get(lc_type, Role.assistant)
 
                     content = getattr(msg, "content", "")
+                    logger.debug(
+                        "[TRANSCODER][TEXT] session=%s exchange=%s role=%s channel_candidate=%s content_preview=%s",
+                        session_id,
+                        exchange_id,
+                        role,
+                        lc_type,
+                        (
+                            str(content)[:80].replace("\n", " ")
+                            if isinstance(content, str)
+                            else type(content).__name__
+                        ),
+                    )
 
                     # CRITICAL FIX: Check msg.parts for structured content first.
                     lc_parts = getattr(msg, "parts", []) or []
@@ -700,6 +738,16 @@ class StreamTranscoder:
                 exchange_id,
             )
             raise
+        except Exception as e:
+            # Preserve partial transcript so far; caller decides how to surface the failure.
+            logger.exception(
+                "[TRANSCODER] stream failure agent=%s session=%s exchange=%s msgs=%d",
+                agent_name,
+                session_id,
+                exchange_id,
+                len(out),
+            )
+            raise StreamAgentError(out, e) from e
 
         return out
 

@@ -30,7 +30,7 @@ from agentic_backend.core.tools.tool_loop import build_tool_loop
 logger = logging.getLogger(__name__)
 
 
-class CorpusManager(AgentFlow):
+class Custodian(AgentFlow):
     """
     Production-ready demo for MCP + HITL:
     - Uses LLM tool-calling to pick MCP tools.

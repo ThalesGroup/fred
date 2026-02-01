@@ -69,6 +69,7 @@ from agentic_backend.core.chatbot.chat_schema import (
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
 from agentic_backend.core.chatbot.stream_transcoder import (
     InterruptRaised,
+    StreamAgentError,
     StreamTranscoder,
 )
 from agentic_backend.core.interrupts.streaming_interrupt_handler import (
@@ -435,13 +436,49 @@ class SessionOrchestrator:
                         actor=PHASE_METRIC_ACTOR,
                     )
                     raise
-                except Exception as e:
-                    user_msg = human_error_message(runtime_context, e)
+                except StreamAgentError as sae:
+                    # Preserve everything already emitted by the transcoder.
+                    agent_msgs = sae.partial_messages
+                    user_msg = human_error_message(runtime_context, sae.original)
+                    # Next free rank after all agent messages (base_rank consumed by user at 0).
+                    safe_rank = base_rank + len(agent_msgs) + 1
                     agent_msgs.append(
                         ChatMessage(
                             session_id=session.id,
                             exchange_id=exchange_id,
-                            rank=base_rank + len(agent_msgs),
+                            rank=safe_rank,
+                            timestamp=_utcnow_dt(),
+                            role=Role.assistant,
+                            channel=Channel.final,
+                            parts=[TextPart(text=user_msg)],
+                            metadata=ChatMetadata(),
+                        )
+                    )
+                    # Important: reset cached agent state to avoid stale tool_calls in MemorySaver
+                    try:
+                        await self.agent_factory.teardown_session_agents(session.id)
+                    except Exception:
+                        logger.warning(
+                            "[SESSIONS] teardown_session_agents failed session=%s after StreamAgentError",
+                            session.id,
+                            exc_info=True,
+                        )
+                    self.kpi.count(
+                        "chat.exchange_error",
+                        1,
+                        dims={
+                            "agent_name": agent_name,
+                        },
+                        actor=PHASE_METRIC_ACTOR,
+                    )
+                except Exception as e:
+                    user_msg = human_error_message(runtime_context, e)
+                    safe_rank = base_rank + len(agent_msgs) + 1
+                    agent_msgs.append(
+                        ChatMessage(
+                            session_id=session.id,
+                            exchange_id=exchange_id,
+                            rank=safe_rank,
                             timestamp=_utcnow_dt(),
                             role=Role.assistant,
                             channel=Channel.final,
@@ -451,6 +488,14 @@ class SessionOrchestrator:
                             metadata=ChatMetadata(),
                         )
                     )
+                    try:
+                        await self.agent_factory.teardown_session_agents(session.id)
+                    except Exception:
+                        logger.warning(
+                            "[SESSIONS] teardown_session_agents failed session=%s after generic exception",
+                            session.id,
+                            exc_info=True,
+                        )
                     self.kpi.count(
                         "chat.exchange_error",
                         1,
@@ -467,6 +512,39 @@ class SessionOrchestrator:
                         agent_name=agent_name,
                     )
                 all_msgs.extend(agent_msgs)
+
+                # Trace what will be persisted for this exchange (helps diagnose missing items on reload)
+                try:
+                    msg_summary = [
+                        {
+                            "rank": m.rank,
+                            "role": m.role,
+                            "channel": m.channel,
+                            "exchange": m.exchange_id,
+                            "parts": [
+                                getattr(p, "type", None) for p in (m.parts or [])
+                            ],
+                        }
+                        for m in all_msgs
+                    ]
+                    logger.info(
+                        "[SESSIONS][PERSIST_TRACE] session=%s exchange=%s total_msgs=%d ranks=%s",
+                        session.id,
+                        exchange_id,
+                        len(all_msgs),
+                        [m.get("rank") for m in msg_summary],
+                    )
+                    logger.debug(
+                        "[SESSIONS][PERSIST_TRACE] details=%s",
+                        msg_summary,
+                    )
+                except Exception as trace_err:
+                    logger.warning(
+                        "[SESSIONS][PERSIST_TRACE] failed to summarize messages session=%s exchange=%s err=%s",
+                        session.id,
+                        exchange_id,
+                        trace_err,
+                    )
 
                 # 6) Attach the raw runtime context (single source of truth)
                 self._attach_runtime_context(
@@ -1457,6 +1535,33 @@ class SessionOrchestrator:
             _rlog("empty", msg="No messages to restore", session_id=session.id)
             return []
 
+        try:
+            logger.info(
+                "[RESTORE][LOAD] session=%s loaded_msgs=%d ranks=%s",
+                session.id,
+                len(hist),
+                [m.rank for m in hist],
+            )
+            logger.debug(
+                "[RESTORE][LOAD] details=%s",
+                [
+                    {
+                        "rank": m.rank,
+                        "role": m.role,
+                        "channel": m.channel,
+                        "exchange": m.exchange_id,
+                        "parts": [getattr(p, "type", None) for p in (m.parts or [])],
+                    }
+                    for m in hist
+                ],
+            )
+        except Exception as trace_err:
+            logger.warning(
+                "[RESTORE][LOAD] failed to log summary session=%s err=%s",
+                session.id,
+                trace_err,
+            )
+
         # 1) Chronology (rank is authoritative)
         hist = sorted(hist, key=lambda m: m.rank)
         try:
@@ -1515,6 +1620,7 @@ class SessionOrchestrator:
         pending_tool_calls_by_ex: dict[str, list[dict]] = defaultdict(list)
         call_name_by_ex: dict[str, dict[str, str]] = defaultdict(dict)
         known_call_ids_by_ex: dict[str, set[str]] = defaultdict(set)
+        seen_tool_results_by_ex: dict[str, set[str]] = defaultdict(set)
         current_exchange: str | None = None
 
         def flush_exchange_calls_if_any(ex_id: str | None):
@@ -1523,13 +1629,21 @@ class SessionOrchestrator:
                 return
             calls = pending_tool_calls_by_ex.get(ex_id)
             if calls:
+                # Emit tool_calls only if at least one tool_result was seen in this exchange.
+                if len(seen_tool_results_by_ex.get(ex_id, set())) == 0:
+                    logger.info(
+                        "[RESTORE][SKIP_CALLS] exchange=%s pending_calls=%d reason=no_tool_result_in_exchange",
+                        ex_id,
+                        len(calls),
+                    )
+                    pending_tool_calls_by_ex[ex_id].clear()
+                    return
                 ai = AIMessage(content="", tool_calls=list(calls))
                 lc_history.append(ai)
-                _rlog(
-                    "emit_ai_calls",
-                    msg="Emitted AI(tool_calls)",
-                    exchange_id=ex_id,
-                    calls=[{"id": c.get("id"), "name": c.get("name")} for c in calls],
+                logger.info(
+                    "[RESTORE][EMIT_CALLS] exchange=%s calls=%s",
+                    ex_id,
+                    [{"id": c.get("id"), "name": c.get("name")} for c in calls],
                 )
                 pending_tool_calls_by_ex[ex_id].clear()
 
@@ -1572,27 +1686,35 @@ class SessionOrchestrator:
                             known_call_ids_by_ex[current_exchange].add(call_id)
                         if call_id and p.name:
                             call_name_by_ex[current_exchange][call_id] = p.name
-                        _rlog(
-                            "acc_call",
-                            msg="Accumulate tool_call",
-                            exchange_id=current_exchange,
-                            call_id=call_id,
-                            name=name,
+                        logger.info(
+                            "[RESTORE][ACC_CALL] exchange=%s call_id=%s name=%s pending_calls=%d",
+                            current_exchange,
+                            call_id,
+                            name,
+                            len(pending_tool_calls_by_ex[current_exchange]),
                         )
                 continue
 
             # Tool result → only if matching call_id exists in THIS exchange
             if m.role == Role.tool and m.channel == Channel.tool_result:
+                # Pre-mark results so grouped tool_calls aren't skipped
+                for p in m.parts or []:
+                    if (
+                        isinstance(p, ToolResultPart)
+                        and p.call_id in known_call_ids_by_ex[current_exchange]
+                    ):
+                        seen_tool_results_by_ex[current_exchange].add(p.call_id)
+
                 # Ensure the grouped AI(tool_calls=[...]) for *this* exchange precedes the ToolMessage(s).
                 flush_exchange_calls_if_any(current_exchange)
+
                 for p in m.parts or []:
                     if isinstance(p, ToolResultPart):
                         if p.call_id not in known_call_ids_by_ex[current_exchange]:
-                            _rlog(
-                                "skip_orphan_tool_result",
-                                msg="Skip orphan ToolMessage (no matching call in this exchange)",
-                                exchange_id=current_exchange,
-                                call_id=p.call_id,
+                            logger.info(
+                                "[RESTORE][SKIP_ORPHAN_RESULT] exchange=%s call_id=%s",
+                                current_exchange,
+                                p.call_id,
                             )
                             continue
                         content = p.content
@@ -1610,21 +1732,19 @@ class SessionOrchestrator:
                                 content=content, name=name, tool_call_id=p.call_id
                             )
                             lc_history.append(tm)
-                            _rlog(
-                                "emit_tool",
-                                msg="Emitted ToolMessage",
-                                exchange_id=current_exchange,
-                                call_id=p.call_id,
-                                name=name,
-                                preview=_preview(content),
+                            seen_tool_results_by_ex[current_exchange].add(p.call_id)
+                            logger.info(
+                                "[RESTORE][EMIT_TOOL_RESULT] exchange=%s call_id=%s name=%s",
+                                current_exchange,
+                                p.call_id,
+                                name,
                             )
                         except Exception:
-                            _rlog(
-                                "emit_tool_error",
-                                msg="Failed to restore ToolMessage",
-                                exchange_id=current_exchange,
-                                call_id=p.call_id,
-                                name=name,
+                            logger.warning(
+                                "[RESTORE][EMIT_TOOL_ERROR] exchange=%s call_id=%s name=%s",
+                                current_exchange,
+                                p.call_id,
+                                name,
                             )
                             continue
                 continue
@@ -1674,7 +1794,33 @@ class SessionOrchestrator:
 
         # Tail: if transcript ends with pending calls and no results, keep the grouped AI(tool_calls=...)
         flush_exchange_calls_if_any(current_exchange)
-        _rlog("restore_done", msg="Restoration complete", total=len(lc_history))
+        try:
+            logger.info(
+                "[RESTORE][SUMMARY] session=%s total=%d exchanges=%d",
+                session.id,
+                len(lc_history),
+                len({m.exchange_id for m in hist}),
+            )
+            logger.debug(
+                "[RESTORE][SUMMARY] exchanges_calls_results=%s",
+                {
+                    ex: {
+                        "calls": len(pending_tool_calls_by_ex.get(ex, [])),
+                        "seen_results": len(seen_tool_results_by_ex.get(ex, set())),
+                    }
+                    for ex in set(
+                        list(pending_tool_calls_by_ex.keys())
+                        + list(seen_tool_results_by_ex.keys())
+                    )
+                },
+            )
+        except Exception:
+            logger.debug(
+                "[RESTORE][SUMMARY] session=%s total=%d (failed to log details)",
+                session.id,
+                len(lc_history),
+            )
+            pass
 
         return lc_history
 

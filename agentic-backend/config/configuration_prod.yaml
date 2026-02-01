@@ -137,7 +137,7 @@ ai:
   agents:
     - name: "Custodian"
       type: "agent"
-      class_path: "agentic_backend.agents.corpus.corpus_manager.CorpusManager"
+      class_path: "agentic_backend.agents.custodian.custodian.Custodian"
       enabled: true
     - name: "Georges"
       type: "agent"

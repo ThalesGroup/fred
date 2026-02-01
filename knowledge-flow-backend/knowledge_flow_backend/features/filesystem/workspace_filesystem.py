@@ -30,10 +30,9 @@ import posixpath
 from dataclasses import dataclass
 from typing import List, Optional
 
-from minio.error import S3Error
-
 from fred_core import KeycloakUser
 from fred_core.filesystem.structures import BaseFilesystem, FilesystemResourceInfoResult
+from minio.error import S3Error
 
 
 def _normalize_key(key: str) -> str:
@@ -172,7 +171,21 @@ class WorkspaceFilesystem:
         owner = (owner_override or user.uid).strip("/")
         root = (root_prefix or self.prefix).rstrip("/")
         full_prefix = _join(root, owner, sub)
-        return await self.fs.list(full_prefix)
+
+        # Determine the namespace root to strip from results
+        namespace_root = _join(root, owner)
+        if not namespace_root.endswith("/"):
+            namespace_root += "/"
+
+        results = await self.fs.list(full_prefix)
+        cleaned = []
+        for res in results:
+            if res.path.startswith(namespace_root):
+                relative_path = res.path[len(namespace_root) :]
+                if not relative_path:
+                    continue
+                cleaned.append(FilesystemResourceInfoResult(path=relative_path, size=res.size, type=res.type, modified=res.modified))
+        return cleaned
 
     async def exists(
         self,
@@ -183,6 +196,37 @@ class WorkspaceFilesystem:
     ) -> bool:
         path = self._path(user, key, owner_override, root_prefix)
         return await self.fs.exists(path)
+
+    async def mkdir(
+        self,
+        user: KeycloakUser,
+        key: str,
+        owner_override: str | None = None,
+        root_prefix: str | None = None,
+    ) -> None:
+        path = self._path(user, key, owner_override, root_prefix)
+        await self.fs.mkdir(path)
+
+    async def grep(
+        self,
+        user: KeycloakUser,
+        pattern: str,
+        prefix: str = "",
+        owner_override: str | None = None,
+        root_prefix: str | None = None,
+    ) -> List[str]:
+        # Reuse list logic to resolve the prefix path correctly
+        sub = _normalize_key(prefix) if prefix else ""
+        owner = (owner_override or user.uid).strip("/")
+        root = (root_prefix or self.prefix).rstrip("/")
+        full_prefix = _join(root, owner, sub)
+
+        namespace_root = _join(root, owner)
+        if not namespace_root.endswith("/"):
+            namespace_root += "/"
+
+        results = await self.fs.grep(pattern, full_prefix)
+        return [p[len(namespace_root) :] for p in results if p.startswith(namespace_root) and p[len(namespace_root) :]]
 
     # Placeholder for future public URL generation (HTTP controller layer)
     def url_for(self, key: str) -> str:
