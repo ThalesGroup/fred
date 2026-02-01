@@ -43,7 +43,9 @@ class StreamingInterruptHandler(InterruptHandler):
             type(payload).__name__,
             list((payload or {}).keys()) if isinstance(payload, dict) else "<non-dict>",
             type(checkpoint).__name__,
-            list((checkpoint or {}).keys()) if isinstance(checkpoint, dict) else "<non-dict>",
+            list((checkpoint or {}).keys())
+            if isinstance(checkpoint, dict)
+            else "<non-dict>",
         )
         if checkpoint is None:
             raise ValueError("checkpoint is required for StreamingInterruptHandler")
@@ -53,7 +55,9 @@ class StreamingInterruptHandler(InterruptHandler):
             try:
                 await self.save_checkpoint(session_id, exchange_id, checkpoint)
             except Exception:  # pragma: no cover - best-effort persistence
-                logger.exception("Failed to persist checkpoint for session %s", session_id)
+                logger.exception(
+                    "Failed to persist checkpoint for session %s", session_id
+                )
 
         event = AwaitingHumanEvent(
             session_id=session_id,

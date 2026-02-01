@@ -1113,6 +1113,10 @@
   },
   "mcp": {
     "servers": {
+      "corpus": {
+        "name": "Gestion du corpus documentaire",
+        "description": "Permet à votre agent d'accéder à des outils de gestion de corpus documentaire (téléversement, traitement, vectorisation)"
+      },
       "search_documents": {
         "name": "Rechercher dans les documents",
         "description": "Permet à votre agent d'effectuer des recherches sémantiques dans les documents téléversés dans Fred (RAG)"

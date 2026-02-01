@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from agentic_backend.core.interrupts.base_interrupt_handler import InterruptHandler
 

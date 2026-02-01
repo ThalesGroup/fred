@@ -20,20 +20,9 @@ import EmailIcon from "@mui/icons-material/Email";
 import FingerprintIcon from "@mui/icons-material/Fingerprint";
 import LogoutIcon from "@mui/icons-material/Logout";
 import SecurityIcon from "@mui/icons-material/Security";
-import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  Divider,
-  Grid2,
-  Stack,
-  Tooltip,
-  Typography,
-  useTheme,
-} from "@mui/material";
+import { Box, Button, Card, CardContent, Chip, Divider, Grid2, Stack, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 import { LanguageSelector } from "../LanguageSelector";
 import { ThemeModeSelector } from "../ThemeModeSelector";
 import { ExternalLink } from "./ExternalLink";
@@ -189,7 +178,11 @@ export function ProfileCard({
                 </Stack>
                 <Box display="flex" flexWrap="wrap" gap={0.75}>
                   {userRoles.map((role) => (
-                    <Tooltip key={role} title={role} arrow disableInteractive>
+                    <SimpleTooltip
+                      key={role}
+                      title={role}
+                      // ATTENTION a disableInteractive
+                    >
                       <Chip
                         size="small"
                         icon={getRoleIcon(role)}
@@ -203,7 +196,7 @@ export function ProfileCard({
                           "&:hover": { backgroundColor: "primary.main", color: "common.white" },
                         }}
                       />
-                    </Tooltip>
+                    </SimpleTooltip>
                   ))}
                 </Box>
               </Box>

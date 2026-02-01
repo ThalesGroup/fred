@@ -1112,6 +1112,10 @@
   },
   "mcp": {
     "servers": {
+      "corpus": {
+        "name": "Corpus Management",
+        "description": "Allow your agent to manage your corpus of documents, with admin tools such as vectorization, cleanup, and metadata management."
+      },
       "search_documents": {
         "name": "Search in documents",
         "description": "Allow your agent to perform semantic search in documents uploaded to Fred (RAG)"

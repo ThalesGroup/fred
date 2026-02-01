@@ -260,6 +260,113 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    uploadUserFileKnowledgeFlowV1StorageUserUploadPost: build.mutation<
+      UploadUserFileKnowledgeFlowV1StorageUserUploadPostApiResponse,
+      UploadUserFileKnowledgeFlowV1StorageUserUploadPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/storage/user/upload`,
+        method: "POST",
+        body: queryArg.bodyUploadUserFileKnowledgeFlowV1StorageUserUploadPost,
+      }),
+    }),
+    listUserFilesKnowledgeFlowV1StorageUserGet: build.query<
+      ListUserFilesKnowledgeFlowV1StorageUserGetApiResponse,
+      ListUserFilesKnowledgeFlowV1StorageUserGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/storage/user`,
+        params: {
+          prefix: queryArg.prefix,
+        },
+      }),
+    }),
+    downloadUserFileKnowledgeFlowV1StorageUserKeyGet: build.query<
+      DownloadUserFileKnowledgeFlowV1StorageUserKeyGetApiResponse,
+      DownloadUserFileKnowledgeFlowV1StorageUserKeyGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/storage/user/${queryArg.key}` }),
+    }),
+    deleteUserFileKnowledgeFlowV1StorageUserKeyDelete: build.mutation<
+      DeleteUserFileKnowledgeFlowV1StorageUserKeyDeleteApiResponse,
+      DeleteUserFileKnowledgeFlowV1StorageUserKeyDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/storage/user/${queryArg.key}`, method: "DELETE" }),
+    }),
+    uploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPost: build.mutation<
+      UploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPostApiResponse,
+      UploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/storage/agent-config/${queryArg.agentId}/upload`,
+        method: "POST",
+        body: queryArg.bodyUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPost,
+      }),
+    }),
+    listAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGet: build.query<
+      ListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetApiResponse,
+      ListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/storage/agent-config/${queryArg.agentId}`,
+        params: {
+          prefix: queryArg.prefix,
+        },
+      }),
+    }),
+    downloadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyGet: build.query<
+      DownloadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyGetApiResponse,
+      DownloadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/storage/agent-config/${queryArg.agentId}/${queryArg.key}` }),
+    }),
+    deleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDelete: build.mutation<
+      DeleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDeleteApiResponse,
+      DeleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/storage/agent-config/${queryArg.agentId}/${queryArg.key}`,
+        method: "DELETE",
+      }),
+    }),
+    uploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPost: build.mutation<
+      UploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPostApiResponse,
+      UploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/storage/agent-user/${queryArg.agentId}/${queryArg.targetUserId}/upload`,
+        method: "POST",
+        body: queryArg.bodyUploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPost,
+      }),
+    }),
+    listAgentUserFilesKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdGet: build.query<
+      ListAgentUserFilesKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdGetApiResponse,
+      ListAgentUserFilesKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/storage/agent-user/${queryArg.agentId}/${queryArg.targetUserId}`,
+        params: {
+          prefix: queryArg.prefix,
+        },
+      }),
+    }),
+    downloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGet: build.query<
+      DownloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGetApiResponse,
+      DownloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/storage/agent-user/${queryArg.agentId}/${queryArg.targetUserId}/${queryArg.key}`,
+      }),
+    }),
+    deleteAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyDelete: build.mutation<
+      DeleteAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyDeleteApiResponse,
+      DeleteAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/storage/agent-user/${queryArg.agentId}/${queryArg.targetUserId}/${queryArg.key}`,
+        method: "DELETE",
+      }),
+    }),
     listAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGet: build.query<
       ListAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGetApiResponse,
       ListAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGetApiArg
@@ -543,6 +650,51 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     createDirectory: build.mutation<CreateDirectoryApiResponse, CreateDirectoryApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/mkdir/${queryArg.path}`, method: "POST" }),
+    }),
+    corpusCapabilities: build.query<CorpusCapabilitiesApiResponse, CorpusCapabilitiesApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/corpus/capabilities` }),
+    }),
+    corpusBuildToc: build.mutation<CorpusBuildTocApiResponse, CorpusBuildTocApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/corpus/build-toc`,
+        method: "POST",
+        body: queryArg.buildCorpusTocRequestV1,
+      }),
+    }),
+    corpusRevectorize: build.mutation<CorpusRevectorizeApiResponse, CorpusRevectorizeApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/corpus/revectorize`,
+        method: "POST",
+        body: queryArg.revectorizeCorpusRequestV1,
+      }),
+    }),
+    corpusPurgeVectors: build.mutation<CorpusPurgeVectorsApiResponse, CorpusPurgeVectorsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/corpus/purge-vectors`,
+        method: "POST",
+        body: queryArg.purgeVectorsRequestV1,
+      }),
+    }),
+    corpusTasksGet: build.mutation<CorpusTasksGetApiResponse, CorpusTasksGetApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/corpus/tasks/get`,
+        method: "POST",
+        body: queryArg.taskGetRequestV1,
+      }),
+    }),
+    corpusTasksResult: build.mutation<CorpusTasksResultApiResponse, CorpusTasksResultApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/corpus/tasks/result`,
+        method: "POST",
+        body: queryArg.taskResultRequestV1,
+      }),
+    }),
+    corpusTasksList: build.mutation<CorpusTasksListApiResponse, CorpusTasksListApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/corpus/tasks/list`,
+        method: "POST",
+        body: queryArg.taskListRequestV1,
+      }),
     }),
     queryLogsKnowledgeFlowV1LogsQueryPost: build.mutation<
       QueryLogsKnowledgeFlowV1LogsQueryPostApiResponse,
@@ -940,6 +1092,74 @@ export type DeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteApiArg = {
   /** [AGENT USE ONLY] Explicit user ID of the asset owner (Header) */
   "X-Asset-User-ID"?: string | null;
 };
+export type UploadUserFileKnowledgeFlowV1StorageUserUploadPostApiResponse = /** status 200 Successful Response */ any;
+export type UploadUserFileKnowledgeFlowV1StorageUserUploadPostApiArg = {
+  bodyUploadUserFileKnowledgeFlowV1StorageUserUploadPost: BodyUploadUserFileKnowledgeFlowV1StorageUserUploadPost;
+};
+export type ListUserFilesKnowledgeFlowV1StorageUserGetApiResponse = /** status 200 Successful Response */ any;
+export type ListUserFilesKnowledgeFlowV1StorageUserGetApiArg = {
+  prefix?: string;
+};
+export type DownloadUserFileKnowledgeFlowV1StorageUserKeyGetApiResponse = /** status 200 Successful Response */ any;
+export type DownloadUserFileKnowledgeFlowV1StorageUserKeyGetApiArg = {
+  key: string;
+};
+export type DeleteUserFileKnowledgeFlowV1StorageUserKeyDeleteApiResponse = /** status 200 Successful Response */ any;
+export type DeleteUserFileKnowledgeFlowV1StorageUserKeyDeleteApiArg = {
+  key: string;
+};
+export type UploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPostApiResponse =
+  /** status 200 Successful Response */ any;
+export type UploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPostApiArg = {
+  agentId: string;
+  bodyUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPost: BodyUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPost;
+};
+export type ListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type ListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetApiArg = {
+  agentId: string;
+  prefix?: string;
+};
+export type DownloadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type DownloadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyGetApiArg = {
+  agentId: string;
+  key: string;
+};
+export type DeleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDeleteApiResponse =
+  /** status 200 Successful Response */ any;
+export type DeleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDeleteApiArg = {
+  agentId: string;
+  key: string;
+};
+export type UploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPostApiResponse =
+  /** status 200 Successful Response */ any;
+export type UploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPostApiArg = {
+  agentId: string;
+  targetUserId: string;
+  bodyUploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPost: BodyUploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPost;
+};
+export type ListAgentUserFilesKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type ListAgentUserFilesKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdGetApiArg = {
+  agentId: string;
+  targetUserId: string;
+  prefix?: string;
+};
+export type DownloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type DownloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGetApiArg = {
+  agentId: string;
+  targetUserId: string;
+  key: string;
+};
+export type DeleteAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyDeleteApiResponse =
+  /** status 200 Successful Response */ any;
+export type DeleteAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyDeleteApiArg = {
+  agentId: string;
+  targetUserId: string;
+  key: string;
+};
 export type ListAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGetApiResponse =
   /** status 200 Successful Response */ AvailableProcessorsResponse;
 export type ListAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGetApiArg = void;
@@ -1118,6 +1338,32 @@ export type PrintRootDirectoryApiArg = void;
 export type CreateDirectoryApiResponse = /** status 200 Successful Response */ any;
 export type CreateDirectoryApiArg = {
   path: string;
+};
+export type CorpusCapabilitiesApiResponse = /** status 200 Successful Response */ CorpusCapabilitiesV1;
+export type CorpusCapabilitiesApiArg = void;
+export type CorpusBuildTocApiResponse = /** status 200 Successful Response */ any;
+export type CorpusBuildTocApiArg = {
+  buildCorpusTocRequestV1: BuildCorpusTocRequestV1;
+};
+export type CorpusRevectorizeApiResponse = /** status 200 Successful Response */ any;
+export type CorpusRevectorizeApiArg = {
+  revectorizeCorpusRequestV1: RevectorizeCorpusRequestV1;
+};
+export type CorpusPurgeVectorsApiResponse = /** status 200 Successful Response */ any;
+export type CorpusPurgeVectorsApiArg = {
+  purgeVectorsRequestV1: PurgeVectorsRequestV1;
+};
+export type CorpusTasksGetApiResponse = /** status 200 Successful Response */ any;
+export type CorpusTasksGetApiArg = {
+  taskGetRequestV1: TaskGetRequestV1;
+};
+export type CorpusTasksResultApiResponse = /** status 200 Successful Response */ any;
+export type CorpusTasksResultApiArg = {
+  taskResultRequestV1: TaskResultRequestV1;
+};
+export type CorpusTasksListApiResponse = /** status 200 Successful Response */ any;
+export type CorpusTasksListApiArg = {
+  taskListRequestV1: TaskListRequestV1;
 };
 export type QueryLogsKnowledgeFlowV1LogsQueryPostApiResponse = /** status 200 Successful Response */ LogQueryResult;
 export type QueryLogsKnowledgeFlowV1LogsQueryPostApiArg = {
@@ -1560,6 +1806,24 @@ export type BodyUploadUserAssetKnowledgeFlowV1UserAssetsUploadPost = {
   /** [AGENT USE ONLY] Explicit user ID of the asset owner */
   user_id_override?: string | null;
 };
+export type BodyUploadUserFileKnowledgeFlowV1StorageUserUploadPost = {
+  /** Binary payload */
+  file: Blob;
+  /** Logical path inside the user's space */
+  key?: string | null;
+};
+export type BodyUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPost = {
+  /** Binary payload */
+  file: Blob;
+  /** Logical path inside the agent's config space */
+  key?: string | null;
+};
+export type BodyUploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPost = {
+  /** Binary payload */
+  file: Blob;
+  /** Logical path inside the agent-user space */
+  key?: string | null;
+};
 export type ProcessorConfig = {
   /** The file extension this processor handles (e.g., '.pdf') */
   prefix: string;
@@ -1861,6 +2125,78 @@ export type ResourceUpdate = {
 export type BodyWriteFile = {
   data: string;
 };
+export type ToolSpecV1 = {
+  name: string;
+  summary: string;
+  request_schema: {
+    [key: string]: any;
+  };
+  async_task?: boolean;
+};
+export type CorpusCapabilitiesV1 = {
+  version?: "v1";
+  tools: ToolSpecV1[];
+};
+export type CorpusScopeV1 = {
+  library_id?: string | null;
+  project_id?: string | null;
+  tag_ids?: string[];
+  document_uids?: string[];
+  source_tag?: string | null;
+};
+export type TocBuildOptionsV1 = {
+  max_depth?: number;
+  max_sections?: number;
+  include_gaps?: boolean;
+  gap_sensitivity?: "low" | "medium" | "high";
+  output_format?: "markdown" | "json" | "both";
+  /** e.g. 'fr', 'en' */
+  language?: string | null;
+};
+export type BuildCorpusTocRequestV1 = {
+  version?: "v1";
+  scope: CorpusScopeV1;
+  options?: TocBuildOptionsV1;
+  title?: string | null;
+  thread_id?: string | null;
+  exchange_id?: string | null;
+};
+export type RevectorizeOptionsV1 = {
+  mode?: "full" | "incremental";
+  force?: boolean;
+  embedding_model?: string | null;
+};
+export type RevectorizeCorpusRequestV1 = {
+  version?: "v1";
+  scope: CorpusScopeV1;
+  options?: RevectorizeOptionsV1;
+  thread_id?: string | null;
+  exchange_id?: string | null;
+};
+export type PurgeVectorsOptionsV1 = {
+  purge_scope?: "vectors_only" | "vectors_and_chunks";
+  dry_run?: boolean;
+};
+export type PurgeVectorsRequestV1 = {
+  version?: "v1";
+  scope: CorpusScopeV1;
+  options?: PurgeVectorsOptionsV1;
+  thread_id?: string | null;
+  exchange_id?: string | null;
+};
+export type TaskGetRequestV1 = {
+  task_id: string;
+};
+export type TaskResultRequestV1 = {
+  task_id: string;
+};
+export type TaskListRequestV1 = {
+  thread_id?: string | null;
+  exchange_id?: string | null;
+  operation?: string | null;
+  status?: ("queued" | "running" | "succeeded" | "failed" | "canceled") | null;
+  limit?: number;
+};
 export type LogEventDto = {
   ts: number;
   level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";
@@ -2130,6 +2466,24 @@ export const {
   useGetUserAssetKnowledgeFlowV1UserAssetsKeyGetQuery,
   useLazyGetUserAssetKnowledgeFlowV1UserAssetsKeyGetQuery,
   useDeleteUserAssetKnowledgeFlowV1UserAssetsKeyDeleteMutation,
+  useUploadUserFileKnowledgeFlowV1StorageUserUploadPostMutation,
+  useListUserFilesKnowledgeFlowV1StorageUserGetQuery,
+  useLazyListUserFilesKnowledgeFlowV1StorageUserGetQuery,
+  useDownloadUserFileKnowledgeFlowV1StorageUserKeyGetQuery,
+  useLazyDownloadUserFileKnowledgeFlowV1StorageUserKeyGetQuery,
+  useDeleteUserFileKnowledgeFlowV1StorageUserKeyDeleteMutation,
+  useUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPostMutation,
+  useListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetQuery,
+  useLazyListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetQuery,
+  useDownloadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyGetQuery,
+  useLazyDownloadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyGetQuery,
+  useDeleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDeleteMutation,
+  useUploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdUploadPostMutation,
+  useListAgentUserFilesKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdGetQuery,
+  useLazyListAgentUserFilesKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdGetQuery,
+  useDownloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGetQuery,
+  useLazyDownloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGetQuery,
+  useDeleteAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyDeleteMutation,
   useListAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGetQuery,
   useLazyListAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGetQuery,
   useRegisterProcessingPipelineKnowledgeFlowV1ProcessingPipelinesPostMutation,
@@ -2182,6 +2536,14 @@ export const {
   usePrintRootDirectoryQuery,
   useLazyPrintRootDirectoryQuery,
   useCreateDirectoryMutation,
+  useCorpusCapabilitiesQuery,
+  useLazyCorpusCapabilitiesQuery,
+  useCorpusBuildTocMutation,
+  useCorpusRevectorizeMutation,
+  useCorpusPurgeVectorsMutation,
+  useCorpusTasksGetMutation,
+  useCorpusTasksResultMutation,
+  useCorpusTasksListMutation,
   useQueryLogsKnowledgeFlowV1LogsQueryPostMutation,
   useListGroupsKnowledgeFlowV1GroupsGetQuery,
   useLazyListGroupsKnowledgeFlowV1GroupsGetQuery,

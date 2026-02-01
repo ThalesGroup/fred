@@ -12,17 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import ForceGraph3D, { ForceGraphMethods } from "react-force-graph-3d";
-import { GraphPoint } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
-import { buildOverlapMap, getNodeId, isAdditiveEvent, makePosKey } from "./selectionUtils";
-import { Box, IconButton, Menu, MenuItem, TextField, InputAdornment, CircularProgress, Tooltip } from "@mui/material";
 import HubIcon from "@mui/icons-material/Hub";
 import PaletteIcon from "@mui/icons-material/Palette";
 import SendIcon from "@mui/icons-material/Send";
+import { Box, CircularProgress, IconButton, InputAdornment, Menu, MenuItem, TextField } from "@mui/material";
+import { useEffect, useMemo, useRef, useState } from "react";
+import ForceGraph3D, { ForceGraphMethods } from "react-force-graph-3d";
 import { useTranslation } from "react-i18next";
 import { useLocalStorageState } from "../../hooks/useLocalStorageState.ts";
-import { useProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostMutation } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
+import {
+  GraphPoint,
+  useProjectTextKnowledgeFlowV1ModelsUmapRefTagUidProjectTextPostMutation,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+import { buildOverlapMap, getNodeId, isAdditiveEvent, makePosKey } from "./selectionUtils";
 
 export type ColorMode = "none" | "3d" | "vector" | "distance";
 
@@ -398,7 +401,7 @@ ${bodySafe}
           gap: 1,
         }}
       >
-        <Tooltip title={t("graph3DView.toggleLinks", "Afficher/masquer les liens")}>
+        <SimpleTooltip title={t("graph3DView.toggleLinks", "Afficher/masquer les liens")}>
           <IconButton
             size="small"
             onClick={handleToggleLinks}
@@ -410,9 +413,9 @@ ${bodySafe}
           >
             <HubIcon fontSize="small" />
           </IconButton>
-        </Tooltip>
+        </SimpleTooltip>
 
-        <Tooltip title={t("graph3DView.colorMode.title", "Mode de coloration")}>
+        <SimpleTooltip title={t("graph3DView.colorMode.title", "Mode de coloration")}>
           <IconButton
             size="small"
             onClick={handleColorMenuClick}
@@ -424,7 +427,7 @@ ${bodySafe}
           >
             <PaletteIcon fontSize="small" />
           </IconButton>
-        </Tooltip>
+        </SimpleTooltip>
 
         <Menu
           anchorEl={anchorEl}

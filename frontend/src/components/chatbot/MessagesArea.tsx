@@ -13,14 +13,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { memo, useMemo } from "react";
-import { Box, Grid2, Tooltip } from "@mui/material";
+import { Box, Grid2 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
+import React, { memo, useMemo } from "react";
 import { AnyAgent } from "../../common/agent";
 import { AgentChipMini } from "../../common/AgentChip";
 import DotsLoader from "../../common/DotsLoader";
-import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
+import { AwaitingHumanEvent, ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras, hasNonEmptyText } from "./ChatBotUtils";
+import HitlInlineCard from "./HitlInlineCard";
 import MessageCard from "./MessageCard";
 import ReasoningStepsAccordion from "./ReasoningStepsAccordion";
 import Sources from "./Sources";
@@ -35,6 +37,9 @@ type Props = {
   libraryNameById?: Record<string, string>;
   chatContextNameById?: Record<string, string>;
   hiddenUserExchangeIds?: Set<string>;
+  hitlEvent?: AwaitingHumanEvent | null;
+  onHitlSubmit?: (choiceId: string, freeText?: string) => void;
+  onHitlCancel?: () => void;
 };
 
 function TypingIndicatorRow({ agent }: { agent: AnyAgent }) {
@@ -42,14 +47,14 @@ function TypingIndicatorRow({ agent }: { agent: AnyAgent }) {
   return (
     <Grid2 container marginBottom={1} sx={{ position: "relative" }}>
       <Grid2 size="auto" paddingTop={2}>
-        <Tooltip title={`${agent.name}: ${agent.tuning.role}`}>
+        <SimpleTooltip title={`${agent.name}: ${agent.tuning.role}`}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
             <AgentChipMini agent={agent} />
             <Box sx={{ display: "flex", alignItems: "center", transform: "translateY(1px) scale(0.9)" }}>
               <DotsLoader dotSize="4px" dotColor={theme.palette.text.secondary} />
             </Box>
           </Box>
-        </Tooltip>
+        </SimpleTooltip>
       </Grid2>
     </Grid2>
   );
@@ -64,6 +69,9 @@ function Area({
   libraryNameById,
   chatContextNameById,
   hiddenUserExchangeIds,
+  hitlEvent,
+  onHitlSubmit,
+  onHitlCancel,
 }: Props) {
   // Hover highlight in Sources (syncs with [n] markers inside MessageCard)
   const [highlightUid, setHighlightUid] = React.useState<string | null>(null);
@@ -76,7 +84,9 @@ function Area({
   const content = useMemo(() => {
     const sorted = [...messages].sort((a, b) => a.rank - b.rank);
     const activeExchangeKey =
-      isWaiting && sorted.length ? `${sorted[sorted.length - 1].session_id}-${sorted[sorted.length - 1].exchange_id}` : null;
+      isWaiting && sorted.length
+        ? `${sorted[sorted.length - 1].session_id}-${sorted[sorted.length - 1].exchange_id}`
+        : null;
 
     const grouped = new Map<string, ChatMessage[]>();
     for (const msg of sorted) {
@@ -174,10 +184,18 @@ function Area({
         );
       }
 
-      const hasAssistantReply = finals.some((m) => m.role === "assistant") || others.some((m) => m.role === "assistant");
+      const hasAssistantReply =
+        finals.some((m) => m.role === "assistant") || others.some((m) => m.role === "assistant");
       if (isActiveExchange && isWaiting && !hasAssistantReply) {
         const indicatorAgent = resolveAgent(userMessage ?? group[group.length - 1]);
         elements.push(<TypingIndicatorRow key={`typing-${groupKey}`} agent={indicatorAgent} />);
+      }
+
+      // Inline HITL card (awaiting human) for this exchange
+      if (hitlEvent && hitlEvent.session_id === group[0].session_id && hitlEvent.exchange_id === group[0].exchange_id) {
+        elements.push(
+          <HitlInlineCard key={`hitl-${groupKey}`} event={hitlEvent} onSubmit={onHitlSubmit} onCancel={onHitlCancel} />,
+        );
       }
 
       // If we already have a curated set and there is no final yet, show it early

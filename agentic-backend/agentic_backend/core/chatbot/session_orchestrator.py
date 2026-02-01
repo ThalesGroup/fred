@@ -47,10 +47,12 @@ from agentic_backend.application_context import (
     get_default_model,
 )
 from agentic_backend.common.kf_fast_text_client import KfFastTextClient
+from agentic_backend.common.mcp_utils import MCPConnectionError
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.chatbot.chat_error_replies import human_error_message
 from agentic_backend.core.chatbot.chat_schema import (
     AttachmentRef,
     Channel,
@@ -264,11 +266,43 @@ class SessionOrchestrator:
         runtime_context.session_id = session.id
         # 2) Check if an agent instance can be created/initialized/reused
         t_agent_init = time.monotonic()
-        agent, is_cached = await self.agent_factory.create_and_init(
-            agent_name=agent_name,
-            runtime_context=runtime_context,
-            session_id=session.id,
-        )
+        try:
+            agent, is_cached = await self.agent_factory.create_and_init(
+                agent_name=agent_name,
+                runtime_context=runtime_context,
+                session_id=session.id,
+            )
+        except MCPConnectionError as mcp_err:
+            self.kpi.count(
+                "chat.exchange_error",
+                1,
+                dims={"agent_name": agent_name},
+                actor=actor,
+            )
+            logger.error(
+                "[SESSIONS] MCP init failed for agent=%s session=%s err=%s",
+                agent_name,
+                session.id,
+                mcp_err,
+            )
+            lang = (runtime_context.language or "").lower() if runtime_context else ""
+            if lang.startswith("fr"):
+                user_msg = (
+                    "L'agent n'a pas pu démarrer : au moins un serveur MCP requis est inaccessible. "
+                    "Réessayez plus tard ou contactez le support."
+                )
+            else:
+                user_msg = (
+                    "The agent cannot start because a required MCP server is unreachable. "
+                    "Please try again later or contact support."
+                )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "mcp_connection_failed",
+                    "message": user_msg,
+                },
+            )
         _record_phase_metric(
             kpi=self.kpi,
             phase="agent_init",
@@ -402,16 +436,7 @@ class SessionOrchestrator:
                     )
                     raise
                 except Exception as e:
-                    err_text = str(e)
-                    user_msg = (
-                        "I encountered an unexpected error. Please try again later."
-                    )
-                    if "timeout" in err_text.lower() or "timed out" in err_text.lower():
-                        user_msg = "The operation timed out because it took too long. Please try reducing the scope of your request or the number of documents."
-                    elif "context length" in err_text.lower():
-                        user_msg = "The request exceeded the model's context limit. Please try with shorter documents or fewer attachments."
-                    elif "rate limit" in err_text.lower():
-                        user_msg = "I'm receiving too many requests right now. Please wait a moment and try again."
+                    user_msg = human_error_message(runtime_context, e)
                     agent_msgs.append(
                         ChatMessage(
                             session_id=session.id,

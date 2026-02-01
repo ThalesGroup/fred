@@ -28,13 +28,14 @@ import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState, 
 import AudioController from "../AudioController.tsx";
 import AudioRecorder from "../AudioRecorder.tsx";
 
-import { Box, Grid2, IconButton, Paper, Stack, TextField, Tooltip, useTheme } from "@mui/material";
+import { Box, Grid2, IconButton, Paper, Stack, TextField, useTheme } from "@mui/material";
 
 import { useTranslation } from "react-i18next";
 import { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 
 // Import the new sub-components
 import { AnyAgent } from "../../../common/agent.ts";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips.tsx";
 import { AgentChatOptions, type RuntimeContext } from "../../../slices/agentic/agenticOpenApi.ts";
 import { AgentSelector } from "./AgentSelector.tsx";
 type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
@@ -211,7 +212,7 @@ function UserInput(
               }}
             >
               {supportsAudioRecording && (
-                <Tooltip title={isRecording ? t("chatbot.stopRecording") : t("chatbot.recordAudio")}>
+                <SimpleTooltip title={isRecording ? t("chatbot.stopRecording") : t("chatbot.recordAudio")}>
                   <span>
                     <IconButton
                       aria-label="record-audio"
@@ -223,10 +224,10 @@ function UserInput(
                       {isRecording ? <StopIcon fontSize="small" /> : <MicIcon fontSize="small" />}
                     </IconButton>
                   </span>
-                </Tooltip>
+                </SimpleTooltip>
               )}
               {!isWaiting && !isHydratingSession && (
-                <Tooltip title={t("chatbot.sendMessage", "Send message")}>
+                <SimpleTooltip title={t("chatbot.sendMessage", "Send message")}>
                   <span>
                     <IconButton
                       aria-label="send-message"
@@ -238,11 +239,11 @@ function UserInput(
                       <ArrowUpwardIcon fontSize="inherit" />
                     </IconButton>
                   </span>
-                </Tooltip>
+                </SimpleTooltip>
               )}
               {isWaiting && onStop && (
                 <>
-                  <Tooltip title={t("chatbot.stopResponse", "Stop response")}>
+                  <SimpleTooltip title={t("chatbot.stopResponse", "Stop response")}>
                     <span>
                       <IconButton
                         aria-label="stop-response"
@@ -253,7 +254,7 @@ function UserInput(
                         <StopIcon fontSize="inherit" />
                       </IconButton>
                     </span>
-                  </Tooltip>
+                  </SimpleTooltip>
                 </>
               )}
             </Box>
@@ -286,11 +287,11 @@ function UserInput(
               ) : audioBlob && displayAudioController ? (
                 <Stack direction="row" alignItems="center" spacing={1} sx={{ px: "12px", pt: "6px", pb: "56px" }}>
                   <AudioController audioUrl={URL.createObjectURL(audioBlob)} color={theme.palette.text.primary} />
-                  <Tooltip title={t("chatbot.hideAudio")}>
+                  <SimpleTooltip title={t("chatbot.hideAudio")}>
                     <IconButton aria-label="hide-audio" onClick={() => setDisplayAudioController(false)}>
                       <VisibilityOffIcon />
                     </IconButton>
-                  </Tooltip>
+                  </SimpleTooltip>
                 </Stack>
               ) : (
                 <Paper elevation={2} sx={{ px: 2, pt: 1.5, pb: 7 }}>

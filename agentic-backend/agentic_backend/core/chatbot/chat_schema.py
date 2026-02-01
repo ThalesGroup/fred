@@ -312,6 +312,69 @@ class ErrorEvent(BaseModel):
     session_id: Optional[str] = None
 
 
+class HitlChoice(BaseModel):
+    """Choice option surfaced to the user during HITL."""
+
+    id: str
+    label: str
+    description: Optional[str] = None
+    default: Optional[bool] = None
+
+
+class HitlPayload(BaseModel):
+    """
+    Normalized HITL payload sent by agents when calling `interrupt()`.
+    Backwards-compatible: extra keys are preserved for legacy agents/UI.
+    """
+
+    stage: Optional[str] = None
+    title: Optional[str] = None
+    question: Optional[str] = None
+    choices: Optional[List[HitlChoice]] = None
+    free_text: Optional[bool] = None
+    metadata: Optional[Dict[str, Any]] = None
+    checkpoint_id: Optional[str] = None
+
+    model_config = ConfigDict(extra="allow")
+
+
+def validate_hitl_payload(raw: Any) -> HitlPayload:
+    """
+    Central HITL payload validation (runtime enforcement).
+    Accepts extra keys but enforces minimal UX safety:
+      - question or title must be present and non-empty
+      - choices, if provided, must be non-empty with unique ids and max one default
+    """
+    payload = HitlPayload.model_validate(raw)
+
+    # question/title presence
+    has_question = bool((payload.question or "").strip())
+    has_title = bool((payload.title or "").strip())
+    if not (has_question or has_title):
+        raise ValueError("HITL payload requires a non-empty 'question' or 'title'.")
+
+    # choices validation
+    if payload.choices is not None:
+        if len(payload.choices) == 0:
+            raise ValueError("HITL payload 'choices' must be a non-empty list.")
+        ids = [c.id.strip() for c in payload.choices if isinstance(c.id, str)]
+        if any(not cid for cid in ids):
+            raise ValueError("HITL payload 'choices' entries must have a non-empty id.")
+        if len(ids) != len(set(ids)):
+            raise ValueError("HITL payload 'choices' ids must be unique.")
+        defaults = [c for c in payload.choices if c.default]
+        if len(defaults) > 1:
+            raise ValueError(
+                "HITL payload 'choices' cannot have more than one default choice."
+            )
+
+    # metadata: best-effort check for JSON-serializable dict
+    if payload.metadata is not None and not isinstance(payload.metadata, dict):
+        raise ValueError("HITL payload 'metadata' must be a dictionary if provided.")
+
+    return payload
+
+
 class AwaitingHumanEvent(BaseModel):
     """
     Emitted when an agent interrupts and awaits human input (HITL).
@@ -321,7 +384,8 @@ class AwaitingHumanEvent(BaseModel):
     type: Literal["awaiting_human"] = "awaiting_human"
     session_id: str
     exchange_id: str
-    payload: Dict[str, Any]
+    # Accept the normalized schema while preserving legacy payloads that may include arbitrary keys.
+    payload: Union[HitlPayload, Dict[str, Any]]
 
 
 ChatEvent = Annotated[

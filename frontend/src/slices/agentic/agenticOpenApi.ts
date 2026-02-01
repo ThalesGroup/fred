@@ -805,6 +805,34 @@ export type ChatMessage = {
   )[];
   metadata?: ChatMetadata;
 };
+export type HitlChoice = {
+  id: string;
+  label: string;
+  description?: string | null;
+  default?: boolean | null;
+};
+export type HitlPayload = {
+  stage?: string | null;
+  title?: string | null;
+  question?: string | null;
+  choices?: HitlChoice[] | null;
+  free_text?: boolean | null;
+  metadata?: {
+    [key: string]: any;
+  } | null;
+  checkpoint_id?: string | null;
+  [key: string]: any;
+};
+export type AwaitingHumanEvent = {
+  type?: "awaiting_human";
+  session_id: string;
+  exchange_id: string;
+  payload:
+    | HitlPayload
+    | {
+        [key: string]: any;
+      };
+};
 export type ChatAskInput = {
   agent_name: string;
   runtime_context?: RuntimeContext | null;
@@ -885,6 +913,10 @@ export type ChatbotRuntimeSummary = {
 export type EchoEnvelope = {
   kind:
     | "ChatMessage"
+    | "AwaitingHumanEvent"
+    | "MessagePart"
+    | "HitlPayload"
+    | "HitlChoice"
     | "StreamEvent"
     | "SessionEvent"
     | "FinalEvent"
@@ -899,6 +931,32 @@ export type EchoEnvelope = {
   /** Schema payload being echoed */
   payload:
     | ChatMessage
+    | AwaitingHumanEvent
+    | (
+        | ({
+            type: "code";
+          } & CodePart)
+        | ({
+            type: "geo";
+          } & GeoPart)
+        | ({
+            type: "image_url";
+          } & ImageUrlPart)
+        | ({
+            type: "link";
+          } & LinkPart)
+        | ({
+            type: "text";
+          } & TextPart)
+        | ({
+            type: "tool_call";
+          } & ToolCallPart)
+        | ({
+            type: "tool_result";
+          } & ToolResultPart)
+      )
+    | HitlPayload
+    | HitlChoice
     | ChatAskInput
     | StreamEvent
     | SessionEvent

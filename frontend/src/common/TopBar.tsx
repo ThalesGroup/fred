@@ -13,9 +13,10 @@
 // limitations under the License.
 
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import { Box, IconButton, Stack, Tooltip, Typography, useTheme } from "@mui/material";
+import { Box, IconButton, Stack, Typography, useTheme } from "@mui/material";
 import { ReactNode } from "react";
 import InvisibleLink from "../components/InvisibleLink";
+import { SimpleTooltip } from "../shared/ui/tooltips/Tooltips";
 
 interface TopBarProps {
   title: string;
@@ -56,22 +57,22 @@ export const TopBar = ({ title, description, children, backTo }: TopBarProps) =>
         )}
 
         {/* Title */}
-        <Tooltip
-          slotProps={{
-            tooltip: {
-              sx: {
-                fontSize: "0.875rem", // Smaller font size (≈ 14px)
-              },
-            },
-          }}
+        <SimpleTooltip
+          // ATTENTION slotProps={{
+          //   tooltip: {
+          //     sx: {
+          //       fontSize: "0.875rem", // Smaller font size (≈ 14px)
+          //     },
+          //   },
+          // }}
           title={description}
           placement="bottom-end"
-          arrow
+          // arrow
         >
           <Typography variant="h6" component="h1">
             {title}
           </Typography>
-        </Tooltip>
+        </SimpleTooltip>
       </Box>
 
       {/* Optional right part */}

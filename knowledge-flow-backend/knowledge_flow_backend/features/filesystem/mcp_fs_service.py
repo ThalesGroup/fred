@@ -18,24 +18,33 @@ from typing import List
 from fred_core import Action, FilesystemResourceInfoResult, KeycloakUser, Resource, authorize
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.features.filesystem.workspace_filesystem import WorkspaceFilesystem
 
 logger = logging.getLogger(__name__)
 
 
-class FilesystemService:
+class McpFilesystemService:
     """
     Business-facing service for asynchronous filesystem operations.
 
-    Each user has an isolated filesystem namespace:
-        <root>/<user_id>
-    where <root> comes from the filesystem backend configuration:
-        - Local: ~/.fred/knowledge-flow/filesystem/
-        - MinIO: bucket "filesystem"
+    - Generic FS backend (local or MinIO) injected via ApplicationContext.
+    - Per-user isolation happens in two layers:
+        1) `_resolve` keeps backward-compat paths `<root>/<uid>/...` for existing callers.
+        2) `user_storage` provides the new canonical namespace `users/<uid>/...` used by
+           agents/exports so that user files and MCP FS share the same bucket.
+
+    Examples
+    --------
+    >>> await service.list(user)                 # lists <root>/<uid>/
+    >>> await service.user_storage.put(user, "reports/summary.txt", b"hi")
+    >>> await service.user_storage.get_text(user, "reports/summary.txt")
     """
 
     def __init__(self):
         context = ApplicationContext.get_instance()
         self.fs = context.get_filesystem()
+        # User-scoped storage facade (users/<uid>/...). Kept close to FS for now.
+        self.scoped_storage = WorkspaceFilesystem(self.fs)
 
     #
     # User-scoping logic

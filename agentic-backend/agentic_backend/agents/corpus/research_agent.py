@@ -135,8 +135,28 @@ class ResearchAgent(AgentFlow):
         interrupt(
             {
                 "stage": "gather",
-                "question": "Les données récoltées sont-elles correctes ?",
-                "data": state.get("research_data"),
+                "title": "Validate gathered material",
+                "question": "Are these collected sources acceptable to continue?",
+                "choices": [
+                    {
+                        "id": "proceed",
+                        "label": "Yes, use them",
+                        "description": "Data looks good; move to analysis.",
+                        "default": True,
+                    },
+                    {
+                        "id": "retry",
+                        "label": "No, re-collect",
+                        "description": "Discard current gather step and try again.",
+                    },
+                    {
+                        "id": "adjust",
+                        "label": "Refine scope then continue",
+                        "description": "I’ll add a short note with tweaks.",
+                    },
+                ],
+                "free_text": True,
+                "metadata": {"sample": str(state.get("research_data"))[:400]},
             }
         )
 
@@ -159,8 +179,30 @@ class ResearchAgent(AgentFlow):
         interrupt(
             {
                 "stage": "analyze",
-                "question": "Validez-vous l'analyse réalisée ?",
-                "data": state.get("messages", []),
+                "title": "Validate insights",
+                "question": "Do these preliminary findings look correct?",
+                "choices": [
+                    {
+                        "id": "approve_analysis",
+                        "label": "Looks correct",
+                        "description": "Proceed to drafting with these insights.",
+                        "default": True,
+                    },
+                    {
+                        "id": "revise_analysis",
+                        "label": "Needs revision",
+                        "description": "Re-run analysis with adjustments I’ll describe.",
+                    },
+                    {
+                        "id": "deepen_analysis",
+                        "label": "Go deeper",
+                        "description": "Increase depth/coverage before drafting.",
+                    },
+                ],
+                "free_text": True,
+                "metadata": {
+                    "messages": [m.content for m in state.get("messages", [])][-3:]
+                },
             }
         )
 
@@ -175,8 +217,35 @@ class ResearchAgent(AgentFlow):
         interrupt(
             {
                 "stage": "draft",
-                "question": "Souhaitez-vous que je génère le rapport final avec ces éléments ?",
-                "data": state.get("messages", []),
+                "title": "Ready to draft",
+                "question": "Choose how to finalize the report:",
+                "choices": [
+                    {
+                        "id": "draft_full",
+                        "label": "Draft full report",
+                        "description": "Generate the complete summary now.",
+                        "default": True,
+                    },
+                    {
+                        "id": "draft_brief",
+                        "label": "Draft brief version",
+                        "description": "Produce a concise one-pager.",
+                    },
+                    {
+                        "id": "add_notes",
+                        "label": "Add guidance first",
+                        "description": "I’ll type specific instructions, then draft.",
+                    },
+                    {
+                        "id": "cancel",
+                        "label": "Stop here",
+                        "description": "End the flow without drafting.",
+                    },
+                ],
+                "free_text": True,
+                "metadata": {
+                    "messages": [m.content for m in state.get("messages", [])][-3:]
+                },
             }
         )
 

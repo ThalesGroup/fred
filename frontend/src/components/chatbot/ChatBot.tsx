@@ -51,6 +51,7 @@ import ChatBotView from "./ChatBotView.tsx";
 import { useConversationOptionsController } from "./ConversationOptionsController.tsx";
 import { toDisplayChunks } from "./messageParts.ts";
 import { UserInputContent } from "./user_input/UserInput.tsx";
+import { AwaitingHumanEvent } from "../../slices/agentic/agenticOpenApi";
 
 const HISTORY_TEXT_LIMIT = 1200;
 const LOG_GENIUS_CONTEXT_TURNS = 3;
@@ -58,13 +59,6 @@ const LOG_GENIUS_CONTEXT_MAX_CHARS = 4000;
 const LOG_GENIUS_TEXT_CHUNK_MAX = 600;
 const LOG_GENIUS_CODE_CHUNK_MAX = 200;
 const MAX_DEBUG_EVENTS = 60;
-
-type AwaitingHumanEvent = {
-  type: "awaiting_human";
-  session_id: string;
-  exchange_id: string;
-  payload: any;
-};
 
 const ellipsize = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}...` : text);
 
@@ -1043,7 +1037,7 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
   };
 
   const respondHumanInLoop = useCallback(
-    async (answer: boolean, eventOverride?: AwaitingHumanEvent | null) => {
+    async (answerOrChoice: string | boolean, freeText?: string, eventOverride?: AwaitingHumanEvent | null) => {
       const target = eventOverride || pendingHitl;
       if (!target || !chatSessionId) return;
       try {
@@ -1057,7 +1051,12 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
           type: "human_resume",
           session_id: chatSessionId,
           exchange_id: target.exchange_id,
-          payload: { answer, checkpoint_id: (target as any)?.payload?.checkpoint_id },
+          payload: {
+            answer: answerOrChoice,
+            choice_id: typeof answerOrChoice === "string" ? answerOrChoice : undefined,
+            text: freeText,
+            checkpoint_id: (target as any)?.payload?.checkpoint_id,
+          },
           agent_name: currentAgent?.name,
           access_token: accessToken || undefined,
           refresh_token: refreshToken || undefined,
@@ -1077,8 +1076,8 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
         setPendingHitl(null);
         beginWaiting();
       } catch (err) {
-      console.error("[CHATBOT] Failed to send HITL resume", err);
-      showError({ summary: "Connection Error", detail: "Could not send your answer — connection failed." });
+        console.error("[CHATBOT] Failed to send HITL resume", err);
+        showError({ summary: "Connection Error", detail: "Could not send your answer — connection failed." });
       }
     },
     [beginWaiting, chatSessionId, currentAgent, pendingHitl, setupWebSocket, showError],
@@ -1125,6 +1124,23 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
     copyFeedback,
     hasDebugHistory: debugEvents.length > 0,
   };
+
+  const handleHitlSubmit = useCallback(
+    (choiceId: string, freeText?: string) => {
+      if (!pendingHitl) return;
+      const hasExplicitChoices = Boolean(pendingHitl.payload?.choices?.length);
+      let answer: string | boolean = choiceId;
+      if (!hasExplicitChoices) {
+        if (choiceId === "yes") answer = true;
+        else if (choiceId === "no") answer = false;
+      }
+      respondHumanInLoop(answer, freeText, pendingHitl);
+    },
+    [pendingHitl, respondHumanInLoop],
+  );
+
+  const handleHitlCancel = useCallback(() => setPendingHitl(null), []);
+
   return (
     <>
       <ChatBotView
@@ -1161,58 +1177,10 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
         setSearchRagScope={setSearchRagScope}
         setDeepSearchEnabled={setDeepSearchEnabled}
         debugWidget={debugWidgetProps}
+        hitlEvent={pendingHitl}
+        onHitlSubmit={handleHitlSubmit}
+        onHitlCancel={handleHitlCancel}
       />
-      {pendingHitl ? (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.4)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-          }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 8,
-              padding: 24,
-              maxWidth: 520,
-              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
-            }}
-          >
-            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Validation requise</h3>
-            <p style={{ marginTop: 0 }}>
-              {pendingHitl.payload?.question ||
-                pendingHitl.payload?.prompt ||
-                pendingHitl.payload?.message ||
-                "Confirmez-vous cette étape ?"}
-            </p>
-            <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
-              <button
-                onClick={() => respondHumanInLoop(true, pendingHitl)}
-                style={{ padding: "8px 14px", background: "#0b6efd", color: "#fff", border: "none", borderRadius: 6 }}
-              >
-                Oui
-              </button>
-              <button
-                onClick={() => respondHumanInLoop(false, pendingHitl)}
-                style={{ padding: "8px 14px", background: "#f44336", color: "#fff", border: "none", borderRadius: 6 }}
-              >
-                Non
-              </button>
-              <button
-                onClick={() => setPendingHitl(null)}
-                style={{ padding: "8px 14px", background: "#e0e0e0", border: "none", borderRadius: 6 }}
-              >
-                Annuler
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </>
   );
 };

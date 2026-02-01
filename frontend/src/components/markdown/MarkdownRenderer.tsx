@@ -17,7 +17,6 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 // import DownloadIcon from "@mui/icons-material/Download"; // REMOVED: Mermaid Download
 import { Box, IconButton, Typography, useTheme } from "@mui/material";
 import "katex/dist/katex.min.css";
-import Mermaid from "./Mermaid.tsx";
 import { createElement, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -32,6 +31,7 @@ import type { PluggableList } from "unified";
 import { visit } from "unist-util-visit";
 import { useLazyDownloadMarkdownMediaBlobQuery } from "../../slices/knowledgeFlow/knowledgeFlowApi.blob";
 import { getMarkdownComponents } from "./GetMarkdownComponents";
+import Mermaid from "./Mermaid.tsx";
 
 // --- NEW CITATION INTERFACES ---
 interface CitationHooks {
@@ -95,12 +95,10 @@ const extractMediaInfo = (src?: string, fallbackDocumentUid?: string): MediaInfo
 
 type AuthenticatedImageProps = JSX.IntrinsicElements["img"] & { documentUidForMedia?: string };
 
-const AuthenticatedMarkdownImage: React.FC<AuthenticatedImageProps> = ({
-  documentUidForMedia,
-  src,
-  ...rest
-}) => {
-  const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(() => (src?.startsWith("data:") ? src : undefined));
+const AuthenticatedMarkdownImage: React.FC<AuthenticatedImageProps> = ({ documentUidForMedia, src, ...rest }) => {
+  const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(() =>
+    src?.startsWith("data:") ? src : undefined,
+  );
   const [fetchMedia] = useLazyDownloadMarkdownMediaBlobQuery();
 
   useEffect(() => {
@@ -242,11 +240,11 @@ const CodeBlockContainer: React.FC<CodeBlockContainerProps> = ({
 
           {/* Download Button for Diagrams (REMOVED) */}
           {/* {isMermaid && (
-            <Tooltip title="Download Diagram (SVG)" placement="top">
+            <SimpleTooltip title="Download Diagram (SVG)" placement="top">
               <IconButton size="small" onClick={handleDownload} color="default">
                 <DownloadIcon fontSize="inherit" />
               </IconButton>
-            </Tooltip>
+            </SimpleTooltip>
           )} */}
         </Box>
       </Box>

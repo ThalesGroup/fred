@@ -60,6 +60,8 @@ from agentic_backend.core.chatbot.chat_schema import (
     ChatWsInput,
     ErrorEvent,
     FinalEvent,
+    HitlChoice,
+    HitlPayload,
     HumanResumeInput,
     MessagePart,
     Role,
@@ -149,6 +151,10 @@ def _paginate_message_text(
 
 EchoPayload = Union[
     ChatMessage,
+    AwaitingHumanEvent,
+    MessagePart,
+    HitlPayload,
+    HitlChoice,
     ChatAskInput,
     StreamEvent,
     SessionEvent,
@@ -167,6 +173,10 @@ EchoPayload = Union[
 class EchoEnvelope(BaseModel):
     kind: Literal[
         "ChatMessage",
+        "AwaitingHumanEvent",
+        "MessagePart",
+        "HitlPayload",
+        "HitlChoice",
         "StreamEvent",
         "SessionEvent",
         "FinalEvent",

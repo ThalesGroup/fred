@@ -13,9 +13,10 @@
 // limitations under the License.
 
 import ShieldIcon from "@mui/icons-material/Shield";
-import { Box, Card, Chip, SvgIcon, Tooltip, Typography } from "@mui/material";
-import { VectorSearchHit } from "../../slices/agentic/agenticOpenApi";
+import { Box, Card, Chip, SvgIcon, Typography } from "@mui/material";
 import { mimeMeta } from "../../common/mimeUtils";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
+import { VectorSearchHit } from "../../slices/agentic/agenticOpenApi";
 
 export function SourceTile({
   documentId,
@@ -68,11 +69,11 @@ export function SourceTile({
     >
       {/* HEADER LINE WITH ICON + TITLE */}
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
-        <Tooltip title={label}>
+        <SimpleTooltip title={label}>
           <SvgIcon component={Icon} inheritViewBox sx={{ fontSize: 20, color: "text.secondary", mt: "2px" }} />
-        </Tooltip>
+        </SimpleTooltip>
 
-        <Tooltip title={title}>
+        <SimpleTooltip title={title}>
           <Typography
             variant="subtitle2"
             sx={{
@@ -85,7 +86,7 @@ export function SourceTile({
           >
             {title}
           </Typography>
-        </Tooltip>
+        </SimpleTooltip>
       </Box>
 
       {/* METADATA CHIPS */}

@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo } from "react";
 import { Box } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Legend, LineChart, Line } from "recharts";
-import { axisTickProps, gridStroke, tooltipStyle, legendStyle } from "./metricChartUtils";
-import { TimePrecision, iterateBuckets, buildPaddedDomain, formatTick } from "../timeAxis";
+import { useMemo } from "react";
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { KpiQueryResultRow } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { TimePrecision, buildPaddedDomain, formatTick, iterateBuckets } from "../timeAxis";
+import { axisTickProps, gridStroke, legendStyle, tooltipStyle } from "./metricChartUtils";
 
 export function KpiLatencyMini({
   start,

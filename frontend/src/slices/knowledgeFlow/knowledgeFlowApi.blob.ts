@@ -42,6 +42,15 @@ export const blobApi = api.injectEndpoints({
         responseHandler: (response) => response.blob(),
       }),
     }),
+
+    // Generic download by absolute URL (workspace assets, config, etc.)
+    downloadHrefBlob: build.query<Blob, { href: string; assetOwnerId?: string }>({
+      query: ({ href, assetOwnerId }) => ({
+        url: href, // absolute URL allowed by fetchBaseQuery
+        headers: assetOwnerId ? { "X-Asset-User-ID": assetOwnerId } : undefined,
+        responseHandler: (response) => response.blob(),
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -53,4 +62,6 @@ export const {
   useDownloadMarkdownMediaBlobQuery,
   useLazyDownloadUserAssetBlobQuery,
   useDownloadUserAssetBlobQuery,
+  useLazyDownloadHrefBlobQuery,
+  useDownloadHrefBlobQuery,
 } = blobApi;

@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 
 # --- Defaults ---
 # This default should correspond to an asset key uploaded by the user
-DEFAULT_ASSET_KEY = "welcome.txt"
-DEFAULT_REPLY_PROMPT = "You are a helpful assistant. You must answer the user's question, but first, include the content of the provided asset under the heading 'ASSET CONTENT'."
+DEFAULT_CONFIG_FILE_KEY = "config.txt"
+DEFAULT_REPLY_PROMPT = "You are a helpful assistant. You must answer the user's question, but first, include the content of the provided configuration file under the heading 'CONFIGURATION FILE CONTENT'."
 
 
 # 1. Declare the Agent's state structure (minimal set)
@@ -49,24 +49,24 @@ class AssetResponderState(TypedDict):
 
 # 2. Declare tunables: allow the user to specify which asset key to use.
 TUNING = AgentTuning(
-    role="asset_responder",
-    description="An agent that fetches user-uploaded assets and includes their content in responses.",
+    role="configuration tester",
+    description="An agent that fetches a user-uploaded configuration file and includes its content in responses.",
     tags=["academy"],
     fields=[
         FieldSpec(
-            key="asset.key",
+            key="config_file.key",
             type="text",
-            title="Required Asset Key",
-            description="The key of the user-uploaded file (e.g., 'template.docx') to use in the prompt.",
-            default=DEFAULT_ASSET_KEY,
-            ui=UIHints(group="User Assets"),
+            title="Required Config File Key",
+            description="The key of the configuration file (e.g., 'template.docx') installed by the admin user.",
+            default=DEFAULT_CONFIG_FILE_KEY,
+            ui=UIHints(group="Configuration File"),
         ),
     ],
 )
 
 
-@expose_runtime_source("agent.AssetResponder")
-class AssetResponder(AgentFlow):
+@expose_runtime_source("agent.ConfigLoader")
+class ConfigLoader(AgentFlow):
     tuning = TUNING
     _graph: StateGraph | None = None
 
@@ -75,54 +75,34 @@ class AssetResponder(AgentFlow):
         await super().async_init(runtime_context)
         self.model = get_default_chat_model()
         self._graph = self._build_graph()
-        logger.info("AssetResponderAgent initialized with asset access.")
+        logger.info(
+            "[ACADEMY] ConfigurationTesterAgent initialized with configuration file access."
+        )
 
     # Graph construction method
     def _build_graph(self) -> StateGraph:
         """The agent's state machine: START -> asset_node -> END."""
         g = StateGraph(AssetResponderState)
-        g.add_node("asset_node", self.asset_responder_node)
+        g.add_node("asset_node", self.config_loader_node)
         g.add_edge(START, "asset_node")
         g.add_edge("asset_node", END)
         return g
 
-    async def asset_responder_node(
+    async def config_loader_node(
         self, state: AssetResponderState
     ) -> AssetResponderState:
         """
         Node 1: Fetches the configured asset content and returns it directly as the response.
         """
         # 1. Get the configured asset key from tuning
-        asset_key = self.get_tuned_text("asset.key")
-        # 2. Fetch the actual content of the asset (This is the core logic!)
-        asset_content = await self.fetch_asset_text(asset_key or DEFAULT_ASSET_KEY)
-        is_error = asset_content.startswith("[Asset Retrieval Error:")
-
-        # 3. Fallback Logic
-        if is_error:
-            if asset_key == DEFAULT_ASSET_KEY:
-                asset_content = await self.read_bundled_file(DEFAULT_ASSET_KEY)
-                status_line = f"--- Asset Retrieval Failed ({asset_key}) ---"
-                status_note = (
-                    f"NOTE: Using bundled fallback asset '{DEFAULT_ASSET_KEY}'."
-                )
-            else:
-                status_line = f"--- Asset Retrieval Failed ({asset_key}) ---"
-                status_note = f"NOTE: The requested key '{asset_key}' failed, and no action was taken."
-        else:
-            # Case C: Asset fetch succeeded.
-            status_line = f"--- Fetched Asset: {asset_key} ---"
-            status_note = f"NOTE: The **remote** asset '{asset_key}' was used."
-
-        # 3. Construct the final message (No LLM call needed for this simple echo)
-        if status_note:
-            final_response_content = f"{status_line}\n{status_note}\n\n{asset_content}"
-        else:
-            # Only the error case, where asset_content is the error string
-            final_response_content = f"{status_line}\n\n{asset_content}"
+        config_file_key = self.get_tuned_text("config_file.key")
+        # 2. Fetch the configuration content from the agent config storage (admin-managed)
+        config_file_content = await self.fetch_agent_config_text(
+            config_file_key or DEFAULT_CONFIG_FILE_KEY
+        )
 
         # 4. Create the final AI message
-        ai_response = AIMessage(content=final_response_content)
+        ai_response = AIMessage(content=config_file_content)
 
         # 5. Return the final delta.
         return self.delta(ai_response)

@@ -21,12 +21,13 @@ import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 
 import TuneIcon from "@mui/icons-material/Tune";
-import { Box, Card, CardContent, IconButton, Stack, Tooltip, Typography, useTheme } from "@mui/material";
+import { Box, Card, CardContent, IconButton, Stack, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 // OpenAPI types
 import { AnyAgent } from "../../common/agent";
 import { AgentChipWithIcon } from "../../common/AgentChip";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 import { Leader } from "../../slices/agentic/agenticOpenApi";
 
 type AgentCardProps = {
@@ -173,7 +174,7 @@ export const AgentCard = ({
         {/* Footer actions (unchanged) */}
         <Stack direction="row" gap={0.5} sx={{ ml: "auto" }}>
           {agent.type === "leader" && onManageCrew && (
-            <Tooltip title={t("agentCard.manageCrew", "Manage crew")}>
+            <SimpleTooltip title={t("agentCard.manageCrew", "Manage crew")}>
               <IconButton
                 size="small"
                 onClick={() => onManageCrew(agent)}
@@ -182,10 +183,10 @@ export const AgentCard = ({
               >
                 <GroupIcon fontSize="small" />
               </IconButton>
-            </Tooltip>
+            </SimpleTooltip>
           )}
           {!isA2A && onManageAssets && (
-            <Tooltip title={t("agentCard.manageAssets")}>
+            <SimpleTooltip title={t("agentCard.manageAssets")}>
               <IconButton
                 size="small"
                 onClick={() => onManageAssets(agent)}
@@ -194,10 +195,10 @@ export const AgentCard = ({
               >
                 <AttachFileIcon fontSize="small" />
               </IconButton>
-            </Tooltip>
+            </SimpleTooltip>
           )}
           {!isA2A && onEdit && (
-            <Tooltip title={t("agentCard.edit")}>
+            <SimpleTooltip title={t("agentCard.edit")}>
               <IconButton
                 size="small"
                 onClick={() => onEdit(agent)}
@@ -206,10 +207,10 @@ export const AgentCard = ({
               >
                 <TuneIcon fontSize="small" />
               </IconButton>
-            </Tooltip>
+            </SimpleTooltip>
           )}
           {!isA2A && onInspectCode && (
-            <Tooltip title={t("agentCard.inspectCode", "Inspect Source Code")}>
+            <SimpleTooltip title={t("agentCard.inspectCode", "Inspect Source Code")}>
               <IconButton
                 size="small"
                 // This calls the handler provided by the parent (AgentHub)
@@ -219,10 +220,10 @@ export const AgentCard = ({
               >
                 <CodeIcon fontSize="small" />
               </IconButton>
-            </Tooltip>
+            </SimpleTooltip>
           )}
           {onViewA2ACard && hasA2aCard && (
-            <Tooltip title={t("agentCard.viewA2ACard", "View A2A card")}>
+            <SimpleTooltip title={t("agentCard.viewA2ACard", "View A2A card")}>
               <IconButton
                 size="small"
                 onClick={() => onViewA2ACard(agent)}
@@ -231,11 +232,11 @@ export const AgentCard = ({
               >
                 <VisibilityIcon fontSize="small" />
               </IconButton>
-            </Tooltip>
+            </SimpleTooltip>
           )}
 
           {onToggleEnabled && (
-            <Tooltip title={isEnabled ? t("agentCard.disable") : t("agentCard.enable")}>
+            <SimpleTooltip title={isEnabled ? t("agentCard.disable") : t("agentCard.enable")}>
               <IconButton
                 size="small"
                 onClick={() => onToggleEnabled(agent)}
@@ -244,7 +245,7 @@ export const AgentCard = ({
               >
                 <PowerSettingsNewIcon fontSize="small" />
               </IconButton>
-            </Tooltip>
+            </SimpleTooltip>
           )}
         </Stack>
       </CardContent>

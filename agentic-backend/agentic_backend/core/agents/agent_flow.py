@@ -17,6 +17,7 @@ import math
 import sys
 import tempfile
 from datetime import datetime
+from functools import partial
 from importlib.resources import files
 from pathlib import Path
 from typing import (
@@ -56,12 +57,12 @@ from agentic_backend.application_context import (
     get_app_context,
     get_knowledge_flow_base_url,
 )
-from agentic_backend.common.kf_agent_asset_client import (
-    AssetBlob,
-    AssetRetrievalError,
-    AssetUploadError,
-    AssetUploadResult,
-    KfAgentAssetClient,
+from agentic_backend.common.kf_workspace_client import (
+    KfWorkspaceClient,
+    UserStorageBlob,
+    UserStorageUploadResult,
+    WorkspaceRetrievalError,
+    WorkspaceUploadError,
 )
 from agentic_backend.common.structures import (
     AgentChatOptions,
@@ -202,7 +203,7 @@ class AgentFlow:
         Asynchronous initialization routine that must be implemented by subclasses.
         """
         self.runtime_context: RuntimeContext = runtime_context
-        self.asset_client = KfAgentAssetClient(agent=self)
+        self.storage_client = KfWorkspaceClient(agent=self)
 
     async def aclose(self) -> None:
         """
@@ -526,7 +527,7 @@ class AgentFlow:
         """
         return self.tuning
 
-    async def read_bundled_file(self, filename: str) -> str:
+    async def read_agent_bundled_file(self, filename: str) -> str:
         """
         Reads a static file bundled as a resource alongside the calling agent's module file.
 
@@ -561,7 +562,7 @@ class AgentFlow:
             )
             logger.error(error_msg)
             # Raise a specific exception so the agent node can handle the failure
-            raise AssetRetrievalError(error_msg)
+            raise WorkspaceRetrievalError(error_msg)
 
         except Exception as e:
             error_msg = (
@@ -569,61 +570,108 @@ class AgentFlow:
                 f"Details: {type(e).__name__}: {e}"
             )
             logger.error(error_msg, exc_info=True)
-            raise AssetRetrievalError(error_msg)
+            raise WorkspaceRetrievalError(error_msg)
 
-    async def fetch_asset_text(self, asset_key: str) -> str:
-        agent_name = self.get_name()
+    def _default_agent_id(self) -> str:
+        return self.agent_settings.name or type(self).__name__
+
+    async def fetch_asset_text(
+        self,
+        asset_key: str,
+    ) -> str:
         try:
             access_token = getattr(self.runtime_context, "access_token", None)
             if not access_token:
                 access_token = self.refresh_user_access_token()
 
-            return await get_app_context().run_in_executor(
-                self.asset_client.fetch_asset_content_text,
-                agent_name,
+            fn = partial(
+                self.storage_client.fetch_user_text,
                 asset_key,
                 access_token,
             )
-        except AssetRetrievalError as e:
+            return await get_app_context().run_in_executor(fn)
+        except WorkspaceRetrievalError as e:
             logger.error(f"Failed to fetch asset for agent: {e}")
             return f"[Asset Retrieval Error: {e.args[0]}]"
         except Exception as e:
             logger.error(f"Unexpected error fetching asset for agent: {e}")
             raise
 
-    async def fetch_asset_blob(self, asset_key: str) -> AssetBlob:
+    async def fetch_agent_config_text(
+        self,
+        asset_key: str,
+        *,
+        agent_id: str | None = None,
+    ) -> str:
         """
-        Retrieves the content of a user-uploaded asset securely and cleanly.
+        Fetch a text file from the agent configuration storage (admin-managed, read-only for agents).
+
+        In case of problem the exception is raised to the caller.
         """
-        agent_name = self.get_name()
+        access_token = getattr(self.runtime_context, "access_token", None)
+        if not access_token:
+            access_token = self.refresh_user_access_token()
+
+        fn = partial(
+            self.storage_client.fetch_agent_config_text,
+            asset_key,
+            access_token,
+            agent_id or self._default_agent_id(),
+        )
+        return await get_app_context().run_in_executor(fn)
+
+    async def _fetch_blob(
+        self,
+        asset_key: str,
+    ) -> UserStorageBlob:
         try:
-            # Ensure token is valid (refresh if necessary)
             access_token = getattr(self.runtime_context, "access_token", None)
             if not access_token:
                 access_token = self.refresh_user_access_token()
 
-            return await get_app_context().run_in_executor(
-                self.asset_client.fetch_asset_blob,
-                agent_name,
+            fn = partial(
+                self.storage_client.fetch_user_blob,
                 asset_key,
                 access_token,
             )
-        except AssetRetrievalError as e:
+            return await get_app_context().run_in_executor(fn)
+        except WorkspaceRetrievalError as e:
             logger.error(f"Failed to fetch asset for agent: {e}")
             raise
         except Exception as e:
             logger.error(f"Unexpected error fetching asset for agent: {e}")
             raise
 
-    async def fetch_asset_blob_to_tempfile(
-        self, asset_key: str, suffix: str | None = None
+    async def fetch_config_blob_to_tempfile(
+        self,
+        asset_key: str,
+        suffix: str | None = None,
+        *,
+        agent_id: str | None = None,
     ) -> Path:
         """
-        Retrieves a user asset, writes it to a secure temporary file, and returns its Path.
-        Why (Fred): Many libraries (pptx, pdf, docx) expect a file path, not bytes.
-        The file lives only for the lifetime of the node execution.
+        Fetch a configuration file (typically a template) from the agent configuration storage.
+        Remember that this is different from user storage! The configuration storage
+        is scoped to the agent and is not user-specific. It can be filled only by
+        administrators or via agent setup processes.
+
+        The downloaded file is written to a temporary file and returned as a Path object.
+        IMPORTANT on suffix:
+          - If suffix is provided, it forces the temp file extension (e.g., ".pptx"). Only do this
+            when the bytes really match that format; some libraries pick the parser based on extension.
+          - If suffix is None (default), we reuse the fetched blob's extension to avoid mime/format mismatch.
         """
-        blob = await self.fetch_asset_blob(asset_key)
+        access_token = (
+            getattr(self.runtime_context, "access_token", None)
+            or self.refresh_user_access_token()
+        )
+        fn = partial(
+            self.storage_client.fetch_agent_config_blob,
+            asset_key,
+            access_token,
+            agent_id or self._default_agent_id(),
+        )
+        blob = await get_app_context().run_in_executor(fn)
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=suffix or Path(blob.filename).suffix
         ) as f:
@@ -631,14 +679,13 @@ class AgentFlow:
             temp_path = Path(f.name)
         return temp_path
 
-    async def upload_user_asset(
+    async def upload_user_blob(
         self,
         key: str,
         file_content: bytes | BinaryIO,
         filename: str,
         content_type: Optional[str] = None,
-        user_id_override: Optional[str] = None,
-    ) -> AssetUploadResult:
+    ) -> UserStorageUploadResult:
         """
         Uploads a binary file to the user's personal asset storage.
 
@@ -656,14 +703,14 @@ class AgentFlow:
         )
         try:
             # Use get_app_context().run_in_executor to safely run the blocking client call
-            result = await get_app_context().run_in_executor(
-                self.asset_client.upload_user_asset_blob,
+            fn = partial(
+                self.storage_client.upload_user_blob,
                 key,
                 file_content,
                 filename,
                 content_type,
-                user_id_override,
             )
+            result = await get_app_context().run_in_executor(fn)
             logger.info(
                 "UPLOADING_ASSET: Upload successful. Key: %s, Size: %d, document_uid: %s",
                 result.key,
@@ -671,31 +718,12 @@ class AgentFlow:
                 result.document_uid,
             )
             return result
-        except AssetUploadError as e:
+        except WorkspaceUploadError as e:
             logger.error(f"Failed to upload user asset: {e}")
             raise  # Re-raise the specific error
         except Exception as e:
             logger.error(f"Unexpected error during user asset upload: {e}")
             raise
-
-    def get_asset_download_url(self, asset_key: str, scope: str = "user") -> str:
-        """Constructs the full, absolute URL for asset download."""
-
-        # NOTE: You MUST replace `get_api_base_url()` with your actual configuration
-        # or helper that returns the public base URL (e.g., 'https://your-api.com').
-        BASE_URL = get_knowledge_flow_base_url()  # Replace with actual base URL source
-
-        if scope == "user":
-            # The User Asset endpoint format: /user-assets/{key}
-            return f"{BASE_URL}/user-assets/{asset_key}"
-        elif scope == "agent":
-            # The Agent Asset endpoint format: /agent-assets/{agent_name}/{key}
-            agent_name = self.get_name()
-            return f"{BASE_URL}/agent-assets/{agent_name}/{asset_key}"
-
-        raise ValueError(f"Unknown asset scope: {scope}")
-
-    # ...
 
     def _get_text_content(self, message: AnyMessage) -> str:
         """

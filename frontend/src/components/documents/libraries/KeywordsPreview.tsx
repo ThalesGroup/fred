@@ -22,11 +22,11 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
-  Tooltip,
   Typography,
 } from "@mui/material";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 
 export function KeywordsPreview({
   keywords,
@@ -77,16 +77,15 @@ export function KeywordsPreview({
   return (
     <>
       {/* Icon-only trigger with SURFACE tooltip */}
-      <Tooltip
-        arrow
+      <SimpleTooltip
         placement="top"
-        slotProps={{
-          tooltip: {
-            sx: (_) => ({
-              maxWidth: 520,
-            }),
-          },
-        }}
+        // sATTENTION lotProps={{
+        //   tooltip: {
+        //     sx: (_) => ({
+        //       maxWidth: 520,
+        //     }),
+        //   },
+        // }}
         title={<Typography variant="caption">{tooltipText || t("documentLibrary.keywords", "Keywords")}</Typography>}
       >
         <span>
@@ -99,7 +98,7 @@ export function KeywordsPreview({
             <SellOutlinedIcon fontSize="small" />
           </IconButton>
         </span>
-      </Tooltip>
+      </SimpleTooltip>
 
       {/* Dialog on SURFACE */}
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="md">

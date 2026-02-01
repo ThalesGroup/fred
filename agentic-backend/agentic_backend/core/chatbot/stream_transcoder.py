@@ -40,6 +40,7 @@ from agentic_backend.core.chatbot.chat_schema import (
     TextPart,
     ToolCallPart,
     ToolResultPart,
+    validate_hitl_payload,
 )
 from agentic_backend.core.chatbot.message_part import (
     clean_token_usage,
@@ -318,6 +319,19 @@ class StreamTranscoder:
             payload_obj.setdefault("checkpoint_id", checkpoint_id)
 
         if interrupt_handler:
+            try:
+                validated = validate_hitl_payload(payload_obj or {})
+            except Exception as ve:
+                logger.error(
+                    "[TRANSCODER] HITL payload invalid agent=%s session=%s exchange=%s err=%s payload=%s",
+                    agent_name,
+                    session_id,
+                    exchange_id,
+                    ve,
+                    payload_obj,
+                )
+                raise ValueError(f"Invalid HITL payload: {ve}") from ve
+
             logger.info(
                 "[TRANSCODER] interrupt_handler_present=True handler=%s",
                 interrupt_handler,
@@ -326,9 +340,7 @@ class StreamTranscoder:
                 "[TRANSCODER] emitting awaiting_human via handler session=%s exchange=%s payload_keys=%s checkpoint_keys=%s",
                 session_id,
                 exchange_id,
-                list((payload_obj or {}).keys())
-                if isinstance(payload_obj, dict)
-                else "<non-dict>",
+                list((validated.model_dump() or {}).keys()),
                 list((checkpoint_obj or {}).keys())
                 if isinstance(checkpoint_obj, dict)
                 else "<non-dict>",
@@ -336,7 +348,7 @@ class StreamTranscoder:
             await interrupt_handler.handle(
                 session_id=session_id,
                 exchange_id=exchange_id,
-                payload=payload_obj,
+                payload=validated.model_dump(exclude_none=True),
                 checkpoint=checkpoint_obj or {},
             )
 
@@ -448,7 +460,9 @@ class StreamTranscoder:
                 for msg in block:
                     raw_md = getattr(msg, "response_metadata", {}) or {}
                     usage_raw = getattr(msg, "usage_metadata", {}) or {}
-                    additional_kwargs = getattr(msg, "additional_kwargs", {}) or {}  # NEW
+                    additional_kwargs = (
+                        getattr(msg, "additional_kwargs", {}) or {}
+                    )  # NEW
 
                     model_name = raw_md.get("model_name") or raw_md.get("model")
                     finish_reason = coerce_finish_reason(raw_md.get("finish_reason"))
@@ -619,13 +633,18 @@ class StreamTranscoder:
                             continue
 
                     if role == Role.assistant and ch == Channel.final:
-                        existing_sources = len(sources_payload) if sources_payload else 0
+                        existing_sources = (
+                            len(sources_payload) if sources_payload else 0
+                        )
                         pending_sources = (
                             len(pending_sources_payload)
                             if pending_sources_payload is not None
                             else 0
                         )
-                        if existing_sources == 0 and pending_sources_payload is not None:
+                        if (
+                            existing_sources == 0
+                            and pending_sources_payload is not None
+                        ):
                             # Some agents put sources in the vector-search tool result, not on the final AIMessage.
                             # In that case, carry the tool-result sources forward into the final message metadata.
                             sources_payload = pending_sources_payload

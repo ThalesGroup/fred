@@ -36,6 +36,7 @@ from fred_core import (
     register_exception_handlers,
 )
 from fred_core.kpi import emit_process_kpis
+from fred_core.scheduler import TemporalClientProvider
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -52,7 +53,9 @@ from knowledge_flow_backend.features.benchmark.benchmark_controller import Bench
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.asset_controller import AssetController
 from knowledge_flow_backend.features.content.content_controller import ContentController
-from knowledge_flow_backend.features.filesystem.controller import FilesystemController
+from knowledge_flow_backend.features.corpus_manager.corpus_manager_controller import CorpusManagerController
+from knowledge_flow_backend.features.filesystem.mcp_fs_controller import McpFilesystemController
+from knowledge_flow_backend.features.filesystem.workspace_storage_controller import WorkspaceStorageController
 from knowledge_flow_backend.features.groups import groups_controller
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
 from knowledge_flow_backend.features.kpi import logs_controller
@@ -210,12 +213,14 @@ def create_app() -> FastAPI:
     ModelController(router)
     ContentController(router)
     AssetController(router)
+    WorkspaceStorageController(router)
     IngestionController(router)
     TagController(app, router)
     VectorSearchController(router)
     KPIController(router)
     ResourceController(router)
-    FilesystemController(router)
+    McpFilesystemController(router)
+    CorpusManagerController(router)
     router.include_router(logs_controller.router)
     router.include_router(groups_controller.router)
     router.include_router(users_controller.router)
@@ -256,7 +261,17 @@ def create_app() -> FastAPI:
 
     if configuration.scheduler.enabled:
         logger.info("%s Activating ingestion scheduler controller.", LOG_PREFIX)
-        SchedulerController(router)
+        temporal_client_provider = None
+
+        if configuration.scheduler.backend.lower() == "temporal":
+            temporal_cfg = configuration.scheduler.temporal
+            if not temporal_cfg:
+                raise ValueError("Scheduler enabled with temporal backend but temporal configuration is missing!")
+            if not temporal_cfg.task_queue:
+                raise ValueError("Scheduler enabled but Temporal task_queue is not set in configuration!")
+            temporal_client_provider = TemporalClientProvider(temporal_cfg)
+
+        SchedulerController(router, temporal_client_provider=temporal_client_provider)
     else:
         logger.warning("%s Ingestion scheduler controller disabled via configuration.scheduler.enabled=false", LOG_PREFIX)
 
@@ -482,9 +497,21 @@ def create_app() -> FastAPI:
             auth_config=auth_cfg,
         )
 
-        mcp_fs.mount_http(mount_path=f"{mcp_prefix}/mcp-filesystem")
+        mcp_fs.mount_http(mount_path=f"{mcp_prefix}/mcp-fs")
     else:
         logger.info("%s MCP Filesystem disabled via configuration.mcp.filesystem_enabled=false", LOG_PREFIX)
+
+    # Corpus manager MCP (mock; exports the HTTP-tagged routes to MCP clients)
+    mcp_corpus = FastApiMCP(
+        app,
+        name="Knowledge Flow Corpus MCP",
+        description=("Manage corpora: start TOC builds, revectorize, purge vectors, and poll task status. Mock implementation backed by in-memory tasks for demos."),
+        include_tags=["CorpusManager"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+        auth_config=auth_cfg,
+    )
+    mcp_corpus.mount_http(mount_path=f"{mcp_prefix}/mcp-corpus")
 
     return app
 
