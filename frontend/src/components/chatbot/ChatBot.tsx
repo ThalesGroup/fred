@@ -26,8 +26,9 @@ import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
 import { getConfig } from "../../common/config.tsx";
 import { useSessionChange } from "../../hooks/useSessionChange.ts";
-import { KeyCloakService } from "../../security/KeycloakService.ts";
 import { useAuth } from "../../security/AuthContext.tsx";
+import { KeyCloakService } from "../../security/KeycloakService.ts";
+import { AwaitingHumanEvent } from "../../slices/agentic/agenticOpenApi";
 import {
   ChatAskInput,
   ChatMessage,
@@ -51,7 +52,6 @@ import ChatBotView from "./ChatBotView.tsx";
 import { useConversationOptionsController } from "./ConversationOptionsController.tsx";
 import { toDisplayChunks } from "./messageParts.ts";
 import { UserInputContent } from "./user_input/UserInput.tsx";
-import { AwaitingHumanEvent } from "../../slices/agentic/agenticOpenApi";
 
 const HISTORY_TEXT_LIMIT = 1200;
 const LOG_GENIUS_CONTEXT_TURNS = 3;
@@ -158,11 +158,16 @@ export interface ChatBotProps {
   onNewSessionCreated: (chatSessionId: string) => void;
 }
 
-const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, runtimeContext: baseRuntimeContext }: ChatBotProps) => {
+const ChatBot = ({
+  chatSessionId,
+  agents,
+  initialAgent,
+  onNewSessionCreated,
+  runtimeContext: baseRuntimeContext,
+}: ChatBotProps) => {
   const isNewConversation = !chatSessionId;
-
+  const { showInfo, showError } = useToast();
   const { t } = useTranslation();
-  const { showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
   const wsTokenRef = useRef<string | null>(null);
   const wsConnectSeqRef = useRef<number>(0);
@@ -897,13 +902,19 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
         return true;
       });
       if (!uniqueFiles.length) {
-        showInfo({ summary: t("chatbot.attachments.duplicateTitle", "Already attached"), detail: t("chatbot.attachments.duplicateDetail", "This file is already in the conversation.") });
+        showInfo({
+          summary: t("chatbot.attachments.duplicateTitle", "Already attached"),
+          detail: t("chatbot.attachments.duplicateDetail", "This file is already in the conversation."),
+        });
         return;
       }
       if (uniqueFiles.length < files.length) {
         showInfo({
           summary: t("chatbot.attachments.skippedDuplicates", "Skipped duplicates"),
-          detail: t("chatbot.attachments.someFilesAlreadyAttached", "Some files were already attached and were skipped."),
+          detail: t(
+            "chatbot.attachments.someFilesAlreadyAttached",
+            "Some files were already attached and were skipped.",
+          ),
         });
       }
 

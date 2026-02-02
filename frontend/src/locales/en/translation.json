@@ -587,7 +587,11 @@
       "tooltip": {
         "description": "Files attached to this conversation.\nThe files are processed by faster but less precise algorithms. The agent may use these files to answer.\n\nNote that this feature is in beta and may not work perfectly for all file types. For persistent corpora, consider using document libraries.",
         "disabled": "This agent does not use attachments."
-      }
+      },
+      "duplicateTitle": "Already attached",
+      "duplicateDetail": "This file is already in the conversation.",
+      "skippedDuplicates": "Skipped duplicates",
+      "someFilesAlreadyAttached": "Some files were already attached and were skipped."
     },
     "documents": {
       "drawerTitle": "Documents",
