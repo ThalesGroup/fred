@@ -150,7 +150,11 @@ def _normalize_sources_payload(raw: Any) -> List[VectorSearchHit]:
 class InterruptRaised(Exception):
     """Internal control-flow exception for LangGraph interrupts."""
 
-    def __init__(self, payload: Dict[str, Any], partial_messages: Optional[List["ChatMessage"]] = None):
+    def __init__(
+        self,
+        payload: Dict[str, Any],
+        partial_messages: Optional[List["ChatMessage"]] = None,
+    ):
         self.payload = payload
         self.partial_messages = partial_messages or []
         super().__init__("LangGraph interrupt")
