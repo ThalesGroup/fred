@@ -1,10 +1,14 @@
+import asyncio
 import logging
 
 from fred_core import KeycloackDisabled, KeycloakUser, RebacDisabledResult, TeamPermission, create_keycloak_admin
+from fred_core.security.rebac.rebac_engine import RebacReference, RelationType, Resource
 from keycloak import KeycloakAdmin
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
 from knowledge_flow_backend.features.teams.teams_structures import Team
+from knowledge_flow_backend.features.users.users_service import get_users_by_ids
+from knowledge_flow_backend.features.users.users_structures import UserSummary
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +38,23 @@ async def list_teams(user: KeycloakUser) -> list[Team]:
     team_ids: list[str] = [g["id"] for g in root_groups if g.get("id") is not None]
     metadata_map = metadata_store.get_by_team_ids(team_ids)
 
+    # Batch query OpenFGA for all team owners
+    team_owners_list = await asyncio.gather(*[
+        _get_team_owners(rebac, team_id)
+        for team_id in team_ids
+    ])
+
+    # Build mapping and collect all unique owner IDs
+    all_owner_ids = set()
+    team_owners_map = {}
+
+    for team_id, owner_ids in zip(team_ids, team_owners_list):
+        team_owners_map[team_id] = owner_ids
+        all_owner_ids.update(owner_ids)
+
+    # Batch fetch user details from Keycloak
+    user_summaries = await get_users_by_ids(all_owner_ids)
+
     # Transform Keycloak group in Fred Team
     teams: list[Team] = []
     for raw_group in root_groups:
@@ -56,19 +77,38 @@ async def list_teams(user: KeycloakUser) -> list[Team]:
             banner_image_url = None
             is_private = False
 
-        # Map to Team with id and name from Keycloak, metadata from store
+        # Map to Team with id and name from Keycloak, metadata from store, owners from OpenFGA
         team = Team(
             id=group_id,
             name=_sanitize_name(group_name, fallback=group_id),
             description=description,
             banner_image_url=banner_image_url,
-            owners=[],  # TODO: to get from Keycloak or ReBAC
-            member_count=0,  # TODO: to get from Keycloak
+            owners=[
+                user_summaries.get(owner_id) or UserSummary(id=owner_id)
+                for owner_id in team_owners_map.get(group_id, [])
+            ],
+            member_count=0,  # TODO: Query from Keycloak (membership is contextual)
             is_private=is_private,
         )
         teams.append(team)
 
     return teams
+
+
+async def _get_team_owners(rebac, team_id: str) -> list[str]:
+    """Get all user IDs with owner relation to this team from OpenFGA."""
+    team_reference = RebacReference(type=Resource.TEAM, id=team_id)
+
+    owners = await rebac.lookup_subjects(
+        team_reference,
+        RelationType.OWNER,
+        Resource.USER
+    )
+
+    if isinstance(owners, RebacDisabledResult):
+        return []
+
+    return [subject.id for subject in owners]
 
 
 async def _fetch_root_groups(admin: KeycloakAdmin) -> list[dict]:
