@@ -7,6 +7,7 @@ import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 from langchain.agents import AgentState, create_agent
 from langchain.messages import ToolMessage
@@ -16,9 +17,11 @@ from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
-from pydantic import ValidationError
 
 from agentic_backend.agents.jira.pydantic_models import (
+    QuickRequirement,
+    QuickTest,
+    QuickUserStory,
     Requirement,
     RequirementsList,
     Test,
@@ -45,13 +48,57 @@ from agentic_backend.core.runtime_source import expose_runtime_source
 logger = logging.getLogger(__name__)
 
 
+# Centralized ID generation helpers for consistent ID formats
+
+
+def _get_next_user_story_id(state: dict) -> str:
+    """Generate next US-XX ID based on existing stories and titles."""
+    existing_stories = state.get("user_stories") or []
+    existing_titles = state.get("user_story_titles") or []
+    all_ids = [s.get("id", "") for s in existing_stories + existing_titles]
+
+    max_num = 0
+    for id_str in all_ids:
+        match = re.search(r"US-(\d+)", id_str)
+        if match:
+            max_num = max(max_num, int(match.group(1)))
+    return f"US-{max_num + 1:02d}"
+
+
+def _get_next_test_id(state: dict) -> str:
+    """Generate next SC-XX ID based on existing tests and titles."""
+    existing_tests = state.get("tests") or []
+    existing_titles = state.get("test_titles") or []
+    all_ids = [t.get("id", "") for t in existing_tests + existing_titles]
+
+    max_num = 0
+    for id_str in all_ids:
+        match = re.search(r"SC-(\d+)", id_str)
+        if match:
+            max_num = max(max_num, int(match.group(1)))
+    return f"SC-{max_num + 1:02d}"
+
+
+def _get_next_requirement_id(state: dict, req_type: str) -> str:
+    """Generate next EX-FON-XX or EX-NFON-XX ID based on existing requirements."""
+    existing_reqs = state.get("requirements") or []
+    prefix = "EX-FON-" if req_type == "fonctionnelle" else "EX-NFON-"
+
+    max_num = 0
+    for req in existing_reqs:
+        id_str = req.get("id", "")
+        if id_str.startswith(prefix):
+            match = re.search(r"-(\d+)$", id_str)
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+    return f"{prefix}{max_num + 1:02d}"
+
+
 class CustomState(AgentState):
     requirements: list[dict]  # Validated against requirementsSchema
-    user_story_titles: list[dict]  # List of {id, title, epic_name} for batch generation
+    user_story_titles: list[dict]  # List of {id, title, epic_name} for batch gen
     user_stories: list[dict]  # Validated against userStoriesSchema
-    test_titles: list[
-        dict
-    ]  # List of {id, title, user_story_id, test_type} for batch generation
+    test_titles: list[dict]  # List of {id, title, us_id, test_type} for batch gen
     tests: list[dict]  # Validated against testsSchema
 
 
@@ -71,35 +118,46 @@ class JiraAgent(AgentFlow):
                 required=True,
                 default="""Tu es un Business Analyst et Product Owner expert. Tu génères des exigences, user stories et cas de tests à partir de documents projet.
 
-## WORKFLOW
+## OUTILS DE MODIFICATION
+
+**Pour ajouter UN élément:**
+- `add_user_story(title, epic_name?, requirement_ids?, context?)` - Ajoute UNE User Story
+- `add_test(title, user_story_id, test_type?)` - Ajoute UN test
+- `add_requirement(title, req_type?, priority?)` - Ajoute UNE exigence
+
+**Pour supprimer:**
+- `remove_item(item_type, item_id)` - Supprime UN élément par son ID
+
+**Pour générer en masse (après recherche documentaire):**
+- `generate_requirements(context_summary)` - Génère plusieurs exigences depuis le contexte
+- `generate_user_stories(context_summary)` - Génère plusieurs User Stories
+- `generate_tests()` - Génère plusieurs tests depuis les User Stories
+
+**Règle de choix:**
+- Utilise `add_*` pour les demandes simples ("ajoute une US pour le login", "ajoute un test pour US-01")
+- Utilise `generate_*` pour les demandes complexes ("génère toutes les US du projet")
+
+## WORKFLOW STANDARD
 
 **1. Recherche documentaire (MCP)**
-Stratégie obligatoire :
+Stratégie obligatoire pour generate_* :
 - D'abord découvrir : recherche "objectif projet", "contexte", "périmètre", "acteurs"
 - Identifier le domaine métier à partir des résultats
 - Puis cibler avec le vocabulaire DÉCOUVERT (jamais inventé)
 
-**2. Génération des exigences (si demandé)**
-- generate_requirements(context_summary) → exigences fonctionnelles et non-fonctionnelles
+**2. Génération ou ajout (selon la demande)**
+- Pour ajout simple → utilise add_user_story / add_test / add_requirement
+- Pour génération en masse → utilise generate_requirements / generate_user_stories / generate_tests
 
-**3. Génération des User Stories (si demandé)**
-- generate_user_stories(context_summary, batch_size=5) → génère les stories par lots
-- Répéter generate_user_stories() jusqu'à ce que toutes les stories soient générées
-
-**4. Génération des tests (si demandé)**
-- generate_tests(batch_size=5) → génère les tests par lots
-- Répéter generate_tests() jusqu'à ce que tous les tests soient générés
-
-**5. Export (OBLIGATOIRE)**
+**3. Export (OBLIGATOIRE)**
 - export_deliverables() → fichier Markdown
 - export_jira_csv() → CSV pour import Jira
 
 ## RÈGLES
 
-1. **Jamais afficher le contenu** : uniquement confirmer (ex: "5 User Stories générées")
+1. **Jamais afficher le contenu** : uniquement confirmer (ex: "User Story US-01 ajoutée")
 2. **Toujours exporter** : appeler export_deliverables ou export_jira_csv à la fin
-3. **update_state** : UNIQUEMENT pour du contenu fourni par l'utilisateur. JAMAIS comme solution de repli quand generate_* échoue.
-4. **Erreurs de validation** : Si generate_* échoue, corrige le format JSON et réessaie generate_*. Ne pas utiliser update_state.""",
+3. **Erreurs de validation** : Si un outil échoue, corrige le format et réessaie.""",
                 ui=UIHints(group="Prompts", multiline=True, markdown=True),
             ),
             FieldSpec(
@@ -177,6 +235,8 @@ Stratégie obligatoire :
     async def aclose(self):
         await self.mcp.aclose()
 
+    # Batch generation tools
+
     def get_requirements_tool(self):
         """Tool that generates requirements using a separate LLM call"""
 
@@ -243,7 +303,9 @@ Règles:
                 {"callbacks": [langfuse_handler]} if langfuse_handler else {}
             )
 
-            response = await model.ainvoke(messages, config=config)
+            response = cast(
+                RequirementsList, await model.ainvoke(messages, config=config)
+            )
             requirements = [r.model_dump() for r in response.items]
 
             return Command(
@@ -370,7 +432,9 @@ Tu dois générer des User Stories COMPLÉMENTAIRES qui n'existent pas encore.
             {"callbacks": [langfuse_handler]} if langfuse_handler else {}
         )
 
-        response = await model.ainvoke(messages, config=config)
+        response = cast(
+            UserStoryTitlesList, await model.ainvoke(messages, config=config)
+        )
         new_titles = [t.model_dump() for t in response.items]
         logger.info(f"US TITLES: {existing_titles + new_titles}")
         return existing_titles + new_titles
@@ -459,7 +523,7 @@ Exigences à respecter:
             {"callbacks": [langfuse_handler]} if langfuse_handler else {}
         )
 
-        response = await model.ainvoke(messages, config=config)
+        response = cast(UserStoriesList, await model.ainvoke(messages, config=config))
         return [s.model_dump() for s in response.items]
 
     def get_user_stories_tool(self):
@@ -688,7 +752,7 @@ Pour chaque User Story, génère des titres de tests couvrant:
             {"callbacks": [langfuse_handler]} if langfuse_handler else {}
         )
 
-        response = await model.ainvoke(messages, config=config)
+        response = cast(TestTitlesList, await model.ainvoke(messages, config=config))
         new_titles = [t.model_dump() for t in response.items]
         return existing_titles + new_titles
 
@@ -767,7 +831,7 @@ Règles:
             {"callbacks": [langfuse_handler]} if langfuse_handler else {}
         )
 
-        response = await model.ainvoke(messages, config=config)
+        response = cast(TestsList, await model.ainvoke(messages, config=config))
         return [t.model_dump() for t in response.items]
 
     def get_tests_tool(self):
@@ -909,56 +973,346 @@ Règles:
 
         return generate_tests
 
-    def get_update_state_tool(self):
-        """Tool to directly update state with user-provided content"""
+    # Single-item add/remove tools
+
+    async def _expand_requirement(
+        self,
+        title: str,
+        req_type: str,
+    ) -> dict:
+        """
+        Use internal LLM call with structured output to expand a title into a full requirement.
+
+        This is for SINGLE item generation only (1 LLM call).
+        For bulk generation, use generate_requirements() which has batching.
+        """
+        type_label = (
+            "fonctionnelle" if req_type == "fonctionnelle" else "non-fonctionnelle"
+        )
+
+        prompt = f"""Génère une exigence {type_label} complète à partir de ce titre.
+
+Titre: {title}
+
+Génère une description détaillée de l'exigence qui:
+- Explique clairement ce qui est requis
+- Est mesurable et testable
+- Est cohérente avec le titre fourni
+"""
+
+        model = get_default_chat_model().with_structured_output(
+            QuickRequirement, method="json_schema"
+        )
+        langfuse_handler = self._get_langfuse_handler()
+        config: RunnableConfig = (
+            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+        )
+        result = cast(
+            QuickRequirement,
+            await model.ainvoke([SystemMessage(content=prompt)], config=config),
+        )
+        return result.model_dump()
+
+    async def _expand_user_story(
+        self,
+        title: str,
+        epic_name: str,
+        requirement_ids: list[str] | None,
+        context: str | None,
+    ) -> dict:
+        """
+        Use internal LLM call with structured output to expand a title into a full user story.
+
+        This is for SINGLE item generation only (1 LLM call).
+        For bulk generation, use generate_user_stories() which has batching.
+        """
+        prompt = f"""Génère une User Story complète à partir de ce titre.
+
+Titre: {title}
+Epic: {epic_name}
+{f"Exigences liées: {requirement_ids}" if requirement_ids else ""}
+{f"Contexte additionnel: {context}" if context else ""}
+
+Génère:
+- Description au format "En tant que [rôle], je veux [action], afin de [bénéfice]"
+- 2-4 critères d'acceptation avec étapes Gherkin (Given/When/Then)
+- Story points (Fibonacci: 1, 2, 3, 5, 8, 13)
+- Priorité (High/Medium/Low)
+"""
+
+        model = get_default_chat_model().with_structured_output(
+            QuickUserStory, method="json_schema"
+        )
+        langfuse_handler = self._get_langfuse_handler()
+        config: RunnableConfig = (
+            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+        )
+        result = cast(
+            QuickUserStory,
+            await model.ainvoke([SystemMessage(content=prompt)], config=config),
+        )
+        return result.model_dump()
+
+    async def _expand_test(
+        self,
+        title: str,
+        user_story_id: str,
+        test_type: str,
+        user_story_context: dict | None,
+    ) -> dict:
+        """
+        Use internal LLM call with structured output to expand a title into a full test.
+
+        This is for SINGLE item generation only (1 LLM call).
+        For bulk generation, use generate_tests() which has batching.
+        """
+        story_context = ""
+        if user_story_context:
+            story_context = f"""
+User Story associée:
+- ID: {user_story_context.get("id")}
+- Résumé: {user_story_context.get("summary")}
+- Description: {user_story_context.get("description")}
+"""
+
+        prompt = f"""Génère un scénario de test complet à partir de ce titre.
+
+Titre du test: {title}
+User Story liée: {user_story_id}
+Type de test: {test_type}
+{story_context}
+
+Génère:
+- Description du test
+- Préconditions nécessaires
+- Étapes détaillées en format Gherkin (Given/When/Then)
+- Données de test si pertinent
+- Résultat attendu
+- Priorité (Haute/Moyenne/Basse)
+"""
+
+        model = get_default_chat_model().with_structured_output(
+            QuickTest, method="json_schema"
+        )
+        langfuse_handler = self._get_langfuse_handler()
+        config: RunnableConfig = (
+            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+        )
+        result = cast(
+            QuickTest,
+            await model.ainvoke([SystemMessage(content=prompt)], config=config),
+        )
+        return result.model_dump()
+
+    def get_add_user_story_tool(self):
+        """Tool to add a single user story from a title."""
 
         @tool
-        async def update_state(
+        async def add_user_story(
             runtime: ToolRuntime,
-            item_type: str,
-            items: list[dict] | None = None,
-            mode: str = "append",
-            ids_to_remove: list[str] | None = None,
+            title: str,
+            epic_name: str | None = None,
+            requirement_ids: list[str] | None = None,
+            context: str | None = None,
         ):
             """
-            Met à jour l'état avec des éléments fournis par l'utilisateur.
+            Ajoute UNE User Story à partir d'un titre.
 
-            Utilise cet outil quand l'utilisateur fournit directement du contenu
-            (exigences, user stories ou tests) à ajouter, remplacer ou supprimer.
+            Utilise cet outil pour les demandes simples comme "ajoute une US pour le login".
+            Pour générer PLUSIEURS User Stories, utilise generate_user_stories().
+
+            Args:
+                title: Titre de la User Story (ex: "Permettre la connexion SSO")
+                epic_name: Nom de l'Epic parent (défaut: "Backlog")
+                requirement_ids: Liste des IDs d'exigences liées (optionnel)
+                context: Contexte supplémentaire pour guider la génération
+            """
+            # Generate ID
+            next_id = _get_next_user_story_id(runtime.state)
+            epic = epic_name or "Backlog"
+
+            # Expand title into full story using internal LLM
+            expanded = await self._expand_user_story(
+                title, epic, requirement_ids, context
+            )
+
+            # Build complete UserStory
+            new_story = {
+                "id": next_id,
+                "summary": title,
+                "epic_name": epic,
+                "issue_type": "Story",
+                "requirement_ids": requirement_ids or [],
+                **expanded,
+            }
+
+            # Validate and add to state
+            validated = UserStory.model_validate(new_story)
+            existing = runtime.state.get("user_stories") or []
+
+            return Command(
+                update={
+                    "user_stories": existing + [validated.model_dump()],
+                    "messages": [
+                        ToolMessage(
+                            f"✓ User Story {next_id} ajoutée: {title}",
+                            tool_call_id=runtime.tool_call_id,
+                        )
+                    ],
+                }
+            )
+
+        return add_user_story
+
+    def get_add_test_tool(self):
+        """Tool to add a single test from a title."""
+
+        @tool
+        async def add_test(
+            runtime: ToolRuntime,
+            title: str,
+            user_story_id: str,
+            test_type: str | None = None,
+        ):
+            """
+            Ajoute UN test à partir d'un titre.
+
+            Utilise cet outil pour les demandes simples comme "ajoute un test pour US-01".
+            Pour générer PLUSIEURS tests, utilise generate_tests().
+
+            Args:
+                title: Titre du test (ex: "Vérifier connexion avec identifiants invalides")
+                user_story_id: ID de la User Story liée (ex: "US-01")
+                test_type: Type de test - "Nominal", "Limite", ou "Erreur" (défaut: "Nominal")
+            """
+            # Validate user_story_id exists
+            user_stories = runtime.state.get("user_stories") or []
+            story_context = None
+            for story in user_stories:
+                if story.get("id") == user_story_id:
+                    story_context = story
+                    break
+
+            if not story_context:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                f"⚠️ User Story {user_story_id} non trouvée. "
+                                f"Assure-toi que la User Story existe avant d'ajouter un test.",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            # Generate ID
+            next_id = _get_next_test_id(runtime.state)
+            ttype = test_type or "Nominal"
+
+            # Expand title into full test using internal LLM
+            expanded = await self._expand_test(
+                title, user_story_id, ttype, story_context
+            )
+
+            # Build complete Test
+            new_test = {
+                "id": next_id,
+                "name": title,
+                "user_story_id": user_story_id,
+                "test_type": ttype,
+                **expanded,
+            }
+
+            # Validate and add to state
+            validated = Test.model_validate(new_test)
+            existing = runtime.state.get("tests") or []
+
+            return Command(
+                update={
+                    "tests": existing + [validated.model_dump()],
+                    "messages": [
+                        ToolMessage(
+                            f"✓ Test {next_id} ajouté: {title}",
+                            tool_call_id=runtime.tool_call_id,
+                        )
+                    ],
+                }
+            )
+
+        return add_test
+
+    def get_add_requirement_tool(self):
+        """Tool to add a single requirement from a title."""
+
+        @tool
+        async def add_requirement(
+            runtime: ToolRuntime,
+            title: str,
+            req_type: str | None = None,
+            priority: str | None = None,
+        ):
+            """
+            Ajoute UNE exigence à partir d'un titre.
+
+            Utilise cet outil pour les demandes simples comme "ajoute une exigence pour l'authentification".
+            Pour générer PLUSIEURS exigences, utilise generate_requirements().
+
+            Args:
+                title: Titre de l'exigence (ex: "Authentification multi-facteur")
+                req_type: Type d'exigence - "fonctionnelle" ou "non-fonctionnelle" (défaut: "fonctionnelle")
+                priority: Priorité - "Haute", "Moyenne", ou "Basse" (défaut: "Moyenne")
+            """
+            # Generate ID
+            rtype = req_type or "fonctionnelle"
+            next_id = _get_next_requirement_id(runtime.state, rtype)
+            prio = priority or "Moyenne"
+
+            # Expand title into full requirement using internal LLM
+            expanded = await self._expand_requirement(title, rtype)
+
+            # Build complete Requirement
+            new_req = {
+                "id": next_id,
+                "title": title,
+                "priority": prio,
+                **expanded,
+            }
+
+            # Validate and add to state
+            validated = Requirement.model_validate(new_req)
+            existing = runtime.state.get("requirements") or []
+
+            return Command(
+                update={
+                    "requirements": existing + [validated.model_dump()],
+                    "messages": [
+                        ToolMessage(
+                            f"✓ Exigence {next_id} ajoutée: {title}",
+                            tool_call_id=runtime.tool_call_id,
+                        )
+                    ],
+                }
+            )
+
+        return add_requirement
+
+    def get_remove_item_tool(self):
+        """Tool to remove an item by ID."""
+
+        @tool
+        async def remove_item(
+            runtime: ToolRuntime,
+            item_type: str,
+            item_id: str,
+        ):
+            """
+            Supprime un élément par son ID.
 
             Args:
                 item_type: Type d'élément - "requirements", "user_stories", ou "tests"
-                items: Liste d'éléments au format JSON (requis pour append/replace)
-                mode: "append" pour ajouter, "replace" pour tout remplacer, "remove" pour supprimer
-                ids_to_remove: Liste d'IDs à supprimer (requis pour mode "remove")
-
-            Returns:
-                Message de confirmation avec le nombre total d'éléments
+                item_id: ID de l'élément à supprimer (ex: "US-01", "SC-05", "EX-FON-01")
             """
-            # Block update_state if there's a recent validation error from generate_* tools
-            # This prevents the LLM from using update_state as a fallback
-            if mode != "remove":
-                messages = runtime.state.get("messages") or []
-                for msg in reversed(messages[-10:]):
-                    content = getattr(msg, "content", "")
-                    if isinstance(content, str) and (
-                        "❌ Erreur de validation JSON" in content
-                        or "❌ Erreur de parsing JSON" in content
-                    ):
-                        return Command(
-                            update={
-                                "messages": [
-                                    ToolMessage(
-                                        "❌ update_state ne peut pas être utilisé après une erreur de validation. "
-                                        "Tu dois corriger le format JSON et réessayer l'outil generate_* approprié "
-                                        "(generate_requirements, generate_user_stories, ou generate_tests).",
-                                        tool_call_id=runtime.tool_call_id,
-                                    )
-                                ]
-                            }
-                        )
-
-            # Validate item_type
             valid_types = ["requirements", "user_stories", "tests"]
             if item_type not in valid_types:
                 return Command(
@@ -972,104 +1326,42 @@ Règles:
                     }
                 )
 
-            # Select Pydantic model based on type
-            model_map = {
-                "requirements": Requirement,
-                "user_stories": UserStory,
-                "tests": Test,
-            }
-
-            # Translate item_type for French message
-            type_labels = {
-                "requirements": "exigences",
-                "user_stories": "user stories",
-                "tests": "tests",
-            }
-
             existing = runtime.state.get(item_type) or []
+            filtered = [item for item in existing if item.get("id") != item_id]
 
-            # Handle remove mode
-            if mode == "remove":
-                if not ids_to_remove:
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    "❌ ids_to_remove est requis pour le mode 'remove'",
-                                    tool_call_id=runtime.tool_call_id,
-                                )
-                            ]
-                        }
-                    )
-                # Filter out items with matching IDs
-                final_items = [
-                    item for item in existing if item.get("id") not in ids_to_remove
-                ]
-                removed_count = len(existing) - len(final_items)
-                action_msg = f"suppression de {removed_count}"
-            else:
-                # For append/replace, items are required
-                if items is None:
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    f"❌ items est requis pour le mode '{mode}'",
-                                    tool_call_id=runtime.tool_call_id,
-                                )
-                            ]
-                        }
-                    )
+            if len(filtered) == len(existing):
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                f"⚠️ Élément {item_id} non trouvé dans {item_type}",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
 
-                # Validate items using Pydantic model
-                model_class = model_map[item_type]
-                validated_items = []
-                errors = []
-                for i, item in enumerate(items):
-                    try:
-                        validated = model_class.model_validate(item)
-                        validated_items.append(validated.model_dump())
-                    except ValidationError as e:
-                        for err in e.errors()[:2]:
-                            loc = ".".join(str(x) for x in err["loc"])
-                            errors.append(f"item[{i}].{loc}: {err['msg']}")
-                        if len(errors) >= 3:
-                            break
-
-                if errors:
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    f"❌ Erreur de validation: {'; '.join(errors)}",
-                                    tool_call_id=runtime.tool_call_id,
-                                )
-                            ]
-                        }
-                    )
-
-                if mode == "replace":
-                    final_items = validated_items
-                    action_msg = f"remplacé par {len(validated_items)}"
-                else:  # append
-                    final_items = existing + validated_items
-                    action_msg = f"ajout de {len(validated_items)}"
+            type_labels = {
+                "requirements": "exigence",
+                "user_stories": "User Story",
+                "tests": "test",
+            }
 
             return Command(
                 update={
-                    item_type: final_items,
+                    item_type: filtered,
                     "messages": [
                         ToolMessage(
-                            f"✓ État mis à jour: {len(final_items)} {type_labels[item_type]} ({action_msg}). "
-                            f"Si tu as terminé de générer tous les livrables demandés par l'utilisateur, "
-                            f"appelle maintenant export_deliverables() pour fournir le lien de téléchargement.",
+                            f"✓ {type_labels[item_type]} {item_id} supprimée",
                             tool_call_id=runtime.tool_call_id,
                         )
                     ],
                 }
             )
 
-        return update_state
+        return remove_item
+
+    # Export tools
 
     def _format_requirements_markdown(self, requirements: list[dict]) -> str:
         """Convert requirements list to markdown format."""
@@ -1437,11 +1729,19 @@ Règles:
 
         return export_jira_csv
 
+    # Create Agent
+
     def get_compiled_graph(self) -> CompiledStateGraph:
+        # Bulk generation tools
         requirements_tool = self.get_requirements_tool()
         user_stories_tool = self.get_user_stories_tool()
         tests_tool = self.get_tests_tool()
-        update_state_tool = self.get_update_state_tool()
+        # Single-item add/remove tools
+        add_requirement_tool = self.get_add_requirement_tool()
+        add_user_story_tool = self.get_add_user_story_tool()
+        add_test_tool = self.get_add_test_tool()
+        remove_item_tool = self.get_remove_item_tool()
+        # Export tools
         export_tool = self.get_export_tool()
         export_jira_csv_tool = self.get_export_jira_csv_tool()
 
@@ -1449,12 +1749,19 @@ Règles:
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[
+                # Bulk generation
                 requirements_tool,
                 user_stories_tool,
                 tests_tool,
-                update_state_tool,
+                # Single-item add/remove
+                add_user_story_tool,
+                add_test_tool,
+                add_requirement_tool,
+                remove_item_tool,
+                # Export
                 export_tool,
                 export_jira_csv_tool,
+                # MCP tools
                 *self.mcp.get_tools(),
             ],
             checkpointer=self.streaming_memory,
