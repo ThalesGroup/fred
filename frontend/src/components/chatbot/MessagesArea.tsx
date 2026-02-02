@@ -288,7 +288,7 @@ function Area({
       // Typing indicator should sit after the latest content of the active exchange
       const isHitlForGroup =
         hitlEvent && hitlEvent.session_id === group[0].session_id && hitlEvent.exchange_id === group[0].exchange_id;
-      if (isActiveExchange && isWaiting && (!hasAssistantReply || isHitlForGroup)) {
+      if (isActiveExchange && isWaiting) {
         const indicatorAgent = resolveAgent(userMessage ?? group[group.length - 1]);
         elements.push(<TypingIndicatorRow key={`typing-${groupKey}`} agent={indicatorAgent} />);
       }
