@@ -504,12 +504,12 @@ applications:
         websocket_url: "ws://fred.dev.fred.thalesgroup.com/fred/chatbot/query"
         frontend_basename : "/"
 
-  knowledge-flow-backend:
+  knowledge-flow-backend: &knowledgeFlowBackend
     enabled: true
     applicationName: knowledge-flow-backend
     deployment:
       enabled: true
-    replicaCount: 1
+    replicaCount: 3 # 3 temporal workers
     statefulset:
       enabled: false
     job:
@@ -806,3 +806,80 @@ applications:
       OPENFGA_API_TOKEN: ""
       SQL_PASSWORD: ""
       POSTGRES_PASSWORD: ""
+
+  knowledge-flow-worker:
+    <<: *knowledgeFlowBackend
+    # Toggle Temporal worker pod deployment.
+    # Note: You need to have set knowledge-flow-backend.configuration.scheduler.enabled = true
+    # otherwise this deployment will not be created.
+    enabled: true
+    applicationName: knowledge-flow-worker
+    configuration:
+      app:
+        metrics_enabled: false # Do not export metrics since its a worker pod
+    command:
+      enabled: true
+      data:
+        - "python"
+        - "-m"
+        - "knowledge_flow_backend.main_worker"
+    ports:
+      - name: worker
+        containerPort: 8112
+    service:
+      enabled: false
+      annotations: {}
+      extraLabels: {}
+      type: ClusterIP
+      ports:
+        - name: worker
+          port: 8112
+          targetPort: 8112
+          protocol: TCP
+    metricsService:
+      enabled: false
+      annotations: {}
+      extraLabels: {}
+      type: ClusterIP
+      port: 9111
+      targetPort: 9111
+      serviceMonitor:
+        enabled: false
+        annotations: {}
+        labels: {}
+        interval: 30s
+        scrapeTimeout: 10s
+        path: /metrics
+        scheme: http
+        honorLabels: false
+        relabelings: []
+        metricRelabelings: []
+        namespaceSelector: {}
+    probes:
+      lifecycle:
+        enabled: false
+      livenessProbe:
+        enabled: false
+        data: {}
+      readinessProbe:
+        enabled: false
+        data: {}
+      startupProbe:
+        enabled: false
+    configuration_type:
+      backend: false
+      frontend: false
+    volumeMounts:
+      - name: knowledge-flow-backend-vol
+        mountPath: /app/config/configuration.yaml
+        subPath: configuration.yaml
+      - name: knowledge-flow-backend-env-vol
+        mountPath: /app/config/.env
+        subPath: .env
+    volumes:
+      - name: knowledge-flow-backend-vol
+        configMap:
+          name: knowledge-flow-backend-back
+      - name: knowledge-flow-backend-env-vol
+        secret:
+          secretName: knowledge-flow-backend-env

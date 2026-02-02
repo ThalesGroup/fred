@@ -1,4 +1,9 @@
 {{- define "common-library.service" -}}
+{{- $serviceEnabled := true }}
+{{- if and .app.service (hasKey .app.service "enabled") }}
+  {{- $serviceEnabled = .app.service.enabled }}
+{{- end }}
+{{- if $serviceEnabled }}
 ---
 apiVersion: v1
 kind: Service
@@ -19,4 +24,5 @@ spec:
     app: {{ .app.applicationName }}
   ports:
 {{ toYaml .app.service.ports | indent 2  }}
+{{- end }}
 {{ end -}}
