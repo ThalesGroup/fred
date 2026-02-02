@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 
+from knowledge_flow_backend.core.stores.team_metadata.team_metadata_structures import TeamMetadataBase, TeamMetadataUpdate
 from knowledge_flow_backend.features.users.users_structures import UserSummary
 
 
@@ -17,12 +18,17 @@ class KeycloakGroupSummary(BaseModel):
     member_count: int
 
 
-class Team(BaseModel):
+class Team(TeamMetadataBase):
+    # From Keycloak
     id: str
     name: str
-    description: str | None = None
-    banner_image_url: str | None = None
-    owners: list[UserSummary] = Field(default_factory=list)
     member_count: int | None = None
-    is_private: bool
+    # From OpenFGA
+    owners: list[UserSummary] = Field(default_factory=list)
     is_member: bool = False
+
+
+class TeamUpdate(TeamMetadataUpdate):
+    """For now, when updating a team, you can only update its metadata"""
+
+    pass

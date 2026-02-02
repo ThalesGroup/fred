@@ -17,7 +17,15 @@ from datetime import datetime
 from sqlmodel import Field, SQLModel
 
 
-class TeamMetadata(SQLModel, table=True):
+class TeamMetadataBase(SQLModel):
+    """Base model for team metadata fields."""
+
+    description: str | None = Field(default=None, nullable=True)
+    banner_image_url: str | None = Field(default=None, nullable=True)
+    is_private: bool = Field(default=True)
+
+
+class TeamMetadata(TeamMetadataBase, table=True):
     """
     Additional metadata for a Keycloak group/team.
     Keycloak provides: id, name
@@ -25,8 +33,13 @@ class TeamMetadata(SQLModel, table=True):
     """
 
     id: str = Field(primary_key=True)
-    description: str | None = Field(default=None, nullable=True)
-    banner_image_url: str | None = Field(default=None, nullable=True)
-    is_private: bool = Field(default=False)
     created_at: datetime = Field(nullable=False)
     updated_at: datetime = Field(nullable=False)
+
+
+class TeamMetadataUpdate(SQLModel):
+    """Model for updating team metadata. All fields are optional."""
+
+    description: str | None = None
+    banner_image_url: str | None = None
+    is_private: bool | None = None

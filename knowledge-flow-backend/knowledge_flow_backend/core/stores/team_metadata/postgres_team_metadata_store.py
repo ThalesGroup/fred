@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
@@ -27,6 +28,7 @@ from knowledge_flow_backend.core.stores.team_metadata.base_team_metadata_store i
 )
 from knowledge_flow_backend.core.stores.team_metadata.team_metadata_structures import (
     TeamMetadata,
+    TeamMetadataUpdate,
 )
 
 logger = logging.getLogger(__name__)
@@ -124,13 +126,13 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
                 # Re-raise other integrity errors (e.g., constraint violations)
                 raise
 
-    def update(self, team_id: str, metadata: TeamMetadata) -> TeamMetadata:
+    def update(self, team_id: str, update_data: TeamMetadataUpdate) -> TeamMetadata:
         """
-        Update existing team metadata.
+        Update existing team metadata using SQLModel pattern.
 
         Args:
             team_id: The Keycloak group ID
-            metadata: The updated team metadata
+            update_data: The partial update data with only fields to change
 
         Returns:
             The updated TeamMetadata
@@ -145,11 +147,10 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
             if not existing:
                 raise TeamMetadataNotFoundError(f"Team metadata for team_id '{team_id}' not found.")
 
-            # Update fields
-            existing.description = metadata.description
-            existing.banner_image_url = metadata.banner_image_url
-            existing.is_private = metadata.is_private
-            existing.updated_at = metadata.updated_at
+            # Update only fields that were set
+            update_dict = update_data.model_dump(exclude_unset=True)
+            existing.sqlmodel_update(update_dict)
+            existing.updated_at = datetime.now()
 
             session.add(existing)
             session.commit()
@@ -158,20 +159,30 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
             logger.info("[TEAM_METADATA][PG] Updated metadata for team_id: %s", team_id)
             return existing
 
-    def upsert(self, metadata: TeamMetadata) -> TeamMetadata:
+    def upsert(self, team_id: str, update_data: TeamMetadataUpdate) -> TeamMetadata:
         """
         Create or update team metadata (idempotent).
 
         Args:
-            metadata: The team metadata to create or update
+            team_id: The Keycloak group ID
+            update_data: The partial update data with only fields to change
 
         Returns:
             The created or updated TeamMetadata
         """
         try:
-            return self.create(metadata)
-        except TeamMetadataAlreadyExistsError:
-            return self.update(metadata.id, metadata)
+            self.get_by_team_id(team_id)
+            return self.update(team_id, update_data)
+        except TeamMetadataNotFoundError:
+            # Create new metadata with provided fields
+            update_dict = update_data.model_dump(exclude_unset=True)
+            new_metadata = TeamMetadata(
+                id=team_id,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+                **update_dict,
+            )
+            return self.create(new_metadata)
 
     def delete(self, team_id: str) -> None:
         """

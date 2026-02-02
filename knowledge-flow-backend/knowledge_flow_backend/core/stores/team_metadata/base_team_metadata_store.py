@@ -16,6 +16,7 @@ from abc import ABC, abstractmethod
 
 from knowledge_flow_backend.core.stores.team_metadata.team_metadata_structures import (
     TeamMetadata,
+    TeamMetadataUpdate,
 )
 
 
@@ -102,13 +103,13 @@ class BaseTeamMetadataStore(ABC):
         pass
 
     @abstractmethod
-    def update(self, team_id: str, metadata: TeamMetadata) -> TeamMetadata:
+    def update(self, team_id: str, update_data: TeamMetadataUpdate) -> TeamMetadata:
         """
-        Update existing team metadata.
+        Update existing team metadata using SQLModel pattern.
 
         Args:
             team_id: The Keycloak group ID
-            metadata: The updated team metadata
+            update_data: The partial update data with only fields to change
 
         Returns:
             The updated TeamMetadata
@@ -119,12 +120,13 @@ class BaseTeamMetadataStore(ABC):
         pass
 
     @abstractmethod
-    def upsert(self, metadata: TeamMetadata) -> TeamMetadata:
+    def upsert(self, team_id: str, update_data: TeamMetadataUpdate) -> TeamMetadata:
         """
         Create or update team metadata (idempotent).
 
         Args:
-            metadata: The team metadata to create or update
+            team_id: The Keycloak group ID
+            update_data: The partial update data with only fields to change
 
         Returns:
             The created or updated TeamMetadata

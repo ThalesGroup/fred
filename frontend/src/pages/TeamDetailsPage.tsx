@@ -22,7 +22,6 @@ export function TeamDetailsPage() {
 
   const tabs: TabConfig[] = [
     {
-      // todo: capitalize in label
       label: capitalize(agentsNicknamePlural || "..."),
       path: `/team/${teamId}/${agentsNicknamePlural}`,
       component: <TeamAgentHub />,

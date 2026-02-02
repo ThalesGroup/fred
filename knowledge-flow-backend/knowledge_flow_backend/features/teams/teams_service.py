@@ -5,7 +5,8 @@ from fred_core import ORGANIZATION_ID, KeycloackDisabled, KeycloakUser, RebacDis
 from keycloak import KeycloakAdmin
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
-from knowledge_flow_backend.features.teams.teams_structures import KeycloakGroupSummary, Team, TeamNotFoundError
+from knowledge_flow_backend.core.stores.team_metadata.team_metadata_structures import TeamMetadata
+from knowledge_flow_backend.features.teams.teams_structures import KeycloakGroupSummary, Team, TeamNotFoundError, TeamUpdate
 from knowledge_flow_backend.features.users.users_service import get_users_by_ids
 from knowledge_flow_backend.features.users.users_structures import UserSummary
 
@@ -77,9 +78,61 @@ async def get_team_by_id(user: KeycloakUser, team_id: str) -> Team:
     return teams[0]
 
 
-async def _enrich_groups_with_team_data(
-    admin: KeycloakAdmin, rebac: RebacEngine, metadata_store, user: KeycloakUser, groups: list[KeycloakGroupSummary]
-) -> list[Team]:
+async def update_team(user: KeycloakUser, team_id: str, update_data: TeamUpdate) -> Team:
+    app_context = ApplicationContext.get_instance()
+    rebac = app_context.get_rebac_engine()
+    metadata_store = app_context.get_team_metadata_store()
+
+    admin = create_keycloak_admin(get_configuration().security.m2m)
+    if isinstance(admin, KeycloackDisabled):
+        logger.info("Keycloak admin client not configured; cannot update team.")
+        raise TeamNotFoundError(team_id)
+
+    # Ensure team exists in Keycloak
+    try:
+        raw_group = await admin.a_get_group(team_id)
+    except Exception as e:
+        logger.warning(f"Failed to fetch group {team_id} from Keycloak: {e}")
+        raise TeamNotFoundError(team_id) from e
+
+    if not raw_group:
+        raise TeamNotFoundError(team_id)
+
+    # Ensure team has organization relation for ReBAC
+    consistency_token = await _ensure_team_organization_relations(rebac, [team_id])
+
+    # Check user has permission to update team info
+    await rebac.check_user_permission_or_raise(user, TeamPermission.CAN_UPDATE_INFO, team_id, consistency_token=consistency_token)
+
+    # Update metadata
+    metadata_store.upsert(team_id, update_data)
+
+    # Handle public tuple if is_private was set (leveraging idempotency)
+    if update_data.is_private is not None:
+        if update_data.is_private:
+            # Team is private, ensure public tuple is removed
+            await rebac.delete_relation(
+                Relation(
+                    subject=RebacReference(Resource.USER, "*"),
+                    relation=RelationType.PUBLIC,
+                    resource=RebacReference(Resource.TEAM, team_id),
+                )
+            )
+        else:
+            # Team is public, ensure public tuple exists
+            await rebac.add_relation(
+                Relation(
+                    subject=RebacReference(Resource.USER, "*"),
+                    relation=RelationType.PUBLIC,
+                    resource=RebacReference(Resource.TEAM, team_id),
+                )
+            )
+
+    # Return updated team
+    return await get_team_by_id(user, team_id)
+
+
+async def _enrich_groups_with_team_data(admin: KeycloakAdmin, rebac: RebacEngine, metadata_store, user: KeycloakUser, groups: list[KeycloakGroupSummary]) -> list[Team]:
     """Shared logic to enrich Keycloak groups with metadata, owners, and member information."""
     if not groups:
         return []
