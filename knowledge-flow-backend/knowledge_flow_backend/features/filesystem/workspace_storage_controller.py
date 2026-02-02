@@ -196,7 +196,7 @@ class WorkspaceStorageController:
             request: Request,
             agent_id: str,
             file: UploadFile = File(..., description="Binary payload"),
-            key: Optional[str] = Body(None, embed=True, description="Logical path inside the agent's config space"),
+            key: Optional[str] = Form(None, description="Logical path inside the agent's config space"),
             user: KeycloakUser = Depends(get_current_user),
         ):
             authorize_or_raise(user, Action.CREATE, Resource.FILES)
@@ -287,7 +287,7 @@ class WorkspaceStorageController:
             agent_id: str,
             target_user_id: str,
             file: UploadFile = File(..., description="Binary payload"),
-            key: Optional[str] = Body(None, embed=True, description="Logical path inside the agent-user space"),
+            key: Optional[str] = Form(None, description="Logical path inside the agent-user space"),
             user: KeycloakUser = Depends(get_current_user),
         ):
             authorize_or_raise(user, Action.CREATE, Resource.FILES)
