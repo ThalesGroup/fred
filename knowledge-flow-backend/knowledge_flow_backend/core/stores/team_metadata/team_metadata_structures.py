@@ -24,7 +24,7 @@ class TeamMetadata(SQLModel, table=True):
     This model stores: description, banner_image_url, is_private, timestamps
     """
 
-    team_id: str = Field(primary_key=True)
+    id: str = Field(primary_key=True)
     description: str | None = Field(default=None, nullable=True)
     banner_image_url: str | None = Field(default=None, nullable=True)
     is_private: bool = Field(default=False)

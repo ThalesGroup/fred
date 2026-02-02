@@ -91,7 +91,8 @@ from knowledge_flow_backend.core.stores.tags.base_tag_store import BaseTagStore
 from knowledge_flow_backend.core.stores.tags.duckdb_tag_store import DuckdbTagStore
 from knowledge_flow_backend.core.stores.tags.opensearch_tag_store import OpenSearchTagStore
 from knowledge_flow_backend.core.stores.tags.postgres_tag_store import PostgresTagStore
-from knowledge_flow_backend.core.stores.team_metadata import BaseTeamMetadataStore, PostgresTeamMetadataStore
+from knowledge_flow_backend.core.stores.team_metadata.base_team_metadata_store import BaseTeamMetadataStore
+from knowledge_flow_backend.core.stores.team_metadata.postgres_team_metadata_store import PostgresTeamMetadataStore
 from knowledge_flow_backend.core.stores.vector.base_text_splitter import BaseTextSplitter
 from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
 from knowledge_flow_backend.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore

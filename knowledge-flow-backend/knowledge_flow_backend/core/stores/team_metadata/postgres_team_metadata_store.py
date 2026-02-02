@@ -68,9 +68,7 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
         with Session(self.engine) as session:
             metadata = session.get(TeamMetadata, team_id)
             if not metadata:
-                raise TeamMetadataNotFoundError(
-                    f"Team metadata for team_id '{team_id}' not found."
-                )
+                raise TeamMetadataNotFoundError(f"Team metadata for team_id '{team_id}' not found.")
             return metadata
 
     def get_by_team_ids(self, team_ids: list[str]) -> dict[str, TeamMetadata]:
@@ -88,9 +86,9 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
             return {}
 
         with Session(self.engine) as session:
-            statement = select(TeamMetadata).where(col(TeamMetadata.team_id).in_(team_ids))
+            statement = select(TeamMetadata).where(col(TeamMetadata.id).in_(team_ids))
             results = session.exec(statement)
-            return {metadata.team_id: metadata for metadata in results.all()}
+            return {metadata.id: metadata for metadata in results.all()}
 
     def create(self, metadata: TeamMetadata) -> TeamMetadata:
         """
@@ -105,7 +103,7 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
         Raises:
             TeamMetadataAlreadyExistsError: If metadata for this team already exists
         """
-        self._validate_team_id(metadata.team_id)
+        self._validate_team_id(metadata.id)
 
         with Session(self.engine) as session:
             try:
@@ -115,18 +113,14 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
 
                 logger.info(
                     "[TEAM_METADATA][PG] Created metadata for team_id: %s",
-                    metadata.team_id,
+                    metadata.id,
                 )
                 return metadata
             except IntegrityError as e:
                 session.rollback()
                 # Check if it's a primary key violation (duplicate team_id)
-                if "duplicate key" in str(e).lower() or "unique constraint" in str(
-                    e
-                ).lower():
-                    raise TeamMetadataAlreadyExistsError(
-                        f"Team metadata for team_id '{metadata.team_id}' already exists."
-                    ) from e
+                if "duplicate key" in str(e).lower() or "unique constraint" in str(e).lower():
+                    raise TeamMetadataAlreadyExistsError(f"Team metadata for team_id '{metadata.id}' already exists.") from e
                 # Re-raise other integrity errors (e.g., constraint violations)
                 raise
 
@@ -149,9 +143,7 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
         with Session(self.engine) as session:
             existing = session.get(TeamMetadata, team_id)
             if not existing:
-                raise TeamMetadataNotFoundError(
-                    f"Team metadata for team_id '{team_id}' not found."
-                )
+                raise TeamMetadataNotFoundError(f"Team metadata for team_id '{team_id}' not found.")
 
             # Update fields
             existing.description = metadata.description
@@ -163,9 +155,7 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
             session.commit()
             session.refresh(existing)
 
-            logger.info(
-                "[TEAM_METADATA][PG] Updated metadata for team_id: %s", team_id
-            )
+            logger.info("[TEAM_METADATA][PG] Updated metadata for team_id: %s", team_id)
             return existing
 
     def upsert(self, metadata: TeamMetadata) -> TeamMetadata:
@@ -181,7 +171,7 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
         try:
             return self.create(metadata)
         except TeamMetadataAlreadyExistsError:
-            return self.update(metadata.team_id, metadata)
+            return self.update(metadata.id, metadata)
 
     def delete(self, team_id: str) -> None:
         """
@@ -198,16 +188,12 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
         with Session(self.engine) as session:
             metadata = session.get(TeamMetadata, team_id)
             if not metadata:
-                raise TeamMetadataNotFoundError(
-                    f"Team metadata for team_id '{team_id}' not found."
-                )
+                raise TeamMetadataNotFoundError(f"Team metadata for team_id '{team_id}' not found.")
 
             session.delete(metadata)
             session.commit()
 
-            logger.info(
-                "[TEAM_METADATA][PG] Deleted metadata for team_id: %s", team_id
-            )
+            logger.info("[TEAM_METADATA][PG] Deleted metadata for team_id: %s", team_id)
 
     def list_all(self) -> list[TeamMetadata]:
         """
