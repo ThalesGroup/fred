@@ -86,7 +86,7 @@ def app_context(monkeypatch, fake_embedder):
                 host="localhost:7233",
                 namespace="default",
                 task_queue="ingestion",
-                workflow_prefix="test-pipeline",
+                workflow_id_prefix="test-pipeline",
                 connect_timeout_seconds=3,
             ),
         ),

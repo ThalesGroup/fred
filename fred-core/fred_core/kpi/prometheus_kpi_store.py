@@ -41,6 +41,46 @@ def _sanitize_label_name(name: str) -> str:
     return safe
 
 
+# Buckets for metrics in milliseconds (e.g. LLM latencies).
+# Default Prometheus buckets (0.005 to 10.0) are optimized for seconds.
+MS_BUCKETS = (
+    5.0,
+    10.0,
+    25.0,
+    50.0,
+    100.0,
+    250.0,
+    500.0,
+    1000.0,
+    2500.0,
+    5000.0,
+    10000.0,
+    30000.0,
+    60000.0,
+    120000.0,
+)
+
+# Buckets for metrics in seconds (e.g. HTTP latencies).
+SECONDS_BUCKETS = (
+    0.005,
+    0.01,
+    0.025,
+    0.05,
+    0.075,
+    0.1,
+    0.25,
+    0.5,
+    0.75,
+    1.0,
+    2.5,
+    5.0,
+    7.5,
+    10.0,
+    30.0,
+    60.0,
+)
+
+
 class PrometheusKPIStore(BaseKPIStore):
     """
     Prometheus-backed KPI sink.
@@ -98,8 +138,17 @@ class PrometheusKPIStore(BaseKPIStore):
             elif metric_type == "gauge":
                 metric = Gauge(name, "KPI gauge", list(label_names), registry=REGISTRY)
             else:
+                buckets = Histogram.DEFAULT_BUCKETS
+                if name.endswith("_ms"):
+                    buckets = MS_BUCKETS
+                elif name.endswith("_seconds"):
+                    buckets = SECONDS_BUCKETS
                 metric = Histogram(
-                    name, "KPI timer", list(label_names), registry=REGISTRY
+                    name,
+                    "KPI timer",
+                    list(label_names),
+                    registry=REGISTRY,
+                    buckets=buckets,
                 )
             self._metrics[key] = metric
             return metric

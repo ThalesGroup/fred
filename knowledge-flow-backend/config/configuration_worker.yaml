@@ -30,7 +30,7 @@ scheduler:
     host: "localhost:7233"
     namespace: "default"
     task_queue: "ingestion"
-    workflow_prefix: "pipeline"
+    workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
 
 # -----------------------------------------------------------------------------

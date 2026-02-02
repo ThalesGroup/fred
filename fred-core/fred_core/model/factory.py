@@ -230,6 +230,7 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         # Ollama transport differs: do not force OpenAI/Azure httpx client injection.
         # We only pass value objects (limits/timeout) via client_kwargs.
         base_url = settings.pop("base_url", None)
+        settings.pop("max_retries", None)
         _info_provider(cfg, settings)
 
         # Depending on langchain_ollama version, the kwargs key can differ.

@@ -277,10 +277,10 @@ applications:
               max_keepalive_connections: 50
               keepalive_expiry_seconds: 10
           crossencoder_model:
-          name: cross-encoder/ms-marco-MiniLM-L-12-v2
-          settings:
-            online: false
-            local_path: /app/models
+            name: cross-encoder/ms-marco-MiniLM-L-12-v2
+            settings:
+              online: false
+              local_path: /app/models
 
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the chat model
@@ -690,7 +690,7 @@ applications:
           host: "localhost:7233"
           namespace: "default"
           task_queue: "ingestion"
-          workflow_prefix: "pipeline"
+          workflow_id_prefix: "pipeline"
           connect_timeout_seconds: 5
       input_processors:
         - prefix: ".pdf"
