@@ -25,8 +25,8 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import ToolNode
 
 from agentic_backend.application_context import get_mcp_configuration
-from agentic_backend.common.mcp_toolkit import McpToolkit
 from agentic_backend.common.mcp_interceptors import ExpiredTokenRetryInterceptor
+from agentic_backend.common.mcp_toolkit import McpToolkit
 from agentic_backend.common.mcp_utils import get_connected_mcp_client_for_agent
 from agentic_backend.common.tool_node_utils import create_mcp_tool_node
 from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerConfiguration
