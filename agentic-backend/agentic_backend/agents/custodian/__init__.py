@@ -2,6 +2,6 @@
 Package placeholder for the Temporal test agent.
 """
 
-from .research_agent import ResearchAgent
+from .researcher import Researcher
 
-__all__ = ["ResearchAgent"]
+__all__ = ["Researcher"]

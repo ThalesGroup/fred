@@ -153,6 +153,9 @@ function Area({
         others.push(msg);
       }
 
+      const hasAssistantReply =
+        finals.some((m) => m.role === "assistant") || others.some((m) => m.role === "assistant");
+
       const shouldHideUserMessage = userMessage && hiddenUserExchangeIds?.has(userMessage.exchange_id);
       if (userMessage && !shouldHideUserMessage) {
         elements.push(
@@ -181,20 +184,6 @@ function Area({
             isOpenByDefault
             resolveAgent={resolveAgent}
           />,
-        );
-      }
-
-      const hasAssistantReply =
-        finals.some((m) => m.role === "assistant") || others.some((m) => m.role === "assistant");
-      if (isActiveExchange && isWaiting && !hasAssistantReply) {
-        const indicatorAgent = resolveAgent(userMessage ?? group[group.length - 1]);
-        elements.push(<TypingIndicatorRow key={`typing-${groupKey}`} agent={indicatorAgent} />);
-      }
-
-      // Inline HITL card (awaiting human) for this exchange
-      if (hitlEvent && hitlEvent.session_id === group[0].session_id && hitlEvent.exchange_id === group[0].exchange_id) {
-        elements.push(
-          <HitlInlineCard key={`hitl-${groupKey}`} event={hitlEvent} onSubmit={onHitlSubmit} onCancel={onHitlCancel} />,
         );
       }
 
@@ -282,6 +271,26 @@ function Area({
             onCitationClick={(uid) => setHighlightUid(uid)}
           />,
         );
+      }
+
+      // Inline HITL card (awaiting human) for this exchange — render after the exchange messages
+      if (hitlEvent && hitlEvent.session_id === group[0].session_id && hitlEvent.exchange_id === group[0].exchange_id) {
+        elements.push(
+          <HitlInlineCard
+            key={`hitl-${groupKey}`}
+            event={hitlEvent}
+            onSubmit={onHitlSubmit}
+            onCancel={onHitlCancel}
+          />,
+        );
+      }
+
+      // Typing indicator should sit after the latest content of the active exchange
+      const isHitlForGroup =
+        hitlEvent && hitlEvent.session_id === group[0].session_id && hitlEvent.exchange_id === group[0].exchange_id;
+      if (isActiveExchange && isWaiting && (!hasAssistantReply || isHitlForGroup)) {
+        const indicatorAgent = resolveAgent(userMessage ?? group[group.length - 1]);
+        elements.push(<TypingIndicatorRow key={`typing-${groupKey}`} agent={indicatorAgent} />);
       }
     }
 

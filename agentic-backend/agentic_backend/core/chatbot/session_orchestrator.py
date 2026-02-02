@@ -183,11 +183,28 @@ class SessionOrchestrator:
         return lock
 
     async def _ensure_next_rank(self, session: SessionSchema) -> int:
+        # If next_rank is missing or stale (e.g., old sessions persisted without partial HITL steps),
+        # recompute from stored history length.
+        prior_msgs: List[ChatMessage] = []
         if session.next_rank is None:
             prior_msgs = await asyncio.to_thread(self.history_store.get, session.id)
-            prior: List[ChatMessage] = prior_msgs or []
-            session.next_rank = len(prior)
+        else:
+            # Lazy fetch only if we need to validate monotonicity
+            prior_msgs = await asyncio.to_thread(self.history_store.get, session.id)
+            if session.next_rank < len(prior_msgs):
+                logger.warning(
+                    "[SESSIONS] next_rank corrected from %s to %s for session=%s",
+                    session.next_rank,
+                    len(prior_msgs),
+                    session.id,
+                )
+                session.next_rank = len(prior_msgs)
+                await asyncio.to_thread(self.session_store.save, session)
+
+        if session.next_rank is None:
+            session.next_rank = len(prior_msgs)
             await asyncio.to_thread(self.session_store.save, session)
+
         return session.next_rank
 
     @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
@@ -359,10 +376,11 @@ class SessionOrchestrator:
                 )
 
                 # 4) Emit the user message immediately
+                next_rank_cursor = base_rank  # first free rank in this session
                 user_msg = ChatMessage(
                     session_id=session.id,
                     exchange_id=exchange_id,
-                    rank=base_rank,
+                    rank=next_rank_cursor,
                     timestamp=_utcnow_dt(),
                     role=Role.user,
                     channel=Channel.final,
@@ -371,6 +389,7 @@ class SessionOrchestrator:
                 )
                 all_msgs: List[ChatMessage] = [user_msg]
                 await self._emit(callback, user_msg)
+                next_rank_cursor += 1  # advance past the user message
 
                 # Stream agent responses via the transcoder
                 agent_msgs: List[ChatMessage] = []
@@ -385,8 +404,8 @@ class SessionOrchestrator:
                         session_id=session.id,
                         exchange_id=exchange_id,
                         agent_name=agent_name,
-                        base_rank=base_rank,
-                        start_seq=1,  # user message already consumed rank=base_rank
+                        base_rank=next_rank_cursor,
+                        start_seq=0,  # start at the next free rank
                         callback=callback,
                         user_context=user,
                         runtime_context=runtime_context,
@@ -410,8 +429,10 @@ class SessionOrchestrator:
                         exchange_id,
                     )
                     # do we need raise here ?
-                except InterruptRaised:
+                except InterruptRaised as ir:
                     # Persist what we already streamed (user + any partial agent msgs)
+                    if not agent_msgs and getattr(ir, "partial_messages", None):
+                        agent_msgs = ir.partial_messages
                     all_msgs.extend(agent_msgs)
                     session.updated_at = _utcnow_dt()
                     session.next_rank = base_rank + len(all_msgs)
@@ -745,39 +766,57 @@ class SessionOrchestrator:
                 )
                 all_msgs: List[ChatMessage] = []
 
-                with self.kpi.timer(
-                    "chat.resume_latency_ms",
-                    dims={
-                        "agent_id": actual_agent_name,
-                        "user_id": user.uid,
-                        "session_id": session.id,
-                        "exchange_id": exchange_id,
-                    },
-                    actor=actor,
-                ):
-                    agent_msgs = await self.transcoder.stream_agent_response(
-                        agent=agent,
-                        input_messages=[],  # Resume does not inject new messages into state
-                        session_id=session.id,
-                        exchange_id=exchange_id,
-                        agent_name=actual_agent_name,
-                        base_rank=base_rank,
-                        start_seq=0,
-                        callback=callback,
-                        user_context=user,
-                        runtime_context=runtime_context,
-                        interrupt_handler=self._make_streaming_interrupt_handler(
-                            session.id, exchange_id, callback
-                        ),
-                        resume_payload=resume_payload,
-                    )
+                try:
+                    with self.kpi.timer(
+                        "chat.resume_latency_ms",
+                        dims={
+                            "agent_id": actual_agent_name,
+                            "user_id": user.uid,
+                            "session_id": session.id,
+                            "exchange_id": exchange_id,
+                        },
+                        actor=actor,
+                    ):
+                        agent_msgs = await self.transcoder.stream_agent_response(
+                            agent=agent,
+                            input_messages=[],  # Resume does not inject new messages into state
+                            session_id=session.id,
+                            exchange_id=exchange_id,
+                            agent_name=actual_agent_name,
+                            base_rank=base_rank,
+                            start_seq=0,
+                            callback=callback,
+                            user_context=user,
+                            runtime_context=runtime_context,
+                            interrupt_handler=self._make_streaming_interrupt_handler(
+                                session.id, exchange_id, callback
+                            ),
+                            resume_payload=resume_payload,
+                        )
+                        all_msgs.extend(agent_msgs)
+                        logger.info(
+                            "[SESSIONS] resume completed agent_msgs=%d session=%s exchange=%s",
+                            len(agent_msgs),
+                            session.id,
+                            exchange_id,
+                        )
+                except InterruptRaised as ir:
+                    # Persist partial messages before the next HITL turn
+                    agent_msgs = getattr(ir, "partial_messages", [])
                     all_msgs.extend(agent_msgs)
+                    session.updated_at = _utcnow_dt()
+                    session.next_rank = base_rank + len(all_msgs)
+                    await asyncio.to_thread(self.session_store.save, session)
+                    await asyncio.to_thread(
+                        self.history_store.save, session.id, all_msgs, user.uid
+                    )
                     logger.info(
-                        "[SESSIONS] resume completed agent_msgs=%d session=%s exchange=%s",
-                        len(agent_msgs),
+                        "[SESSIONS] resume interrupt persisted session=%s exchange=%s msgs=%d",
                         session.id,
                         exchange_id,
+                        len(all_msgs),
                     )
+                    raise
 
                 # 7. Persist
                 if all_msgs:

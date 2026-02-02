@@ -158,11 +158,6 @@ ai:
         search_rag_scoping: true
         deep_search_delegate: false
         attach_files: true
-    - name: "Test"
-      type: "agent"
-      class_path: "agentic_backend.academy.03_config_loader.config_loader.AssetResponder"
-      enabled: true
-      chat_model: {}
     - name: "Rico Senior"
       type: "agent"
       class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"

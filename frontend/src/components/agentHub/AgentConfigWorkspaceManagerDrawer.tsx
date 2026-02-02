@@ -41,7 +41,7 @@ import {
   useListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetQuery,
   useUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPostMutation,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { stripAgentConfigPrefix } from "../../slices/knowledgeFlow/storagePaths";
+import { agentConfigPrefix, stripAgentConfigPrefix } from "../../slices/knowledgeFlow/storagePaths";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useToast } from "../ToastProvider";
 // -------------------------------
@@ -106,10 +106,23 @@ export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawer
     return listData
       .map((item: any) => {
         const path: string = item.path || item.key || "";
+        const prefix = agentConfigPrefix(agentId);
+        const normalizedPath = path.endsWith("/") ? path : `${path}/`;
+
         // Keep only files that are within the agent-config prefix and are files (type != directory)
-        const relativeKey = stripAgentConfigPrefix(path, agentId);
+        let relativeKey = stripAgentConfigPrefix(path, agentId);
+        // Some backends already return keys with a leading "config/" segment; strip it once to avoid double prefixes.
+        if (relativeKey.startsWith("config/")) {
+          relativeKey = relativeKey.slice("config/".length);
+        }
+        // Remove leading slashes to avoid creating nested folders on delete/upload.
+        relativeKey = relativeKey.replace(/^\/+/, "");
         const isDirectory = (item.type || "").toLowerCase() === "directory";
-        const isRootPlaceholder = relativeKey === "" || relativeKey === "/";
+        const isRootPlaceholder =
+          relativeKey === "" ||
+          relativeKey === "/" ||
+          normalizedPath === prefix || // e.g., "agents/{id}/config" without trailing slash
+          path === prefix;
         if (isDirectory || isRootPlaceholder) return null;
         const name = relativeKey.split("/").filter(Boolean).pop() || relativeKey;
         return {

@@ -150,8 +150,9 @@ def _normalize_sources_payload(raw: Any) -> List[VectorSearchHit]:
 class InterruptRaised(Exception):
     """Internal control-flow exception for LangGraph interrupts."""
 
-    def __init__(self, payload: Dict[str, Any]):
+    def __init__(self, payload: Dict[str, Any], partial_messages: Optional[List["ChatMessage"]] = None):
         self.payload = payload
+        self.partial_messages = partial_messages or []
         super().__init__("LangGraph interrupt")
 
 
@@ -729,7 +730,7 @@ class StreamTranscoder:
                         out.append(msg_v2)
                         seq += 1
                         await self._emit(callback, msg_v2)
-        except InterruptRaised:
+        except InterruptRaised as ir:
             # Expected control-flow for HITL; let caller handle without logging an error.
             logger.info(
                 "StreamTranscoder: interrupt raised agent=%s session=%s exchange=%s",
@@ -737,6 +738,8 @@ class StreamTranscoder:
                 session_id,
                 exchange_id,
             )
+            # Attach partial messages so the orchestrator can persist them.
+            ir.partial_messages = out
             raise
         except Exception as e:
             # Preserve partial transcript so far; caller decides how to surface the failure.

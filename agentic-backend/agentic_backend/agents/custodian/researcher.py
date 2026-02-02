@@ -36,7 +36,7 @@ class ResearchAgentState(TypedDict):
     research_depth: int  # Hydrated from AgentInputV1.parameters['research_depth']
 
 
-class ResearchAgent(AgentFlow):
+class Researcher(AgentFlow):
     """
     A minimal long-running research agent wired for Temporal, but keeping the
     agent itself free of Temporal imports.
