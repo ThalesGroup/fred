@@ -1885,6 +1885,7 @@ export type Team = {
   owners?: UserSummary[];
   member_count?: number | null;
   is_private: boolean;
+  is_member?: boolean;
 };
 export type ProcessorDescriptor = {
   id: string;

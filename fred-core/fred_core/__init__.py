@@ -83,6 +83,7 @@ from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
 from fred_core.security.rbac import RBACProvider
 from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
 from fred_core.security.rebac.rebac_engine import (
+    ORGANIZATION_ID,
     AgentPermission,
     DocumentPermission,
     RebacDisabledResult,
@@ -180,6 +181,7 @@ __all__ = [
     "TagPermission",
     "DocumentPermission",
     "TeamPermission",
+    "ORGANIZATION_ID",
     "AgentPermission",
     "RebacPermission",
     "RebacDisabledResult",

@@ -13,6 +13,8 @@ from fred_core.security.keycloak.keycloack_admin_client import (
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.structure import KeycloakUser, M2MSecurity
 
+ORGANIZATION_ID = "fred"
+
 
 @dataclass(frozen=True)
 class RebacReference:
@@ -372,7 +374,6 @@ class RebacEngine(ABC):
             return set()
 
         relations: set[Relation] = set()
-        organization_id = "fred"
 
         # Map Keycloak roles to organization relations based on the schema
         for role in user.roles:
@@ -388,7 +389,7 @@ class RebacEngine(ABC):
                             subject=RebacReference(Resource.USER, user.uid),
                             relation=relation_type,
                             resource=RebacReference(
-                                Resource.ORGANIZATION, organization_id
+                                Resource.ORGANIZATION, ORGANIZATION_ID
                             ),
                         )
                     )

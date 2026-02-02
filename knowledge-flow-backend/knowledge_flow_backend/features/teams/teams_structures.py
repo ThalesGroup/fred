@@ -17,3 +17,4 @@ class Team(BaseModel):
     owners: list[UserSummary] = Field(default_factory=list)
     member_count: int | None = None
     is_private: bool
+    is_member: bool = False
