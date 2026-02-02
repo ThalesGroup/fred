@@ -127,7 +127,9 @@ class Tessa(AgentFlow):
                 return self._maybe_parse_json(msg.content)
         return None
 
-    def _normalize_database_context(self, payload: Any) -> Dict[str, List[Dict[str, Any]]]:
+    def _normalize_database_context(
+        self, payload: Any
+    ) -> Dict[str, List[Dict[str, Any]]]:
         payload = self._maybe_parse_json(payload)
 
         if isinstance(payload, dict):
@@ -155,7 +157,9 @@ class Tessa(AgentFlow):
             for item in payload:
                 if not isinstance(item, dict):
                     continue
-                db_name = item.get("db_name") or item.get("database") or item.get("name")
+                db_name = (
+                    item.get("db_name") or item.get("database") or item.get("name")
+                )
                 tables = item.get("tables")
                 if isinstance(db_name, str) and isinstance(tables, list):
                     collapsed[db_name] = tables
@@ -165,9 +169,7 @@ class Tessa(AgentFlow):
         logger.warning("Unexpected tabular context format: %s", type(payload).__name__)
         return {}
 
-    def _format_context_for_prompt(
-        self, database_context: Any
-    ) -> str:
+    def _format_context_for_prompt(self, database_context: Any) -> str:
         """
         Format DB context where the dict structure is:
         {
