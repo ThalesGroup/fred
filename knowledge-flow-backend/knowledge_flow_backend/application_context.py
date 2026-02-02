@@ -91,6 +91,7 @@ from knowledge_flow_backend.core.stores.tags.base_tag_store import BaseTagStore
 from knowledge_flow_backend.core.stores.tags.duckdb_tag_store import DuckdbTagStore
 from knowledge_flow_backend.core.stores.tags.opensearch_tag_store import OpenSearchTagStore
 from knowledge_flow_backend.core.stores.tags.postgres_tag_store import PostgresTagStore
+from knowledge_flow_backend.core.stores.team_metadata import BaseTeamMetadataStore, PostgresTeamMetadataStore
 from knowledge_flow_backend.core.stores.vector.base_text_splitter import BaseTextSplitter
 from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
 from knowledge_flow_backend.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
@@ -257,6 +258,7 @@ class ApplicationContext:
     _vector_store_instance: Optional[BaseVectorStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
+    _team_metadata_store_instance: Optional[BaseTeamMetadataStore] = None
     _kpi_store_instance: Optional[BaseKPIStore] = None
     _log_store_instance: Optional[BaseLogStore] = None
     _opensearch_client: Optional[OpenSearch] = None
@@ -804,6 +806,20 @@ class ApplicationContext:
         else:
             raise ValueError("Unsupported sessions storage backend")
         return self._tag_store_instance
+
+    def get_team_metadata_store(self) -> BaseTeamMetadataStore:
+        """Get the team metadata store instance."""
+        if self._team_metadata_store_instance is not None:
+            return self._team_metadata_store_instance
+
+        pg = get_configuration().storage.postgres
+        if not pg:
+            raise ValueError("PostgreSQL configuration is required for team metadata store")
+
+        engine = create_engine_from_config(pg)
+        self._team_metadata_store_instance = PostgresTeamMetadataStore(engine=engine)
+
+        return self._team_metadata_store_instance
 
     def get_resource_store(self) -> BaseResourceStore:
         if self._resource_store_instance is not None:

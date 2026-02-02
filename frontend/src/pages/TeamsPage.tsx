@@ -1,7 +1,7 @@
 import { Box, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { TeamCard } from "../components/teams/TeamCard";
-import { Team } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { Team, useListTeamsKnowledgeFlowV1TeamsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 const teams: Team[] = [
   {
@@ -47,7 +47,7 @@ const teams: Team[] = [
 
 export function TeamsPage() {
   const { t } = useTranslation();
-  // const { data: teams } = useListGroupsKnowledgeFlowV1GroupsGetQuery();
+  const { data: teams } = useListTeamsKnowledgeFlowV1TeamsGetQuery();
 
   return (
     <Box sx={{ px: 2, pt: 1, pb: 2 }}>

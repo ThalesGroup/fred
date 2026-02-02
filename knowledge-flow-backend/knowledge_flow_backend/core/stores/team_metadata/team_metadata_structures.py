@@ -1,0 +1,32 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from datetime import datetime
+
+from sqlmodel import Field, SQLModel
+
+
+class TeamMetadata(SQLModel, table=True):
+    """
+    Additional metadata for a Keycloak group/team.
+    Keycloak provides: id, name
+    This model stores: description, banner_image_url, is_private, timestamps
+    """
+
+    team_id: str = Field(primary_key=True)
+    description: str | None = Field(default=None, nullable=True)
+    banner_image_url: str | None = Field(default=None, nullable=True)
+    is_private: bool = Field(default=False)
+    created_at: datetime = Field(nullable=False)
+    updated_at: datetime = Field(nullable=False)
