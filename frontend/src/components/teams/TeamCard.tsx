@@ -2,12 +2,13 @@ import GroupsIcon from "@mui/icons-material/Groups";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import { Avatar, AvatarGroup, Box, Paper, styled, Tooltip, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
+import { KeyCloakService } from "../../security/KeycloakService";
 import { Team } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { getInitials } from "../../utils/getInitials";
 import InvisibleLink from "../InvisibleLink";
 
-const HoverBox = styled(Box)<{ userIsMember: boolean }>(({ theme, userIsMember }) => {
-  if (!userIsMember) {
+const HoverBox = styled(Box)<{ isClickable: boolean }>(({ theme, isClickable }) => {
+  if (!isClickable) {
     return {};
   }
 
@@ -20,11 +21,14 @@ const HoverBox = styled(Box)<{ userIsMember: boolean }>(({ theme, userIsMember }
 
 export interface TeamCardProps {
   team: Team;
-  userIsMember?: boolean;
 }
 
-export function TeamCard({ team, userIsMember = false }: TeamCardProps) {
+export function TeamCard({ team }: TeamCardProps) {
   const { t } = useTranslation();
+
+  const userRoles = KeyCloakService.GetUserRoles();
+  const isAdmin = userRoles.includes("admin");
+  const isClickable = team.is_member || isAdmin;
 
   // Offset a tooltp down from 12px
   const tooltipOffset = {
@@ -43,7 +47,7 @@ export function TeamCard({ team, userIsMember = false }: TeamCardProps) {
   const cardContent = (
     <Paper elevation={2} sx={{ borderRadius: 2, userSelect: "none" }}>
       <HoverBox
-        userIsMember={userIsMember}
+        isClickable={isClickable}
         sx={{
           display: "flex",
           flexDirection: "column",
@@ -55,7 +59,7 @@ export function TeamCard({ team, userIsMember = false }: TeamCardProps) {
       >
         {/* Banner */}
         <img
-          src={team.banner_image_url}
+          src={team.banner_image_url || ""}
           alt={`${team.name} avatar`}
           style={{ objectFit: "cover", backgroundRepeat: "no-repeat", height: "6rem" }}
         />
@@ -117,7 +121,7 @@ export function TeamCard({ team, userIsMember = false }: TeamCardProps) {
           {/* List of owners */}
           <Box sx={{ display: "flex" }}>
             <AvatarGroup max={4}>
-              {team.owners.map((owner) => (
+              {team.owners?.map((owner) => (
                 <Tooltip
                   title={`${owner.first_name} ${owner.last_name}`}
                   key={owner.id}
@@ -136,5 +140,5 @@ export function TeamCard({ team, userIsMember = false }: TeamCardProps) {
     </Paper>
   );
 
-  return userIsMember ? <InvisibleLink to={`/team/${team.id}`}>{cardContent}</InvisibleLink> : cardContent;
+  return isClickable ? <InvisibleLink to={`/team/${team.id}`}>{cardContent}</InvisibleLink> : cardContent;
 }

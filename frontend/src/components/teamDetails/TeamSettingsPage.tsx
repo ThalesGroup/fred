@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Team } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface TeamSettingsPageProps {
-  team: Team;
+  team?: Team;
 }
 
 export function TeamSettingsPage({ team }: TeamSettingsPageProps) {
@@ -26,7 +26,7 @@ export function TeamSettingsPage({ team }: TeamSettingsPageProps) {
             </Box>
             {/* Banner Preview */}
             <img
-              src={team.banner_image_url}
+              src={team?.banner_image_url || ""}
               style={{ height: "6rem", borderRadius: theme.spacing(1), width: "450px", objectFit: "cover" }}
             />
           </Box>

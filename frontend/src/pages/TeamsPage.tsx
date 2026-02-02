@@ -27,7 +27,7 @@ export function TeamsPage() {
         </Box>
 
         <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
-          {yourTeams && yourTeams.map((team) => <TeamCard key={team.id} team={team} userIsMember />)}
+          {yourTeams && yourTeams.map((team) => <TeamCard key={team.id} team={team} />)}
         </Box>
       </Box>
 

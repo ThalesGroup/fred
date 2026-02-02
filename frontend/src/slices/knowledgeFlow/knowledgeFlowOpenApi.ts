@@ -556,6 +556,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/knowledge-flow/v1/teams` }),
     }),
+    getTeamKnowledgeFlowV1TeamsTeamIdGet: build.query<
+      GetTeamKnowledgeFlowV1TeamsTeamIdGetApiResponse,
+      GetTeamKnowledgeFlowV1TeamsTeamIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/teams/${queryArg.teamId}` }),
+    }),
     listUsersKnowledgeFlowV1UsersGet: build.query<
       ListUsersKnowledgeFlowV1UsersGetApiResponse,
       ListUsersKnowledgeFlowV1UsersGetApiArg
@@ -1125,6 +1131,10 @@ export type QueryLogsKnowledgeFlowV1LogsQueryPostApiArg = {
 };
 export type ListTeamsKnowledgeFlowV1TeamsGetApiResponse = /** status 200 Successful Response */ Team[];
 export type ListTeamsKnowledgeFlowV1TeamsGetApiArg = void;
+export type GetTeamKnowledgeFlowV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ Team;
+export type GetTeamKnowledgeFlowV1TeamsTeamIdGetApiArg = {
+  teamId: string;
+};
 export type ListUsersKnowledgeFlowV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
 export type ListUsersKnowledgeFlowV1UsersGetApiArg = void;
 export type ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiResponse =
@@ -2182,6 +2192,8 @@ export const {
   useQueryLogsKnowledgeFlowV1LogsQueryPostMutation,
   useListTeamsKnowledgeFlowV1TeamsGetQuery,
   useLazyListTeamsKnowledgeFlowV1TeamsGetQuery,
+  useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery,
+  useLazyGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery,
   useListUsersKnowledgeFlowV1UsersGetQuery,
   useLazyListUsersKnowledgeFlowV1UsersGetQuery,
   useListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,

@@ -5,7 +5,7 @@ from fred_core import ORGANIZATION_ID, KeycloackDisabled, KeycloakUser, RebacDis
 from keycloak import KeycloakAdmin
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
-from knowledge_flow_backend.features.teams.teams_structures import KeycloakGroupSummary, Team
+from knowledge_flow_backend.features.teams.teams_structures import KeycloakGroupSummary, Team, TeamNotFoundError
 from knowledge_flow_backend.features.users.users_service import get_users_by_ids
 from knowledge_flow_backend.features.users.users_structures import UserSummary
 
@@ -35,8 +35,57 @@ async def list_teams(user: KeycloakUser) -> list[Team]:
         authorized_tags_ids = [t.id for t in authorized_teams_refs]
         root_groups = [t for t in root_groups if t.id in authorized_tags_ids]
 
+    # Enrich groups with full team data
+    return await _enrich_groups_with_team_data(admin, rebac, metadata_store, user, root_groups)
+
+
+async def get_team_by_id(user: KeycloakUser, team_id: str) -> Team:
+    app_context = ApplicationContext.get_instance()
+    rebac = app_context.get_rebac_engine()
+    metadata_store = app_context.get_team_metadata_store()
+
+    admin = create_keycloak_admin(get_configuration().security.m2m)
+    if isinstance(admin, KeycloackDisabled):
+        logger.info("Keycloak admin client not configured; cannot retrieve team.")
+        raise TeamNotFoundError(team_id)
+
+    # Fetch the specific group from Keycloak
+    try:
+        raw_group = await admin.a_get_group(team_id)
+    except Exception as e:
+        logger.warning(f"Failed to fetch group {team_id} from Keycloak: {e}")
+        raise TeamNotFoundError(team_id) from e
+
+    if not raw_group:
+        raise TeamNotFoundError(team_id)
+
+    # Ensure team has organization relation for ReBAC
+    consistency_token = await _ensure_team_organization_relations(rebac, [team_id])
+
+    # Check user authorization for this specific team
+    await rebac.check_user_permission_or_raise(user, TeamPermission.CAN_READ, team_id, consistency_token=consistency_token)
+
+    # Create group summary from raw Keycloak data
+    group_summary = KeycloakGroupSummary(
+        id=raw_group.get("id"),
+        name=raw_group.get("name"),
+        member_count=0,  # Will be populated by enrichment
+    )
+
+    # Enrich with full team data
+    teams = await _enrich_groups_with_team_data(admin, rebac, metadata_store, user, [group_summary])
+    return teams[0]
+
+
+async def _enrich_groups_with_team_data(
+    admin: KeycloakAdmin, rebac: RebacEngine, metadata_store, user: KeycloakUser, groups: list[KeycloakGroupSummary]
+) -> list[Team]:
+    """Shared logic to enrich Keycloak groups with metadata, owners, and member information."""
+    if not groups:
+        return []
+
     # Batch fetch metadata for all teams
-    team_ids: list[str] = [g.id for g in root_groups]
+    team_ids: list[str] = [g.id for g in groups]
     metadata_map = metadata_store.get_by_team_ids(team_ids)
 
     # Batch query OpenFGA for all team owners and Keycloak for member counts in parallel
@@ -62,7 +111,7 @@ async def list_teams(user: KeycloakUser) -> list[Team]:
 
     # Transform Keycloak group in Fred Team
     teams: list[Team] = []
-    for group_summary in root_groups:
+    for group_summary in groups:
         group_id = group_summary.id
         group_name = group_summary.name
 

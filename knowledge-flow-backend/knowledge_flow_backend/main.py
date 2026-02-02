@@ -187,6 +187,8 @@ def create_app() -> FastAPI:
 
     # Register exception handlers
     register_exception_handlers(app)
+    teams_controller.register_exception_handlers(app)
+    
     allowed_origins = list({_norm_origin(o) for o in configuration.security.authorized_origins})
     logger.info("%s[CORS] allow_origins=%s", LOG_PREFIX, allowed_origins)
     app.add_middleware(
