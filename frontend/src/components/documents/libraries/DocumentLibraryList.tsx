@@ -18,7 +18,7 @@ import SchemaOutlinedIcon from "@mui/icons-material/SchemaOutlined";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
 import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
 import UploadIcon from "@mui/icons-material/Upload";
-import { Box, Breadcrumbs, Button, Card, Chip, IconButton, Link, TextField, Tooltip, Typography } from "@mui/material";
+import { Box, Breadcrumbs, Button, Card, Chip, IconButton, Link, TextField, Typography } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { LibraryCreateDrawer } from "../../../common/LibraryCreateDrawer";
@@ -27,6 +27,8 @@ import { usePermissions } from "../../../security/usePermissions";
 import { EmptyState } from "../../EmptyState";
 
 import { useLocalStorageState } from "../../../hooks/useLocalStorageState";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
+import { buildTree, findNode, TagNode } from "../../../shared/utils/tagTree";
 import {
   DocumentMetadata,
   TagWithItemsId,
@@ -35,7 +37,6 @@ import {
   useListUsersKnowledgeFlowV1UsersGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
-import { buildTree, findNode, TagNode } from "../../tags/tagTree";
 import { useToast } from "../../ToastProvider";
 import { useDocumentCommands } from "../common/useDocumentCommands";
 import { docHasAnyTag, matchesDocByName } from "./documentHelper";
@@ -208,7 +209,7 @@ export default function DocumentLibraryList() {
 
   const loadMore = React.useCallback(
     (tagId: string) => {
-      const offset = tagId === currentTagId ? nextOffset : perTagDocs[tagId]?.length ?? 0;
+      const offset = tagId === currentTagId ? nextOffset : (perTagDocs[tagId]?.length ?? 0);
       const applyToCurrent = tagId === currentTagId;
       void loadPage(tagId, offset, true, applyToCurrent);
     },
@@ -217,7 +218,7 @@ export default function DocumentLibraryList() {
 
   const loadAll = React.useCallback(
     (tagId: string) => {
-      const offset = tagId === currentTagId ? nextOffset : perTagDocs[tagId]?.length ?? 0;
+      const offset = tagId === currentTagId ? nextOffset : (perTagDocs[tagId]?.length ?? 0);
       const total = perTagTotals[tagId] ?? (tagId === currentTagId ? totalDocuments : undefined);
       const remaining = total !== undefined ? Math.max(total - offset, 0) : 0;
       if (remaining <= 0) return;
@@ -252,9 +253,7 @@ export default function DocumentLibraryList() {
       .filter((id): id is string => Boolean(id))
       .filter(
         (id) =>
-          perTagTotals[id] === undefined &&
-          !prefetchedTagsRef.current.has(id) &&
-          !prefetchingTagsRef.current.has(id),
+          perTagTotals[id] === undefined && !prefetchedTagsRef.current.has(id) && !prefetchingTagsRef.current.has(id),
       )
       .slice(0, MAX_PREFETCH);
 
@@ -311,10 +310,12 @@ export default function DocumentLibraryList() {
   const allExpanded = React.useMemo(() => expanded.length > 0, [expanded]);
 
   /* ---------------- Commands ---------------- */
-  const { toggleRetrievable, removeFromLibrary, bulkRemoveFromLibraryForTag, preview, previewPdf, download } = useDocumentCommands({
-    refetchTags: refetch,
-    refetchDocs: () => (currentTagId ? loadPage(currentTagId, 0, false) : Promise.resolve()),
-  });
+  const { toggleRetrievable, removeFromLibrary, bulkRemoveFromLibraryForTag, preview, previewPdf, download } =
+    useDocumentCommands({
+      refetchTags: refetch,
+      refetchDocs: (tagId?: string) =>
+        tagId ? loadPage(tagId, 0, false) : currentTagId ? loadPage(currentTagId, 0, false) : Promise.resolve(),
+    });
   const handleDownload = React.useCallback(
     async (doc: DocumentMetadata) => {
       const name = doc.identity.document_name || doc.identity.document_uid;
@@ -388,7 +389,15 @@ export default function DocumentLibraryList() {
     showConfirmationDialog({
       title: t("documentLibrary.confirmBulkRemoveTitle") || "Remove selected?",
       onConfirm: async () => {
-        const docsById = new Map<string, DocumentMetadata>((allDocuments ?? []).map((d) => [d.identity.document_uid, d]));
+        const docsById = new Map<string, DocumentMetadata>();
+        Object.values(documentsByTagId).forEach((docs) => {
+          docs.forEach((doc) => {
+            docsById.set(doc.identity.document_uid, doc);
+          });
+        });
+        (allDocuments ?? []).forEach((doc) => {
+          docsById.set(doc.identity.document_uid, doc);
+        });
         const docsByTag = new Map<string, { tag: TagWithItemsId; docs: DocumentMetadata[] }>();
 
         for (const [docUid, tag] of entries) {
@@ -410,7 +419,15 @@ export default function DocumentLibraryList() {
         setSelectedDocs({});
       },
     });
-  }, [selectedDocs, allDocuments, bulkRemoveFromLibraryForTag, setSelectedDocs, showConfirmationDialog, t]);
+  }, [
+    selectedDocs,
+    documentsByTagId,
+    allDocuments,
+    bulkRemoveFromLibraryForTag,
+    setSelectedDocs,
+    showConfirmationDialog,
+    t,
+  ]);
 
   const { confirmDeleteFolder } = useTagCommands({
     refetchTags: refetch,
@@ -436,12 +453,7 @@ export default function DocumentLibraryList() {
   );
 
   return (
-    <Box
-      display="flex"
-      flexDirection="column"
-      gap={2}
-      sx={{ height: "calc(100vh - 120px)", minHeight: 0 }}
-    >
+    <Box display="flex" flexDirection="column" gap={2} sx={{ height: "calc(100vh - 120px)", minHeight: 0 }}>
       {/* Top toolbar */}
       <Box display="flex" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
         <Breadcrumbs>
@@ -553,26 +565,21 @@ export default function DocumentLibraryList() {
             </Typography>
             <Box display="flex" alignItems="center" gap={1}>
               {selectedFolder && (
-                <Tooltip title={t("documentLibrary.configurePipeline") || "Configure processing pipeline"}>
+                <SimpleTooltip title={t("documentLibrary.configurePipeline") || "Configure processing pipeline"}>
                   <span>
-                    <IconButton
-                      size="small"
-                      color="primary"
-                      onClick={handleOpenPipelineDrawer}
-                      disabled={!tree}
-                    >
+                    <IconButton size="small" color="primary" onClick={handleOpenPipelineDrawer} disabled={!tree}>
                       <SchemaOutlinedIcon fontSize="small" />
                     </IconButton>
                   </span>
-                </Tooltip>
+                </SimpleTooltip>
               )}
-              <Tooltip
+              <SimpleTooltip
                 title={allExpanded ? t("documentLibrariesList.collapseAll") : t("documentLibrariesList.expandAll")}
               >
                 <IconButton size="small" onClick={() => setAllExpanded(!allExpanded)} disabled={!tree}>
                   {allExpanded ? <UnfoldLessIcon fontSize="small" /> : <UnfoldMoreIcon fontSize="small" />}
                 </IconButton>
-              </Tooltip>
+              </SimpleTooltip>
             </Box>
           </Box>
 

@@ -38,8 +38,11 @@ from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHin
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
+    get_document_uids,
+    get_language,
     get_rag_knowledge_scope,
     get_search_policy,
+    get_vector_search_scopes,
     is_corpus_only_mode,
 )
 from agentic_backend.core.runtime_source import expose_runtime_source
@@ -96,15 +99,6 @@ RAG_TUNING = AgentTuning(
                 "Today is {today}."
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
-        ),
-        FieldSpec(
-            key="prompts.response_language",
-            type="text",
-            title="Response Language",
-            description="Language to use for all answers (e.g., 'English', 'Spanish').",
-            required=False,
-            default="English",
-            ui=UIHints(group="Prompts"),
         ),
         FieldSpec(
             key="prompts.with_sources",
@@ -188,7 +182,7 @@ RAG_TUNING = AgentTuning(
                 "If enabled, the model first extracts keywords and augments the query before vector search to widen recall."
             ),
             required=False,
-            default=True,
+            default=False,
             ui=UIHints(group="Retrieval"),
         ),
         FieldSpec(
@@ -256,9 +250,7 @@ class Rico(AgentFlow):
         """
         Resolve the RAG system prompt from tuning; optionally append chat context text if enabled.
         """
-        response_language = (
-            self.get_tuned_text("prompts.response_language") or "English"
-        )
+        response_language = get_language(self.get_runtime_context()) or "English"
         sys_text = self._render_tuned_prompt(
             "prompts.system", response_language=response_language
         )  # token-safe rendering (e.g. {today})
@@ -314,6 +306,18 @@ class Rico(AgentFlow):
         try:
             runtime_context = self.get_runtime_context()
             rag_scope = get_rag_knowledge_scope(runtime_context)
+            response_language = get_language(runtime_context) or "English"
+            chat_context = self.chat_context_text()
+            include_chat_context = self.get_field_spec(
+                "prompts.include_chat_context"
+            ) is None or bool(self.get_tuned_any("prompts.include_chat_context"))
+            logger.debug(
+                "[AGENT] Rico prompt check: response_language=%s include_chat_context=%s system_prompt=%r chat_context=%r",
+                response_language,
+                include_chat_context,
+                self._system_prompt(),
+                chat_context,
+            )
 
             if rag_scope == "general_only":
                 logger.info("Rico: general-only mode; bypassing retrieval.")
@@ -362,29 +366,35 @@ class Rico(AgentFlow):
 
             # 1) Build retrieval scope from runtime context
             doc_tag_ids = get_document_library_tags_ids(runtime_context)
+            document_uids = get_document_uids(runtime_context)
             search_policy = get_search_policy(runtime_context)
             top_k = self.get_tuned_int("rag.top_k", default=10)
             logger.debug(
-                "[AGENT] reasoning start question=%r doc_tag_ids=%s search_policy=%s top_k=%s rag_scope=%s",
+                "[AGENT] reasoning start question=%r doc_tag_ids=%s document_uids=%s search_policy=%s top_k=%s rag_scope=%s",
                 question,
                 doc_tag_ids,
+                document_uids,
                 search_policy,
                 top_k,
                 rag_scope,
             )
             logger.info(
-                "[AGENT][SESSION PATH] question=%r runtime_context.session_id=%s rag_scope=%s search_policy=%s doc_tag_ids=%s",
+                "[AGENT][SESSION PATH] question=%r runtime_context.session_id=%s rag_scope=%s search_policy=%s doc_tag_ids=%s document_uids=%s",
                 question,
                 runtime_context.session_id if runtime_context else None,
                 rag_scope,
                 search_policy,
                 doc_tag_ids,
+                document_uids,
             )
 
             if not runtime_context or not runtime_context.session_id:
                 raise RuntimeError(
                     "Runtime context missing session_id; required for scoped retrieval."
                 )
+            include_session_scope, include_corpus_scope = get_vector_search_scopes(
+                runtime_context
+            )
 
             # 2) Vector search
             with self.kpi_timer(
@@ -395,9 +405,11 @@ class Rico(AgentFlow):
                     question=augmented_question,
                     top_k=top_k,
                     document_library_tags_ids=doc_tag_ids,
+                    document_uids=document_uids,
                     search_policy=search_policy,
                     session_id=runtime_context.session_id,
-                    include_session_scope=True,
+                    include_session_scope=include_session_scope,
+                    include_corpus_scope=include_corpus_scope,
                 )
             logger.debug("[AGENT] vector search returned %d hit(s)", len(hits))
             if hits:
@@ -581,7 +593,7 @@ class Rico(AgentFlow):
 
             fallback_text = guardrail_fallback_message(
                 info,
-                language=self.get_tuned_text("prompts.response_language"),
+                language=get_language(runtime_context) or "English",
                 default_message="An unexpected error occurred while searching documents. Please try again.",
             )
             fallback = await self.model.ainvoke([HumanMessage(content=fallback_text)])

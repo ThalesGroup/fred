@@ -18,13 +18,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional, cast
 
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import ToolNode
 
 from agentic_backend.application_context import get_mcp_configuration
+from agentic_backend.common.mcp_interceptors import ExpiredTokenRetryInterceptor
 from agentic_backend.common.mcp_toolkit import McpToolkit
 from agentic_backend.common.mcp_utils import get_connected_mcp_client_for_agent
 from agentic_backend.common.tool_node_utils import create_mcp_tool_node
@@ -131,10 +132,23 @@ class MCPRuntime:
         from the same task on stop signal to avoid AnyIO cancel-scope mismatches.
         """
         try:
+            interceptors = []
+            refresh_cb_attr = getattr(
+                self.agent_instance, "refresh_user_access_token", None
+            )
+            refresh_cb: Callable[[], str] | None = (
+                cast(Callable[[], str], refresh_cb_attr)
+                if callable(refresh_cb_attr)
+                else None
+            )
+            if refresh_cb:
+                interceptors.append(ExpiredTokenRetryInterceptor(refresh_cb))
+
             new_client = await get_connected_mcp_client_for_agent(
                 agent_name=self.agent_instance.get_name(),
                 mcp_servers=self.available_servers,
                 runtime_context=runtime_context,
+                tool_interceptors=interceptors,
             )
             self.mcp_client = new_client
             self.toolkit = McpToolkit(client=new_client, agent=self.agent_instance)

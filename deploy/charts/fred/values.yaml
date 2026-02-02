@@ -1,5 +1,3 @@
-# Unified values.yaml
-
 global:
   kubeconfig: ""
   create_index:
@@ -51,6 +49,8 @@ applications:
     ports:
       - name: http
         containerPort: 8000
+      - name: metrics
+        containerPort: 9000
     service:
       annotations: {}
       extraLabels: {}
@@ -59,6 +59,25 @@ applications:
         - name: http
           port: 80
           targetPort: 8000
+    metricsService:
+      enabled: true
+      annotations: {}
+      extraLabels: {}
+      type: ClusterIP
+      port: 9000
+      targetPort: 9000
+      serviceMonitor:
+        enabled: false
+        annotations: {}
+        labels: {}
+        interval: 30s
+        scrapeTimeout: 10s
+        path: /metrics
+        scheme: http
+        honorLabels: false
+        relabelings: []
+        metricRelabelings: []
+        namespaceSelector: {}
     ingress:
       enabled: false
       className: ""
@@ -147,6 +166,13 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
+        metrics_enabled: true # Prometheus exporter
+        metrics_address: "0.0.0.0"
+        metrics_port: 9000
+        kpi_process_metrics_interval_sec: 0
+        kpi_log_summary_interval_sec: 0.0
+        kpi_log_summary_top_n: 0
+
       security:
         m2m:
           enabled: true
@@ -176,6 +202,20 @@ applications:
           # If true activate the backend and frontend modules in charge of K8
           # and frugality monitoring
           enableK8Features: false
+      scheduler:
+        # Scheduler backend driving agent workflows.
+        # - "memory": in-process queue for local/dev.
+        # - "temporal": use Temporal Cloud/self-hosted to run agent tasks asynchronously.
+        backend: "temporal"
+        temporal:
+          # Temporal frontend endpoint and namespace used by the agentic worker.
+          host: "temporal.default.svc.cluster.local:7233"
+          namespace: "default"
+          task_queue: "agents"
+          workflow_id_prefix: "task"
+          connect_timeout_seconds: 5
+        # Optional progress query name and memo/search attributes can be added here if your
+        # cluster uses custom Temporal conventions.
           # If true activate support for an electronic warfare demonstration
           enableElecWarfare: false
         properties:
@@ -193,10 +233,10 @@ applications:
 
         # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
         max_concurrent_agents: 128
-        
+
         # Maximum number of files a user can attach across all sessions
         max_attached_files_per_user: 20
-  
+
         # Maximum size (in MB) for each attached file
         max_attached_file_size_mb: 50
 
@@ -207,28 +247,40 @@ applications:
           connect: 5 # Time to wait for a connection in seconds
           read: 15 # Time to wait for a response in seconds
         default_chat_model:
-          # Required in .env:
-          # - OPENAI_API_KEY
           provider: "openai"
-          name: "gpt-4o"
+          name: "gpt-4o-mini"
           settings:
             temperature: 0.0
-            max_retries: 2
-            request_timeout: 30
+            max_retries: 1
+            timeout:
+              connect: 10.0
+              read: 120.0
+              write: 30.0
+              pool: 5.0
+            http_client_limits:
+              max_connections: 200
+              max_keepalive_connections: 50
+              keepalive_expiry_seconds: 10
         default_language_model:
-          # Required in .env:
-          # - OPENAI_API_KEY
           provider: "openai"
           name: "gpt-4o"
           settings:
             temperature: 0.0
-            max_retries: 2
-            request_timeout: 30
-        crossencoder_model:
-          name: cross-encoder/ms-marco-MiniLM-L-12-v2
-          settings:
-            online: false
-            local_path: /app/models
+            max_retries: 1
+            timeout:
+              connect: 10.0
+              read: 180.0
+              write: 30.0
+              pool: 5.0
+            http_client_limits:
+              max_connections: 200
+              max_keepalive_connections: 50
+              keepalive_expiry_seconds: 10
+          crossencoder_model:
+            name: cross-encoder/ms-marco-MiniLM-L-12-v2
+            settings:
+              online: false
+              local_path: /app/models
 
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the chat model
@@ -333,7 +385,8 @@ applications:
       OPENSEARCH_PASSWORD: ""
       M2M_CLIENT_SECRET: ""
       OPENFGA_API_TOKEN: ""
-  
+      POSTGRES_PASSWORD: ""
+
   frontend:
     enabled: true
     applicationName: frontend
@@ -489,6 +542,8 @@ applications:
     ports:
       - name: http
         containerPort: 8111
+      - name: metrics
+        containerPort: 9111
       - name: https
         containerPort: 8443
     service:
@@ -504,6 +559,25 @@ applications:
           port: 8443
           targetPort: 8443
           protocol: TCP
+    metricsService:
+      enabled: true
+      annotations: {}
+      extraLabels: {}
+      type: ClusterIP
+      port: 9111
+      targetPort: 9111
+      serviceMonitor:
+        enabled: false
+        annotations: {}
+        labels: {}
+        interval: 30s
+        scrapeTimeout: 10s
+        path: /metrics
+        scheme: http
+        honorLabels: false
+        relabelings: []
+        metricRelabelings: []
+        namespaceSelector: {}
     ingress:
       enabled: false
       className: ""
@@ -573,6 +647,13 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
+        metrics_enabled: true # Prometheus exporter
+        metrics_address: "0.0.0.0"
+        metrics_port: 9111
+        kpi_process_metrics_interval_sec: 0
+        kpi_log_summary_interval_sec: 0.0
+        kpi_log_summary_top_n: 0
+
       processing:
         generate_summary: true
         use_gpu: true
@@ -609,7 +690,7 @@ applications:
           host: "localhost:7233"
           namespace: "default"
           task_queue: "ingestion"
-          workflow_prefix: "pipeline"
+          workflow_id_prefix: "pipeline"
           connect_timeout_seconds: 5
       input_processors:
         - prefix: ".pdf"
@@ -723,3 +804,5 @@ applications:
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
       OPENFGA_API_TOKEN: ""
+      SQL_PASSWORD: ""
+      POSTGRES_PASSWORD: ""

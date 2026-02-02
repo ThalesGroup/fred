@@ -1,32 +1,31 @@
 // MessageRuntimeContextHeader.tsx
 // Header indicators for Libraries/ChatContext + info icon that opens the popover.
 
-import { Box, Tooltip, Typography } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import PersonOutlinedIcon from "@mui/icons-material/PersonOutline";
 import LibraryBooksOutlinedIcon from "@mui/icons-material/LibraryBooksOutlined";
+import PersonOutlinedIcon from "@mui/icons-material/PersonOutline";
+import { Box, Typography } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras } from "./ChatBotUtils";
 import MessageRuntimeContextPopover from "./MessageRuntimeContextPopover";
 
 type Props = {
   message: ChatMessage;
-  visible: boolean; // show indicators on bubble hover
   libraryNameById?: Record<string, string>;
   chatContextNameById?: Record<string, string>;
 };
 
-export default function MessageRuntimeContextHeader({ message, visible, libraryNameById, chatContextNameById }: Props) {
+export default function MessageRuntimeContextHeader({ message, libraryNameById, chatContextNameById }: Props) {
   const theme = useTheme();
   const { t } = useTranslation();
 
   // Popover anchor + bridged hover to avoid flicker
   const [insightAnchorEl, setInsightAnchorEl] = useState<HTMLElement | null>(null);
   const insightHoverRef = useRef(false);
-  const insightOpen = Boolean(insightAnchorEl);
 
   const openInsights = (el: HTMLElement | null) => {
     setInsightAnchorEl(el);
@@ -112,12 +111,12 @@ export default function MessageRuntimeContextHeader({ message, visible, libraryN
         display: "flex",
         alignItems: "center",
         gap: 0.5,
-        opacity: visible || insightOpen ? 1 : 0,
+        opacity: 1,
         transition: "opacity .15s ease",
       }}
     >
       {showLibs && (
-        <Tooltip
+        <SimpleTooltip
           title={
             <Box>
               <Typography variant="caption" sx={{ opacity: 0.7, display: "block", mb: 0.25 }}>
@@ -147,11 +146,11 @@ export default function MessageRuntimeContextHeader({ message, visible, libraryN
               {t("header.librariesInline", { label: librariesLabel, names: libsTextFull })}
             </Typography>
           </Box>
-        </Tooltip>
+        </SimpleTooltip>
       )}
 
       {showChatCtx && (
-        <Tooltip
+        <SimpleTooltip
           title={
             <Box>
               <Typography variant="caption" sx={{ opacity: 0.7, display: "block", mb: 0.25 }}>
@@ -181,7 +180,7 @@ export default function MessageRuntimeContextHeader({ message, visible, libraryN
               {t("header.chatContextsInline", { label: chatContextLabel, names: chatCtxTextFull })}
             </Typography>
           </Box>
-        </Tooltip>
+        </SimpleTooltip>
       )}
 
       {/* Info icon + popover */}

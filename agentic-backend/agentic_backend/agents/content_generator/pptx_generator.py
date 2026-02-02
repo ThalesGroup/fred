@@ -32,8 +32,8 @@ from pptx.util import Pt
 from pydantic import BaseModel
 
 from agentic_backend.application_context import get_default_chat_model
-from agentic_backend.common.kf_agent_asset_client import AssetRetrievalError
 from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
+from agentic_backend.common.kf_workspace_client import WorkspaceRetrievalError
 from agentic_backend.common.rags_utils import (
     attach_sources_to_llm_response,
     ensure_ranks,
@@ -45,7 +45,9 @@ from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHin
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
+    get_document_uids,
     get_search_policy,
+    get_vector_search_scopes,
 )
 from agentic_backend.core.chatbot.chat_schema import (
     LinkKind,
@@ -302,13 +304,13 @@ class Sloan(AgentFlow):
         """Fill PowerPoint template and style header, with fallback text for missing info."""
 
         template_key = (
-            self.get_tuned_text("ppt.template_key") or "template_fiche_ref_projet.pptx"
+            self.get_tuned_text("ppt.template_path") or "template_fiche_ref_projet.pptx"
         )
 
         # If the key already ends with .pptx, don't append another suffix
         suffix = "" if template_key.lower().endswith(".pptx") else ".pptx"
 
-        template_path = await self.fetch_asset_blob_to_tempfile(
+        template_path = await self.fetch_config_blob_to_tempfile(
             template_key, suffix=suffix
         )
 
@@ -410,10 +412,14 @@ class Sloan(AgentFlow):
 
         try:
             doc_tag_ids = get_document_library_tags_ids(self.get_runtime_context())
+            document_uids = get_document_uids(self.get_runtime_context())
             search_policy = get_search_policy(self.get_runtime_context())
             top_k = self.get_tuned_int("rag.top_k", default=6)
 
             runtime_ctx = self.get_runtime_context()
+            include_session_scope, include_corpus_scope = get_vector_search_scopes(
+                runtime_ctx
+            )
             if not runtime_ctx or not runtime_ctx.session_id:
                 raise RuntimeError(
                     "Runtime context missing session_id; required for scoped retrieval."
@@ -422,9 +428,11 @@ class Sloan(AgentFlow):
                 question=question,
                 top_k=top_k,
                 document_library_tags_ids=doc_tag_ids,
+                document_uids=document_uids,
                 search_policy=search_policy,
                 session_id=runtime_ctx.session_id,
-                include_session_scope=True,
+                include_session_scope=include_session_scope,
+                include_corpus_scope=include_corpus_scope,
             )
 
             if not hits:
@@ -494,32 +502,26 @@ class Sloan(AgentFlow):
                 unique_ppt_name = f"fiche_ref_{project_name}_{timestamp}.pptx"
                 unique_pdf_name = f"fiche_ref_{project_name}_{timestamp}.pdf"
                 with open(ppt_path, "rb") as f:
-                    upload_result = await self.upload_user_asset(
+                    upload_result = await self.upload_user_blob(
                         key=f"{user_id}_{unique_ppt_name}",
                         file_content=f,
                         filename=unique_ppt_name,
                         content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                        user_id_override=user_id,
                     )
-                download_url = self.get_asset_download_url(
-                    asset_key=upload_result.key, scope="user"
-                )
+                download_url = upload_result.download_url
 
                 # --- Convert to PDF and upload ---
                 pdf_path = self._convert_pptx_to_pdf(ppt_path)
                 if pdf_path and pdf_path.exists():
                     with open(pdf_path, "rb") as f:
-                        pdf_upload = await self.upload_user_asset(
+                        pdf_upload = await self.upload_user_blob(
                             key=f"{user_id}_{unique_pdf_name}",
                             file_content=f,
                             filename=unique_pdf_name,
                             content_type="application/pdf",
-                            user_id_override=user_id,
                         )
                         logger.info(f"pdf_upload: {pdf_upload}")
-                    pdf_download_url = self.get_asset_download_url(
-                        asset_key=pdf_upload.key, scope="user"
-                    )
+                    pdf_download_url = pdf_upload.download_url
 
                 # --- Use Tuned Summary Prompt ---
                 summary_template_text = self.summary_prompt_template.format_messages(
@@ -561,7 +563,7 @@ class Sloan(AgentFlow):
                 ai_msg = AIMessage(content="", parts=parts)
                 return {"messages": [ai_msg], "structured_data": structured_data}
 
-            except AssetRetrievalError as e:
+            except WorkspaceRetrievalError as e:
                 logger.exception("Asset upload error: %s", e)
                 return {
                     "messages": [AIMessage(content=f"❌ Upload error: {e}")],

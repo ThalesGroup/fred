@@ -1,3 +1,84 @@
+**v1.2.4** — 2026-02-02
+
+- **Summary**
+
+  This features brings in two major features: the support for interrupt to cleanly implement human in the loop
+  and a clean support for a shared filesystem, exposde to agnt using a well defined workspace
+  concept. This allow configuration files or working files to be cleanly exchanged between admins, users
+  and agents.
+
+- **Features**
+
+  - new KPIs and bench logging, finer grain http outgoing configurability (#1061)
+
+- **Improvements**
+
+  - handling of token expiry (#1061)
+
+---
+
+**v1.2.3** — 2026-01-25
+
+- **Summary**
+  This release bring in new KPIs, a bench tools to stress the agentic fred backend. As part of KPIs and performance improvements,
+  the various langchain dependencies have been updated:
+
+  - "langchain>=1.2.7",
+  - "langchain-community>=0.4.1",
+  - "langchain-mcp-adapters>=0.2.1",
+  - "langchain-core>=1.2.7",
+  - "langchain-ollama>=1.0.1",
+  - "langchain-openai>=1.1.7",
+  - "langchain-text-splitters>=1.1.0",
+  - "langchain-postgres>=0.0.16",
+
+- **Features**
+
+  - new KPIs and bench logging, finer grain http outgoing configurability (#1059)
+  - new bench tools (#1049)
+  - new core temporal agentic API (#1038)
+
+- **Improvements**
+
+  - use of shared http clients (#1055)
+  - reshaping of prometheus metrics (#1023)
+  - updated langchain version to latest (#1059)
+  - improve applicative KPIs (#1066)
+
+**v1.2.2** — 2026-01-23
+
+- **Summary**
+  This release bring in UI improvments in particular allow agents to have the UI display their options
+  on a nicer and more ergonomic conversation right side panel.
+
+  - **Features**
+
+    - allow per document search (#1022)
+    - leverage unstructured for attachement files processing (#1012)
+    - added Log Genius agent (#1004)
+
+  - **Bug fixes**
+
+    - fixe the delete UI issue not refreshin (#1026)
+    - UI improvements (#1015,#999,#1014)
+
+**v1.2.1** — 2026-01-16
+
+- **Features**
+
+  - add favicon override front setting (#987)
+
+- **Improvements**
+
+  - use kpi store to expose prometheus metrics (#983)
+  - batch "load more" calls to max 500 docs and paginate long user chat messages (#975)
+
+- **Bug fixes**
+  - fix the dot loader (#986)
+  - fix UI leak when selecting a library affecting other conversations (#981)
+
+---
+
 **v1.2.0** — 2026-01-10
 
 This release brings in a major UI revamp. This revamp has been proposed and designed

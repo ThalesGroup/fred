@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
@@ -38,6 +39,28 @@ from fred_core.kpi.kpi_writer_structures import (
 from fred_core.security.structure import KeycloakUser
 
 logger = logging.getLogger(__name__)
+summary_logger = logging.getLogger("KPI")
+
+
+@dataclass
+class _MetricRollup:
+    metric_type: str
+    count: int = 0
+    total: float = 0.0
+    min_value: float = 0.0
+    max_value: float = 0.0
+    last_value: float = 0.0
+
+    def add(self, value: float) -> None:
+        if self.count == 0:
+            self.min_value = value
+            self.max_value = value
+        else:
+            self.min_value = min(self.min_value, value)
+            self.max_value = max(self.max_value, value)
+        self.count += 1
+        self.total += value
+        self.last_value = value
 
 
 # -------------------------
@@ -100,7 +123,7 @@ def to_kpi_actor(user: KeycloakUser) -> KPIActor:
     - Fred’s KPI model is actor-centric (human/agent/system). We always attribute
       costs and usage to an actor to support per-user chargeback and audits.
     """
-    return KPIActor(type="human", user_id=user.uid)
+    return KPIActor(type="human", user_id=user.uid, groups=user.groups)
 
 
 # -------------------------
@@ -120,14 +143,26 @@ class KPIWriter(BaseKPIWriter):
       kpi.count("doc.used_total", actor=actor, dims={"doc_uid": "..."})
     """
 
-    def __init__(self, store: BaseKPIStore, defaults: Optional[KPIDefaults] = None):
+    def __init__(
+        self,
+        store: BaseKPIStore,
+        defaults: Optional[KPIDefaults] = None,
+        summary_interval_s: Optional[float] = None,
+        summary_top_n: Optional[int] = None,
+    ):
         self.store = store
         self.defaults = defaults or KPIDefaults()
+        self._summary_interval_s = self._resolve_summary_interval(summary_interval_s)
+        self._summary_top_n = self._resolve_summary_top_n(summary_top_n)
+        self._summary_lock = threading.Lock()
+        self._summary_rollups: Dict[str, _MetricRollup] = {}
+        self._summary_last_ts = time.monotonic()
         # We attempt to ready the underlying sink but never fail the app on metrics init.
         try:
             self.store.ensure_ready()
         except Exception as e:
             logger.warning(f"[KPI] ensure_ready failed (continuing best-effort): {e}")
+        self._start_summary_thread_if_enabled()
 
     # ---- generic emit --------------------------------------------------------
     def emit(
@@ -158,6 +193,8 @@ class KPIWriter(BaseKPIWriter):
         _dims["actor_type"] = actor.type
         if actor.user_id:
             _dims["user_id"] = actor.user_id
+        if "groups" not in _dims and actor.groups:
+            _dims["groups"] = ",".join(sorted(actor.groups))
         merged_dims = _merge_dims(self.defaults, _dims)
 
         event = KPIEvent(
@@ -170,6 +207,7 @@ class KPIWriter(BaseKPIWriter):
             source=self.defaults.source,
             trace=(Trace(**trace) if trace else None),
         )
+        self._record_summary(event)
         self.store.index_event(event)
 
     # ---- simple helpers ------------------------------------------------------
@@ -220,6 +258,133 @@ class KPIWriter(BaseKPIWriter):
             unit=unit,
             dims=dims,
             actor=actor,
+        )
+
+    # ---- summary logging (optional) -----------------------------------------
+    def _resolve_summary_interval(self, value: Optional[float]) -> Optional[float]:
+        if value is not None:
+            return value if value > 0 else None
+        return None
+
+    def _resolve_summary_top_n(self, value: Optional[int]) -> Optional[int]:
+        if value is not None:
+            return value if value > 0 else None
+        return None
+
+    def _start_summary_thread_if_enabled(self) -> None:
+        if not self._summary_interval_s:
+            return
+        logger.warning(
+            "[KPI] Starting summary logger: interval=%.1fs top_n=%s",
+            self._summary_interval_s,
+            str(self._summary_top_n or "all"),
+        )
+        t = threading.Thread(
+            target=self._summary_loop,
+            name="kpi-summary",
+            daemon=True,
+        )
+        t.start()
+
+    def _record_summary(self, event: KPIEvent) -> None:
+        if (
+            not self._summary_interval_s
+            or not event.metric
+            or event.metric.value is None
+        ):
+            return
+        metric_type = event.metric.type
+        name = event.metric.name
+        # Preserve per-phase visibility for chat phases
+        if name == "chat.phase_latency_ms":
+            dims = event.dims or {}
+            parts = [name]
+            if dims.get("agent_step"):
+                parts.append(f"step={dims['agent_step']}")
+            if dims.get("status"):
+                parts.append(f"status={dims['status']}")
+            name = "|".join(parts)
+        value = float(event.metric.value)
+        with self._summary_lock:
+            rollup = self._summary_rollups.get(name)
+            if rollup is None:
+                rollup = _MetricRollup(metric_type=metric_type)
+                self._summary_rollups[name] = rollup
+            rollup.add(value)
+
+    def _summary_loop(self) -> None:
+        while True:
+            time.sleep(self._summary_interval_s or 0)
+            snapshot, elapsed = self._drain_summary()
+            if not snapshot:
+                continue
+            summary_logger.debug(
+                "[KPI][SUMMARY] interval=%.1fs metrics=%d",
+                elapsed,
+                len(snapshot),
+            )
+            for name, rollup in self._format_summary(snapshot):
+                summary_logger.warning("%s", self._format_rollup_line(name, rollup))
+
+    def _drain_summary(self) -> tuple[Dict[str, _MetricRollup], float]:
+        now = time.monotonic()
+        with self._summary_lock:
+            elapsed = now - self._summary_last_ts
+            snapshot = self._summary_rollups
+            self._summary_rollups = {}
+            self._summary_last_ts = now
+        return snapshot, elapsed
+
+    def _format_summary(
+        self, snapshot: Dict[str, _MetricRollup]
+    ) -> list[tuple[str, _MetricRollup]]:
+        items = list(snapshot.items())
+        if self._summary_top_n:
+            items.sort(key=lambda item: item[1].count, reverse=True)
+            top = items[: self._summary_top_n]
+            must_include = {
+                "process.cpu.percent",
+                "process.memory.rss_mb",
+                "process.memory.vms_mb",
+                "process.memory.rss_percent",
+                "process.memory.limit_mb",
+                "process.open_fds",
+            }
+            present = {name for name, _ in top}
+            for name, rollup in items[self._summary_top_n :]:
+                if name in must_include and name not in present:
+                    top.append((name, rollup))
+                    present.add(name)
+            return top
+        return sorted(items, key=lambda item: item[0])
+
+    def _format_rollup_line(self, name: str, rollup: _MetricRollup) -> str:
+        if rollup.metric_type == "gauge":
+            avg = rollup.total / rollup.count if rollup.count else 0.0
+            return (
+                "[KPI][SUMMARY] gauge %s count=%d last=%.4f avg=%.2f min=%.2f max=%.2f"
+                % (
+                    name,
+                    rollup.count,
+                    rollup.last_value,
+                    avg,
+                    rollup.min_value,
+                    rollup.max_value,
+                )
+            )
+        if rollup.metric_type == "timer":
+            avg = rollup.total / rollup.count if rollup.count else 0.0
+            return "[KPI][SUMMARY] timer %s count=%d avg=%.2f min=%.2f max=%.2f" % (
+                name,
+                rollup.count,
+                avg,
+                rollup.min_value,
+                rollup.max_value,
+            )
+        return "[KPI][SUMMARY] counter %s count=%d sum=%.2f" % (
+            name,
+            rollup.count,
+            rollup.total,
         )
 
     class _TimerImpl(AbstractContextManager):

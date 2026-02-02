@@ -19,22 +19,30 @@
 Entrypoint for the Agentic Backend App.
 """
 
+import asyncio
+import contextlib
 import logging
-import os
 from contextlib import asynccontextmanager
 
-from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_user_security, log_setup, register_exception_handlers
+from fred_core.kpi import emit_process_kpis
+from fred_core.scheduler import TemporalClientProvider
+from prometheus_client import start_http_server
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from agentic_backend.application_context import (
     ApplicationContext,
     get_agent_store,
     get_session_store,
 )
+from agentic_backend.common.config_loader import (
+    get_loaded_config_file_path,
+    get_loaded_env_file_path,
+    load_configuration,
+)
 from agentic_backend.common.structures import Configuration
-from agentic_backend.common.utils import parse_server_configuration
 from agentic_backend.core import logs_controller
 from agentic_backend.core.agents import agent_controller
 from agentic_backend.core.agents.agent_factory import AgentFactory
@@ -45,6 +53,7 @@ from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrato
 from agentic_backend.core.feedback import feedback_controller
 from agentic_backend.core.mcp import mcp_controller
 from agentic_backend.core.monitoring import monitoring_controller
+from agentic_backend.scheduler.scheduler_controller import AgentTasksController
 
 # -----------------------
 # LOGGING + ENVIRONMENT
@@ -58,24 +67,6 @@ def _norm_origin(o) -> str:
     return str(o).rstrip("/")
 
 
-def load_environment(dotenv_path: str = "./config/.env"):
-    if load_dotenv(dotenv_path):
-        logging.getLogger().info(f"✅ Loaded environment variables from: {dotenv_path}")
-    else:
-        logging.getLogger().warning(f"⚠️ No .env file found at: {dotenv_path}")
-
-
-def load_configuration() -> Configuration:
-    load_environment()
-    default_config_file = "./config/configuration.yaml"
-    config_file = os.environ.get("CONFIG_FILE", default_config_file)
-    if not os.path.exists(config_file):
-        raise FileNotFoundError(f"Configuration file not found: {config_file}")
-    configuration: Configuration = parse_server_configuration(config_file)
-    logger.info(f"✅ Loaded configuration from: {config_file}")
-    return configuration
-
-
 # -----------------------
 # APP CREATION
 # -----------------------
@@ -83,6 +74,9 @@ def load_configuration() -> Configuration:
 
 def create_app() -> FastAPI:
     configuration: Configuration = load_configuration()
+    env_file = get_loaded_env_file_path() or "<unset>"
+    config_file = get_loaded_config_file_path() or "<unset>"
+    logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
     base_url = configuration.app.base_url
 
     application_context = ApplicationContext(configuration)
@@ -123,6 +117,21 @@ def create_app() -> FastAPI:
             history_store=application_context.get_history_store(),
             kpi=application_context.get_kpi_writer(),
         )
+        process_kpi_task = None
+        kpi_interval_env = configuration.app.kpi_process_metrics_interval_sec
+        if kpi_interval_env:
+            try:
+                interval_s = float(kpi_interval_env)
+            except ValueError:
+                logger.error(
+                    "Invalid KPI process metrics interval: %s. Disabling KPI process metrics task.",
+                    kpi_interval_env,
+                )
+                interval_s = 0
+            if interval_s > 0:
+                process_kpi_task = asyncio.create_task(
+                    emit_process_kpis(interval_s, application_context.get_kpi_writer())
+                )
         try:
             await agent_manager.bootstrap()
         except Exception:
@@ -141,6 +150,10 @@ def create_app() -> FastAPI:
         try:
             yield  # Hand control to the FastAPI server, but keep the startup task running
         finally:
+            if process_kpi_task:
+                process_kpi_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await process_kpi_task
             logger.info("🧹 Lifespan exit: orderly shutdown.")
             logger.info("✅ Shutdown complete.")
 
@@ -150,6 +163,13 @@ def create_app() -> FastAPI:
         openapi_url=f"{base_url}/openapi.json",
         lifespan=lifespan,
     )
+
+    if configuration.app.metrics_enabled:
+        Instrumentator().instrument(app)
+        start_http_server(
+            configuration.app.metrics_port,
+            addr=configuration.app.metrics_address,
+        )
 
     # Register exception handlers
     register_exception_handlers(app)
@@ -173,6 +193,23 @@ def create_app() -> FastAPI:
     router.include_router(monitoring_controller.router)
     router.include_router(feedback_controller.router)
     router.include_router(logs_controller.router)
+    if configuration.scheduler.enabled:
+        logger.info("🛠️ Activating agent scheduler controller.")
+        if not configuration.scheduler.temporal:
+            raise ValueError("Scheduler enabled but Temporal configuration is missing!")
+        task_queue = configuration.scheduler.temporal.task_queue
+        if not task_queue:
+            raise ValueError(
+                "Scheduler enabled but Temporal task_queue is not set in configuration!"
+            )
+        temporal_client_provider = TemporalClientProvider(
+            configuration.scheduler.temporal
+        )
+        AgentTasksController(router, temporal_client_provider, task_queue)
+    else:
+        logger.warning(
+            "🛑 Agent scheduler controller disabled via configuration.scheduler.enabled=false"
+        )
     app.include_router(router)
     logger.info("🧩 All controllers registered.")
     return app

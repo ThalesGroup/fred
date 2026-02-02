@@ -5,11 +5,15 @@ import logging
 from typing import Any, Optional
 
 import httpx  # ← we log/inspect HTTP errors coming from MCP adapters
-from fred_core import KPIActor
+from fred_core.kpi import KPIActor
 from langchain_core.tools import BaseTool
 from pydantic import Field
 
 from agentic_backend.application_context import get_app_context
+from agentic_backend.common.token_expiry import (
+    is_expired_httpx_status_error,
+    unwrap_httpx_status_error,
+)
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContextProvider,
     get_document_library_tags_ids,
@@ -19,22 +23,8 @@ logger = logging.getLogger(__name__)
 
 
 def _unwrap_httpx_status_error(exc: BaseException) -> Optional[httpx.HTTPStatusError]:
-    """
-    Fred rationale:
-    MCP adapters sometimes re-wrap httpx exceptions. We walk the cause/context chain
-    to find the underlying HTTPStatusError so we can extract status code & URL.
-    """
-    seen: set[int] = set()
-    cur: Optional[BaseException] = exc  # type: ignore[assignment]
-    while cur and id(cur) not in seen:
-        seen.add(id(cur))
-        if isinstance(cur, httpx.HTTPStatusError):
-            return cur
-        cur = (
-            getattr(cur, "__cause__", None)  # exception chaining
-            or getattr(cur, "__context__", None)
-        )
-    return None
+    # Backward compatibility for existing callers
+    return unwrap_httpx_status_error(exc)
 
 
 def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
@@ -52,18 +42,22 @@ def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
 
     body_preview = ""
     try:
-        if resp is not None and resp.text:
+        if resp is not None:
             txt = resp.text
             # keep logs short; we only need a hint
             body_preview = f" | body: {txt[:300].replace(chr(10), ' ')}"
+    except httpx.ResponseNotRead:
+        pass
     except Exception:
         logger.warning("Failed to extract HTTP response body", exc_info=True)
         pass
 
     if code == 401:
+        expired_flag = " (expired token)" if is_expired_httpx_status_error(err) else ""
         logger.error(
-            "[MCP][%s] 401 Unauthorized (likely expired/invalid token) on %s %s%s",
+            "[MCP][%s] 401 Unauthorized%s (likely expired/invalid token) on %s %s%s",
             tool_name,
+            expired_flag,
             method,
             url,
             body_preview,
@@ -152,8 +146,7 @@ class ContextAwareTool(BaseTool):
 
         return kwargs
 
-    def _kpi_timer(self, *, context) -> Any:
-        kpi = get_app_context().get_kpi_writer()
+    def _kpi_base_dims(self, *, context) -> dict[str, Optional[str]]:
         dims: dict[str, Optional[str]] = {"tool_name": self.name, "source": "mcp"}
         session_id = getattr(context, "session_id", None) if context else None
         if session_id:
@@ -161,56 +154,116 @@ class ContextAwareTool(BaseTool):
         user_id = getattr(context, "user_id", None) if context else None
         if user_id:
             dims["user_id"] = str(user_id)
-        return kpi.timer(
+        return dims
+
+    def _kpi_timer(
+        self, *, context
+    ) -> tuple[Any, Any, dict[str, Optional[str]], list[str] | None]:
+        kpi = get_app_context().get_kpi_writer()
+        dims = self._kpi_base_dims(context=context)
+        groups = getattr(context, "user_groups", None) if context else None
+        timer = kpi.timer(
             "agent.tool_latency_ms",
             dims=dims,
-            actor=KPIActor(type="system"),
+            actor=KPIActor(type="system", groups=groups),
         )
+        return kpi, timer, dims, groups
 
     def _run(self, **kwargs: Any) -> Any:
         """Sync execution with context injection + robust HTTP(401) tracing."""
         context = self.context_provider()
         kwargs = self._inject_context_if_needed(kwargs)
-        try:
-            with self._kpi_timer(context=context):
+        kpi, timer, base_dims, groups = self._kpi_timer(context=context)
+        with timer as kpi_dims:
+            try:
                 return self.base_tool._run(**kwargs)
-        except httpx.RequestError as e:
-            # Network / DNS / TLS issues before we even get an HTTP status code
-            logger.error(
-                "[MCP][%s] HTTP request error: %s", self.name, e, exc_info=True
-            )
-            raise
-        except httpx.HTTPStatusError as e:
-            _log_http_error(self.name, e)
-            raise
-        except Exception as e:
-            # Catch wrapped httpx errors (common in adapters)
-            inner = _unwrap_httpx_status_error(e)
-            if inner is not None:
-                _log_http_error(self.name, inner)
-            else:
-                logger.exception("[MCP][%s] Tool error", self.name)
-            raise
+            except Exception as e:
+                # 1. Metrics & Logging
+                kpi_dims["error_code"] = type(e).__name__
+                kpi_dims["exception_type"] = type(e).__name__
+
+                # Check for HTTP status in the exception chain for better logs
+                inner = _unwrap_httpx_status_error(e)
+                status_code = (
+                    inner.response.status_code if inner and inner.response else None
+                )
+
+                if status_code:
+                    kpi_dims["http_status"] = str(status_code)
+
+                kpi.count(
+                    "agent.tool_failed_total",
+                    1,
+                    dims={
+                        **base_dims,
+                        "status": "error",
+                        "error_code": type(e).__name__,
+                        "exception_type": type(e).__name__,
+                        "http_status": str(status_code) if status_code else None,
+                    },
+                    actor=KPIActor(type="system", groups=groups),
+                )
+
+                # 2. Logging
+                if inner:
+                    _log_http_error(self.name, inner)
+                else:
+                    logger.exception(
+                        "[MCP][%s] Tool execution failed (captured)", self.name
+                    )
+
+                # 3. CRITICAL: Return error as text to preserve chat history integrity.
+                # This ensures every ToolCall gets a ToolResult, preventing "orphan" calls.
+                msg = f"Error: {str(e)}"
+                if getattr(self, "response_format", None) == "content_and_artifact":
+                    return msg, None
+                return msg
 
     async def _arun(self, config=None, **kwargs: Any) -> Any:
         """Async execution with context injection + robust HTTP(401) tracing."""
         context = self.context_provider()
         kwargs = self._inject_context_if_needed(kwargs)
-        try:
-            with self._kpi_timer(context=context):
+        kpi, timer, base_dims, groups = self._kpi_timer(context=context)
+        with timer as kpi_dims:
+            try:
                 return await self.base_tool._arun(config=config, **kwargs)
-        except httpx.RequestError as e:
-            logger.error(
-                "[MCP][%s] HTTP request error: %s", self.name, e, exc_info=True
-            )
-            raise
-        except httpx.HTTPStatusError as e:
-            _log_http_error(self.name, e)
-            raise
-        except Exception as e:
-            inner = _unwrap_httpx_status_error(e)
-            if inner is not None:
-                _log_http_error(self.name, inner)
-            else:
-                logger.exception("[MCP][%s] Tool error", self.name)
-            raise
+            except Exception as e:
+                # 1. Metrics & Logging
+                kpi_dims["error_code"] = type(e).__name__
+                kpi_dims["exception_type"] = type(e).__name__
+
+                # Check for HTTP status in the exception chain for better logs
+                inner = _unwrap_httpx_status_error(e)
+                status_code = (
+                    inner.response.status_code if inner and inner.response else None
+                )
+
+                if status_code:
+                    kpi_dims["http_status"] = str(status_code)
+
+                kpi.count(
+                    "agent.tool_failed_total",
+                    1,
+                    dims={
+                        **base_dims,
+                        "status": "error",
+                        "error_code": type(e).__name__,
+                        "exception_type": type(e).__name__,
+                        "http_status": str(status_code) if status_code else None,
+                    },
+                    actor=KPIActor(type="system", groups=groups),
+                )
+
+                # 2. Logging
+                if inner:
+                    _log_http_error(self.name, inner)
+                else:
+                    logger.exception(
+                        "[MCP][%s] Tool execution failed (captured)", self.name
+                    )
+
+                # 3. CRITICAL: Return error as text to preserve chat history integrity.
+                msg = f"Error: {str(e)}"
+                if getattr(self, "response_format", None) == "content_and_artifact":
+                    return msg, None
+                return msg

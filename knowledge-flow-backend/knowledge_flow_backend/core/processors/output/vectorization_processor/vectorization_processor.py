@@ -17,7 +17,7 @@ import os
 import time
 from typing import List, Optional, override
 
-from fred_core import BaseKPIWriter, KPIActor
+from fred_core.kpi import BaseKPIWriter, KPIActor
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext

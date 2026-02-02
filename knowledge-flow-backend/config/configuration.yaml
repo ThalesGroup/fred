@@ -13,15 +13,23 @@
 app:
   name: "Knowledge Flow Backend"
   base_url: "/knowledge-flow/v1"
-  address: "127.0.0.1"
+  address: "0.0.0.0"
   port: 8111
   log_level: "info"
   reload: false
   reload_dir: "."
+  metrics_enabled: true
+  metrics_address: "0.0.0.0"
+  metrics_port: 9111
+  kpi_process_metrics_interval_sec: 0
+  kpi_log_summary_interval_sec: 0.0
+  kpi_log_summary_top_n: 0
+
 processing:
   generate_summary: false
   use_gpu: true
   process_images: false
+
 security:
   m2m:
     enabled: false
@@ -33,6 +41,10 @@ security:
     realm_url: "http://app-keycloak:8080/realms/app"
   authorized_origins:
     - "http://localhost:5173"
+  rebac:
+    enabled: false
+    type: openfga
+    api_url: "http://localhost:9080"
 
 scheduler:
   enabled: true
@@ -41,8 +53,15 @@ scheduler:
     host: "localhost:7233"
     namespace: "default"
     task_queue: "ingestion"
-    workflow_prefix: "pipeline"
+    workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
+
+# Optional: fast processors used for chat attachments (/fast/text, /fast/ingest).
+# If omitted, defaults to the Unstructured fast processor.
+attachment_processors:
+  - prefix: "*"
+    class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_unstructured_text_processor.FastUnstructuredTextProcessingProcessor
+
 input_processors:
   - prefix: ".pdf"
     class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
@@ -60,6 +79,22 @@ input_processors:
     class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
   - prefix: ".jsonl"
     class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+  - prefix: ".png"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".jpg"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".jpeg"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".gif"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".bmp"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".svg"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".webp"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - prefix: ".ico"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
 content_storage:
   type: "local"
   root_path: ~/.fred/knowledge-flow/content-storage
@@ -75,11 +110,32 @@ document_sources:
 embedding_model:
   provider: openai
   name: text-embedding-3-large
+  settings:
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 30.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
+
 # Configuration for the LLM used for summary, keyword generation
 # and other text generation tasks.
 chat_model:
   provider: openai # openai | azure | ollama
   name: "gpt-4o-mini"
+  settings:
+    temperature: 0
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 30.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
+
   # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
 # chat_model:
 #   provider: ollama
@@ -112,6 +168,16 @@ chat_model:
 vision_model:
   provider: openai
   name: gpt-4o-mini # or gpt-4o if you want higher fidelity
+  settings:
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 30.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
+    temperature: 0 # optional
 
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2

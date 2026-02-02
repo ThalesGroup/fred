@@ -123,7 +123,9 @@ def get_exempt_routes() -> Set[str]:
         "/ready",
         # Agentic specific routes
         "/config/frontend_settings",
-        "/schemas/echo"
+        "/schemas/echo",
+        # Prometheus scraping route
+        "/metrics"
     }
 
 

@@ -14,10 +14,10 @@
 
 
 import logging
-from typing import Any, Dict, List, Literal, Optional, cast
+from typing import Any, Dict, List, Literal, Optional, Sequence, cast
 
 from fred_core import VectorSearchHit
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, StateGraph
 
@@ -48,7 +48,9 @@ from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHin
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
+    get_document_uids,
     get_search_policy,
+    get_vector_search_scopes,
 )
 from agentic_backend.core.chatbot.chat_schema import (
     LinkKind,
@@ -298,6 +300,26 @@ class AdvancedRico(AgentFlow):
 
         return builder
 
+    def _extract_question_from_messages(self, messages: Sequence[Any]) -> Optional[str]:
+        """
+        Return the most recent human question (or the last message content) from history.
+        """
+        if not messages:
+            return None
+
+        for msg in reversed(messages):
+            if isinstance(msg, HumanMessage):
+                content = getattr(msg, "content", "")
+                if isinstance(content, str) and content.strip():
+                    return content.strip()
+
+        for msg in reversed(messages):
+            content = getattr(msg, "content", None)
+            if isinstance(content, str) and content.strip():
+                return content
+
+        return None
+
     async def _retrieve(self, state: RagGraphState) -> RagGraphState:
         """
         Retrieves relevant document chunks based on the user's question using vector search.
@@ -310,9 +332,13 @@ class AdvancedRico(AgentFlow):
         """
         # Extract parameters from state
         question: Optional[str] = state.get("question")
+        message_history = state.get("messages") or []
         if question is None or question == "":
-            messages = state.get("messages")
-            question = messages[-1].content
+            question = self._extract_question_from_messages(message_history)
+            if not question:
+                raise RuntimeError(
+                    "Cannot perform retrieval: question missing from state and message history."
+                )
 
         retry_count = int(state.get("retry_count", 0) or 0)
         top_k = self.get_tuned_int("search.top_k", default=50)
@@ -324,7 +350,11 @@ class AdvancedRico(AgentFlow):
                 "Runtime context missing session_id; required for scoped retrieval."
             )
         document_library_tags_ids = get_document_library_tags_ids(runtime_context)
+        document_uids = get_document_uids(runtime_context)
         search_policy = get_search_policy(runtime_context)
+        include_session_scope, include_corpus_scope = get_vector_search_scopes(
+            runtime_context
+        )
 
         try:
             # Perform search
@@ -336,9 +366,11 @@ class AdvancedRico(AgentFlow):
                     question=question or "",
                     top_k=top_k,
                     document_library_tags_ids=document_library_tags_ids,
+                    document_uids=document_uids,
                     search_policy=search_policy,
                     session_id=runtime_context.session_id,
-                    include_session_scope=True,
+                    include_session_scope=include_session_scope,
+                    include_corpus_scope=include_corpus_scope,
                 )
 
             if not hits:
@@ -374,6 +406,8 @@ class AdvancedRico(AgentFlow):
             }
             if document_library_tags_ids:
                 call_args["tags"] = document_library_tags_ids
+            if document_uids:
+                call_args["document_uids"] = document_uids
 
             messages = [
                 mk_tool_call(call_id=call_id, name="retrieve", args=call_args),

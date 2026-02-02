@@ -279,6 +279,29 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/logs/query`, method: "POST", body: queryArg.logQuery }),
     }),
+    submitAgentTaskAgenticV1V1AgentTasksPost: build.mutation<
+      SubmitAgentTaskAgenticV1V1AgentTasksPostApiResponse,
+      SubmitAgentTaskAgenticV1V1AgentTasksPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/v1/agent-tasks`,
+        method: "POST",
+        body: queryArg.submitAgentTaskRequest,
+      }),
+    }),
+    listAgentTasksAgenticV1V1AgentTasksGet: build.query<
+      ListAgentTasksAgenticV1V1AgentTasksGetApiResponse,
+      ListAgentTasksAgenticV1V1AgentTasksGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/v1/agent-tasks`,
+        params: {
+          limit: queryArg.limit,
+          status: queryArg.status,
+          target_agent: queryArg.targetAgent,
+        },
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -452,6 +475,18 @@ export type QueryLogsAgenticV1LogsQueryPostApiResponse = /** status 200 Successf
 export type QueryLogsAgenticV1LogsQueryPostApiArg = {
   logQuery: LogQuery;
 };
+export type SubmitAgentTaskAgenticV1V1AgentTasksPostApiResponse =
+  /** status 200 Successful Response */ SubmitAgentTaskResponse;
+export type SubmitAgentTaskAgenticV1V1AgentTasksPostApiArg = {
+  submitAgentTaskRequest: SubmitAgentTaskRequest;
+};
+export type ListAgentTasksAgenticV1V1AgentTasksGetApiResponse =
+  /** status 200 Successful Response */ AgentTaskRecordV1[];
+export type ListAgentTasksAgenticV1V1AgentTasksGetApiArg = {
+  limit?: number;
+  status?: AgentTaskStatus | null;
+  targetAgent?: string | null;
+};
 export type ValidationError = {
   loc: (string | number)[];
   msg: string;
@@ -541,6 +576,8 @@ export type AgentChatOptions = {
   search_rag_scoping?: boolean;
   /** Expose a toggle to delegate RAG retrieval to a senior agent (deep search) when available. */
   deep_search_delegate?: boolean;
+  /** Display a picker to restrict retrieval to specific documents for this message. */
+  documents_selection?: boolean;
 };
 export type ClientAuthMode = "user_token" | "no_token";
 export type McpServerConfiguration = {
@@ -710,7 +747,9 @@ export type RuntimeContext = {
   language?: string | null;
   session_id?: string | null;
   user_id?: string | null;
+  user_groups?: string[] | null;
   selected_document_libraries_ids?: string[] | null;
+  selected_document_uids?: string[] | null;
   selected_chat_context_ids?: string[] | null;
   search_policy?: string | null;
   access_token?: string | null;
@@ -719,6 +758,8 @@ export type RuntimeContext = {
   attachments_markdown?: string | null;
   search_rag_scope?: ("corpus_only" | "hybrid" | "general_only") | null;
   deep_search?: boolean | null;
+  include_session_scope?: boolean | null;
+  include_corpus_scope?: boolean | null;
 };
 export type ChatMetadata = {
   model?: string | null;
@@ -764,14 +805,43 @@ export type ChatMessage = {
   )[];
   metadata?: ChatMetadata;
 };
+export type HitlChoice = {
+  id: string;
+  label: string;
+  description?: string | null;
+  default?: boolean | null;
+};
+export type HitlPayload = {
+  stage?: string | null;
+  title?: string | null;
+  question?: string | null;
+  choices?: HitlChoice[] | null;
+  free_text?: boolean | null;
+  metadata?: {
+    [key: string]: any;
+  } | null;
+  checkpoint_id?: string | null;
+  [key: string]: any;
+};
+export type AwaitingHumanEvent = {
+  type?: "awaiting_human";
+  session_id: string;
+  exchange_id: string;
+  payload:
+    | HitlPayload
+    | {
+        [key: string]: any;
+      };
+};
 export type ChatAskInput = {
-  session_id?: string | null;
-  message: string;
   agent_name: string;
   runtime_context?: RuntimeContext | null;
-  client_exchange_id?: string | null;
   access_token?: string | null;
   refresh_token?: string | null;
+  type?: "ask";
+  session_id?: string | null;
+  message: string;
+  client_exchange_id?: string | null;
 };
 export type StreamEvent = {
   type?: "stream";
@@ -783,9 +853,14 @@ export type SessionSchema = {
   agent_name?: string | null;
   title: string;
   updated_at: string;
+  next_rank?: number | null;
   preferences?: {
     [key: string]: any;
   } | null;
+};
+export type SessionEvent = {
+  type?: "session";
+  session: SessionSchema;
 };
 export type FinalEvent = {
   type?: "final";
@@ -807,6 +882,7 @@ export type SessionWithFiles = {
   agent_name?: string | null;
   title: string;
   updated_at: string;
+  next_rank?: number | null;
   preferences?: {
     [key: string]: any;
   } | null;
@@ -837,7 +913,12 @@ export type ChatbotRuntimeSummary = {
 export type EchoEnvelope = {
   kind:
     | "ChatMessage"
+    | "AwaitingHumanEvent"
+    | "MessagePart"
+    | "HitlPayload"
+    | "HitlChoice"
     | "StreamEvent"
+    | "SessionEvent"
     | "FinalEvent"
     | "ErrorEvent"
     | "SessionSchema"
@@ -850,8 +931,35 @@ export type EchoEnvelope = {
   /** Schema payload being echoed */
   payload:
     | ChatMessage
+    | AwaitingHumanEvent
+    | (
+        | ({
+            type: "code";
+          } & CodePart)
+        | ({
+            type: "geo";
+          } & GeoPart)
+        | ({
+            type: "image_url";
+          } & ImageUrlPart)
+        | ({
+            type: "link";
+          } & LinkPart)
+        | ({
+            type: "text";
+          } & TextPart)
+        | ({
+            type: "tool_call";
+          } & ToolCallPart)
+        | ({
+            type: "tool_result";
+          } & ToolResultPart)
+      )
+    | HitlPayload
+    | HitlChoice
     | ChatAskInput
     | StreamEvent
+    | SessionEvent
     | FinalEvent
     | ErrorEvent
     | SessionSchema
@@ -869,9 +977,17 @@ export type FrontendFlags = {
 export type Properties = {
   logoName?: string;
   logoNameDark?: string;
+  logoHeight?: string;
+  logoWidth?: string;
+  faviconName?: string | null;
+  faviconNameDark?: string | null;
   siteDisplayName?: string;
   /** Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'. */
   releaseBrand?: string | null;
+  agentsNicknameSingular?: string;
+  agentsNicknamePlural?: string;
+  agentIconPath?: string | null;
+  contactSupportLink?: string | null;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;
@@ -1028,6 +1144,53 @@ export type LogQuery = {
   limit?: number;
   order?: "asc" | "desc";
 };
+export type AgentTaskStatus = "QUEUED" | "RUNNING" | "BLOCKED" | "COMPLETED" | "FAILED" | "CANCELED";
+export type SubmitAgentTaskResponse = {
+  task_id: string;
+  status: AgentTaskStatus;
+  workflow_id: string;
+  run_id?: string | null;
+};
+export type AgentContextRefsV1 = {
+  session_id?: string | null;
+  profile_id?: string | null;
+  project_id?: string | null;
+  tag_ids?: string[];
+  document_uids?: string[];
+};
+export type SubmitAgentTaskRequest = {
+  target_agent: string;
+  request_text: string;
+  context?: AgentContextRefsV1;
+  parameters?: {
+    [key: string]: any;
+  };
+  task_id?: string | null;
+};
+export type AgentTaskRecordV1 = {
+  task_id: string;
+  user_id: string;
+  target_agent: string;
+  status?: AgentTaskStatus;
+  request_text: string;
+  context?: AgentContextRefsV1;
+  parameters?: {
+    [key: string]: any;
+  };
+  workflow_id: string;
+  run_id?: string | null;
+  last_message?: string | null;
+  percent_complete?: number;
+  artifacts?: string[];
+  error_details?: {
+    [key: string]: any;
+  } | null;
+  blocked_details?: {
+    [key: string]: any;
+  } | null;
+  created_at: string;
+  updated_at: string;
+};
 export const {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
@@ -1082,4 +1245,7 @@ export const {
   usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
   useDeleteFeedbackAgenticV1ChatbotFeedbackFeedbackIdDeleteMutation,
   useQueryLogsAgenticV1LogsQueryPostMutation,
+  useSubmitAgentTaskAgenticV1V1AgentTasksPostMutation,
+  useListAgentTasksAgenticV1V1AgentTasksGetQuery,
+  useLazyListAgentTasksAgenticV1V1AgentTasksGetQuery,
 } = injectedRtkApi;

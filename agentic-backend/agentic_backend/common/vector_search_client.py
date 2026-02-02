@@ -100,6 +100,7 @@ class VectorSearchClient:
         search_policy: Optional[str] = None,
         session_id: Optional[str] = None,
         include_session_scope: bool = True,
+        include_corpus_scope: bool = True,
     ) -> List[VectorSearchHit]:
         """
         Wire format (matches controller):
@@ -111,6 +112,7 @@ class VectorSearchClient:
             "search_policy": str?,
             "session_id": str?,
             "include_session_scope": bool,
+            "include_corpus_scope": bool,
           }
         """
         payload: Dict[str, Any] = {"question": question, "top_k": top_k}
@@ -121,6 +123,7 @@ class VectorSearchClient:
         if session_id:
             payload["session_id"] = session_id
             payload["include_session_scope"] = include_session_scope
+        payload["include_corpus_scope"] = include_corpus_scope
 
         r = self._post_with_auth_retry("/vector/search", payload)
         r.raise_for_status()

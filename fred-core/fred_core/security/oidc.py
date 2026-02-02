@@ -225,7 +225,11 @@ def decode_jwt(token: str) -> KeycloakUser:
     if not KEYCLOAK_ENABLED:
         logger.debug("[SECURITY] Authentication is DISABLED. Returning a mock user.")
         return KeycloakUser(
-            uid="admin", username="admin", roles=["admin"], email="dev@localhost"
+            uid="admin",
+            username="admin",
+            roles=["admin"],
+            email="dev@localhost",
+            groups=["admins"],
         )
 
     cached_user = _get_cached_user(token)
@@ -324,7 +328,7 @@ def decode_jwt(token: str) -> KeycloakUser:
         client_data = payload["resource_access"].get(KEYCLOAK_CLIENT_ID, {})
         client_roles = client_data.get("roles", [])
 
-    logger.info(
+    logger.debug(
         "[SECURITY] JWT token decoded: sub=%s preferred_username=%s email=%s roles=%s",
         payload.get("sub"),
         payload.get("preferred_username"),
@@ -350,7 +354,11 @@ def get_current_user(token: str = Security(oauth2_scheme)) -> KeycloakUser:
     if not KEYCLOAK_ENABLED:
         logger.debug("[SECURITY] Authentication is DISABLED. Returning a mock user.")
         return KeycloakUser(
-            uid="admin", username="admin", roles=["admin"], email="admin@mail.com"
+            uid="admin",
+            username="admin",
+            roles=["admin"],
+            email="admin@mail.com",
+            groups=["admins"],
         )
 
     if not token:

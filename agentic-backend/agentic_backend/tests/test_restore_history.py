@@ -4,7 +4,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from fred_core import KeycloakUser, NoOpKPIWriter
+from fred_core import KeycloakUser
+from fred_core.kpi import NoOpKPIWriter
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agentic_backend.common.structures import Configuration

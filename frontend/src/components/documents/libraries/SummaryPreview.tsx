@@ -12,20 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo, useState } from "react";
-import {
-  Box,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Button,
-  Tooltip,
-  Typography,
-  IconButton,
-} from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Typography } from "@mui/material";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import type { DocSummary } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export default function SummaryPreview({
@@ -54,27 +45,15 @@ export default function SummaryPreview({
   return (
     <>
       {/* Minimal trigger with SURFACE tooltip */}
-      <Tooltip
-        arrow
+      <SimpleTooltip
         placement="top"
-        slotProps={{
-          tooltip: {
-            sx: (theme) => ({
-              background: theme.palette.surfaces.soft,
-              color: theme.palette.text.primary,
-              border: `1px solid ${theme.palette.divider}`,
-              borderRadius: 1,
-              boxShadow: "none",
-              maxWidth: 520,
-            }),
-          },
-          arrow: {
-            sx: (theme) => ({
-              // Tooltip arrow can't be a gradient; pick the 'to' stop for best match
-              color: theme.palette.heroBackgroundGrad?.gradientTo ?? theme.palette.background.paper,
-            }),
-          },
-        }}
+        // ATTENTION slotProps={{
+        //   tooltip: {
+        //     sx: {
+        //       maxWidth: 520,
+        //     },
+        //   },
+        // }}
         title={
           abstractPreview ? (
             <Box sx={{ maxWidth: 520 }}>
@@ -97,22 +76,10 @@ export default function SummaryPreview({
             <InfoOutlinedIcon fontSize="small" />
           </IconButton>
         </span>
-      </Tooltip>
+      </SimpleTooltip>
 
       {/* Full summary dialog on SURFACE */}
-      <Dialog
-        open={open}
-        onClose={() => setOpen(false)}
-        fullWidth
-        maxWidth="md"
-        PaperProps={{
-          sx: (theme) => ({
-            background: theme.palette.surfaces.raised,
-            border: `1px solid ${theme.palette.divider}`,
-            borderRadius: 2,
-          }),
-        }}
-      >
+      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="md">
         <DialogTitle sx={{ pb: 1 }}>
           {t("documentLibrary.summary", "Summary")}
           {docTitle ? (

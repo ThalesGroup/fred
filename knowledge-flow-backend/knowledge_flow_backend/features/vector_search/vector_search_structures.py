@@ -68,6 +68,10 @@ class SearchRequest(BaseModel):
         default=None,
         description="Optional list of tag names to filter documents. Only chunks in a document with at least one of these tags will be returned.",
     )
+    document_uids: Optional[list[str]] = Field(
+        default=None,
+        description="Optional list of document UIDs to restrict results to specific documents.",
+    )
     search_policy: Optional[SearchPolicyName] = Field(
         default=None,
         description="Optional search policy preset. If omitted, defaults to 'hybrid'.",
@@ -79,6 +83,10 @@ class SearchRequest(BaseModel):
     include_session_scope: bool = Field(
         default=True,
         description="If true and session_id is provided, also search session-scoped attachment vectors (filtered by user/session).",
+    )
+    include_corpus_scope: bool = Field(
+        default=True,
+        description="If true, also search corpus/library vectors (non-session scope).",
     )
 
 

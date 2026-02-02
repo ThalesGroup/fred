@@ -27,7 +27,9 @@ class RuntimeContext(BaseModel):
     language: Optional[str] = None
     session_id: Optional[str] = None
     user_id: Optional[str] = None
+    user_groups: list[str] | None = None
     selected_document_libraries_ids: list[str] | None = None
+    selected_document_uids: list[str] | None = None
     selected_chat_context_ids: list[str] | None = None
     search_policy: str | None = None
     access_token: Optional[str] = None
@@ -38,6 +40,8 @@ class RuntimeContext(BaseModel):
     )
     search_rag_scope: Optional[Literal["corpus_only", "hybrid", "general_only"]] = None
     deep_search: Optional[bool] = None
+    include_session_scope: Optional[bool] = None
+    include_corpus_scope: Optional[bool] = None
 
 
 # Type alias for context provider functions
@@ -64,6 +68,13 @@ def get_search_policy(context: RuntimeContext | None) -> str:
     return context.search_policy if context.search_policy else "semantic"
 
 
+def get_document_uids(context: RuntimeContext | None) -> list[str] | None:
+    """Helper to extract document UIDs from context."""
+    if not context:
+        return None
+    return context.selected_document_uids
+
+
 def get_rag_knowledge_scope(context: RuntimeContext | None) -> str:
     """
     Decide how the agent should use the corpus vs. general knowledge.
@@ -82,6 +93,35 @@ def get_rag_knowledge_scope(context: RuntimeContext | None) -> str:
         return scope
 
     return "hybrid"
+
+
+def get_vector_search_scopes(context: RuntimeContext | None) -> tuple[bool, bool]:
+    """
+    Resolve which vector search scopes to include for the current request.
+    Returns (include_session_scope, include_corpus_scope).
+    """
+    scope = get_rag_knowledge_scope(context)
+    if scope == "corpus_only":
+        default_session, default_corpus = False, True
+    elif scope == "general_only":
+        default_session, default_corpus = False, False
+    else:
+        default_session, default_corpus = True, True
+
+    if not context:
+        return default_session, default_corpus
+
+    include_session_scope = (
+        default_session
+        if context.include_session_scope is None
+        else bool(context.include_session_scope)
+    )
+    include_corpus_scope = (
+        default_corpus
+        if context.include_corpus_scope is None
+        else bool(context.include_corpus_scope)
+    )
+    return include_session_scope, include_corpus_scope
 
 
 def get_deep_search_enabled(context: RuntimeContext | None) -> bool:

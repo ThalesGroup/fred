@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { AnyAgent } from "../common/agent";
 import { ChatMessage } from "../slices/agentic/agenticOpenApi";
-import { useLocalStorageState } from "./useLocalStorageState";
 import { useSessionChange } from "./useSessionChange";
 
 // Simple hook to help with agent selection.
@@ -13,12 +12,6 @@ export function useAgentSelector(
 ) {
   // Track manually selected agent (overrides default logic)
   const [manuallySelectedAgentId, setManuallySelectedAgentId] = useState<string | null>(null);
-
-  // Store last agent used for new conversations in localStorage
-  const [lastNewConversationAgent, setLastNewConversationAgent] = useLocalStorageState<string | null>(
-    "chat.lastNewConversationAgent",
-    null,
-  );
 
   // Reset manual selection when session changes
   useSessionChange(sessionId, {
@@ -44,25 +37,16 @@ export function useAgentSelector(
       }
     }
 
-    // For new conversations (draft): use last agent from localStorage
-    const lastAgent = agents.find((a) => a.name === lastNewConversationAgent);
-    if (lastAgent) return lastAgent;
-
     // Fallback to first agent in the list
     return agents[0] ?? null;
-  }, [agents, history, isNewConversation, lastNewConversationAgent, manuallySelectedAgentId]);
+  }, [agents, history, isNewConversation, manuallySelectedAgentId]);
 
   const setCurrentAgent = useCallback(
     (agent: AnyAgent) => {
       // Set as manually selected agent (overrides default logic)
       setManuallySelectedAgentId(agent.name);
-
-      // Also save to localStorage if we're in a new conversation
-      if (isNewConversation) {
-        setLastNewConversationAgent(agent.name);
-      }
     },
-    [isNewConversation, setManuallySelectedAgentId, setLastNewConversationAgent],
+    [setManuallySelectedAgentId],
   );
 
   return { currentAgent, setCurrentAgent };

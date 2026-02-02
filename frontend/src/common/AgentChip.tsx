@@ -10,21 +10,21 @@ const LETTER_SPACING = 0.2; // avoids cramped uppercase
 
 // --- THEME COLOR MAPPING ---
 // Maps the functional color hints to specific, high-contrast chart colors.
-const THEME_COLOR_MAP = (theme: Theme): Record<AgentColorHint, string> => ({
+export const THEME_COLOR_MAP = (theme: Theme): Record<AgentColorHint, string> => ({
   // Leaders: Use high-contrast purple
-  leader: theme.palette.chart.purple,
+  leader: theme.palette.secondary.main,
 
   // Data/Knowledge: Mapped to chart.blue (Information/Context)
-  data: theme.palette.chart.blue,
+  data: theme.palette.secondary.main,
 
   // Execution/Tool: Mapped to chart.green (Action/Success)
-  execution: theme.palette.chart.green, // NOTE: Changed back to green for execution to maximize color variation
+  execution: theme.palette.secondary.main,
 
   // Drafting/Content: Mapped to chart.orange (Creation/Drafting, high visibility)
-  document: theme.palette.chart.blue, // NOTE: Changed back to orange for drafting
+  document: theme.palette.secondary.main,
 
   // Fallback/General: Mapped to chart.secondary
-  general: theme.palette.chart.blue,
+  general: theme.palette.secondary.main,
 });
 
 // --- Component Props and Definition ---
@@ -32,6 +32,7 @@ const THEME_COLOR_MAP = (theme: Theme): Record<AgentColorHint, string> => ({
 interface AgentChipProps {
   agent: AnyAgent | null | undefined;
   align?: "center" | "right";
+  disableTitles?: boolean;
   sx?: SxProps;
 }
 
@@ -54,7 +55,6 @@ export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
   // Visual constants
   const ICON_SIZE = 14;
   const NAME_MAX_W = 200; // allow a bit more breathing room
-  const ROLE_MAX_W = 260;
   const GAP_X = 0.75;
   const ICON_PAD = ICON_SIZE + 6;
 
@@ -112,28 +112,8 @@ export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
             maxWidth: NAME_MAX_W,
             textAlign: "center",
           }}
-          title={agent.name}
         >
           {agent.name}
-        </Typography>
-
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          sx={{
-            minWidth: 0,
-            maxWidth: ROLE_MAX_W,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            lineHeight: 1.1,
-            textTransform: "none",
-            textAlign: "center",
-            fontSize: "12.5px",
-          }}
-          title={agent.tuning.role}
-        >
-          {agent.tuning.role}
         </Typography>
       </Box>
     </Box>

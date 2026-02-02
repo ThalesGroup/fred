@@ -15,7 +15,7 @@
 
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import PreviewIcon from "@mui/icons-material/Preview";
-import { Box, Button, Chip, Grid2, IconButton, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Chip, Grid2, IconButton, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,9 +25,14 @@ import { Download as DownloadIcon } from "@mui/icons-material";
 import FeedbackOutlinedIcon from "@mui/icons-material/FeedbackOutlined";
 import { AnyAgent } from "../../common/agent.ts";
 import { AgentChipMini } from "../../common/AgentChip.tsx";
+import DotsLoader from "../../common/DotsLoader.tsx";
 import { usePdfDocumentViewer } from "../../common/usePdfDocumentViewer";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
 import type { GeoPart, LinkPart } from "../../slices/agentic/agenticOpenApi.ts";
-import { ChatMessage, usePostFeedbackAgenticV1ChatbotFeedbackPostMutation } from "../../slices/agentic/agenticOpenApi.ts";
+import {
+  ChatMessage,
+  usePostFeedbackAgenticV1ChatbotFeedbackPostMutation,
+} from "../../slices/agentic/agenticOpenApi.ts";
 import { extractHttpErrorMessage } from "../../utils/extractHttpErrorMessage.tsx";
 import { FeedbackDialog } from "../feedback/FeedbackDialog.tsx";
 import MarkdownRenderer from "../markdown/MarkdownRenderer.tsx";
@@ -36,8 +41,8 @@ import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 import GeoMapRenderer from "./GeoMapRenderer.tsx";
 import { MessagePart, toCopyText, toMarkdown, toPlainText } from "./messageParts.ts";
 import MessageRuntimeContextHeader from "./MessageRuntimeContextHeader.tsx";
-import { useAssetDownloader } from "./useAssetDownloader.tsx";
 import { useMessageContentPagination } from "./useMessageContentPagination.tsx";
+import { workspaceUserFileDownloader } from "./workspaceUserFileDownloader.tsx";
 
 export default function MessageCard({
   message,
@@ -76,7 +81,6 @@ export default function MessageCard({
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   // Header hover state (controls header indicators visibility)
-  const [bubbleHover, setBubbleHover] = useState(false);
   const isAssistant = side === "left";
 
   const handleFeedbackSubmit = (rating: number, comment?: string) => {
@@ -116,19 +120,14 @@ export default function MessageCard({
     | { offset?: number; limit?: number; total?: number; has_more?: boolean }
     | undefined;
   const paginationHasMore = Boolean(textPagination?.has_more);
-  const {
-    renderMessage,
-    isExpanded,
-    isLoadingFullText,
-    toggleExpanded,
-  } = useMessageContentPagination({
+  const { renderMessage, isExpanded, isLoadingFullText, toggleExpanded } = useMessageContentPagination({
     message,
     paginationHasMore,
     onError: onLoadError,
   });
 
   const extras = getExtras(renderMessage);
-  const { downloadLink } = useAssetDownloader();
+  const { downloadLink } = workspaceUserFileDownloader();
   const isCall = isToolCall(renderMessage);
   const isResult = isToolResult(renderMessage);
 
@@ -180,33 +179,38 @@ export default function MessageCard({
 
   const collapsedCharThreshold = 1200;
   const collapsedMaxHeight = 320;
-  const effectiveLimit =
-    typeof textPagination?.limit === "number" ? textPagination.limit : collapsedCharThreshold;
+  const effectiveLimit = typeof textPagination?.limit === "number" ? textPagination.limit : collapsedCharThreshold;
   const shouldCollapse =
     !suppressText && side === "right" && (paginationHasMore || plainText.trim().length > effectiveLimit);
   const isCollapsed = shouldCollapse && !isExpanded;
-  const bubbleBackground =
-    side === "right" ? theme.palette.background.paper : theme.palette.background.default;
+  const userBubbleBackground = theme.palette.mode === "dark" ? theme.palette.grey[800] : theme.palette.grey[100];
+  const bubbleBackground = side === "right" ? userBubbleBackground : theme.palette.background.default;
   const mdContent = useMemo(() => toMarkdown(processedParts), [processedParts]);
   const toggleButtonSx = {
     minWidth: "unset",
     px: 1,
     textTransform: "none",
-    borderRadius: 999,
+    borderRadius: "8px",
   };
   const toggleEdgeSx = side === "right" ? { right: 8 } : { left: 8 };
   const showLessSticky = shouldCollapse && isExpanded;
 
-
   return (
     <>
-      <Grid2 container marginBottom={1}>
+      <Grid2 container marginBottom={1} sx={{ position: "relative" }}>
         {/* Assistant avatar on the left */}
         {side === "left" && agent && (
           <Grid2 size="auto" paddingTop={2}>
-            <Tooltip title={`${agent.name}: ${agent.tuning.role}`}>
-              <AgentChipMini agent={agent} />
-            </Tooltip>
+            <SimpleTooltip title={`${agent.name}: ${agent.tuning.role}`}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                <AgentChipMini agent={agent} />
+                {pending && (
+                  <Box sx={{ display: "flex", alignItems: "center", transform: "translateY(1px) scale(0.9)" }}>
+                    <DotsLoader dotSize="4px" dotColor={theme.palette.text.secondary} />
+                  </Box>
+                )}
+              </Box>
+            </SimpleTooltip>
           </Grid2>
         )}
 
@@ -215,41 +219,42 @@ export default function MessageCard({
             <>
               <Grid2>
                 <Box
-                    onMouseEnter={() => setBubbleHover(true)}
-                    onMouseLeave={() => setBubbleHover(false)}
-                    sx={{
-                      display: "flex",
-                      flexDirection: "column",
-                      backgroundColor:
-                        side === "right" ? theme.palette.background.paper : theme.palette.background.default,
-                      padding: side === "right" ? "0.8em 16px 0 16px" : "0.8em 0 0 0",
-                      marginTop: side === "right" ? 1 : 0,
-                      borderRadius: 3,
-                      wordBreak: "break-word",
-                    }}
-                  >
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    backgroundColor: side === "right" ? userBubbleBackground : theme.palette.background.default,
+                    padding: side === "right" ? "0.55em 14px" : "0.8em 14px",
+                    marginTop: side === "right" ? 1 : 0,
+                    borderRadius: 3,
+                    border: side === "right" ? `1px solid ${theme.palette.divider}` : "none",
+                    maxWidth: side === "right" ? "72ch" : "100%",
+                    width: side === "right" ? "fit-content" : "100%",
+                    textAlign: "left",
+                    wordBreak: "break-word",
+                  }}
+                >
                   {/* Header: task chips + indicators */}
                   {(showMetaChips || isCall || isResult) && (
-                    <Box display="flex" alignItems="center" gap={1} px={side === "right" ? 0 : 1} pb={0.5}>
+                    <Box display="flex" alignItems="center" gap={1} px={0} pb={0.5}>
                       {showMetaChips && extras?.task && (
-                        <Tooltip title={t("chat.labels.task")}>
+                        <SimpleTooltip title={t("chat.labels.task")}>
                           <Typography
                             variant="caption"
                             sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, px: 0.75, py: 0.25 }}
                           >
                             {String(extras.task)}
                           </Typography>
-                        </Tooltip>
+                        </SimpleTooltip>
                       )}
                       {showMetaChips && extras?.node && (
-                        <Tooltip title={t("chat.labels.node")}>
+                        <SimpleTooltip title={t("chat.labels.node")}>
                           <Typography
                             variant="caption"
                             sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, px: 0.75, py: 0.25 }}
                           >
                             {String(extras.node)}
                           </Typography>
-                        </Tooltip>
+                        </SimpleTooltip>
                       )}
                       {showMetaChips && extras?.label && (
                         <Typography
@@ -271,20 +276,12 @@ export default function MessageCard({
                       )}
 
                       {/* Runtime context header (indicators + popover trigger) */}
-                      {isAssistant && (
-                        <MessageRuntimeContextHeader
-                          message={renderMessage}
-                          visible={bubbleHover}
-                          libraryNameById={libraryNameById}
-                          chatContextNameById={chatContextNameById}
-                        />
-                      )}
                     </Box>
                   )}
 
                   {/* tool_call compact args */}
                   {isCall && renderMessage.parts?.[0]?.type === "tool_call" && (
-                    <Box px={side === "right" ? 0 : 1} pb={0.5} sx={{ opacity: 0.8 }}>
+                    <Box px={0} pb={0.25} sx={{ opacity: 0.8 }}>
                       <Typography fontSize=".8rem">
                         <b>{(renderMessage.parts[0] as any).name}</b>
                         {": "}
@@ -297,8 +294,8 @@ export default function MessageCard({
 
                   {/* Main content */}
                   <Box
-                    px={side === "right" ? 0 : 1}
-                    pb={0.5}
+                    px={0}
+                    pb={side === "right" ? 0 : 0.25}
                     sx={{ display: "flex", flexDirection: "column", position: "relative" }}
                   >
                     {showLessSticky && (
@@ -332,11 +329,12 @@ export default function MessageCard({
                     <Box
                       sx={{
                         position: "relative",
+                        mt: side === "right" ? 0 : showMetaChips || isCall || isResult ? 3 : 0.8,
                         ...(isCollapsed && {
                           maxHeight: collapsedMaxHeight,
                           overflow: "hidden",
                           "&::after": {
-                            content: "\"\"",
+                            content: '""',
                             position: "absolute",
                             left: 0,
                             right: 0,
@@ -347,20 +345,33 @@ export default function MessageCard({
                         }),
                       }}
                     >
-                      <MarkdownRenderer
-                        content={mdContent}
-                        size="medium"
-                        citations={{
-                          getUidForNumber: (n) => {
-                            const src = (renderMessage.metadata?.sources as any[]) || [];
-                            const ordered = [...src].sort((a, b) => (a?.rank ?? 1e9) - (b?.rank ?? 1e9));
-                            const hit = ordered[n - 1];
-                            return hit?.uid ?? null;
-                          },
-                          onHover: onCitationHover,
-                          onClick: onCitationClick,
-                        }}
-                      />
+                      {side === "right" ? (
+                        <Typography
+                          variant="body1"
+                          sx={{
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                            lineHeight: 1.6,
+                          }}
+                        >
+                          {plainText}
+                        </Typography>
+                      ) : (
+                        <MarkdownRenderer
+                          content={mdContent}
+                          size="medium"
+                          citations={{
+                            getUidForNumber: (n) => {
+                              const src = (renderMessage.metadata?.sources as any[]) || [];
+                              const ordered = [...src].sort((a, b) => (a?.rank ?? 1e9) - (b?.rank ?? 1e9));
+                              const hit = ordered[n - 1];
+                              return hit?.uid ?? null;
+                            },
+                            onHover: onCitationHover,
+                            onClick: onCitationClick,
+                          }}
+                        />
+                      )}
                     </Box>
                     {shouldCollapse && !isExpanded && (
                       <Box
@@ -390,13 +401,13 @@ export default function MessageCard({
                     )}
                   </Box>
                   {geoPart && (
-                    <Box px={side === "right" ? 0 : 1} pt={0.5} pb={1}>
+                    <Box px={0} pt={0.5} pb={1}>
                       <GeoMapRenderer part={geoPart} />
                     </Box>
                   )}
                   {/* 🌟 DOWNLOAD / VIEW LINKS 🌟 */}
                   {(downloadLinkPart || viewLinkPart) && (
-                    <Box px={side === "right" ? 0 : 1} pt={0.5} pb={1} display="flex" gap={1} flexWrap="wrap">
+                    <Box px={0} pt={0.5} pb={1} display="flex" gap={1} flexWrap="wrap">
                       {downloadLinkPart && (
                         <Chip
                           icon={<DownloadIcon />}
@@ -410,7 +421,7 @@ export default function MessageCard({
                         />
                       )}
                       {viewLinkPart && (
-                        <Tooltip title="Open PDF preview in viewer">
+                        <SimpleTooltip title="Open PDF preview in viewer">
                           <Chip
                             icon={<PreviewIcon />}
                             label={viewLinkPart.title || "View PDF"}
@@ -430,7 +441,7 @@ export default function MessageCard({
                               }
                             }}
                           />
-                        </Tooltip>
+                        </SimpleTooltip>
                       )}
                     </Box>
                   )}
@@ -462,17 +473,17 @@ export default function MessageCard({
                   )}
 
                   {renderMessage.metadata?.token_usage && (
-                    <Tooltip
+                    <SimpleTooltip
                       title={`In: ${renderMessage.metadata.token_usage?.input_tokens ?? 0} · Out: ${renderMessage.metadata.token_usage?.output_tokens ?? 0}`}
                       placement="top"
                     >
                       <Typography color={theme.palette.text.secondary} fontSize=".7rem" sx={{ wordBreak: "normal" }}>
                         {renderMessage.metadata.token_usage?.output_tokens ?? 0} tokens
                       </Typography>
-                    </Tooltip>
+                    </SimpleTooltip>
                   )}
 
-                  <Chip
+                  {/* <Chip
                     label="AI content may be incorrect, please double-check responses"
                     size="small"
                     variant="outlined"
@@ -482,7 +493,7 @@ export default function MessageCard({
                       borderColor: theme.palette.divider,
                       color: theme.palette.text.primary,
                     }}
-                  />
+                  /> */}
                 </Grid2>
               ) : (
                 <Grid2 height="30px" />
@@ -490,6 +501,15 @@ export default function MessageCard({
             </>
           )}
         </Grid2>
+        {isAssistant && (
+          <Box sx={{ position: "absolute", right: 0, top: "0.8em", zIndex: 1 }}>
+            <MessageRuntimeContextHeader
+              message={renderMessage}
+              libraryNameById={libraryNameById}
+              chatContextNameById={chatContextNameById}
+            />
+          </Box>
+        )}
       </Grid2>
 
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} onSubmit={handleFeedbackSubmit} />

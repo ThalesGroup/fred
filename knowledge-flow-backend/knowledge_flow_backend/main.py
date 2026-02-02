@@ -35,6 +35,10 @@ from fred_core import (
     log_setup,
     register_exception_handlers,
 )
+from fred_core.kpi import emit_process_kpis
+from fred_core.scheduler import TemporalClientProvider
+from prometheus_client import start_http_server
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.application_state import attach_app
@@ -49,7 +53,9 @@ from knowledge_flow_backend.features.benchmark.benchmark_controller import Bench
 from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.asset_controller import AssetController
 from knowledge_flow_backend.features.content.content_controller import ContentController
-from knowledge_flow_backend.features.filesystem.controller import FilesystemController
+from knowledge_flow_backend.features.corpus_manager.corpus_manager_controller import CorpusManagerController
+from knowledge_flow_backend.features.filesystem.mcp_fs_controller import McpFilesystemController
+from knowledge_flow_backend.features.filesystem.workspace_storage_controller import WorkspaceStorageController
 from knowledge_flow_backend.features.groups import groups_controller
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
 from knowledge_flow_backend.features.kpi import logs_controller
@@ -143,10 +149,27 @@ def create_app() -> FastAPI:
 
         # Reconcile Keycloak groups with ReBAC every 15 minutes
         background_task = asyncio.create_task(periodic_reconciliation())
+        process_kpi_task = None
+        kpi_interval_env = configuration.app.kpi_process_metrics_interval_sec
+        if kpi_interval_env:
+            try:
+                interval_s = float(kpi_interval_env)
+            except ValueError:
+                logger.error(
+                    "Invalid KPI process metrics interval: %s. Disabling KPI process metrics task.",
+                    kpi_interval_env,
+                )
+                interval_s = 0
+            if interval_s > 0:
+                process_kpi_task = asyncio.create_task(emit_process_kpis(interval_s, application_context.get_kpi_writer()))
 
         try:
             yield
         finally:
+            if process_kpi_task:
+                process_kpi_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await process_kpi_task
             background_task.cancel()
             with suppress(asyncio.CancelledError):
                 await background_task
@@ -157,6 +180,13 @@ def create_app() -> FastAPI:
         openapi_url=f"{configuration.app.base_url}/openapi.json",
         lifespan=lifespan,
     )
+
+    if configuration.app.metrics_enabled:
+        Instrumentator().instrument(app)
+        start_http_server(
+            configuration.app.metrics_port,
+            addr=configuration.app.metrics_address,
+        )
 
     # Register exception handlers
     register_exception_handlers(app)
@@ -183,12 +213,14 @@ def create_app() -> FastAPI:
     ModelController(router)
     ContentController(router)
     AssetController(router)
+    WorkspaceStorageController(router)
     IngestionController(router)
     TagController(app, router)
     VectorSearchController(router)
     KPIController(router)
     ResourceController(router)
-    FilesystemController(router)
+    McpFilesystemController(router)
+    CorpusManagerController(router)
     router.include_router(logs_controller.router)
     router.include_router(groups_controller.router)
     router.include_router(users_controller.router)
@@ -229,7 +261,17 @@ def create_app() -> FastAPI:
 
     if configuration.scheduler.enabled:
         logger.info("%s Activating ingestion scheduler controller.", LOG_PREFIX)
-        SchedulerController(router)
+        temporal_client_provider = None
+
+        if configuration.scheduler.backend.lower() == "temporal":
+            temporal_cfg = configuration.scheduler.temporal
+            if not temporal_cfg:
+                raise ValueError("Scheduler enabled with temporal backend but temporal configuration is missing!")
+            if not temporal_cfg.task_queue:
+                raise ValueError("Scheduler enabled but Temporal task_queue is not set in configuration!")
+            temporal_client_provider = TemporalClientProvider(temporal_cfg)
+
+        SchedulerController(router, temporal_client_provider=temporal_client_provider)
     else:
         logger.warning("%s Ingestion scheduler controller disabled via configuration.scheduler.enabled=false", LOG_PREFIX)
 
@@ -455,9 +497,21 @@ def create_app() -> FastAPI:
             auth_config=auth_cfg,
         )
 
-        mcp_fs.mount_http(mount_path=f"{mcp_prefix}/mcp-filesystem")
+        mcp_fs.mount_http(mount_path=f"{mcp_prefix}/mcp-fs")
     else:
         logger.info("%s MCP Filesystem disabled via configuration.mcp.filesystem_enabled=false", LOG_PREFIX)
+
+    # Corpus manager MCP (mock; exports the HTTP-tagged routes to MCP clients)
+    mcp_corpus = FastApiMCP(
+        app,
+        name="Knowledge Flow Corpus MCP",
+        description=("Manage corpora: start TOC builds, revectorize, purge vectors, and poll task status. Mock implementation backed by in-memory tasks for demos."),
+        include_tags=["CorpusManager"],
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+        auth_config=auth_cfg,
+    )
+    mcp_corpus.mount_http(mount_path=f"{mcp_prefix}/mcp-corpus")
 
     return app
 

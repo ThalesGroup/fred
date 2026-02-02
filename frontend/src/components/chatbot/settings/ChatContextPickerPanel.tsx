@@ -5,16 +5,17 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 
 import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
 import {
+  Badge,
   Box,
   Button,
   IconButton,
   List,
   ListItem,
   ListItemButton,
+  Stack,
   Theme,
-  Tooltip,
   Typography,
   useTheme,
 } from "@mui/material";
@@ -23,6 +24,9 @@ import { BoxProps } from "@mui/material";
 import Popover from "@mui/material/Popover";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
+import { ViewIconButton } from "../../../shared/ui/buttons/ViewIconButton";
+import { DetailedTooltip, SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import {
   Resource,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
@@ -34,11 +38,13 @@ import { ChatResourcesSelectionCard } from "../ChatResourcesSelectionCard";
 export type ChatContextPickerPanelProps = {
   selectedChatContextIds: string[];
   onChangeSelectedChatContextIds: (ids: string[]) => void;
+  variant?: "button" | "icon";
 } & Pick<BoxProps, "sx">;
 
 export function ChatContextPickerPanel({
   selectedChatContextIds,
   onChangeSelectedChatContextIds,
+  variant = "button",
   sx,
 }: ChatContextPickerPanelProps) {
   const theme = useTheme<Theme>();
@@ -74,6 +80,9 @@ export function ChatContextPickerPanel({
     }, {});
   }, [selectedChatContextResources]);
 
+  const [previewAnchor, setPreviewAnchor] = useState<HTMLElement | null>(null);
+  const [previewResourceId, setPreviewResourceId] = useState<string | null>(null);
+
   const applyChatContextSelection = (ids: string[]) => {
     const uniqueIds = Array.from(new Set(ids));
     onChangeSelectedChatContextIds(uniqueIds);
@@ -81,6 +90,7 @@ export function ChatContextPickerPanel({
   };
 
   const hasSelectedChatContext = selectedChatContextIds.length > 0;
+  const isIconVariant = variant === "icon";
 
   return (
     <Box
@@ -89,18 +99,33 @@ export function ChatContextPickerPanel({
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
     >
-      {/* Titre + action à droite */}
-      {!hasSelectedChatContext && (
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 0.5 }}>
-          <Button
-            size="small"
-            startIcon={<AddIcon />}
-            onClick={(e) => setChatContextPickerAnchor(e.currentTarget)}
-            sx={{ textTransform: "none", color: theme.palette.text.primary }}
-          >
-            {t("settings.chatContext")}
-          </Button>
-        </Box>
+      {/* Trigger */}
+      {isIconVariant ? (
+        <DetailedTooltip label={t("settings.chatContext")} description={t("settings.chatContextTooltip.description")}>
+          <IconButton size="small" onClick={(e) => setChatContextPickerAnchor(e.currentTarget)}>
+            <Badge
+              color="primary"
+              badgeContent={selectedChatContextIds.length ? selectedChatContextIds.length : undefined}
+              overlap="circular"
+              anchorOrigin={{ vertical: "top", horizontal: "right" }}
+            >
+              <ForumOutlinedIcon fontSize="small" />
+            </Badge>
+          </IconButton>
+        </DetailedTooltip>
+      ) : (
+        !hasSelectedChatContext && (
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 0.5 }}>
+            <Button
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={(e) => setChatContextPickerAnchor(e.currentTarget)}
+              sx={{ textTransform: "none", color: theme.palette.text.primary }}
+            >
+              {t("settings.chatContext")}
+            </Button>
+          </Box>
+        )
       )}
 
       {/* Popover de sélection/modification */}
@@ -120,8 +145,8 @@ export function ChatContextPickerPanel({
         />
       </Popover>
 
-      {/* Carte compacte quand un profil est sélectionné */}
-      {hasSelectedChatContext ? (
+      {/* Selected list (hidden in icon variant) */}
+      {!isIconVariant && hasSelectedChatContext ? (
         <List dense disablePadding sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
           {selectedChatContextResources.map((resource) => {
             const preview = chatContextBodyPreviews[resource.id];
@@ -177,24 +202,57 @@ export function ChatContextPickerPanel({
                     )}
                   </Box>
 
-                  <Tooltip title={t("common.remove")}>
-                    <IconButton
-                      size="small"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        applyChatContextSelection(selectedChatContextIds.filter((id) => id !== resource.id));
-                      }}
-                      sx={{ flexShrink: 0, opacity: 0.7 }}
-                    >
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
+                  <Stack direction="row" alignItems="center" spacing={0.5}>
+                    <SimpleTooltip title={t("common.view")}>
+                      <ViewIconButton
+                        size="small"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setPreviewResourceId(resource.id);
+                          setPreviewAnchor(event.currentTarget);
+                        }}
+                        sx={{ flexShrink: 0, opacity: 0.7 }}
+                      />
+                    </SimpleTooltip>
+                    <SimpleTooltip title={t("common.remove")}>
+                      <DeleteIconButton
+                        size="small"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          applyChatContextSelection(selectedChatContextIds.filter((id) => id !== resource.id));
+                        }}
+                        sx={{ flexShrink: 0, opacity: 0.7 }}
+                      />
+                    </SimpleTooltip>
+                  </Stack>
                 </ListItemButton>
               </ListItem>
             );
           })}
         </List>
       ) : null}
+
+      <Popover
+        open={Boolean(previewAnchor && previewResourceId)}
+        anchorEl={previewAnchor}
+        onClose={() => {
+          setPreviewAnchor(null);
+          setPreviewResourceId(null);
+        }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        PaperProps={{ sx: { maxWidth: 320, px: 1.5, py: 1 } }}
+      >
+        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
+          {t("settings.chatContextPreviewTitle", "Chat context preview")}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {previewResourceId
+            ? (chatContextBodyPreviews[previewResourceId] ??
+              t("settings.chatContextPreviewEmpty", "No preview available"))
+            : ""}
+        </Typography>
+      </Popover>
     </Box>
   );
 }

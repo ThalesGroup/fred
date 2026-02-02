@@ -26,6 +26,7 @@ from fred_core import (
     SecurityConfiguration,
     StoreConfig,
 )
+from fred_core.common.structures import TemporalSchedulerConfig
 from pydantic import BaseModel, Field, model_validator
 
 """
@@ -239,14 +240,6 @@ class MCPConfig(BaseModel):
     )
 
 
-class TemporalSchedulerConfig(BaseModel):
-    host: str = "localhost:7233"
-    namespace: str = "default"
-    task_queue: str = "ingestion"
-    workflow_prefix: str = "pipeline"
-    connect_timeout_seconds: Optional[int] = 5
-
-
 class SchedulerConfig(BaseModel):
     enabled: bool = False
     backend: str = "temporal"
@@ -262,6 +255,21 @@ class AppConfig(BaseModel):
     reload: bool = False
     reload_dir: str = "."
     max_ingestion_workers: int = 1
+    metrics_enabled: bool = True
+    metrics_address: str = "127.0.0.1"
+    metrics_port: int = 9111
+    kpi_process_metrics_interval_sec: int = Field(
+        10,
+        description="Interval in seconds for processing and logging KPI metrics.",
+    )
+    kpi_log_summary_interval_sec: float = Field(
+        default=0.0,
+        description="Emit KPI summary logs every N seconds (bench/debug). Set 0 to disable.",
+    )
+    kpi_log_summary_top_n: int = Field(
+        default=0,
+        description="Top-N metrics to show in KPI summary logs. 0 means all / disabled.",
+    )
 
 
 class PullProvider(str, Enum):
@@ -422,6 +430,32 @@ class MinioFilesystemConfig(BaseModel):
 FilesystemConfig = Annotated[Union[LocalFilesystemConfig, MinioFilesystemConfig], Field(discriminator="type")]
 
 
+class WorkspaceLayoutConfig(BaseModel):
+    """
+    Configurable storage path layout for workspace storage.
+
+    Allowed placeholders:
+      {user_id}, {agent_id}, {key}
+    """
+
+    user_pattern: str = Field("users/{user_id}/{key}", description="Path template for user exchange storage")
+    agent_config_pattern: str = Field("agents/{agent_id}/config/{key}", description="Path template for agent config storage")
+    agent_user_pattern: str = Field("agents/{agent_id}/users/{user_id}/{key}", description="Path template for per-user agent storage")
+
+    @model_validator(mode="after")
+    def validate_placeholders(self):
+        for field_name, required in [
+            ("user_pattern", ["user_id", "key"]),
+            ("agent_config_pattern", ["agent_id", "key"]),
+            ("agent_user_pattern", ["agent_id", "user_id", "key"]),
+        ]:
+            pattern = getattr(self, field_name)
+            for req in required:
+                if "{" + req + "}" not in pattern:
+                    raise ValueError(f"{field_name} must contain placeholder {{{req}}}")
+        return self
+
+
 class Configuration(BaseModel):
     app: AppConfig
     chat_model: ModelConfiguration
@@ -430,6 +464,13 @@ class Configuration(BaseModel):
     crossencoder_model: Optional[ModelConfiguration] = None
     security: SecurityConfiguration
     input_processors: List[ProcessorConfig]
+    attachment_processors: Optional[List[ProcessorConfig]] = Field(
+        default=None,
+        description=(
+            "Optional fast-text processors for attachments. Uses the same structure as input_processors, "
+            "but classes must subclass BaseFastTextProcessor. If omitted, the default fast processor is used."
+        ),
+    )
     output_processors: Optional[List[ProcessorConfig]] = None
     library_output_processors: Optional[List[LibraryProcessorConfig]] = None
     content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
@@ -439,3 +480,8 @@ class Configuration(BaseModel):
     storage: StorageConfig
     mcp: MCPConfig = Field(default_factory=MCPConfig, description="Feature toggles for MCP-only endpoints and servers.")
     filesystem: FilesystemConfig = Field(..., description="Filesystem backend configuration.")
+    # Workspace storage layout (paths for user/agent config/agent-user storage).
+    workspace_layout: WorkspaceLayoutConfig = Field(
+        default_factory=lambda: WorkspaceLayoutConfig(),  # type: ignore
+        description="Patterns used to build workspace storage paths.",
+    )

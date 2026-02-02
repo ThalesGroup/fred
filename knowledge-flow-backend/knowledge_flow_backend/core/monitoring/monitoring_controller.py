@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fastapi import (
-    APIRouter,
-)
+from fastapi import APIRouter
 
 
 class MonitoringController:

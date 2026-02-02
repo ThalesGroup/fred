@@ -30,6 +30,11 @@ except Exception:  # optional in prod images
 
 logger = logging.getLogger(__name__)
 
+LEVEL_MAP = {
+    "DETAIL": "DEBUG",
+    "TRACE": "DEBUG",
+}
+
 
 # --- JSON formatter kept tiny and portable ---
 class CompactJsonFormatter(logging.Formatter):
@@ -77,11 +82,14 @@ class StoreEmitHandler(logging.Handler):
                 print("Log record is not JSON: %s", raw)
                 pass  # formatter should be JSON, but we tolerate plain text
 
+            if payload:
+                mapped_level = LEVEL_MAP.get(payload.get("level"), record.levelname)
+            else:
+                mapped_level = record.levelname
+
             e = LogEventDTO(
                 ts=payload.get("ts", record.created) if payload else record.created,
-                level=payload.get("level", record.levelname)
-                if payload
-                else record.levelname,  # type: ignore
+                level=mapped_level,  # type: ignore
                 logger=payload.get("logger", record.name) if payload else record.name,
                 file=payload.get("file", record.filename)
                 if payload
@@ -139,12 +147,21 @@ class UvicornAccessProbeFilter(logging.Filter):
         return True
 
 
+class UvicornWebsocketNoiseFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if "WebSocket" in msg and "[accepted]" in msg:
+            return False
+        return msg not in {"connection open", "connection closed"}
+
+
 def log_setup(
     *,
     service_name: str,
     log_level: str = "INFO",
     store: BaseLogStore,
     include_uvicorn: bool = True,
+    use_rich: bool = True,
 ) -> None:
     root = logging.getLogger()
     root.setLevel(log_level.upper())
@@ -154,25 +171,26 @@ def log_setup(
     if getattr(root, marker, False):
         return
 
-    # 1) Human console (Rich)
-    if RichHandler is not None:
-        formatter = logging.Formatter(
-            # Include custom 'task_name' attribute and standard 'threadName'
-            fmt="%(asctime)s | %(levelname)s | [%(threadName)s/%(task_name)s] | %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-        console = RichHandler(
+    # 1) Human console (Rich or plain)
+    formatter = logging.Formatter(
+        # Include process ID, task name, and thread name for concurrency diagnostics.
+        fmt="%(asctime)s | %(levelname)s | [pid=%(process)d %(threadName)s/%(task_name)s] | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    if use_rich and RichHandler is not None:
+        console_handler: logging.Handler = RichHandler(
             rich_tracebacks=False,
             show_time=False,  # Time is now in the custom formatter
             show_level=True,
             show_path=True,
-            # Omit other rich handler formatting controls, as the formatter handles the prefix
-            log_time_format="%Y-%m-%d %H:%M:%S",  # This can be misleading, rely on formatter time
+            log_time_format="%Y-%m-%d %H:%M:%S",
         )
-        console.setFormatter(formatter)
-        console.addFilter(TaskNameFilter())
-        console.setLevel(log_level.upper())
-        root.addHandler(console)
+    else:
+        console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    console_handler.addFilter(TaskNameFilter())
+    console_handler.setLevel(log_level.upper())
+    root.addHandler(console_handler)
 
     # 3) Store (machine)
     store_h = StoreEmitHandler(service_name=service_name, store=store)
@@ -194,7 +212,11 @@ def log_setup(
         "azure.identity",
         "msal",
         "websockets",
+        "websockets.server",
+        "websockets.protocol",
+        "websockets.client",
         "httptools",
+        "mcp.client.streamable_http",
     )
     for noisy in noisy_libs:
         lg = logging.getLogger(noisy)
@@ -214,5 +236,6 @@ def log_setup(
             else:
                 lg.setLevel(log_level.upper())
             lg.propagate = True  # forward to our root handlers
+        logging.getLogger("uvicorn.error").addFilter(UvicornWebsocketNoiseFilter())
 
     setattr(root, marker, True)

@@ -20,13 +20,9 @@ from typing import Any, Dict, Optional, Type, Union
 
 from fred_core import (
     BaseFilesystem,
-    BaseKPIStore,
-    BaseKPIWriter,
     BaseLogStore,
     DuckdbStoreConfig,
     InMemoryLogStorageConfig,
-    KpiLogStore,
-    KPIWriter,
     LocalFilesystem,
     LogStoreConfig,
     MinioFilesystem,
@@ -34,7 +30,6 @@ from fred_core import (
     ModelProvider,
     OpenFgaRebacConfig,
     OpenSearchIndexConfig,
-    OpenSearchKPIStore,
     OpenSearchLogStore,
     PostgresTableConfig,
     RamLogStore,
@@ -47,6 +42,7 @@ from fred_core import (
     rebac_factory,
     split_realm_url,
 )
+from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIDefaults, KpiLogStore, KPIWriter, OpenSearchKPIStore, PrometheusKPIStore
 from fred_core.sql import create_engine_from_config
 from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
@@ -70,6 +66,7 @@ from knowledge_flow_backend.common.structures import (
     WeaviateVectorStorage,
 )
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
+from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import BaseFastTextProcessor
 from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 from knowledge_flow_backend.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
@@ -122,6 +119,15 @@ EXTENSION_CATEGORY = {
     ".xlsm": "tabular",
     ".duckdb": "duckdb",
     ".jsonl": "markdown",
+    # Image extensions - processed as markdown with metadata
+    ".png": "markdown",
+    ".jpg": "markdown",
+    ".jpeg": "markdown",
+    ".gif": "markdown",
+    ".bmp": "markdown",
+    ".svg": "markdown",
+    ".webp": "markdown",
+    ".ico": "markdown",
 }
 
 logger = logging.getLogger(__name__)
@@ -226,6 +232,22 @@ def validate_library_output_processor_config(config: Configuration):
             raise ImportError(f"Library Output Processor '{entry.class_path}' could not be loaded: {e}")
 
 
+def validate_attachment_processor_config(config: Configuration):
+    """Ensure all attachment fast-text processor classes can be imported and subclass BaseFastTextProcessor."""
+    if not config.attachment_processors:
+        return
+    for entry in config.attachment_processors:
+        module_path, class_name = entry.class_path.rsplit(".", 1)
+        try:
+            module = importlib.import_module(module_path)
+            cls = getattr(module, class_name)
+            if not issubclass(cls, BaseFastTextProcessor):
+                raise TypeError(f"{entry.class_path} is not a subclass of BaseFastTextProcessor")
+            logger.debug("Validated attachment processor: %s for prefix: %s", entry.class_path, entry.prefix)
+        except (ImportError, AttributeError, TypeError) as e:
+            raise ImportError(f"Attachment Processor '{entry.class_path}' could not be loaded: {e}")
+
+
 def _require_env(var: str) -> None:
     """Log presence of a required env var or raise loudly if missing."""
     val = os.getenv(var, "")
@@ -265,6 +287,7 @@ class ApplicationContext:
         validate_input_processor_config(configuration)
         validate_output_processor_config(configuration)
         validate_library_output_processor_config(configuration)
+        validate_attachment_processor_config(configuration)
         self.input_processor_registry: Dict[str, Type[BaseInputProcessor]] = self._load_input_processor_registry()
         self.output_processor_registry: Dict[str, Type[BaseOutputProcessor]] = self._load_output_processor_registry()
         ApplicationContext._instance = self
@@ -717,7 +740,12 @@ class ApplicationContext:
         if self._kpi_writer is not None:
             return self._kpi_writer
 
-        self._kpi_writer = KPIWriter(store=self.get_kpi_store())
+        self._kpi_writer = KPIWriter(
+            store=self.get_kpi_store(),
+            defaults=KPIDefaults(static_dims={"service": "knowledge-flow"}),
+            summary_interval_s=self.configuration.app.kpi_log_summary_interval_sec,
+            summary_top_n=self.configuration.app.kpi_log_summary_top_n,
+        )
         return self._kpi_writer
 
     def get_rebac_engine(self) -> RebacEngine:
@@ -738,7 +766,7 @@ class ApplicationContext:
             password = opensearch_config.password
             if not password:
                 raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
-            self._kpi_store_instance = OpenSearchKPIStore(
+            store: BaseKPIStore = OpenSearchKPIStore(
                 host=opensearch_config.host,
                 username=opensearch_config.username,
                 password=password,
@@ -747,9 +775,10 @@ class ApplicationContext:
                 index=store_config.index,
             )
         elif isinstance(store_config, LogStoreConfig):
-            self._kpi_store_instance = KpiLogStore(level=store_config.level)
+            store = KpiLogStore(level=store_config.level)
         else:
             raise ValueError("Unsupported KPI storage backend")
+        self._kpi_store_instance = PrometheusKPIStore(delegate=store)
         return self._kpi_store_instance
 
     def get_tag_store(self) -> BaseTagStore:

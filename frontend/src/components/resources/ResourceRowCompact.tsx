@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined"; // optional visual parity
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
-import { Box, IconButton, Tooltip, Typography } from "@mui/material";
+import { Box, IconButton, Typography } from "@mui/material";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
+import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 import { Resource } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export type ResourceRowCompactProps = {
@@ -64,37 +65,40 @@ export function ResourceRowCompact({
       </Box>
 
       {/* Middle: updated date (parity with document date pill) */}
-      <Tooltip title={prompt.updated_at || ""}>
+      <SimpleTooltip title={prompt.updated_at || ""}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexShrink: 0 }}>
           <EventAvailableIcon fontSize="inherit" />
           <Typography variant="caption" noWrap>
             {fmt(prompt.updated_at)}
           </Typography>
         </Box>
-      </Tooltip>
+      </SimpleTooltip>
 
       {/* Right: actions */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexShrink: 0, ml: 2 }}>
         {onPreview && (
-          <Tooltip title={t("resourceLibrary.preview")}>
+          <SimpleTooltip title={t("resourceLibrary.preview")}>
             <IconButton size="small" onClick={() => onPreview(prompt)} aria-label="preview">
               <VisibilityOutlinedIcon fontSize="inherit" />
             </IconButton>
-          </Tooltip>
+          </SimpleTooltip>
         )}
         {onEdit && (
-          <Tooltip title={t("resourceLibrary.edit")}>
+          <SimpleTooltip title={t("resourceLibrary.edit")}>
             <IconButton size="small" onClick={() => onEdit(prompt)} aria-label="edit">
               <EditOutlinedIcon fontSize="inherit" />
             </IconButton>
-          </Tooltip>
+          </SimpleTooltip>
         )}
         {onRemoveFromLibrary && (
-          <Tooltip title={t("documentLibrary.removeFromLibrary")}>
-            <IconButton size="small" onClick={() => onRemoveFromLibrary(prompt)} aria-label="remove-from-library">
-              <DeleteOutlineIcon fontSize="inherit" />
-            </IconButton>
-          </Tooltip>
+          <SimpleTooltip title={t("documentLibrary.removeFromLibrary")}>
+            <DeleteIconButton
+              size="small"
+              iconSize="inherit"
+              onClick={() => onRemoveFromLibrary(prompt)}
+              aria-label="remove-from-library"
+            />
+          </SimpleTooltip>
         )}
       </Box>
     </Box>

@@ -14,15 +14,18 @@
 import { Box, CircularProgress, Grid2, Typography } from "@mui/material";
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
+
 import { useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
 export default function Chat() {
-  const { sessionId } = useParams<{ sessionId?: string }>();
+  const { sessionId, 'agent-id': agentId } = useParams<{ sessionId?: string; 'agent-id'?: string }>();
   const navigate = useNavigate();
+  const { i18n } = useTranslation();
 
   const {
     data: rawAgentsFromServer = [],
@@ -31,14 +34,31 @@ export default function Chat() {
     error: flowsErrObj,
   } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery(undefined, {
     refetchOnMountOrArgChange: true,
-    refetchOnFocus: true,
-    refetchOnReconnect: true,
+    refetchOnFocus: false,
+    refetchOnReconnect: false,
   });
 
   const agentsFromServer = useMemo<AnyAgent[]>(() => normalizeAgenticFlows(rawAgentsFromServer), [rawAgentsFromServer]);
   const enabledAgents = (agentsFromServer ?? []).filter(
     (a) => a.enabled === true && !a.metadata?.deep_search_hidden_in_ui,
   );
+
+  // Base runtime context propagated to every message (language, etc.)
+  const baseRuntimeContext = useMemo(() => ({ language: i18n.language || undefined }), [i18n.language]);
+
+  // Find the initial agent based on URL parameter (if present)
+  const initialAgent = useMemo<AnyAgent | undefined>(() => {
+    if (!agentId || enabledAgents.length === 0) return undefined;
+
+    // Decode the URL-encoded agent name
+    const decodedAgentId = decodeURIComponent(agentId);
+
+    const match = enabledAgents.find((a) => a.name === decodedAgentId);
+    if (!match) {
+      console.warn(`[CHAT] Agent "${decodedAgentId}" not found in enabled agents. Defaulting to first agent.`);
+    }
+    return match;
+  }, [agentId, enabledAgents]);
 
   // Handle navigation when a new session is created
   const handleNewSessionCreated = (newSessionId: string) => {
@@ -77,15 +97,15 @@ export default function Chat() {
       </Box>
     );
   }
-
   return (
     <Box sx={{ height: "100vh", position: "relative", overflow: "hidden" }}>
       <Grid2>
         <ChatBot
-          sessionId={sessionId}
+          chatSessionId={sessionId}
           agents={enabledAgents}
+          initialAgent={initialAgent}
           onNewSessionCreated={handleNewSessionCreated}
-          runtimeContext={{}}
+          runtimeContext={baseRuntimeContext}
         />
       </Grid2>
     </Box>

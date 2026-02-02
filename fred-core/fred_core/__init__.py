@@ -25,6 +25,7 @@ from fred_core.common.structures import (
     PostgresTableConfig,
     SQLStorageConfig,
     StoreConfig,
+    TemporalSchedulerConfig,
 )
 from fred_core.common.utils import raise_internal_error
 from fred_core.filesystem.local_filesystem import LocalFilesystem
@@ -34,32 +35,12 @@ from fred_core.filesystem.structures import (
     FilesystemResourceInfo,
     FilesystemResourceInfoResult,
 )
-from fred_core.kpi.base_kpi_store import BaseKPIStore
-from fred_core.kpi.base_kpi_writer import BaseKPIWriter
-from fred_core.kpi.kpi_reader_structures import (
-    FilterTerm,
-    KPIQuery,
-    KPIQueryResult,
-    TimeBucket,
-)
-from fred_core.kpi.kpi_writer import KPIWriter
-from fred_core.kpi.kpi_writer_structures import (
-    Cost,
-    KPIActor,
-    KPIEvent,
-    Metric,
-    MetricType,
-    Quantities,
-    Trace,
-)
-from fred_core.kpi.log_kpi_store import KpiLogStore
-from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
-from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from fred_core.logs.base_log_store import BaseLogStore
 from fred_core.logs.log_setup import StoreEmitHandler, log_setup
 from fred_core.logs.log_structures import (
     InMemoryLogStorageConfig,
     LogEventDTO,
+    LogFilter,
     LogQuery,
     LogQueryResult,
     LogStorageConfig,
@@ -128,6 +109,7 @@ from fred_core.store.vector_search import VectorSearchHit
 __all__ = [
     "BaseLogStore",
     "LogEventDTO",
+    "LogFilter",
     "LogQuery",
     "LogQueryResult",
     "OpenSearchLogStore",
@@ -174,23 +156,6 @@ __all__ = [
     "VectorSearchHit",
     "ClientCredentialsProvider",
     "BearerAuth",
-    "OpenSearchKPIStore",
-    "KPIEvent",
-    "Metric",
-    "MetricType",
-    "Cost",
-    "Quantities",
-    "Trace",
-    "BaseKPIStore",
-    "KpiLogStore",
-    "FilterTerm",
-    "KPIQuery",
-    "KPIQueryResult",
-    "TimeBucket",
-    "KPIWriter",
-    "NoOpKPIWriter",
-    "BaseKPIWriter",
-    "KPIActor",
     "LogStoreConfig",
     "M2MAuthConfig",
     "M2MTokenProvider",
@@ -202,6 +167,7 @@ __all__ = [
     "get_structured_chain",
     "get_embeddings",
     "ModelConfiguration",
+    "TemporalSchedulerConfig",
     "SQLStorageConfig",
     "SQLTableStore",
     "StoreInfo",

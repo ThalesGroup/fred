@@ -48,9 +48,11 @@ class VectorSearchClient(KfBaseClient):
         question: str,
         top_k: int = 10,
         document_library_tags_ids: Optional[Sequence[str]] = None,
+        document_uids: Optional[Sequence[str]] = None,
         search_policy: Optional[str] = None,
         session_id: Optional[str] = None,
         include_session_scope: bool = True,
+        include_corpus_scope: bool = True,
     ) -> List[VectorSearchHit]:
         """
         Perform a vector search against the Knowledge Flow backend. This method
@@ -62,24 +64,33 @@ class VectorSearchClient(KfBaseClient):
             "question": str,
             "top_k": int,
             "library_tags_ids": [str]?,
-            "search_policy": str?
+            "document_uids": [str]?,
+            "search_policy": str?,
+            "session_id": str?,
+            "include_session_scope": bool,
+            "include_corpus_scope": bool
           }
         """
         payload: Dict[str, Any] = {"question": question, "top_k": top_k}
         if document_library_tags_ids:
             payload["document_library_tags_ids"] = list(document_library_tags_ids)
+        if document_uids:
+            payload["document_uids"] = list(document_uids)
         if search_policy:
             payload["search_policy"] = search_policy
         if session_id:
             payload["session_id"] = session_id
             payload["include_session_scope"] = include_session_scope
+        payload["include_corpus_scope"] = include_corpus_scope
         logger.info(
-            "[VECTOR][CLIENT] session_id=%s include_session_scope=%s top_k=%d search_policy=%s document_library_tags_ids=%s",
+            "[VECTOR][CLIENT] session_id=%s include_session_scope=%s include_corpus_scope=%s top_k=%d search_policy=%s document_library_tags_ids=%s document_uids=%s",
             session_id,
             include_session_scope,
+            include_corpus_scope,
             top_k,
             search_policy,
             payload.get("document_library_tags_ids"),
+            payload.get("document_uids"),
         )
 
         # Use the base class's request method, passing the required access_token.

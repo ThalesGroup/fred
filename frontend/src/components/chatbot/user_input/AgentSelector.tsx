@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../../common/agent";
 import { AgentChipWithIcon } from "../../../common/AgentChip";
-import { AgentTooltip } from "../../../common/AgentTooltip";
+import { DetailedTooltip } from "../../../shared/ui/tooltips/Tooltips";
 export type AgentSelectorProps = AgentPopoverPickerProps & Pick<BoxProps, "sx">;
 
 export function AgentSelector({ sx, currentAgent, agents, onSelectNewAgent }: AgentSelectorProps) {
@@ -27,9 +27,7 @@ export function AgentSelector({ sx, currentAgent, agents, onSelectNewAgent }: Ag
       <Box
         sx={{
           border: `1px solid ${theme.palette.divider}`,
-          borderBottom: "0px",
-          borderTopLeftRadius: "16px",
-          borderTopRightRadius: "16px",
+          borderRadius: "16px",
           background: theme.palette.background.paper,
           paddingX: 2,
           paddingY: 0.5,
@@ -111,12 +109,13 @@ export function AgentPopoverPicker({ currentAgent, agents, onSelectNewAgent }: A
   return (
     <List>
       {agents.map((agent) => {
+        const tooltipDescription = [agent.tuning.role, agent.tuning.description].filter(Boolean).join("\n");
         return (
-          <AgentTooltip agent={agent}>
+          <DetailedTooltip key={agent.name} label={agent.name} description={tooltipDescription} placement="right">
             <ListItemButton onClick={() => onSelectNewAgent(agent)} selected={agent.name === currentAgent.name}>
               <AgentChipWithIcon agent={agent} />
             </ListItemButton>
-          </AgentTooltip>
+          </DetailedTooltip>
         );
       })}
     </List>

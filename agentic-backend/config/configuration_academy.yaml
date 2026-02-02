@@ -92,7 +92,7 @@ ai:
       enabled: true
     - name: "AssetResponder"
       type: "agent"
-      class_path: "agentic_backend.academy.03_asset_responder.asset_responder.AssetResponder"
+      class_path: "agentic_backend.academy.03_config_loader.config_loader.AssetResponder"
       enabled: true
       chat_model: {}
     - name: "SlideMaker"
@@ -127,10 +127,6 @@ ai:
     - name: "Sage"
       type: "agent"
       class_path: "agentic_backend.agents.statistics.statistics_expert.Sage"
-      enabled: true
-    - name: "EcoAdviser"
-      type: "agent"
-      class_path: "agentic_backend.academy.07_ecoadviser.eco_adviser.EcoAdvisor"
       enabled: true
 
 mcp:
@@ -186,6 +182,9 @@ storage:
   session_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/session.duckdb"
+  attachments_store:
+    type: "duckdb"
+    duckdb_path: "~/.fred/agentic/session_attachements.duckdb"
   history_store:
     type: "duckdb"
     duckdb_path: "~/.fred/agentic/history.duckdb"

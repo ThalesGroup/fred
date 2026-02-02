@@ -29,7 +29,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ProgressStep, ProgressStepper } from "../../ProgressStepper";
 
-
 interface DocumentUploadProgressModalProps {
   open: boolean;
   onClose: (reason?: "backdropClick" | "escapeKeyDown" | "closeButton") => void;
@@ -133,9 +132,7 @@ export const DocumentUploadProgressModal: React.FC<DocumentUploadProgressModalPr
             sx={{
               mt: 1,
               p: 2,
-              borderRadius: 2,
               borderColor: "primary.light",
-              background: theme.palette.mode === "dark" ? theme.palette.surfaces.raised : theme.palette.surfaces.soft,
             }}
           >
             <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 1 }}>

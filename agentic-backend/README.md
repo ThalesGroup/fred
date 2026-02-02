@@ -20,16 +20,46 @@ make run
 ```
 
 This will:
+
 - Start the API server (FastAPI)
 - Use default in-memory and local storage components
 - Let you interact with agents right away — no external dependencies required
+
+## 🧰 Temporal Worker (Long Jobs)
+
+For long-running or isolated agent tasks, start the Temporal worker as a separate process:
+
+```bash
+make run-worker
+```
+
+This starts the worker only (no FastAPI server). You can also point it at a different config:
+
+```bash
+CONFIG_FILE=./config/configuration_worker.yaml make run-worker
+```
+
+## 🔐 Temporal Payload Encryption (Recommended for Prod)
+
+Temporal stores workflow inputs in history. To protect user tokens in scheduler payloads,
+enable the payload codec by setting the same key in both the API pod and worker pod:
+
+```bash
+export FRED_TEMPORAL_CODEC_KEY="..."
+```
+
+Generate a key locally:
+
+```bash
+make temporal-key
+```
 
 ---
 
 ## Configure Your LLM Provider (Required)
 
-To use Fred, you must configure an LLM provider in `configuration.yaml` and `.env`. The logic is simple: 
-in '.env' file you provide only sensitive access keys and tokens. ALl the rest is in the yaml file. 
+To use Fred, you must configure an LLM provider in `configuration.yaml` and `.env`. The logic is simple:
+in '.env' file you provide only sensitive access keys and tokens. ALl the rest is in the yaml file.
 
 Fred supports:
 
@@ -66,7 +96,7 @@ If you want to learn how to build agents in Fred, start with the **Academy** sam
   - `agentic_backend/academy/00-echo/README.md` – minimal echo agent
   - `agentic_backend/academy/01-llm-responder/README.md` – simple LLM responder
   - `agentic_backend/academy/02-dual-model-responder/README.md` – router/generator pattern
-  - `agentic_backend/academy/03_asset_responder/README.md` – agents working with assets
+  - `agentic_backend/academy/03_config_loader/README.md` – agents working with assets
   - `agentic_backend/academy/04_slide_maker/README.md` – slide/outline generator
   - `agentic_backend/academy/05_gps_agent/README.md` – basic geo/GPS agent
   - `agentic_backend/academy/06_simple_leader/README.md` – simple leader/orchestrator
@@ -92,6 +122,7 @@ You can choose between:
 Inside the `ai.default_model` section, choose your provider.
 
 #### 🔹 Option 1: OpenAI
+
 ```yaml
 ai:
   default_model:
@@ -104,11 +135,12 @@ ai:
 ```
 
 #### 🔹 Option 2: Azure OpenAI
+
 ```yaml
 ai:
   default_model:
     provider: "azure-openai"
-    name: "fred-gpt-4o"  # your Azure deployment name
+    name: "fred-gpt-4o" # your Azure deployment name
     settings:
       api_version: "2024-05-01-preview"
       temperature: 0.0
@@ -117,6 +149,7 @@ ai:
 ```
 
 #### 🔹 Option 3: Azure OpenAI via APIM
+
 ```yaml
 ai:
   default_model:
@@ -133,16 +166,19 @@ ai:
 ### 🔐 Step 2: Set Required Environment Variables in `.env`
 
 #### ✅ For OpenAI:
+
 ```env
 OPENAI_API_KEY=sk-...
 ```
 
 #### ✅ For Azure OpenAI:
+
 ```env
 AZURE_OPENAI_API_KEY=...
 ```
 
 Optional for Azure AD authentication:
+
 ```env
 AZURE_TENANT_ID=...
 AZURE_AD_CLIENT_ID=...
@@ -150,6 +186,7 @@ AZURE_AD_CLIENT_SECRET=...
 ```
 
 #### ✅ For Azure APIM (if used):
+
 ```env
 AZURE_APIM_SUBSCRIPTION_KEY=your-subscription-key
 ```

@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
@@ -18,9 +17,10 @@ import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import SearchIcon from "@mui/icons-material/Search";
 import SearchOffIcon from "@mui/icons-material/SearchOff";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
-import { Box, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
+import { Box, CircularProgress, IconButton, Typography } from "@mui/material";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
+import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
 
 import { usePermissions } from "../../../security/usePermissions";
 import { type DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -28,6 +28,7 @@ import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 import { getDocumentIcon } from "../common/DocumentIcon";
 import { DocumentVersionChip, extractDocumentVersion } from "../common/DocumentVersionChip";
 
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import KeywordsPreview from "./KeywordsPreview";
 import SummaryPreview from "./SummaryPreview";
 
@@ -108,7 +109,7 @@ export function DocumentRowCompact({
       <Box sx={{ justifySelf: "start" }}>
         {/* 🆕 Condition to show PDF button instead of standard preview */}
         {onPdfPreview && isPdf ? (
-          <Tooltip title={t("documentLibrary.viewOriginalPdf", "View Original PDF")}>
+          <SimpleTooltip title={t("documentLibrary.viewOriginalPdf", "View Original PDF")}>
             <IconButton
               size="small"
               onClick={() => onPdfPreview(doc)}
@@ -116,14 +117,14 @@ export function DocumentRowCompact({
             >
               <PictureAsPdfIcon fontSize="inherit" />
             </IconButton>
-          </Tooltip>
+          </SimpleTooltip>
         ) : onPreview ? (
           // 👈 Show standard markdown preview button for non-PDF files
-          <Tooltip title={t("documentLibrary.preview")}>
+          <SimpleTooltip title={t("documentLibrary.preview")}>
             <IconButton size="small" onClick={() => onPreview(doc)} aria-label={t("documentLibrary.preview")}>
               <VisibilityOutlinedIcon fontSize="inherit" />
             </IconButton>
-          </Tooltip>
+          </SimpleTooltip>
         ) : null}
       </Box>{" "}
       {/* 5) Status pills */}
@@ -139,7 +140,7 @@ export function DocumentRowCompact({
           const label: Record<string, string> = { raw: "R", preview: "P", vector: "V", sql: "S", mcp: "M" };
           const { bg, fg } = style[status];
           return (
-            <Tooltip key={stage} title={`${stage}: ${status}`} arrow>
+            <SimpleTooltip key={stage} title={`${stage}: ${status}`}>
               <Box
                 sx={{
                   bgcolor: bg,
@@ -155,24 +156,24 @@ export function DocumentRowCompact({
               >
                 {label[stage]}
               </Box>
-            </Tooltip>
+            </SimpleTooltip>
           );
         })}
       </Box>
       {/* 6) Date added */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, justifySelf: "start" }}>
-        <Tooltip title={doc.source.date_added_to_kb}>
+        <SimpleTooltip title={doc.source.date_added_to_kb}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <EventAvailableIcon fontSize="inherit" />
             <Typography variant="caption" noWrap>
               {formatDate(doc.source.date_added_to_kb)}
             </Typography>
           </Box>
-        </Tooltip>
+        </SimpleTooltip>
       </Box>
       {/* 7) Searchable toggle */}
       <Box sx={{ justifySelf: "start" }}>
-        <Tooltip
+        <SimpleTooltip
           title={
             doc.source.retrievable
               ? t("documentLibrary.makeExcluded", "Make excluded")
@@ -201,32 +202,31 @@ export function DocumentRowCompact({
               {doc.source.retrievable ? <SearchIcon fontSize="small" /> : <SearchOffIcon fontSize="small" />}
             </IconButton>
           </span>
-        </Tooltip>
+        </SimpleTooltip>
       </Box>
       {/* 8) Actions (download/remove) */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, justifySelf: "end" }}>
         {onDownload && (
-          <Tooltip title={t("documentLibrary.download")}>
+          <SimpleTooltip title={t("documentLibrary.download")}>
             <span>
               <IconButton size="small" onClick={() => onDownload(doc)} disabled={isDownloading}>
                 {isDownloading ? <CircularProgress size={16} thickness={5} /> : <DownloadIcon fontSize="inherit" />}
               </IconButton>
             </span>
-          </Tooltip>
+          </SimpleTooltip>
         )}
         {onRemoveFromLibrary && (
-          <Tooltip title={t("documentLibrary.removeFromLibrary")}>
-            <IconButton
+          <SimpleTooltip title={t("documentLibrary.removeFromLibrary")}>
+            <DeleteIconButton
               size="small"
               disabled={!canDeleteDocument}
               onClick={() => {
                 if (!canDeleteDocument) return;
                 onRemoveFromLibrary(doc);
               }}
-            >
-              <DeleteIcon fontSize="inherit" />
-            </IconButton>
-          </Tooltip>
+              iconSize="inherit"
+            />
+          </SimpleTooltip>
         )}
       </Box>
     </Box>

@@ -19,22 +19,21 @@ import json
 import logging
 import re
 import secrets
+import time
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException, UploadFile, WebSocketDisconnect
 from fred_core import (
     Action,
     AuthorizationError,
-    BaseKPIWriter,
     KeycloakUser,
-    KPIActor,
     Resource,
     authorize,
 )
+from fred_core.kpi import BaseKPIWriter, Dims, KPIActor
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
@@ -47,11 +46,13 @@ from requests import HTTPError
 from agentic_backend.application_context import (
     get_default_model,
 )
-from agentic_backend.common.kf_lite_markdown_client import KfLiteMarkdownClient
+from agentic_backend.common.kf_fast_text_client import KfFastTextClient
+from agentic_backend.common.mcp_utils import MCPConnectionError
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.chatbot.chat_error_replies import human_error_message
 from agentic_backend.core.chatbot.chat_schema import (
     AttachmentRef,
     Channel,
@@ -66,7 +67,14 @@ from agentic_backend.core.chatbot.chat_schema import (
     ToolResultPart,
 )
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
-from agentic_backend.core.chatbot.stream_transcoder import StreamTranscoder
+from agentic_backend.core.chatbot.stream_transcoder import (
+    InterruptRaised,
+    StreamAgentError,
+    StreamTranscoder,
+)
+from agentic_backend.core.interrupts.streaming_interrupt_handler import (
+    StreamingInterruptHandler,
+)
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.session.attachement_processing import AttachementProcessing
 from agentic_backend.core.session.stores.base_session_attachment_store import (
@@ -76,14 +84,41 @@ from agentic_backend.core.session.stores.base_session_attachment_store import (
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 
 logger = logging.getLogger(__name__)
+PHASE_METRIC_ACTOR = KPIActor(type="system", user_id=None, groups=None)
 
 # Callback type used by WS controller to push events to clients
 CallbackType = Callable[[dict], None] | Callable[[dict], Awaitable[None]]
+SessionCallbackType = (
+    Callable[[SessionSchema], None] | Callable[[SessionSchema], Awaitable[None]]
+)
 
 
 def _utcnow_dt() -> datetime:
     """UTC timestamp (seconds resolution) for ISO-8601 serialization."""
     return datetime.now(timezone.utc).replace(microsecond=0)
+
+
+def _record_phase_metric(
+    *,
+    kpi: BaseKPIWriter,
+    phase: str,
+    start_ts: float,
+    agent_name: str,
+) -> None:
+    ms = int((time.monotonic() - start_ts) * 1000)
+    # Keep cardinality low for Prometheus: only agent + phase + status.
+    dims: Dims = {
+        "agent_name": agent_name,
+        "phase": phase,
+    }
+    kpi.emit(
+        name="chat.phase_latency_ms",
+        type="timer",
+        value=ms,
+        unit="ms",
+        dims=dims,
+        actor=PHASE_METRIC_ACTOR,
+    )
 
 
 class SessionOrchestrator:
@@ -121,6 +156,7 @@ class SessionOrchestrator:
         self.kpi: BaseKPIWriter = kpi
         self.attachement_processing = AttachementProcessing()
         self.restore_max_exchanges = configuration.ai.restore_max_exchanges
+        self._rank_locks: Dict[str, asyncio.Lock] = {}
         # Stateless worker that knows how to turn LangGraph events into ChatMessage[]
         self.transcoder = StreamTranscoder()
         cfg_max_files = configuration.ai.max_attached_files_per_user
@@ -139,6 +175,38 @@ class SessionOrchestrator:
 
     # ---------------- Public API (used by WS layer) ----------------
 
+    def get_rank_lock(self, session_id: str) -> asyncio.Lock:
+        lock = self._rank_locks.get(session_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._rank_locks[session_id] = lock
+        return lock
+
+    async def _ensure_next_rank(self, session: SessionSchema) -> int:
+        # If next_rank is missing or stale (e.g., old sessions persisted without partial HITL steps),
+        # recompute from stored history length.
+        prior_msgs: List[ChatMessage] = []
+        if session.next_rank is None:
+            prior_msgs = await asyncio.to_thread(self.history_store.get, session.id)
+        else:
+            # Lazy fetch only if we need to validate monotonicity
+            prior_msgs = await asyncio.to_thread(self.history_store.get, session.id)
+            if session.next_rank < len(prior_msgs):
+                logger.warning(
+                    "[SESSIONS] next_rank corrected from %s to %s for session=%s",
+                    session.next_rank,
+                    len(prior_msgs),
+                    session.id,
+                )
+                session.next_rank = len(prior_msgs)
+                await asyncio.to_thread(self.session_store.save, session)
+
+        if session.next_rank is None:
+            session.next_rank = len(prior_msgs)
+            await asyncio.to_thread(self.session_store.save, session)
+
+        return session.next_rank
+
     @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
     @authorize(action=Action.UPDATE, resource=Resource.SESSIONS)
     async def chat_ask_websocket(
@@ -146,6 +214,7 @@ class SessionOrchestrator:
         *,
         user: KeycloakUser,
         callback: CallbackType,
+        session_callback: SessionCallbackType | None = None,
         session_id: str | None,
         message: str,
         agent_name: str,
@@ -163,7 +232,9 @@ class SessionOrchestrator:
         """
         # Check if user is authorized to talk in this session
         if session_id is not None:
-            self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
+            await asyncio.to_thread(
+                self._authorize_user_action_on_session, session_id, user, Action.UPDATE
+            )
 
         logger.debug(
             "chat_ask_websocket user_id=%s session_id=%s agent=%s",
@@ -173,85 +244,159 @@ class SessionOrchestrator:
         )
 
         # KPI: count incoming question early (before any work)
-        actor = KPIActor(type="human", user_id=user.uid)
+        actor = KPIActor(type="human", user_id=user.uid, groups=user.groups)
         exchange_id = client_exchange_id or str(uuid4())
         self.kpi.count(
             "chat.user_message_total",
             1,
             dims={
-                "agent_id": agent_name,
-                "scope_type": "session",
-                "scope_id": session_id,
-                "exchange_id": exchange_id,
+                "agent_name": agent_name,
             },
             actor=actor,
         )
         # 1) Get or create the session. We receive a None session_id for new sessions.
-        session = self._get_or_create_session(
+        t_initial = time.monotonic()
+        session = await self._get_or_create_session(
             user_id=user.uid, query=message, session_id=session_id
         )
+        _record_phase_metric(
+            kpi=self.kpi,
+            phase="session_get_create",
+            start_ts=t_initial,
+            agent_name=agent_name,
+        )
         # If this session was created with a placeholder title, refresh it now from the first prompt.
-        self._maybe_refresh_title_from_prompt(session=session, prompt=message)
+        t_title = time.monotonic()
+        old_title = session.title
+        await self._maybe_refresh_title_from_prompt(session=session, prompt=message)
+        title_changed = session.title != old_title
+        if session.title != old_title:
+            session.updated_at = _utcnow_dt()
+            await asyncio.to_thread(self.session_store.save, session)
+        _record_phase_metric(
+            kpi=self.kpi,
+            phase="title_refresh",
+            start_ts=t_title,
+            agent_name=agent_name,
+        )
         # Propagate effective session_id into runtime context so downstream calls
         # (vector search, attachments) can scope to the correct conversation.
         runtime_context.session_id = session.id
         # 2) Check if an agent instance can be created/initialized/reused
-        agent, is_cached = await self.agent_factory.create_and_init(
-            agent_name=agent_name,
-            runtime_context=runtime_context,
-            session_id=session.id,
-        )
-
-        # 3) Rebuild minimal LangChain history (user/assistant/system only),
-        # This method will only restore history if the agent is not cached.
-        lc_history: List[AnyMessage] = []
-        if not is_cached:
-            lc_history = self._restore_history(
-                user=user,
-                session=session,
-            )
-            label = f"agent={agent_name} session={session.id}"
-            log_agent_message_summary(lc_history, label=label)
-
-        # Rank base = current stored history length
-        prior: List[ChatMessage] = self.history_store.get(session.id) or []
-        base_rank = len(prior)
-
-        # 4) Emit the user message immediately
-        user_msg = ChatMessage(
-            session_id=session.id,
-            exchange_id=exchange_id,
-            rank=base_rank,
-            timestamp=_utcnow_dt(),
-            role=Role.user,
-            channel=Channel.final,
-            parts=[TextPart(text=message)],
-            metadata=ChatMetadata(),
-        )
-        all_msgs: List[ChatMessage] = [user_msg]
-        await self._emit(callback, user_msg)
-
-        # Stream agent responses via the transcoder
-        saw_final_assistant = False
-        agent_msgs: List[ChatMessage] = []
-        had_error = False
-        had_cancelled = False
-        error_code: Optional[str] = None
+        t_agent_init = time.monotonic()
         try:
-            # Timer covers the entire exchange; default status="ok" unless overridden.
-            with self.kpi.timer(
-                "chat.exchange_latency_ms",
-                dims={
-                    "agent_id": agent_name,
-                    "user_id": user.uid,
-                    "session_id": session.id,
-                    "exchange_id": exchange_id,
-                },
+            agent, is_cached = await self.agent_factory.create_and_init(
+                agent_name=agent_name,
+                runtime_context=runtime_context,
+                session_id=session.id,
+            )
+        except MCPConnectionError as mcp_err:
+            self.kpi.count(
+                "chat.exchange_error",
+                1,
+                dims={"agent_name": agent_name},
                 actor=actor,
-            ) as kpi_dims:
+            )
+            logger.error(
+                "[SESSIONS] MCP init failed for agent=%s session=%s err=%s",
+                agent_name,
+                session.id,
+                mcp_err,
+            )
+            lang = (runtime_context.language or "").lower() if runtime_context else ""
+            if lang.startswith("fr"):
+                user_msg = (
+                    "L'agent n'a pas pu démarrer : au moins un serveur MCP requis est inaccessible. "
+                    "Réessayez plus tard ou contactez le support."
+                )
+            else:
+                user_msg = (
+                    "The agent cannot start because a required MCP server is unreachable. "
+                    "Please try again later or contact support."
+                )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "mcp_connection_failed",
+                    "message": user_msg,
+                },
+            )
+        _record_phase_metric(
+            kpi=self.kpi,
+            phase="agent_init",
+            start_ts=t_agent_init,
+            agent_name=agent_name,
+        )
+        if is_cached:
+            self.kpi.count(
+                "agent.cache_hit",
+                1,
+                dims={"agent_name": agent_name},
+                actor=actor,
+            )
+        else:
+            self.kpi.count(
+                "agent.cache_miss",
+                1,
+                dims={"agent_name": agent_name},
+                actor=actor,
+            )
+
+        try:
+            if title_changed and session_callback:
+                await self._emit_session(session_callback, session)
+            # 3) Rebuild minimal LangChain history (user/assistant/system only),
+            # This method will only restore history if the agent is not cached.
+            lc_history: List[AnyMessage] = []
+            if not is_cached:
+                t_restore = time.monotonic()
+                lc_history = await asyncio.to_thread(
+                    self._restore_history,
+                    user=user,
+                    session=session,
+                )
+                _record_phase_metric(
+                    kpi=self.kpi,
+                    phase="history_restore",
+                    start_ts=t_restore,
+                    agent_name=agent_name,
+                )
+                label = f"agent={agent_name} session={session.id}"
+                log_agent_message_summary(lc_history, label=label)
+
+            rank_lock = self.get_rank_lock(session.id)
+            async with rank_lock:
+                t_rank = time.monotonic()
+                base_rank = await self._ensure_next_rank(session)
+                _record_phase_metric(
+                    kpi=self.kpi,
+                    phase="rank_seed",
+                    start_ts=t_rank,
+                    agent_name=agent_name,
+                )
+
+                # 4) Emit the user message immediately
+                next_rank_cursor = base_rank  # first free rank in this session
+                user_msg = ChatMessage(
+                    session_id=session.id,
+                    exchange_id=exchange_id,
+                    rank=next_rank_cursor,
+                    timestamp=_utcnow_dt(),
+                    role=Role.user,
+                    channel=Channel.final,
+                    parts=[TextPart(text=message)],
+                    metadata=ChatMetadata(),
+                )
+                all_msgs: List[ChatMessage] = [user_msg]
+                await self._emit(callback, user_msg)
+                next_rank_cursor += 1  # advance past the user message
+
+                # Stream agent responses via the transcoder
+                agent_msgs: List[ChatMessage] = []
+
                 # Build input messages ensuring the last message is the Human question.
                 input_messages = lc_history + [HumanMessage(message)]
-
+                stream_start = time.monotonic()
                 try:
                     agent_msgs = await self.transcoder.stream_agent_response(
                         agent=agent,
@@ -259,83 +404,433 @@ class SessionOrchestrator:
                         session_id=session.id,
                         exchange_id=exchange_id,
                         agent_name=agent_name,
-                        base_rank=base_rank,
-                        start_seq=1,  # user message already consumed rank=base_rank
+                        base_rank=next_rank_cursor,
+                        start_seq=0,  # start at the next free rank
                         callback=callback,
                         user_context=user,
                         runtime_context=runtime_context,
+                        interrupt_handler=self._make_streaming_interrupt_handler(
+                            session.id, exchange_id, callback
+                        ),
                     )
-                except asyncio.CancelledError:
-                    had_cancelled = True
-                    error_code = "cancelled"
-                    kpi_dims["error_code"] = error_code
+                except WebSocketDisconnect:
+                    self.kpi.count(
+                        "chat.exchange_error",
+                        1,
+                        dims={
+                            "agent_name": agent_name,
+                        },
+                        actor=PHASE_METRIC_ACTOR,
+                    )
+                    logger.error(
+                        "Agent execution cancelled by client disconnect (agent=%s session=%s exchange=%s)",
+                        agent_name,
+                        session.id,
+                        exchange_id,
+                    )
+                    # do we need raise here ?
+                except InterruptRaised as ir:
+                    # Persist what we already streamed (user + any partial agent msgs)
+                    if not agent_msgs and getattr(ir, "partial_messages", None):
+                        agent_msgs = ir.partial_messages
+                    all_msgs.extend(agent_msgs)
+                    session.updated_at = _utcnow_dt()
+                    session.next_rank = base_rank + len(all_msgs)
+                    await asyncio.to_thread(self.session_store.save, session)
+                    await asyncio.to_thread(
+                        self.history_store.save, session.id, all_msgs, user.uid
+                    )
+                    logger.info(
+                        "[SESSIONS] interrupt persisted session=%s exchange=%s msgs=%d",
+                        session.id,
+                        exchange_id,
+                        len(all_msgs),
+                    )
                     raise
+                except asyncio.CancelledError:
+                    self.kpi.count(
+                        "chat.exchange_error",
+                        1,
+                        dims={
+                            "agent_name": agent_name,
+                        },
+                        actor=PHASE_METRIC_ACTOR,
+                    )
+                    raise
+                except StreamAgentError as sae:
+                    # Preserve everything already emitted by the transcoder.
+                    agent_msgs = sae.partial_messages
+                    user_msg = human_error_message(runtime_context, sae.original)
+                    # Next free rank after all agent messages (base_rank consumed by user at 0).
+                    safe_rank = base_rank + len(agent_msgs) + 1
+                    agent_msgs.append(
+                        ChatMessage(
+                            session_id=session.id,
+                            exchange_id=exchange_id,
+                            rank=safe_rank,
+                            timestamp=_utcnow_dt(),
+                            role=Role.assistant,
+                            channel=Channel.final,
+                            parts=[TextPart(text=user_msg)],
+                            metadata=ChatMetadata(),
+                        )
+                    )
+                    # Important: reset cached agent state to avoid stale tool_calls in MemorySaver
+                    try:
+                        await self.agent_factory.teardown_session_agents(session.id)
+                    except Exception:
+                        logger.warning(
+                            "[SESSIONS] teardown_session_agents failed session=%s after StreamAgentError",
+                            session.id,
+                            exc_info=True,
+                        )
+                    self.kpi.count(
+                        "chat.exchange_error",
+                        1,
+                        dims={
+                            "agent_name": agent_name,
+                        },
+                        actor=PHASE_METRIC_ACTOR,
+                    )
+                except Exception as e:
+                    user_msg = human_error_message(runtime_context, e)
+                    safe_rank = base_rank + len(agent_msgs) + 1
+                    agent_msgs.append(
+                        ChatMessage(
+                            session_id=session.id,
+                            exchange_id=exchange_id,
+                            rank=safe_rank,
+                            timestamp=_utcnow_dt(),
+                            role=Role.assistant,
+                            channel=Channel.final,
+                            parts=[
+                                TextPart(text=user_msg),
+                            ],
+                            metadata=ChatMetadata(),
+                        )
+                    )
+                    try:
+                        await self.agent_factory.teardown_session_agents(session.id)
+                    except Exception:
+                        logger.warning(
+                            "[SESSIONS] teardown_session_agents failed session=%s after generic exception",
+                            session.id,
+                            exc_info=True,
+                        )
+                    self.kpi.count(
+                        "chat.exchange_error",
+                        1,
+                        dims={
+                            "agent_name": agent_name,
+                        },
+                        actor=PHASE_METRIC_ACTOR,
+                    )
+                finally:
+                    _record_phase_metric(
+                        kpi=self.kpi,
+                        phase="stream",
+                        start_ts=stream_start,
+                        agent_name=agent_name,
+                    )
                 all_msgs.extend(agent_msgs)
-                # Success signal: exactly one assistant/final per exchange (enforced by transcoder)
-                saw_final_assistant = any(
-                    (m.role == Role.assistant and m.channel == Channel.final)
-                    for m in agent_msgs
-                )
-                # Error signal: explicit error marker from the transcoder.
-                for msg in agent_msgs:
-                    extras = msg.metadata.extras if msg.metadata else {}
-                    if extras.get("error") is True or msg.channel == Channel.error:
-                        had_error = True
-                        error_code = extras.get("error_code") or error_code
-                        break
-                if had_error:
-                    kpi_dims["status"] = "error"
-                    if error_code:
-                        kpi_dims["error_code"] = error_code
-        except asyncio.CancelledError:
-            logger.info(
-                "Agent execution cancelled by client (agent=%s session=%s exchange=%s)",
-                agent_name,
-                session.id,
-                exchange_id,
-            )
-            raise
-        except Exception:
-            logger.exception("Agent execution failed")
-            # KPI timer already recorded status="error" on exception
-        finally:
-            # Count the exchange outcome
-            exchange_status = (
-                "cancelled"
-                if had_cancelled
-                else (
-                    "error" if had_error else ("ok" if saw_final_assistant else "error")
-                )
-            )
-            exchange_dims: Dict[str, str | None] = {
-                "agent_id": agent_name,
-                "user_id": user.uid,
-                "session_id": session.id,
-                "exchange_id": exchange_id,
-                "status": exchange_status,
-            }
-            if exchange_status in {"error", "cancelled"} and error_code:
-                exchange_dims["error_code"] = error_code
-            self.kpi.count(
-                "chat.exchange_total",
-                1,
-                dims=exchange_dims,
-                actor=actor,
-            )
 
-        # 6) Attach the raw runtime context (single source of truth)
-        self._attach_runtime_context(
-            runtime_context=runtime_context,
-            messages=agent_msgs,
+                # Trace what will be persisted for this exchange (helps diagnose missing items on reload)
+                try:
+                    msg_summary = [
+                        {
+                            "rank": m.rank,
+                            "role": m.role,
+                            "channel": m.channel,
+                            "exchange": m.exchange_id,
+                            "parts": [
+                                getattr(p, "type", None) for p in (m.parts or [])
+                            ],
+                        }
+                        for m in all_msgs
+                    ]
+                    logger.info(
+                        "[SESSIONS][PERSIST_TRACE] session=%s exchange=%s total_msgs=%d ranks=%s",
+                        session.id,
+                        exchange_id,
+                        len(all_msgs),
+                        [m.get("rank") for m in msg_summary],
+                    )
+                    logger.debug(
+                        "[SESSIONS][PERSIST_TRACE] details=%s",
+                        msg_summary,
+                    )
+                except Exception as trace_err:
+                    logger.warning(
+                        "[SESSIONS][PERSIST_TRACE] failed to summarize messages session=%s exchange=%s err=%s",
+                        session.id,
+                        exchange_id,
+                        trace_err,
+                    )
+
+                # 6) Attach the raw runtime context (single source of truth)
+                self._attach_runtime_context(
+                    runtime_context=runtime_context,
+                    messages=agent_msgs,
+                )
+
+                # 7) Persist session + history
+                t_persist = time.monotonic()
+                session.updated_at = _utcnow_dt()
+                session.next_rank = base_rank + len(all_msgs)
+                await asyncio.to_thread(self.session_store.save, session)
+                assert session.user_id == user.uid, "Session/user mismatch"
+                # Save only the new messages; history stores are append/upsert-capable.
+                await asyncio.to_thread(
+                    self.history_store.save, session.id, all_msgs, user.uid
+                )
+                _record_phase_metric(
+                    kpi=self.kpi,
+                    phase="persist",
+                    start_ts=t_persist,
+                    agent_name=agent_name,
+                )
+
+                return session, all_msgs
+        finally:
+            _record_phase_metric(
+                kpi=self.kpi,
+                phase="total",
+                start_ts=t_initial,
+                agent_name=agent_name,
+            )
+            self.agent_factory.release_agent(session.id, agent_name)
+            stats = self.agent_factory.get_cache_stats()
+            if stats:
+                self.kpi.gauge("agent.cache_entries", stats.size, actor=actor)
+                self.kpi.gauge(
+                    "agent.cache_inflight_total", stats.in_use_total, actor=actor
+                )
+                self.kpi.gauge(
+                    "agent.cache_inflight_entries", stats.in_use_entries, actor=actor
+                )
+                self.kpi.gauge(
+                    "agent.cache_evictions_total", stats.evictions, actor=actor
+                )
+                self.kpi.gauge(
+                    "agent.cache_blocked_evictions_total",
+                    stats.blocked_evictions,
+                    actor=actor,
+                )
+
+    @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
+    @authorize(action=Action.UPDATE, resource=Resource.SESSIONS)
+    async def resume_interrupted_exchange(
+        self,
+        *,
+        user: KeycloakUser,
+        callback: CallbackType,
+        session_callback: SessionCallbackType | None = None,
+        session_id: str,
+        exchange_id: str,
+        agent_name: str | None,
+        resume_payload: Dict[str, Any],
+        runtime_context: RuntimeContext | None = None,
+    ) -> Tuple[SessionSchema, List[ChatMessage]]:
+        """
+        Resumes an execution that was interrupted (e.g. for Human-in-the-loop).
+        Delegates to the transcoder with the resume payload.
+        """
+        logger.info(
+            "[SESSIONS] resume_interrupted_exchange start session=%s exchange=%s agent=%s user=%s resume_keys=%s",
+            session_id,
+            exchange_id,
+            agent_name,
+            user.uid,
+            list((resume_payload or {}).keys()),
+        )
+        # 1. Authorize
+        await asyncio.to_thread(
+            self._authorize_user_action_on_session, session_id, user, Action.UPDATE
         )
 
-        # 7) Persist session + history
-        session.updated_at = _utcnow_dt()
-        self.session_store.save(session)
-        assert session.user_id == user.uid, "Session/user mismatch"
-        self.history_store.save(session.id, prior + all_msgs, user.uid)
+        logger.info(
+            "resume_interrupted_exchange user_id=%s session_id=%s exchange_id=%s",
+            user.uid,
+            session_id,
+            exchange_id,
+        )
 
-        return session, all_msgs
+        # 2. Retrieve Session
+        session = self.session_store.get(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "session_not_found",
+                    "message": f"Session {session_id} not found.",
+                },
+            )
+
+        # 3. Resolve Agent
+        actual_agent_name = agent_name or session.agent_name
+        if not actual_agent_name:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "agent_not_specified",
+                    "message": "No agent specified for resume.",
+                },
+            )
+
+        # 4. Setup Context
+        if runtime_context:
+            runtime_context.session_id = session.id
+        else:
+            runtime_context = RuntimeContext(session_id=session.id)
+        logger.info(
+            "[SESSIONS] resume runtime_context session_id=%s has_tokens=%s",
+            runtime_context.session_id,
+            bool(runtime_context.access_token),
+        )
+
+        # 5. KPI Actor
+        actor = KPIActor(type="human", user_id=user.uid, groups=user.groups)
+
+        # 6. Get Agent (Must be cached for in-memory checkpointer to work)
+        agent, is_cached = await self.agent_factory.create_and_init(
+            agent_name=actual_agent_name,
+            runtime_context=runtime_context,
+            session_id=session.id,
+        )
+        logger.info(
+            "[SESSIONS] resume agent_ready agent=%s cached=%s session=%s",
+            actual_agent_name,
+            is_cached,
+            session.id,
+        )
+        if not is_cached:
+            logger.warning(
+                "[SESSIONS] resume aborted: agent cache miss session=%s exchange=%s agent=%s",
+                session.id,
+                exchange_id,
+                actual_agent_name,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "resume_unavailable",
+                    "message": "Cannot resume this exchange because the agent state is unavailable. Please restart the request.",
+                },
+            )
+
+        # Optional: fetch checkpoint from the agent's in-memory saver (best-effort) to observe state reuse.
+        checkpoint_obj: dict | None = None
+        try:
+            streaming_mem = getattr(agent, "streaming_memory", None)
+            if streaming_mem and hasattr(streaming_mem, "get"):
+                checkpoint_obj = streaming_mem.get(
+                    {"configurable": {"thread_id": session.id}}
+                )
+            elif streaming_mem and hasattr(streaming_mem, "get_state"):
+                checkpoint_obj = streaming_mem.get_state(
+                    {"configurable": {"thread_id": session.id}}
+                )
+            if checkpoint_obj:
+                logger.info(
+                    "[SESSIONS] resume checkpoint fetched agent=%s session=%s checkpoint_keys=%s",
+                    actual_agent_name,
+                    session.id,
+                    list(checkpoint_obj.keys())
+                    if isinstance(checkpoint_obj, dict)
+                    else type(checkpoint_obj).__name__,
+                )
+                if isinstance(resume_payload, dict):
+                    resume_payload.setdefault(
+                        "checkpoint",
+                        checkpoint_obj.get("checkpoint", checkpoint_obj)
+                        if isinstance(checkpoint_obj, dict)
+                        else checkpoint_obj,
+                    )
+        except Exception as cp_err:
+            logger.warning(
+                "[SESSIONS] resume could not fetch checkpoint agent=%s session=%s err=%s",
+                actual_agent_name,
+                session.id,
+                cp_err,
+            )
+
+        try:
+            rank_lock = self.get_rank_lock(session.id)
+            async with rank_lock:
+                base_rank = await self._ensure_next_rank(session)
+                logger.info(
+                    "[SESSIONS] resume base_rank=%s next_rank=%s session=%s",
+                    base_rank,
+                    session.next_rank,
+                    session.id,
+                )
+                all_msgs: List[ChatMessage] = []
+
+                try:
+                    with self.kpi.timer(
+                        "chat.resume_latency_ms",
+                        dims={
+                            "agent_id": actual_agent_name,
+                            "user_id": user.uid,
+                            "session_id": session.id,
+                            "exchange_id": exchange_id,
+                        },
+                        actor=actor,
+                    ):
+                        agent_msgs = await self.transcoder.stream_agent_response(
+                            agent=agent,
+                            input_messages=[],  # Resume does not inject new messages into state
+                            session_id=session.id,
+                            exchange_id=exchange_id,
+                            agent_name=actual_agent_name,
+                            base_rank=base_rank,
+                            start_seq=0,
+                            callback=callback,
+                            user_context=user,
+                            runtime_context=runtime_context,
+                            interrupt_handler=self._make_streaming_interrupt_handler(
+                                session.id, exchange_id, callback
+                            ),
+                            resume_payload=resume_payload,
+                        )
+                        all_msgs.extend(agent_msgs)
+                        logger.info(
+                            "[SESSIONS] resume completed agent_msgs=%d session=%s exchange=%s",
+                            len(agent_msgs),
+                            session.id,
+                            exchange_id,
+                        )
+                except InterruptRaised as ir:
+                    # Persist partial messages before the next HITL turn
+                    agent_msgs = getattr(ir, "partial_messages", [])
+                    all_msgs.extend(agent_msgs)
+                    session.updated_at = _utcnow_dt()
+                    session.next_rank = base_rank + len(all_msgs)
+                    await asyncio.to_thread(self.session_store.save, session)
+                    await asyncio.to_thread(
+                        self.history_store.save, session.id, all_msgs, user.uid
+                    )
+                    logger.info(
+                        "[SESSIONS] resume interrupt persisted session=%s exchange=%s msgs=%d",
+                        session.id,
+                        exchange_id,
+                        len(all_msgs),
+                    )
+                    raise
+
+                # 7. Persist
+                if all_msgs:
+                    session.updated_at = _utcnow_dt()
+                    session.next_rank = base_rank + len(all_msgs)
+                    await asyncio.to_thread(self.session_store.save, session)
+                    await asyncio.to_thread(
+                        self.history_store.save, session.id, all_msgs, user.uid
+                    )
+
+                return session, all_msgs
+
+        finally:
+            self.agent_factory.release_agent(session.id, actual_agent_name)
 
     # ---------------- Session/History helpers (intentionally here) ----------------
 
@@ -405,6 +900,7 @@ class SessionOrchestrator:
             title=title or "New conversation",
             updated_at=_utcnow_dt(),
             preferences=prefs,
+            next_rank=0,
         )
         self.session_store.save(session)
         logger.info(
@@ -412,7 +908,7 @@ class SessionOrchestrator:
         )
         return session
 
-    def _maybe_refresh_title_from_prompt(
+    async def _maybe_refresh_title_from_prompt(
         self, *, session: SessionSchema, prompt: str
     ) -> None:
         """
@@ -440,7 +936,7 @@ class SessionOrchestrator:
                 "User question: " + prompt
             )
             model = get_default_model()
-            resp = model.invoke(prompt_text)
+            resp = await model.ainvoke(prompt_text)
             raw_title = resp.content if hasattr(resp, "content") else str(resp)
             logger.debug(
                 "[SESSIONS] Title generation raw response model=%s prompt=%s raw=%s",
@@ -535,7 +1031,22 @@ class SessionOrchestrator:
                 },
             )
         session.preferences = preferences or {}
-        session.updated_at = _utcnow_dt()
+        # Keep session.agent_name in sync with the latest user-selected agent, if provided.
+        try:
+            agent_name = session.preferences.get("agent_name")
+            if isinstance(agent_name, str) and agent_name.strip():
+                session.agent_name = agent_name.strip()
+        except Exception:
+            logger.warning(
+                "[SESSIONS][PREFS] Failed to update agent_name in session=%s preferences: %s",
+                session_id,
+                session.preferences,
+                exc_info=True,
+            )
+            pass
+        # Important: do NOT bump session.updated_at for preference changes.
+        # The UI orders conversations by updated_at and expects it to change only
+        # on actual conversation activity (messages), not when viewing/toggling settings.
         self.session_store.save(session)
         try:
             prefs_str = json.dumps(session.preferences, default=str)
@@ -573,7 +1084,7 @@ class SessionOrchestrator:
             self.attachments_store.delete_for_session(session_id)
         # Remote vector cleanup
         if doc_uids and access_token:
-            client = KfLiteMarkdownClient(access_token=access_token)
+            client = KfFastTextClient(access_token=access_token)
             for doc_uid in doc_uids:
                 try:
                     client.delete_ingested_vectors(doc_uid)
@@ -622,7 +1133,7 @@ class SessionOrchestrator:
                 )
         if doc_uid and access_token:
             try:
-                client = KfLiteMarkdownClient(access_token=access_token)
+                client = KfFastTextClient(access_token=access_token)
                 client.delete_ingested_vectors(doc_uid)
                 logger.info(
                     "[SESSIONS][ATTACH] Deleted vectors for doc_uid=%s (attachment removal)",
@@ -715,8 +1226,8 @@ class SessionOrchestrator:
     ) -> dict:
         """
         Fred rationale:
-        - Zero temp-files: we stream the uploaded content to Knowledge Flow 'lite/markdown'.
-        - Store compact markdown + vectors via Knowledge Flow; no in-memory cache is used.
+        - Zero temp-files: we stream the uploaded content to Knowledge Flow 'fast/text'.
+        - Store compact text + vectors via Knowledge Flow; no in-memory cache is used.
         """
         if not self.attachments_store:
             logger.error(
@@ -729,7 +1240,6 @@ class SessionOrchestrator:
                     "message": "Attachment uploads are disabled (no attachment store configured).",
                 },
             )
-        supported_suffixes = {".pdf", ".docx", ".csv", ".md"}
         # Enforce per-user attachment count limit
         max_files_user = self.max_attached_files_per_user
         try:
@@ -767,20 +1277,6 @@ class SessionOrchestrator:
                     "message": "Uploaded file must have a filename.",
                 },
             )
-        suffix = Path(file.filename).suffix.lower()
-        if suffix not in supported_suffixes:
-            logger.warning(
-                "Unsupported upload extension rejected: %s (user=%s)",
-                file.filename,
-                user.uid,
-            )
-            raise HTTPException(
-                status_code=415,
-                detail={
-                    "code": "unsupported_file_type",
-                    "message": f"Unsupported file type '{suffix or file.filename}'. Allowed: {', '.join(sorted(supported_suffixes))}.",
-                },
-            )
         size_limit_bytes = self.max_attached_file_size_bytes
         if size_limit_bytes is not None:
             content = await file.read(size_limit_bytes + 1)
@@ -804,7 +1300,7 @@ class SessionOrchestrator:
 
         # If no session_id was provided (first interaction), create one now.
         # Use a lightweight title based on the filename to keep UX sensible.
-        session = self._get_or_create_session(
+        session = await self._get_or_create_session(
             user_id=user.uid,
             query=f"File: {file.filename}",
             session_id=session_id if session_id else None,
@@ -812,16 +1308,37 @@ class SessionOrchestrator:
         # Ensure the user has rights on this session (create/update if needed)
         self._authorize_user_action_on_session(session.id, user, Action.UPDATE)
 
+        # Prevent duplicate filenames within a session (UI convenience + avoids double ingest)
+        try:
+            if self.attachments_store:
+                existing = await asyncio.to_thread(
+                    self.attachments_store.list_for_session, session.id
+                )
+                if any(rec.name == file.filename for rec in existing):
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "attachment_duplicate",
+                            "message": f"Attachment '{file.filename}' already exists in this session.",
+                        },
+                    )
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception(
+                "[SESSIONS][ATTACH] Failed during duplicate attachment check"
+            )
+
         # 1) Secure session-mode client for Knowledge Flow (Bearer user token)
-        client = KfLiteMarkdownClient(
+        client = KfFastTextClient(
             access_token=access_token,
             # Optional: refresh_user_access_token=lambda: self._refresh_user_token(user)
         )
 
         # 2) Ask KF to produce a compact Markdown (text-only) for conversational use
         try:
-            # Build a compact summary for UI while ingesting full lite markdown below.
-            summary_md = client.extract_markdown_from_bytes(
+            # Build a compact summary for UI while ingesting full fast text below.
+            summary_md = client.extract_text_from_bytes(
                 filename=file.filename,
                 content=content,
                 mime=file.content_type,
@@ -870,8 +1387,8 @@ class SessionOrchestrator:
         # 3b) Ingest into vector store with session/user scoping
         document_uid: Optional[str] = None
         try:
-            # Ingest full lite markdown (per-page) for higher recall; no max_chars cap.
-            ingest_resp = client.ingest_markdown_from_bytes(
+            # Ingest full fast text (per-page) for higher recall; no max_chars cap.
+            ingest_resp = client.ingest_text_from_bytes(
                 filename=file.filename,
                 content=content,
                 session_id=session.id,
@@ -1030,6 +1547,16 @@ class SessionOrchestrator:
         # action is passed for future flexibility (ex: session sharing with attached permissions)
         return session.user_id == user.uid
 
+    def _make_streaming_interrupt_handler(
+        self, session_id: str, exchange_id: str, callback: CallbackType
+    ) -> StreamingInterruptHandler:
+        async def emit(event):
+            await self._emit(callback, event)
+
+        # Checkpoint persistence is already done by the agent's MemorySaver;
+        # we don't need an extra saver here for the PoC.
+        return StreamingInterruptHandler(emit=emit)
+
     async def _emit(self, callback: CallbackType, message: ChatMessage) -> None:
         """
         Purpose:
@@ -1037,6 +1564,16 @@ class SessionOrchestrator:
           duplicating code at call sites.
         """
         result = callback(message.model_dump())
+        if asyncio.iscoroutine(result):
+            await result
+
+    async def _emit_session(
+        self, callback: SessionCallbackType, session: SessionSchema
+    ) -> None:
+        """
+        Emit a session update to the WS layer (sync or async).
+        """
+        result = callback(session)
         if asyncio.iscoroutine(result):
             await result
 
@@ -1057,6 +1594,33 @@ class SessionOrchestrator:
         if not hist:
             _rlog("empty", msg="No messages to restore", session_id=session.id)
             return []
+
+        try:
+            logger.info(
+                "[RESTORE][LOAD] session=%s loaded_msgs=%d ranks=%s",
+                session.id,
+                len(hist),
+                [m.rank for m in hist],
+            )
+            logger.debug(
+                "[RESTORE][LOAD] details=%s",
+                [
+                    {
+                        "rank": m.rank,
+                        "role": m.role,
+                        "channel": m.channel,
+                        "exchange": m.exchange_id,
+                        "parts": [getattr(p, "type", None) for p in (m.parts or [])],
+                    }
+                    for m in hist
+                ],
+            )
+        except Exception as trace_err:
+            logger.warning(
+                "[RESTORE][LOAD] failed to log summary session=%s err=%s",
+                session.id,
+                trace_err,
+            )
 
         # 1) Chronology (rank is authoritative)
         hist = sorted(hist, key=lambda m: m.rank)
@@ -1116,6 +1680,7 @@ class SessionOrchestrator:
         pending_tool_calls_by_ex: dict[str, list[dict]] = defaultdict(list)
         call_name_by_ex: dict[str, dict[str, str]] = defaultdict(dict)
         known_call_ids_by_ex: dict[str, set[str]] = defaultdict(set)
+        seen_tool_results_by_ex: dict[str, set[str]] = defaultdict(set)
         current_exchange: str | None = None
 
         def flush_exchange_calls_if_any(ex_id: str | None):
@@ -1124,13 +1689,21 @@ class SessionOrchestrator:
                 return
             calls = pending_tool_calls_by_ex.get(ex_id)
             if calls:
+                # Emit tool_calls only if at least one tool_result was seen in this exchange.
+                if len(seen_tool_results_by_ex.get(ex_id, set())) == 0:
+                    logger.info(
+                        "[RESTORE][SKIP_CALLS] exchange=%s pending_calls=%d reason=no_tool_result_in_exchange",
+                        ex_id,
+                        len(calls),
+                    )
+                    pending_tool_calls_by_ex[ex_id].clear()
+                    return
                 ai = AIMessage(content="", tool_calls=list(calls))
                 lc_history.append(ai)
-                _rlog(
-                    "emit_ai_calls",
-                    msg="Emitted AI(tool_calls)",
-                    exchange_id=ex_id,
-                    calls=[{"id": c.get("id"), "name": c.get("name")} for c in calls],
+                logger.info(
+                    "[RESTORE][EMIT_CALLS] exchange=%s calls=%s",
+                    ex_id,
+                    [{"id": c.get("id"), "name": c.get("name")} for c in calls],
                 )
                 pending_tool_calls_by_ex[ex_id].clear()
 
@@ -1173,27 +1746,35 @@ class SessionOrchestrator:
                             known_call_ids_by_ex[current_exchange].add(call_id)
                         if call_id and p.name:
                             call_name_by_ex[current_exchange][call_id] = p.name
-                        _rlog(
-                            "acc_call",
-                            msg="Accumulate tool_call",
-                            exchange_id=current_exchange,
-                            call_id=call_id,
-                            name=name,
+                        logger.info(
+                            "[RESTORE][ACC_CALL] exchange=%s call_id=%s name=%s pending_calls=%d",
+                            current_exchange,
+                            call_id,
+                            name,
+                            len(pending_tool_calls_by_ex[current_exchange]),
                         )
                 continue
 
             # Tool result → only if matching call_id exists in THIS exchange
             if m.role == Role.tool and m.channel == Channel.tool_result:
+                # Pre-mark results so grouped tool_calls aren't skipped
+                for p in m.parts or []:
+                    if (
+                        isinstance(p, ToolResultPart)
+                        and p.call_id in known_call_ids_by_ex[current_exchange]
+                    ):
+                        seen_tool_results_by_ex[current_exchange].add(p.call_id)
+
                 # Ensure the grouped AI(tool_calls=[...]) for *this* exchange precedes the ToolMessage(s).
                 flush_exchange_calls_if_any(current_exchange)
+
                 for p in m.parts or []:
                     if isinstance(p, ToolResultPart):
                         if p.call_id not in known_call_ids_by_ex[current_exchange]:
-                            _rlog(
-                                "skip_orphan_tool_result",
-                                msg="Skip orphan ToolMessage (no matching call in this exchange)",
-                                exchange_id=current_exchange,
-                                call_id=p.call_id,
+                            logger.info(
+                                "[RESTORE][SKIP_ORPHAN_RESULT] exchange=%s call_id=%s",
+                                current_exchange,
+                                p.call_id,
                             )
                             continue
                         content = p.content
@@ -1211,21 +1792,19 @@ class SessionOrchestrator:
                                 content=content, name=name, tool_call_id=p.call_id
                             )
                             lc_history.append(tm)
-                            _rlog(
-                                "emit_tool",
-                                msg="Emitted ToolMessage",
-                                exchange_id=current_exchange,
-                                call_id=p.call_id,
-                                name=name,
-                                preview=_preview(content),
+                            seen_tool_results_by_ex[current_exchange].add(p.call_id)
+                            logger.info(
+                                "[RESTORE][EMIT_TOOL_RESULT] exchange=%s call_id=%s name=%s",
+                                current_exchange,
+                                p.call_id,
+                                name,
                             )
                         except Exception:
-                            _rlog(
-                                "emit_tool_error",
-                                msg="Failed to restore ToolMessage",
-                                exchange_id=current_exchange,
-                                call_id=p.call_id,
-                                name=name,
+                            logger.warning(
+                                "[RESTORE][EMIT_TOOL_ERROR] exchange=%s call_id=%s name=%s",
+                                current_exchange,
+                                p.call_id,
+                                name,
                             )
                             continue
                 continue
@@ -1275,17 +1854,43 @@ class SessionOrchestrator:
 
         # Tail: if transcript ends with pending calls and no results, keep the grouped AI(tool_calls=...)
         flush_exchange_calls_if_any(current_exchange)
-        _rlog("restore_done", msg="Restoration complete", total=len(lc_history))
+        try:
+            logger.info(
+                "[RESTORE][SUMMARY] session=%s total=%d exchanges=%d",
+                session.id,
+                len(lc_history),
+                len({m.exchange_id for m in hist}),
+            )
+            logger.debug(
+                "[RESTORE][SUMMARY] exchanges_calls_results=%s",
+                {
+                    ex: {
+                        "calls": len(pending_tool_calls_by_ex.get(ex, [])),
+                        "seen_results": len(seen_tool_results_by_ex.get(ex, set())),
+                    }
+                    for ex in set(
+                        list(pending_tool_calls_by_ex.keys())
+                        + list(seen_tool_results_by_ex.keys())
+                    )
+                },
+            )
+        except Exception:
+            logger.debug(
+                "[RESTORE][SUMMARY] session=%s total=%d (failed to log details)",
+                session.id,
+                len(lc_history),
+            )
+            pass
 
         return lc_history
 
     # --- Small, focused helpers to keep logs readable ---
 
-    def _get_or_create_session(
+    async def _get_or_create_session(
         self, *, user_id: str, query: str, session_id: Optional[str]
     ) -> SessionSchema:
         if session_id:
-            existing = self.session_store.get(session_id)
+            existing = await asyncio.to_thread(self.session_store.get, session_id)
             if existing:
                 logger.info(
                     "[AGENTS] resumed session %s for user %s", session_id, user_id
@@ -1293,22 +1898,20 @@ class SessionOrchestrator:
                 return existing
 
         new_session_id = secrets.token_urlsafe(8)
-        title: str = (
-            get_default_model()
-            .invoke(
-                "Give a short, clear title for this conversation based on the user's question. "
-                "No markdown formatting. Return a few keywords only. Question: " + query
-            )
-            .content
+        response = await get_default_model().ainvoke(
+            "Give a short, clear title for this conversation based on the user's question. "
+            "Return a few keywords only. Question: " + query
         )
+        title = response.content
         session = SessionSchema(
             id=new_session_id,
             user_id=user_id,
             title=title,
             updated_at=_utcnow_dt(),
             preferences=None,
+            next_rank=0,
         )
-        self.session_store.save(session)
+        await asyncio.to_thread(self.session_store.save, session)
         logger.info(
             "[AGENTS] Created new session %s for user %s", new_session_id, user_id
         )

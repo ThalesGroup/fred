@@ -16,6 +16,7 @@ import { Box, FormControl, Grid2, InputLabel, MenuItem, Select } from "@mui/mate
 import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/fr";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 // Fred: global controls (single Paper at top)
 import DashboardCard from "../DashboardCard";
@@ -37,15 +38,108 @@ import { useAuth } from "../../../security/AuthContext";
 import {
   FilterTerm,
   KpiQuery,
-  KpiQueryResult,
+  SelectMetric,
+  TimeBucket,
   useQueryKnowledgeFlowV1KpiQueryPostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import DateRangeControl from "../common/DateRangeControl";
 import { FULL_QUICK_RANGES } from "../common/dateRangeControlPresets";
 import { FramelessTile } from "../FramelessTile";
 import { KpiGroupedBarMini } from "./KpiGroupedBarMini";
+import { KpiHeatStripMini } from "./KpiHeatStripMini";
 import { KpiLatencyMini } from "./KpiLatencyMini";
 import { KpiStatusMini } from "./KpiStatusMini";
+
+const UI = {
+  controlHeight: 32,
+  buttonFontSize: 13,
+  compactLabelFontSize: 11,
+  compactLabelMinWidth: 90,
+  compactPadding: 1.5,
+  compactRowGap: 0.5,
+  compactColumnGap: 0.25,
+  compactHeaderGap: 0,
+  heatStripHeight: 16,
+  tileChartHeight: 135,
+} as const;
+
+const METRIC_VALUE_FIELD: SelectMetric["field"] = "metric.value";
+
+const filterTerm = (field: FilterTerm["field"] | "dims.service", value: string) =>
+  ({ field: field as FilterTerm["field"], value }) as FilterTerm;
+
+const selectMetric = (
+  alias: string,
+  op: SelectMetric["op"],
+  field?: SelectMetric["field"],
+  p?: number,
+): SelectMetric => ({
+  alias,
+  op,
+  field,
+  p,
+});
+
+const percentiles = (alias: string, p: number): SelectMetric =>
+  selectMetric(alias, "percentile", METRIC_VALUE_FIELD, p);
+const selectMax = (alias: string): SelectMetric => selectMetric(alias, "max", METRIC_VALUE_FIELD);
+const selectAvg = (alias: string): SelectMetric => selectMetric(alias, "avg", METRIC_VALUE_FIELD);
+const selectSum = (alias: string): SelectMetric => selectMetric(alias, "sum", METRIC_VALUE_FIELD);
+const selectCount = (alias: string): SelectMetric => selectMetric(alias, "count");
+
+const timeBucketFor = (precision: TimePrecision): TimeBucket => ({
+  interval: precisionToInterval[precision],
+});
+
+const agenticPrecisionFor = (precision: TimePrecision) => {
+  if (precision === "sec" || precision === "min") return "minute";
+  if (precision === "hour") return "hour";
+  return "day";
+};
+
+const useKpiRows = (query: KpiQuery) => {
+  const [trigger, state] = useQueryKnowledgeFlowV1KpiQueryPostMutation();
+
+  useEffect(() => {
+    trigger({ kpiQuery: query })
+      .unwrap()
+      .catch(() => {});
+  }, [trigger, query]);
+
+  return state.data?.rows ?? [];
+};
+
+const useProcessHistoryRows = ({
+  metricName,
+  service,
+  since,
+  until,
+  precision,
+  viewGlobal,
+}: {
+  metricName: string;
+  service: string;
+  since: string;
+  until: string;
+  precision: TimePrecision;
+  viewGlobal: boolean;
+}) => {
+  const query = useMemo<KpiQuery>(
+    () => ({
+      since,
+      until,
+      view_global: viewGlobal,
+      select: [selectMax("max_pct")],
+      group_by: [],
+      time_bucket: timeBucketFor(precision),
+      filters: [filterTerm("metric.name", metricName), filterTerm("dims.service", service)],
+      limit: 1000,
+    }),
+    [since, until, precision, viewGlobal, metricName, service],
+  );
+
+  return useKpiRows(query);
+};
 
 /**
  *
@@ -58,22 +152,20 @@ import { KpiStatusMini } from "./KpiStatusMini";
 export default function KpiDashboard() {
   const now = dayjs();
   const isAdmin = useAuth().roles.includes("admin");
+  const { t } = useTranslation();
   const [viewGlobal, setViewGlobal] = useState(false);
   // Range state (top-level owns it)
   const [startDate, setStartDate] = useState<Dayjs>(now.subtract(12, "hours"));
   const [endDate, setEndDate] = useState<Dayjs>(now);
   const [agentFilter, setAgentFilter] = useState<string>("");
+  const dateRangeProps = { startDate, endDate, setStartDate, setEndDate, quickRanges: FULL_QUICK_RANGES };
 
   // Shared precision + aligned range + shared xDomain (UTC numeric)
   const precision: TimePrecision = useMemo(
     () => getPrecisionForRange(startDate.toDate(), endDate.toDate()),
     [startDate, endDate],
   );
-  const agenticPrecision = useMemo(() => {
-    if (precision === "sec" || precision === "min") return "minute";
-    if (precision === "hour") return "hour";
-    return "day";
-  }, [precision]);
+  const agenticPrecision = useMemo(() => agenticPrecisionFor(precision), [precision]);
   const [alignedStartIso, alignedEndIso] = useMemo(
     () => alignDateRangeToPrecision(startDate, endDate, precision),
     [startDate, endDate, precision],
@@ -102,54 +194,78 @@ export default function KpiDashboard() {
   /* ---------------------------------------------------------------------- */
   /* KPI: chat.exchange_latency_ms p50/p95  */
   /* ---------------------------------------------------------------------- */
-  const [fetchLatency, latencyState] = useQueryKnowledgeFlowV1KpiQueryPostMutation();
-
   const latencyBody: KpiQuery = useMemo(
     () => ({
       since: alignedStartIso,
       until: alignedEndIso,
       view_global: viewGlobal,
-      select: [
-        { field: "metric.value", op: "percentile", alias: "p50", p: 50 } as any,
-        { field: "metric.value", op: "percentile", alias: "p95", p: 95 } as any,
-      ],
+      select: [percentiles("p50", 50), percentiles("p95", 95)],
       group_by: [],
-      time_bucket: { interval: precisionToInterval[precision] } as any,
+      time_bucket: timeBucketFor(precision),
       filters: [
-        { field: "metric.name", value: "chat.exchange_latency_ms" } as FilterTerm,
-        ...(agentFilter ? ([{ field: "dims.agent_id", value: agentFilter } as FilterTerm] as FilterTerm[]) : []),
+        filterTerm("metric.name", "chat.exchange_latency_ms"),
+        ...(agentFilter ? [filterTerm("dims.agent_id", agentFilter)] : []),
       ],
       limit: 1000,
     }),
     [alignedStartIso, alignedEndIso, precision, agentFilter, viewGlobal],
   );
 
-  useEffect(() => {
-    fetchLatency({ kpiQuery: latencyBody })
-      .unwrap()
-      .then((d) => console.debug("[KPI parent] latency ok", d))
-      .catch((e) => console.warn("[KPI parent] latency error", e));
-  }, [fetchLatency, latencyBody]);
-
-  const latencyRows = (latencyState.data as KpiQueryResult | undefined)?.rows ?? [];
+  const latencyRows = useKpiRows(latencyBody);
   /* ---------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------- */
+  /* KPI: process CPU/memory history (max per bucket)                        */
+  /* ---------------------------------------------------------------------- */
+  const processViewGlobal = viewGlobal || isAdmin;
+
+  const cpuHistoryRowsAgentic = useProcessHistoryRows({
+    metricName: "process.cpu.percent",
+    service: "agentic",
+    since: alignedStartIso,
+    until: alignedEndIso,
+    precision,
+    viewGlobal: processViewGlobal,
+  });
+  const memHistoryRowsAgentic = useProcessHistoryRows({
+    metricName: "process.memory.rss_percent",
+    service: "agentic",
+    since: alignedStartIso,
+    until: alignedEndIso,
+    precision,
+    viewGlobal: processViewGlobal,
+  });
+  const cpuHistoryRowsKf = useProcessHistoryRows({
+    metricName: "process.cpu.percent",
+    service: "knowledge-flow",
+    since: alignedStartIso,
+    until: alignedEndIso,
+    precision,
+    viewGlobal: processViewGlobal,
+  });
+  const memHistoryRowsKf = useProcessHistoryRows({
+    metricName: "process.memory.rss_percent",
+    service: "knowledge-flow",
+    since: alignedStartIso,
+    until: alignedEndIso,
+    precision,
+    viewGlobal: processViewGlobal,
+  });
+
   /* ---------------------------------------------------------------------- */
   /* KPI: chat.exchange_total by dims.status (range totals)                 */
   /* Fetch at top-level; pass rows to the mini (presentational only).       */
   /* ---------------------------------------------------------------------- */
-  const [fetchStatus, statusState] = useQueryKnowledgeFlowV1KpiQueryPostMutation();
-
   const statusBody: KpiQuery = useMemo(
     () => ({
       since: alignedStartIso,
       until: alignedEndIso,
       view_global: viewGlobal,
-      select: [{ field: "metric.value", op: "sum", alias: "exchanges" } as any],
+      select: [selectSum("exchanges")],
       group_by: ["dims.status"],
       // No time_bucket: we want totals over the selected window
       filters: [
-        { field: "metric.name", value: "chat.exchange_total" } as FilterTerm,
-        ...(agentFilter ? ([{ field: "dims.agent_id", value: agentFilter } as FilterTerm] as FilterTerm[]) : []),
+        filterTerm("metric.name", "chat.exchange_total"),
+        ...(agentFilter ? [filterTerm("dims.agent_id", agentFilter)] : []),
       ],
       limit: 10,
       // If you want to sort bars by the metric instead of doc_count:
@@ -157,39 +273,23 @@ export default function KpiDashboard() {
     }),
     [alignedStartIso, alignedEndIso, agentFilter, viewGlobal],
   );
-
-  useEffect(() => {
-    fetchStatus({ kpiQuery: statusBody })
-      .unwrap()
-      .catch(() => {});
-  }, [fetchStatus, statusBody]);
-
-  const statusRows = (statusState.data as KpiQueryResult | undefined)?.rows ?? [];
+  const statusRows = useKpiRows(statusBody);
 
   /* ---------------------------------------------------------------------- */
   /* KPI: agent_id options (range totals)                                    */
   /* ---------------------------------------------------------------------- */
-  const [fetchAgentIds, agentIdsState] = useQueryKnowledgeFlowV1KpiQueryPostMutation();
-
   const agentIdsBody: KpiQuery = useMemo(
     () => ({
       since: alignedStartIso,
       until: alignedEndIso,
-      select: [{ op: "count", alias: "events" } as any],
+      select: [selectCount("events")],
       group_by: ["dims.agent_id"],
-      filters: [{ field: "metric.name", value: "chat.exchange_total" } as FilterTerm],
+      filters: [filterTerm("metric.name", "chat.exchange_total")],
       limit: 50,
     }),
     [alignedStartIso, alignedEndIso],
   );
-
-  useEffect(() => {
-    fetchAgentIds({ kpiQuery: agentIdsBody })
-      .unwrap()
-      .catch(() => {});
-  }, [fetchAgentIds, agentIdsBody]);
-
-  const agentIdsRows = (agentIdsState.data as KpiQueryResult | undefined)?.rows ?? [];
+  const agentIdsRows = useKpiRows(agentIdsBody);
   const agentOptions = useMemo(() => {
     const ids = new Set<string>();
     for (const row of agentIdsRows) {
@@ -204,115 +304,250 @@ export default function KpiDashboard() {
   /* ---------------------------------------------------------------------- */
   /* KPI: agent.step_latency_ms by dims.step (range avg)                     */
   /* ---------------------------------------------------------------------- */
-  const [fetchStepLatency, stepLatencyState] = useQueryKnowledgeFlowV1KpiQueryPostMutation();
-
   const stepLatencyBody: KpiQuery = useMemo(
     () => ({
       since: alignedStartIso,
       until: alignedEndIso,
       view_global: viewGlobal,
-      select: [{ field: "metric.value", op: "avg", alias: "avg_ms" } as any],
+      select: [selectAvg("avg_ms")],
       group_by: ["dims.agent_step"],
       filters: [
-        { field: "metric.name", value: "agent.step_latency_ms" } as FilterTerm,
-        ...(agentFilter ? ([{ field: "dims.agent_id", value: agentFilter } as FilterTerm] as FilterTerm[]) : []),
+        filterTerm("metric.name", "agent.step_latency_ms"),
+        ...(agentFilter ? [filterTerm("dims.agent_id", agentFilter)] : []),
       ],
       limit: 50,
     }),
     [alignedStartIso, alignedEndIso, agentFilter, viewGlobal],
   );
-
-  useEffect(() => {
-    fetchStepLatency({ kpiQuery: stepLatencyBody })
-      .unwrap()
-      .catch(() => {});
-  }, [fetchStepLatency, stepLatencyBody]);
-
-  const stepLatencyRows = (stepLatencyState.data as KpiQueryResult | undefined)?.rows ?? [];
+  const stepLatencyRows = useKpiRows(stepLatencyBody);
 
   /* ---------------------------------------------------------------------- */
   /* KPI: agent.tool_latency_ms by dims.tool (range avg)                     */
   /* ---------------------------------------------------------------------- */
-  const [fetchToolLatency, toolLatencyState] = useQueryKnowledgeFlowV1KpiQueryPostMutation();
-
   const toolLatencyBody: KpiQuery = useMemo(
     () => ({
       since: alignedStartIso,
       until: alignedEndIso,
       view_global: viewGlobal,
-      select: [{ field: "metric.value", op: "avg", alias: "avg_ms" } as any],
+      select: [selectAvg("avg_ms")],
       group_by: ["dims.tool_name"],
       filters: [
-        { field: "metric.name", value: "agent.tool_latency_ms" } as FilterTerm,
-        ...(agentFilter ? ([{ field: "dims.agent_id", value: agentFilter } as FilterTerm] as FilterTerm[]) : []),
+        filterTerm("metric.name", "agent.tool_latency_ms"),
+        ...(agentFilter ? [filterTerm("dims.agent_id", agentFilter)] : []),
       ],
       limit: 50,
     }),
     [alignedStartIso, alignedEndIso, agentFilter, viewGlobal],
   );
-
-  useEffect(() => {
-    fetchToolLatency({ kpiQuery: toolLatencyBody })
-      .unwrap()
-      .catch(() => {});
-  }, [fetchToolLatency, toolLatencyBody]);
-
-  const toolLatencyRows = (toolLatencyState.data as KpiQueryResult | undefined)?.rows ?? [];
+  const toolLatencyRows = useKpiRows(toolLatencyBody);
 
   return (
-    <Box display="flex" flexDirection="column" gap={2} p={2} mt={1}>
+    <Box display="flex" flexDirection="column" gap={1} p={2} mt={1}>
       {/* Single Paper host: global filters only */}
       <DashboardCard>
         <Box display="flex" flexDirection="column" gap={1.5}>
-          <DateRangeControl
-            startDate={startDate}
-            endDate={endDate}
-            setStartDate={setStartDate}
-            setEndDate={setEndDate}
-            quickRanges={FULL_QUICK_RANGES}
-            toleranceMs={90_000} // tighter match for short windows
-          />
-          <Box display="flex" flexWrap="wrap" gap={1} alignItems="center">
-            <FormControl size="small" sx={{ minWidth: 220 }}>
-              <InputLabel id="kpi-agent-filter-label">Agent</InputLabel>
-              <Select
-                labelId="kpi-agent-filter-label"
-                label="Agent"
-                value={agentFilter}
-                onChange={(event) => setAgentFilter(event.target.value)}
-                sx={(theme) => ({
-                  ".MuiSelect-select": {
-                    fontSize: theme.typography.body2.fontSize,
-                  },
-                })}
-              >
-                <MenuItem value="">All agents</MenuItem>
-                {agentOptions.map((agentId) => (
-                  <MenuItem key={agentId} value={agentId}>
-                    {agentId}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            {isAdmin && (
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={viewGlobal}
-                    onChange={(e) => setViewGlobal(e.target.checked)}
-                    name="viewGlobalToggle"
-                    size="small"
-                  />
-                }
-                label={<Typography variant="body2">View Global KPIs</Typography>}
+          <Box display="flex" flexWrap="wrap" alignItems="center" justifyContent="space-between" gap={1}>
+            <Box flex="1 1 520px" minWidth={320}>
+              <DateRangeControl
+                {...dateRangeProps}
+                toleranceMs={90_000} // tighter match for short windows
+                showPickers={false}
               />
-            )}
+            </Box>
+            <Typography
+              sx={{
+                fontSize: UI.buttonFontSize,
+                fontWeight: 600,
+                color: "text.secondary",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {t("kpis.title")}
+            </Typography>
+          </Box>
+          <Box display="flex" flexWrap="wrap" gap={1} alignItems="center">
+            <Box flex="1 1 520px" minWidth={320} display="flex" justifyContent="flex-start">
+              <DateRangeControl {...dateRangeProps} showQuickRanges={false} />
+            </Box>
+            <Box flex="1 1 220px" display="flex" justifyContent="center">
+              <FormControl
+                size="small"
+                sx={{
+                  minWidth: 220,
+                  "& .MuiOutlinedInput-root": { height: UI.controlHeight },
+                  "& .MuiSelect-select": {
+                    fontSize: UI.buttonFontSize,
+                    paddingTop: 0,
+                    paddingBottom: 0,
+                    display: "flex",
+                    alignItems: "center",
+                  },
+                }}
+              >
+                <InputLabel id="kpi-agent-filter-label" sx={{ fontSize: UI.buttonFontSize }}>
+                  Agent
+                </InputLabel>
+                <Select
+                  labelId="kpi-agent-filter-label"
+                  label="Agent"
+                  value={agentFilter}
+                  onChange={(event) => setAgentFilter(event.target.value)}
+                >
+                  <MenuItem value="">All agents</MenuItem>
+                  {agentOptions.map((agentId) => (
+                    <MenuItem key={agentId} value={agentId}>
+                      {agentId}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+            <Box flex="1 1 240px" display="flex" justifyContent="flex-end">
+              {isAdmin && (
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={viewGlobal}
+                      onChange={(e) => setViewGlobal(e.target.checked)}
+                      name="viewGlobalToggle"
+                      size="small"
+                    />
+                  }
+                  label={<Typography sx={{ fontSize: UI.buttonFontSize }}>View Global KPIs</Typography>}
+                  sx={{ ".MuiFormControlLabel-label": { fontSize: UI.buttonFontSize } }}
+                />
+              )}
+            </Box>
           </Box>
         </Box>
       </DashboardCard>
 
       {/* Compact grid; frameless tiles (Boxes) to avoid Paper-in-Paper */}
-      <Grid2 container spacing={2}>
+      <Grid2 container spacing={1}>
+        <Grid2 size={{ xs: 12, md: 12, lg: 12 }}>
+          <Box
+            sx={{
+              p: UI.compactPadding,
+              borderRadius: 2,
+              border: (theme) => `1px solid ${theme.palette.divider}`,
+              bgcolor: (theme) => theme.palette.background.default,
+              display: "flex",
+              flexDirection: "column",
+              gap: UI.compactRowGap,
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Box sx={{ minWidth: UI.compactLabelMinWidth }} />
+              <Box sx={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", gap: UI.compactHeaderGap }}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    textAlign: "center",
+                    fontWeight: 600,
+                    color: "text.secondary",
+                    fontSize: UI.compactLabelFontSize,
+                  }}
+                >
+                  Agentic
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    textAlign: "center",
+                    fontWeight: 600,
+                    color: "text.secondary",
+                    fontSize: UI.compactLabelFontSize,
+                  }}
+                >
+                  Knowledge Flow
+                </Typography>
+              </Box>
+            </Box>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  minWidth: UI.compactLabelMinWidth,
+                  fontWeight: 600,
+                  color: "text.secondary",
+                  fontSize: UI.compactLabelFontSize,
+                }}
+              >
+                CPU %
+              </Typography>
+              <Box sx={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", gap: UI.compactColumnGap }}>
+                <KpiHeatStripMini
+                  label=""
+                  labelMinWidth={0}
+                  rows={cpuHistoryRowsAgentic}
+                  metricKey="max_pct"
+                  height={UI.heatStripHeight}
+                  start={alignedStart}
+                  end={alignedEnd}
+                  precision={precision}
+                  xDomain={xDomain}
+                  frame={false}
+                  dense={true}
+                />
+                <KpiHeatStripMini
+                  label=""
+                  labelMinWidth={0}
+                  rows={cpuHistoryRowsKf}
+                  metricKey="max_pct"
+                  height={UI.heatStripHeight}
+                  start={alignedStart}
+                  end={alignedEnd}
+                  precision={precision}
+                  xDomain={xDomain}
+                  frame={false}
+                  dense={true}
+                />
+              </Box>
+            </Box>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  minWidth: UI.compactLabelMinWidth,
+                  fontWeight: 600,
+                  color: "text.secondary",
+                  fontSize: UI.compactLabelFontSize,
+                }}
+              >
+                Memory %
+              </Typography>
+              <Box sx={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", gap: UI.compactColumnGap }}>
+                <KpiHeatStripMini
+                  label=""
+                  labelMinWidth={0}
+                  rows={memHistoryRowsAgentic}
+                  metricKey="max_pct"
+                  height={UI.heatStripHeight}
+                  start={alignedStart}
+                  end={alignedEnd}
+                  precision={precision}
+                  xDomain={xDomain}
+                  frame={false}
+                  dense={true}
+                />
+                <KpiHeatStripMini
+                  label=""
+                  labelMinWidth={0}
+                  rows={memHistoryRowsKf}
+                  metricKey="max_pct"
+                  height={UI.heatStripHeight}
+                  start={alignedStart}
+                  end={alignedEnd}
+                  precision={precision}
+                  xDomain={xDomain}
+                  frame={false}
+                  dense={true}
+                />
+              </Box>
+            </Box>
+          </Box>
+        </Grid2>
+
         <Grid2 size={{ xs: 12, md: 12, lg: 12 }}>
           <FramelessTile
             title="Token usage"
@@ -324,7 +559,7 @@ export default function KpiDashboard() {
               end={alignedEnd}
               precision={precision}
               metrics={tokenMetrics as any}
-              height={150}
+              height={UI.tileChartHeight}
               xDomain={xDomain}
             />
           </FramelessTile>
@@ -341,7 +576,7 @@ export default function KpiDashboard() {
               end={alignedEnd}
               precision={precision}
               xDomain={xDomain}
-              height={150}
+              height={UI.tileChartHeight}
               showLegend={false}
               rows={latencyRows}
             />
@@ -353,7 +588,7 @@ export default function KpiDashboard() {
             subtitle="Range totals in the selected window"
             help="Sums of chat.exchange_total per dims.status (ok, error, timeout, filtered, cancelled). Filtered = blocked by policy/guardrails; cancelled = client aborted."
           >
-            <KpiStatusMini rows={statusRows} height={150} showLegend={false} />
+            <KpiStatusMini rows={statusRows} height={UI.tileChartHeight} showLegend={false} />
           </FramelessTile>
         </Grid2>
 
@@ -365,7 +600,7 @@ export default function KpiDashboard() {
           >
             <KpiGroupedBarMini
               rows={stepLatencyRows}
-              height={150}
+              height={UI.tileChartHeight}
               metricKey="avg_ms"
               metricLabel="avg ms"
               groupKey="dims.agent_step"
@@ -380,7 +615,7 @@ export default function KpiDashboard() {
           >
             <KpiGroupedBarMini
               rows={toolLatencyRows}
-              height={150}
+              height={UI.tileChartHeight}
               metricKey="avg_ms"
               metricLabel="avg ms"
               groupKey="dims.tool_name"

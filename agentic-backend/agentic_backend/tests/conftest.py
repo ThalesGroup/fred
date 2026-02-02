@@ -1,4 +1,16 @@
-# agentic_backend/tests/conftest.py
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import asyncio
 
@@ -66,6 +78,7 @@ def minimal_generalist_config() -> Configuration:
             log_level="debug",
             reload=False,
             reload_dir=".",
+            kpi_process_metrics_interval_sec=10,
         ),
         frontend_settings=FrontendSettings(
             feature_flags=FrontendFlags(
@@ -127,6 +140,7 @@ def minimal_generalist_config() -> Configuration:
             history_store=duckdb_store,
             feedback_store=duckdb_store,
             kpi_store=duckdb_store,
+            task_store=duckdb_store,
         ),
     )
 
