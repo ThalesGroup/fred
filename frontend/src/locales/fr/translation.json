@@ -169,7 +169,8 @@
     "deleteSessionFailed": "La supression de la conversation a échoué",
     "monitoring_graph": "Graphe",
     "newChat": "Nouvelle conversation",
-    "teams": "Équipes"
+    "teams": "Équipes",
+    "yourTeamsSectionTitle": "Vos équipes"
   },
   "apps": {
     "scheduler": {

@@ -562,6 +562,16 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/teams/${queryArg.teamId}` }),
     }),
+    updateTeamKnowledgeFlowV1TeamsTeamIdPatch: build.mutation<
+      UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiResponse,
+      UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/teams/${queryArg.teamId}`,
+        method: "PATCH",
+        body: queryArg.teamUpdate,
+      }),
+    }),
     listUsersKnowledgeFlowV1UsersGet: build.query<
       ListUsersKnowledgeFlowV1UsersGetApiResponse,
       ListUsersKnowledgeFlowV1UsersGetApiArg
@@ -1134,6 +1144,11 @@ export type ListTeamsKnowledgeFlowV1TeamsGetApiArg = void;
 export type GetTeamKnowledgeFlowV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ Team;
 export type GetTeamKnowledgeFlowV1TeamsTeamIdGetApiArg = {
   teamId: string;
+};
+export type UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiResponse = /** status 200 Successful Response */ Team;
+export type UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiArg = {
+  teamId: string;
+  teamUpdate: TeamUpdate;
 };
 export type ListUsersKnowledgeFlowV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
 export type ListUsersKnowledgeFlowV1UsersGetApiArg = void;
@@ -1888,14 +1903,19 @@ export type LogQuery = {
   order?: "asc" | "desc";
 };
 export type Team = {
-  id: string;
-  name: string;
   description?: string | null;
   banner_image_url?: string | null;
-  owners?: UserSummary[];
+  is_private?: boolean;
+  id: string;
+  name: string;
   member_count?: number | null;
-  is_private: boolean;
+  owners?: UserSummary[];
   is_member?: boolean;
+};
+export type TeamUpdate = {
+  description?: string | null;
+  banner_image_url?: string | null;
+  is_private?: boolean | null;
 };
 export type ProcessorDescriptor = {
   id: string;
@@ -2194,6 +2214,7 @@ export const {
   useLazyListTeamsKnowledgeFlowV1TeamsGetQuery,
   useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery,
   useLazyGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery,
+  useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation,
   useListUsersKnowledgeFlowV1UsersGetQuery,
   useLazyListUsersKnowledgeFlowV1UsersGetQuery,
   useListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,

@@ -168,7 +168,8 @@
     "deleteSessionFailed": "Failed to delete conversation",
     "monitoring_graph": "Graph",
     "newChat": "New chat",
-    "teams": "Teams"
+    "teams": "Teams",
+    "yourTeamsSectionTitle": "Your teams"
   },
   "apps": {
     "scheduler": {

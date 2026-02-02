@@ -1,7 +1,10 @@
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import { alpha, Box, Button, FormControlLabel, Paper, Switch, TextField, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
-import { Team } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  Team,
+  useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface TeamSettingsPageProps {
   team?: Team;
@@ -10,6 +13,9 @@ export interface TeamSettingsPageProps {
 export function TeamSettingsPage({ team }: TeamSettingsPageProps) {
   const { t } = useTranslation();
   const theme = useTheme();
+
+  const [updateTeam] = useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation();
+
   return (
     <Box sx={{ px: 2, pb: 2, display: "flex", height: "100%" }}>
       <Paper sx={{ borderRadius: 2, flex: 1, display: "flex", justifyContent: "center" }}>

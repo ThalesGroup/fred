@@ -36,6 +36,7 @@ import { SideBarNewConversationButton } from "../components/sideBar/SideBarNewCo
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { KeyCloakService } from "../security/KeycloakService";
 import { usePermissions } from "../security/usePermissions";
+import { useListTeamsKnowledgeFlowV1TeamsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { ImageComponent } from "../utils/image";
 import { ApplicationContext } from "./ApplicationContextProvider";
 
@@ -240,229 +241,18 @@ export default function SideBar() {
       : []),
   ];
 
-  // todo: retrieve teams from backend
-  const teamsMenuItem: SideBarNavigationElement[] = [
-    {
-      key: "team-1",
-      label: "Design Team",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/0`,
-    },
-    {
-      key: "team-2",
-      label: "TSN",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/1`,
-    },
-    {
-      key: "team-3",
-      label: "Engineering Core on Fred and PRISM opensource",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/2`,
-    },
-    {
-      key: "team-4",
-      label: "Product Management",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/4`,
-    },
-    {
-      key: "team-5",
-      label: "DevOps & Infrastructure",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/5`,
-    },
-    {
-      key: "team-6",
-      label: "Data Science",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/6`,
-    },
-    {
-      key: "team-7",
-      label: "Quality Assurance",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/7`,
-    },
-    {
-      key: "team-8",
-      label: "Security",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/8`,
-    },
-    {
-      key: "team-9",
-      label: "Marketing",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/9`,
-    },
-    {
-      key: "team-10",
-      label: "Customer Success",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/10`,
-    },
-    {
-      key: "team-11",
-      label: "Sales",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/11`,
-    },
-    {
-      key: "team-12",
-      label: "Finance & Operations",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/12`,
-    },
-    {
-      key: "team-13",
-      label: "Research & Development",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/13`,
-    },
-    {
-      key: "team-14",
-      label: "Frontend Guild",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/14`,
-    },
-    {
-      key: "team-15",
-      label: "Backend Guild",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/15`,
-    },
-    {
-      key: "team-16",
-      label: "Mobile Team",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/16`,
-    },
-    {
-      key: "team-17",
-      label: "AI/ML Team",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/17`,
-    },
-    {
-      key: "team-18",
-      label: "Platform Engineering",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/18`,
-    },
-    {
-      key: "team-19",
-      label: "Business Intelligence",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/19`,
-    },
-    {
-      key: "team-20",
-      label: "Legal & Compliance",
-      icon: (
-        <Avatar
-          src="https://www.bio.org/act-root/bio/assets/images/banner-default.png"
-          sx={{ height: "24px", width: "24px" }}
-        />
-      ),
-      url: `/team/20`,
-    },
-  ];
+  // List user teams
+  // todo: handle loading
+  // todo: handle error
+  const { data: teams } = useListTeamsKnowledgeFlowV1TeamsGetQuery();
+  const yourTeams = teams && teams.filter((t) => t.is_member);
+  const teamsMenuItem: SideBarNavigationElement[] =
+    yourTeams?.map((t) => ({
+      key: t.id,
+      label: t.name,
+      url: `team/${t.id}/${agentsNicknamePlural}`,
+      icon: <Avatar src={t.banner_image_url || ""} sx={{ height: "24px", width: "24px" }} />,
+    })) || [];
 
   const logoName = getProperty("logoName") || "fred";
   const logoNameDark = getProperty("logoNameDark") || "fred-dark";
@@ -526,7 +316,7 @@ export default function SideBar() {
           {/* Teams */}
           <Box sx={{ display: "flex", alignItems: "center", px: 2, pt: 1 }}>
             <Typography variant="caption" color="textSecondary">
-              Teams
+              {t("sidebar.yourTeamsSectionTitle")}
             </Typography>
           </Box>
           <Box
