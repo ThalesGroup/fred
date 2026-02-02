@@ -16,7 +16,6 @@ import {
   ListItemButton,
   Stack,
   Theme,
-  Tooltip,
   Typography,
   useTheme,
 } from "@mui/material";
@@ -27,7 +26,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
 import { ViewIconButton } from "../../../shared/ui/buttons/ViewIconButton";
-import { DetailedTooltip } from "../../../shared/ui/tooltips/Tooltips";
+import { DetailedTooltip, SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import {
   Resource,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
@@ -204,7 +203,7 @@ export function ChatContextPickerPanel({
                   </Box>
 
                   <Stack direction="row" alignItems="center" spacing={0.5}>
-                    <Tooltip title={t("common.view")}>
+                    <SimpleTooltip title={t("common.view")}>
                       <ViewIconButton
                         size="small"
                         onClick={(event) => {
@@ -214,8 +213,8 @@ export function ChatContextPickerPanel({
                         }}
                         sx={{ flexShrink: 0, opacity: 0.7 }}
                       />
-                    </Tooltip>
-                    <Tooltip title={t("common.remove")}>
+                    </SimpleTooltip>
+                    <SimpleTooltip title={t("common.remove")}>
                       <DeleteIconButton
                         size="small"
                         onClick={(event) => {
@@ -224,7 +223,7 @@ export function ChatContextPickerPanel({
                         }}
                         sx={{ flexShrink: 0, opacity: 0.7 }}
                       />
-                    </Tooltip>
+                    </SimpleTooltip>
                   </Stack>
                 </ListItemButton>
               </ListItem>

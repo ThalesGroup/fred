@@ -326,7 +326,7 @@ class ReferenceEditor(AgentFlow):
             template_key = (
                 self.get_tuned_text("ppt.template_key") or "simple_template.pptx"
             )
-            template_path = await self.fetch_asset_blob_to_tempfile(
+            template_path = await self.fetch_config_blob_to_tempfile(
                 template_key, suffix=".pptx"
             )
 
@@ -359,7 +359,7 @@ class ReferenceEditor(AgentFlow):
             import asyncio
             import uuid
 
-            user_id_to_store_asset = self.get_end_user_id()
+            # user_id_to_store_asset = self.get_end_user_id()
             # Use UUID to generate a unique filename that won't trigger versioning conflicts
             unique_id = str(uuid.uuid4())
             final_key = f"Generated_Slide_{unique_id}.pptx"
@@ -372,14 +372,11 @@ class ReferenceEditor(AgentFlow):
             for attempt in range(max_retries):
                 try:
                     with open(output_path, "rb") as f_out:
-                        upload_result = await self.upload_user_asset(
+                        upload_result = await self.upload_user_blob(
                             key=final_key,
                             file_content=f_out,
                             filename=final_key,  # Use the same unique filename to avoid versioning conflicts
                             content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                            user_id_override=user_id_to_store_asset
-                            if attempt == 0
-                            else None,
                         )
                     upload_succeeded = True
                     break  # Success, exit retry loop
@@ -392,9 +389,7 @@ class ReferenceEditor(AgentFlow):
 
             if upload_succeeded:
                 # 4. Construct the structured message for the UI
-                final_download_url = self.get_asset_download_url(
-                    asset_key=upload_result.key, scope="user"
-                )
+                final_download_url = upload_result.download_url
 
                 return LinkPart(
                     href=final_download_url,
@@ -428,7 +423,7 @@ class ReferenceEditor(AgentFlow):
             template_key = (
                 self.get_tuned_text("word.template_key") or "simple_template.docx"
             )
-            template_path = await self.fetch_asset_blob_to_tempfile(
+            template_path = await self.fetch_config_blob_to_tempfile(
                 template_key, suffix=".docx"
             )
 
@@ -461,7 +456,7 @@ class ReferenceEditor(AgentFlow):
             import asyncio
             import uuid
 
-            user_id_to_store_asset = self.get_end_user_id()
+            # user_id_to_store_asset = self.get_end_user_id()
             # Use UUID to generate a unique filename that won't trigger versioning conflicts
             unique_id = str(uuid.uuid4())
             final_key = f"Generated_Document_{unique_id}.docx"
@@ -471,14 +466,11 @@ class ReferenceEditor(AgentFlow):
             for attempt in range(max_retries):
                 try:
                     with open(output_path, "rb") as f_out:
-                        upload_result = await self.upload_user_asset(
+                        upload_result = await self.upload_user_blob(
                             key=final_key,
                             file_content=f_out,
                             filename=final_key,  # Use the same unique filename to avoid versioning conflicts
                             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            user_id_override=user_id_to_store_asset
-                            if attempt == 0
-                            else None,
                         )
                     break  # Success, exit retry loop
                 except Exception:
@@ -491,9 +483,7 @@ class ReferenceEditor(AgentFlow):
                         raise
 
             # 4. Construct the structured message for the UI
-            final_download_url = self.get_asset_download_url(
-                asset_key=upload_result.key, scope="user"
-            )
+            final_download_url = upload_result.download_url
 
             return LinkPart(
                 href=final_download_url,

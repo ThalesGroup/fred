@@ -269,7 +269,7 @@ mcp:
   resources_enabled: true
   opensearch_ops_enabled: true
   neo4j_enabled: false
-  filesystem_enabled: false
+  filesystem_enabled: true
 
 filesystem:
   type: minio
@@ -277,3 +277,9 @@ filesystem:
   access_key: admin
   bucket_name: filesystem
   secure: false
+
+# Workspace storage layout (paths inside the bucket/filesystem)
+workspace_layout:
+  user_pattern: "users/{user_id}/{key}"
+  agent_config_pattern: "agents/{agent_id}/config/{key}"
+  agent_user_pattern: "agents/{agent_id}/users/{user_id}/{key}"

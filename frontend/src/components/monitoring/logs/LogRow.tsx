@@ -23,14 +23,15 @@
 // - Uses RTK OpenAPI hooks you already generated: useQueryLogs... + useTailLogsFile...
 // - Minimal UI plumbing: level floor, service filter, logger contains, text contains.
 
-import { useCallback, useState } from "react";
-import { Box, Stack, IconButton, Tooltip, Chip, useTheme } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import { Box, Chip, IconButton, Stack, useTheme } from "@mui/material";
+import { useCallback, useState } from "react";
 
-import { LogEventDto } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import dayjs from "dayjs";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
+import { LogEventDto } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 type Level = LogEventDto["level"];
 const levelColor: Record<Level, "default" | "success" | "info" | "warning" | "error"> = {
@@ -130,11 +131,11 @@ export function LogRow({ e }: { e: LogEventDto }) {
         {e.msg}
         {e.extra && (
           <Box sx={{ mt: 0.25 }}>
-            <Tooltip title={open ? "Hide extra" : "Show extra"}>
+            <SimpleTooltip title={open ? "Hide extra" : "Show extra"}>
               <IconButton size="small" onClick={() => setOpen((v) => !v)} sx={{ p: 0.25 }}>
                 {open ? <ExpandLessIcon fontSize="inherit" /> : <ExpandMoreIcon fontSize="inherit" />}
               </IconButton>
-            </Tooltip>
+            </SimpleTooltip>
             {open && (
               <Box
                 component="pre"
@@ -158,11 +159,11 @@ export function LogRow({ e }: { e: LogEventDto }) {
       </Box>
 
       {/* copy */}
-      <Tooltip title="Copy message">
+      <SimpleTooltip title="Copy message">
         <IconButton size="small" onClick={copy} sx={{ p: 0.25, color: "text.secondary" }}>
           <ContentCopyIcon fontSize="inherit" />
         </IconButton>
-      </Tooltip>
+      </SimpleTooltip>
     </Stack>
   );
 }

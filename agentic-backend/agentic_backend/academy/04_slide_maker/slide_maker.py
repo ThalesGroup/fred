@@ -22,7 +22,7 @@ from pptx.util import Pt
 from typing_extensions import Annotated
 
 from agentic_backend.application_context import get_default_chat_model
-from agentic_backend.common.kf_agent_asset_client import AssetRetrievalError
+from agentic_backend.common.kf_workspace_client import WorkspaceRetrievalError
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.runtime_context import RuntimeContext
@@ -155,7 +155,7 @@ class SlideMaker(AgentFlow):
             template_key = (
                 self.get_tuned_text("ppt.template_key") or "simple_template.pptx"
             )
-            template_path = await self.fetch_asset_blob_to_tempfile(
+            template_path = await self.fetch_config_blob_to_tempfile(
                 template_key, suffix=".pptx"
             )
 
@@ -189,19 +189,16 @@ class SlideMaker(AgentFlow):
             final_key = f"{user_id_to_store_asset}_{output_path.name}"
 
             with open(output_path, "rb") as f_out:
-                upload_result = await self.upload_user_asset(
+                upload_result = await self.upload_user_blob(
                     key=final_key,
                     file_content=f_out,
                     filename=f"Generated_Slide_{self.get_name()}.pptx",
                     content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    user_id_override=user_id_to_store_asset,
                 )
 
             # 5. Construct the structured message for the UI
-            final_download_url = self.get_asset_download_url(
-                asset_key=upload_result.key, scope="user"
-            )
-
+            final_download_url = upload_result.download_url
+            logger.info("[ACADEMY] Generated slide uploaded: %s", final_download_url)
             final_parts: list[MessagePart] = [
                 TextPart(
                     text=f"✅ **Success:** PowerPoint deck generated and securely saved to your assets.\n**Display Filename:** `{upload_result.file_name}`"
@@ -229,15 +226,9 @@ class SlideMaker(AgentFlow):
                 "content_slot": state.get("content_slot", ""),
             }
 
-        except AssetRetrievalError as e:
+        except WorkspaceRetrievalError as e:
             return _append_error(
-                f"❌ **Asset Error:** Cannot find template '{template_key}'. Check asset availability. (Details: {e})"
-            )
-        except Exception as e:
-            # Catch all other exceptions during rendering/upload
-            logger.exception("An unexpected error occurred during rendering/upload.")
-            return _append_error(
-                f"❌ **Processing Error:** Failed to generate/upload the slide. (Details: {e})"
+                f"❌ **Asset Error:** Cannot find the pptx template '{template_key}'. Upload it to the agent configuration workspace and retry (Details: {e})"
             )
 
         finally:

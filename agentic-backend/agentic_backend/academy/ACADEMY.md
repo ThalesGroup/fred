@@ -49,7 +49,7 @@ academy/
   00-echo/
   01-llm-responder/
   02-dual-model-responder/
-  03_asset_responder/
+  03_config_loader/
   04_slide_maker/
   05_gps_agent/
   06_simple_leader/
@@ -113,8 +113,8 @@ Key idea: _A small, fast model classifies the request; a stronger model uses tha
 
 ### 03 – Asset Responder: working with files/assets
 
-Folder: `academy/03_asset_responder`  
-Code: `asset_responder.py` (see folder)  
+Folder: `academy/03_config_loader`  
+Code: `config_loader.py` (see folder)  
 Docs: `README.md`
 
 **What you’ll learn**

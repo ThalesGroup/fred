@@ -29,7 +29,7 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone"; // New import
 
 import { useTranslation } from "react-i18next";
@@ -37,11 +37,11 @@ import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 
 // --- RTK Query Hooks & Types ---
 import {
-  AssetMeta,
-  useDeleteAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteMutation,
-  useListAgentAssetsKnowledgeFlowV1AgentAssetsAgentGetQuery,
-  useUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostMutation,
+  useDeleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDeleteMutation,
+  useListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetQuery,
+  useUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPostMutation,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { agentConfigPrefix, stripAgentConfigPrefix } from "../../slices/knowledgeFlow/storagePaths";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useToast } from "../ToastProvider";
 // -------------------------------
@@ -52,6 +52,12 @@ interface AgentAssetManagerDrawerProps {
   agentId: string; // The ID of the agent whose assets we manage
 }
 
+type ListedConfigFile = {
+  key: string;
+  file_name: string;
+  size: number | null;
+};
+
 // Helper to format file size
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return "0 Bytes";
@@ -61,7 +67,11 @@ const formatFileSize = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 
-export const AgentAssetManagerDrawer: React.FC<AgentAssetManagerDrawerProps> = ({ isOpen, onClose, agentId }) => {
+export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawerProps> = ({
+  isOpen,
+  onClose,
+  agentId,
+}) => {
   const { t } = useTranslation();
   const { showInfo, showError } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
@@ -78,20 +88,51 @@ export const AgentAssetManagerDrawer: React.FC<AgentAssetManagerDrawerProps> = (
     isLoading: isListLoading,
     isFetching: isListFetching,
     refetch: refetchAssets,
-  } = useListAgentAssetsKnowledgeFlowV1AgentAssetsAgentGetQuery(
-    { agent: agentId },
-    { skip: !isOpen }, // Skip query if drawer is closed
+  } = useListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetQuery(
+    { agentId },
+    { skip: !isOpen, refetchOnMountOrArgChange: true },
   );
 
   const [uploadAsset, { isLoading: isApiLoading }] =
-    useUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostMutation();
+    useUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPostMutation();
 
-  const [deleteAsset] = useDeleteAgentAssetKnowledgeFlowV1AgentAssetsAgentKeyDeleteMutation();
+  const [deleteAsset] = useDeleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDeleteMutation();
   // The overall loading state combines the API mutation state and the local processing loop state
   const isUploading = isApiLoading || isProcessing;
   // --------------------------------
 
-  const assets: AssetMeta[] = useMemo(() => listData?.items || [], [listData]);
+  const assets: ListedConfigFile[] = useMemo(() => {
+    if (!listData || !Array.isArray(listData)) return [];
+    return listData
+      .map((item: any) => {
+        const path: string = item.path || item.key || "";
+        const prefix = agentConfigPrefix(agentId);
+        const normalizedPath = path.endsWith("/") ? path : `${path}/`;
+
+        // Keep only files that are within the agent-config prefix and are files (type != directory)
+        let relativeKey = stripAgentConfigPrefix(path, agentId);
+        // Some backends already return keys with a leading "config/" segment; strip it once to avoid double prefixes.
+        if (relativeKey.startsWith("config/")) {
+          relativeKey = relativeKey.slice("config/".length);
+        }
+        // Remove leading slashes to avoid creating nested folders on delete/upload.
+        relativeKey = relativeKey.replace(/^\/+/, "");
+        const isDirectory = (item.type || "").toLowerCase() === "directory";
+        const isRootPlaceholder =
+          relativeKey === "" ||
+          relativeKey === "/" ||
+          normalizedPath === prefix || // e.g., "agents/{id}/config" without trailing slash
+          path === prefix;
+        if (isDirectory || isRootPlaceholder) return null;
+        const name = relativeKey.split("/").filter(Boolean).pop() || relativeKey;
+        return {
+          key: relativeKey,
+          file_name: name,
+          size: item.size ?? null,
+        };
+      })
+      .filter((x): x is ListedConfigFile => !!x);
+  }, [listData, agentId]);
 
   // --- Dropzone Logic (Reused from DocumentUploadDrawer) ---
   const { getRootProps, getInputProps, open } = useDropzone({
@@ -140,8 +181,8 @@ export const AgentAssetManagerDrawer: React.FC<AgentAssetManagerDrawerProps> = (
 
       try {
         await uploadAsset({
-          agent: agentId,
-          bodyUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPost: formData as any,
+          agentId,
+          bodyUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPost: formData as any,
         }).unwrap();
 
         showInfo({
@@ -173,7 +214,7 @@ export const AgentAssetManagerDrawer: React.FC<AgentAssetManagerDrawerProps> = (
         `Are you sure you want to delete asset '${key}'? This action cannot be undone.`,
       onConfirm: async () => {
         try {
-          await deleteAsset({ agent: agentId, key }).unwrap();
+          await deleteAsset({ agentId, key }).unwrap();
           showInfo({
             summary: t("assetManager.deleteSuccessSummary") || "Asset Deleted",
             detail: t("assetManager.deleteSuccessDetail", { key }) || `Asset '${key}' deleted.`,
@@ -194,6 +235,13 @@ export const AgentAssetManagerDrawer: React.FC<AgentAssetManagerDrawerProps> = (
     setIsProcessing(false);
     onClose();
   };
+
+  // Always refresh when the drawer is opened to keep it stateless/fresh.
+  useEffect(() => {
+    if (isOpen) {
+      refetchAssets();
+    }
+  }, [isOpen, refetchAssets]);
 
   return (
     <Drawer

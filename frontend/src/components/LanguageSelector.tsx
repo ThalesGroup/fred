@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Box, IconButton } from "@mui/material";
 import { useTranslation } from "react-i18next";
-import { IconButton, Tooltip, Box } from "@mui/material";
+import { SimpleTooltip } from "../shared/ui/tooltips/Tooltips";
 
 export const LanguageSelector = () => {
   const { i18n } = useTranslation();
@@ -25,7 +26,7 @@ export const LanguageSelector = () => {
 
   return (
     <Box sx={{ display: "flex", gap: 1 }}>
-      <Tooltip title="Français" arrow>
+      <SimpleTooltip title="Français">
         <IconButton
           onClick={() => changeLanguage("fr")}
           size="small"
@@ -42,8 +43,8 @@ export const LanguageSelector = () => {
         >
           FR
         </IconButton>
-      </Tooltip>
-      <Tooltip title="English" arrow>
+      </SimpleTooltip>
+      <SimpleTooltip title="English">
         <IconButton
           onClick={() => changeLanguage("en")}
           size="small"
@@ -60,7 +61,7 @@ export const LanguageSelector = () => {
         >
           EN
         </IconButton>
-      </Tooltip>
+      </SimpleTooltip>
     </Box>
   );
 };

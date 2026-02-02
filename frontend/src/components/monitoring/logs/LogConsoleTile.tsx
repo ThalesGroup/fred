@@ -3,20 +3,21 @@
 // - Presentational + fetch-on-props-change.
 // - Parent owns time (incl. "Live"); tile never polls on its own.
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Stack, Divider, Tooltip, Button } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import { Box, Button, Divider, Stack } from "@mui/material";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryLogsAgenticV1LogsQueryPostMutation } from "../../../slices/agentic/agenticOpenApi";
 import {
   LogEventDto,
   LogQuery,
   useQueryLogsKnowledgeFlowV1LogsQueryPostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useQueryLogsAgenticV1LogsQueryPostMutation } from "../../../slices/agentic/agenticOpenApi";
 
-import { LogControls } from "./LogControls";
-import type { ServiceId } from "./logType";
-import { LogRow } from "./LogRow";
 import { useTranslation } from "react-i18next";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
+import { LogControls } from "./LogControls";
+import { LogRow } from "./LogRow";
+import type { ServiceId } from "./logType";
 
 type Level = LogEventDto["level"];
 const MAX_EVENTS = 1000;
@@ -178,7 +179,7 @@ export function LogConsoleTile({
           setTextLike={setTextLike}
           onRefresh={fetchQuery} // manual refresh remains available
         />
-        <Tooltip title="Copy all visible logs to clipboard">
+        <SimpleTooltip title="Copy all visible logs to clipboard">
           <Button
             variant="outlined"
             size="small"
@@ -190,7 +191,7 @@ export function LogConsoleTile({
           >
             {t("logs.copyAll", { count: events.length })}
           </Button>
-        </Tooltip>
+        </SimpleTooltip>
       </Stack>
       <Divider />
 

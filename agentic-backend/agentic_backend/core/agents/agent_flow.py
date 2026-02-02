@@ -16,7 +16,9 @@ import logging
 import math
 import sys
 import tempfile
+import time
 from datetime import datetime
+from functools import partial
 from importlib.resources import files
 from pathlib import Path
 from typing import (
@@ -50,17 +52,18 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Command
 
 from agentic_backend.application_context import (
     get_app_context,
     get_knowledge_flow_base_url,
 )
-from agentic_backend.common.kf_agent_asset_client import (
-    AssetBlob,
-    AssetRetrievalError,
-    AssetUploadError,
-    AssetUploadResult,
-    KfAgentAssetClient,
+from agentic_backend.common.kf_workspace_client import (
+    KfWorkspaceClient,
+    UserStorageBlob,
+    UserStorageUploadResult,
+    WorkspaceRetrievalError,
+    WorkspaceUploadError,
 )
 from agentic_backend.common.structures import (
     AgentChatOptions,
@@ -109,6 +112,7 @@ class AgentFlow:
 
     _tuning: AgentTuning
     run_config: RunnableConfig = {}  # Use an empty dict as the default/initial value
+    middlewares: list = []  # Optional LangChain/LangGraph middlewares (HITL, etc.)
 
     def __init__(self, agent_settings: AgentSettings):
         """
@@ -141,20 +145,41 @@ class AgentFlow:
         #     # Set to None if disabled
         #     self.langfuse_client = None
 
-    def get_compiled_graph(self) -> CompiledStateGraph:
+    def get_compiled_graph(
+        self, checkpointer: Optional[object] = None
+    ) -> CompiledStateGraph:
         """
         Compile and return the agent's graph (idempotent).
         Subclasses must set `self._graph` in async_init().
         """
-        if self.compiled_graph is not None:
+        cp = checkpointer or self.streaming_memory
+        logger.info(
+            "[AGENT_FLOW] get_compiled_graph agent=%s checkpointer=%s id=%s cached=%s",
+            self.get_name(),
+            type(cp).__name__,
+            hex(id(cp)),
+            self.compiled_graph is not None,
+        )
+        # Reuse compiled graph when no external checkpointer is provided.
+        if checkpointer is None and self.compiled_graph is not None:
             return self.compiled_graph
         if self._graph is None:
             # Strong, early signal to devs wiring the agent: you must build the graph in async_init()
             raise RuntimeError(
                 f"{type(self).__name__}: _graph is None. Did you forget to set it in async_init()?"
             )
-        self.compiled_graph = self._graph.compile(checkpointer=self.streaming_memory)
-        return self.compiled_graph
+        compiled = self._graph.compile(
+            checkpointer=checkpointer or self.streaming_memory
+        )
+        if checkpointer is None:
+            self.compiled_graph = compiled
+        logger.info(
+            "[AGENT_FLOW] compiled graph ready agent=%s checkpointer=%s id=%s",
+            self.get_name(),
+            type(cp).__name__,
+            hex(id(cp)),
+        )
+        return compiled
 
     def apply_settings(self, new_settings: AgentSettings) -> None:
         """
@@ -167,12 +192,19 @@ class AgentFlow:
         # Keep .tuning coherent on the settings object held by the instance
         self.agent_settings.tuning = self._tuning
 
+    def set_middlewares(self, middlewares: list) -> None:
+        """
+        Configure LangChain/LangGraph middlewares (e.g., HumanInTheLoop).
+        These will be injected into the run_config at execution time.
+        """
+        self.middlewares = list(middlewares or [])
+
     async def async_init(self, runtime_context: RuntimeContext):
         """
         Asynchronous initialization routine that must be implemented by subclasses.
         """
         self.runtime_context: RuntimeContext = runtime_context
-        self.asset_client = KfAgentAssetClient(agent=self)
+        self.storage_client = KfWorkspaceClient(agent=self)
 
     async def aclose(self) -> None:
         """
@@ -240,16 +272,23 @@ class AgentFlow:
                     "Could not set access_token_expires_at on runtime_context; skipping attribute assignment."
                 )
 
+        ttl = None
+        try:
+            ttl = int(expires_at) - int(time.time()) if expires_at else None
+        except Exception:
+            ttl = None
+
+        ttl_msg = f" ttl={ttl}s" if ttl is not None else ""
         logger.info(
-            "[SECURITY] User access token refreshed successfully [token=%s] [expires_at=%s]",
-            new_access_token,
+            "[SECURITY] User access token refreshed successfully [expires_at=%s]%s",
             expires_at,
+            ttl_msg,
         )
         return new_access_token
 
     async def astream_updates(
         self,
-        state: MessagesState,
+        state: Any,
         *,
         config: Optional[RunnableConfig] = None,
         **kwargs: Any,
@@ -259,7 +298,30 @@ class AgentFlow:
         """
         # 1. Start with the incoming config, ensuring it's not None
         self.run_config = config if config is not None else {}
-        compiled = self.get_compiled_graph()
+        logger.debug(
+            "[AGENT_FLOW] astream_updates run_config configurable=%s thread_id=%s",
+            self.run_config.get("configurable"),
+            (self.run_config.get("configurable") or {}).get("thread_id"),
+        )
+        logger.info(
+            "[AGENT_FLOW] astream_updates resume=%s config_keys=%s",
+            isinstance(state, Command),
+            list((self.run_config or {}).keys()),
+        )
+        # Inject optional middlewares (e.g., HumanInTheLoop) if configured on the agent
+        logger.info(
+            "[AGENT_FLOW] astream_updates start agent=%s thread_id=%s using_memory_saver=%s",
+            self.get_name(),
+            (self.run_config.get("configurable") or {}).get("thread_id"),
+            True,
+        )
+        # Force a checkpointer for HITL/interrupt resume. Using the per-instance MemorySaver by default.
+        compiled = self.get_compiled_graph(checkpointer=self.streaming_memory)
+        logger.info(
+            "[AGENT_FLOW] astream_updates compiled graph agent=%s checkpointer=%s",
+            self.get_name(),
+            type(self.streaming_memory).__name__,
+        )
 
         # 2. Instantiate the Langfuse Handler
         # CallbackHandler expects an optional public_key (str | None); do not pass the Langfuse client instance here.
@@ -289,7 +351,7 @@ class AgentFlow:
         # 5. Execute the graph using the MODIFIED config (self.run_config)
         async for event in compiled.astream(
             state,
-            config=self.run_config,  # <--- CORRECT: Pass the updated config
+            config=self.run_config,
             stream_mode="updates",
             **kwargs,
         ):
@@ -473,7 +535,7 @@ class AgentFlow:
         """
         return self.tuning
 
-    async def read_bundled_file(self, filename: str) -> str:
+    async def read_agent_bundled_file(self, filename: str) -> str:
         """
         Reads a static file bundled as a resource alongside the calling agent's module file.
 
@@ -508,7 +570,7 @@ class AgentFlow:
             )
             logger.error(error_msg)
             # Raise a specific exception so the agent node can handle the failure
-            raise AssetRetrievalError(error_msg)
+            raise WorkspaceRetrievalError(error_msg)
 
         except Exception as e:
             error_msg = (
@@ -516,61 +578,108 @@ class AgentFlow:
                 f"Details: {type(e).__name__}: {e}"
             )
             logger.error(error_msg, exc_info=True)
-            raise AssetRetrievalError(error_msg)
+            raise WorkspaceRetrievalError(error_msg)
 
-    async def fetch_asset_text(self, asset_key: str) -> str:
-        agent_name = self.get_name()
+    def _default_agent_id(self) -> str:
+        return self.agent_settings.name or type(self).__name__
+
+    async def fetch_asset_text(
+        self,
+        asset_key: str,
+    ) -> str:
         try:
             access_token = getattr(self.runtime_context, "access_token", None)
             if not access_token:
                 access_token = self.refresh_user_access_token()
 
-            return await get_app_context().run_in_executor(
-                self.asset_client.fetch_asset_content_text,
-                agent_name,
+            fn = partial(
+                self.storage_client.fetch_user_text,
                 asset_key,
                 access_token,
             )
-        except AssetRetrievalError as e:
+            return await get_app_context().run_in_executor(fn)
+        except WorkspaceRetrievalError as e:
             logger.error(f"Failed to fetch asset for agent: {e}")
             return f"[Asset Retrieval Error: {e.args[0]}]"
         except Exception as e:
             logger.error(f"Unexpected error fetching asset for agent: {e}")
             raise
 
-    async def fetch_asset_blob(self, asset_key: str) -> AssetBlob:
+    async def fetch_agent_config_text(
+        self,
+        asset_key: str,
+        *,
+        agent_id: str | None = None,
+    ) -> str:
         """
-        Retrieves the content of a user-uploaded asset securely and cleanly.
+        Fetch a text file from the agent configuration storage (admin-managed, read-only for agents).
+
+        In case of problem the exception is raised to the caller.
         """
-        agent_name = self.get_name()
+        access_token = getattr(self.runtime_context, "access_token", None)
+        if not access_token:
+            access_token = self.refresh_user_access_token()
+
+        fn = partial(
+            self.storage_client.fetch_agent_config_text,
+            asset_key,
+            access_token,
+            agent_id or self._default_agent_id(),
+        )
+        return await get_app_context().run_in_executor(fn)
+
+    async def _fetch_blob(
+        self,
+        asset_key: str,
+    ) -> UserStorageBlob:
         try:
-            # Ensure token is valid (refresh if necessary)
             access_token = getattr(self.runtime_context, "access_token", None)
             if not access_token:
                 access_token = self.refresh_user_access_token()
 
-            return await get_app_context().run_in_executor(
-                self.asset_client.fetch_asset_blob,
-                agent_name,
+            fn = partial(
+                self.storage_client.fetch_user_blob,
                 asset_key,
                 access_token,
             )
-        except AssetRetrievalError as e:
+            return await get_app_context().run_in_executor(fn)
+        except WorkspaceRetrievalError as e:
             logger.error(f"Failed to fetch asset for agent: {e}")
             raise
         except Exception as e:
             logger.error(f"Unexpected error fetching asset for agent: {e}")
             raise
 
-    async def fetch_asset_blob_to_tempfile(
-        self, asset_key: str, suffix: str | None = None
+    async def fetch_config_blob_to_tempfile(
+        self,
+        asset_key: str,
+        suffix: str | None = None,
+        *,
+        agent_id: str | None = None,
     ) -> Path:
         """
-        Retrieves a user asset, writes it to a secure temporary file, and returns its Path.
-        Why (Fred): Many libraries (pptx, pdf, docx) expect a file path, not bytes.
-        The file lives only for the lifetime of the node execution.
+        Fetch a configuration file (typically a template) from the agent configuration storage.
+        Remember that this is different from user storage! The configuration storage
+        is scoped to the agent and is not user-specific. It can be filled only by
+        administrators or via agent setup processes.
+
+        The downloaded file is written to a temporary file and returned as a Path object.
+        IMPORTANT on suffix:
+          - If suffix is provided, it forces the temp file extension (e.g., ".pptx"). Only do this
+            when the bytes really match that format; some libraries pick the parser based on extension.
+          - If suffix is None (default), we reuse the fetched blob's extension to avoid mime/format mismatch.
         """
-        blob = await self.fetch_asset_blob(asset_key)
+        access_token = (
+            getattr(self.runtime_context, "access_token", None)
+            or self.refresh_user_access_token()
+        )
+        fn = partial(
+            self.storage_client.fetch_agent_config_blob,
+            asset_key,
+            access_token,
+            agent_id or self._default_agent_id(),
+        )
+        blob = await get_app_context().run_in_executor(fn)
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=suffix or Path(blob.filename).suffix
         ) as f:
@@ -578,14 +687,13 @@ class AgentFlow:
             temp_path = Path(f.name)
         return temp_path
 
-    async def upload_user_asset(
+    async def upload_user_blob(
         self,
         key: str,
         file_content: bytes | BinaryIO,
         filename: str,
         content_type: Optional[str] = None,
-        user_id_override: Optional[str] = None,
-    ) -> AssetUploadResult:
+    ) -> UserStorageUploadResult:
         """
         Uploads a binary file to the user's personal asset storage.
 
@@ -603,14 +711,14 @@ class AgentFlow:
         )
         try:
             # Use get_app_context().run_in_executor to safely run the blocking client call
-            result = await get_app_context().run_in_executor(
-                self.asset_client.upload_user_asset_blob,
+            fn = partial(
+                self.storage_client.upload_user_blob,
                 key,
                 file_content,
                 filename,
                 content_type,
-                user_id_override,
             )
+            result = await get_app_context().run_in_executor(fn)
             logger.info(
                 "UPLOADING_ASSET: Upload successful. Key: %s, Size: %d, document_uid: %s",
                 result.key,
@@ -618,31 +726,12 @@ class AgentFlow:
                 result.document_uid,
             )
             return result
-        except AssetUploadError as e:
+        except WorkspaceUploadError as e:
             logger.error(f"Failed to upload user asset: {e}")
             raise  # Re-raise the specific error
         except Exception as e:
             logger.error(f"Unexpected error during user asset upload: {e}")
             raise
-
-    def get_asset_download_url(self, asset_key: str, scope: str = "user") -> str:
-        """Constructs the full, absolute URL for asset download."""
-
-        # NOTE: You MUST replace `get_api_base_url()` with your actual configuration
-        # or helper that returns the public base URL (e.g., 'https://your-api.com').
-        BASE_URL = get_knowledge_flow_base_url()  # Replace with actual base URL source
-
-        if scope == "user":
-            # The User Asset endpoint format: /user-assets/{key}
-            return f"{BASE_URL}/user-assets/{asset_key}"
-        elif scope == "agent":
-            # The Agent Asset endpoint format: /agent-assets/{agent_name}/{key}
-            agent_name = self.get_name()
-            return f"{BASE_URL}/agent-assets/{agent_name}/{asset_key}"
-
-        raise ValueError(f"Unknown asset scope: {scope}")
-
-    # ...
 
     def _get_text_content(self, message: AnyMessage) -> str:
         """

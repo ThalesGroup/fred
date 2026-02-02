@@ -26,8 +26,9 @@ import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
 import { getConfig } from "../../common/config.tsx";
 import { useSessionChange } from "../../hooks/useSessionChange.ts";
-import { KeyCloakService } from "../../security/KeycloakService.ts";
 import { useAuth } from "../../security/AuthContext.tsx";
+import { KeyCloakService } from "../../security/KeycloakService.ts";
+import { AwaitingHumanEvent } from "../../slices/agentic/agenticOpenApi";
 import {
   ChatAskInput,
   ChatMessage,
@@ -157,11 +158,16 @@ export interface ChatBotProps {
   onNewSessionCreated: (chatSessionId: string) => void;
 }
 
-const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, runtimeContext: baseRuntimeContext }: ChatBotProps) => {
+const ChatBot = ({
+  chatSessionId,
+  agents,
+  initialAgent,
+  onNewSessionCreated,
+  runtimeContext: baseRuntimeContext,
+}: ChatBotProps) => {
   const isNewConversation = !chatSessionId;
-
+  const { showInfo, showError } = useToast();
   const { t } = useTranslation();
-  const { showError } = useToast();
   const webSocketRef = useRef<WebSocket | null>(null);
   const wsTokenRef = useRef<string | null>(null);
   const wsConnectSeqRef = useRef<number>(0);
@@ -346,6 +352,7 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
   const waitStartedAtRef = useRef<number>(0);
   const waitSeqRef = useRef<number>(0);
   const debugLoader = false;
+  const [pendingHitl, setPendingHitl] = useState<AwaitingHumanEvent | null>(null);
   const { roles } = useAuth();
   const isAdmin = roles.includes("admin");
   const [debugEvents, setDebugEvents] = useState<DebugEventEntry[]>([]);
@@ -637,6 +644,13 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
               break;
             }
 
+            case "awaiting_human": {
+              const awaiting = response as AwaitingHumanEvent;
+              setPendingHitl(awaiting);
+              endWaiting({ immediate: true });
+              break;
+            }
+
             default: {
               console.warn("[⚠️ ChatBot] Unknown message type:", response.type);
               showError({
@@ -876,6 +890,34 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
   const handleAddAttachments = useCallback(
     async (files: File[]) => {
       if (!files.length) return;
+
+      // Prevent duplicate uploads by filename (existing + in the same batch)
+      const existingNames = new Set((sessionAttachments || []).map((a) => a.name));
+      const seenInBatch = new Set<string>();
+      const uniqueFiles = files.filter((file) => {
+        const key = `${file.name}::${file.size}`;
+        if (existingNames.has(file.name)) return false;
+        if (seenInBatch.has(key)) return false;
+        seenInBatch.add(key);
+        return true;
+      });
+      if (!uniqueFiles.length) {
+        showInfo({
+          summary: t("chatbot.attachments.duplicateTitle", "Already attached"),
+          detail: t("chatbot.attachments.duplicateDetail", "This file is already in the conversation."),
+        });
+        return;
+      }
+      if (uniqueFiles.length < files.length) {
+        showInfo({
+          summary: t("chatbot.attachments.skippedDuplicates", "Skipped duplicates"),
+          detail: t(
+            "chatbot.attachments.someFilesAlreadyAttached",
+            "Some files were already attached and were skipped.",
+          ),
+        });
+      }
+
       setIsUploadingAttachments(true);
       let sid = pendingSessionIdRef.current || chatSessionId;
       if (!sid) {
@@ -888,7 +930,7 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
       }
 
       try {
-        for (const file of files) {
+        for (const file of uniqueFiles) {
           const formData = new FormData();
           formData.append("session_id", sid);
           formData.append("file", file);
@@ -993,6 +1035,7 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
     const refreshToken = KeyCloakService.GetRefreshToken();
     const accessToken = KeyCloakService.GetToken();
     const eventBase: ChatAskInput = {
+      type: "ask",
       message: input,
       agent_name: agent ? agent.name : currentAgent.name,
       // Use the already-resolved sid (may come from ensureSessionId()) to avoid any drift
@@ -1025,6 +1068,53 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
       endWaiting({ immediate: true });
     }
   };
+
+  const respondHumanInLoop = useCallback(
+    async (answerOrChoice: string | boolean, freeText?: string, eventOverride?: AwaitingHumanEvent | null) => {
+      const target = eventOverride || pendingHitl;
+      if (!target || !chatSessionId) return;
+      try {
+        const socket = await setupWebSocket();
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+          throw new Error("WebSocket not open");
+        }
+        const refreshToken = KeyCloakService.GetRefreshToken();
+        const accessToken = KeyCloakService.GetToken();
+        const payload = {
+          type: "human_resume",
+          session_id: chatSessionId,
+          exchange_id: target.exchange_id,
+          payload: {
+            answer: answerOrChoice,
+            choice_id: typeof answerOrChoice === "string" ? answerOrChoice : undefined,
+            text: freeText,
+            checkpoint_id: (target as any)?.payload?.checkpoint_id,
+          },
+          agent_name: currentAgent?.name,
+          access_token: accessToken || undefined,
+          refresh_token: refreshToken || undefined,
+        };
+        console.info("[CHATBOT][HITL] send human_resume", {
+          session_id: chatSessionId,
+          exchange_id: target.exchange_id,
+          checkpoint_id: (target as any)?.payload?.checkpoint_id,
+        });
+        socket.send(JSON.stringify(payload));
+        console.info("[CHATBOT] WS send human_resume", {
+          session_id: chatSessionId,
+          exchange_id: target.exchange_id,
+          payload,
+          ws_state: socket.readyState,
+        });
+        setPendingHitl(null);
+        beginWaiting();
+      } catch (err) {
+        console.error("[CHATBOT] Failed to send HITL resume", err);
+        showError({ summary: "Connection Error", detail: "Could not send your answer — connection failed." });
+      }
+    },
+    [beginWaiting, chatSessionId, currentAgent, pendingHitl, setupWebSocket, showError],
+  );
 
   const handleRequestLogGenius = useCallback(() => {
     if (!logGeniusAgent) return;
@@ -1067,42 +1157,64 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
     copyFeedback,
     hasDebugHistory: debugEvents.length > 0,
   };
+
+  const handleHitlSubmit = useCallback(
+    (choiceId: string, freeText?: string) => {
+      if (!pendingHitl) return;
+      const hasExplicitChoices = Boolean(pendingHitl.payload?.choices?.length);
+      let answer: string | boolean = choiceId;
+      if (!hasExplicitChoices) {
+        if (choiceId === "yes") answer = true;
+        else if (choiceId === "no") answer = false;
+      }
+      respondHumanInLoop(answer, freeText, pendingHitl);
+    },
+    [pendingHitl, respondHumanInLoop],
+  );
+
+  const handleHitlCancel = useCallback(() => setPendingHitl(null), []);
+
   return (
-    <ChatBotView
-      chatSessionId={chatSessionId}
-      options={options}
-      attachmentSessionId={attachmentSessionId}
-      sessionAttachments={sessionAttachments}
-      onAddAttachments={handleAddAttachments}
-      onAttachmentsUpdated={handleAttachmentsUpdated}
-      isUploadingAttachments={isUploadingAttachments}
-      libraryNameMap={libraryNameMap}
-      libraryById={libraryById}
-      promptNameMap={promptNameMap}
-      templateNameMap={templateNameMap}
-      chatContextNameMap={chatContextNameMap}
-      chatContextResourceMap={chatContextResourceMap}
-      isSessionLoadBlocked={isSessionLoadBlocked}
-      loadError={hasLoadError}
-      showWelcome={showWelcome}
-      showHistoryLoading={showHistoryLoading}
-      waitResponse={waitResponse}
-      isHydratingSession={isHydratingSession && !isClientCreatedSession}
-      conversationPrefs={conversationPrefs}
-      currentAgent={currentAgent}
-      agents={agents}
-      messages={messages}
-      hiddenUserExchangeIds={hiddenUserExchangeIdsRef.current}
-      layout={layout}
-      onSend={handleSend}
-      onStop={stopStreaming}
-      onRequestLogGenius={logGeniusAgent ? handleRequestLogGenius : undefined}
-      onSelectAgent={selectAgent}
-      setSearchPolicy={setSearchPolicy}
-      setSearchRagScope={setSearchRagScope}
-      setDeepSearchEnabled={setDeepSearchEnabled}
-      debugWidget={debugWidgetProps}
-    />
+    <>
+      <ChatBotView
+        chatSessionId={chatSessionId}
+        options={options}
+        attachmentSessionId={attachmentSessionId}
+        sessionAttachments={sessionAttachments}
+        onAddAttachments={handleAddAttachments}
+        onAttachmentsUpdated={handleAttachmentsUpdated}
+        isUploadingAttachments={isUploadingAttachments}
+        libraryNameMap={libraryNameMap}
+        libraryById={libraryById}
+        promptNameMap={promptNameMap}
+        templateNameMap={templateNameMap}
+        chatContextNameMap={chatContextNameMap}
+        chatContextResourceMap={chatContextResourceMap}
+        isSessionLoadBlocked={isSessionLoadBlocked}
+        loadError={hasLoadError}
+        showWelcome={showWelcome}
+        showHistoryLoading={showHistoryLoading}
+        waitResponse={waitResponse}
+        isHydratingSession={isHydratingSession && !isClientCreatedSession}
+        conversationPrefs={conversationPrefs}
+        currentAgent={currentAgent}
+        agents={agents}
+        messages={messages}
+        hiddenUserExchangeIds={hiddenUserExchangeIdsRef.current}
+        layout={layout}
+        onSend={handleSend}
+        onStop={stopStreaming}
+        onRequestLogGenius={logGeniusAgent ? handleRequestLogGenius : undefined}
+        onSelectAgent={selectAgent}
+        setSearchPolicy={setSearchPolicy}
+        setSearchRagScope={setSearchRagScope}
+        setDeepSearchEnabled={setDeepSearchEnabled}
+        debugWidget={debugWidgetProps}
+        hitlEvent={pendingHitl}
+        onHitlSubmit={handleHitlSubmit}
+        onHitlCancel={handleHitlCancel}
+      />
+    </>
   );
 };
 

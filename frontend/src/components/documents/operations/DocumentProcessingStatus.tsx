@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, IconButton, Tooltip, Typography } from "@mui/material";
+import { Box, IconButton, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 
 import RefreshIcon from "@mui/icons-material/Refresh";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import { useGetProcessingSummaryKnowledgeFlowV1DocumentsProcessingSummaryGetQuery } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 interface DocumentProcessingStatusProps {
@@ -76,11 +77,11 @@ export const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> =
       }}
     >
       <Box sx={{ position: "absolute", top: 4, right: 4 }}>
-        <Tooltip title={t("scheduler.refreshProgress")}>
+        <SimpleTooltip title={t("scheduler.refreshProgress")}>
           <IconButton size="small" onClick={() => refetch()}>
             <RefreshIcon fontSize="small" />
           </IconButton>
-        </Tooltip>
+        </SimpleTooltip>
       </Box>
       <Box flex={1} minWidth={0}>
         <Typography variant="subtitle2">{t("scheduler.globalStatusTitle")}</Typography>

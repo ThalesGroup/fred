@@ -10,6 +10,6 @@ This step shows how an agent can **work with uploaded assets/files** in the Fred
 
 ## Files
 
-- `asset_responder.py` – example agent using assets (see code for exact behavior).
+- `config_loader.py` – example agent using assets (see code for exact behavior).
 
 Use this as a starting point when you want agents that react to files (reports, PDFs, datasets, etc.) provided by the user.
