@@ -27,7 +27,7 @@ import logging
 from dataclasses import asdict
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
 
 from knowledge_flow_backend.features.filesystem.workspace_storage_service import (
