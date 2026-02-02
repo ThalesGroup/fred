@@ -26,11 +26,17 @@ class UserStoryTitle(BaseModel):
     """A user story title for batch generation."""
 
     id: str = Field(description="Unique user story ID (e.g., US-01)")
-    title: str = Field(description="Short, descriptive title for the user story")
+    title: str = Field(
+        description="Short, descriptive title for the user story (max 80 characters)"
+    )
     epic_name: str = Field(description="Parent epic name for grouping related stories")
     requirement_ids: list[str] | None = Field(
         default=None,
         description="List of requirement IDs this story implements (e.g., ['EX-FON-01', 'EX-NFON-02'])",
+    )
+    dependencies: list[str] | None = Field(
+        default=None,
+        description="List of prerequisite user story IDs (e.g., ['US-01', 'US-02'])",
     )
 
 
@@ -53,7 +59,7 @@ class UserStory(BaseModel):
     id: str = Field(description="Unique user story ID (e.g., US-01)")
     summary: str = Field(description="User story title/summary")
     description: str = Field(
-        description="User story in format: As a [role], I want [feature], so that [benefit]"
+        description="User story in format: En tant que [persona], je veux [action], afin de [bénéfice]"
     )
     issue_type: Literal["Story", "Task", "Bug"] | None = Field(
         default="Story", description="Jira issue type"
@@ -77,9 +83,17 @@ class UserStory(BaseModel):
         default=None,
         description="List of requirement IDs this story implements (e.g., ['EX-FON-01', 'EX-NFON-02'])",
     )
+    dependencies: list[str] | None = Field(
+        default=None,
+        description="List of prerequisite user story IDs (e.g., ['US-01', 'US-02'])",
+    )
     acceptance_criteria: list[AcceptanceCriterion] | None = Field(
         default=None,
         description="List of acceptance criteria with scenario name and Gherkin steps",
+    )
+    clarification_questions: list[str] | None = Field(
+        default=None,
+        description="1 to 3 clarification questions to resolve ambiguities",
     )
 
 
@@ -149,7 +163,7 @@ class QuickUserStory(BaseModel):
     """
 
     description: str = Field(
-        description="User story in format: En tant que [role], je veux [action], afin de [benefit]"
+        description="User story in format: En tant que [persona], je veux [action], afin de [bénéfice]"
     )
     priority: Literal["High", "Medium", "Low"] = Field(
         default="Medium", description="Story priority level"
@@ -163,6 +177,10 @@ class QuickUserStory(BaseModel):
     acceptance_criteria: list[AcceptanceCriterion] | None = Field(
         default=None,
         description="List of acceptance criteria with scenario name and Gherkin steps",
+    )
+    clarification_questions: list[str] | None = Field(
+        default=None,
+        description="1 to 3 clarification questions to resolve ambiguities",
     )
 
 
