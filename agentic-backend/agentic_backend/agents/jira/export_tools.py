@@ -167,24 +167,18 @@ class ExportTools:
         final_key = f"{user_id}_livrables_{timestamp}.md"
 
         with open(output_path, "rb") as f_out:
-            upload_result = await self.agent.upload_user_asset(
+            upload_result = await self.agent.upload_user_blob(
                 key=final_key,
                 file_content=f_out,
                 filename=f"Livrables_{timestamp}.md",
                 content_type="text/markdown",
-                user_id_override=user_id,
             )
 
         # Clean up temp file
         output_path.unlink(missing_ok=True)
 
-        # Build download URL
-        download_url = self.agent.get_asset_download_url(
-            asset_key=upload_result.key, scope="user"
-        )
-
         return LinkPart(
-            href=download_url,
+            href=upload_result.download_url,
             title=f"📥 Télécharger {upload_result.file_name}",
             kind=LinkKind.download,
             mime="text/markdown",
@@ -373,27 +367,21 @@ class ExportTools:
             final_key = f"{user_id}_jira_import_{timestamp}.csv"
 
             with open(output_path, "rb") as f_out:
-                upload_result = await self.agent.upload_user_asset(
+                upload_result = await self.agent.upload_user_blob(
                     key=final_key,
                     file_content=f_out,
                     filename=f"jira_import_{timestamp}.csv",
                     content_type="text/csv",
-                    user_id_override=user_id,
                 )
 
             # Clean up temp file
             output_path.unlink(missing_ok=True)
 
-            # Build download URL
-            download_url = self.agent.get_asset_download_url(
-                asset_key=upload_result.key, scope="user"
-            )
-
             return Command(
                 update={
                     "messages": [
                         ToolMessage(
-                            content=f"✓ Fichier CSV Jira exporté avec succès: [{upload_result.file_name}]({download_url})\n\n"
+                            content=f"✓ Fichier CSV Jira exporté avec succès: [{upload_result.file_name}]({upload_result.download_url})\n\n"
                             f"**Pour importer dans Jira:**\n"
                             f"1. Allez dans votre projet Jira\n"
                             f"2. Menu **Project settings** > **External system import**\n"

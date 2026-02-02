@@ -9,6 +9,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import after_model
 from langchain.tools import tool
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Checkpointer
 
 from agentic_backend.agents.knowledge_extractor.jsonschema import globalSchema
 from agentic_backend.agents.knowledge_extractor.powerpoint_template_util import (
@@ -20,6 +21,7 @@ from agentic_backend.agents.knowledge_extractor.tool_validator import (
 )
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
+from agentic_backend.common.tool_node_utils import normalize_mcp_tool_content
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import (
     AgentTuning,
@@ -296,7 +298,7 @@ class SlideMaker(AgentFlow):
                     yield event
                 break
 
-    def get_compiled_graph(self) -> CompiledStateGraph:
+    def get_compiled_graph(self, checkpointer: Checkpointer | None = None) -> CompiledStateGraph:
         template_tool = self.get_template_tool()
         validator_tool = self.get_validator_tool()
 
@@ -345,10 +347,12 @@ class SlideMaker(AgentFlow):
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[template_tool, validator_tool, *self.mcp.get_tools()],
-            checkpointer=self.streaming_memory,
+            checkpointer=checkpointer,
             middleware=[
                 extract_text_from_thinking_model,
                 validate_tool_calls,
+                # Normalize MCP content blocks to strings (fixes OpenAI 422 errors)
+                normalize_mcp_tool_content,
             ],
         )
 

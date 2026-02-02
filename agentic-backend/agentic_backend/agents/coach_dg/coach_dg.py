@@ -4,9 +4,11 @@ import logging
 
 from langchain.agents import create_agent
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Checkpointer
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
+from agentic_backend.common.tool_node_utils import normalize_mcp_tool_content
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import (
     AgentTuning,
@@ -142,11 +144,12 @@ class CoachDG(AgentFlow):
     async def aclose(self):
         await self.mcp.aclose()
 
-    def get_compiled_graph(self) -> CompiledStateGraph:
+    def get_compiled_graph(self, checkpointer: Checkpointer | None = None) -> CompiledStateGraph:
         return create_agent(
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=self.mcp.get_tools(),
-            checkpointer=self.streaming_memory,
-            middleware=[],
+            checkpointer=checkpointer,
+            # Normalize MCP content blocks to strings (fixes OpenAI 422 errors)
+            middleware=[normalize_mcp_tool_content],
         )

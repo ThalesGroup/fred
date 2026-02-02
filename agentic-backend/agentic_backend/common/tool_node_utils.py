@@ -14,13 +14,92 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import Sequence
+from typing import TYPE_CHECKING, Any, Sequence
 
+from langchain.agents.middleware import wrap_tool_call
+from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt.tool_node import ToolCallRequest
+
+if TYPE_CHECKING:
+    from langchain.agents.middleware import AgentMiddleware
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_mcp_content(content) -> str:
+    """
+    Normalize MCP tool content blocks to a plain string.
+
+    MCP tools return content as: [{"type": "text", "text": "..."}]
+    OpenAI API expects ToolMessage.content to be a string.
+
+    This function extracts text from content blocks and joins them,
+    or returns the original content if already a string.
+    """
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        # Extract text from content blocks
+        texts = []
+        for block in content:
+            if isinstance(block, dict):
+                if block.get("type") == "text":
+                    texts.append(block.get("text", ""))
+                else:
+                    # For non-text blocks, serialize to JSON
+                    texts.append(json.dumps(block))
+            else:
+                texts.append(str(block))
+        return "\n".join(texts) if texts else ""
+
+    # For other types, convert to JSON string
+    return json.dumps(content)
+
+
+@wrap_tool_call
+async def normalize_mcp_tool_content(
+    request: ToolCallRequest, handler: Any
+) -> ToolMessage:
+    """
+    Middleware that normalizes MCP tool content blocks to strings.
+
+    This fixes the 422 error from OpenAI when MCP tools return content blocks
+    like [{"type": "text", "text": "..."}] instead of plain strings.
+
+    Usage with create_agent:
+        return create_agent(
+            model=...,
+            tools=[...],
+            middleware=[normalize_mcp_tool_content],
+        )
+    """
+    result = await handler(request)
+
+    # Handle ToolMessage results
+    if isinstance(result, ToolMessage):
+        normalized_content = _normalize_mcp_content(result.content)
+        if normalized_content != result.content:
+            logger.debug(
+                "[MCP] Normalized content blocks to string for tool=%s",
+                request.tool_call.get("name", "unknown"),
+            )
+            return ToolMessage(
+                content=normalized_content,
+                tool_call_id=result.tool_call_id,
+                name=result.name,
+            )
+
+    return result
+
+
+# Explicit type annotation for the decorated middleware
+# (helps type checkers since @wrap_tool_call's async overload is not fully typed)
+normalize_mcp_tool_content: "AgentMiddleware[Any, Any]"  # type: ignore[no-redef]
 
 
 def friendly_mcp_tool_error_handler(e: Exception) -> str:
