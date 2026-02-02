@@ -371,12 +371,15 @@ class IngestionController:
                 logger.info("Queued Temporal workflow %s from /upload-process-documents", handle.workflow_id)
                 yield ProcessingProgress(step=current_step, status=Status.SUCCESS, filename="scheduler").model_dump_json() + "\n"
                 for filename, document_uid, _ in temporal_candidates:
-                    yield ProcessingProgress(
-                        step="Finished",
-                        filename=filename,
-                        status=Status.FINISHED,
-                        document_uid=document_uid,
-                    ).model_dump_json() + "\n"
+                    yield (
+                        ProcessingProgress(
+                            step="Finished",
+                            filename=filename,
+                            status=Status.FINISHED,
+                            document_uid=document_uid,
+                        ).model_dump_json()
+                        + "\n"
+                    )
                 success += len(temporal_candidates)
             except Exception as e:
                 error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"

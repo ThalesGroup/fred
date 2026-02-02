@@ -18,6 +18,7 @@ from typing import Any
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
+
 def _read(obj: Any, field: str, default: Any = None) -> Any:
     if isinstance(obj, dict):
         return obj.get(field, default)
@@ -138,25 +139,17 @@ class Process:
             display_name = _display_name(file)
             if _is_pull(file):
                 workflow.logger.info(f"[SCHEDULER] Processing pull file: {display_name}")
-                metadata = await workflow.execute_child_workflow(
-                    CreatePullFileMetadata.run, args=[file], id=f"CreatePullFileMetadata-{display_name}", retry_policy=RetryPolicy(maximum_attempts=2)
-                )
+                metadata = await workflow.execute_child_workflow(CreatePullFileMetadata.run, args=[file], id=f"CreatePullFileMetadata-{display_name}", retry_policy=RetryPolicy(maximum_attempts=2))
 
                 workflow.logger.info(f"[SCHEDULER] Loading pull file local copy: {display_name}")
-                local_file_path = await workflow.execute_child_workflow(
-                    LoadPullFile.run, args=[file, metadata], id=f"LoadPullFile-{display_name}", retry_policy=RetryPolicy(maximum_attempts=2)
-                )
+                local_file_path = await workflow.execute_child_workflow(LoadPullFile.run, args=[file, metadata], id=f"LoadPullFile-{display_name}", retry_policy=RetryPolicy(maximum_attempts=2))
 
             else:
                 workflow.logger.info(f"[SCHEDULER] Processing push file: {display_name}")
-                metadata = await workflow.execute_child_workflow(
-                    GetPushFileMetadata.run, args=[file], id=f"GetPushFileMetadata-{display_name}", retry_policy=RetryPolicy(maximum_attempts=2)
-                )
+                metadata = await workflow.execute_child_workflow(GetPushFileMetadata.run, args=[file], id=f"GetPushFileMetadata-{display_name}", retry_policy=RetryPolicy(maximum_attempts=2))
 
                 workflow.logger.info(f"[SCHEDULER] Loading push file local copy: {display_name}")
-                local_file_path = await workflow.execute_child_workflow(
-                    LoadPushFile.run, args=[file, metadata], id=f"LoadPushFile-{display_name}", retry_policy=RetryPolicy(maximum_attempts=2)
-                )
+                local_file_path = await workflow.execute_child_workflow(LoadPushFile.run, args=[file, metadata], id=f"LoadPushFile-{display_name}", retry_policy=RetryPolicy(maximum_attempts=2))
 
             workflow.logger.info(f"[SCHEDULER] Input process local copy: {local_file_path or 'unknown'}")
 
