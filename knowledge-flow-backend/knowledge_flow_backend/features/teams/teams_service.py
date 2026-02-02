@@ -6,13 +6,14 @@ from fred_core.security.rebac.rebac_engine import RebacReference, RelationType, 
 from keycloak import KeycloakAdmin
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
-from knowledge_flow_backend.features.teams.teams_structures import Team
+from knowledge_flow_backend.features.teams.teams_structures import KeycloakGroupSummary, Team
 from knowledge_flow_backend.features.users.users_service import get_users_by_ids
 from knowledge_flow_backend.features.users.users_structures import UserSummary
 
 logger = logging.getLogger(__name__)
 
-_TEAM_PAGE_SIZE = 200
+_GROUP_PAGE_SIZE = 200
+_MEMBER_PAGE_SIZE = 200
 
 
 async def list_teams(user: KeycloakUser) -> list[Team]:
@@ -26,44 +27,44 @@ async def list_teams(user: KeycloakUser) -> list[Team]:
         return []
 
     # List groups in Keycloak
-    root_groups = await _fetch_root_groups(admin)
+    root_groups = await _fetch_root_keycloak_groups(admin)
 
     # Filter groups with ReBAC
     authorized_teams_refs = await rebac.lookup_user_resources(user, TeamPermission.CAN_READ)
     if not isinstance(authorized_teams_refs, RebacDisabledResult):
         authorized_tags_ids = [t.id for t in authorized_teams_refs]
-        root_groups = [t for t in root_groups if t.get("id") in authorized_tags_ids]
+        root_groups = [t for t in root_groups if t.id in authorized_tags_ids]
 
-    # Batch fetch metadata for all teams (single query)
-    team_ids: list[str] = [g["id"] for g in root_groups if g.get("id") is not None]
+    # Batch fetch metadata for all teams
+    team_ids: list[str] = [g.id for g in root_groups]
     metadata_map = metadata_store.get_by_team_ids(team_ids)
 
-    # Batch query OpenFGA for all team owners
-    team_owners_list = await asyncio.gather(*[
-        _get_team_owners(rebac, team_id)
-        for team_id in team_ids
-    ])
+    # Batch query OpenFGA for all team owners and Keycloak for member counts in parallel
+    team_owners_list, member_counts_list = await asyncio.gather(
+        asyncio.gather(*[_get_team_owners(rebac, team_id) for team_id in team_ids]),
+        asyncio.gather(*[_fetch_group_member_ids(admin, team_id) for team_id in team_ids]),
+    )
 
     # Build mapping and collect all unique owner IDs
     all_owner_ids = set()
     team_owners_map = {}
+    member_counts_map = {}
 
     for team_id, owner_ids in zip(team_ids, team_owners_list):
         team_owners_map[team_id] = owner_ids
         all_owner_ids.update(owner_ids)
+
+    for team_id, member_ids in zip(team_ids, member_counts_list):
+        member_counts_map[team_id] = len(member_ids)
 
     # Batch fetch user details from Keycloak
     user_summaries = await get_users_by_ids(all_owner_ids)
 
     # Transform Keycloak group in Fred Team
     teams: list[Team] = []
-    for raw_group in root_groups:
-        group_id = raw_group.get("id")
-        group_name = raw_group.get("name")
-
-        if not group_id:
-            logger.debug("Skipping Keycloak group without identifier: %s", raw_group)
-            continue
+    for group_summary in root_groups:
+        group_id = group_summary.id
+        group_name = group_summary.name
 
         # Get metadata from batch results
         metadata = metadata_map.get(group_id)
@@ -83,11 +84,8 @@ async def list_teams(user: KeycloakUser) -> list[Team]:
             name=_sanitize_name(group_name, fallback=group_id),
             description=description,
             banner_image_url=banner_image_url,
-            owners=[
-                user_summaries.get(owner_id) or UserSummary(id=owner_id)
-                for owner_id in team_owners_map.get(group_id, [])
-            ],
-            member_count=0,  # TODO: Query from Keycloak (membership is contextual)
+            owners=[user_summaries.get(owner_id) or UserSummary(id=owner_id) for owner_id in team_owners_map.get(group_id, [])],
+            member_count=member_counts_map.get(group_id, 0),
             is_private=is_private,
         )
         teams.append(team)
@@ -99,11 +97,7 @@ async def _get_team_owners(rebac, team_id: str) -> list[str]:
     """Get all user IDs with owner relation to this team from OpenFGA."""
     team_reference = RebacReference(type=Resource.TEAM, id=team_id)
 
-    owners = await rebac.lookup_subjects(
-        team_reference,
-        RelationType.OWNER,
-        Resource.USER
-    )
+    owners = await rebac.lookup_subjects(team_reference, RelationType.OWNER, Resource.USER)
 
     if isinstance(owners, RebacDisabledResult):
         return []
@@ -111,22 +105,53 @@ async def _get_team_owners(rebac, team_id: str) -> list[str]:
     return [subject.id for subject in owners]
 
 
-async def _fetch_root_groups(admin: KeycloakAdmin) -> list[dict]:
-    groups: list[dict] = []
+async def _fetch_root_keycloak_groups(admin: KeycloakAdmin) -> list[KeycloakGroupSummary]:
+    groups: list[KeycloakGroupSummary] = []
     offset = 0
 
     while True:
-        batch = await admin.a_get_groups({"first": offset, "max": _TEAM_PAGE_SIZE, "briefRepresentation": True})
+        batch = await admin.a_get_groups({"first": offset, "max": _GROUP_PAGE_SIZE, "briefRepresentation": True})
         if not batch:
             break
 
-        groups.extend(batch)
-        if len(batch) < _TEAM_PAGE_SIZE:
+        for raw_group in batch:
+            group_id = raw_group.get("id")
+            if group_id:
+                groups.append(
+                    KeycloakGroupSummary(
+                        id=group_id,
+                        name=raw_group.get("name"),
+                        member_count=0,  # Will be populated later in parallel
+                    )
+                )
+
+        if len(batch) < _GROUP_PAGE_SIZE:
             break
 
-        offset += _TEAM_PAGE_SIZE
+        offset += _GROUP_PAGE_SIZE
 
     return groups
+
+
+async def _fetch_group_member_ids(admin: KeycloakAdmin, group_id: str) -> set[str]:
+    member_ids: set[str] = set()
+    offset = 0
+
+    while True:
+        batch = await admin.a_get_group_members(group_id, {"first": offset, "max": _MEMBER_PAGE_SIZE, "briefRepresentation": True})
+        if not batch:
+            break
+
+        for member in batch:
+            member_id = member.get("id")
+            if member_id:
+                member_ids.add(member_id)
+        if len(batch) < _MEMBER_PAGE_SIZE:
+            break
+
+        offset += _MEMBER_PAGE_SIZE
+
+    return member_ids
 
 
 def _sanitize_name(value: object, fallback: str) -> str:

@@ -3,6 +3,12 @@ from pydantic import BaseModel, Field
 from knowledge_flow_backend.features.users.users_structures import UserSummary
 
 
+class KeycloakGroupSummary(BaseModel):
+    id: str
+    name: str | None
+    member_count: int
+
+
 class Team(BaseModel):
     id: str
     name: str
