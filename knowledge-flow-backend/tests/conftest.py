@@ -14,6 +14,7 @@
 
 
 import os
+
 import pytest
 from fastapi.testclient import TestClient
 from fred_core import (
@@ -33,8 +34,8 @@ from knowledge_flow_backend.common.structures import (
     AppConfig,
     Configuration,
     InMemoryVectorStorage,
-    LocalFilesystemConfig,
     LocalContentStorageConfig,
+    LocalFilesystemConfig,
     ProcessingConfig,
     ProcessorConfig,
     PushSourceConfig,

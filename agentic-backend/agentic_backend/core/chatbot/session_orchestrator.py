@@ -1308,6 +1308,27 @@ class SessionOrchestrator:
         # Ensure the user has rights on this session (create/update if needed)
         self._authorize_user_action_on_session(session.id, user, Action.UPDATE)
 
+        # Prevent duplicate filenames within a session (UI convenience + avoids double ingest)
+        try:
+            if self.attachments_store:
+                existing = await asyncio.to_thread(
+                    self.attachments_store.list_for_session, session.id
+                )
+                if any(rec.name == file.filename for rec in existing):
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "attachment_duplicate",
+                            "message": f"Attachment '{file.filename}' already exists in this session.",
+                        },
+                    )
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception(
+                "[SESSIONS][ATTACH] Failed during duplicate attachment check"
+            )
+
         # 1) Secure session-mode client for Knowledge Flow (Bearer user token)
         client = KfFastTextClient(
             access_token=access_token,

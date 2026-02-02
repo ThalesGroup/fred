@@ -885,6 +885,28 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
   const handleAddAttachments = useCallback(
     async (files: File[]) => {
       if (!files.length) return;
+
+      // Prevent duplicate uploads by filename (existing + in the same batch)
+      const existingNames = new Set((sessionAttachments || []).map((a) => a.name));
+      const seenInBatch = new Set<string>();
+      const uniqueFiles = files.filter((file) => {
+        const key = `${file.name}::${file.size}`;
+        if (existingNames.has(file.name)) return false;
+        if (seenInBatch.has(key)) return false;
+        seenInBatch.add(key);
+        return true;
+      });
+      if (!uniqueFiles.length) {
+        showInfo({ summary: t("chatbot.attachments.duplicateTitle", "Already attached"), detail: t("chatbot.attachments.duplicateDetail", "This file is already in the conversation.") });
+        return;
+      }
+      if (uniqueFiles.length < files.length) {
+        showInfo({
+          summary: t("chatbot.attachments.skippedDuplicates", "Skipped duplicates"),
+          detail: t("chatbot.attachments.someFilesAlreadyAttached", "Some files were already attached and were skipped."),
+        });
+      }
+
       setIsUploadingAttachments(true);
       let sid = pendingSessionIdRef.current || chatSessionId;
       if (!sid) {
@@ -897,7 +919,7 @@ const ChatBot = ({ chatSessionId, agents, initialAgent, onNewSessionCreated, run
       }
 
       try {
-        for (const file of files) {
+        for (const file of uniqueFiles) {
           const formData = new FormData();
           formData.append("session_id", sid);
           formData.append("file", file);
