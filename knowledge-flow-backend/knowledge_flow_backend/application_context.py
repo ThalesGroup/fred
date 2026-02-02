@@ -399,6 +399,12 @@ class ApplicationContext:
         """
         return self.configuration
 
+    def get_scheduler_backend(self) -> str:
+        scheduler_cfg = self.configuration.scheduler
+        if not scheduler_cfg.enabled:
+            return "memory"
+        return scheduler_cfg.backend.lower()
+
     def _get_input_processor_class(self, extension: str) -> Optional[Type[BaseInputProcessor]]:
         """
         Get the input processor class for a given file extension. The mapping is

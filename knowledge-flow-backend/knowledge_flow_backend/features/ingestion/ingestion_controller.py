@@ -24,10 +24,11 @@ import time
 import uuid
 from typing import Dict, List, Optional, Type
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from fred_core import KeycloakUser, get_current_user
 from fred_core.kpi import KPIActor, KPIWriter
+from fred_core.scheduler import TemporalClientProvider
 from langchain_core.documents import Document
 from pydantic import BaseModel
 
@@ -48,7 +49,9 @@ from knowledge_flow_backend.core.stores.vector.base_vector_store import (
 )
 from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 from knowledge_flow_backend.features.scheduler.activities import input_process, output_process
-from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
+from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
+from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess, FileToProcessWithoutUser
+from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors
 
 logger = logging.getLogger(__name__)
 
@@ -255,6 +258,190 @@ class IngestionController:
             self._fast_text_instances[class_path] = processor_class()
         return self._fast_text_instances[class_path]
 
+    def _preload_uploaded_files(self, files: List[UploadFile]) -> list[tuple[str, pathlib.Path]]:
+        preloaded_files: list[tuple[str, pathlib.Path]] = []
+        for file in files:
+            filename = file.filename or "uploaded_file"
+            raw_path = uploadfile_to_path(file)
+            input_temp_file = save_file_to_temp(raw_path)
+            logger.info(f"File {filename} saved to temp storage at {input_temp_file}")
+            preloaded_files.append((filename, input_temp_file))
+        return preloaded_files
+
+    async def _stream_upload_process(
+        self,
+        *,
+        preloaded_files: list[tuple[str, pathlib.Path]],
+        user: KeycloakUser,
+        tags: list[str],
+        source_tag: str,
+        temporal_task_service: IngestionTaskService | None,
+        background_tasks: BackgroundTasks | None,
+        kpi: KPIWriter,
+        kpi_actor: KPIActor,
+        timer_dims: dict,
+    ):
+        success = 0
+        last_error: str | None = None
+        total = len(preloaded_files)
+        temporal_candidates: list[tuple[str, str, str | None]] = []
+
+        for filename, input_temp_file in preloaded_files:
+            file_started = time.perf_counter()
+            file_status = "error"
+            file_type = pathlib.Path(filename).suffix.lstrip(".") or None
+            current_step = "metadata extraction"
+            try:
+                output_temp_dir = input_temp_file.parent.parent
+
+                yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
+                metadata = self.service.extract_metadata(user, file_path=input_temp_file, tags=tags, source_tag=source_tag)
+                metadata_file_type = getattr(metadata, "file_type", None)
+                file_type = metadata_file_type or file_type
+                yield ProcessingProgress(step=current_step, status=Status.SUCCESS, filename=filename).model_dump_json() + "\n"
+
+                current_step = "input content saving"
+                yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
+                self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
+                yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+
+                if temporal_task_service is None:
+                    current_step = "input processing"
+                    yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
+                    metadata = await input_process(user=user, input_file=str(input_temp_file), metadata=metadata)
+                    yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+
+                    current_step = "output processing"
+                    file_to_process = FileToProcess(
+                        document_uid=metadata.document_uid,
+                        external_path=None,
+                        source_tag=source_tag,
+                        tags=tags,
+                        processed_by=user,
+                    )
+                    yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
+                    metadata = await output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
+                    yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+                    yield ProcessingProgress(step="Finished", filename=filename, status=Status.FINISHED, document_uid=metadata.document_uid).model_dump_json() + "\n"
+                    success += 1
+                    file_status = "ok"
+                else:
+                    current_step = "metadata saving"
+                    yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
+                    await self.service.save_metadata(user, metadata=metadata)
+                    yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+
+                    temporal_candidates.append((filename, metadata.document_uid, file_type))
+                    file_status = "queued"
+            except Exception as e:
+                error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
+                last_error = error_message
+                logger.exception("Ingestion error during '%s' for file '%s'", current_step, filename, exc_info=True)
+                yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n"
+            finally:
+                duration_ms = (time.perf_counter() - file_started) * 1000.0
+                kpi.emit(
+                    name="ingestion.document_duration_ms",
+                    type="timer",
+                    value=duration_ms,
+                    unit="ms",
+                    dims={"file_type": file_type, "status": file_status, "source": "api"},
+                    actor=kpi_actor,
+                )
+
+        if temporal_task_service is not None and temporal_candidates:
+            current_step = "scheduler submission"
+            yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename="scheduler").model_dump_json() + "\n"
+            try:
+                files_to_schedule = [
+                    FileToProcessWithoutUser(
+                        source_tag=source_tag,
+                        tags=tags,
+                        document_uid=document_uid,
+                        display_name=filename,
+                    )
+                    for filename, document_uid, _ in temporal_candidates
+                ]
+                _, handle = await temporal_task_service.submit_documents(
+                    user=user,
+                    pipeline_name="upload_ui_async",
+                    files=files_to_schedule,
+                    background_tasks=background_tasks,
+                )
+                logger.info("Queued Temporal workflow %s from /upload-process-documents", handle.workflow_id)
+                yield ProcessingProgress(step=current_step, status=Status.SUCCESS, filename="scheduler").model_dump_json() + "\n"
+                for filename, document_uid, _ in temporal_candidates:
+                    yield ProcessingProgress(
+                        step="Finished",
+                        filename=filename,
+                        status=Status.FINISHED,
+                        document_uid=document_uid,
+                    ).model_dump_json() + "\n"
+                success += len(temporal_candidates)
+            except Exception as e:
+                error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
+                last_error = error_message
+                logger.exception("Scheduler submission failed for /upload-process-documents", exc_info=True)
+                for filename, _, _ in temporal_candidates:
+                    yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n"
+
+        timer_dims["status"] = "ok" if success == total else "error"
+        overall_status = Status.SUCCESS if success == total else Status.ERROR
+        done_payload: dict = {"step": "done", "status": overall_status}
+        if last_error:
+            done_payload["error"] = last_error
+        yield json.dumps(done_payload) + "\n"
+
+    async def _stream_upload_process_local(
+        self,
+        *,
+        preloaded_files: list[tuple[str, pathlib.Path]],
+        user: KeycloakUser,
+        tags: list[str],
+        source_tag: str,
+        kpi: KPIWriter,
+        kpi_actor: KPIActor,
+        timer_dims: dict,
+    ):
+        async for line in self._stream_upload_process(
+            preloaded_files=preloaded_files,
+            user=user,
+            tags=tags,
+            source_tag=source_tag,
+            temporal_task_service=None,
+            background_tasks=None,
+            kpi=kpi,
+            kpi_actor=kpi_actor,
+            timer_dims=timer_dims,
+        ):
+            yield line
+
+    async def _stream_upload_process_temporal(
+        self,
+        *,
+        preloaded_files: list[tuple[str, pathlib.Path]],
+        user: KeycloakUser,
+        tags: list[str],
+        source_tag: str,
+        background_tasks: BackgroundTasks,
+        temporal_task_service: IngestionTaskService,
+        kpi: KPIWriter,
+        kpi_actor: KPIActor,
+        timer_dims: dict,
+    ):
+        async for line in self._stream_upload_process(
+            preloaded_files=preloaded_files,
+            user=user,
+            tags=tags,
+            source_tag=source_tag,
+            temporal_task_service=temporal_task_service,
+            background_tasks=background_tasks,
+            kpi=kpi,
+            kpi_actor=kpi_actor,
+            timer_dims=timer_dims,
+        ):
+            yield line
+
     def __init__(self, router: APIRouter):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.service = IngestionService()
@@ -262,6 +449,18 @@ class IngestionController:
         self._fast_text_instances: Dict[str, BaseFastTextProcessor] = {}
         self.embedder = ApplicationContext.get_instance().get_embedder()
         self.vector_store: BaseVectorStore = ApplicationContext.get_instance().get_create_vector_store(self.embedder)
+        scheduler_cfg = ApplicationContext.get_instance().get_config().scheduler
+        self.temporal_task_service: IngestionTaskService | None = None
+        self._temporal_client_provider: TemporalClientProvider | None = None
+        self._temporal_task_queue: str | None = None
+        if scheduler_cfg.enabled and scheduler_cfg.backend.lower() == "temporal":
+            self._temporal_client_provider = TemporalClientProvider(scheduler_cfg.temporal)
+            self._temporal_task_queue = scheduler_cfg.temporal.task_queue
+            self.temporal_task_service = IngestionTaskService(
+                scheduler_config=scheduler_cfg,
+                metadata_service=self.service.metadata_service,
+                temporal_client_provider=self._temporal_client_provider,
+            )
         logger.info("IngestionController initialized.")
 
         # ------------------------------------------------------------------
@@ -543,88 +742,48 @@ class IngestionController:
             description="Ingest and process one or more documents synchronously in a single step.",
         )
         async def process_documents_sync(
+            background_tasks: BackgroundTasks,
             files: List[UploadFile] = File(...),
             metadata_json: str = Form(...),
             user: KeycloakUser = Depends(get_current_user),
             kpi: KPIWriter = Depends(get_kpi_writer),
         ) -> StreamingResponse:
+            kpi_actor = KPIActor(type="human", user_id=user.uid, groups=user.groups)
             with kpi.timer(
                 "api.request_latency_ms",
                 dims={"route": "/upload-process-documents", "method": "POST"},
-                actor=KPIActor(type="human", user_id=user.uid, groups=user.groups),
+                actor=kpi_actor,
             ) as d:
                 parsed_input = IngestionInput(**json.loads(metadata_json))
                 tags = parsed_input.tags
                 source_tag = parsed_input.source_tag
 
-                preloaded_files = []
-                for file in files:
-                    raw_path = uploadfile_to_path(file)
-                    input_temp_file = save_file_to_temp(raw_path)
-                    logger.info(f"File {file.filename} saved to temp storage at {input_temp_file}")
-                    preloaded_files.append((file.filename, input_temp_file))
+                preloaded_files = self._preload_uploaded_files(files)
+                temporal_task_service = self.temporal_task_service
+                if temporal_task_service is None:
+                    event_stream = self._stream_upload_process_local(
+                        preloaded_files=preloaded_files,
+                        user=user,
+                        tags=tags,
+                        source_tag=source_tag,
+                        kpi=kpi,
+                        kpi_actor=kpi_actor,
+                        timer_dims=d,
+                    )
+                else:
+                    event_stream = self._stream_upload_process_temporal(
+                        preloaded_files=preloaded_files,
+                        user=user,
+                        tags=tags,
+                        source_tag=source_tag,
+                        background_tasks=background_tasks,
+                        temporal_task_service=temporal_task_service,
+                        kpi=kpi,
+                        kpi_actor=kpi_actor,
+                        timer_dims=d,
+                    )
 
-                total = len(preloaded_files)
-
-                async def event_stream():
-                    success = 0
-                    last_error: str | None = None
-                    for filename, input_temp_file in preloaded_files:
-                        file_started = time.perf_counter()
-                        file_status = "error"
-                        file_type = pathlib.Path(filename).suffix.lstrip(".") or None
-                        try:
-                            output_temp_dir = input_temp_file.parent.parent
-
-                            current_step = "metadata extraction"
-                            yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                            metadata = self.service.extract_metadata(user, file_path=input_temp_file, tags=tags, source_tag=source_tag)
-                            metadata_file_type = getattr(metadata, "file_type", None)
-                            file_type = metadata_file_type or file_type
-                            yield ProcessingProgress(step=current_step, status=Status.SUCCESS, filename=filename).model_dump_json() + "\n"
-
-                            current_step = "input content saving"
-                            yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                            self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
-                            yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
-
-                            current_step = "input processing"
-                            yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                            metadata = await input_process(user=user, input_file=input_temp_file, metadata=metadata)
-                            yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
-
-                            current_step = "output processing"
-                            file_to_process = FileToProcess(document_uid=metadata.document_uid, external_path=None, source_tag=source_tag, tags=tags, processed_by=user)
-                            yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                            metadata = await output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
-                            yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
-                            yield ProcessingProgress(step="Finished", filename=filename, status=Status.FINISHED, document_uid=metadata.document_uid).model_dump_json() + "\n"
-                            success += 1
-                            file_status = "ok"
-
-                        except Exception as e:
-                            error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
-                            last_error = error_message
-                            logger.exception("Ingestion error during '%s' for file '%s'", current_step, filename, exc_info=True)
-                            yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n"
-                        finally:
-                            duration_ms = (time.perf_counter() - file_started) * 1000.0
-                            kpi.emit(
-                                name="ingestion.document_duration_ms",
-                                type="timer",
-                                value=duration_ms,
-                                unit="ms",
-                                dims={"file_type": file_type, "status": file_status, "source": "api"},
-                                actor=KPIActor(type="human", user_id=user.uid, groups=user.groups),
-                            )
-                    d["status"] = "ok" if success == total else "error"
-                    overall_status = Status.SUCCESS if success == total else Status.ERROR
-                    done_payload: dict = {"step": "done", "status": overall_status}
-                    if last_error:
-                        done_payload["error"] = last_error
-                    yield json.dumps(done_payload) + "\n"
-
-                return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+                return StreamingResponse(event_stream, media_type="application/x-ndjson")
 
         @router.post(
             "/fast/text",
@@ -719,11 +878,11 @@ class IngestionController:
             description=(
                 """
                 Extract compact text via the fast processor and store it as vectors with user/session scoping.
-                Skips heavy pandoc/Temporal paths.
+                Uses scheduler backend from configuration (memory or temporal) for vector storage.
             """
             ),
         )
-        def fast_ingest(
+        async def fast_ingest(
             file: UploadFile = File(...),
             options_json: Optional[str] = Form(None, description="JSON string of FastTextOptions"),
             session_id: Optional[str] = Form(None, description="Optional chat session id for scoping"),
@@ -818,11 +977,27 @@ class IngestionController:
                 }
                 docs.append(Document(page_content=text, metadata=doc_meta))
 
+            app_context = ApplicationContext.get_instance()
+            scheduler_backend = app_context.get_scheduler_backend()
             try:
-                ids = self.vector_store.add_documents(docs)
-                chunks = len(ids) if isinstance(ids, (list, tuple, set)) else len(docs)
+                if scheduler_backend == "temporal":
+                    if self._temporal_client_provider is None or not self._temporal_task_queue:
+                        raise HTTPException(status_code=500, detail="Temporal scheduler is not configured for fast ingest.")
+                    payload = {"documents": [{"page_content": d.page_content, "metadata": d.metadata} for d in docs]}
+                    client = await self._temporal_client_provider.get_client()
+                    workflow_result = await client.execute_workflow(
+                        FastStoreVectors.run,
+                        payload,
+                        id=f"fast-ingest-{document_uid}",
+                        task_queue=self._temporal_task_queue,
+                    )
+                    chunks = int((workflow_result or {}).get("chunks", len(docs)))
+                else:
+                    ids = self.vector_store.add_documents(docs)
+                    chunks = len(ids) if isinstance(ids, (list, tuple, set)) else len(docs)
                 logger.info(
-                    "[FAST TEXT][INGEST] Stored vectors doc_uid=%s chunks=%d user=%s session=%s scope=%s per_page=%s",
+                    "[FAST TEXT][INGEST] Stored vectors backend=%s doc_uid=%s chunks=%d user=%s session=%s scope=%s per_page=%s",
+                    scheduler_backend,
                     document_uid,
                     chunks,
                     user.uid,
@@ -830,6 +1005,8 @@ class IngestionController:
                     scope,
                     bool(result.pages),
                 )
+            except HTTPException:
+                raise
             except Exception:
                 logger.exception("[FAST TEXT][INGEST] Failed to store vectors for %s", filename)
                 raise HTTPException(status_code=500, detail="Failed to store vectors")
@@ -848,7 +1025,7 @@ class IngestionController:
             summary="Delete vectors for a fast ingested document",
             description="Remove vectors created via /fast/ingest (identified by document_uid).",
         )
-        def delete_fast_ingest(
+        async def delete_fast_ingest(
             document_uid: str,
             session_id: Optional[str] = Query(None, description="Optional session_id for scoped cleanup"),
             user: KeycloakUser = Depends(get_current_user),
@@ -859,9 +1036,22 @@ class IngestionController:
                     user.uid,
                     document_uid,
                     session_id,
-                    self.vector_store.__class__.__name__,
+                    ApplicationContext.get_instance().get_scheduler_backend(),
                 )
-                self.vector_store.delete_vectors_for_document(document_uid=document_uid)
+                app_context = ApplicationContext.get_instance()
+                scheduler_backend = app_context.get_scheduler_backend()
+                if scheduler_backend == "temporal":
+                    if self._temporal_client_provider is None or not self._temporal_task_queue:
+                        raise HTTPException(status_code=500, detail="Temporal scheduler is not configured for fast ingest deletion.")
+                    client = await self._temporal_client_provider.get_client()
+                    await client.execute_workflow(
+                        FastDeleteVectors.run,
+                        {"document_uid": document_uid},
+                        id=f"fast-delete-{document_uid}",
+                        task_queue=self._temporal_task_queue,
+                    )
+                else:
+                    self.vector_store.delete_vectors_for_document(document_uid=document_uid)
                 logger.info(
                     "[FAST TEXT][INGEST] Deleted vectors for doc_uid=%s user=%s session=%s",
                     document_uid,
