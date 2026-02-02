@@ -67,8 +67,12 @@ async def get_team_by_id(user: KeycloakUser, team_id: str) -> Team:
     await rebac.check_user_permission_or_raise(user, TeamPermission.CAN_READ, team_id, consistency_token=consistency_token)
 
     # Create group summary from raw Keycloak data
+    group_id = raw_group.get("id")
+    if not group_id:
+        raise TeamNotFoundError(team_id)
+
     group_summary = KeycloakGroupSummary(
-        id=raw_group.get("id"),
+        id=group_id,
         name=raw_group.get("name"),
         member_count=0,  # Will be populated by enrichment
     )
