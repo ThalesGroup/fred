@@ -48,9 +48,9 @@ from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from sentence_transformers import CrossEncoder
+from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
-# from fred_core.filesystem.local_filesystem import LocalFilesystem
-# from fred_core.filesystem.minio_filesystem import MinioFilesystem
 from knowledge_flow_backend.common.structures import (
     ChromaVectorStorageConfig,
     Configuration,
@@ -270,6 +270,8 @@ class ApplicationContext:
     _rebac_engine: Optional[RebacEngine] = None
     _neo4j_driver: Optional[Driver] = None
     _filesystem_instance: Optional[BaseFilesystem] = None
+    _async_sql_engine: Optional[AsyncEngine] = None
+    _sql_engine: Optional[Engine] = None
 
     def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
@@ -664,10 +666,8 @@ class ApplicationContext:
             db_path = Path(store_config.duckdb_path).expanduser()
             self._metadata_store_instance = DuckdbMetadataStore(db_path)
         elif isinstance(store_config, PostgresTableConfig):
-            postgres_config = get_configuration().storage.postgres
-            engine = create_engine_from_config(postgres_config)
             self._metadata_store_instance = PostgresMetadataStore(
-                engine=engine,
+                engine=self.get_sql_engine(),
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )
@@ -706,6 +706,30 @@ class ApplicationContext:
             connection_class=RequestsHttpConnection,
         )
         return self._opensearch_client
+
+    def get_sql_engine(self) -> Engine:
+        """Create one SQL engine for the whole app"""
+        if self._sql_engine is None:
+            # For now, only Postgres is supported
+            pg = get_configuration().storage.postgres
+            if not pg:
+                raise ValueError("PostgreSQL configuration is required for sql engine")
+
+            self._sql_engine = create_engine_from_config(pg)
+
+        return self._sql_engine
+
+    def get_async_sql_engine(self) -> AsyncEngine:
+        """Create one async SQL engine for the whole app"""
+        if self._async_sql_engine is None:
+            # For now, only Postgres is supported
+            pg = get_configuration().storage.postgres
+            if not pg:
+                raise ValueError("PostgreSQL configuration is required for async sql engine")
+
+            self._async_sql_engine = create_async_engine_from_config(pg)
+
+        return self._async_sql_engine
 
     def get_neo4j_driver(self) -> Driver:
         """
@@ -782,10 +806,8 @@ class ApplicationContext:
             db_path = Path(store_config.duckdb_path).expanduser()
             self._tag_store_instance = DuckdbTagStore(db_path)
         elif isinstance(store_config, PostgresTableConfig):
-            pg = get_configuration().storage.postgres
-            engine = create_engine_from_config(pg)
             self._tag_store_instance = PostgresTagStore(
-                engine=engine,
+                engine=self.get_sql_engine(),
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )
@@ -810,18 +832,8 @@ class ApplicationContext:
 
     def get_team_metadata_store(self) -> BaseTeamMetadataStore:
         """Get the team metadata store instance."""
-        if self._team_metadata_store_instance is not None:
-            return self._team_metadata_store_instance
-
-        pg = get_configuration().storage.postgres
-        if not pg:
-            raise ValueError("PostgreSQL configuration is required for team metadata store")
-
-        # Use async engine for team metadata store
-        async_engine = create_async_engine_from_config(pg)
-        self._team_metadata_store_instance = PostgresTeamMetadataStore(engine=async_engine)
-
-        return self._team_metadata_store_instance
+        # No choice, team store only support SQLAlchemy compatible db (Postgres, SQLite...)
+        return PostgresTeamMetadataStore(engine=self.get_async_sql_engine())
 
     def get_resource_store(self) -> BaseResourceStore:
         if self._resource_store_instance is not None:
@@ -832,10 +844,8 @@ class ApplicationContext:
             db_path = Path(store_config.duckdb_path).expanduser()
             self._resource_store_instance = DuckdbResourceStore(db_path)
         elif isinstance(store_config, PostgresTableConfig):
-            pg = get_configuration().storage.postgres
-            engine = create_engine_from_config(pg)
             self._resource_store_instance = PostgresResourceStore(
-                engine=engine,
+                engine=self.get_sql_engine(),
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )

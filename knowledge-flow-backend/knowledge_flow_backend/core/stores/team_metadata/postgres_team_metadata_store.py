@@ -14,12 +14,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
-from sqlmodel import SQLModel, col, select
+from sqlmodel import col, select
 
 from knowledge_flow_backend.core.stores.team_metadata.base_team_metadata_store import (
     BaseTeamMetadataStore,
@@ -43,22 +42,6 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
     def __init__(self, engine: AsyncEngine):
         self.engine = engine
         self.async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-        # Create tables asynchronously during initialization
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(self._create_tables())
-        except RuntimeError:
-            # No event loop running, create one
-            asyncio.run(self._create_tables())
-
-        logger.info("[TEAM_METADATA][PG] Async store initialized")
-
-    async def _create_tables(self):
-        """Create tables if they don't exist."""
-        async with self.engine.begin() as conn:
-            await conn.run_sync(SQLModel.metadata.create_all)
-        logger.info("[TEAM_METADATA][PG] Table ready: team_metadata")
 
     @staticmethod
     def _validate_team_id(team_id: TeamId) -> None:

@@ -38,6 +38,7 @@ from fred_core import (
 from fred_core.kpi import emit_process_kpis
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
+from sqlmodel import SQLModel
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.application_state import attach_app
@@ -136,6 +137,13 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        # Initialize database tables
+        # todo: migration tool like Alembic instead of this
+        engine = application_context.get_async_sql_engine()
+        async with engine.begin() as conn:
+            await conn.run_sync(SQLModel.metadata.create_all)
+        logger.info("%s Database tables created/verified", LOG_PREFIX)
+
         async def periodic_reconciliation() -> None:
             while True:
                 try:
@@ -188,7 +196,7 @@ def create_app() -> FastAPI:
     # Register exception handlers
     register_exception_handlers(app)
     teams_controller.register_exception_handlers(app)
-    
+
     allowed_origins = list({_norm_origin(o) for o in configuration.security.authorized_origins})
     logger.info("%s[CORS] allow_origins=%s", LOG_PREFIX, allowed_origins)
     app.add_middleware(
