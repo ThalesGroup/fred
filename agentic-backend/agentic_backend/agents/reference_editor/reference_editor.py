@@ -251,7 +251,9 @@ class ReferenceEditor(AgentFlow):
     async def aclose(self):
         await self.mcp.aclose()
 
-    def get_compiled_graph(self, checkpointer: Checkpointer | None = None) -> CompiledStateGraph:
+    def get_compiled_graph(
+        self, checkpointer: Checkpointer | None = None
+    ) -> CompiledStateGraph:
         template_tool = self.get_template_tool()
         word_template_tool = self.get_word_template_tool()
         validator_tool = self.get_validator_tool()

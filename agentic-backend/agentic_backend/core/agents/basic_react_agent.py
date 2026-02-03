@@ -130,7 +130,9 @@ class BasicReActAgent(AgentFlow):
     async def aclose(self):
         await self.mcp.aclose()
 
-    def get_compiled_graph(self, checkpointer: Checkpointer | None = None) -> CompiledStateGraph:
+    def get_compiled_graph(
+        self, checkpointer: Checkpointer | None = None
+    ) -> CompiledStateGraph:
         base_prompt = self.render(self.get_tuned_text("prompts.system") or "")
         return create_agent(
             model=get_default_chat_model(),
