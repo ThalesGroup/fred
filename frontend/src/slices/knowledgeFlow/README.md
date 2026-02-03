@@ -28,22 +28,41 @@ To add cache invalidation for auto-generated endpoints:
    ```
 
 2. Enhance endpoints in `knowledgeFlowApiEnhancements.ts`:
+
+   **For a single resource:**
    ```typescript
-   export const enhancedKnowledgeFlowApi = knowledgeFlowApi.enhanceEndpoints({
-     endpoints: {
-       getYourResource: {
-         providesTags: (result, error, arg) => [{ type: "YourNewTag", id: arg.id }],
-       },
-       updateYourResource: {
-         invalidatesTags: (result, error, arg) => [{ type: "YourNewTag", id: arg.id }],
-       },
-     },
-   });
+   getYourResource: {
+     providesTags: (_, __, arg) => [{ type: "YourNewTag", id: arg.id }],
+   },
+   updateYourResource: {
+     invalidatesTags: (_, __, arg) => [{ type: "YourNewTag", id: arg.id }],
+   },
+   ```
+
+   **For a list resource:**
+   ```typescript
+   listYourResources: {
+     providesTags: (result) =>
+       result
+         ? [...result.map((item) => ({ type: "YourNewTag", id: item.id })), { type: "YourNewTag", id: "LIST" }]
+         : [{ type: "YourNewTag", id: "LIST" }],
+   },
+   ```
+
+   When updating a resource, invalidate both the specific item and the list:
+   ```typescript
+   updateYourResource: {
+     invalidatesTags: (_, __, arg) => [
+       { type: "YourNewTag", id: arg.id },
+       { type: "YourNewTag", id: "LIST" },
+     ],
+   },
    ```
 
 3. Re-export the hooks you need:
    ```typescript
    export const {
+     useListYourResourcesQuery,
      useGetYourResourceQuery,
      useUpdateYourResourceMutation,
    } = enhancedKnowledgeFlowApi;

@@ -36,7 +36,7 @@ import { SideBarNewConversationButton } from "../components/sideBar/SideBarNewCo
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { KeyCloakService } from "../security/KeycloakService";
 import { usePermissions } from "../security/usePermissions";
-import { useListTeamsKnowledgeFlowV1TeamsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useListTeamsKnowledgeFlowV1TeamsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
 import { ImageComponent } from "../utils/image";
 import { ApplicationContext } from "./ApplicationContextProvider";
 

@@ -1,7 +1,7 @@
 import { Box, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { TeamCard } from "../components/teams/TeamCard";
-import { useListTeamsKnowledgeFlowV1TeamsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useListTeamsKnowledgeFlowV1TeamsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
 
 export function TeamsPage() {
   const { t } = useTranslation();
