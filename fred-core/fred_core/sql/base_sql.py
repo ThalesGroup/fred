@@ -17,11 +17,12 @@ from __future__ import annotations
 import contextlib
 import logging
 import re
-from typing import Any, Iterator, Mapping, Sequence
+from typing import Any, Iterator, Literal, Mapping, Sequence, overload
 
 from sqlalchemy import Table, create_engine
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.sql import ClauseElement
 
 from fred_core.common.structures import PostgresStoreConfig
@@ -29,11 +30,39 @@ from fred_core.common.structures import PostgresStoreConfig
 logger = logging.getLogger(__name__)
 
 
-def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
+@overload
+def _build_engine_from_config(
+    config: PostgresStoreConfig,
+    *,
+    async_mode: Literal[False] = False,
+) -> Engine: ...
+
+
+@overload
+def _build_engine_from_config(
+    config: PostgresStoreConfig,
+    *,
+    async_mode: Literal[True],
+) -> AsyncEngine: ...
+
+
+def _build_engine_from_config(
+    config: PostgresStoreConfig,
+    *,
+    async_mode: bool = False,
+) -> Engine | AsyncEngine:
     """
-    Build a SQLAlchemy Engine for Postgres from a PostgresStoreConfig.
-    Adds explicit logging and validation of required fields to ease debugging.
+    Internal helper to build a SQLAlchemy Engine (sync or async) from a PostgresStoreConfig.
+
+    Args:
+        config: PostgreSQL configuration
+        async_mode: If True, creates an AsyncEngine with asyncpg driver. If False, creates a sync Engine.
+
+    Returns:
+        Engine or AsyncEngine instance
     """
+    context = "AsyncEngine" if async_mode else "Engine"
+
     missing = [
         name
         for name in ("host", "database", "username")
@@ -41,7 +70,7 @@ def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
     ]
     if missing:
         raise ValueError(
-            f"[SQL][Engine] Missing required Postgres config fields: {', '.join(missing)}"
+            f"[SQL][{context}] Missing required Postgres config fields: {', '.join(missing)}"
         )
 
     connect_args: dict[str, Any] = (
@@ -51,9 +80,17 @@ def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
     def _mask_dsn(dsn: str) -> str:
         return re.sub(r":([^:@]+)@", ":***@", dsn)
 
-    masked_dsn = _mask_dsn(config.dsn())
+    # For async mode, convert postgresql:// to postgresql+asyncpg://
+    dsn = config.dsn()
+    if async_mode:
+        dsn = dsn.replace("postgresql://", "postgresql+asyncpg://")
+
+    masked_dsn = _mask_dsn(dsn)
+
     logger.info(
-        "[SQL][Engine] Creating engine: url=%s host=%s port=%s db=%s user=%s pwd_set=%s echo=%s pool_size=%s connect_args=%s",
+        "[SQL][%s] Creating %s: url=%s host=%s port=%s db=%s user=%s pwd_set=%s echo=%s pool_size=%s connect_args=%s",
+        context,
+        "async engine" if async_mode else "engine",
         masked_dsn,
         config.host,
         config.port,
@@ -66,18 +103,27 @@ def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
     )
 
     try:
-        engine = create_engine(
-            config.dsn(),
-            echo=config.echo,
-            pool_size=config.pool_size or 5,
-            connect_args=connect_args,
-        )
-        logger.info("[SQL][Engine] Engine created successfully.")
+        if async_mode:
+            engine = create_async_engine(
+                dsn,
+                echo=config.echo,
+                pool_size=config.pool_size or 5,
+                connect_args=connect_args,
+            )
+        else:
+            engine = create_engine(
+                dsn,
+                echo=config.echo,
+                pool_size=config.pool_size or 5,
+                connect_args=connect_args,
+            )
+        logger.info("[SQL][%s] %s created successfully.", context, "Async engine" if async_mode else "Engine")
         return engine
     except Exception as exc:
-        logger.exception("[SQL][Engine] Failed to create engine: %s", exc)
+        logger.exception("[SQL][%s] Failed to create %s: %s", context, "async engine" if async_mode else "engine", exc)
         logger.error(
-            "[SQL][Engine] Debug details: url=%s host=%s port=%s db=%s user=%s pwd_set=%s echo=%s pool_size=%s connect_args=%s",
+            "[SQL][%s] Debug details: url=%s host=%s port=%s db=%s user=%s pwd_set=%s echo=%s pool_size=%s connect_args=%s",
+            context,
             masked_dsn,
             config.host,
             config.port,
@@ -89,6 +135,22 @@ def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
             connect_args,
         )
         raise
+
+
+def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
+    """
+    Build a SQLAlchemy Engine for Postgres from a PostgresStoreConfig.
+    Adds explicit logging and validation of required fields to ease debugging.
+    """
+    return _build_engine_from_config(config, async_mode=False)
+
+
+def create_async_engine_from_config(config: PostgresStoreConfig) -> AsyncEngine:
+    """
+    Build an async SQLAlchemy Engine for Postgres from a PostgresStoreConfig.
+    Uses asyncpg driver for async operations.
+    """
+    return _build_engine_from_config(config, async_mode=True)
 
 
 class BaseSqlStore:

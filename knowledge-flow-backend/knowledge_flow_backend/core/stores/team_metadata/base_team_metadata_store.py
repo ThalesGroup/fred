@@ -58,7 +58,7 @@ class BaseTeamMetadataStore(ABC):
     """
 
     @abstractmethod
-    def get_by_team_id(self, team_id: TeamId) -> TeamMetadata:
+    async def get_by_team_id(self, team_id: TeamId) -> TeamMetadata:
         """
         Retrieve team metadata by team ID.
 
@@ -74,7 +74,7 @@ class BaseTeamMetadataStore(ABC):
         pass
 
     @abstractmethod
-    def get_by_team_ids(self, team_ids: list[TeamId]) -> dict[TeamId, TeamMetadata]:
+    async def get_by_team_ids(self, team_ids: list[TeamId]) -> dict[TeamId, TeamMetadata]:
         """
         Retrieve multiple team metadata by team IDs in a single query.
 
@@ -88,7 +88,7 @@ class BaseTeamMetadataStore(ABC):
         pass
 
     @abstractmethod
-    def create(self, metadata: TeamMetadata) -> TeamMetadata:
+    async def create(self, metadata: TeamMetadata) -> TeamMetadata:
         """
         Create new team metadata.
 
@@ -104,7 +104,7 @@ class BaseTeamMetadataStore(ABC):
         pass
 
     @abstractmethod
-    def update(self, team_id: TeamId, update_data: TeamMetadataUpdate) -> TeamMetadata:
+    async def update(self, team_id: TeamId, update_data: TeamMetadataUpdate) -> TeamMetadata:
         """
         Update existing team metadata using SQLModel pattern.
 
@@ -121,7 +121,7 @@ class BaseTeamMetadataStore(ABC):
         pass
 
     @abstractmethod
-    def upsert(self, team_id: TeamId, update_data: TeamMetadataUpdate) -> TeamMetadata:
+    async def upsert(self, team_id: TeamId, update_data: TeamMetadataUpdate) -> TeamMetadata:
         """
         Create or update team metadata (idempotent).
 
@@ -135,7 +135,7 @@ class BaseTeamMetadataStore(ABC):
         pass
 
     @abstractmethod
-    def delete(self, team_id: TeamId) -> None:
+    async def delete(self, team_id: TeamId) -> None:
         """
         Delete team metadata.
 
@@ -148,7 +148,7 @@ class BaseTeamMetadataStore(ABC):
         pass
 
     @abstractmethod
-    def list_all(self) -> list[TeamMetadata]:
+    async def list_all(self) -> list[TeamMetadata]:
         """
         List all team metadata.
 

@@ -110,7 +110,7 @@ async def update_team(user: KeycloakUser, team_id: TeamId, update_data: TeamUpda
     await rebac.check_user_permission_or_raise(user, TeamPermission.CAN_UPDATE_INFO, team_id, consistency_token=consistency_token)
 
     # Update metadata
-    metadata_store.upsert(team_id, update_data)
+    await metadata_store.upsert(team_id, update_data)
 
     # Handle public tuple if is_private was set (leveraging idempotency)
     if update_data.is_private is not None:
@@ -142,12 +142,10 @@ async def _enrich_groups_with_team_data(admin: KeycloakAdmin, rebac: RebacEngine
     if not groups:
         return []
 
-    # Batch fetch metadata for all teams
+    # Batch fetch metadata, team owners, and member counts in parallel
     team_ids: list[TeamId] = [g.id for g in groups]
-    metadata_map = metadata_store.get_by_team_ids(team_ids)
-
-    # Batch query OpenFGA for all team owners and Keycloak for member counts in parallel
-    team_owners_list, member_counts_list = await asyncio.gather(
+    metadata_map, team_owners_list, member_counts_list = await asyncio.gather(
+        metadata_store.get_by_team_ids(team_ids),
         asyncio.gather(*[_get_team_owners(rebac, team_id) for team_id in team_ids]),
         asyncio.gather(*[_fetch_group_member_ids(admin, team_id) for team_id in team_ids]),
     )

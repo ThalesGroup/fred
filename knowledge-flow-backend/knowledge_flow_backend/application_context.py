@@ -43,7 +43,7 @@ from fred_core import (
     split_realm_url,
 )
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIDefaults, KpiLogStore, KPIWriter, OpenSearchKPIStore, PrometheusKPIStore
-from fred_core.sql import create_engine_from_config
+from fred_core.sql import create_async_engine_from_config, create_engine_from_config
 from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
@@ -817,8 +817,9 @@ class ApplicationContext:
         if not pg:
             raise ValueError("PostgreSQL configuration is required for team metadata store")
 
-        engine = create_engine_from_config(pg)
-        self._team_metadata_store_instance = PostgresTeamMetadataStore(engine=engine)
+        # Use async engine for team metadata store
+        async_engine = create_async_engine_from_config(pg)
+        self._team_metadata_store_instance = PostgresTeamMetadataStore(engine=async_engine)
 
         return self._team_metadata_store_instance
 

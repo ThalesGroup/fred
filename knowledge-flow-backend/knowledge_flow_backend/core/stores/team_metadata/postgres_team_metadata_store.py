@@ -14,11 +14,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
-from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, SQLModel, col, select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlmodel import SQLModel, col, select
 
 from knowledge_flow_backend.core.stores.team_metadata.base_team_metadata_store import (
     BaseTeamMetadataStore,
@@ -36,14 +37,27 @@ logger = logging.getLogger(__name__)
 
 class PostgresTeamMetadataStore(BaseTeamMetadataStore):
     """
-    PostgreSQL-backed team metadata store using SQLModel.
+    PostgreSQL-backed team metadata store using SQLModel with async operations.
     """
 
-    def __init__(self, engine: Engine):
+    def __init__(self, engine: AsyncEngine):
         self.engine = engine
+        self.async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-        # Create tables
-        SQLModel.metadata.create_all(self.engine)
+        # Create tables asynchronously during initialization
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._create_tables())
+        except RuntimeError:
+            # No event loop running, create one
+            asyncio.run(self._create_tables())
+
+        logger.info("[TEAM_METADATA][PG] Async store initialized")
+
+    async def _create_tables(self):
+        """Create tables if they don't exist."""
+        async with self.engine.begin() as conn:
+            await conn.run_sync(SQLModel.metadata.create_all)
         logger.info("[TEAM_METADATA][PG] Table ready: team_metadata")
 
     @staticmethod
@@ -52,7 +66,7 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
         if not team_id or not team_id.strip():
             raise ValueError("team_id must not be empty")
 
-    def get_by_team_id(self, team_id: TeamId) -> TeamMetadata:
+    async def get_by_team_id(self, team_id: TeamId) -> TeamMetadata:
         """
         Retrieve team metadata by team ID.
 
@@ -67,13 +81,13 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
         """
         self._validate_team_id(team_id)
 
-        with Session(self.engine) as session:
-            metadata = session.get(TeamMetadata, team_id)
+        async with self.async_session_maker() as session:
+            metadata = await session.get(TeamMetadata, team_id)
             if not metadata:
                 raise TeamMetadataNotFoundError(f"Team metadata for team_id '{team_id}' not found.")
             return metadata
 
-    def get_by_team_ids(self, team_ids: list[TeamId]) -> dict[TeamId, TeamMetadata]:
+    async def get_by_team_ids(self, team_ids: list[TeamId]) -> dict[TeamId, TeamMetadata]:
         """
         Retrieve multiple team metadata by team IDs in a single query.
 
@@ -87,12 +101,13 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
         if not team_ids:
             return {}
 
-        with Session(self.engine) as session:
+        async with self.async_session_maker() as session:
             statement = select(TeamMetadata).where(col(TeamMetadata.id).in_(team_ids))
-            results = session.exec(statement)
-            return {metadata.id: metadata for metadata in results.all()}
+            result = await session.execute(statement)
+            metadata_list = result.scalars().all()
+            return {metadata.id: metadata for metadata in metadata_list}
 
-    def create(self, metadata: TeamMetadata) -> TeamMetadata:
+    async def create(self, metadata: TeamMetadata) -> TeamMetadata:
         """
         Create new team metadata.
 
@@ -107,11 +122,11 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
         """
         self._validate_team_id(metadata.id)
 
-        with Session(self.engine) as session:
+        async with self.async_session_maker() as session:
             try:
                 session.add(metadata)
-                session.commit()
-                session.refresh(metadata)
+                await session.commit()
+                await session.refresh(metadata)
 
                 logger.info(
                     "[TEAM_METADATA][PG] Created metadata for team_id: %s",
@@ -119,14 +134,14 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
                 )
                 return metadata
             except IntegrityError as e:
-                session.rollback()
+                await session.rollback()
                 # Check if it's a primary key violation (duplicate team_id)
                 if "duplicate key" in str(e).lower() or "unique constraint" in str(e).lower():
                     raise TeamMetadataAlreadyExistsError(f"Team metadata for team_id '{metadata.id}' already exists.") from e
                 # Re-raise other integrity errors (e.g., constraint violations)
                 raise
 
-    def update(self, team_id: TeamId, update_data: TeamMetadataUpdate) -> TeamMetadata:
+    async def update(self, team_id: TeamId, update_data: TeamMetadataUpdate) -> TeamMetadata:
         """
         Update existing team metadata using SQLModel pattern.
 
@@ -142,8 +157,8 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
         """
         self._validate_team_id(team_id)
 
-        with Session(self.engine) as session:
-            existing = session.get(TeamMetadata, team_id)
+        async with self.async_session_maker() as session:
+            existing = await session.get(TeamMetadata, team_id)
             if not existing:
                 raise TeamMetadataNotFoundError(f"Team metadata for team_id '{team_id}' not found.")
 
@@ -152,13 +167,13 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
             existing.sqlmodel_update(update_dict)
 
             session.add(existing)
-            session.commit()
-            session.refresh(existing)
+            await session.commit()
+            await session.refresh(existing)
 
             logger.info("[TEAM_METADATA][PG] Updated metadata for team_id: %s", team_id)
             return existing
 
-    def upsert(self, team_id: TeamId, update_data: TeamMetadataUpdate) -> TeamMetadata:
+    async def upsert(self, team_id: TeamId, update_data: TeamMetadataUpdate) -> TeamMetadata:
         """
         Create or update team metadata (idempotent).
 
@@ -170,8 +185,8 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
             The created or updated TeamMetadata
         """
         try:
-            self.get_by_team_id(team_id)
-            return self.update(team_id, update_data)
+            await self.get_by_team_id(team_id)
+            return await self.update(team_id, update_data)
         except TeamMetadataNotFoundError:
             # Create new metadata with provided fields
             update_dict = update_data.model_dump(exclude_unset=True)
@@ -179,9 +194,9 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
                 id=team_id,
                 **update_dict,
             )
-            return self.create(new_metadata)
+            return await self.create(new_metadata)
 
-    def delete(self, team_id: TeamId) -> None:
+    async def delete(self, team_id: TeamId) -> None:
         """
         Delete team metadata.
 
@@ -193,24 +208,24 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
         """
         self._validate_team_id(team_id)
 
-        with Session(self.engine) as session:
-            metadata = session.get(TeamMetadata, team_id)
+        async with self.async_session_maker() as session:
+            metadata = await session.get(TeamMetadata, team_id)
             if not metadata:
                 raise TeamMetadataNotFoundError(f"Team metadata for team_id '{team_id}' not found.")
 
-            session.delete(metadata)
-            session.commit()
+            await session.delete(metadata)
+            await session.commit()
 
             logger.info("[TEAM_METADATA][PG] Deleted metadata for team_id: %s", team_id)
 
-    def list_all(self) -> list[TeamMetadata]:
+    async def list_all(self) -> list[TeamMetadata]:
         """
         List all team metadata.
 
         Returns:
             List of all TeamMetadata objects
         """
-        with Session(self.engine) as session:
+        async with self.async_session_maker() as session:
             statement = select(TeamMetadata)
-            results = session.exec(statement)
-            return list(results.all())
+            result = await session.execute(statement)
+            return list(result.scalars().all())
