@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import List, Literal, Optional, Union
 
@@ -43,9 +44,11 @@ from fred_core import (
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 from starlette.websockets import WebSocketState
 
-from agentic_backend.application_context import get_configuration, get_rebac_engine
+from agentic_backend.application_context import (
+    get_configuration,
+    get_rebac_engine,
+)
 from agentic_backend.common.structures import AgentSettings, FrontendSettings
-from agentic_backend.common.utils import log_exception
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
@@ -70,6 +73,9 @@ from agentic_backend.core.chatbot.chat_schema import (
     SessionWithFiles,
     StreamEvent,
     TextPart,
+)
+from agentic_backend.core.chatbot.chatbot_benchmark_call import (
+    handle_chatbot_baseline_websocket,
 )
 from agentic_backend.core.chatbot.metric_structures import (
     MetricsBucket,
@@ -145,6 +151,20 @@ def _paginate_message_text(
     }
     metadata = message.metadata.model_copy(update={"extras": extras})
     return message.model_copy(update={"parts": paged_parts, "metadata": metadata})
+
+
+def _summarize_error(e: Exception, context: str | None = None) -> str:
+    """
+    Produce a single-line summary and log it once (no stack trace).
+    Fred is stable and performant and should not spam logs with full tracebacks
+    for expected errors (e.g. client disconnects, validation errors, etc).
+    """
+    summary = f"{type(e).__name__}: {e}"
+    if context:
+        logger.error("%s: %s", context, summary)
+    else:
+        logger.error("%s", summary)
+    return summary
 
 
 # ---------------- Echo types for UI OpenAPI ----------------
@@ -576,8 +596,16 @@ async def websocket_chatbot_question(
                 )
                 # Control-flow: awaiting_human already sent to client.
                 continue
+            except asyncio.CancelledError:
+                logger.error(
+                    "[CHATBOT WS] CancelledError (likely client disconnected) session_id=%s",
+                    client_request.get("session_id", "unknown-session")
+                    if isinstance(client_request, dict)
+                    else "unknown-session",
+                )
+                raise
             except Exception as e:
-                summary = log_exception(
+                summary = _summarize_error(
                     e, "INTERNAL Error processing chatbot client query"
                 )
                 session_id = (
@@ -585,22 +613,53 @@ async def websocket_chatbot_question(
                     if client_request
                     else "unknown-session"
                 )
-                if not await _safe_ws_send_text(
+                sent = await _safe_ws_send_text(
                     websocket,
                     ErrorEvent(
                         type="error", content=summary, session_id=session_id
                     ).model_dump_json(),
-                ):
+                )
+                if not sent:
                     logger.debug("WebSocket closed; cannot send error event.")
-                    break
+                # Align with baseline: stop the loop after an error.
+                try:
+                    await websocket.close(code=1011)
+                except Exception:
+                    logger.debug("WebSocket close failed", exc_info=True)
+                    pass
+                break
     except Exception as e:
-        summary = log_exception(e, "EXTERNAL Error processing chatbot client query")
+        summary = _summarize_error(e, "EXTERNAL Error processing chatbot client query")
         await _safe_ws_send_text(
             websocket,
             ErrorEvent(
                 type="error", content=summary, session_id="unknown-session"
             ).model_dump_json(),
         )
+        try:
+            await websocket.close(code=1011)
+        except Exception:
+            logger.debug("WebSocket close failed", exc_info=True)
+            pass
+
+
+@router.websocket("/chatbot/query/ws-baseline")
+async def websocket_chatbot_openai_baseline(websocket: WebSocket):
+    """
+    This endpoint is used to benchmark Fred against an extra simple one-call only
+    llm inetraction. It basically allow us to measure easily the overhead of Fred
+    against a direct call.
+    The actual logic is implemented in handle_chatbot_baseline_websocket()
+
+    Refer to the companion golang benchmark client for more details.
+    """
+    await websocket.accept()
+
+    await handle_chatbot_baseline_websocket(
+        websocket,
+        safe_send_text=_safe_ws_send_text,
+        summarize_error=_summarize_error,
+    )
 
 
 @router.get(

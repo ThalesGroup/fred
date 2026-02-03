@@ -101,7 +101,7 @@ ai:
       base_url: "http://localhost:8383/v1"
       timeout:
         connect: 10.0
-        read: 20.0
+        read: 30.0
         write: 30.0
         pool: 5.0
       http_client_limits:
@@ -231,8 +231,9 @@ storage:
     table: tasks
 
   kpi_store:
-    type: "log"
-    level: "INFO"
+    type: "opensearch"
+    index: kpi-index
 
   log_store:
-    type: "in_memory"
+    type: "opensearch"
+    index: log-index
