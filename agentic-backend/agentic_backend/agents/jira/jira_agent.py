@@ -2,6 +2,8 @@
 
 import logging
 import os
+import re
+from typing import Annotated
 
 from langchain.agents import AgentState, create_agent
 from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
@@ -28,14 +30,63 @@ from agentic_backend.core.runtime_source import expose_runtime_source
 logger = logging.getLogger(__name__)
 
 
+def list_reducer(current: list[dict], update: list[dict]) -> list[dict]:
+    """
+    Custom reducer for list state that handles concurrent updates.
+
+    Supports two operations:
+    - Add: Items without __remove__ marker are appended to the list
+    - Remove: Items with {"__remove__": item_id} remove that ID from the list
+
+    Also resolves ID conflicts from parallel tool calls by reassigning IDs.
+    """
+    remove_ids = set()
+    add_items = []
+
+    for item in update:
+        if "__remove__" in item:
+            remove_ids.add(item["__remove__"])
+        else:
+            add_items.append(item)
+
+    # Filter out removed items from current list
+    result = [item for item in current if item.get("id") not in remove_ids]
+
+    # Track existing IDs to detect conflicts
+    existing_ids = {item.get("id") for item in result if item.get("id")}
+
+    # Append new items one by one, resolving ID conflicts
+    for item in add_items:
+        item_id = item.get("id")
+        if isinstance(item_id, str) and item_id in existing_ids:
+            # ID conflict - extract prefix (e.g., "US-", "EX-FON-", "SC-")
+            match = re.match(r"^(.+-)\d+$", item_id)
+            if match:
+                prefix = match.group(1)
+                # Find max number with this prefix
+                max_num = 0
+                for existing in result:
+                    eid = existing.get("id", "")
+                    if eid.startswith(prefix):
+                        m = re.search(r"-(\d+)$", eid)
+                        if m:
+                            max_num = max(max_num, int(m.group(1)))
+                new_id = f"{prefix}{max_num + 1:02d}"
+                item = {**item, "id": new_id}
+        existing_ids.add(item.get("id"))
+        result.append(item)
+
+    return result
+
+
 class CustomState(AgentState):
     """Custom state for Jira agent with requirements, user stories, and tests."""
 
-    requirements: list[dict]  # Validated against requirementsSchema
-    user_story_titles: list[dict]  # List of {id, title, epic_name} for batch gen
-    user_stories: list[dict]  # Validated against userStoriesSchema
-    test_titles: list[dict]  # List of {id, title, us_id, test_type} for batch gen
-    tests: list[dict]  # Validated against testsSchema
+    requirements: Annotated[list[dict], list_reducer]
+    user_story_titles: Annotated[list[dict], list_reducer]
+    user_stories: Annotated[list[dict], list_reducer]
+    test_titles: Annotated[list[dict], list_reducer]
+    tests: Annotated[list[dict], list_reducer]
 
 
 @expose_runtime_source("agent.Jim")

@@ -234,7 +234,6 @@ Tu dois générer des User Stories COMPLÉMENTAIRES qui n'existent pas encore.
             UserStoryTitlesList, await model.ainvoke(messages, config=config)
         )
         new_titles = [t.model_dump() for t in response.items]
-        logger.info(f"US TITLES: {existing_titles + new_titles}")
         return existing_titles + new_titles
 
     async def _generate_user_story_batch(

@@ -221,13 +221,12 @@ Génère:
                 **expanded,
             }
 
-            # Validate and add to state
+            # Validate and add to state (reducer handles appending)
             validated = Requirement.model_validate(new_req)
-            existing = runtime.state.get("requirements") or []
 
             return Command(
                 update={
-                    "requirements": existing + [validated.model_dump()],
+                    "requirements": [validated.model_dump()],
                     "messages": [
                         ToolMessage(
                             f"✓ Exigence {next_id} ajoutée: {title}",
@@ -286,13 +285,12 @@ Génère:
                 **expanded,
             }
 
-            # Validate and add to state
+            # Validate and add to state (reducer handles appending)
             validated = UserStory.model_validate(new_story)
-            existing = runtime.state.get("user_stories") or []
 
             return Command(
                 update={
-                    "user_stories": existing + [validated.model_dump()],
+                    "user_stories": [validated.model_dump()],
                     "messages": [
                         ToolMessage(
                             f"✓ User Story {next_id} ajoutée: {title}",
@@ -364,13 +362,12 @@ Génère:
                 **expanded,
             }
 
-            # Validate and add to state
+            # Validate and add to state (reducer handles appending)
             validated = Test.model_validate(new_test)
-            existing = runtime.state.get("tests") or []
 
             return Command(
                 update={
-                    "tests": existing + [validated.model_dump()],
+                    "tests": [validated.model_dump()],
                     "messages": [
                         ToolMessage(
                             f"✓ Test {next_id} ajouté: {title}",
@@ -411,10 +408,11 @@ Génère:
                     }
                 )
 
+            # Check if item exists before removing
             existing = runtime.state.get(item_type) or []
-            filtered = [item for item in existing if item.get("id") != item_id]
+            item_exists = any(item.get("id") == item_id for item in existing)
 
-            if len(filtered) == len(existing):
+            if not item_exists:
                 return Command(
                     update={
                         "messages": [
@@ -432,9 +430,10 @@ Génère:
                 "tests": "test",
             }
 
+            # Use removal marker - reducer will handle filtering
             return Command(
                 update={
-                    item_type: filtered,
+                    item_type: [{"__remove__": item_id}],
                     "messages": [
                         ToolMessage(
                             f"✓ {type_labels[item_type]} {item_id} supprimée",
