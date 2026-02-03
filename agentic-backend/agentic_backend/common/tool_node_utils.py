@@ -16,16 +16,13 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import Any, Sequence
 
 from langchain.agents.middleware import wrap_tool_call
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import ToolCallRequest
-
-if TYPE_CHECKING:
-    from langchain.agents.middleware import AgentMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +58,7 @@ def _normalize_mcp_content(content) -> str:
     return json.dumps(content)
 
 
-@wrap_tool_call
+@wrap_tool_call  # pyright: ignore[reportCallIssue, reportArgumentType]
 async def normalize_mcp_tool_content(
     request: ToolCallRequest, handler: Any
 ) -> ToolMessage:
@@ -95,11 +92,6 @@ async def normalize_mcp_tool_content(
             )
 
     return result
-
-
-# Explicit type annotation for the decorated middleware
-# (helps type checkers since @wrap_tool_call's async overload is not fully typed)
-normalize_mcp_tool_content: "AgentMiddleware[Any, Any]"  # type: ignore[no-redef]
 
 
 def friendly_mcp_tool_error_handler(e: Exception) -> str:
