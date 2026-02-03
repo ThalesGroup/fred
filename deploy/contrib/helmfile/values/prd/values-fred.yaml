@@ -122,29 +122,38 @@ applications:
       storage:
         # Set Postgres connection params
         postgres: &storage-postgres
-          host: postgres
+          host: "postgresql-primary"
           port: 5432
           database: fred
-          username: admin
+          # todo: use fred user
+          username: postgres
+          
 
         # Set Opensearch connection params
         opensearch: &storage-opensearch
           host: https://prism-opensearch-prd.six.cloud.thales
           # verify_certs: true # todo: set to true
 
-        # Set all store to opensearch
+        # Set most stores on Postgres
         feedback_store:
-          type: "opensearch"
-          index: feedback-index
+          type: "postgres"
+          table: feedbacks
         agent_store:
-          type: "opensearch"
-          index: agent-index
+          type: "postgres"
+          table: agent
+        mcp_servers_store:
+          type: "postgres"
+          table: mcp-server
         session_store:
-          type: "opensearch"
-          index: session-index
+          type: "postgres"
+          table: session
+        attachments_store:
+          type: "postgres"
+          table: session_attachments
         history_store:
-          type: "opensearch"
-          index: history-index
+          type: "postgres"
+          table: session_history
+        # Set KPI and Logs on Opensearch
         kpi_store:
           type: "opensearch"
           index: kpi-index
@@ -265,27 +274,28 @@ applications:
         # Set Opensearch connection params
         opensearch: *storage-opensearch
 
-        # Set all store to opensearch
+        # Set most of stores on Postgres
         catalog_store:
-          type: "opensearch"
-          index: "catalog-index"
+          type: "postgres"
+          table: catalog
         prompt_store:
-          type: "opensearch"
-          index: prompt-index
+          type: "postgres"
+          table: prompt
         resource_store:
-          type: "opensearch"
-          index: resource-index
+          type: "postgres"
+          table: resource
+        tag_store:
+          type: "postgres"
+          table: tag
+        metadata_store:
+          type: "postgres"
+          table: metadata
+        # Set KPI and vector on opensearch
         kpi_store:
           type: "opensearch"
           index: kpi-index
-        tag_store:
-          type: "opensearch"
-          index: tag-index
-        metadata_store:
-          type: "opensearch"
-          index: metadata-index
         vector_store:
-          type: opensearch
+          type: "opensearch"
           index: vector-index-3-large
           # Default bulk size for vector insertions is 500. Increase if you have
           # enough memory and want faster ingestion. Or if run into ingestion errors
@@ -298,15 +308,11 @@ applications:
         # Set tabular store to opensearch
         tabular_stores:
           base_database:
+            <<: *storage-postgres
             type: "sql"
             mode: read_and_write
-            driver: "postgresql+psycopg2"
-            host: "postgresql-primary"
-            port: 5432
-            database: "fred"
+            driver: "postgresql+psycopg2"            
             path: null # (important: remove the `path` default value)
-            # todo: use fred user
-            username: postgres
 
       # Enable filesystem mcp
       mcp:
