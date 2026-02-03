@@ -21,6 +21,21 @@ export const enhancedKnowledgeFlowApi = knowledgeFlowApi.enhanceEndpoints({
         { type: "Team" as const, id: "LIST" },
       ],
     },
+    listTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGet: {
+      providesTags: (result, _, arg) =>
+        result
+          ? [
+              ...result.map((member) => ({ type: "TeamMember" as const, id: `${arg.teamId}-${member.user.id}` })),
+              { type: "TeamMember" as const, id: `LIST-${arg.teamId}` },
+            ]
+          : [{ type: "TeamMember" as const, id: `LIST-${arg.teamId}` }],
+    },
+    updateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatch: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "TeamMember" as const, id: `${arg.teamId}-${arg.userId}` },
+        { type: "TeamMember" as const, id: `LIST-${arg.teamId}` },
+      ],
+    },
   },
 });
 
@@ -29,4 +44,6 @@ export const {
   useListTeamsKnowledgeFlowV1TeamsGetQuery,
   useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery,
   useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation,
+  useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
+  useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation,
 } = enhancedKnowledgeFlowApi;

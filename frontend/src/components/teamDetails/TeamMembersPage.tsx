@@ -14,11 +14,17 @@ import {
   Typography,
 } from "@mui/material";
 import { useTranslation } from "react-i18next";
-import { useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
+  useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation,
+} from "../../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
+import { UserTeamRelation } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface TeamMembersPageProps {
   teamId: string;
 }
+
+const TEAM_ROLES: UserTeamRelation[] = ["owner", "manager", "member"];
 
 export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
   const { t } = useTranslation();
@@ -27,6 +33,16 @@ export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
   // todo: handle loading
   // todo: handle error
   // todo: handle empty state
+
+  const [updateTeamMember] = useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation();
+
+  const handleRoleChange = async (userId: string, newRelation: UserTeamRelation) => {
+    await updateTeamMember({
+      teamId,
+      userId,
+      updateTeamMemberRequest: { relation: newRelation },
+    });
+  };
 
   return (
     <Box sx={{ px: 2, pb: 2, display: "flex", height: "100%" }}>
@@ -75,10 +91,16 @@ export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
                   <TableCell>{member.user.first_name}</TableCell>
                   <TableCell>{member.user.last_name}</TableCell>
                   <TableCell>
-                    <Select value={member.relation} size="small">
-                      <MenuItem value={"owner"}>{t("teamMembersPage.teamRole.owner")}</MenuItem>
-                      <MenuItem value={"manager"}>{t("teamMembersPage.teamRole.manager")}</MenuItem>
-                      <MenuItem value={"member"}>{t("teamMembersPage.teamRole.member")}</MenuItem>
+                    <Select<UserTeamRelation>
+                      value={member.relation}
+                      size="small"
+                      onChange={(event) => handleRoleChange(member.user.id, event.target.value as UserTeamRelation)} // not sure why casting was necessary...
+                    >
+                      {TEAM_ROLES.map((role) => (
+                        <MenuItem key={role} value={role}>
+                          {t(`teamMembersPage.teamRole.${role}`)}
+                        </MenuItem>
+                      ))}
                     </Select>
                   </TableCell>
                   <TableCell></TableCell>
