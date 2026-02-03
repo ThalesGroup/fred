@@ -42,8 +42,8 @@ class TimestampMixin(SQLModel):
 class TeamMetadataBase(SQLModel):
     """Base model for team metadata fields."""
 
-    description: str | None = Field(default=None, nullable=True)
-    banner_image_url: str | None = Field(default=None, nullable=True)
+    description: str | None = Field(default=None, nullable=True, max_length=180)
+    banner_image_url: str | None = Field(default=None, nullable=True, max_length=800)
     is_private: bool = Field(default=True)
 
 
