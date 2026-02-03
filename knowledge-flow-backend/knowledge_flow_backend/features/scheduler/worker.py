@@ -29,13 +29,24 @@ from temporalio.worker import Worker
 
 from knowledge_flow_backend.common.structures import TemporalSchedulerConfig
 from knowledge_flow_backend.features.scheduler.activities import (
+    create_pull_file_metadata,
     fast_delete_vectors,
     fast_store_vectors,
-    process_file,
+    get_push_file_metadata,
+    input_process,
+    load_pull_file,
+    load_push_file,
+    output_process,
 )
 from knowledge_flow_backend.features.scheduler.workflow import (
+    CreatePullFileMetadata,
     FastDeleteVectors,
     FastStoreVectors,
+    GetPushFileMetadata,
+    InputProcess,
+    LoadPullFile,
+    LoadPushFile,
+    OutputProcess,
     Process,
 )
 
@@ -63,11 +74,22 @@ async def run_worker(config: TemporalSchedulerConfig):
         task_queue=config.task_queue,
         workflows=[
             Process,
+            CreatePullFileMetadata,
+            GetPushFileMetadata,
+            LoadPullFile,
+            LoadPushFile,
+            InputProcess,
+            OutputProcess,
             FastStoreVectors,
             FastDeleteVectors,
         ],
         activities=[
-            process_file,
+            create_pull_file_metadata,
+            get_push_file_metadata,
+            load_pull_file,
+            load_push_file,
+            input_process,
+            output_process,
             fast_store_vectors,
             fast_delete_vectors,
         ],

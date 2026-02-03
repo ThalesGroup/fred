@@ -206,7 +206,7 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
 async def run_file_pipeline(file: FileToProcess, *, accept_memory_storage: bool) -> DocumentMetadata:
     """
     Shared ingestion pipeline for one file.
-    Used by both in-memory scheduling and Temporal (via `process_file` activity).
+    Used by the in-memory scheduler.
     """
     if file.is_pull():
         metadata = await create_pull_file_metadata(file)
@@ -217,19 +217,6 @@ async def run_file_pipeline(file: FileToProcess, *, accept_memory_storage: bool)
 
     metadata = await input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
     return await output_process(file=file, metadata=metadata, accept_memory_storage=accept_memory_storage)
-
-
-@activity.defn
-async def process_file(file: FileToProcess, accept_memory_storage: bool = False) -> DocumentMetadata:
-    logger = activity.logger
-    logger.info(
-        "[SCHEDULER][ACTIVITY][PROCESS_FILE] Starting uid=%s pull=%s",
-        file.document_uid,
-        file.is_pull(),
-    )
-    metadata = await run_file_pipeline(file, accept_memory_storage=accept_memory_storage)
-    logger.info("[SCHEDULER][ACTIVITY][PROCESS_FILE] Completed uid=%s", metadata.document_uid)
-    return metadata
 
 
 @activity.defn
