@@ -18,25 +18,13 @@ from typing import Any
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
-
-def _read(obj: Any, field: str, default: Any = None) -> Any:
-    if isinstance(obj, dict):
-        return obj.get(field, default)
-    return getattr(obj, field, default)
-
-
-def _display_name(file: Any) -> str:
-    return _read(file, "display_name") or "unknown"
-
-
-def _is_pull(file: Any) -> bool:
-    return _read(file, "external_path") is not None
+from knowledge_flow_backend.features.scheduler.scheduler_structures import PipelineDefinition
 
 
 @workflow.defn
 class CreatePullFileMetadata:
     @workflow.run
-    async def run(self, file):
+    async def run(self, file: Any) -> Any:
         workflow.logger.info(f"[SCHEDULER] ExtractMetadataWorkflow: {file}")
         return await workflow.execute_activity(
             "create_pull_file_metadata",
@@ -48,7 +36,7 @@ class CreatePullFileMetadata:
 @workflow.defn
 class GetPushFileMetadata:
     @workflow.run
-    async def run(self, file):
+    async def run(self, file: Any) -> Any:
         workflow.logger.info(f"[SCHEDULER] ExtractMetadataWorkflow: {file}")
         return await workflow.execute_activity(
             "get_push_file_metadata",
@@ -60,7 +48,7 @@ class GetPushFileMetadata:
 @workflow.defn
 class LoadPullFile:
     @workflow.run
-    async def run(self, file, metadata):
+    async def run(self, file: Any, metadata: Any) -> str:
         workflow.logger.info(f"[SCHEDULER] LoadPullFile: {file}")
         return await workflow.execute_activity(
             "load_pull_file",
@@ -72,7 +60,7 @@ class LoadPullFile:
 @workflow.defn
 class LoadPushFile:
     @workflow.run
-    async def run(self, file, metadata):
+    async def run(self, file: Any, metadata: Any) -> str:
         workflow.logger.info(f"[SCHEDULER] LoadPushFile: {file}")
         return await workflow.execute_activity(
             "load_push_file",
@@ -84,7 +72,7 @@ class LoadPushFile:
 @workflow.defn
 class InputProcess:
     @workflow.run
-    async def run(self, user, input_file, metadata):
+    async def run(self, user: Any, input_file: str, metadata: Any) -> Any:
         workflow.logger.info(f"[SCHEDULER] InputProcess: {input_file}")
         return await workflow.execute_activity(
             "input_process",
@@ -96,7 +84,7 @@ class InputProcess:
 @workflow.defn
 class OutputProcess:
     @workflow.run
-    async def run(self, file, metadata):
+    async def run(self, file: Any, metadata: Any) -> None:
         workflow.logger.info(f"[SCHEDULER] OutputProcess: {file}")
         await workflow.execute_activity(
             "output_process",
@@ -130,14 +118,14 @@ class FastDeleteVectors:
 @workflow.defn
 class Process:
     @workflow.run
-    async def run(self, definition: Any) -> str:
-        pipeline_name = _read(definition, "name", "unknown")
-        files = _read(definition, "files", []) or []
+    async def run(self, definition: PipelineDefinition) -> str:
+        pipeline_name = definition.name
+        files = definition.files
         workflow.logger.info(f"[SCHEDULER] Ingesting pipeline: {pipeline_name}")
 
         for file in files:
-            display_name = _display_name(file)
-            if _is_pull(file):
+            display_name = file.display_name or "unknown"
+            if file.is_pull():
                 workflow.logger.info(f"[SCHEDULER] Processing pull file: {display_name}")
                 metadata = await workflow.execute_child_workflow(CreatePullFileMetadata.run, args=[file], id=f"CreatePullFileMetadata-{display_name}", retry_policy=RetryPolicy(maximum_attempts=2))
 
@@ -155,7 +143,7 @@ class Process:
 
             metadata = await workflow.execute_child_workflow(
                 InputProcess.run,
-                args=[_read(file, "processed_by"), local_file_path, metadata],
+                args=[file.processed_by, local_file_path, metadata],
                 id=f"InputProcess-{display_name}",
                 retry_policy=RetryPolicy(maximum_attempts=2),
             )

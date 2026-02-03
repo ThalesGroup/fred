@@ -16,9 +16,8 @@
 import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from fred_core import KeycloakUser
 from pydantic import BaseModel
 
 from knowledge_flow_backend.common.document_structures import (
@@ -59,17 +58,17 @@ class FileToProcessWithoutUser(BaseModel):
 
 
 class FileToProcess(FileToProcessWithoutUser):
-    processed_by: KeycloakUser
+    processed_by: Any
 
     @classmethod
-    def from_file_to_process_without_user(cls, file: FileToProcessWithoutUser, user: KeycloakUser) -> "FileToProcess":
+    def from_file_to_process_without_user(cls, file: FileToProcessWithoutUser, user: Any) -> "FileToProcess":
         return cls(
             **file.model_dump(),
             processed_by=user,
         )
 
     @classmethod
-    def from_pull_entry(cls, entry: PullFileEntry, source_tag: str, user: KeycloakUser) -> "FileToProcess":
+    def from_pull_entry(cls, entry: PullFileEntry, source_tag: str, user: Any) -> "FileToProcess":
         return cls(
             source_tag=source_tag,
             external_path=entry.path,
