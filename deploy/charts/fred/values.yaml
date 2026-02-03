@@ -509,7 +509,7 @@ applications:
     applicationName: knowledge-flow-backend
     deployment:
       enabled: true
-    replicaCount: 3 # 3 temporal workers
+    replicaCount: 1
     statefulset:
       enabled: false
     job:
@@ -814,6 +814,7 @@ applications:
     # otherwise this deployment will not be created.
     enabled: true
     applicationName: knowledge-flow-worker
+    replicaCount: 3 # 3 temporal workers
     configuration:
       app:
         metrics_enabled: false # Do not export metrics since its a worker pod
