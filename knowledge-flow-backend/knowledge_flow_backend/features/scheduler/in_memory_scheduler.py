@@ -22,6 +22,7 @@ from typing import List, Optional
 
 from fastapi import BackgroundTasks
 from fred_core import KeycloakUser
+from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
@@ -201,3 +202,40 @@ class InMemoryScheduler(BaseScheduler):
         module_name, class_name = class_path.rsplit(".", 1)
         module = __import__(module_name, fromlist=[class_name])
         return getattr(module, class_name)
+
+    async def store_fast_vectors(self, payload: dict) -> dict:
+        docs_payload = payload.get("documents") or []
+        if not isinstance(docs_payload, list):
+            raise ValueError("payload.documents must be a list")
+
+        context = ApplicationContext.get_instance()
+        embedder = context.get_embedder()
+        vector_store = context.get_create_vector_store(embedder)
+
+        docs: list[Document] = []
+        for item in docs_payload:
+            if not isinstance(item, dict):
+                continue
+            page_content = str(item.get("page_content") or "")
+            metadata = item.get("metadata") or {}
+            if not isinstance(metadata, dict):
+                metadata = {}
+            docs.append(Document(page_content=page_content, metadata=metadata))
+
+        if not docs:
+            return {"chunks": 0}
+
+        ids = vector_store.add_documents(docs)
+        chunks = len(ids) if isinstance(ids, (list, tuple, set)) else len(docs)
+        return {"chunks": chunks}
+
+    async def delete_fast_vectors(self, payload: dict) -> dict:
+        document_uid = payload.get("document_uid")
+        if not document_uid:
+            raise ValueError("payload.document_uid is required")
+
+        context = ApplicationContext.get_instance()
+        embedder = context.get_embedder()
+        vector_store = context.get_create_vector_store(embedder)
+        vector_store.delete_vectors_for_document(document_uid=document_uid)
+        return {"status": "ok", "document_uid": document_uid}

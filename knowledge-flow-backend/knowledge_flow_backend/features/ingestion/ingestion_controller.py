@@ -29,7 +29,6 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from fastapi.responses import Response, StreamingResponse
 from fred_core import KeycloakUser, get_current_user
 from fred_core.kpi import KPIActor, KPIWriter
-from fred_core.scheduler import TemporalClientProvider
 from langchain_core.documents import Document
 from pydantic import BaseModel
 
@@ -52,7 +51,6 @@ from knowledge_flow_backend.features.ingestion.ingestion_service import Ingestio
 from knowledge_flow_backend.features.scheduler.activities import input_process, output_process
 from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess, FileToProcessWithoutUser
-from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors
 
 logger = logging.getLogger(__name__)
 
@@ -271,6 +269,30 @@ class IngestionController:
             logger.info(f"File {filename} saved to temp storage at {input_temp_file}")
             preloaded_files.append((filename, input_temp_file))
         return preloaded_files
+
+    def _scheduler_backend(self) -> str:
+        if self.scheduler_task_service is None:
+            return "memory"
+        return ApplicationContext.get_instance().get_scheduler_backend()
+
+    async def _store_fast_vectors(self, *, document_uid: str, docs: list[Document]) -> tuple[str, int]:
+        payload = {"documents": [{"page_content": d.page_content, "metadata": d.metadata} for d in docs]}
+        if self.scheduler_task_service is None:
+            ids = self.vector_store.add_documents(docs)
+            chunks = len(ids) if isinstance(ids, (list, tuple, set)) else len(docs)
+            return "memory", chunks
+
+        result = await self.scheduler_task_service.store_fast_vectors(payload=payload)
+        chunks = int((result or {}).get("chunks", len(docs)))
+        return self._scheduler_backend(), chunks
+
+    async def _delete_fast_vectors(self, *, document_uid: str) -> str:
+        if self.scheduler_task_service is None:
+            self.vector_store.delete_vectors_for_document(document_uid=document_uid)
+            return "memory"
+
+        await self.scheduler_task_service.delete_fast_vectors(payload={"document_uid": document_uid})
+        return self._scheduler_backend()
 
     async def _stream_upload_process(
         self,
@@ -542,17 +564,11 @@ class IngestionController:
         self.embedder = ApplicationContext.get_instance().get_embedder()
         self.vector_store: BaseVectorStore = ApplicationContext.get_instance().get_create_vector_store(self.embedder)
         scheduler_cfg = ApplicationContext.get_instance().get_config().scheduler
-        self.temporal_task_service: IngestionTaskService | None = None
-        self._temporal_client_provider: TemporalClientProvider | None = None
-        self._temporal_task_queue: str | None = None
+        self.scheduler_task_service: IngestionTaskService | None = None
         if scheduler_cfg.enabled:
-            if scheduler_cfg.backend.lower() == "temporal":
-                self._temporal_client_provider = TemporalClientProvider(scheduler_cfg.temporal)
-                self._temporal_task_queue = scheduler_cfg.temporal.task_queue
-            self.temporal_task_service = IngestionTaskService(
+            self.scheduler_task_service = IngestionTaskService(
                 scheduler_config=scheduler_cfg,
                 metadata_service=self.service.metadata_service,
-                temporal_client_provider=self._temporal_client_provider,
             )
         logger.info("IngestionController initialized.")
 
@@ -897,8 +913,8 @@ class IngestionController:
                     user=user,
                     tags=tags,
                     source_tag=source_tag,
-                    scheduler_task_service=self.temporal_task_service,
-                    background_tasks=background_tasks if self.temporal_task_service is not None else None,
+                    scheduler_task_service=self.scheduler_task_service,
+                    background_tasks=background_tasks if self.scheduler_task_service is not None else None,
                     kpi=kpi,
                     kpi_actor=kpi_actor,
                     timer_dims=d,
@@ -1098,24 +1114,8 @@ class IngestionController:
                 }
                 docs.append(Document(page_content=text, metadata=doc_meta))
 
-            app_context = ApplicationContext.get_instance()
-            scheduler_backend = app_context.get_scheduler_backend()
             try:
-                if scheduler_backend == "temporal":
-                    if self._temporal_client_provider is None or not self._temporal_task_queue:
-                        raise HTTPException(status_code=500, detail="Temporal scheduler is not configured for fast ingest.")
-                    payload = {"documents": [{"page_content": d.page_content, "metadata": d.metadata} for d in docs]}
-                    client = await self._temporal_client_provider.get_client()
-                    workflow_result = await client.execute_workflow(
-                        FastStoreVectors.run,
-                        payload,
-                        id=f"fast-ingest-{document_uid}",
-                        task_queue=self._temporal_task_queue,
-                    )
-                    chunks = int((workflow_result or {}).get("chunks", len(docs)))
-                else:
-                    ids = self.vector_store.add_documents(docs)
-                    chunks = len(ids) if isinstance(ids, (list, tuple, set)) else len(docs)
+                scheduler_backend, chunks = await self._store_fast_vectors(document_uid=document_uid, docs=docs)
                 logger.info(
                     "[FAST TEXT][INGEST] Stored vectors backend=%s doc_uid=%s chunks=%d user=%s session=%s scope=%s per_page=%s",
                     scheduler_backend,
@@ -1157,22 +1157,9 @@ class IngestionController:
                     user.uid,
                     document_uid,
                     session_id,
-                    ApplicationContext.get_instance().get_scheduler_backend(),
+                    self._scheduler_backend(),
                 )
-                app_context = ApplicationContext.get_instance()
-                scheduler_backend = app_context.get_scheduler_backend()
-                if scheduler_backend == "temporal":
-                    if self._temporal_client_provider is None or not self._temporal_task_queue:
-                        raise HTTPException(status_code=500, detail="Temporal scheduler is not configured for fast ingest deletion.")
-                    client = await self._temporal_client_provider.get_client()
-                    await client.execute_workflow(
-                        FastDeleteVectors.run,
-                        {"document_uid": document_uid},
-                        id=f"fast-delete-{document_uid}",
-                        task_queue=self._temporal_task_queue,
-                    )
-                else:
-                    self.vector_store.delete_vectors_for_document(document_uid=document_uid)
+                await self._delete_fast_vectors(document_uid=document_uid)
                 logger.info(
                     "[FAST TEXT][INGEST] Deleted vectors for doc_uid=%s user=%s session=%s",
                     document_uid,

@@ -91,6 +91,20 @@ class BaseScheduler(ABC):
         """
         pass
 
+    @abstractmethod
+    async def store_fast_vectors(self, payload: dict) -> dict:
+        """
+        Store fast-ingest vectors (backend-specific implementation).
+        """
+        pass
+
+    @abstractmethod
+    async def delete_fast_vectors(self, payload: dict) -> dict:
+        """
+        Delete fast-ingest vectors (backend-specific implementation).
+        """
+        pass
+
     def _extract_document_uids(self, definition: PipelineDefinition) -> List[str]:
         document_uids: List[str] = []
         for file in definition.files:
