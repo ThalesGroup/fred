@@ -16,6 +16,7 @@ from openfga_sdk.client.models.list_users_request import ClientListUsersRequest
 from openfga_sdk.client.models.tuple import ClientTuple
 from openfga_sdk.client.models.write_conflict_opts import (
     ClientWriteRequestOnDuplicateWrites,
+    ClientWriteRequestOnMissingDeletes,
     ConflictOptions,
 )
 from openfga_sdk.client.models.write_request import (
@@ -357,8 +358,10 @@ class OpenFgaRebacEngine(RebacEngine):
                 "authorization_model_id", self._authorization_model_id
             )
 
+        # Make writes and deletes idempotant
         filtered_options["conflict"] = ConflictOptions(
             on_duplicate_writes=ClientWriteRequestOnDuplicateWrites.IGNORE,
+            on_missing_deletes=ClientWriteRequestOnMissingDeletes.IGNORE,
         )
 
         return filtered_options
