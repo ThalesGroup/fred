@@ -572,6 +572,12 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.teamUpdate,
       }),
     }),
+    listTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGet: build.query<
+      ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiResponse,
+      ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/teams/${queryArg.teamId}/members` }),
+    }),
     listUsersKnowledgeFlowV1UsersGet: build.query<
       ListUsersKnowledgeFlowV1UsersGetApiResponse,
       ListUsersKnowledgeFlowV1UsersGetApiArg
@@ -1149,6 +1155,11 @@ export type UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiResponse = /** status 20
 export type UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiArg = {
   teamId: string;
   teamUpdate: TeamUpdate;
+};
+export type ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiResponse =
+  /** status 200 Successful Response */ TeamMember[];
+export type ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiArg = {
+  teamId: string;
 };
 export type ListUsersKnowledgeFlowV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
 export type ListUsersKnowledgeFlowV1UsersGetApiArg = void;
@@ -1917,6 +1928,12 @@ export type TeamUpdate = {
   banner_image_url?: string | null;
   is_private?: boolean | null;
 };
+export type UserTeamRelation = "owner" | "manager" | "member";
+export type TeamMember = {
+  type?: "user";
+  relation: UserTeamRelation;
+  user: UserSummary;
+};
 export type ProcessorDescriptor = {
   id: string;
   name: string;
@@ -2215,6 +2232,8 @@ export const {
   useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery,
   useLazyGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery,
   useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation,
+  useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
+  useLazyListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
   useListUsersKnowledgeFlowV1UsersGetQuery,
   useLazyListUsersKnowledgeFlowV1UsersGetQuery,
   useListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,

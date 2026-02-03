@@ -39,6 +39,7 @@
       "metadata": {
         "relations": {
           "can_read": {},
+          "can_read_members": {},
           "can_update_agents": {},
           "can_update_info": {},
           "can_update_members": {},
@@ -63,6 +64,7 @@
             ]
           }
         },
+        "can_read_members": { "computedUserset": { "relation": "member" } },
         "can_update_agents": { "computedUserset": { "relation": "manager" } },
         "can_update_info": { "computedUserset": { "relation": "owner" } },
         "can_update_members": { "computedUserset": { "relation": "manager" } },

@@ -1,3 +1,7 @@
+from enum import Enum
+from typing import Literal
+
+from fred_core import RelationType
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.core.stores.team_metadata.team_metadata_structures import TeamMetadataBase, TeamMetadataUpdate
@@ -33,3 +37,19 @@ class TeamUpdate(TeamMetadataUpdate):
     """For now, when updating a team, you can only update its metadata"""
 
     pass
+
+
+# Subset of RelationType for user-tag relations
+class UserTeamRelation(str, Enum):
+    OWNER = RelationType.OWNER.value
+    MANAGER = RelationType.MANAGER.value
+    MEMBER = RelationType.MEMBER.value
+
+    def to_relation(self) -> RelationType:
+        return RelationType(self.value)
+
+
+class TeamMember(BaseModel):
+    type: Literal["user"] = "user"
+    relation: UserTeamRelation
+    user: UserSummary

@@ -27,7 +27,7 @@ type team
     define public: [user:*]
 
     # --- Permissions (computed relations) ---
-    # Can read team info (name, description, banner, members...)
+    # Can read team info (name, description, banner, owners list...)
     # -> must be at least member or team is public
     define can_read: member or public
 
@@ -38,6 +38,10 @@ type team
     # Can manage members: add/remove members, handle join request
     # -> must be at least manager
     define can_update_members: manager
+
+    # Can list all team memebers with their role
+    # -> must be member
+    define can_read_members: member
 
     # -- Helpers (not permission to use directly, only to help define) --
 

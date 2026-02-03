@@ -70,6 +70,7 @@ class TeamPermission(str, Enum):
     CAN_READ = "can_read"
     CAN_UPDATE_INFO = "can_update_info"
     CAN_UPDATE_MEMBERS = "can_update_members"
+    CAN_READ_MEMEBERS = "can_read_members"
 
 
 class AgentPermission(str, Enum):

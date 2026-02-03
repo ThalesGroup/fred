@@ -6,9 +6,10 @@ from fred_core import KeycloakUser, get_current_user
 
 from knowledge_flow_backend.features.teams.team_id import TeamId
 from knowledge_flow_backend.features.teams.teams_service import get_team_by_id as get_team_by_id_from_service
+from knowledge_flow_backend.features.teams.teams_service import list_team_members as list_team_members_from_service
 from knowledge_flow_backend.features.teams.teams_service import list_teams as list_teams_from_service
 from knowledge_flow_backend.features.teams.teams_service import update_team as update_team_from_service
-from knowledge_flow_backend.features.teams.teams_structures import Team, TeamNotFoundError, TeamUpdate
+from knowledge_flow_backend.features.teams.teams_structures import Team, TeamMember, TeamNotFoundError, TeamUpdate
 
 router = APIRouter(tags=["Teams"])
 
@@ -49,3 +50,13 @@ async def get_team(team_id: Annotated[TeamId, Path()], user: KeycloakUser = Depe
 )
 async def update_team(team_id: Annotated[TeamId, Path()], update_data: TeamUpdate, user: KeycloakUser = Depends(get_current_user)) -> Team:
     return await update_team_from_service(user, team_id, update_data)
+
+
+@router.get(
+    "/teams/{team_id}/members",
+    response_model=list[TeamMember],
+    response_model_exclude_none=True,
+    summary="List members of a specific team",
+)
+async def list_team_members(team_id: Annotated[TeamId, Path()], user: KeycloakUser = Depends(get_current_user)) -> list[TeamMember]:
+    return await list_team_members_from_service(user, team_id)

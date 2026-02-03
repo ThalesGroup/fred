@@ -14,7 +14,10 @@ import {
   Typography,
 } from "@mui/material";
 import { useTranslation } from "react-i18next";
-import { UserSummary } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
+  UserSummary,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 // todo: get type from codegen from backend
 interface TeamMember extends UserSummary {
@@ -49,8 +52,17 @@ const members: TeamMember[] = [
   { id: "25", username: "ylopez", first_name: "Yara", last_name: "Lopez", role: "member" },
 ];
 
-export function TeamMembersPage() {
+export interface TeamMembersPageProps {
+  teamId: string;
+}
+
+export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
   const { t } = useTranslation();
+
+  const { data: members } = useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery({ teamId: teamId });
+  // todo: handle loading
+  // todo: handle error
+  // todo: handle empty state
 
   return (
     <Box sx={{ px: 2, pb: 2, display: "flex", height: "100%" }}>
@@ -92,21 +104,22 @@ export function TeamMembersPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {members.map((member) => (
-              <TableRow key={member.id}>
-                <TableCell>{member.username}</TableCell>
-                <TableCell>{member.first_name}</TableCell>
-                <TableCell>{member.last_name}</TableCell>
-                <TableCell>
-                  <Select value={member.role} size="small">
-                    <MenuItem value={"owner"}>{t("teamMembersPage.teamRole.owner")}</MenuItem>
-                    <MenuItem value={"manager"}>{t("teamMembersPage.teamRole.manager")}</MenuItem>
-                    <MenuItem value={"member"}>{t("teamMembersPage.teamRole.member")}</MenuItem>
-                  </Select>
-                </TableCell>
-                <TableCell></TableCell>
-              </TableRow>
-            ))}
+            {members &&
+              members.map((member) => (
+                <TableRow key={member.user.id}>
+                  <TableCell>{member.user.username}</TableCell>
+                  <TableCell>{member.user.first_name}</TableCell>
+                  <TableCell>{member.user.last_name}</TableCell>
+                  <TableCell>
+                    <Select value={member.relation} size="small">
+                      <MenuItem value={"owner"}>{t("teamMembersPage.teamRole.owner")}</MenuItem>
+                      <MenuItem value={"manager"}>{t("teamMembersPage.teamRole.manager")}</MenuItem>
+                      <MenuItem value={"member"}>{t("teamMembersPage.teamRole.member")}</MenuItem>
+                    </Select>
+                  </TableCell>
+                  <TableCell></TableCell>
+                </TableRow>
+              ))}
           </TableBody>
         </Table>
       </TableContainer>

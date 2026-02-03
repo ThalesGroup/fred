@@ -5,9 +5,8 @@ from fred_core import ORGANIZATION_ID, KeycloackDisabled, KeycloakUser, RebacDis
 from keycloak import KeycloakAdmin
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
-from knowledge_flow_backend.core.stores.team_metadata.team_metadata_structures import TeamMetadata
 from knowledge_flow_backend.features.teams.team_id import TeamId
-from knowledge_flow_backend.features.teams.teams_structures import KeycloakGroupSummary, Team, TeamNotFoundError, TeamUpdate
+from knowledge_flow_backend.features.teams.teams_structures import KeycloakGroupSummary, Team, TeamMember, TeamNotFoundError, TeamUpdate, UserTeamRelation
 from knowledge_flow_backend.features.users.users_service import get_users_by_ids
 from knowledge_flow_backend.features.users.users_structures import UserSummary
 
@@ -137,6 +136,51 @@ async def update_team(user: KeycloakUser, team_id: TeamId, update_data: TeamUpda
     return await get_team_by_id(user, team_id)
 
 
+async def list_team_members(user: KeycloakUser, team_id: TeamId) -> list[TeamMember]:
+    app_context = ApplicationContext.get_instance()
+    rebac = app_context.get_rebac_engine()
+
+    admin = create_keycloak_admin(get_configuration().security.m2m)
+    if isinstance(admin, KeycloackDisabled):
+        logger.info("Keycloak admin client not configured; cannot list team members.")
+        raise TeamNotFoundError(team_id)
+
+    # Check user can list members
+    await rebac.check_user_permission_or_raise(user, TeamPermission.CAN_READ_MEMEBERS, team_id)
+
+    # Retrieve all member ids + ids of owners and managers
+    owner_ids, manager_ids, member_ids = await asyncio.gather(
+        _get_team_users_by_relation(rebac, team_id, RelationType.OWNER),
+        _get_team_users_by_relation(rebac, team_id, RelationType.MANAGER),
+        _fetch_group_member_ids(admin, team_id),
+    )
+
+    # Retrieve all user summaries for members
+    user_summaries_map = await get_users_by_ids(member_ids)
+
+    # Build TeamMember list with appropriate relations
+    team_members: list[TeamMember] = []
+    for user_id in member_ids:
+        user_summary = user_summaries_map.get(user_id) or UserSummary(id=user_id)
+
+        # Determine relation priority: owner > manager > member
+        if user_id in owner_ids:
+            relation = UserTeamRelation.OWNER
+        elif user_id in manager_ids:
+            relation = UserTeamRelation.MANAGER
+        else:
+            relation = UserTeamRelation.MEMBER
+
+        team_members.append(TeamMember(user=user_summary, relation=relation))
+
+    return team_members
+
+
+# ------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------
+
+
 async def _enrich_groups_with_team_data(admin: KeycloakAdmin, rebac: RebacEngine, metadata_store, user: KeycloakUser, groups: list[KeycloakGroupSummary]) -> list[Team]:
     """Shared logic to enrich Keycloak groups with metadata, owners, and member information."""
     if not groups:
@@ -146,7 +190,7 @@ async def _enrich_groups_with_team_data(admin: KeycloakAdmin, rebac: RebacEngine
     team_ids: list[TeamId] = [g.id for g in groups]
     metadata_map, team_owners_list, member_counts_list = await asyncio.gather(
         metadata_store.get_by_team_ids(team_ids),
-        asyncio.gather(*[_get_team_owners(rebac, team_id) for team_id in team_ids]),
+        asyncio.gather(*[_get_team_users_by_relation(rebac, team_id, RelationType.OWNER) for team_id in team_ids]),
         asyncio.gather(*[_fetch_group_member_ids(admin, team_id) for team_id in team_ids]),
     )
 
@@ -236,16 +280,25 @@ async def _ensure_team_organization_relations(rebac: RebacEngine, team_ids: list
     return await rebac.add_relations(relations_to_add)
 
 
-async def _get_team_owners(rebac: RebacEngine, team_id: TeamId) -> list[str]:
-    """Get all user IDs with owner relation to this team from OpenFGA."""
+async def _get_team_users_by_relation(rebac: RebacEngine, team_id: TeamId, relation: RelationType) -> set[str]:
+    """Get all user IDs with a specific relation to this team from OpenFGA.
+
+    Args:
+        rebac: The ReBAC engine instance
+        team_id: The team identifier
+        relation: The relation type to lookup
+
+    Returns:
+        Set of user IDs with the specified relation to the team
+    """
     team_reference = RebacReference(type=Resource.TEAM, id=team_id)
 
-    owners = await rebac.lookup_subjects(team_reference, RelationType.OWNER, Resource.USER)
+    subjects = await rebac.lookup_subjects(team_reference, relation, Resource.USER)
 
-    if isinstance(owners, RebacDisabledResult):
-        return []
+    if isinstance(subjects, RebacDisabledResult):
+        return set()
 
-    return [subject.id for subject in owners]
+    return {subject.id for subject in subjects}
 
 
 async def _fetch_root_keycloak_groups(admin: KeycloakAdmin) -> list[KeycloakGroupSummary]:

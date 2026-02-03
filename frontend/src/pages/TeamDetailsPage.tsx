@@ -16,9 +16,13 @@ export function TeamDetailsPage() {
 
   const { teamId } = useParams<{ teamId: string }>();
   const { data: team } = useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery({ teamId: teamId || "" }, { skip: !teamId });
-
   // todo: handle loading
   // todo: handle error (404)
+
+  if (teamId === undefined) {
+    // Should never happen
+    return <>need a team id in the url</>;
+  }
 
   const tabs: TabConfig[] = [
     {
@@ -43,7 +47,7 @@ export function TeamDetailsPage() {
     {
       label: t("teamDetails.tabs.members"),
       path: `/team/${teamId}/members`,
-      component: <TeamMembersPage />,
+      component: <TeamMembersPage teamId={teamId} />,
     },
     {
       label: t("teamDetails.tabs.settings"),
