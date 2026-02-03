@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Sequence
+from typing import Any, Sequence, cast
 
-from langchain.agents.middleware import wrap_tool_call
+from langchain.agents.middleware import AgentMiddleware, wrap_tool_call
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.prebuilt import ToolNode
@@ -58,8 +58,8 @@ def _normalize_mcp_content(content) -> str:
     return json.dumps(content)
 
 
-@wrap_tool_call  # pyright: ignore[reportCallIssue, reportArgumentType]
-async def normalize_mcp_tool_content(
+@wrap_tool_call
+async def _normalize_mcp_tool_content_impl(
     request: ToolCallRequest, handler: Any
 ) -> ToolMessage:
     """
@@ -92,6 +92,13 @@ async def normalize_mcp_tool_content(
             )
 
     return result
+
+
+# Cast to AgentMiddleware for proper type inference
+# (wrap_tool_call decorator transforms the function into an AgentMiddleware instance)
+normalize_mcp_tool_content: AgentMiddleware[Any, Any] = cast(
+    AgentMiddleware[Any, Any], _normalize_mcp_tool_content_impl
+)
 
 
 def friendly_mcp_tool_error_handler(e: Exception) -> str:
