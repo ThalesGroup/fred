@@ -203,22 +203,6 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
     return metadata
 
 
-async def run_file_pipeline(file: FileToProcess, *, accept_memory_storage: bool) -> DocumentMetadata:
-    """
-    Shared ingestion pipeline for one file.
-    Used by the in-memory scheduler.
-    """
-    if file.is_pull():
-        metadata = await create_pull_file_metadata(file)
-        local_file_path = await load_pull_file(file, metadata)
-    else:
-        metadata = await get_push_file_metadata(file)
-        local_file_path = await load_push_file(file, metadata)
-
-    metadata = await input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
-    return await output_process(file=file, metadata=metadata, accept_memory_storage=accept_memory_storage)
-
-
 @activity.defn
 async def fast_store_vectors(payload: dict) -> dict:
     """
