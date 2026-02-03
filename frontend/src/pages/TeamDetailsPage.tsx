@@ -7,7 +7,7 @@ import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
 import { TeamMembersPage } from "../components/teamDetails/TeamMembersPage";
 import { TeamSettingsPage } from "../components/teamDetails/TeamSettingsPage";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
-import { useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery } from "../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
 import { capitalize } from "../utils/capitalize";
 
 export function TeamDetailsPage() {
