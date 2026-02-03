@@ -14,7 +14,29 @@
 
 from datetime import datetime
 
+from sqlalchemy import Column, DateTime
+from sqlalchemy.sql import func
 from sqlmodel import Field, SQLModel
+
+
+class TimestampMixin(SQLModel):
+    """Mixin for automatic timestamp fields."""
+
+    created_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+        )
+    )
+    updated_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+    )
 
 
 class TeamMetadataBase(SQLModel):
@@ -25,16 +47,12 @@ class TeamMetadataBase(SQLModel):
     is_private: bool = Field(default=True)
 
 
-class TeamMetadata(TeamMetadataBase, table=True):
+class TeamMetadata(TeamMetadataBase, TimestampMixin, table=True):
     """
     Additional metadata for a Keycloak group/team.
-    Keycloak provides: id, name
-    This model stores: description, banner_image_url, is_private, timestamps
     """
 
     id: str = Field(primary_key=True)
-    created_at: datetime = Field(nullable=False)
-    updated_at: datetime = Field(nullable=False)
 
 
 class TeamMetadataUpdate(SQLModel):

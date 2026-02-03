@@ -15,7 +15,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
@@ -150,7 +149,6 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
             # Update only fields that were set
             update_dict = update_data.model_dump(exclude_unset=True)
             existing.sqlmodel_update(update_dict)
-            existing.updated_at = datetime.now()
 
             session.add(existing)
             session.commit()
@@ -178,8 +176,6 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
             update_dict = update_data.model_dump(exclude_unset=True)
             new_metadata = TeamMetadata(
                 id=team_id,
-                created_at=datetime.now(),
-                updated_at=datetime.now(),
                 **update_dict,
             )
             return self.create(new_metadata)
