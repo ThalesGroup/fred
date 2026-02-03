@@ -14,9 +14,11 @@
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime
+from sqlalchemy import Column, DateTime, String
 from sqlalchemy.sql import func
 from sqlmodel import Field, SQLModel
+
+from knowledge_flow_backend.features.teams.team_id import TeamId
 
 
 class TimestampMixin(SQLModel):
@@ -52,7 +54,8 @@ class TeamMetadata(TeamMetadataBase, TimestampMixin, table=True):
     Additional metadata for a Keycloak group/team.
     """
 
-    id: str = Field(primary_key=True)
+    # id: Annotated[TeamId, PlainSerializer(lambda x: str(x), return_type=str)] = Field(sa_column=Column(String, primary_key=True))
+    id: TeamId = Field(sa_column=Column(String, primary_key=True))
 
 
 class TeamMetadataUpdate(SQLModel):

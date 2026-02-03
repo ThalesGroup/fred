@@ -29,6 +29,7 @@ from knowledge_flow_backend.core.stores.team_metadata.team_metadata_structures i
     TeamMetadata,
     TeamMetadataUpdate,
 )
+from knowledge_flow_backend.features.teams.team_id import TeamId
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +47,12 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
         logger.info("[TEAM_METADATA][PG] Table ready: team_metadata")
 
     @staticmethod
-    def _validate_team_id(team_id: str) -> None:
+    def _validate_team_id(team_id: TeamId) -> None:
         """Validate that team_id is not empty."""
         if not team_id or not team_id.strip():
             raise ValueError("team_id must not be empty")
 
-    def get_by_team_id(self, team_id: str) -> TeamMetadata:
+    def get_by_team_id(self, team_id: TeamId) -> TeamMetadata:
         """
         Retrieve team metadata by team ID.
 
@@ -72,7 +73,7 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
                 raise TeamMetadataNotFoundError(f"Team metadata for team_id '{team_id}' not found.")
             return metadata
 
-    def get_by_team_ids(self, team_ids: list[str]) -> dict[str, TeamMetadata]:
+    def get_by_team_ids(self, team_ids: list[TeamId]) -> dict[TeamId, TeamMetadata]:
         """
         Retrieve multiple team metadata by team IDs in a single query.
 
@@ -125,7 +126,7 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
                 # Re-raise other integrity errors (e.g., constraint violations)
                 raise
 
-    def update(self, team_id: str, update_data: TeamMetadataUpdate) -> TeamMetadata:
+    def update(self, team_id: TeamId, update_data: TeamMetadataUpdate) -> TeamMetadata:
         """
         Update existing team metadata using SQLModel pattern.
 
@@ -157,7 +158,7 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
             logger.info("[TEAM_METADATA][PG] Updated metadata for team_id: %s", team_id)
             return existing
 
-    def upsert(self, team_id: str, update_data: TeamMetadataUpdate) -> TeamMetadata:
+    def upsert(self, team_id: TeamId, update_data: TeamMetadataUpdate) -> TeamMetadata:
         """
         Create or update team metadata (idempotent).
 
@@ -180,7 +181,7 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
             )
             return self.create(new_metadata)
 
-    def delete(self, team_id: str) -> None:
+    def delete(self, team_id: TeamId) -> None:
         """
         Delete team metadata.
 

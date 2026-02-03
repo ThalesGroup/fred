@@ -6,6 +6,7 @@ from keycloak import KeycloakAdmin
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
 from knowledge_flow_backend.core.stores.team_metadata.team_metadata_structures import TeamMetadata
+from knowledge_flow_backend.features.teams.team_id import TeamId
 from knowledge_flow_backend.features.teams.teams_structures import KeycloakGroupSummary, Team, TeamNotFoundError, TeamUpdate
 from knowledge_flow_backend.features.users.users_service import get_users_by_ids
 from knowledge_flow_backend.features.users.users_structures import UserSummary
@@ -40,7 +41,7 @@ async def list_teams(user: KeycloakUser) -> list[Team]:
     return await _enrich_groups_with_team_data(admin, rebac, metadata_store, user, root_groups)
 
 
-async def get_team_by_id(user: KeycloakUser, team_id: str) -> Team:
+async def get_team_by_id(user: KeycloakUser, team_id: TeamId) -> Team:
     app_context = ApplicationContext.get_instance()
     rebac = app_context.get_rebac_engine()
     metadata_store = app_context.get_team_metadata_store()
@@ -82,7 +83,7 @@ async def get_team_by_id(user: KeycloakUser, team_id: str) -> Team:
     return teams[0]
 
 
-async def update_team(user: KeycloakUser, team_id: str, update_data: TeamUpdate) -> Team:
+async def update_team(user: KeycloakUser, team_id: TeamId, update_data: TeamUpdate) -> Team:
     app_context = ApplicationContext.get_instance()
     rebac = app_context.get_rebac_engine()
     metadata_store = app_context.get_team_metadata_store()
@@ -142,7 +143,7 @@ async def _enrich_groups_with_team_data(admin: KeycloakAdmin, rebac: RebacEngine
         return []
 
     # Batch fetch metadata for all teams
-    team_ids: list[str] = [g.id for g in groups]
+    team_ids: list[TeamId] = [g.id for g in groups]
     metadata_map = metadata_store.get_by_team_ids(team_ids)
 
     # Batch query OpenFGA for all team owners and Keycloak for member counts in parallel
@@ -205,7 +206,7 @@ async def _enrich_groups_with_team_data(admin: KeycloakAdmin, rebac: RebacEngine
 
 
 # todo: Remove when our API handle team creation/deletion and not Keycloak
-async def _ensure_team_organization_relations(rebac: RebacEngine, team_ids: list[str]) -> str | None:
+async def _ensure_team_organization_relations(rebac: RebacEngine, team_ids: list[TeamId]) -> str | None:
     """Ensure all teams have organization relation tuples in OpenFGA. This tuples are needed for all rules
     referencing orgnaization wide role (like org admin writes).
 
@@ -237,7 +238,7 @@ async def _ensure_team_organization_relations(rebac: RebacEngine, team_ids: list
     return await rebac.add_relations(relations_to_add)
 
 
-async def _get_team_owners(rebac: RebacEngine, team_id: str) -> list[str]:
+async def _get_team_owners(rebac: RebacEngine, team_id: TeamId) -> list[str]:
     """Get all user IDs with owner relation to this team from OpenFGA."""
     team_reference = RebacReference(type=Resource.TEAM, id=team_id)
 
@@ -277,7 +278,7 @@ async def _fetch_root_keycloak_groups(admin: KeycloakAdmin) -> list[KeycloakGrou
     return groups
 
 
-async def _fetch_group_member_ids(admin: KeycloakAdmin, group_id: str) -> set[str]:
+async def _fetch_group_member_ids(admin: KeycloakAdmin, group_id: TeamId) -> set[str]:
     member_ids: set[str] = set()
     offset = 0
 

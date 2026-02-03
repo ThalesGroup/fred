@@ -18,6 +18,7 @@ from knowledge_flow_backend.core.stores.team_metadata.team_metadata_structures i
     TeamMetadata,
     TeamMetadataUpdate,
 )
+from knowledge_flow_backend.features.teams.team_id import TeamId
 
 
 class TeamMetadataNotFoundError(Exception):
@@ -57,7 +58,7 @@ class BaseTeamMetadataStore(ABC):
     """
 
     @abstractmethod
-    def get_by_team_id(self, team_id: str) -> TeamMetadata:
+    def get_by_team_id(self, team_id: TeamId) -> TeamMetadata:
         """
         Retrieve team metadata by team ID.
 
@@ -73,7 +74,7 @@ class BaseTeamMetadataStore(ABC):
         pass
 
     @abstractmethod
-    def get_by_team_ids(self, team_ids: list[str]) -> dict[str, TeamMetadata]:
+    def get_by_team_ids(self, team_ids: list[TeamId]) -> dict[TeamId, TeamMetadata]:
         """
         Retrieve multiple team metadata by team IDs in a single query.
 
@@ -103,7 +104,7 @@ class BaseTeamMetadataStore(ABC):
         pass
 
     @abstractmethod
-    def update(self, team_id: str, update_data: TeamMetadataUpdate) -> TeamMetadata:
+    def update(self, team_id: TeamId, update_data: TeamMetadataUpdate) -> TeamMetadata:
         """
         Update existing team metadata using SQLModel pattern.
 
@@ -120,7 +121,7 @@ class BaseTeamMetadataStore(ABC):
         pass
 
     @abstractmethod
-    def upsert(self, team_id: str, update_data: TeamMetadataUpdate) -> TeamMetadata:
+    def upsert(self, team_id: TeamId, update_data: TeamMetadataUpdate) -> TeamMetadata:
         """
         Create or update team metadata (idempotent).
 
@@ -134,7 +135,7 @@ class BaseTeamMetadataStore(ABC):
         pass
 
     @abstractmethod
-    def delete(self, team_id: str) -> None:
+    def delete(self, team_id: TeamId) -> None:
         """
         Delete team metadata.
 
