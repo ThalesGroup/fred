@@ -182,9 +182,9 @@ storage:
         driver: "postgresql+psycopg2"
         host: "postgresql-primary"
         port: 5432
-        database: "fred"
+        database: "data"
         path: null # (important: remove the `path` default value)
-        username: postgres
+        username: tabular
 
 mcp:
   reports_enabled: true
