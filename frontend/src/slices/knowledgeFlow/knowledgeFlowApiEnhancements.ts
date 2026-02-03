@@ -36,6 +36,12 @@ export const enhancedKnowledgeFlowApi = knowledgeFlowApi.enhanceEndpoints({
         { type: "TeamMember" as const, id: `LIST-${arg.teamId}` },
       ],
     },
+    removeTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDelete: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "TeamMember" as const, id: `${arg.teamId}-${arg.userId}` },
+        { type: "TeamMember" as const, id: `LIST-${arg.teamId}` },
+      ],
+    },
   },
 });
 
@@ -46,4 +52,5 @@ export const {
   useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation,
   useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
   useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation,
+  useRemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteMutation,
 } = enhancedKnowledgeFlowApi;

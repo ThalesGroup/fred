@@ -1,6 +1,8 @@
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import {
   Box,
+  IconButton,
   MenuItem,
   Paper,
   Select,
@@ -12,10 +14,12 @@ import {
   TableRow,
   Tooltip,
   Typography,
+  useTheme,
 } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import {
   useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
+  useRemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteMutation,
   useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation,
 } from "../../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
 import { UserTeamRelation } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
@@ -28,6 +32,7 @@ const TEAM_ROLES: UserTeamRelation[] = ["owner", "manager", "member"];
 
 export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
   const { t } = useTranslation();
+  const theme = useTheme();
 
   const { data: members } = useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery({ teamId: teamId });
   // todo: handle loading
@@ -35,12 +40,20 @@ export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
   // todo: handle empty state
 
   const [updateTeamMember] = useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation();
+  const [removeTeamMember] = useRemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteMutation();
 
   const handleRoleChange = async (userId: string, newRelation: UserTeamRelation) => {
     await updateTeamMember({
       teamId,
       userId,
       updateTeamMemberRequest: { relation: newRelation },
+    });
+  };
+
+  const handleRemoveMember = async (userId: string) => {
+    await removeTeamMember({
+      teamId,
+      userId,
     });
   };
 
@@ -103,7 +116,17 @@ export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
                       ))}
                     </Select>
                   </TableCell>
-                  <TableCell></TableCell>
+                  <TableCell>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleRemoveMember(member.user.id)}
+                      sx={{
+                        color: theme.palette.error.light,
+                      }}
+                    >
+                      <DeleteOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </TableCell>
                 </TableRow>
               ))}
           </TableBody>
