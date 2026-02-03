@@ -15,7 +15,7 @@ app:
   base_url: "/agentic/v1"
   address: "127.0.0.1"
   port: 8000
-  log_level: "info"
+  log_level: "warning"
   reload: false
   reload_dir: "."
   metrics_enabled: true
@@ -93,35 +93,20 @@ ai:
     read: 60 # Time to wait for a response in seconds (longer for large document processing)
 
   default_chat_model:
-    # Required in .env:
-    # - OPENAI_API_KEY
-    # provider: "azure-openai"
-    # name: "gpt-4o"
-    # settings:
-    #   azure_apim_base_url: "https://tehopenai.openai.azure.com/"
-    #   azure_openai_api_version: "2024-06-01"
-    # provider: "azure-apim"
-    # name: "gpt-4o"
-    # settings:
-    #   azure_apim_base_url: "https://trustnest.azure-api.net"
-    #   azure_apim_resource_path: "/genai-aoai-inference/v2"
-    #   azure_openai_api_version: "2024-06-01"
-    #   azure_tenant_id: "your-tenant-id"
-    #   azure_ad_client_id: "your-client-id"
-    #   azure_ad_client_scope: "api://your-client-id/.default"
     provider: "openai"
     name: "model-2"
     settings:
-      request_timeout: 5
       max_retries: 0
       # Benchmark (mock OpenAI): uncomment the base_url below to target the mock server.
       base_url: "http://localhost:8383/v1"
       timeout:
         connect: 10.0
-        read: 30.0
+        read: 20.0
+        write: 30.0
+        pool: 5.0
       http_client_limits:
         max_connections: 500
-        max_keepalive_connections: 0
+        max_keepalive_connections: 200
         keepalive_expiry_seconds: 10
       temperature: 0.0
 
@@ -137,67 +122,25 @@ ai:
       base_url: "http://localhost:8383/v1"
       temperature: 0.0
       max_retries: 0
-      timeout: 30.0
+      timeout:
+        connect: 10.0
+        read: 30.0
+        write: 30.0
+        pool: 5.0
       http_client_limits:
         max_connections: 500
-        max_keepalive_connections: 0
+        max_keepalive_connections: 200
         keepalive_expiry_seconds: 10
 
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:
-    - name: "Researcher"
-      type: "agent"
-      class_path: "agentic_backend.agents.research.research_agent.ResearchAgent"
-      enabled: true
     - name: "Georges"
       type: "agent"
       class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
       enabled: true
       chat_options:
         attach_files: false
-    - name: "Sammy"
-      type: "agent"
-      class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
-      enabled: true
-    - name: "Rico"
-      type: "agent"
-      class_path: "agentic_backend.agents.rags.rag_expert.Rico"
-      chat_options:
-        search_policy_selection: true
-        libraries_selection: true
-        search_rag_scoping: true
-        deep_search_delegate: true
-        attach_files: true
-      metadata:
-        # Deep-search delegation target
-        deep_search_delegate_to: "Rico Senior"
-    - name: "Rico Senior"
-      type: "agent"
-      class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
-      enabled: true
-      metadata:
-        deep_search_hidden_in_ui: true
-    - name: "Tessa"
-      type: "agent"
-      class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
-      enabled: true
-    - name: "Kellia"
-      type: "agent"
-      class_path: "agentic_backend.agents.knowledge_extractor.slide_maker.SlideMaker"
-      enabled: true
-    - name: "Raph"
-      type: "agent"
-      class_path: "agentic_backend.agents.reference_editor.reference_editor.ReferenceEditor"
-      enabled: true
-    - name: "CoachDG"
-      type: "agent"
-      class_path: "agentic_backend.agents.coach_dg.coach_dg.CoachDG"
-      enabled: false
-    - name: "LogGenius"
-      type: "agent"
-      class_path: "agentic_backend.agents.log_genius.log_genius_expert.LogGenius"
-      enabled: true
 
 mcp:
   servers:
@@ -230,7 +173,7 @@ mcp:
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - id: "mcp-knowledge-flow-fs
+    - id: "mcp-knowledge-flow-fs"
       name: "mcp.servers.filesystem.name"
       description: "mcp.servers.filesystem.description"
       enabled: true
