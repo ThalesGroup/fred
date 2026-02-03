@@ -396,28 +396,37 @@ class IngestionController:
                             continue
                         if doc.has_failed:
                             last_error = f"Temporal processing failed for document_uid={document_uid}"
-                            yield ProcessingProgress(
-                                step=current_step,
-                                status=Status.ERROR,
-                                error=last_error,
-                                filename=filename,
-                                document_uid=document_uid,
-                            ).model_dump_json() + "\n"
+                            yield (
+                                ProcessingProgress(
+                                    step=current_step,
+                                    status=Status.ERROR,
+                                    error=last_error,
+                                    filename=filename,
+                                    document_uid=document_uid,
+                                ).model_dump_json()
+                                + "\n"
+                            )
                             resolved_uids.append(document_uid)
                             continue
                         if doc.fully_processed:
-                            yield ProcessingProgress(
-                                step=current_step,
-                                status=Status.SUCCESS,
-                                filename=filename,
-                                document_uid=document_uid,
-                            ).model_dump_json() + "\n"
-                            yield ProcessingProgress(
-                                step="Finished",
-                                filename=filename,
-                                status=Status.FINISHED,
-                                document_uid=document_uid,
-                            ).model_dump_json() + "\n"
+                            yield (
+                                ProcessingProgress(
+                                    step=current_step,
+                                    status=Status.SUCCESS,
+                                    filename=filename,
+                                    document_uid=document_uid,
+                                ).model_dump_json()
+                                + "\n"
+                            )
+                            yield (
+                                ProcessingProgress(
+                                    step="Finished",
+                                    filename=filename,
+                                    status=Status.FINISHED,
+                                    document_uid=document_uid,
+                                ).model_dump_json()
+                                + "\n"
+                            )
                             success += 1
                             resolved_uids.append(document_uid)
 
@@ -428,9 +437,7 @@ class IngestionController:
                         break
 
                     if time.monotonic() >= deadline:
-                        timeout_message = (
-                            f"Timed out waiting for Temporal completion after {TEMPORAL_PROGRESS_TIMEOUT_SEC}s"
-                        )
+                        timeout_message = f"Timed out waiting for Temporal completion after {TEMPORAL_PROGRESS_TIMEOUT_SEC}s"
                         last_error = timeout_message
                         logger.warning(
                             "Timeout while waiting for Temporal workflow %s completion; pending=%d",
@@ -438,21 +445,27 @@ class IngestionController:
                             len(pending_by_uid),
                         )
                         for document_uid, filename in pending_by_uid.items():
-                            yield ProcessingProgress(
-                                step=current_step,
-                                status=Status.ERROR,
-                                error=timeout_message,
-                                filename=filename,
-                                document_uid=document_uid,
-                            ).model_dump_json() + "\n"
+                            yield (
+                                ProcessingProgress(
+                                    step=current_step,
+                                    status=Status.ERROR,
+                                    error=timeout_message,
+                                    filename=filename,
+                                    document_uid=document_uid,
+                                ).model_dump_json()
+                                + "\n"
+                            )
                         pending_by_uid.clear()
                         break
 
-                    yield ProcessingProgress(
-                        step=current_step,
-                        status=Status.IN_PROGRESS,
-                        filename="scheduler",
-                    ).model_dump_json() + "\n"
+                    yield (
+                        ProcessingProgress(
+                            step=current_step,
+                            status=Status.IN_PROGRESS,
+                            filename="scheduler",
+                        ).model_dump_json()
+                        + "\n"
+                    )
                     await asyncio.sleep(TEMPORAL_PROGRESS_POLL_INTERVAL_SEC)
             except Exception as e:
                 error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
