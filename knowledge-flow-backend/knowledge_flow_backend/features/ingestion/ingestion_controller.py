@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import dataclasses
 import inspect
 import json
@@ -54,6 +55,9 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import FileT
 from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors
 
 logger = logging.getLogger(__name__)
+
+TEMPORAL_PROGRESS_POLL_INTERVAL_SEC = 2.0
+TEMPORAL_PROGRESS_TIMEOUT_SEC = 30 * 60
 
 
 class IngestionInput(BaseModel):
@@ -353,6 +357,7 @@ class IngestionController:
             current_step = "scheduler submission"
             yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename="scheduler").model_dump_json() + "\n"
             try:
+                workflow_id: str | None = None
                 files_to_schedule = [
                     FileToProcessWithoutUser(
                         source_tag=source_tag,
@@ -368,19 +373,87 @@ class IngestionController:
                     files=files_to_schedule,
                     background_tasks=background_tasks,
                 )
+                workflow_id = handle.workflow_id
                 logger.info("Queued Temporal workflow %s from /upload-process-documents", handle.workflow_id)
                 yield ProcessingProgress(step=current_step, status=Status.SUCCESS, filename="scheduler").model_dump_json() + "\n"
-                for filename, document_uid, _ in temporal_candidates:
-                    yield (
-                        ProcessingProgress(
-                            step="Finished",
-                            filename=filename,
-                            status=Status.FINISHED,
-                            document_uid=document_uid,
-                        ).model_dump_json()
-                        + "\n"
+
+                # Block until all scheduled documents are either fully processed or failed.
+                current_step = "scheduler processing"
+                pending_by_uid = {document_uid: filename for filename, document_uid, _ in temporal_candidates}
+                deadline = time.monotonic() + TEMPORAL_PROGRESS_TIMEOUT_SEC
+
+                while pending_by_uid:
+                    progress = await temporal_task_service.get_progress(
+                        user=user,
+                        workflow_id=workflow_id,
                     )
-                success += len(temporal_candidates)
+                    docs_by_uid = {doc.document_uid: doc for doc in progress.documents}
+
+                    resolved_uids: list[str] = []
+                    for document_uid, filename in pending_by_uid.items():
+                        doc = docs_by_uid.get(document_uid)
+                        if doc is None:
+                            continue
+                        if doc.has_failed:
+                            last_error = f"Temporal processing failed for document_uid={document_uid}"
+                            yield ProcessingProgress(
+                                step=current_step,
+                                status=Status.ERROR,
+                                error=last_error,
+                                filename=filename,
+                                document_uid=document_uid,
+                            ).model_dump_json() + "\n"
+                            resolved_uids.append(document_uid)
+                            continue
+                        if doc.fully_processed:
+                            yield ProcessingProgress(
+                                step=current_step,
+                                status=Status.SUCCESS,
+                                filename=filename,
+                                document_uid=document_uid,
+                            ).model_dump_json() + "\n"
+                            yield ProcessingProgress(
+                                step="Finished",
+                                filename=filename,
+                                status=Status.FINISHED,
+                                document_uid=document_uid,
+                            ).model_dump_json() + "\n"
+                            success += 1
+                            resolved_uids.append(document_uid)
+
+                    for document_uid in resolved_uids:
+                        pending_by_uid.pop(document_uid, None)
+
+                    if not pending_by_uid:
+                        break
+
+                    if time.monotonic() >= deadline:
+                        timeout_message = (
+                            f"Timed out waiting for Temporal completion after {TEMPORAL_PROGRESS_TIMEOUT_SEC}s"
+                        )
+                        last_error = timeout_message
+                        logger.warning(
+                            "Timeout while waiting for Temporal workflow %s completion; pending=%d",
+                            workflow_id,
+                            len(pending_by_uid),
+                        )
+                        for document_uid, filename in pending_by_uid.items():
+                            yield ProcessingProgress(
+                                step=current_step,
+                                status=Status.ERROR,
+                                error=timeout_message,
+                                filename=filename,
+                                document_uid=document_uid,
+                            ).model_dump_json() + "\n"
+                        pending_by_uid.clear()
+                        break
+
+                    yield ProcessingProgress(
+                        step=current_step,
+                        status=Status.IN_PROGRESS,
+                        filename="scheduler",
+                    ).model_dump_json() + "\n"
+                    await asyncio.sleep(TEMPORAL_PROGRESS_POLL_INTERVAL_SEC)
             except Exception as e:
                 error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
                 last_error = error_message
