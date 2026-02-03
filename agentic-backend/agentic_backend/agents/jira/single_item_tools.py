@@ -38,6 +38,7 @@ class SingleItemTools:
         self,
         title: str,
         req_type: str,
+        example_requirement: dict | None = None,
     ) -> dict:
         """
         Use internal LLM call with structured output to expand a title into a full requirement.
@@ -49,14 +50,27 @@ class SingleItemTools:
             "fonctionnelle" if req_type == "fonctionnelle" else "non-fonctionnelle"
         )
 
+        example_section = ""
+        if example_requirement:
+            example_section = f"""
+Voici un exemple d'exigence existante pour référence de style et longueur:
+- Titre: {example_requirement.get("title")}
+- Description: {example_requirement.get("description")}
+
+Ta description doit avoir une longueur et un style similaires à cet exemple.
+"""
+
         prompt = f"""Génère une exigence {type_label} complète à partir de ce titre.
 
 Titre: {title}
 
-Génère une description détaillée de l'exigence qui:
+Génère une description de l'exigence qui:
 - Explique clairement ce qui est requis
 - Est mesurable et testable
 - Est cohérente avec le titre fourni
+- Est concise (1-2 phrases maximum)
+
+{example_section}
 """
 
         model = get_default_chat_model().with_structured_output(
@@ -164,6 +178,67 @@ Génère:
         )
         return result.model_dump()
 
+    def get_add_requirement_tool(self):
+        """Tool to add a single requirement from a title."""
+
+        @tool
+        async def add_requirement(
+            runtime: ToolRuntime,
+            title: str,
+            req_type: str | None = None,
+            priority: str | None = None,
+        ):
+            """
+            Ajoute UNE exigence à partir d'un titre.
+
+            Utilise cet outil pour les demandes simples comme "ajoute une exigence pour l'authentification".
+            Pour générer PLUSIEURS exigences, utilise generate_requirements().
+
+            Args:
+                title: Titre de l'exigence (ex: "Authentification multi-facteur")
+                req_type: Type d'exigence - "fonctionnelle" ou "non-fonctionnelle" (défaut: "fonctionnelle")
+                priority: Priorité - "Haute", "Moyenne", ou "Basse" (défaut: "Moyenne")
+            """
+            # Generate ID
+            rtype = req_type or "fonctionnelle"
+            next_id = get_next_requirement_id(runtime.state, rtype)
+            prio = priority or "Moyenne"
+
+            # Get an example requirement from state if available
+            existing_requirements = runtime.state.get("requirements") or []
+            example_requirement = (
+                existing_requirements[0] if existing_requirements else None
+            )
+
+            # Expand title into full requirement using internal LLM
+            expanded = await self._expand_requirement(title, rtype, example_requirement)
+
+            # Build complete Requirement
+            new_req = {
+                "id": next_id,
+                "title": title,
+                "priority": prio,
+                **expanded,
+            }
+
+            # Validate and add to state
+            validated = Requirement.model_validate(new_req)
+            existing = runtime.state.get("requirements") or []
+
+            return Command(
+                update={
+                    "requirements": existing + [validated.model_dump()],
+                    "messages": [
+                        ToolMessage(
+                            f"✓ Exigence {next_id} ajoutée: {title}",
+                            tool_call_id=runtime.tool_call_id,
+                        )
+                    ],
+                }
+            )
+
+        return add_requirement
+
     def get_add_user_story_tool(self):
         """Tool to add a single user story from a title."""
 
@@ -178,8 +253,13 @@ Génère:
             """
             Ajoute UNE User Story à partir d'un titre.
 
-            Utilise cet outil pour les demandes simples comme "ajoute une US pour le login".
-            Pour générer PLUSIEURS User Stories, utilise generate_user_stories().
+            Utilise cet outil pour:
+            - Les demandes simples comme "ajoute une US pour le login"
+            - Ajouter des User Stories après avoir ajouté de nouvelles exigences (add_requirement)
+            - Tu peux appeler cet outil plusieurs fois séquentiellement pour ajouter plusieurs stories
+
+            ⚠️ generate_user_stories() ne fonctionne que pour la génération initiale.
+            Pour ajouter des stories incrémentalement, utilise TOUJOURS cet outil.
 
             Args:
                 title: Titre de la User Story (ex: "Permettre la connexion SSO")
@@ -301,61 +381,6 @@ Génère:
             )
 
         return add_test
-
-    def get_add_requirement_tool(self):
-        """Tool to add a single requirement from a title."""
-
-        @tool
-        async def add_requirement(
-            runtime: ToolRuntime,
-            title: str,
-            req_type: str | None = None,
-            priority: str | None = None,
-        ):
-            """
-            Ajoute UNE exigence à partir d'un titre.
-
-            Utilise cet outil pour les demandes simples comme "ajoute une exigence pour l'authentification".
-            Pour générer PLUSIEURS exigences, utilise generate_requirements().
-
-            Args:
-                title: Titre de l'exigence (ex: "Authentification multi-facteur")
-                req_type: Type d'exigence - "fonctionnelle" ou "non-fonctionnelle" (défaut: "fonctionnelle")
-                priority: Priorité - "Haute", "Moyenne", ou "Basse" (défaut: "Moyenne")
-            """
-            # Generate ID
-            rtype = req_type or "fonctionnelle"
-            next_id = get_next_requirement_id(runtime.state, rtype)
-            prio = priority or "Moyenne"
-
-            # Expand title into full requirement using internal LLM
-            expanded = await self._expand_requirement(title, rtype)
-
-            # Build complete Requirement
-            new_req = {
-                "id": next_id,
-                "title": title,
-                "priority": prio,
-                **expanded,
-            }
-
-            # Validate and add to state
-            validated = Requirement.model_validate(new_req)
-            existing = runtime.state.get("requirements") or []
-
-            return Command(
-                update={
-                    "requirements": existing + [validated.model_dump()],
-                    "messages": [
-                        ToolMessage(
-                            f"✓ Exigence {next_id} ajoutée: {title}",
-                            tool_call_id=runtime.tool_call_id,
-                        )
-                    ],
-                }
-            )
-
-        return add_requirement
 
     def get_remove_item_tool(self):
         """Tool to remove an item by ID."""

@@ -335,9 +335,12 @@ Exigences à respecter:
             """
             Génère TOUTES les User Stories complètes à partir du contexte projet en une seule invocation.
 
-            Cet outil génère automatiquement les titres de User Stories puis génère toutes les stories
-            par lots internes jusqu'à complétion. Il retourne uniquement quand toutes les stories
-            sont générées.
+            Cet outil est pour la GÉNÉRATION INITIALE uniquement (quand aucune User Story n'existe).
+            Il génère automatiquement les titres puis génère toutes les stories par lots internes.
+
+            ⚠️ NE PAS UTILISER si des User Stories existent déjà!
+            Pour ajouter des User Stories de manière incrémentale (ex: après add_requirement),
+            utilise add_user_story() plusieurs fois à la place.
 
             IMPORTANT:
             - AVANT d'appeler cet outil, tu DOIS faire une recherche documentaire avec les outils MCP

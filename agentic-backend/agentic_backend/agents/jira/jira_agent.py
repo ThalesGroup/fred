@@ -79,7 +79,7 @@ class JiraAgent(AgentFlow):
 
 **1. Recherche documentaire (MCP)**
 Stratégie obligatoire pour generate_* :
-- D'abord découvrir : recherche "objectif projet", "contexte", "périmètre", "acteurs"
+- D'abord découvrir : recherche "objectif projet", "contexte", "périmètre"
 - Identifier le domaine métier à partir des résultats
 - Puis cibler avec le vocabulaire DÉCOUVERT (jamais inventé)
 
