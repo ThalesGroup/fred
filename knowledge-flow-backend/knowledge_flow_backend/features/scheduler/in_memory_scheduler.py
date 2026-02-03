@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from tempfile import NamedTemporaryFile
@@ -25,7 +26,7 @@ from fred_core import KeycloakUser
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryDocumentInput, LibraryOutputProcessor
-from knowledge_flow_backend.features.scheduler.activities import create_pull_file_metadata, get_push_file_metadata, input_process, load_pull_file, load_push_file, output_process
+from knowledge_flow_backend.features.scheduler.activities import run_file_pipeline
 from knowledge_flow_backend.features.scheduler.base_scheduler import BaseScheduler, WorkflowHandle
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     PipelineDefinition,
@@ -56,18 +57,19 @@ async def _run_ingestion_pipeline(definition: PipelineDefinition) -> str:
         if simulated_delay_seconds > 0:
             time.sleep(simulated_delay_seconds)
 
-        if file.is_pull():
-            metadata = await create_pull_file_metadata(file)
-            local_file_path = await load_pull_file(file, metadata)
-            metadata = await input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
-            _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
-        else:
-            metadata = await get_push_file_metadata(file)
-            local_file_path = await load_push_file(file, metadata)
-            metadata = await input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
-            _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
+        _ = await run_file_pipeline(file=file, accept_memory_storage=True)
 
     return "success"
+
+
+def _log_pipeline_task_result(task: asyncio.Task[str]) -> None:
+    try:
+        exc = task.exception()
+    except asyncio.CancelledError:
+        logger.warning("[SCHEDULER][IN_MEMORY] Pipeline task was cancelled")
+        return
+    if exc is not None:
+        logger.exception("[SCHEDULER][IN_MEMORY] Pipeline task failed: %s", exc)
 
 
 class InMemoryScheduler(BaseScheduler):
@@ -86,8 +88,12 @@ class InMemoryScheduler(BaseScheduler):
     ) -> WorkflowHandle:
         handle = self._register_workflow(user, definition)
 
+        # IMPORTANT: do not rely on FastAPI BackgroundTasks here.
+        # For streaming responses, BackgroundTasks run only after response completion,
+        # which can deadlock progress polling.
         if background_tasks is not None:
-            background_tasks.add_task(_run_ingestion_pipeline, definition)
+            task = asyncio.create_task(_run_ingestion_pipeline(definition))
+            task.add_done_callback(_log_pipeline_task_result)
         else:
             # Fallback for non-HTTP contexts; this will block the caller.
             logger.warning("[SCHEDULER][IN_MEMORY] BackgroundTasks not provided, running ingestion pipeline synchronously")

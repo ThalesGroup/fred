@@ -279,7 +279,7 @@ class IngestionController:
         user: KeycloakUser,
         tags: list[str],
         source_tag: str,
-        temporal_task_service: IngestionTaskService | None,
+        scheduler_task_service: IngestionTaskService | None,
         background_tasks: BackgroundTasks | None,
         kpi: KPIWriter,
         kpi_actor: KPIActor,
@@ -288,7 +288,7 @@ class IngestionController:
         success = 0
         last_error: str | None = None
         total = len(preloaded_files)
-        temporal_candidates: list[tuple[str, str, str | None]] = []
+        scheduled_candidates: list[tuple[str, str, str | None]] = []
 
         for filename, input_temp_file in preloaded_files:
             file_started = time.perf_counter()
@@ -299,7 +299,12 @@ class IngestionController:
                 output_temp_dir = input_temp_file.parent.parent
 
                 yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                metadata = self.service.extract_metadata(user, file_path=input_temp_file, tags=tags, source_tag=source_tag)
+                metadata = self.service.extract_metadata(
+                    user,
+                    file_path=input_temp_file,
+                    tags=tags,
+                    source_tag=source_tag,
+                )
                 metadata_file_type = getattr(metadata, "file_type", None)
                 file_type = metadata_file_type or file_type
                 yield ProcessingProgress(step=current_step, status=Status.SUCCESS, filename=filename).model_dump_json() + "\n"
@@ -307,13 +312,29 @@ class IngestionController:
                 current_step = "input content saving"
                 yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                 self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
-                yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+                yield (
+                    ProcessingProgress(
+                        step=current_step,
+                        status=Status.SUCCESS,
+                        filename=filename,
+                        document_uid=metadata.document_uid,
+                    ).model_dump_json()
+                    + "\n"
+                )
 
-                if temporal_task_service is None:
+                if scheduler_task_service is None:
                     current_step = "input processing"
                     yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                     metadata = await input_process(user=user, input_file=str(input_temp_file), metadata=metadata)
-                    yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+                    yield (
+                        ProcessingProgress(
+                            step=current_step,
+                            status=Status.SUCCESS,
+                            filename=filename,
+                            document_uid=metadata.document_uid,
+                        ).model_dump_json()
+                        + "\n"
+                    )
 
                     current_step = "output processing"
                     file_to_process = FileToProcess(
@@ -325,23 +346,55 @@ class IngestionController:
                     )
                     yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                     metadata = await output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
-                    yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
-                    yield ProcessingProgress(step="Finished", filename=filename, status=Status.FINISHED, document_uid=metadata.document_uid).model_dump_json() + "\n"
+                    yield (
+                        ProcessingProgress(
+                            step=current_step,
+                            status=Status.SUCCESS,
+                            filename=filename,
+                            document_uid=metadata.document_uid,
+                        ).model_dump_json()
+                        + "\n"
+                    )
+                    yield (
+                        ProcessingProgress(
+                            step="Finished",
+                            status=Status.FINISHED,
+                            filename=filename,
+                            document_uid=metadata.document_uid,
+                        ).model_dump_json()
+                        + "\n"
+                    )
                     success += 1
                     file_status = "ok"
                 else:
                     current_step = "metadata saving"
                     yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                     await self.service.save_metadata(user, metadata=metadata)
-                    yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+                    yield (
+                        ProcessingProgress(
+                            step=current_step,
+                            status=Status.SUCCESS,
+                            filename=filename,
+                            document_uid=metadata.document_uid,
+                        ).model_dump_json()
+                        + "\n"
+                    )
 
-                    temporal_candidates.append((filename, metadata.document_uid, file_type))
+                    scheduled_candidates.append((filename, metadata.document_uid, file_type))
                     file_status = "queued"
             except Exception as e:
                 error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
                 last_error = error_message
                 logger.exception("Ingestion error during '%s' for file '%s'", current_step, filename, exc_info=True)
-                yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n"
+                yield (
+                    ProcessingProgress(
+                        step=current_step,
+                        status=Status.ERROR,
+                        filename=filename,
+                        error=error_message,
+                    ).model_dump_json()
+                    + "\n"
+                )
             finally:
                 duration_ms = (time.perf_counter() - file_started) * 1000.0
                 kpi.emit(
@@ -353,7 +406,7 @@ class IngestionController:
                     actor=kpi_actor,
                 )
 
-        if temporal_task_service is not None and temporal_candidates:
+        if scheduler_task_service is not None and scheduled_candidates:
             current_step = "scheduler submission"
             yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename="scheduler").model_dump_json() + "\n"
             try:
@@ -365,25 +418,25 @@ class IngestionController:
                         document_uid=document_uid,
                         display_name=filename,
                     )
-                    for filename, document_uid, _ in temporal_candidates
+                    for filename, document_uid, _ in scheduled_candidates
                 ]
-                _, handle = await temporal_task_service.submit_documents(
+                _, handle = await scheduler_task_service.submit_documents(
                     user=user,
                     pipeline_name="upload_ui_async",
                     files=files_to_schedule,
                     background_tasks=background_tasks,
                 )
                 workflow_id = handle.workflow_id
-                logger.info("Queued Temporal workflow %s from /upload-process-documents", handle.workflow_id)
+                logger.info("Queued scheduler workflow %s from /upload-process-documents", handle.workflow_id)
                 yield ProcessingProgress(step=current_step, status=Status.SUCCESS, filename="scheduler").model_dump_json() + "\n"
 
                 # Block until all scheduled documents are either fully processed or failed.
                 current_step = "scheduler processing"
-                pending_by_uid = {document_uid: filename for filename, document_uid, _ in temporal_candidates}
+                pending_by_uid = {document_uid: filename for filename, document_uid, _ in scheduled_candidates}
                 deadline = time.monotonic() + TEMPORAL_PROGRESS_TIMEOUT_SEC
 
                 while pending_by_uid:
-                    progress = await temporal_task_service.get_progress(
+                    progress = await scheduler_task_service.get_progress(
                         user=user,
                         workflow_id=workflow_id,
                     )
@@ -395,7 +448,7 @@ class IngestionController:
                         if doc is None:
                             continue
                         if doc.has_failed:
-                            last_error = f"Temporal processing failed for document_uid={document_uid}"
+                            last_error = f"Scheduler processing failed for document_uid={document_uid}"
                             yield (
                                 ProcessingProgress(
                                     step=current_step,
@@ -437,10 +490,10 @@ class IngestionController:
                         break
 
                     if time.monotonic() >= deadline:
-                        timeout_message = f"Timed out waiting for Temporal completion after {TEMPORAL_PROGRESS_TIMEOUT_SEC}s"
+                        timeout_message = f"Timed out waiting for scheduler completion after {TEMPORAL_PROGRESS_TIMEOUT_SEC}s"
                         last_error = timeout_message
                         logger.warning(
-                            "Timeout while waiting for Temporal workflow %s completion; pending=%d",
+                            "Timeout while waiting for scheduler workflow %s completion; pending=%d",
                             workflow_id,
                             len(pending_by_uid),
                         )
@@ -471,7 +524,7 @@ class IngestionController:
                 error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
                 last_error = error_message
                 logger.exception("Scheduler submission failed for /upload-process-documents", exc_info=True)
-                for filename, _, _ in temporal_candidates:
+                for filename, _, _ in scheduled_candidates:
                     yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n"
 
         timer_dims["status"] = "ok" if success == total else "error"
@@ -480,56 +533,6 @@ class IngestionController:
         if last_error:
             done_payload["error"] = last_error
         yield json.dumps(done_payload) + "\n"
-
-    async def _stream_upload_process_local(
-        self,
-        *,
-        preloaded_files: list[tuple[str, pathlib.Path]],
-        user: KeycloakUser,
-        tags: list[str],
-        source_tag: str,
-        kpi: KPIWriter,
-        kpi_actor: KPIActor,
-        timer_dims: dict,
-    ):
-        async for line in self._stream_upload_process(
-            preloaded_files=preloaded_files,
-            user=user,
-            tags=tags,
-            source_tag=source_tag,
-            temporal_task_service=None,
-            background_tasks=None,
-            kpi=kpi,
-            kpi_actor=kpi_actor,
-            timer_dims=timer_dims,
-        ):
-            yield line
-
-    async def _stream_upload_process_temporal(
-        self,
-        *,
-        preloaded_files: list[tuple[str, pathlib.Path]],
-        user: KeycloakUser,
-        tags: list[str],
-        source_tag: str,
-        background_tasks: BackgroundTasks,
-        temporal_task_service: IngestionTaskService,
-        kpi: KPIWriter,
-        kpi_actor: KPIActor,
-        timer_dims: dict,
-    ):
-        async for line in self._stream_upload_process(
-            preloaded_files=preloaded_files,
-            user=user,
-            tags=tags,
-            source_tag=source_tag,
-            temporal_task_service=temporal_task_service,
-            background_tasks=background_tasks,
-            kpi=kpi,
-            kpi_actor=kpi_actor,
-            timer_dims=timer_dims,
-        ):
-            yield line
 
     def __init__(self, router: APIRouter):
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -542,9 +545,10 @@ class IngestionController:
         self.temporal_task_service: IngestionTaskService | None = None
         self._temporal_client_provider: TemporalClientProvider | None = None
         self._temporal_task_queue: str | None = None
-        if scheduler_cfg.enabled and scheduler_cfg.backend.lower() == "temporal":
-            self._temporal_client_provider = TemporalClientProvider(scheduler_cfg.temporal)
-            self._temporal_task_queue = scheduler_cfg.temporal.task_queue
+        if scheduler_cfg.enabled:
+            if scheduler_cfg.backend.lower() == "temporal":
+                self._temporal_client_provider = TemporalClientProvider(scheduler_cfg.temporal)
+                self._temporal_task_queue = scheduler_cfg.temporal.task_queue
             self.temporal_task_service = IngestionTaskService(
                 scheduler_config=scheduler_cfg,
                 metadata_service=self.service.metadata_service,
@@ -783,12 +787,7 @@ class IngestionController:
             tags = parsed_input.tags
             source_tag = parsed_input.source_tag
 
-            preloaded_files = []
-            for file in files:
-                raw_path = uploadfile_to_path(file)
-                input_temp_file = save_file_to_temp(raw_path)
-                logger.info(f"File {file.filename} saved to temp storage at {input_temp_file}")
-                preloaded_files.append((file.filename, input_temp_file))
+            preloaded_files = self._preload_uploaded_files(files)
 
             total = len(preloaded_files)
 
@@ -797,27 +796,72 @@ class IngestionController:
                 for filename, input_temp_file in preloaded_files:
                     current_step = "metadata extraction"
                     try:
-                        output_temp_dir = input_temp_file.parent.parent
                         yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                        metadata = self.service.extract_metadata(user, file_path=input_temp_file, tags=tags, source_tag=source_tag)
-                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+                        metadata = self.service.extract_metadata(
+                            user,
+                            file_path=input_temp_file,
+                            tags=tags,
+                            source_tag=source_tag,
+                        )
+                        yield (
+                            ProcessingProgress(
+                                step=current_step,
+                                status=Status.SUCCESS,
+                                filename=filename,
+                                document_uid=metadata.document_uid,
+                            ).model_dump_json()
+                            + "\n"
+                        )
 
-                        current_step = "raw content saving"
+                        current_step = "input content saving"
                         yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
+                        output_temp_dir = input_temp_file.parent.parent
                         self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
-                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
+                        yield (
+                            ProcessingProgress(
+                                step=current_step,
+                                status=Status.SUCCESS,
+                                filename=filename,
+                                document_uid=metadata.document_uid,
+                            ).model_dump_json()
+                            + "\n"
+                        )
 
                         current_step = "metadata saving"
                         yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                         await self.service.save_metadata(user, metadata=metadata)
-                        yield ProcessingProgress(step=current_step, status=Status.SUCCESS, document_uid=metadata.document_uid, filename=filename).model_dump_json() + "\n"
-                        yield ProcessingProgress(step="Finished", filename=filename, status=Status.FINISHED, document_uid=metadata.document_uid).model_dump_json() + "\n"
+                        yield (
+                            ProcessingProgress(
+                                step=current_step,
+                                status=Status.SUCCESS,
+                                filename=filename,
+                                document_uid=metadata.document_uid,
+                            ).model_dump_json()
+                            + "\n"
+                        )
+                        yield (
+                            ProcessingProgress(
+                                step="Finished",
+                                status=Status.FINISHED,
+                                filename=filename,
+                                document_uid=metadata.document_uid,
+                            ).model_dump_json()
+                            + "\n"
+                        )
 
                         success += 1
 
                     except Exception as e:
                         error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
-                        yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n"
+                        yield (
+                            ProcessingProgress(
+                                step=current_step,
+                                status=Status.ERROR,
+                                filename=filename,
+                                error=error_message,
+                            ).model_dump_json()
+                            + "\n"
+                        )
 
                 overall_status = Status.SUCCESS if success == total else Status.ERROR
                 yield json.dumps({"step": "done", "status": overall_status}) + "\n"
@@ -848,29 +892,17 @@ class IngestionController:
                 source_tag = parsed_input.source_tag
 
                 preloaded_files = self._preload_uploaded_files(files)
-                temporal_task_service = self.temporal_task_service
-                if temporal_task_service is None:
-                    event_stream = self._stream_upload_process_local(
-                        preloaded_files=preloaded_files,
-                        user=user,
-                        tags=tags,
-                        source_tag=source_tag,
-                        kpi=kpi,
-                        kpi_actor=kpi_actor,
-                        timer_dims=d,
-                    )
-                else:
-                    event_stream = self._stream_upload_process_temporal(
-                        preloaded_files=preloaded_files,
-                        user=user,
-                        tags=tags,
-                        source_tag=source_tag,
-                        background_tasks=background_tasks,
-                        temporal_task_service=temporal_task_service,
-                        kpi=kpi,
-                        kpi_actor=kpi_actor,
-                        timer_dims=d,
-                    )
+                event_stream = self._stream_upload_process(
+                    preloaded_files=preloaded_files,
+                    user=user,
+                    tags=tags,
+                    source_tag=source_tag,
+                    scheduler_task_service=self.temporal_task_service,
+                    background_tasks=background_tasks if self.temporal_task_service is not None else None,
+                    kpi=kpi,
+                    kpi_actor=kpi_actor,
+                    timer_dims=d,
+                )
 
                 return StreamingResponse(event_stream, media_type="application/x-ndjson")
 

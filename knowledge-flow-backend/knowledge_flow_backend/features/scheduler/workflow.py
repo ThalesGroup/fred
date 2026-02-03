@@ -18,80 +18,6 @@ from typing import Any
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
-from knowledge_flow_backend.features.scheduler.scheduler_structures import PipelineDefinition
-
-
-@workflow.defn
-class CreatePullFileMetadata:
-    @workflow.run
-    async def run(self, file: Any) -> Any:
-        workflow.logger.info(f"[SCHEDULER] ExtractMetadataWorkflow: {file}")
-        return await workflow.execute_activity(
-            "create_pull_file_metadata",
-            args=[file],
-            schedule_to_close_timeout=timedelta(seconds=60),
-        )
-
-
-@workflow.defn
-class GetPushFileMetadata:
-    @workflow.run
-    async def run(self, file: Any) -> Any:
-        workflow.logger.info(f"[SCHEDULER] ExtractMetadataWorkflow: {file}")
-        return await workflow.execute_activity(
-            "get_push_file_metadata",
-            args=[file],
-            schedule_to_close_timeout=timedelta(seconds=60),
-        )
-
-
-@workflow.defn
-class LoadPullFile:
-    @workflow.run
-    async def run(self, file: Any, metadata: Any) -> str:
-        workflow.logger.info(f"[SCHEDULER] LoadPullFile: {file}")
-        return await workflow.execute_activity(
-            "load_pull_file",
-            args=[file, metadata],
-            schedule_to_close_timeout=timedelta(seconds=60),
-        )
-
-
-@workflow.defn
-class LoadPushFile:
-    @workflow.run
-    async def run(self, file: Any, metadata: Any) -> str:
-        workflow.logger.info(f"[SCHEDULER] LoadPushFile: {file}")
-        return await workflow.execute_activity(
-            "load_push_file",
-            args=[file, metadata],
-            schedule_to_close_timeout=timedelta(seconds=60),
-        )
-
-
-@workflow.defn
-class InputProcess:
-    @workflow.run
-    async def run(self, user: Any, input_file: str, metadata: Any) -> Any:
-        workflow.logger.info(f"[SCHEDULER] InputProcess: {input_file}")
-        return await workflow.execute_activity(
-            "input_process",
-            args=[user, input_file, metadata],
-            schedule_to_close_timeout=timedelta(seconds=60),
-        )
-
-
-@workflow.defn
-class OutputProcess:
-    @workflow.run
-    async def run(self, file: Any, metadata: Any) -> None:
-        workflow.logger.info(f"[SCHEDULER] OutputProcess: {file}")
-        await workflow.execute_activity(
-            "output_process",
-            args=[file, metadata, False],
-            schedule_to_close_timeout=timedelta(seconds=60),
-        )
-
 
 @workflow.defn
 class FastStoreVectors:
@@ -118,39 +44,21 @@ class FastDeleteVectors:
 @workflow.defn
 class Process:
     @workflow.run
-    async def run(self, definition: PipelineDefinition) -> str:
-        pipeline_name = definition.name
-        files = definition.files
+    async def run(self, definition: Any) -> str:
+        pipeline_name = definition.get("name") if isinstance(definition, dict) else getattr(definition, "name", "unknown")
+        files = definition.get("files", []) if isinstance(definition, dict) else getattr(definition, "files", [])
         workflow.logger.info(f"[SCHEDULER] Ingesting pipeline: {pipeline_name}")
 
         for file in files:
-            display_name = file.display_name or "unknown"
-            if file.is_pull():
-                workflow.logger.info(f"[SCHEDULER] Processing pull file: {display_name}")
-                metadata = await workflow.execute_child_workflow(CreatePullFileMetadata.run, args=[file], id=f"CreatePullFileMetadata-{display_name}", retry_policy=RetryPolicy(maximum_attempts=2))
-
-                workflow.logger.info(f"[SCHEDULER] Loading pull file local copy: {display_name}")
-                local_file_path = await workflow.execute_child_workflow(LoadPullFile.run, args=[file, metadata], id=f"LoadPullFile-{display_name}", retry_policy=RetryPolicy(maximum_attempts=2))
-
-            else:
-                workflow.logger.info(f"[SCHEDULER] Processing push file: {display_name}")
-                metadata = await workflow.execute_child_workflow(GetPushFileMetadata.run, args=[file], id=f"GetPushFileMetadata-{display_name}", retry_policy=RetryPolicy(maximum_attempts=2))
-
-                workflow.logger.info(f"[SCHEDULER] Loading push file local copy: {display_name}")
-                local_file_path = await workflow.execute_child_workflow(LoadPushFile.run, args=[file, metadata], id=f"LoadPushFile-{display_name}", retry_policy=RetryPolicy(maximum_attempts=2))
-
-            workflow.logger.info(f"[SCHEDULER] Input process local copy: {local_file_path or 'unknown'}")
-
-            metadata = await workflow.execute_child_workflow(
-                InputProcess.run,
-                args=[file.processed_by, local_file_path, metadata],
-                id=f"InputProcess-{display_name}",
+            display_name = file.get("display_name") if isinstance(file, dict) else getattr(file, "display_name", None)
+            display_name = display_name or "unknown"
+            workflow.logger.info("[SCHEDULER] Processing file: %s", display_name)
+            await workflow.execute_activity(
+                "process_file",
+                args=[file, False],
+                schedule_to_close_timeout=timedelta(minutes=15),
                 retry_policy=RetryPolicy(maximum_attempts=2),
             )
-
-            workflow.logger.info(f"[SCHEDULER] Output process local copy: {local_file_path or 'unknown'}")
-            await workflow.execute_child_workflow(OutputProcess.run, args=[file, metadata], id=f"OutputProcess-{display_name}", retry_policy=RetryPolicy(maximum_attempts=2))
-
-            workflow.logger.info(f"[SCHEDULER] Completed file: {display_name}")
+            workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
 
         return "success"
