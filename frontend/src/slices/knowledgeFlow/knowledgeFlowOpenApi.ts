@@ -578,6 +578,35 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/teams/${queryArg.teamId}/members` }),
     }),
+    addTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPost: build.mutation<
+      AddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostApiResponse,
+      AddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/teams/${queryArg.teamId}/members`,
+        method: "POST",
+        body: queryArg.addTeamMemberRequest,
+      }),
+    }),
+    removeTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDelete: build.mutation<
+      RemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteApiResponse,
+      RemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/teams/${queryArg.teamId}/members/${queryArg.userId}`,
+        method: "DELETE",
+      }),
+    }),
+    updateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatch: build.mutation<
+      UpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchApiResponse,
+      UpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/teams/${queryArg.teamId}/members/${queryArg.userId}`,
+        method: "PATCH",
+        body: queryArg.updateTeamMemberRequest,
+      }),
+    }),
     listUsersKnowledgeFlowV1UsersGet: build.query<
       ListUsersKnowledgeFlowV1UsersGetApiResponse,
       ListUsersKnowledgeFlowV1UsersGetApiArg
@@ -1160,6 +1189,22 @@ export type ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiResponse =
   /** status 200 Successful Response */ TeamMember[];
 export type ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiArg = {
   teamId: string;
+};
+export type AddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostApiResponse = unknown;
+export type AddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostApiArg = {
+  teamId: string;
+  addTeamMemberRequest: AddTeamMemberRequest;
+};
+export type RemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteApiResponse = unknown;
+export type RemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteApiArg = {
+  teamId: string;
+  userId: string;
+};
+export type UpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchApiResponse = unknown;
+export type UpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchApiArg = {
+  teamId: string;
+  userId: string;
+  updateTeamMemberRequest: UpdateTeamMemberRequest;
 };
 export type ListUsersKnowledgeFlowV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
 export type ListUsersKnowledgeFlowV1UsersGetApiArg = void;
@@ -1934,6 +1979,13 @@ export type TeamMember = {
   relation: UserTeamRelation;
   user: UserSummary;
 };
+export type AddTeamMemberRequest = {
+  user_id: string;
+  relation: UserTeamRelation;
+};
+export type UpdateTeamMemberRequest = {
+  relation: UserTeamRelation;
+};
 export type ProcessorDescriptor = {
   id: string;
   name: string;
@@ -2234,6 +2286,9 @@ export const {
   useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation,
   useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
   useLazyListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
+  useAddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostMutation,
+  useRemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteMutation,
+  useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation,
   useListUsersKnowledgeFlowV1UsersGetQuery,
   useLazyListUsersKnowledgeFlowV1UsersGetQuery,
   useListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,

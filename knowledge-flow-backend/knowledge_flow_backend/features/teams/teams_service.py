@@ -6,7 +6,16 @@ from keycloak import KeycloakAdmin
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
 from knowledge_flow_backend.features.teams.team_id import TeamId
-from knowledge_flow_backend.features.teams.teams_structures import KeycloakGroupSummary, Team, TeamMember, TeamNotFoundError, TeamUpdate, UserTeamRelation
+from knowledge_flow_backend.features.teams.teams_structures import (
+    AddTeamMemberRequest,
+    KeycloakGroupSummary,
+    Team,
+    TeamMember,
+    TeamNotFoundError,
+    TeamUpdate,
+    UpdateTeamMemberRequest,
+    UserTeamRelation,
+)
 from knowledge_flow_backend.features.users.users_service import get_users_by_ids
 from knowledge_flow_backend.features.users.users_structures import UserSummary
 
@@ -45,34 +54,11 @@ async def get_team_by_id(user: KeycloakUser, team_id: TeamId) -> Team:
     rebac = app_context.get_rebac_engine()
     metadata_store = app_context.get_team_metadata_store()
 
-    admin = create_keycloak_admin(get_configuration().security.m2m)
-    if isinstance(admin, KeycloackDisabled):
-        logger.info("Keycloak admin client not configured; cannot retrieve team.")
-        raise TeamNotFoundError(team_id)
-
-    # Fetch the specific group from Keycloak
-    try:
-        raw_group = await admin.a_get_group(team_id)
-    except Exception as e:
-        logger.warning(f"Failed to fetch group {team_id} from Keycloak: {e}")
-        raise TeamNotFoundError(team_id) from e
-
-    if not raw_group:
-        raise TeamNotFoundError(team_id)
-
-    # Ensure team has organization relation for ReBAC
-    consistency_token = await _ensure_team_organization_relations(rebac, [team_id])
-
-    # Check user authorization for this specific team
-    await rebac.check_user_permission_or_raise(user, TeamPermission.CAN_READ, team_id, consistency_token=consistency_token)
-
-    # Create group summary from raw Keycloak data
-    group_id = raw_group.get("id")
-    if not group_id:
-        raise TeamNotFoundError(team_id)
+    # Validate team exists and check permissions
+    admin, raw_group = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_READ)
 
     group_summary = KeycloakGroupSummary(
-        id=group_id,
+        id=team_id,
         name=raw_group.get("name"),
         member_count=0,  # Will be populated by enrichment
     )
@@ -87,26 +73,8 @@ async def update_team(user: KeycloakUser, team_id: TeamId, update_data: TeamUpda
     rebac = app_context.get_rebac_engine()
     metadata_store = app_context.get_team_metadata_store()
 
-    admin = create_keycloak_admin(get_configuration().security.m2m)
-    if isinstance(admin, KeycloackDisabled):
-        logger.info("Keycloak admin client not configured; cannot update team.")
-        raise TeamNotFoundError(team_id)
-
-    # Ensure team exists in Keycloak
-    try:
-        raw_group = await admin.a_get_group(team_id)
-    except Exception as e:
-        logger.warning(f"Failed to fetch group {team_id} from Keycloak: {e}")
-        raise TeamNotFoundError(team_id) from e
-
-    if not raw_group:
-        raise TeamNotFoundError(team_id)
-
-    # Ensure team has organization relation for ReBAC
-    consistency_token = await _ensure_team_organization_relations(rebac, [team_id])
-
-    # Check user has permission to update team info
-    await rebac.check_user_permission_or_raise(user, TeamPermission.CAN_UPDATE_INFO, team_id, consistency_token=consistency_token)
+    # Validate team exists and check permissions
+    _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_INFO)
 
     # Update metadata
     await metadata_store.upsert(team_id, update_data)
@@ -140,13 +108,8 @@ async def list_team_members(user: KeycloakUser, team_id: TeamId) -> list[TeamMem
     app_context = ApplicationContext.get_instance()
     rebac = app_context.get_rebac_engine()
 
-    admin = create_keycloak_admin(get_configuration().security.m2m)
-    if isinstance(admin, KeycloackDisabled):
-        logger.info("Keycloak admin client not configured; cannot list team members.")
-        raise TeamNotFoundError(team_id)
-
-    # Check user can list members
-    await rebac.check_user_permission_or_raise(user, TeamPermission.CAN_READ_MEMEBERS, team_id)
+    # Validate team exists and check permissions
+    admin, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_READ_MEMEBERS)
 
     # Retrieve all member ids + ids of owners and managers
     owner_ids, manager_ids, member_ids = await asyncio.gather(
@@ -174,6 +137,82 @@ async def list_team_members(user: KeycloakUser, team_id: TeamId) -> list[TeamMem
         team_members.append(TeamMember(user=user_summary, relation=relation))
 
     return team_members
+
+
+async def add_team_member(user: KeycloakUser, team_id: TeamId, request: AddTeamMemberRequest) -> None:
+    """Add a member to a team with the specified relation.
+
+    Args:
+        user: The user performing the action
+        team_id: The team identifier
+        request: The request containing user_id and relation to add
+
+    Raises:
+        TeamNotFoundError: If the team doesn't exist
+        PermissionError: If user doesn't have permission to update members
+    """
+    app_context = ApplicationContext.get_instance()
+    rebac = app_context.get_rebac_engine()
+
+    # Validate team exists and check permissions
+    _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
+
+    # Add the relation in OpenFGA
+    await _add_team_member_relation(rebac, team_id, request.user_id, request.relation)
+
+    logger.info(f"Added user {request.user_id} as {request.relation.value} to team {team_id}")
+
+
+async def remove_team_member(user: KeycloakUser, team_id: TeamId, user_id: str) -> None:
+    """Remove a member from a team (removes all relations).
+
+    Args:
+        user: The user performing the action
+        team_id: The team identifier
+        user_id: The ID of the user to remove
+
+    Raises:
+        TeamNotFoundError: If the team doesn't exist
+        PermissionError: If user doesn't have permission to update members
+    """
+    app_context = ApplicationContext.get_instance()
+    rebac = app_context.get_rebac_engine()
+
+    # Validate team exists and check permissions
+    _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
+
+    # Remove all relations
+    await _remove_all_team_member_relations(rebac, team_id, user_id)
+
+    logger.info(f"Removed user {user_id} from team {team_id}")
+
+
+async def update_team_member(user: KeycloakUser, team_id: TeamId, user_id: str, request: UpdateTeamMemberRequest) -> None:
+    """Update a team member's relation.
+
+    Args:
+        user: The user performing the action
+        team_id: The team identifier
+        user_id: The ID of the user to update
+        request: The request containing the new relation
+
+    Raises:
+        TeamNotFoundError: If the team doesn't exist
+        PermissionError: If user doesn't have permission to update members
+    """
+    app_context = ApplicationContext.get_instance()
+    rebac = app_context.get_rebac_engine()
+
+    # Validate team exists and check permissions
+    _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
+
+    # Remove all existing relations
+    await _remove_all_team_member_relations(rebac, team_id, user_id)
+
+    # Add the new relation
+    await _add_team_member_relation(rebac, team_id, user_id, request.relation)
+
+    logger.info(f"Updated user {user_id} relation to {request.relation.value} in team {team_id}")
 
 
 # ------------------------------------------------------------
@@ -353,3 +392,90 @@ async def _fetch_group_member_ids(admin: KeycloakAdmin, group_id: TeamId) -> set
 def _sanitize_name(value: object, fallback: str) -> str:
     name = (str(value or "")).strip()
     return name or fallback
+
+
+async def _validate_team_and_check_permission(user: KeycloakUser, team_id: TeamId, rebac: RebacEngine, permission: TeamPermission) -> tuple[KeycloakAdmin, dict]:
+    """Validate that a team exists and check if user has the specified permission.
+
+    Args:
+        user: The user performing the action
+        team_id: The team identifier
+        rebac: The ReBAC engine instance
+        permission: The permission to check
+
+    Returns:
+        A tuple of (KeycloakAdmin instance, raw Keycloak group data)
+
+    Raises:
+        TeamNotFoundError: If the team doesn't exist in Keycloak
+        PermissionError: If user doesn't have the required permission
+    """
+    admin = create_keycloak_admin(get_configuration().security.m2m)
+    if isinstance(admin, KeycloackDisabled):
+        logger.info("Keycloak admin client not configured; cannot validate team.")
+        raise TeamNotFoundError(team_id)
+
+    # Ensure team exists in Keycloak
+    try:
+        raw_group = await admin.a_get_group(team_id)
+    except Exception as e:
+        logger.warning(f"Failed to fetch group {team_id} from Keycloak: {e}")
+        raise TeamNotFoundError(team_id) from e
+
+    if not raw_group:
+        raise TeamNotFoundError(team_id)
+
+    # Ensure team has organization relation for ReBAC
+    consistency_token = await _ensure_team_organization_relations(rebac, [team_id])
+
+    # Check user has the required permission
+    await rebac.check_user_permission_or_raise(user, permission, team_id, consistency_token=consistency_token)
+
+    return admin, raw_group
+
+
+async def _add_team_member_relation(rebac: RebacEngine, team_id: TeamId, user_id: str, relation: UserTeamRelation) -> None:
+    """Add a specific relation for a user to a team in OpenFGA.
+
+    Args:
+        rebac: The ReBAC engine instance
+        team_id: The team identifier
+        user_id: The user identifier
+        relation: The relation type to add
+    """
+    await rebac.add_relation(
+        Relation(
+            subject=RebacReference(Resource.USER, user_id),
+            relation=relation.to_relation(),
+            resource=RebacReference(Resource.TEAM, team_id),
+        )
+    )
+
+
+async def _remove_all_team_member_relations(rebac: RebacEngine, team_id: TeamId, user_id: str) -> None:
+    """Remove all relations (owner, manager, member) for a user from a team in OpenFGA.
+
+    Args:
+        rebac: The ReBAC engine instance
+        team_id: The team identifier
+        user_id: The user identifier
+    """
+    relations_to_remove = [
+        Relation(
+            subject=RebacReference(Resource.USER, user_id),
+            relation=RelationType.OWNER,
+            resource=RebacReference(Resource.TEAM, team_id),
+        ),
+        Relation(
+            subject=RebacReference(Resource.USER, user_id),
+            relation=RelationType.MANAGER,
+            resource=RebacReference(Resource.TEAM, team_id),
+        ),
+        Relation(
+            subject=RebacReference(Resource.USER, user_id),
+            relation=RelationType.MEMBER,
+            resource=RebacReference(Resource.TEAM, team_id),
+        ),
+    ]
+
+    await rebac.delete_relations(relations_to_remove)

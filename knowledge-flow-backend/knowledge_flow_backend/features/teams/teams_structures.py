@@ -53,3 +53,16 @@ class TeamMember(BaseModel):
     type: Literal["user"] = "user"
     relation: UserTeamRelation
     user: UserSummary
+
+
+class AddTeamMemberRequest(BaseModel):
+    """Request to add a member to a team."""
+
+    user_id: str
+    relation: UserTeamRelation
+
+
+class UpdateTeamMemberRequest(BaseModel):
+    """Request to update a team member's relation."""
+
+    relation: UserTeamRelation
