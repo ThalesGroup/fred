@@ -155,7 +155,10 @@ async def add_team_member(user: KeycloakUser, team_id: TeamId, request: AddTeamM
     rebac = app_context.get_rebac_engine()
 
     # Validate team exists and check permissions
-    _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
+    admin, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
+
+    # Add user to Keycloak group
+    await _add_keycloak_user_to_group(admin, request.user_id, team_id)
 
     # Add the relation in OpenFGA
     await _add_team_member_relation(rebac, team_id, request.user_id, request.relation)
@@ -179,7 +182,10 @@ async def remove_team_member(user: KeycloakUser, team_id: TeamId, user_id: str) 
     rebac = app_context.get_rebac_engine()
 
     # Validate team exists and check permissions
-    _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
+    admin, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
+
+    # Remove user from Keycloak group
+    await _remove_keycloak_user_from_group(admin, user_id, team_id)
 
     # Remove all relations
     await _remove_all_team_member_relations(rebac, team_id, user_id)
@@ -479,3 +485,35 @@ async def _remove_all_team_member_relations(rebac: RebacEngine, team_id: TeamId,
     ]
 
     await rebac.delete_relations(relations_to_remove)
+
+
+async def _add_keycloak_user_to_group(admin: KeycloakAdmin, user_id: str, group_id: TeamId) -> None:
+    """Add a user to a Keycloak group.
+
+    Args:
+        admin: The Keycloak admin instance
+        user_id: The user identifier
+        group_id: The group/team identifier
+    """
+    try:
+        await admin.a_group_user_add(user_id, group_id)
+        logger.info(f"Added user {user_id} to Keycloak group {group_id}")
+    except Exception as e:
+        logger.error(f"Failed to add user {user_id} to Keycloak group {group_id}: {e}")
+        raise
+
+
+async def _remove_keycloak_user_from_group(admin: KeycloakAdmin, user_id: str, group_id: TeamId) -> None:
+    """Remove a user from a Keycloak group.
+
+    Args:
+        admin: The Keycloak admin instance
+        user_id: The user identifier
+        group_id: The group/team identifier
+    """
+    try:
+        await admin.a_group_user_remove(user_id, group_id)
+        logger.info(f"Removed user {user_id} from Keycloak group {group_id}")
+    except Exception as e:
+        logger.error(f"Failed to remove user {user_id} from Keycloak group {group_id}: {e}")
+        raise
