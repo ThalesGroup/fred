@@ -1038,7 +1038,9 @@ class ApplicationContext:
 
         # Timeouts
         tcfg = cfg.ai.timeout
-        logger.info("  ⏱️  Timeouts: connect=%ss, read=%ss", tcfg.connect, tcfg.read)
+        logger.info(
+            "  ⏱️  Rest Call Timeouts: connect=%ss, read=%ss", tcfg.connect, tcfg.read
+        )
 
         # Agents
         enabled_agents = [a.name for a in cfg.ai.agents if a.enabled]

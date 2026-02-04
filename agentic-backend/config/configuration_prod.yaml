@@ -76,7 +76,7 @@ ai:
   agentic_restore_max_exchanges: 20
 
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
-  max_concurrent_agents: 128
+  max_concurrent_agents: 1024
 
   # Maximum number of files a user can attach across all sessions
   max_attached_files_per_user: 20
@@ -112,11 +112,17 @@ ai:
     provider: "openai"
     name: "gpt-5.1"
     settings:
-      # Benchmark (mock OpenAI): uncomment the base_url below to target the mock server.
-      # base_url: "http://localhost:8383/v1"
+      max_retries: 0
+      timeout:
+        connect: 10.0
+        read: 30.0
+        write: 30.0
+        pool: 5.0
+      http_client_limits:
+        max_connections: 500
+        max_keepalive_connections: 200
+        keepalive_expiry_seconds: 10
       temperature: 0.0
-      max_retries: 2
-      request_timeout: 30
 
   # Default language model used for non-chat interactions. This one is optional
   # and if not set, the default_chat_model will be used as fallback.
@@ -126,11 +132,17 @@ ai:
     provider: "openai"
     name: "gpt-5.1"
     settings:
-      # Benchmark (mock OpenAI): uncomment the base_url below to target the mock server.
-      # base_url: "http://localhost:8383/v1"
+      max_retries: 0
+      timeout:
+        connect: 10.0
+        read: 30.0
+        write: 30.0
+        pool: 5.0
+      http_client_limits:
+        max_connections: 500
+        max_keepalive_connections: 200
+        keepalive_expiry_seconds: 10
       temperature: 0.0
-      max_retries: 2
-      request_timeout: 30
 
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model

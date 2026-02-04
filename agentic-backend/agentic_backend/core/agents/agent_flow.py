@@ -152,34 +152,29 @@ class AgentFlow:
         Compile and return the agent's graph (idempotent).
         Subclasses must set `self._graph` in async_init().
         """
-        cp = checkpointer or self.streaming_memory
-        logger.info(
-            "[AGENT_FLOW] get_compiled_graph agent=%s checkpointer=%s id=%s cached=%s",
-            self.get_name(),
-            type(cp).__name__,
-            hex(id(cp)),
-            self.compiled_graph is not None,
-        )
-        # Reuse compiled graph when no external checkpointer is provided.
-        if checkpointer is None and self.compiled_graph is not None:
+        # If we have a cached graph, return it.
+        # The checkpointer is bound at compile time, so we assume it's the correct one.
+        if self.compiled_graph is not None:
+            logger.debug(
+                "[AGENT_FLOW] Reusing cached compiled graph for agent=%s",
+                self.get_name(),
+            )
             return self.compiled_graph
+
         if self._graph is None:
             # Strong, early signal to devs wiring the agent: you must build the graph in async_init()
             raise RuntimeError(
                 f"{type(self).__name__}: _graph is None. Did you forget to set it in async_init()?"
             )
-        compiled = self._graph.compile(
-            checkpointer=checkpointer or self.streaming_memory
-        )
-        if checkpointer is None:
-            self.compiled_graph = compiled
+
+        cp = checkpointer or self.streaming_memory
         logger.info(
-            "[AGENT_FLOW] compiled graph ready agent=%s checkpointer=%s id=%s",
+            "[AGENT_FLOW] Compiling graph for agent=%s with checkpointer=%s",
             self.get_name(),
             type(cp).__name__,
-            hex(id(cp)),
         )
-        return compiled
+        self.compiled_graph = self._graph.compile(checkpointer=cp)
+        return self.compiled_graph
 
     def apply_settings(self, new_settings: AgentSettings) -> None:
         """

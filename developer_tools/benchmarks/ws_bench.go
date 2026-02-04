@@ -618,9 +618,16 @@ func deriveSessionURL(wsURL string) (string, error) {
 		parsed.Scheme = "https"
 	}
 
-	if strings.Contains(parsed.Path, "/chatbot/query/ws") {
-		parsed.Path = strings.Replace(parsed.Path, "/chatbot/query/ws", "/chatbot/session", 1)
-		return parsed.String(), nil
+	// Support both main and baseline websocket routes.
+	replacements := []string{
+		"/chatbot/query/ws-baseline",
+		"/chatbot/query/ws",
+	}
+	for _, old := range replacements {
+		if strings.Contains(parsed.Path, old) {
+			parsed.Path = strings.Replace(parsed.Path, old, "/chatbot/session", 1)
+			return parsed.String(), nil
+		}
 	}
 
 	return "", fmt.Errorf("cannot derive session URL from %s (set -session-url)", wsURL)

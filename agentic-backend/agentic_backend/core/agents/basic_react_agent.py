@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from langchain.agents import create_agent
 from langgraph.graph.state import CompiledStateGraph
@@ -125,14 +126,26 @@ class BasicReActAgent(AgentFlow):
         )
         await self.mcp.init()
 
-    async def aclose(self):
-        await self.mcp.aclose()
-
-    def get_compiled_graph(self) -> CompiledStateGraph:
+        # Compile the graph once and cache it.
+        # The checkpointer is bound at compile time.
         base_prompt = self.render(self.get_tuned_text("prompts.system") or "")
-        return create_agent(
+        self.compiled_graph = create_agent(
             model=get_default_chat_model(),
             system_prompt=f"{base_prompt}{_CITATION_POLICY}",
             tools=[*self.mcp.get_tools()],
             checkpointer=self.streaming_memory,
         )
+
+    async def aclose(self):
+        await self.mcp.aclose()
+
+    def get_compiled_graph(
+        self, checkpointer: Optional[object] = None
+    ) -> CompiledStateGraph:
+        # The checkpointer is already bound during async_init.
+        # The argument is kept for signature compatibility with the base class.
+        if self.compiled_graph is None:
+            raise RuntimeError(
+                "BasicReActAgent graph not compiled. Did you forget to call async_init()?"
+            )
+        return self.compiled_graph
