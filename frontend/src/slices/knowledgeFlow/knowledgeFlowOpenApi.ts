@@ -572,6 +572,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.teamUpdate,
       }),
     }),
+    uploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost: build.mutation<
+      UploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostApiResponse,
+      UploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/teams/${queryArg.teamId}/banner`,
+        method: "POST",
+        body: queryArg.bodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost,
+      }),
+    }),
     listTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGet: build.query<
       ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiResponse,
       ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiArg
@@ -1184,6 +1194,13 @@ export type UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiResponse = /** status 20
 export type UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiArg = {
   teamId: string;
   teamUpdate: TeamUpdate;
+};
+export type UploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type UploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostApiArg = {
+  teamId: string;
+  bodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost: BodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost;
 };
 export type ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiResponse =
   /** status 200 Successful Response */ TeamMember[];
@@ -1960,7 +1977,7 @@ export type LogQuery = {
 };
 export type Team = {
   description?: string | null;
-  banner_image_url?: string | null;
+  banner_object_storage_key?: string | null;
   is_private?: boolean;
   id: string;
   name: string;
@@ -1970,8 +1987,12 @@ export type Team = {
 };
 export type TeamUpdate = {
   description?: string | null;
-  banner_image_url?: string | null;
+  banner_object_storage_key?: string | null;
   is_private?: boolean | null;
+};
+export type BodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost = {
+  /** Banner image file (max 5MB, JPEG/PNG/WebP) */
+  file: Blob;
 };
 export type UserTeamRelation = "owner" | "manager" | "member";
 export type TeamMember = {
@@ -2284,6 +2305,7 @@ export const {
   useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery,
   useLazyGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery,
   useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation,
+  useUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostMutation,
   useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
   useLazyListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
   useAddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostMutation,

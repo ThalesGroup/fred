@@ -19,7 +19,7 @@ import logging
 import mimetypes
 import os
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import BinaryIO, List, Optional, cast  # Added 'cast' here
 
@@ -366,6 +366,13 @@ class FileSystemContentStore(BaseContentStore):
         if not path.exists():
             raise FileNotFoundError(f"Object not found: {key}")
         path.unlink()
+
+    def get_presigned_url(self, key: str, expires: timedelta = timedelta(hours=1)) -> str:
+        """
+        Local filesystem storage does not support presigned URLs.
+        Use MinIO storage backend for presigned URL functionality.
+        """
+        raise NotImplementedError("Presigned URLs are not supported by local filesystem storage. Use MinIO storage backend instead.")
 
     def list_document_uids(self) -> List[str]:
         """

@@ -42,25 +42,26 @@ class TimestampMixin(SQLModel):
 
 
 class TeamMetadataBase(SQLModel):
-    """Base model for team metadata fields."""
+    """Base model for team metadata fields (exposed in API)."""
 
     description: str | None = Field(default=None, nullable=True, max_length=180)
-    banner_image_url: str | None = Field(default=None, nullable=True, max_length=800)
     is_private: bool = Field(default=True)
 
 
 class TeamMetadata(TeamMetadataBase, TimestampMixin, table=True):
     """
     Additional metadata for a Keycloak group/team.
+    Includes internal fields not exposed in API.
     """
 
     # id: Annotated[TeamId, PlainSerializer(lambda x: str(x), return_type=str)] = Field(sa_column=Column(String, primary_key=True))
     id: TeamId = Field(sa_column=Column(String, primary_key=True))
+    banner_object_storage_key: str | None = Field(default=None, nullable=True, max_length=300)
 
 
 class TeamMetadataUpdate(SQLModel):
     """Model for updating team metadata. All fields are optional."""
 
     description: str | None = None
-    banner_image_url: str | None = None
+    banner_object_storage_key: str | None = None
     is_private: bool | None = None

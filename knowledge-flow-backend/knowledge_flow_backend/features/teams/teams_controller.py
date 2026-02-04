@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, Path, Request
+from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Path, Request, UploadFile
 from fastapi.responses import JSONResponse
 from fred_core import KeycloakUser, get_current_user
 
@@ -12,7 +12,8 @@ from knowledge_flow_backend.features.teams.teams_service import list_teams as li
 from knowledge_flow_backend.features.teams.teams_service import remove_team_member as remove_team_member_from_service
 from knowledge_flow_backend.features.teams.teams_service import update_team as update_team_from_service
 from knowledge_flow_backend.features.teams.teams_service import update_team_member as update_team_member_from_service
-from knowledge_flow_backend.features.teams.teams_structures import AddTeamMemberRequest, Team, TeamMember, TeamNotFoundError, TeamUpdate, UpdateTeamMemberRequest
+from knowledge_flow_backend.features.teams.teams_service import upload_team_banner as upload_team_banner_from_service
+from knowledge_flow_backend.features.teams.teams_structures import AddTeamMemberRequest, BannerUploadError, Team, TeamMember, TeamNotFoundError, TeamUpdate, UpdateTeamMemberRequest
 
 router = APIRouter(tags=["Teams"])
 
@@ -23,6 +24,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(TeamNotFoundError)
     async def team_not_found_handler(request: Request, exc: TeamNotFoundError) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+    @app.exception_handler(BannerUploadError)
+    async def banner_upload_error_handler(request: Request, exc: BannerUploadError) -> JSONResponse:
+        return JSONResponse(status_code=400, content={"detail": exc.message})
 
 
 @router.get(
@@ -53,6 +58,20 @@ async def get_team(team_id: Annotated[TeamId, Path()], user: KeycloakUser = Depe
 )
 async def update_team(team_id: Annotated[TeamId, Path()], update_data: TeamUpdate, user: KeycloakUser = Depends(get_current_user)) -> Team:
     return await update_team_from_service(user, team_id, update_data)
+
+
+@router.post(
+    "/teams/{team_id}/banner",
+    tags=["Teams"],
+    summary="Upload team banner image",
+    status_code=204,
+)
+async def upload_team_banner(
+    team_id: Annotated[TeamId, Path()],
+    file: UploadFile = File(..., description="Banner image file (max 5MB, JPEG/PNG/WebP)"),
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    await upload_team_banner_from_service(user, team_id, file)
 
 
 @router.get(

@@ -1216,7 +1216,13 @@
   "teamSettingsPage": {
     "teamBanner": {
       "label": "Bannière de l'équipe",
-      "buttonLabel": "Fichier..."
+      "buttonLabel": "Télécharger une image...",
+      "alt": "Image de bannière de l'équipe",
+      "noImage": "Aucune image de bannière téléchargée",
+      "uploadSuccess": "Bannière téléchargée avec succès",
+      "uploadError": "Échec du téléchargement de l'image de bannière",
+      "invalidType": "Type de fichier invalide. Veuillez utiliser le format JPEG, PNG ou WebP.",
+      "tooLarge": "Le fichier est trop volumineux. La taille maximale est de 5 Mo."
     },
     "description": {
       "label": "Description de l'équipe",

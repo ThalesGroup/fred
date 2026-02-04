@@ -1,13 +1,23 @@
 import asyncio
 import logging
+import shutil
+import tempfile
+from datetime import timedelta
+from pathlib import Path
+from uuid import uuid4
 
+import magic
+from fastapi import UploadFile
 from fred_core import ORGANIZATION_ID, KeycloackDisabled, KeycloakUser, RebacDisabledResult, RebacEngine, RebacReference, Relation, RelationType, Resource, TeamPermission, create_keycloak_admin
 from keycloak import KeycloakAdmin
+from PIL import Image
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
+from knowledge_flow_backend.core.stores.team_metadata.team_metadata_structures import TeamMetadataUpdate
 from knowledge_flow_backend.features.teams.team_id import TeamId
 from knowledge_flow_backend.features.teams.teams_structures import (
     AddTeamMemberRequest,
+    BannerUploadError,
     KeycloakGroupSummary,
     Team,
     TeamMember,
@@ -102,6 +112,86 @@ async def update_team(user: KeycloakUser, team_id: TeamId, update_data: TeamUpda
 
     # Return updated team
     return await get_team_by_id(user, team_id)
+
+
+async def upload_team_banner(user: KeycloakUser, team_id: TeamId, file: UploadFile) -> None:
+    """Upload a banner image for a team.
+
+    Args:
+        user: The user performing the action
+        team_id: The team identifier
+        file: The uploaded file (FastAPI UploadFile)
+
+    Raises:
+        TeamNotFoundError: If the team doesn't exist
+        PermissionError: If user doesn't have permission to update info
+        BannerUploadError: If file validation fails
+    """
+    app_context = ApplicationContext.get_instance()
+    rebac = app_context.get_rebac_engine()
+    metadata_store = app_context.get_team_metadata_store()
+    content_store = app_context.get_content_store()
+
+    # Validate team exists and check permissions
+    await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_INFO)
+
+    # Validate file size (5MB max)
+    MAX_SIZE = 5 * 1024 * 1024
+    file.file.seek(0, 2)  # Seek to end
+    size = file.file.tell()
+    file.file.seek(0)  # Reset
+
+    if size > MAX_SIZE:
+        raise BannerUploadError(f"File too large: {size} bytes (max: {MAX_SIZE})")
+
+    # Validate MIME type
+    ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
+    content_type = file.content_type or "application/octet-stream"
+    if content_type not in ALLOWED_TYPES:
+        raise BannerUploadError(f"Invalid content type: {content_type}")
+
+    # Create temp file for validation
+    tmp_dir = Path(tempfile.mkdtemp())
+    try:
+        tmp_file = tmp_dir / (file.filename or "upload")
+        with open(tmp_file, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        # Magic bytes verification
+        mime = magic.from_file(str(tmp_file), mime=True)
+        if mime not in ALLOWED_TYPES:
+            raise BannerUploadError(f"File content doesn't match extension: {mime}")
+
+        # PIL validation (verify it's a valid image)
+        try:
+            with Image.open(tmp_file) as img:
+                img.verify()
+        except Exception as e:
+            raise BannerUploadError(f"Invalid image file: {e}")
+
+        # Extract file extension
+        file_ext = Path(file.filename).suffix if file.filename else ""
+        if not file_ext:
+            # Infer from content type
+            ext_map = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+            file_ext = ext_map.get(content_type, ".jpg")
+
+        # Generate object storage key with UUID
+        object_storage_key = f"teams/{team_id}/banner-{uuid4().hex}{file_ext}"
+
+        # Upload to MinIO
+        with open(tmp_file, "rb") as f:
+            content_store.put_object(object_storage_key, f, content_type=content_type)
+
+        # Update PostgreSQL with object storage key
+        await metadata_store.upsert(team_id, TeamMetadataUpdate(banner_object_storage_key=object_storage_key))
+
+        logger.info(f"Uploaded banner for team {team_id}: {object_storage_key}")
+
+    finally:
+        # Cleanup temp files
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        await file.close()
 
 
 async def list_team_members(user: KeycloakUser, team_id: TeamId) -> list[TeamMember]:
@@ -231,6 +321,10 @@ async def _enrich_groups_with_team_data(admin: KeycloakAdmin, rebac: RebacEngine
     if not groups:
         return []
 
+    # Get application context for content store access
+    app_context = ApplicationContext.get_instance()
+    content_store = app_context.get_content_store()
+
     # Batch fetch metadata, team owners, and member counts in parallel
     team_ids: list[TeamId] = [g.id for g in groups]
     metadata_map, team_owners_list, member_counts_list = await asyncio.gather(
@@ -264,8 +358,15 @@ async def _enrich_groups_with_team_data(admin: KeycloakAdmin, rebac: RebacEngine
         metadata = metadata_map.get(group_id)
         if metadata:
             description = metadata.description
-            banner_image_url = metadata.banner_image_url
             is_private = metadata.is_private
+
+            # Generate presigned URL from object storage key
+            banner_image_url = None
+            if metadata.banner_object_storage_key:
+                try:
+                    banner_image_url = content_store.get_presigned_url(metadata.banner_object_storage_key, expires=timedelta(hours=1))
+                except Exception as e:
+                    logger.warning(f"Failed to generate presigned URL for team {group_id} banner: {e}")
         else:
             # Use defaults if metadata not found
             description = None

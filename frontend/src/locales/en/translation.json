@@ -1214,7 +1214,13 @@
   "teamSettingsPage": {
     "teamBanner": {
       "label": "Team banner",
-      "buttonLabel": "File..."
+      "buttonLabel": "Upload image...",
+      "alt": "Team banner image",
+      "noImage": "No banner image uploaded",
+      "uploadSuccess": "Banner uploaded successfully",
+      "uploadError": "Failed to upload banner image",
+      "invalidType": "Invalid file type. Please use JPEG, PNG, or WebP format.",
+      "tooLarge": "File is too large. Maximum size is 5MB."
     },
     "description": {
       "label": "Team description",

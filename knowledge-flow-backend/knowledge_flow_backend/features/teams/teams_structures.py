@@ -17,6 +17,14 @@ class TeamNotFoundError(Exception):
         super().__init__(f"Team with id '{team_id}' not found")
 
 
+class BannerUploadError(Exception):
+    """Raised when banner upload validation fails."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+
 class KeycloakGroupSummary(BaseModel):
     id: TeamId
     name: str | None
@@ -31,6 +39,8 @@ class Team(TeamMetadataBase):
     # From OpenFGA
     owners: list[UserSummary] = Field(default_factory=list)
     is_member: bool = False
+    # From Minio (Generated presigned URL)
+    banner_image_url: str | None = None
 
 
 class TeamUpdate(TeamMetadataUpdate):

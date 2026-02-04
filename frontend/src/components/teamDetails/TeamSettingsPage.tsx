@@ -1,13 +1,28 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
-import { alpha, Box, Button, FormControlLabel, Paper, Switch, TextField, Typography, useTheme } from "@mui/material";
-import { useEffect, useMemo } from "react";
+import {
+  alpha,
+  Box,
+  Button,
+  CircularProgress,
+  FormControlLabel,
+  Paper,
+  Switch,
+  TextField,
+  Typography,
+  useTheme,
+} from "@mui/material";
+import { useEffect, useMemo, useRef } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useDebounce } from "../../hooks/useDebounce";
+import {
+  useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation,
+  useUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostMutation,
+} from "../../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
 import { Team } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation } from "../../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
+import { useToast } from "../ToastProvider";
 
 const teamSettingsSchema = z.object({
   description: z.string().max(180).optional(),
@@ -23,15 +38,23 @@ export interface TeamSettingsPageProps {
 export function TeamSettingsPage({ team }: TeamSettingsPageProps) {
   const { t } = useTranslation();
   const theme = useTheme();
+  const { showError, showInfo } = useToast();
 
   const [updateTeam] = useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation();
+  const [uploadBanner, { isLoading: isUploadingBanner }] =
+    useUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostMutation();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Constants for validation
+  const MAX_BANNER_SIZE = 5 * 1024 * 1024; // 5MB
+  const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
   const defaultValues = useMemo(
     () => ({
       description: team?.description || "",
       is_private: team?.is_private ?? false,
     }),
-    [team?.id]
+    [team?.id],
   );
 
   const { control, watch, reset } = useForm<TeamSettingsFormData>({
@@ -73,25 +96,99 @@ export function TeamSettingsPage({ team }: TeamSettingsPageProps) {
     });
   }, [debouncedIsPrivate, team?.id, team?.is_private, updateTeam]);
 
+  // Handle banner upload
+  const handleBannerUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !team?.id) return;
+
+    // Client-side validation
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      showError(t("teamSettingsPage.teamBanner.invalidType"));
+      return;
+    }
+
+    if (file.size > MAX_BANNER_SIZE) {
+      showError(t("teamSettingsPage.teamBanner.tooLarge"));
+      return;
+    }
+
+    try {
+      await uploadBanner({
+        teamId: team.id,
+        bodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost: { file },
+      }).unwrap();
+
+      showInfo(t("teamSettingsPage.teamBanner.uploadSuccess"));
+      // RTK Query will automatically invalidate and refetch team data
+    } catch (error) {
+      console.error("Banner upload error:", error);
+      showError(t("teamSettingsPage.teamBanner.uploadError"));
+    } finally {
+      // Reset file input
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <Box sx={{ px: 2, pb: 2, display: "flex", height: "100%" }}>
       <Paper sx={{ borderRadius: 2, flex: 1, display: "flex", justifyContent: "center" }}>
         <Box sx={{ maxWidth: "600px", display: "flex", flexDirection: "column", gap: 2, py: 2 }}>
           {/* Banner */}
-          <Box sx={{ display: "flex", alignItems: "center" }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1, px: 2 }}>
               <Typography variant="body2" color="textSecondary" sx={{ textWrap: "nowrap" }}>
                 {t("teamSettingsPage.teamBanner.label")}
               </Typography>
-              <Button variant="outlined" startIcon={<UploadFileIcon />}>
+
+              {/* Hidden file input */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/jpeg,image/png,image/webp"
+                style={{ display: "none" }}
+                onChange={handleBannerUpload}
+              />
+
+              <Button
+                variant="outlined"
+                startIcon={isUploadingBanner ? <CircularProgress size={20} /> : <UploadFileIcon />}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploadingBanner}
+              >
                 {t("teamSettingsPage.teamBanner.buttonLabel")}
               </Button>
             </Box>
+
             {/* Banner Preview */}
-            <img
-              src={team?.banner_image_url || ""}
-              style={{ height: "6rem", borderRadius: theme.spacing(1), width: "450px", objectFit: "cover" }}
-            />
+            <Box sx={{ position: "relative" }}>
+              {team?.banner_object_storage_key ? (
+                <img
+                  src={team.banner_object_storage_key}
+                  alt={t("teamSettingsPage.teamBanner.alt")}
+                  style={{ height: "6rem", width: "450px", objectFit: "cover", borderRadius: theme.spacing(1) }}
+                  onError={(e) => {
+                    // Handle missing/expired presigned URL gracefully
+                    e.currentTarget.style.display = "none";
+                  }}
+                />
+              ) : (
+                <Box
+                  sx={{
+                    height: "6rem",
+                    width: "450px",
+                    border: `2px dashed ${theme.palette.divider}`,
+                    borderRadius: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Typography variant="body2" color="textSecondary">
+                    {t("teamSettingsPage.teamBanner.noImage")}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
           </Box>
 
           {/* Description */}

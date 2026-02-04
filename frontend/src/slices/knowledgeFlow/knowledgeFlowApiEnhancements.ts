@@ -21,6 +21,22 @@ export const enhancedKnowledgeFlowApi = knowledgeFlowApi.enhanceEndpoints({
         { type: "Team" as const, id: "LIST" },
       ],
     },
+    uploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost: {
+      query: (queryArg) => {
+        const formData = new FormData();
+        formData.append('file', queryArg.bodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost.file);
+
+        return {
+          url: `/knowledge-flow/v1/teams/${queryArg.teamId}/banner`,
+          method: "POST",
+          body: formData,
+        };
+      },
+      invalidatesTags: (_, __, arg) => [
+        { type: "Team" as const, id: arg.teamId },
+        { type: "Team" as const, id: "LIST" },
+      ],
+    },
     listTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGet: {
       providesTags: (result, _, arg) =>
         result
@@ -50,6 +66,7 @@ export const {
   useListTeamsKnowledgeFlowV1TeamsGetQuery,
   useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery,
   useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation,
+  useUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostMutation,
   useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
   useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation,
   useRemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteMutation,
