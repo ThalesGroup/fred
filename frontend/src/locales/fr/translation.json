@@ -1247,6 +1247,15 @@
       "manager": "Manager",
       "owner": "Propriétaire"
     },
-    "addUserInputPlaceholder": "Ajouter un utilisateur..."
+    "addUserInputPlaceholder": "Ajouter un utilisateur...",
+    "removeMemberConfonfirmationDialog": {
+      "title": "Confirmer la suppression ?",
+      "message": "Vous etes sur le point de supprimer cet utilisateur de l'équipe. Êtes-vous certain de vouloir continuer ?",
+      "confirmButtonLabel": "Supprimer"
+    }
+  },
+  "confirmationDialog": {
+    "defaultCancelButtonLabel": "Annuler",
+    "defaultConfirmButtonLabel": "Confirmer"
   }
 }

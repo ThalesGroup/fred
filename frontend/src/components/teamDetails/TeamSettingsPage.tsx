@@ -161,9 +161,9 @@ export function TeamSettingsPage({ team }: TeamSettingsPageProps) {
 
             {/* Banner Preview */}
             <Box sx={{ position: "relative" }}>
-              {team?.banner_object_storage_key ? (
+              {team?.banner_image_url ? (
                 <img
-                  src={team.banner_object_storage_key}
+                  src={team.banner_image_url}
                   alt={t("teamSettingsPage.teamBanner.alt")}
                   style={{ height: "6rem", width: "450px", objectFit: "cover", borderRadius: theme.spacing(1) }}
                   onError={(e) => {

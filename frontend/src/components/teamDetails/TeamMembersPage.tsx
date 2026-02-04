@@ -34,6 +34,7 @@ import {
   UserSummary,
   UserTeamRelation,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 export interface TeamMembersPageProps {
   teamId: string;
 }
@@ -43,6 +44,8 @@ const TEAM_ROLES: UserTeamRelation[] = ["owner", "manager", "member"];
 export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
   const { t } = useTranslation();
   const theme = useTheme();
+  const { showConfirmationDialog } = useConfirmationDialog();
+
   const [inputValue, setInputValue] = useState("");
 
   const { data: members } = useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery({ teamId: teamId });
@@ -52,7 +55,8 @@ export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
 
   const [updateTeamMember] = useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation();
   const [removeTeamMember] = useRemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteMutation();
-  const [addTeamMember, { isLoading: isAddingMember }] = useAddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostMutation();
+  const [addTeamMember, { isLoading: isAddingMember }] =
+    useAddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostMutation();
 
   const { data: users } = useListUsersKnowledgeFlowV1UsersGetQuery();
 
@@ -68,9 +72,17 @@ export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
   };
 
   const handleRemoveMember = async (userId: string) => {
-    await removeTeamMember({
-      teamId,
-      userId,
+    showConfirmationDialog({
+      criticalAction: true,
+      title: t("teamMembersPage.removeMemberConfonfirmationDialog.title"),
+      message: t("teamMembersPage.removeMemberConfonfirmationDialog.message"),
+      confirmButtonLabel: t("teamMembersPage.removeMemberConfonfirmationDialog.confirmButtonLabel"),
+      onConfirm: async () => {
+        await removeTeamMember({
+          teamId,
+          userId,
+        });
+      },
     });
   };
 
@@ -183,13 +195,7 @@ export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
                     </Select>
                   </TableCell>
                   <TableCell>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleRemoveMember(member.user.id)}
-                      sx={{
-                        color: theme.palette.error.light,
-                      }}
-                    >
+                    <IconButton size="small" onClick={() => handleRemoveMember(member.user.id)} color="error">
                       <DeleteOutlineIcon fontSize="small" />
                     </IconButton>
                   </TableCell>

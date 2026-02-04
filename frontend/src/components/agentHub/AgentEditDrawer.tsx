@@ -136,6 +136,7 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved, onDeleted }: Pr
     if (!agent) return;
 
     showConfirmationDialog({
+      criticalAction: true,
       title: t("agentHub.confirmDeleteTitle"),
       message: t("agentHub.confirmDeleteMessage"),
       onConfirm: async () => {

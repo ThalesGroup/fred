@@ -1245,6 +1245,15 @@
       "manager": "Manager",
       "owner": "Owner"
     },
-    "addUserInputPlaceholder": "Add a user..."
+    "addUserInputPlaceholder": "Add a user...",
+    "removeMemberConfonfirmationDialog": {
+      "title": "Confirm deletion ?",
+      "message": "You're about to remove this user from the team. Do you want to continue?",
+      "confirmButtonLabel": "Delete"
+    }
+  },
+  "confirmationDialog": {
+    "defaultCancelButtonLabel": "Cancel",
+    "defaultConfirmButtonLabel": "Confirm"
   }
 }
