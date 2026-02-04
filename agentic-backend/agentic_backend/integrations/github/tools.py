@@ -40,7 +40,9 @@ class GithubTools:
             return _as_json(issue.__dict__)
 
         @tool("github_comment", return_direct=True)
-        async def comment(issue_number: int, body: str, repo: Optional[str] = None) -> str:
+        async def comment(
+            issue_number: int, body: str, repo: Optional[str] = None
+        ) -> str:
             owner, name = _split_repo(repo or self._require_repo())
             res = await asyncio.get_running_loop().run_in_executor(
                 None,
@@ -80,4 +82,3 @@ def _as_json(data) -> str:
     except Exception:  # pragma: no cover
         logger.warning("[GithubTools] JSON dump failed, falling back to str")
         return str(data)
-

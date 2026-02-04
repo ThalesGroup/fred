@@ -8,4 +8,3 @@ Intended usage:
 
 from .gateway import GithubGateway, GithubIssue  # noqa: F401
 from .tools import GithubTools  # noqa: F401
-

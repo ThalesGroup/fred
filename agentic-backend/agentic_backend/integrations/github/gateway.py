@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 
 import requests
 
@@ -104,8 +104,5 @@ class GithubGateway:
         try:
             resp.raise_for_status()
         except Exception as exc:  # pragma: no cover
-            logger.error(
-                "GitHub API error %s: %s", resp.status_code, resp.text.strip()
-            )
+            logger.error("GitHub API error %s: %s", resp.status_code, resp.text.strip())
             raise exc
-

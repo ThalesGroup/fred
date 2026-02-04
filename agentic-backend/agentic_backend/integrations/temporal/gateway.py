@@ -35,6 +35,7 @@ from temporalio.client import WorkflowHandle
 from agentic_backend.scheduler.agent_contracts import (
     AgentContextRefsV1,
     AgentInputArgsV1,
+    AgentResultV1,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,15 +107,17 @@ class TemporalGateway:
 
         try:
             desc = await handle.describe()
-            status_obj = getattr(desc, "status", None)
-            status = status_obj.name if hasattr(status_obj, "name") else str(status_obj)
+            # Strict access: desc.status is a WorkflowExecutionStatus enum
+            status = desc.status.name if desc.status else "UNKNOWN"
+
             final_summary = None
             if status == "COMPLETED":
                 try:
                     result = await handle.result()
-                    final_summary = getattr(result, "final_summary", None) or str(
-                        result
-                    )
+                    if isinstance(result, AgentResultV1):
+                        final_summary = result.final_summary
+                    else:
+                        final_summary = str(result)
                 except Exception as exc:  # pragma: no cover
                     final_summary = f"(résumé indisponible: {exc})"
             return TemporalStatus(

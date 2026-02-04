@@ -94,7 +94,7 @@ from agentic_backend.core.session.stores.postgres_session_attachment_store impor
 from agentic_backend.core.session.stores.postgres_session_store import (
     PostgresSessionStore,
 )
-from agentic_backend.scheduler.base_task_store import BaseAgentTaskStore
+from agentic_backend.scheduler.store.base_task_store import BaseAgentTaskStore
 
 logger = logging.getLogger(__name__)
 
@@ -671,13 +671,18 @@ class ApplicationContext:
     def get_task_store(self):
         if self._task_store_instance is not None:
             return self._task_store_instance
-        from agentic_backend.scheduler.memory_task_store import MemoryAgentTaskStore
-        from agentic_backend.scheduler.postgres_task_store import PostgresAgentTaskStore
+        from agentic_backend.scheduler.store.memory_task_store import (
+            MemoryAgentTaskStore,
+        )
 
         store_config = get_configuration().storage.task_store
         # Allow the task store to be optional for workers that don't need it.
         try:
             if isinstance(store_config, PostgresTableConfig):
+                from agentic_backend.scheduler.store.postgres_task_store import (
+                    PostgresAgentTaskStore,
+                )
+
                 if not os.getenv("POSTGRES_PASSWORD"):
                     logger.error(
                         "[TASKS][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres task store)"
