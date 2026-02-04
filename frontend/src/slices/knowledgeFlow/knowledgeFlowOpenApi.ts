@@ -1186,11 +1186,12 @@ export type QueryLogsKnowledgeFlowV1LogsQueryPostApiArg = {
 };
 export type ListTeamsKnowledgeFlowV1TeamsGetApiResponse = /** status 200 Successful Response */ Team[];
 export type ListTeamsKnowledgeFlowV1TeamsGetApiArg = void;
-export type GetTeamKnowledgeFlowV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ Team;
+export type GetTeamKnowledgeFlowV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ TeamWithPermissions;
 export type GetTeamKnowledgeFlowV1TeamsTeamIdGetApiArg = {
   teamId: string;
 };
-export type UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiResponse = /** status 200 Successful Response */ Team;
+export type UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiResponse =
+  /** status 200 Successful Response */ TeamWithPermissions;
 export type UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiArg = {
   teamId: string;
   teamUpdate: TeamUpdate;
@@ -1982,6 +1983,18 @@ export type Team = {
   owners?: UserSummary[];
   is_member?: boolean;
   banner_image_url?: string | null;
+};
+export type TeamPermission = "can_read" | "can_update_info" | "can_update_members" | "can_read_members";
+export type TeamWithPermissions = {
+  description?: string | null;
+  is_private?: boolean;
+  id: string;
+  name: string;
+  member_count?: number | null;
+  owners?: UserSummary[];
+  is_member?: boolean;
+  banner_image_url?: string | null;
+  permissions?: TeamPermission[];
 };
 export type TeamUpdate = {
   description?: string | null;

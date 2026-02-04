@@ -23,6 +23,7 @@ from knowledge_flow_backend.features.teams.teams_structures import (
     TeamMember,
     TeamNotFoundError,
     TeamUpdate,
+    TeamWithPermissions,
     UpdateTeamMemberRequest,
     UserTeamRelation,
 )
@@ -59,13 +60,13 @@ async def list_teams(user: KeycloakUser) -> list[Team]:
     return await _enrich_groups_with_team_data(admin, rebac, metadata_store, user, root_groups)
 
 
-async def get_team_by_id(user: KeycloakUser, team_id: TeamId) -> Team:
+async def get_team_by_id(user: KeycloakUser, team_id: TeamId) -> TeamWithPermissions:
     app_context = ApplicationContext.get_instance()
     rebac = app_context.get_rebac_engine()
     metadata_store = app_context.get_team_metadata_store()
 
     # Validate team exists and check permissions
-    admin, raw_group = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_READ)
+    admin, raw_group, consistency_token = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_READ)
 
     group_summary = KeycloakGroupSummary(
         id=team_id,
@@ -75,16 +76,27 @@ async def get_team_by_id(user: KeycloakUser, team_id: TeamId) -> Team:
 
     # Enrich with full team data
     teams = await _enrich_groups_with_team_data(admin, rebac, metadata_store, user, [group_summary])
-    return teams[0]
+    base_team = teams[0]
+
+    # Get user permissions for this team
+    permissions = await _get_team_permissions_for_user(rebac, user, team_id, consistency_token)
+
+    # Create TeamWithPermissions from the base team
+    team_with_permissions = TeamWithPermissions(
+        **base_team.model_dump(),
+        permissions=permissions,
+    )
+
+    return team_with_permissions
 
 
-async def update_team(user: KeycloakUser, team_id: TeamId, update_data: TeamUpdate) -> Team:
+async def update_team(user: KeycloakUser, team_id: TeamId, update_data: TeamUpdate) -> TeamWithPermissions:
     app_context = ApplicationContext.get_instance()
     rebac = app_context.get_rebac_engine()
     metadata_store = app_context.get_team_metadata_store()
 
     # Validate team exists and check permissions
-    _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_INFO)
+    _, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_INFO)
 
     # Update metadata
     await metadata_store.upsert(team_id, update_data)
@@ -133,7 +145,7 @@ async def upload_team_banner(user: KeycloakUser, team_id: TeamId, file: UploadFi
     content_store = app_context.get_content_store()
 
     # Validate team exists and check permissions
-    await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_INFO)
+    _, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_INFO)
 
     # Validate file size (5MB max)
     MAX_SIZE = 5 * 1024 * 1024
@@ -199,7 +211,7 @@ async def list_team_members(user: KeycloakUser, team_id: TeamId) -> list[TeamMem
     rebac = app_context.get_rebac_engine()
 
     # Validate team exists and check permissions
-    admin, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_READ_MEMEBERS)
+    admin, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_READ_MEMEBERS)
 
     # Retrieve all member ids + ids of owners and managers
     owner_ids, manager_ids, member_ids = await asyncio.gather(
@@ -245,7 +257,7 @@ async def add_team_member(user: KeycloakUser, team_id: TeamId, request: AddTeamM
     rebac = app_context.get_rebac_engine()
 
     # Validate team exists and check permissions
-    admin, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
+    admin, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
 
     # Add user to Keycloak group
     await _add_keycloak_user_to_group(admin, request.user_id, team_id)
@@ -272,7 +284,7 @@ async def remove_team_member(user: KeycloakUser, team_id: TeamId, user_id: str) 
     rebac = app_context.get_rebac_engine()
 
     # Validate team exists and check permissions
-    admin, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
+    admin, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
 
     # Remove user from Keycloak group
     await _remove_keycloak_user_from_group(admin, user_id, team_id)
@@ -300,7 +312,7 @@ async def update_team_member(user: KeycloakUser, team_id: TeamId, user_id: str, 
     rebac = app_context.get_rebac_engine()
 
     # Validate team exists and check permissions
-    _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
+    _, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
 
     # Remove all existing relations
     await _remove_all_team_member_relations(rebac, team_id, user_id)
@@ -426,6 +438,52 @@ async def _ensure_team_organization_relations(rebac: RebacEngine, team_ids: list
     return await rebac.add_relations(relations_to_add)
 
 
+async def _get_team_permissions_for_user(rebac: RebacEngine, user: KeycloakUser, team_id: TeamId, consistency_token: str | None = None) -> list[TeamPermission]:
+    """Check all team permissions for a user efficiently.
+
+    Automatically checks all permissions defined in the TeamPermission enum,
+    ensuring new permissions are always included without manual updates.
+
+    Args:
+        rebac: The ReBAC engine instance
+        user: The user to check permissions for
+        team_id: The team identifier
+        consistency_token: Optional consistency token for read-after-write consistency
+
+    Returns:
+        List of permissions the user has on the team
+    """
+    # Automatically get all permissions from the enum
+    permissions_to_check = list(TeamPermission)
+
+    # Get contextual relations once for efficiency
+    group_relations, org_relations = await asyncio.gather(
+        rebac.groups_list_to_relations(user),
+        rebac.user_role_to_organization_relation(user),
+    )
+    contextual_relations = group_relations | org_relations
+
+    # Batch check all permissions in parallel
+    user_reference = RebacReference(Resource.USER, user.uid)
+    team_reference = RebacReference(Resource.TEAM, team_id)
+
+    checks = await asyncio.gather(
+        *[
+            rebac.has_permission(
+                user_reference,
+                permission,
+                team_reference,
+                contextual_relations=contextual_relations,
+                consistency_token=consistency_token,
+            )
+            for permission in permissions_to_check
+        ]
+    )
+
+    # Return only permissions user has
+    return [permission for permission, has_perm in zip(permissions_to_check, checks) if has_perm]
+
+
 async def _get_team_users_by_relation(rebac: RebacEngine, team_id: TeamId, relation: RelationType) -> set[str]:
     """Get all user IDs with a specific relation to this team from OpenFGA.
 
@@ -501,7 +559,7 @@ def _sanitize_name(value: object, fallback: str) -> str:
     return name or fallback
 
 
-async def _validate_team_and_check_permission(user: KeycloakUser, team_id: TeamId, rebac: RebacEngine, permission: TeamPermission) -> tuple[KeycloakAdmin, dict]:
+async def _validate_team_and_check_permission(user: KeycloakUser, team_id: TeamId, rebac: RebacEngine, permission: TeamPermission) -> tuple[KeycloakAdmin, dict, str | None]:
     """Validate that a team exists and check if user has the specified permission.
 
     Args:
@@ -511,7 +569,7 @@ async def _validate_team_and_check_permission(user: KeycloakUser, team_id: TeamI
         permission: The permission to check
 
     Returns:
-        A tuple of (KeycloakAdmin instance, raw Keycloak group data)
+        A tuple of (KeycloakAdmin instance, raw Keycloak group data, consistency token)
 
     Raises:
         TeamNotFoundError: If the team doesn't exist in Keycloak
@@ -538,7 +596,7 @@ async def _validate_team_and_check_permission(user: KeycloakUser, team_id: TeamI
     # Check user has the required permission
     await rebac.check_user_permission_or_raise(user, permission, team_id, consistency_token=consistency_token)
 
-    return admin, raw_group
+    return admin, raw_group, consistency_token
 
 
 async def _add_team_member_relation(rebac: RebacEngine, team_id: TeamId, user_id: str, relation: UserTeamRelation) -> None:

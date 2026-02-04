@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Literal
 
-from fred_core import RelationType
+from fred_core import RelationType, TeamPermission
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.core.stores.team_metadata.team_metadata_structures import TeamMetadataBase, TeamMetadataUpdate
@@ -41,6 +41,12 @@ class Team(TeamMetadataBase):
     is_member: bool = False
     # From Minio (Generated presigned URL)
     banner_image_url: str | None = None
+
+
+class TeamWithPermissions(Team):
+    """Team with user-specific permissions included"""
+
+    permissions: list[TeamPermission] = Field(default_factory=list)
 
 
 class TeamUpdate(TeamMetadataUpdate):

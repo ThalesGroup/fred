@@ -29,19 +29,22 @@ import {
   useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation,
 } from "../../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
 import {
+  TeamPermission,
   useAddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostMutation,
   useListUsersKnowledgeFlowV1UsersGetQuery,
   UserSummary,
   UserTeamRelation,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
-export interface TeamMembersPageProps {
-  teamId: string;
-}
 
 const TEAM_ROLES: UserTeamRelation[] = ["owner", "manager", "member"];
 
-export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
+export interface TeamMembersPageProps {
+  teamId: string;
+  permissions?: TeamPermission[];
+}
+
+export function TeamMembersPage({ teamId, permissions }: TeamMembersPageProps) {
   const { t } = useTranslation();
   const theme = useTheme();
   const { showConfirmationDialog } = useConfirmationDialog();
@@ -99,6 +102,7 @@ export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
       },
     });
   };
+  const can_update_members = permissions?.includes("can_update_members");
 
   return (
     <Box sx={{ px: 2, pb: 2, display: "flex", height: "100%" }}>
@@ -171,7 +175,7 @@ export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
               <TableCell>{t("teamMembersPage.tableHeader.firstName")}</TableCell>
               <TableCell>{t("teamMembersPage.tableHeader.lastName")}</TableCell>
               <TableCell>{t("teamMembersPage.tableHeader.role")}</TableCell>
-              <TableCell>{t("teamMembersPage.tableHeader.actions")}</TableCell>
+              {can_update_members && <TableCell>{t("teamMembersPage.tableHeader.actions")}</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -182,23 +186,28 @@ export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
                   <TableCell>{member.user.first_name}</TableCell>
                   <TableCell>{member.user.last_name}</TableCell>
                   <TableCell>
-                    <Select<UserTeamRelation>
-                      value={member.relation}
-                      size="small"
-                      onChange={(event) => handleRoleChange(member.user.id, event.target.value as UserTeamRelation)} // not sure why casting was necessary...
-                    >
-                      {TEAM_ROLES.map((role) => (
-                        <MenuItem key={role} value={role}>
-                          {t(`teamMembersPage.teamRole.${role}`)}
-                        </MenuItem>
-                      ))}
-                    </Select>
+                    {can_update_members && (
+                      <Select<UserTeamRelation>
+                        value={member.relation}
+                        size="small"
+                        onChange={(event) => handleRoleChange(member.user.id, event.target.value as UserTeamRelation)} // not sure why casting was necessary...
+                      >
+                        {TEAM_ROLES.map((role) => (
+                          <MenuItem key={role} value={role}>
+                            {t(`teamMembersPage.teamRole.${role}`)}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    )}
+                    {!can_update_members && <Typography>{t(`teamMembersPage.teamRole.${member.relation}`)}</Typography>}
                   </TableCell>
-                  <TableCell>
-                    <IconButton size="small" onClick={() => handleRemoveMember(member.user.id)} color="error">
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </TableCell>
+                  {can_update_members && (
+                    <TableCell>
+                      <IconButton size="small" onClick={() => handleRemoveMember(member.user.id)} color="error">
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
           </TableBody>

@@ -49,18 +49,21 @@ export const enhancedKnowledgeFlowApi = knowledgeFlowApi.enhanceEndpoints({
     addTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPost: {
       invalidatesTags: (_, __, arg) => [
         { type: "TeamMember" as const, id: `LIST-${arg.teamId}` },
+        { type: "Team" as const, id: arg.teamId }, // Refetch team to get updated permissions
       ],
     },
     updateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatch: {
       invalidatesTags: (_, __, arg) => [
         { type: "TeamMember" as const, id: `${arg.teamId}-${arg.userId}` },
         { type: "TeamMember" as const, id: `LIST-${arg.teamId}` },
+        { type: "Team" as const, id: arg.teamId }, // Refetch team to get updated permissions
       ],
     },
     removeTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDelete: {
       invalidatesTags: (_, __, arg) => [
         { type: "TeamMember" as const, id: `${arg.teamId}-${arg.userId}` },
         { type: "TeamMember" as const, id: `LIST-${arg.teamId}` },
+        { type: "Team" as const, id: arg.teamId }, // Refetch team to get updated permissions
       ],
     },
   },

@@ -24,6 +24,18 @@ export function TeamDetailsPage() {
     return <>need a team id in the url</>;
   }
 
+  const memberTab: TabConfig = {
+    label: t("teamDetails.tabs.members"),
+    path: `/team/${teamId}/members`,
+    component: <TeamMembersPage teamId={teamId} permissions={team?.permissions} />,
+  };
+
+  const settingTab: TabConfig = {
+    label: t("teamDetails.tabs.settings"),
+    path: `/team/${teamId}/settings`,
+    component: <TeamSettingsPage team={team} />,
+  };
+
   const tabs: TabConfig[] = [
     {
       label: capitalize(agentsNicknamePlural || "..."),
@@ -44,16 +56,8 @@ export function TeamDetailsPage() {
       path: `/team/${teamId}/apps`,
       component: <TeamAppsPage />,
     },
-    {
-      label: t("teamDetails.tabs.members"),
-      path: `/team/${teamId}/members`,
-      component: <TeamMembersPage teamId={teamId} />,
-    },
-    {
-      label: t("teamDetails.tabs.settings"),
-      path: `/team/${teamId}/settings`,
-      component: <TeamSettingsPage team={team} />,
-    },
+    ...(team?.permissions?.includes("can_read_members") ? [memberTab] : []),
+    ...(team?.permissions?.includes("can_update_info") ? [settingTab] : []),
   ];
 
   return (

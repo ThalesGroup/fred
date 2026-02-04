@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Path, Request, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Path, Request, UploadFile
 from fastapi.responses import JSONResponse
 from fred_core import KeycloakUser, get_current_user
 
@@ -13,7 +13,16 @@ from knowledge_flow_backend.features.teams.teams_service import remove_team_memb
 from knowledge_flow_backend.features.teams.teams_service import update_team as update_team_from_service
 from knowledge_flow_backend.features.teams.teams_service import update_team_member as update_team_member_from_service
 from knowledge_flow_backend.features.teams.teams_service import upload_team_banner as upload_team_banner_from_service
-from knowledge_flow_backend.features.teams.teams_structures import AddTeamMemberRequest, BannerUploadError, Team, TeamMember, TeamNotFoundError, TeamUpdate, UpdateTeamMemberRequest
+from knowledge_flow_backend.features.teams.teams_structures import (
+    AddTeamMemberRequest,
+    BannerUploadError,
+    Team,
+    TeamMember,
+    TeamNotFoundError,
+    TeamUpdate,
+    TeamWithPermissions,
+    UpdateTeamMemberRequest,
+)
 
 router = APIRouter(tags=["Teams"])
 
@@ -42,21 +51,21 @@ async def list_teams(user: KeycloakUser = Depends(get_current_user)) -> list[Tea
 
 @router.get(
     "/teams/{team_id}",
-    response_model=Team,
+    response_model=TeamWithPermissions,
     response_model_exclude_none=True,
     summary="Get a specific team by ID",
 )
-async def get_team(team_id: Annotated[TeamId, Path()], user: KeycloakUser = Depends(get_current_user)) -> Team:
+async def get_team(team_id: Annotated[TeamId, Path()], user: KeycloakUser = Depends(get_current_user)) -> TeamWithPermissions:
     return await get_team_by_id_from_service(user, team_id)
 
 
 @router.patch(
     "/teams/{team_id}",
-    response_model=Team,
+    response_model=TeamWithPermissions,
     response_model_exclude_none=True,
     summary="Update a team",
 )
-async def update_team(team_id: Annotated[TeamId, Path()], update_data: TeamUpdate, user: KeycloakUser = Depends(get_current_user)) -> Team:
+async def update_team(team_id: Annotated[TeamId, Path()], update_data: TeamUpdate, user: KeycloakUser = Depends(get_current_user)) -> TeamWithPermissions:
     return await update_team_from_service(user, team_id, update_data)
 
 
