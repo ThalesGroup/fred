@@ -118,8 +118,19 @@ def _parse_limits(settings: Dict[str, Any]) -> httpx.Limits:
 
 
 def _parse_timeout(settings: Dict[str, Any]) -> httpx.Timeout:
-    # Accept either key; "timeout" is what you use in YAML.
-    raw = settings.get("timeout", settings.get("request_timeout", None))
+    # Transport timeouts should come from "timeout".
+    # For backward compatibility, if only request_timeout is provided, reuse it for transport.
+    raw_timeout = settings.get("timeout", None)
+    raw_request = settings.get("request_timeout", None)
+
+    if raw_timeout is None and raw_request is not None:
+        logger.warning(
+            "[NET] timeout not set; using request_timeout=%s for transport. Set timeout to avoid this fallback.",
+            raw_request,
+        )
+        raw = raw_request
+    else:
+        raw = raw_timeout
 
     # Numeric: apply to all phases.
     if isinstance(raw, (int, float)):
@@ -168,7 +179,7 @@ def strip_transport_settings(settings: Dict[str, Any]) -> None:
     """
     settings.pop("http_client_limits", None)
     settings.pop("timeout", None)
-    settings.pop("request_timeout", None)
+    # keep request_timeout so it can be forwarded to the LLM wrapper as a per-request timeout
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +216,6 @@ def get_shared_stack(
     with _LOCK:
         if _SHARED_TUNING is None:
             _SHARED_TUNING = requested
-
             _SYNC_CLIENT = httpx.Client(
                 limits=_SHARED_TUNING.limits,
                 timeout=_SHARED_TUNING.timeout,
@@ -230,6 +240,20 @@ def get_shared_stack(
                 _SHARED_TUNING.timeout.write,
                 _SHARED_TUNING.timeout.pool,
             )
+            logger.warning(
+                "[NET][TUNING] provider=%s applied_limits={max=%s keepalive=%s exp=%ss} "
+                "applied_timeout={connect=%ss read=%ss write=%ss pool=%ss} "
+                "from_settings=%s",
+                cfg.provider,
+                _SHARED_TUNING.limits.max_connections,
+                _SHARED_TUNING.limits.max_keepalive_connections,
+                _SHARED_TUNING.limits.keepalive_expiry,
+                _SHARED_TUNING.timeout.connect,
+                _SHARED_TUNING.timeout.read,
+                _SHARED_TUNING.timeout.write,
+                _SHARED_TUNING.timeout.pool,
+                effective_settings,
+            )
         else:
             if requested != _SHARED_TUNING:
                 logger.warning(
@@ -238,6 +262,20 @@ def get_shared_stack(
                     cfg.provider,
                     requested,
                     _SHARED_TUNING,
+                )
+            else:
+                logger.warning(
+                    "[NET][TUNING] provider=%s reusing shared stack "
+                    "limits(max=%s keepalive=%s exp=%ss) "
+                    "timeout(connect=%ss read=%ss write=%ss pool=%ss)",
+                    cfg.provider,
+                    _SHARED_TUNING.limits.max_connections,
+                    _SHARED_TUNING.limits.max_keepalive_connections,
+                    _SHARED_TUNING.limits.keepalive_expiry,
+                    _SHARED_TUNING.timeout.connect,
+                    _SHARED_TUNING.timeout.read,
+                    _SHARED_TUNING.timeout.write,
+                    _SHARED_TUNING.timeout.pool,
                 )
 
         assert _SHARED_TUNING is not None
