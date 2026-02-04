@@ -91,8 +91,6 @@ async def handle_chatbot_baseline_websocket(
     of orchestration, RAG, and persistence. The difference in latency and resource
     usage should give you an idea of the overhead introduced by Fred.
     """
-    await websocket.accept()
-
     auth = websocket.headers.get("authorization") or ""
     token = (
         auth.split(" ", 1)[1]
