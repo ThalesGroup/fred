@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 from langchain.agents import create_agent
 from langgraph.graph.state import CompiledStateGraph
