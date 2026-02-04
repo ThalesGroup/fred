@@ -14,10 +14,11 @@
 
 import SaveIcon from "@mui/icons-material/Save";
 import UploadIcon from "@mui/icons-material/Upload";
-import { Box, Button, Drawer, FormControl, MenuItem, Paper, Select, Tooltip, Typography, useTheme } from "@mui/material";
+import { Box, Button, Drawer, FormControl, MenuItem, Paper, Select, Typography, useTheme } from "@mui/material";
 import React, { useMemo, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import { streamUploadOrProcessDocument } from "../../../slices/streamDocumentUpload";
 import { ProgressStep } from "../../ProgressStepper";
 import { useToast } from "../../ToastProvider";
@@ -211,7 +212,7 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
         </Select>
       </FormControl>
 
-      <Tooltip title={t("documentLibrary.uploadDrawerTooltip")} placement="left">
+      <SimpleTooltip title={t("documentLibrary.uploadDrawerTooltip")} placement="left">
         <Paper
           {...getRootProps()}
           sx={{
@@ -270,7 +271,7 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
             </Box>
           )}
         </Paper>
-      </Tooltip>
+      </SimpleTooltip>
 
       <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: "block" }}>
         {t("documentLibrary.supportedFormats")}

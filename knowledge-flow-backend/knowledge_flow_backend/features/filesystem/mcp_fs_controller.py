@@ -17,19 +17,19 @@ import logging
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
 
-from knowledge_flow_backend.features.filesystem.service import FilesystemService
+from knowledge_flow_backend.features.filesystem.mcp_fs_service import McpFilesystemService
 
 logger = logging.getLogger(__name__)
 
 
-class FilesystemController:
+class McpFilesystemController:
     """
     Controller exposing filesystem operations via API.
     Works directly with the selected backend (local or MinIO).
     """
 
     def __init__(self, router: APIRouter):
-        self.service = FilesystemService()
+        self.service = McpFilesystemService()
         self._register_routes(router)
 
     # ----------- Helper for consistent error handling -----------

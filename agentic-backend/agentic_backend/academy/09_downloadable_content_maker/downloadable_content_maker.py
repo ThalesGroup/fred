@@ -190,7 +190,7 @@ class DownloadableContentMaker(AgentFlow):
             )
 
             # Upload the asset to user storage
-            upload_result = await self.upload_user_asset(
+            upload_result = await self.upload_user_blob(
                 key=unique_asset_key,
                 file_content=file_content,
                 filename=unique_filename,
@@ -201,11 +201,7 @@ class DownloadableContentMaker(AgentFlow):
                 f"[AGENTS][DOWNLOADABLE_CONTENT_MAKER] Content uploaded successfully. Key: {upload_result.key}, "
                 f"Size: {upload_result.size}"
             )
-
-            # Construct the download URL
-            download_url = self.get_asset_download_url(
-                asset_key=upload_result.key, scope="user"
-            )
+            download_url = upload_result.download_url
 
             # Format the structured response with the download link (LinkPart)
             parts: List[MessagePart] = [

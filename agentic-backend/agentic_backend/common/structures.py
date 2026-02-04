@@ -206,7 +206,8 @@ class AIConfig(BaseModel):
         description="URL of the Knowledge Flow backend.",
     )
     timeout: TimeoutSettings = Field(
-        ..., description="Timeout settings for the AI client."
+        ...,
+        description="Timeout settings for the REST AI clients. This does not affect model calls.",
     )
     use_static_config_only: Optional[bool] = Field(
         True,
@@ -221,7 +222,7 @@ class AIConfig(BaseModel):
     )
 
     max_concurrent_agents: int = Field(
-        128,
+        1024,
         description="Maximum number of agents that can be cached in memory for faster access.",
     )
     max_attached_files_per_user: int = Field(

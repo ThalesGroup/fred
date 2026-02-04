@@ -3,21 +3,11 @@
 
 import { InfoOutlined } from "@mui/icons-material";
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
-import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  Chip,
-  CircularProgress,
-  Stack,
-  Tooltip,
-  Typography,
-} from "@mui/material";
+import { Box, Button, Card, CardContent, CardHeader, Chip, CircularProgress, Stack, Typography } from "@mui/material";
 import dayjs from "dayjs";
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import { useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useDocumentCommands } from "../common/useDocumentCommands";
 
@@ -64,11 +54,11 @@ export const UserAssetsList: React.FC<Props> = ({ tagId }) => {
         title={
           <Box display="flex" alignItems="center" gap={1}>
             <Typography variant="h6">{t("knowledge.userAssets.title")}</Typography>
-            <Tooltip title={t("knowledge.userAssets.subtitle")}>
+            <SimpleTooltip title={t("knowledge.userAssets.subtitle")}>
               <Box aria-label={t("knowledge.userAssets.subtitle") || "Info"} sx={{ display: "inline-flex" }}>
                 <InfoOutlined fontSize="small" color="action" />
               </Box>
-            </Tooltip>
+            </SimpleTooltip>
           </Box>
         }
       />
@@ -92,15 +82,15 @@ export const UserAssetsList: React.FC<Props> = ({ tagId }) => {
               : "—";
             const size = formatSize(doc.file?.file_size_bytes);
             return (
-                <Box
-                  key={doc.identity.document_uid}
-                  sx={{
-                    display: "grid",
-                    gridTemplateColumns: "minmax(0,2fr) auto",
-                    alignItems: "center",
-                    gap: 1,
-                    px: 1,
-                    py: 1,
+              <Box
+                key={doc.identity.document_uid}
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0,2fr) auto",
+                  alignItems: "center",
+                  gap: 1,
+                  px: 1,
+                  py: 1,
                   border: "1px solid",
                   borderColor: "divider",
                   borderRadius: 1,

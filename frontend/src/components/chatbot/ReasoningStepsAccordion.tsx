@@ -25,13 +25,13 @@ import {
   IconButton,
   List,
   Stack,
-  Tooltip,
   Typography,
   useTheme,
 } from "@mui/material";
 import React, { useMemo, useState } from "react";
 
 import { AnyAgent } from "../../common/agent";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 import { Channel, ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras, isToolCall, isToolResult, textPreview, toolId } from "./ChatBotUtils";
 import ReasoningStepBadge from "./ReasoningStepBadge";
@@ -346,11 +346,11 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
                   .join(" · ");
               })()}
             </Typography>
-            <Tooltip title="Close">
+            <SimpleTooltip title="Close">
               <IconButton onClick={closeDetails} size="small" sx={{ color: "inherit" }}>
                 <ExpandMoreIcon sx={{ transform: "rotate(90deg)" }} />
               </IconButton>
-            </Tooltip>
+            </SimpleTooltip>
           </Stack>
         </Box>
 

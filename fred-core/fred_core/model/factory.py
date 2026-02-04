@@ -133,16 +133,25 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
     ):
         _normalize_openai_compat(settings)
 
+    # Extract an optional request-level timeout (applied at OpenAI client level)
+    request_level_timeout = settings.get("request_timeout", None)
+
     # Allocate / reuse shared HTTP clients based on (possibly empty) settings
     # IMPORTANT: strip transport keys before forwarding to LangChain wrappers.
     tuning, h_client, a_client = get_shared_stack(cfg, settings=settings)
     strip_transport_settings(settings)
 
+    # Determine effective timeout to pass to the SDK wrapper.
+    # If request_timeout is explicit, use it. Otherwise, enforce the transport timeout.
+    # This prevents the OpenAI SDK from overriding our strict httpx client timeout with its default (600s).
+    effective_timeout = (
+        request_level_timeout if request_level_timeout is not None else tuning.timeout
+    )
+
     base_kwargs = {
         "http_client": h_client,
         "http_async_client": a_client,
-        # Do NOT pass "timeout" kwarg to the wrapper: the shared httpx clients already enforce it.
-        # This avoids version-dependent wrapper behaviors and duplicate-kwarg bugs.
+        "timeout": effective_timeout,
     }
 
     # --- Provider: OpenAI ---
@@ -153,7 +162,16 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
                 "OpenAI chat requires 'name' (model id, e.g., gpt-4o-mini)."
             )
         _info_provider(cfg, settings)
-        return ChatOpenAI(model=cfg.name, **base_kwargs, **settings)
+        logger.info(
+            "[MODEL][OPENAI] Constructing ChatOpenAI model=%s with explicit timeout=%s (overriding SDK default)",
+            cfg.name,
+            base_kwargs.get("timeout"),
+        )
+        return ChatOpenAI(
+            model=cfg.name,
+            **base_kwargs,
+            **settings,
+        )
 
     # --- Provider: Azure OpenAI ---
     if provider == ModelProvider.AZURE_OPENAI.value:
@@ -165,6 +183,11 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             raise ValueError("Azure chat requires 'name' (deployment).")
         api_version = settings.pop("azure_openai_api_version")
         _info_provider(cfg, settings)
+        logger.info(
+            "[MODEL][AZURE_OPENAI] Constructing AzureChatOpenAI deployment=%s with explicit timeout=%s",
+            cfg.name,
+            base_kwargs.get("timeout"),
+        )
         return AzureChatOpenAI(
             azure_deployment=cfg.name,
             api_version=api_version,
@@ -207,6 +230,11 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
 
         passthrough = {k: v for k, v in settings.items() if k not in required}
         _info_provider(cfg, passthrough)
+        logger.info(
+            "[MODEL][AZURE_APIM] Constructing AzureChatOpenAI (APIM) deployment=%s with explicit timeout=%s",
+            cfg.name,
+            base_kwargs.get("timeout"),
+        )
 
         return AzureChatOpenAI(
             azure_endpoint=f"{base}{path}/deployments/{cfg.name}/chat/completions?api-version={api_version}",
@@ -217,8 +245,7 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
                     "AZURE_APIM_SUBSCRIPTION_KEY"
                 ]
             },
-            http_client=h_client,
-            http_async_client=a_client,
+            **base_kwargs,
             **passthrough,
         )
 
@@ -278,7 +305,8 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
     base_kwargs = {
         "http_client": h_client,
         "http_async_client": a_client,
-        # As for chat: rely on the shared client's timeout.
+        # Explicitly pass the configured timeout to override the OpenAI SDK default.
+        "timeout": tuning.timeout,
     }
 
     name = cfg.name
@@ -346,14 +374,13 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
         return AzureOpenAIEmbeddings(
             azure_endpoint=f"{base}{path}/deployments/{cfg.name}/embeddings?api-version={api_version}",
             api_version=api_version,
-            http_client=h_client,
-            http_async_client=a_client,
             azure_ad_token_provider=_token_provider,
             default_headers={
                 "TrustNest-Apim-Subscription-Key": os.environ[
                     "AZURE_APIM_SUBSCRIPTION_KEY"
                 ]
             },
+            **base_kwargs,
             **passthrough,
         )
 

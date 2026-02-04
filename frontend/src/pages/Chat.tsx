@@ -14,6 +14,7 @@
 import { Box, CircularProgress, Grid2, Typography } from "@mui/material";
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
@@ -24,6 +25,7 @@ import { normalizeAgenticFlows } from "../utils/agenticFlows";
 export default function Chat() {
   const { sessionId, 'agent-id': agentId } = useParams<{ sessionId?: string; 'agent-id'?: string }>();
   const navigate = useNavigate();
+  const { i18n } = useTranslation();
 
   const {
     data: rawAgentsFromServer = [],
@@ -40,6 +42,9 @@ export default function Chat() {
   const enabledAgents = (agentsFromServer ?? []).filter(
     (a) => a.enabled === true && !a.metadata?.deep_search_hidden_in_ui,
   );
+
+  // Base runtime context propagated to every message (language, etc.)
+  const baseRuntimeContext = useMemo(() => ({ language: i18n.language || undefined }), [i18n.language]);
 
   // Find the initial agent based on URL parameter (if present)
   const initialAgent = useMemo<AnyAgent | undefined>(() => {
@@ -100,7 +105,7 @@ export default function Chat() {
           agents={enabledAgents}
           initialAgent={initialAgent}
           onNewSessionCreated={handleNewSessionCreated}
-          runtimeContext={{}}
+          runtimeContext={baseRuntimeContext}
         />
       </Grid2>
     </Box>

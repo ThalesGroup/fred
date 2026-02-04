@@ -92,7 +92,7 @@ ai:
       enabled: true
     - name: "AssetResponder"
       type: "agent"
-      class_path: "agentic_backend.academy.03_asset_responder.asset_responder.AssetResponder"
+      class_path: "agentic_backend.academy.03_config_loader.config_loader.AssetResponder"
       enabled: true
       chat_model: {}
     - name: "SlideMaker"

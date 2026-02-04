@@ -13,20 +13,39 @@
 // limitations under the License.
 
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
-import { Avatar, Box, Checkbox, Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel, Tooltip, Typography } from "@mui/material";
+import {
+  Avatar,
+  Box,
+  Checkbox,
+  Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TableSortLabel,
+  Typography,
+} from "@mui/material";
 import dayjs from "dayjs";
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { DocumentMetadata, TagType, TagWithItemsId, useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
+import {
+  DocumentMetadata,
+  TagType,
+  TagWithItemsId,
+  useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
+} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 import { getDocumentIcon } from "../common/DocumentIcon";
 import { DocumentVersionChip, extractDocumentVersion } from "../common/DocumentVersionChip";
 import { useDocumentActions } from "../common/useDocumentActions";
-import { DocumentProcessingStatus } from "./DocumentProcessingStatus";
 import { DocumentOperationsStatus } from "./DocumentOperationsStatus";
 import { CustomRowAction, DocumentTableRowActionsMenu } from "./DocumentOperationsTableRowActionsMenu";
 import { CustomBulkAction, DocumentOperationsTableSelectionToolbar } from "./DocumentOperationsTableSelectionToolbar";
+import { DocumentProcessingStatus } from "./DocumentProcessingStatus";
 
 // Todo: use `DocumentMetadata` directly (as `DocumentMetadata` is auto-generated from OpenAPI spec)
 
@@ -303,30 +322,30 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                     />
                   </TableCell>
                   {columns.fileName && (
-                  <TableCell>
-                    <Box
-                      display="flex"
-                      alignItems="center"
-                      gap={1}
-                      onClick={() => nameClickAction?.(file)}
-                      sx={{ cursor: nameClickAction ? "pointer" : "default" }}
-                    >
-                      {getDocumentIcon(file.identity.document_name)}
-                      <Typography variant="body2" noWrap sx={{ fontSize: "0.8rem" }}>
-                        {file.identity.document_name}
-                      </Typography>
-                      <DocumentVersionChip version={extractDocumentVersion(file)} />
-                    </Box>
-                  </TableCell>
-                )}
+                    <TableCell>
+                      <Box
+                        display="flex"
+                        alignItems="center"
+                        gap={1}
+                        onClick={() => nameClickAction?.(file)}
+                        sx={{ cursor: nameClickAction ? "pointer" : "default" }}
+                      >
+                        {getDocumentIcon(file.identity.document_name)}
+                        <Typography variant="body2" noWrap sx={{ fontSize: "0.8rem" }}>
+                          {file.identity.document_name}
+                        </Typography>
+                        <DocumentVersionChip version={extractDocumentVersion(file)} />
+                      </Box>
+                    </TableCell>
+                  )}
                   {columns.dateAdded && (
                     <TableCell>
-                      <Tooltip title={file.source.date_added_to_kb}>
+                      <SimpleTooltip title={file.source.date_added_to_kb}>
                         <Typography variant="body2">
                           <EventAvailableIcon fontSize="small" sx={{ mr: 0.5 }} />
                           {formatDate(file.source.date_added_to_kb)}
                         </Typography>
-                      </Tooltip>
+                      </SimpleTooltip>
                     </TableCell>
                   )}
                   {columns.librairies && (
@@ -337,9 +356,9 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                           const tagName = tag?.name || tagId;
 
                           return (
-                            <Tooltip key={tagId} title={tag?.description || ""}>
+                            <SimpleTooltip key={tagId} title={tag?.description || ""}>
                               <Chip label={tagName} size="small" variant="filled" sx={{ fontSize: "0.6rem" }} />
-                            </Tooltip>
+                            </SimpleTooltip>
                           );
                         })}
                       </Box>
@@ -382,7 +401,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                           const { bgColor, color } = statusStyleMap[status];
 
                           return (
-                            <Tooltip key={stage} title={`${stage.replace(/_/g, " ")}: ${status}`} arrow>
+                            <SimpleTooltip key={stage} title={`${stage.replace(/_/g, " ")}: ${status}`}>
                               <Avatar
                                 sx={{
                                   bgcolor: bgColor,
@@ -395,7 +414,7 @@ export const DocumentOperationsTable: React.FC<DocumentOperationsTableProps> = (
                               >
                                 {label}
                               </Avatar>
-                            </Tooltip>
+                            </SimpleTooltip>
                           );
                         })}
                       </Box>

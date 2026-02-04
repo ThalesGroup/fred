@@ -15,7 +15,7 @@
 
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import PreviewIcon from "@mui/icons-material/Preview";
-import { Box, Button, Chip, Grid2, IconButton, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Chip, Grid2, IconButton, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -27,6 +27,7 @@ import { AnyAgent } from "../../common/agent.ts";
 import { AgentChipMini } from "../../common/AgentChip.tsx";
 import DotsLoader from "../../common/DotsLoader.tsx";
 import { usePdfDocumentViewer } from "../../common/usePdfDocumentViewer";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
 import type { GeoPart, LinkPart } from "../../slices/agentic/agenticOpenApi.ts";
 import {
   ChatMessage,
@@ -40,8 +41,8 @@ import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 import GeoMapRenderer from "./GeoMapRenderer.tsx";
 import { MessagePart, toCopyText, toMarkdown, toPlainText } from "./messageParts.ts";
 import MessageRuntimeContextHeader from "./MessageRuntimeContextHeader.tsx";
-import { useAssetDownloader } from "./useAssetDownloader.tsx";
 import { useMessageContentPagination } from "./useMessageContentPagination.tsx";
+import { workspaceUserFileDownloader } from "./workspaceUserFileDownloader.tsx";
 
 export default function MessageCard({
   message,
@@ -126,7 +127,7 @@ export default function MessageCard({
   });
 
   const extras = getExtras(renderMessage);
-  const { downloadLink } = useAssetDownloader();
+  const { downloadLink } = workspaceUserFileDownloader();
   const isCall = isToolCall(renderMessage);
   const isResult = isToolResult(renderMessage);
 
@@ -200,7 +201,7 @@ export default function MessageCard({
         {/* Assistant avatar on the left */}
         {side === "left" && agent && (
           <Grid2 size="auto" paddingTop={2}>
-            <Tooltip title={`${agent.name}: ${agent.tuning.role}`}>
+            <SimpleTooltip title={`${agent.name}: ${agent.tuning.role}`}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
                 <AgentChipMini agent={agent} />
                 {pending && (
@@ -209,7 +210,7 @@ export default function MessageCard({
                   </Box>
                 )}
               </Box>
-            </Tooltip>
+            </SimpleTooltip>
           </Grid2>
         )}
 
@@ -236,24 +237,24 @@ export default function MessageCard({
                   {(showMetaChips || isCall || isResult) && (
                     <Box display="flex" alignItems="center" gap={1} px={0} pb={0.5}>
                       {showMetaChips && extras?.task && (
-                        <Tooltip title={t("chat.labels.task")}>
+                        <SimpleTooltip title={t("chat.labels.task")}>
                           <Typography
                             variant="caption"
                             sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, px: 0.75, py: 0.25 }}
                           >
                             {String(extras.task)}
                           </Typography>
-                        </Tooltip>
+                        </SimpleTooltip>
                       )}
                       {showMetaChips && extras?.node && (
-                        <Tooltip title={t("chat.labels.node")}>
+                        <SimpleTooltip title={t("chat.labels.node")}>
                           <Typography
                             variant="caption"
                             sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, px: 0.75, py: 0.25 }}
                           >
                             {String(extras.node)}
                           </Typography>
-                        </Tooltip>
+                        </SimpleTooltip>
                       )}
                       {showMetaChips && extras?.label && (
                         <Typography
@@ -420,7 +421,7 @@ export default function MessageCard({
                         />
                       )}
                       {viewLinkPart && (
-                        <Tooltip title="Open PDF preview in viewer">
+                        <SimpleTooltip title="Open PDF preview in viewer">
                           <Chip
                             icon={<PreviewIcon />}
                             label={viewLinkPart.title || "View PDF"}
@@ -440,7 +441,7 @@ export default function MessageCard({
                               }
                             }}
                           />
-                        </Tooltip>
+                        </SimpleTooltip>
                       )}
                     </Box>
                   )}
@@ -472,14 +473,14 @@ export default function MessageCard({
                   )}
 
                   {renderMessage.metadata?.token_usage && (
-                    <Tooltip
+                    <SimpleTooltip
                       title={`In: ${renderMessage.metadata.token_usage?.input_tokens ?? 0} · Out: ${renderMessage.metadata.token_usage?.output_tokens ?? 0}`}
                       placement="top"
                     >
                       <Typography color={theme.palette.text.secondary} fontSize=".7rem" sx={{ wordBreak: "normal" }}>
                         {renderMessage.metadata.token_usage?.output_tokens ?? 0} tokens
                       </Typography>
-                    </Tooltip>
+                    </SimpleTooltip>
                   )}
 
                   {/* <Chip

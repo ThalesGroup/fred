@@ -430,6 +430,32 @@ class MinioFilesystemConfig(BaseModel):
 FilesystemConfig = Annotated[Union[LocalFilesystemConfig, MinioFilesystemConfig], Field(discriminator="type")]
 
 
+class WorkspaceLayoutConfig(BaseModel):
+    """
+    Configurable storage path layout for workspace storage.
+
+    Allowed placeholders:
+      {user_id}, {agent_id}, {key}
+    """
+
+    user_pattern: str = Field("users/{user_id}/{key}", description="Path template for user exchange storage")
+    agent_config_pattern: str = Field("agents/{agent_id}/config/{key}", description="Path template for agent config storage")
+    agent_user_pattern: str = Field("agents/{agent_id}/users/{user_id}/{key}", description="Path template for per-user agent storage")
+
+    @model_validator(mode="after")
+    def validate_placeholders(self):
+        for field_name, required in [
+            ("user_pattern", ["user_id", "key"]),
+            ("agent_config_pattern", ["agent_id", "key"]),
+            ("agent_user_pattern", ["agent_id", "user_id", "key"]),
+        ]:
+            pattern = getattr(self, field_name)
+            for req in required:
+                if "{" + req + "}" not in pattern:
+                    raise ValueError(f"{field_name} must contain placeholder {{{req}}}")
+        return self
+
+
 class Configuration(BaseModel):
     app: AppConfig
     chat_model: ModelConfiguration
@@ -454,3 +480,8 @@ class Configuration(BaseModel):
     storage: StorageConfig
     mcp: MCPConfig = Field(default_factory=MCPConfig, description="Feature toggles for MCP-only endpoints and servers.")
     filesystem: FilesystemConfig = Field(..., description="Filesystem backend configuration.")
+    # Workspace storage layout (paths for user/agent config/agent-user storage).
+    workspace_layout: WorkspaceLayoutConfig = Field(
+        default_factory=lambda: WorkspaceLayoutConfig(),  # type: ignore
+        description="Patterns used to build workspace storage paths.",
+    )

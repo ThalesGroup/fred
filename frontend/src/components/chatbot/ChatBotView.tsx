@@ -25,7 +25,6 @@ import {
   IconButton,
   Stack,
   TextField,
-  Tooltip,
   Typography,
   useTheme,
 } from "@mui/material";
@@ -34,7 +33,7 @@ import { useTranslation } from "react-i18next";
 import type { AnyAgent } from "../../common/agent.ts";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips.tsx";
-import type { ChatMessage, RuntimeContext } from "../../slices/agentic/agenticOpenApi.ts";
+import type { AwaitingHumanEvent, ChatMessage, RuntimeContext } from "../../slices/agentic/agenticOpenApi.ts";
 import type { Resource, SearchPolicyName, TagWithItemsId } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import {
   ConversationOptionsPanel,
@@ -71,6 +70,9 @@ type ChatBotViewProps = {
   agents: AnyAgent[];
   messages: ChatMessage[];
   hiddenUserExchangeIds?: Set<string>;
+  hitlEvent?: AwaitingHumanEvent | null;
+  onHitlSubmit?: (choiceId: string, freeText?: string) => void;
+  onHitlCancel?: () => void;
   layout: {
     chatWidgetRail: string;
     chatWidgetGap: string;
@@ -121,6 +123,9 @@ const ChatBotView = ({
   agents,
   messages,
   hiddenUserExchangeIds,
+  hitlEvent,
+  onHitlSubmit,
+  onHitlCancel,
   layout,
   onSend,
   onStop,
@@ -384,6 +389,9 @@ const ChatBotView = ({
                     libraryNameById={libraryNameMap}
                     chatContextNameById={chatContextNameMap}
                     hiddenUserExchangeIds={hiddenUserExchangeIds}
+                    hitlEvent={hitlEvent}
+                    onHitlSubmit={onHitlSubmit}
+                    onHitlCancel={onHitlCancel}
                   />
                   {showHistoryLoading && (
                     <Box mt={1} sx={{ display: "flex", justifyContent: "center" }}>
@@ -415,7 +423,7 @@ const ChatBotView = ({
                 </Grid2>
 
                 <Grid2 container width="100%" display="flex" justifyContent="flex-end" marginTop={0.5}>
-                  <Tooltip
+                  <SimpleTooltip
                     title={t("chatbot.tooltip.tokenUsage", {
                       input: inputTokenCounts,
                       output: outputTokenCounts,
@@ -426,7 +434,7 @@ const ChatBotView = ({
                         total: outputTokenCounts + inputTokenCounts > 0 ? outputTokenCounts + inputTokenCounts : "...",
                       })}
                     </Typography>
-                  </Tooltip>
+                  </SimpleTooltip>
                 </Grid2>
               </Box>
             </Box>

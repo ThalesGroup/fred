@@ -4,10 +4,11 @@
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import LibraryBooksOutlinedIcon from "@mui/icons-material/LibraryBooksOutlined";
 import PersonOutlinedIcon from "@mui/icons-material/PersonOutline";
-import { Box, Tooltip, Typography } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import { getExtras } from "./ChatBotUtils";
 import MessageRuntimeContextPopover from "./MessageRuntimeContextPopover";
@@ -115,7 +116,7 @@ export default function MessageRuntimeContextHeader({ message, libraryNameById, 
       }}
     >
       {showLibs && (
-        <Tooltip
+        <SimpleTooltip
           title={
             <Box>
               <Typography variant="caption" sx={{ opacity: 0.7, display: "block", mb: 0.25 }}>
@@ -145,11 +146,11 @@ export default function MessageRuntimeContextHeader({ message, libraryNameById, 
               {t("header.librariesInline", { label: librariesLabel, names: libsTextFull })}
             </Typography>
           </Box>
-        </Tooltip>
+        </SimpleTooltip>
       )}
 
       {showChatCtx && (
-        <Tooltip
+        <SimpleTooltip
           title={
             <Box>
               <Typography variant="caption" sx={{ opacity: 0.7, display: "block", mb: 0.25 }}>
@@ -179,7 +180,7 @@ export default function MessageRuntimeContextHeader({ message, libraryNameById, 
               {t("header.chatContextsInline", { label: chatContextLabel, names: chatCtxTextFull })}
             </Typography>
           </Box>
-        </Tooltip>
+        </SimpleTooltip>
       )}
 
       {/* Info icon + popover */}

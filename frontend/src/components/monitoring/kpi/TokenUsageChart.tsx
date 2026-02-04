@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { alpha, useTheme } from "@mui/material/styles";
 import dayjs, { ManipulateType } from "dayjs";
 import utc from "dayjs/plugin/utc";
-import { alpha, useTheme } from "@mui/material/styles";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { MetricsResponse } from "../../../slices/agentic/agenticOpenApi";
 import { precisionToUnit } from "../timeAxis";
 

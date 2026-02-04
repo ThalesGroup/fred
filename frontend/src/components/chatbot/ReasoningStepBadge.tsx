@@ -14,9 +14,10 @@
 
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import TerminalIcon from "@mui/icons-material/Terminal";
-import { Box, Chip, Collapse, IconButton, ListItemButton, Stack, Tooltip, Typography } from "@mui/material";
+import { Box, Chip, Collapse, IconButton, ListItemButton, Stack, Typography } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import React, { useState } from "react";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 import type { Channel, ChatMessage } from "../../slices/agentic/agenticOpenApi";
 
 const channelColor = (c: Channel): "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
@@ -228,7 +229,11 @@ export default function ReasoningStepBadge({
                 </Stack>
               )}
               {primaryText && (
-                <Tooltip title={primaryTooltip ?? ""} enterTouchDelay={0} disableHoverListener={!primaryTooltip}>
+                <SimpleTooltip
+                  title={primaryTooltip ?? ""}
+                  // ATTENTION enterTouchDelay={0}
+                  //disableHoverListener={!primaryTooltip}
+                >
                   <Typography
                     variant="body2"
                     sx={{
@@ -243,10 +248,14 @@ export default function ReasoningStepBadge({
                   >
                     {primaryText}
                   </Typography>
-                </Tooltip>
+                </SimpleTooltip>
               )}
               {secondaryText && (
-                <Tooltip title={secondaryTooltip ?? ""} enterTouchDelay={0} disableHoverListener={!secondaryTooltip}>
+                <SimpleTooltip
+                  title={secondaryTooltip ?? ""}
+                  // ATTENTION enterTouchDelay={0}
+                  // disableHoverListener={!secondaryTooltip}
+                >
                   <Typography
                     variant="body2"
                     sx={{
@@ -266,7 +275,7 @@ export default function ReasoningStepBadge({
                   >
                     {secondaryText}
                   </Typography>
-                </Tooltip>
+                </SimpleTooltip>
               )}
             </Stack>
           </Collapse>
@@ -275,7 +284,7 @@ export default function ReasoningStepBadge({
 
       <Stack direction="row" spacing={0.25} alignItems="center" sx={{ flexShrink: 0, pr: 0.25 }}>
         {onToggleDetails && (
-          <Tooltip title="Ouvrir les détails">
+          <SimpleTooltip title="Ouvrir les détails">
             <IconButton
               size="small"
               onClick={(event) => {
@@ -285,7 +294,7 @@ export default function ReasoningStepBadge({
             >
               <LaunchRoundedIcon fontSize="small" />
             </IconButton>
-          </Tooltip>
+          </SimpleTooltip>
         )}
       </Stack>
     </ListItemButton>

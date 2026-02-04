@@ -99,6 +99,7 @@ chat_model:
   settings:
     temperature: 0
     max_retries: 0
+    base_url: "http://localhost:8383/v1"
     timeout:
       connect: 10.0
       read: 30.0
@@ -111,6 +112,7 @@ embedding_model:
   name: text-embedding-3-large # or text-embedding-3-small
   settings:
     max_retries: 0
+    base_url: "http://localhost:8383/v1"
     timeout:
       connect: 10.0
       read: 30.0

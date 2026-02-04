@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, IconButton, LinearProgress, Tooltip, Typography } from "@mui/material";
+import { Box, IconButton, LinearProgress, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import React from "react";
-import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { useTranslation } from "react-i18next";
+import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 
 import RefreshIcon from "@mui/icons-material/Refresh";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import { ProcessDocumentsProgressResponse } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 interface DocumentOperationsStatusProps {
@@ -41,14 +42,13 @@ export const DocumentOperationsStatus: React.FC<DocumentOperationsStatusProps> =
 
   const remaining = Math.max(totalInProgress - doneCount - failedCount, 0);
 
-  const chartData =
-    hasProgress
-      ? [
-          { key: "done", label: t("scheduler.processingStatusDoneLabel"), value: doneCount },
-          { key: "failed", label: t("scheduler.processingStatusFailedOnlyLabel"), value: failedCount },
-          { key: "remaining", label: t("scheduler.processingStatusRemainingLabel"), value: remaining },
-        ]
-      : [];
+  const chartData = hasProgress
+    ? [
+        { key: "done", label: t("scheduler.processingStatusDoneLabel"), value: doneCount },
+        { key: "failed", label: t("scheduler.processingStatusFailedOnlyLabel"), value: failedCount },
+        { key: "remaining", label: t("scheduler.processingStatusRemainingLabel"), value: remaining },
+      ]
+    : [];
 
   const chartDataForChart =
     chartData.length > 0
@@ -84,11 +84,11 @@ export const DocumentOperationsStatus: React.FC<DocumentOperationsStatusProps> =
       }}
     >
       <Box sx={{ position: "absolute", top: 4, right: 4 }}>
-        <Tooltip title={t("scheduler.refreshProgress")}>
+        <SimpleTooltip title={t("scheduler.refreshProgress")}>
           <IconButton size="small" onClick={onRefresh}>
             <RefreshIcon fontSize="small" />
           </IconButton>
-        </Tooltip>
+        </SimpleTooltip>
       </Box>
       <Box flex={1} minWidth={0}>
         <Typography variant="subtitle2">{t("scheduler.processingStatusTitle")}</Typography>
@@ -140,7 +140,14 @@ export const DocumentOperationsStatus: React.FC<DocumentOperationsStatusProps> =
         <Box width={120} height={80}>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={chartDataForChart} dataKey="value" nameKey="key" innerRadius={22} outerRadius={34} paddingAngle={1}>
+              <Pie
+                data={chartDataForChart}
+                dataKey="value"
+                nameKey="key"
+                innerRadius={22}
+                outerRadius={34}
+                paddingAngle={1}
+              >
                 {chartDataForChart.map((entry) => (
                   <Cell key={entry.key} fill={colors[entry.key] || theme.palette.grey[300]} />
                 ))}

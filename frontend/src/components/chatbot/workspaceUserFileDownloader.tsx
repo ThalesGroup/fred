@@ -17,27 +17,13 @@
 
 import { useCallback } from "react";
 import type { LinkPart } from "../../slices/agentic/agenticOpenApi.ts";
-import { useLazyDownloadUserAssetBlobQuery } from "../../slices/knowledgeFlow/knowledgeFlowApi.blob";
+import { useLazyDownloadHrefBlobQuery } from "../../slices/knowledgeFlow/knowledgeFlowApi.blob.ts";
 import { downloadFile } from "../../utils/downloadUtils.tsx";
 import { useToast } from "../ToastProvider.tsx";
 
-// Extract the user-asset key from a full URL.
-const extractUserAssetKey = (href: string): string | null => {
-  try {
-    const url = new URL(href, window.location.origin);
-    const match = url.pathname.match(/\/user-assets\/(.+)$/);
-    if (match && match[1]) {
-      return decodeURIComponent(match[1]);
-    }
-  } catch {
-    // noop
-  }
-  return null;
-};
-
-export const useAssetDownloader = () => {
+export const workspaceUserFileDownloader = () => {
   const { showError } = useToast();
-  const [downloadUserAsset] = useLazyDownloadUserAssetBlobQuery();
+  const [downloadByHref] = useLazyDownloadHrefBlobQuery();
 
   const downloadLink = useCallback(
     async (link: LinkPart) => {
@@ -46,15 +32,9 @@ export const useAssetDownloader = () => {
         return;
       }
 
-      const key = extractUserAssetKey(link.href);
-      if (!key) {
-        showError({ summary: "Download error", detail: "Unable to parse asset key." });
-        return;
-      }
-
       try {
-        const blob = await downloadUserAsset({
-          key,
+        const blob = await downloadByHref({
+          href: link.href,
           assetOwnerId: link.rel || undefined, // optional override header
         }).unwrap();
 
@@ -67,7 +47,7 @@ export const useAssetDownloader = () => {
         });
       }
     },
-    [downloadUserAsset, showError],
+    [downloadByHref, showError],
   );
 
   return { downloadLink };

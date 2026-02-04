@@ -17,7 +17,7 @@ import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import PersonAddAltIcon from "@mui/icons-material/PersonAddAlt";
-import { Box, Checkbox, IconButton, Tooltip } from "@mui/material";
+import { Box, Checkbox, IconButton } from "@mui/material";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import * as React from "react";
@@ -25,10 +25,11 @@ import { useTranslation } from "react-i18next";
 import { getConfig } from "../../common/config";
 import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 
-import { Resource, TagWithItemsId } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 import { TagNode } from "../../shared/utils/tagTree";
-import { ResourceRowCompact } from "./ResourceRowCompact";
+import { Resource, TagWithItemsId } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DocumentLibraryShareDialog } from "../documents/libraries/sharing/DocumentLibraryShareDialog";
+import { ResourceRowCompact } from "./ResourceRowCompact";
 
 /* --------------------------------------------------------------------------
  * Helpers (mirrors DocumentLibraryTree)
@@ -206,7 +207,7 @@ export function ResourceLibraryTree({
               {/* Right: owner + share + delete */}
               <Box sx={{ ml: "auto", display: "flex", alignItems: "center" }}>
                 {feature_flags.is_rebac_enabled && ownerName && (
-                  <Tooltip title={t("documentLibraryTree.ownerTooltip", { name: ownerName })}>
+                  <SimpleTooltip title={t("documentLibraryTree.ownerTooltip", { name: ownerName })}>
                     <Box
                       sx={{
                         display: "inline-flex",
@@ -232,10 +233,13 @@ export function ResourceLibraryTree({
                       />
                       <span style={{ whiteSpace: "nowrap" }}>{ownerName}</span>
                     </Box>
-                  </Tooltip>
+                  </SimpleTooltip>
                 )}
                 {feature_flags.is_rebac_enabled && (
-                  <Tooltip title={t("documentLibraryTree.shareFolder")} enterTouchDelay={10}>
+                  <SimpleTooltip
+                    title={t("documentLibraryTree.shareFolder")}
+                    // ATTENTION enterTouchDelay={10}
+                  >
                     <IconButton
                       size="small"
                       onClick={(e) => {
@@ -245,13 +249,13 @@ export function ResourceLibraryTree({
                     >
                       <PersonAddAltIcon fontSize="small" />
                     </IconButton>
-                  </Tooltip>
+                  </SimpleTooltip>
                 )}
-                <Tooltip
+                <SimpleTooltip
                   title={
                     canBeDeleted ? t("documentLibraryTree.deleteFolder") : t("documentLibraryTree.deleteFolderDisabled")
                   }
-                  enterTouchDelay={10}
+                  // ATTENTION enterTouchDelay={10}
                 >
                   <DeleteIconButton
                     size="small"
@@ -261,7 +265,7 @@ export function ResourceLibraryTree({
                       onDeleteFolder(hereTag);
                     }}
                   />
-                </Tooltip>
+                </SimpleTooltip>
               </Box>
             </Box>
           }

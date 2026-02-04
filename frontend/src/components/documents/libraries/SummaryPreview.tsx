@@ -12,20 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo, useState } from "react";
-import {
-  Box,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Button,
-  Tooltip,
-  Typography,
-  IconButton,
-} from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Typography } from "@mui/material";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import type { DocSummary } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export default function SummaryPreview({
@@ -54,16 +45,15 @@ export default function SummaryPreview({
   return (
     <>
       {/* Minimal trigger with SURFACE tooltip */}
-      <Tooltip
-        arrow
+      <SimpleTooltip
         placement="top"
-        slotProps={{
-          tooltip: {
-            sx: {
-              maxWidth: 520,
-            },
-          },
-        }}
+        // ATTENTION slotProps={{
+        //   tooltip: {
+        //     sx: {
+        //       maxWidth: 520,
+        //     },
+        //   },
+        // }}
         title={
           abstractPreview ? (
             <Box sx={{ maxWidth: 520 }}>
@@ -86,15 +76,10 @@ export default function SummaryPreview({
             <InfoOutlinedIcon fontSize="small" />
           </IconButton>
         </span>
-      </Tooltip>
+      </SimpleTooltip>
 
       {/* Full summary dialog on SURFACE */}
-      <Dialog
-        open={open}
-        onClose={() => setOpen(false)}
-        fullWidth
-        maxWidth="md"
-      >
+      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="md">
         <DialogTitle sx={{ pb: 1 }}>
           {t("documentLibrary.summary", "Summary")}
           {docTitle ? (

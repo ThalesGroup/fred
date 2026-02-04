@@ -16,10 +16,11 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import EditIcon from "@mui/icons-material/Edit";
 import PreviewIcon from "@mui/icons-material/Preview";
 import RestoreIcon from "@mui/icons-material/Restore";
-import { Box, Chip, Divider, IconButton, Stack, Tab, Tabs, Tooltip, Typography, useTheme } from "@mui/material";
+import { Box, Chip, Divider, IconButton, Stack, Tab, Tabs, Typography, useTheme } from "@mui/material";
 import * as monaco from "monaco-editor";
 import { useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 
 type Props = {
   label: string;
@@ -94,18 +95,18 @@ export function PromptEditor({ label, value, defaultValue = "", onChange, tokens
           />
         )}
         <Box sx={{ ml: "auto", display: "flex", alignItems: "center", gap: 0.5 }}>
-          <Tooltip title="Reset to default">
+          <SimpleTooltip title="Reset to default">
             <span>
               <IconButton size="small" onClick={resetToDefault} disabled={!hasChanged}>
                 <RestoreIcon fontSize="small" />
               </IconButton>
             </span>
-          </Tooltip>
-          <Tooltip title="Copy prompt">
+          </SimpleTooltip>
+          <SimpleTooltip title="Copy prompt">
             <IconButton size="small" onClick={copyToClipboard}>
               <ContentCopyIcon fontSize="small" />
             </IconButton>
-          </Tooltip>
+          </SimpleTooltip>
         </Box>
       </Box>
 

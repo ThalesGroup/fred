@@ -299,6 +299,10 @@ class KPIWriter(BaseKPIWriter):
         if name == "chat.phase_latency_ms":
             dims = event.dims or {}
             parts = [name]
+            if dims.get("agent_name"):
+                parts.append(f"agent={dims['agent_name']}")
+            if dims.get("phase"):
+                parts.append(f"phase={dims['phase']}")
             if dims.get("agent_step"):
                 parts.append(f"step={dims['agent_step']}")
             if dims.get("status"):
@@ -338,25 +342,20 @@ class KPIWriter(BaseKPIWriter):
     def _format_summary(
         self, snapshot: Dict[str, _MetricRollup]
     ) -> list[tuple[str, _MetricRollup]]:
-        items = list(snapshot.items())
+        # Keep summary output focused on chat phase latencies only.
+        chat_items = [
+            (name, rollup)
+            for name, rollup in snapshot.items()
+            if name.startswith("chat.phase_latency_ms")
+        ]
+        if not chat_items:
+            return []
+
         if self._summary_top_n:
-            items.sort(key=lambda item: item[1].count, reverse=True)
-            top = items[: self._summary_top_n]
-            must_include = {
-                "process.cpu.percent",
-                "process.memory.rss_mb",
-                "process.memory.vms_mb",
-                "process.memory.rss_percent",
-                "process.memory.limit_mb",
-                "process.open_fds",
-            }
-            present = {name for name, _ in top}
-            for name, rollup in items[self._summary_top_n :]:
-                if name in must_include and name not in present:
-                    top.append((name, rollup))
-                    present.add(name)
-            return top
-        return sorted(items, key=lambda item: item[0])
+            chat_items.sort(key=lambda item: item[1].count, reverse=True)
+            return chat_items[: self._summary_top_n]
+
+        return sorted(chat_items, key=lambda item: item[0])
 
     def _format_rollup_line(self, name: str, rollup: _MetricRollup) -> str:
         if rollup.metric_type == "gauge":

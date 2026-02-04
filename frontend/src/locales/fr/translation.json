@@ -588,7 +588,11 @@
       "tooltip": {
         "description": "Fichiers attachés à cette conversation.\n\nLes fichiers sont traités par des algorithmes plus rapides mais moins précis. L'agent pourra utiliser ces fichiers pour répondre .\n\nNotez que cette fonctionnalité est en version bêta et peut ne pas fonctionner parfaitement pour tous les types de fichiers. Pour des corpus pérennes, envisagez d'utiliser des bibliothèques de documents.",
         "disabled": "Cet agent n’utilise pas les pièces jointes."
-      }
+      },
+      "duplicateTitle": "Déjà ajouté",
+      "duplicateDetail": "Ce fichier est déjà dans la conversation.",
+      "skippedDuplicates": "Doublons ignorés",
+      "someFilesAlreadyAttached": "Certains fichiers étaient déjà joints et ont été ignorés."
     },
     "documents": {
       "drawerTitle": "Documents",
@@ -1113,6 +1117,10 @@
   },
   "mcp": {
     "servers": {
+      "corpus": {
+        "name": "Gestion du corpus documentaire",
+        "description": "Permet à votre agent d'accéder à des outils de gestion de corpus documentaire (téléversement, traitement, vectorisation)"
+      },
       "search_documents": {
         "name": "Rechercher dans les documents",
         "description": "Permet à votre agent d'effectuer des recherches sémantiques dans les documents téléversés dans Fred (RAG)"

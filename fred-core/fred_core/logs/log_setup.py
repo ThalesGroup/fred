@@ -216,6 +216,7 @@ def log_setup(
         "websockets.protocol",
         "websockets.client",
         "httptools",
+        "mcp.client.streamable_http",
     )
     for noisy in noisy_libs:
         lg = logging.getLogger(noisy)

@@ -43,7 +43,7 @@ import {
 // UI union facade
 import { AnyAgent, isLeader } from "../common/agent";
 import { A2aCardDialog } from "../components/agentHub/A2aCardDialog";
-import { AgentAssetManagerDrawer } from "../components/agentHub/AgentAssetManagerDrawer";
+import { AgentConfigWorkspaceManagerDrawer } from "../components/agentHub/AgentConfigWorkspaceManagerDrawer";
 import { CreateAgentModal } from "../components/agentHub/CreateAgentModal";
 import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
 import { useToast } from "../components/ToastProvider";
@@ -354,7 +354,7 @@ export const AgentHub = () => {
           onSaved={fetchAgents}
         />
         {agentForAssetManagement && (
-          <AgentAssetManagerDrawer
+          <AgentConfigWorkspaceManagerDrawer
             isOpen={assetManagerOpen}
             onClose={handleCloseAssetManager}
             agentId={agentForAssetManagement.name}

@@ -58,7 +58,7 @@ async def export_conversation_to_asset(
 
     try:
         # Upload the asset to user storage
-        upload_result = await agent.upload_user_asset(
+        upload_result = await agent.upload_user_blob(
             key=unique_asset_key,
             file_content=file_content,
             filename=unique_filename,
@@ -71,9 +71,9 @@ async def export_conversation_to_asset(
         )
 
         # Construct the download URL
-        download_url = agent.get_asset_download_url(
-            asset_key=upload_result.key, scope="user"
-        )
+        download_url = upload_result.download_url
+        if not download_url:
+            raise ValueError("Failed to obtain download URL after upload")
 
         return download_url, upload_result.key
     except AttributeError as e:

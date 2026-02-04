@@ -36,14 +36,14 @@ async def reconcile_keycloak_groups_with_rebac() -> None:
     # Create Keycloak and ReBAC clients
     rebac_engine = ApplicationContext.get_instance().get_rebac_engine()
     if not rebac_engine.enabled:
-        logger.warning("Rebac is disabled; skipping reconciliation.")
+        logger.warning("[REBAC] Rebac is disabled; skipping reconciliation.")
         return
     if not rebac_engine.need_keycloak_sync:
-        logger.info("Rebac engine does not require Keycloak sync; skipping reconciliation.")
+        logger.info("[REBAC] Rebac engine does not require Keycloak sync; skipping reconciliation.")
         return
     admin = create_keycloak_admin(get_configuration().security.m2m)
     if isinstance(admin, KeycloackDisabled):
-        logger.warning("Keycloak admin client could not be created; skipping reconciliation.")
+        logger.warning("[REBAC] Keycloak admin client could not be created; skipping reconciliation.")
         return
 
     # Collect membership edges from both systems
@@ -55,7 +55,7 @@ async def reconcile_keycloak_groups_with_rebac() -> None:
     edges_to_remove = rebac_edges - keycloak_edges
 
     if not edges_to_add and not edges_to_remove:
-        logger.info("Keycloak and ReBAC membership graphs are already in sync.")
+        logger.info("[REBAC] Keycloak and ReBAC membership graphs are already in sync.")
         return
 
     # Apply the diff with limited concurrency (to avoid overwhelming ReBAC engine)
@@ -98,7 +98,7 @@ async def _collect_keycloak_memberships(admin: KeycloakAdmin) -> set[MembershipE
         for member in members:
             user_id = member.get("id")
             if not user_id:
-                logger.debug("Skipping Keycloak member without identifier in group %s: %s", group_id, member)
+                logger.debug("[REBAC] Skipping Keycloak member without identifier in group %s: %s", group_id, member)
                 continue
             edges.add(MembershipEdge(Resource.USER, user_id, group_id))
 
@@ -107,12 +107,12 @@ async def _collect_keycloak_memberships(admin: KeycloakAdmin) -> set[MembershipE
         for subgroup in subgroups:
             subgroup_id = subgroup.get("id")
             if not subgroup_id:
-                logger.debug("Skipping subgroup without identifier in group %s: %s", group_id, subgroup)
+                logger.debug("[REBAC] Skipping subgroup without identifier in group %s: %s", group_id, subgroup)
                 continue
             edges.add(MembershipEdge(Resource.GROUP, subgroup_id, group_id))
             stack.append(subgroup)
 
-    logger.info("Collected %d membership edges from Keycloak across %d groups.", len(edges), len(seen_groups))
+    logger.info("[REBAC] Collected %d membership edges from Keycloak across %d groups.", len(edges), len(seen_groups))
     return edges
 
 
@@ -167,7 +167,7 @@ async def _apply_membership_diff(
         await asyncio.gather(*tasks)
 
     logger.info(
-        "Applied membership diff: %d additions, %d deletions.",
+        "[REBAC] Applied membership diff: %d additions, %d deletions.",
         len(edges_to_add),
         len(edges_to_remove),
     )
