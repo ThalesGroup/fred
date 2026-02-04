@@ -18,7 +18,7 @@ from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError
 
 from agentic_backend.scheduler.agent_contracts import (
-    AgentInputV1,
+    AgentInputArgsV1,
     AgentResultStatus,
     AgentResultV1,
     ProgressEventV1,
@@ -28,7 +28,7 @@ from agentic_backend.scheduler.agent_contracts import (
 @workflow.defn(name="AgentWorkflow")
 class AgentWorkflow:
     @workflow.run
-    async def run(self, input: AgentInputV1) -> AgentResultV1:
+    async def run(self, input: AgentInputArgsV1) -> AgentResultV1:
         # 1. Define Activity Options
         # We allow long execution (e.g. 1 hour) but require heartbeats every minute
         retry_policy = RetryPolicy(

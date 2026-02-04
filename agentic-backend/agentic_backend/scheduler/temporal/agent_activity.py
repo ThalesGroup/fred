@@ -15,20 +15,20 @@ import logging
 
 from temporalio import activity
 
-from agentic_backend.scheduler.agent_contracts import AgentInputV1, AgentResultV1
+from agentic_backend.scheduler.agent_contracts import AgentInputArgsV1, AgentResultV1
 from agentic_backend.scheduler.temporal.agent_task_runner import get_runner
 
 logger = logging.getLogger(__name__)
 
 
 @activity.defn(name="run_langgraph_activity")
-async def run_langgraph_activity(input: AgentInputV1) -> AgentResultV1:
+async def run_langgraph_activity(input: AgentInputArgsV1) -> AgentResultV1:
     """
     Temporal Activity entry point.
     It delegates all logic to the AgentTaskRunner.
     """
     logger.info(
-        f"[ACTIVITY] Starting task {input.task_id} for agent {input.target_agent}"
+        f"[ACTIVITY] Starting task {input.task_id} for agent {input.target_ref}"
     )
 
     # Fetch the singleton runner

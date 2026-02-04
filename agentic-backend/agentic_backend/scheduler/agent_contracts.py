@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
+from fred_core.scheduler import SchedulerInputArgsV1
 from pydantic import BaseModel, Field
 
 
@@ -44,15 +45,17 @@ class AgentContextRefsV1(BaseModel):
 # -----------------------------
 
 
-class AgentInputV1(BaseModel):
-    """The complete context needed for an agent to perform a task."""
+class AgentInputArgsV1(SchedulerInputArgsV1):
+    """
+    The complete context needed for an agent to perform a task.
 
-    task_id: str
-    target_agent: str
+    This is a specialization of SchedulerInputArgsV1 with agent-specific fields.
+    """
+
+    target_kind: Literal["agent"] = "agent"
     user_id: Optional[str] = None
     request_text: str
     context: AgentContextRefsV1 = Field(default_factory=AgentContextRefsV1)
-    parameters: Dict[str, Any] = Field(default_factory=dict)
 
     # HITL / Resumption
     checkpoint_ref: Optional[str] = None

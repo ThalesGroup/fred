@@ -12,7 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred_core.scheduler.scheduler_structures import SchedulerInputArgsV1
-from fred_core.scheduler.temporal_client_provider import TemporalClientProvider
 
-__all__ = ["TemporalClientProvider", "SchedulerInputArgsV1"]
+from typing import Any, Dict, Literal
+
+from pydantic import BaseModel, Field
+
+
+class SchedulerInputArgsV1(BaseModel):
+    """
+    Minimal envelope used by Schedulers including Temporal workflows (agentic or third-party apps).
+
+    """
+
+    task_id: str  # unique identifier for the scheduled task
+    target_ref: str  # the workflow/agent/app unique identifier to invoke
+    target_kind: Literal["agent", "app"] = "agent"
+    parameters: Dict[str, Any] = Field(default_factory=dict)

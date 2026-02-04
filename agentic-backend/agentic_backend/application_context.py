@@ -59,6 +59,7 @@ from fred_core.kpi import (
     OpenSearchKPIStore,
     PrometheusKPIStore,
 )
+from fred_core.scheduler import TemporalClientProvider
 from fred_core.sql import create_engine_from_config
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -191,6 +192,10 @@ def get_feedback_store() -> BaseFeedbackStore:
 
 def get_task_store() -> BaseAgentTaskStore:
     return get_app_context().get_task_store()
+
+
+def get_temporal_client_provider() -> TemporalClientProvider:
+    return get_app_context().get_temporal_client_provider()
 
 
 def get_enabled_agent_names() -> List[str]:
@@ -698,6 +703,19 @@ class ApplicationContext:
             )
             self._task_store_instance = MemoryAgentTaskStore()
             return self._task_store_instance
+
+    def get_temporal_client_provider(self) -> TemporalClientProvider:
+        if getattr(self, "_temporal_provider", None) is not None:
+            return self._temporal_provider  # type: ignore[attr-defined]
+
+        cfg = get_configuration().scheduler
+        if cfg.backend.lower() != "temporal":
+            raise RuntimeError(
+                f"Temporal client requested but scheduler backend is {cfg.backend}"
+            )
+
+        self._temporal_provider = TemporalClientProvider(cfg.temporal)
+        return self._temporal_provider
 
     def get_agent_store(self) -> BaseAgentStore:
         """

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-from typing import Annotated, List, Type, TypedDict
+from typing import Annotated, Any, List, Optional, Type, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage
 from langgraph.graph import END, StateGraph
@@ -13,6 +14,11 @@ from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.scheduler.agent_contracts import (
+    AgentContextRefsV1,
+    AgentResultStatus,
+)
+from agentic_backend.scheduler.temporal.delegate_client import TemporalAgentInvoker
 
 logger = logging.getLogger(__name__)
 
@@ -34,19 +40,13 @@ class ResearchAgentState(TypedDict):
     research_data: str
     project_id: str  # Hydrated from AgentInputV1.context.project_id
     research_depth: int  # Hydrated from AgentInputV1.parameters['research_depth']
+    delegate_workflow_id: Optional[str]
+    delegate_summary: Optional[str]
 
 
-class Researcher(AgentFlow):
+class HitlAgent(AgentFlow):
     """
-    A minimal long-running research agent wired for Temporal, but keeping the
-    agent itself free of Temporal imports.
-
-    Why the schema matters:
-    - The Temporal activity receives AgentInputV1 (request_text, context, parameters).
-    - Before running the graph it "hydrates" the LangGraph state using the schema
-      returned by get_state_schema().
-    - This lets you add required inputs (e.g., project_id, research_depth) without
-      hard-coding Temporal details inside the agent.
+    A minimal long-running research agent that ask confirmation to the user
     """
 
     tuning = AgentTuning(
@@ -86,6 +86,7 @@ class Researcher(AgentFlow):
         builder.add_node("validate_gather", self.validate_after_gather)
         builder.add_node("analyze", self.analyze_data)
         builder.add_node("validate_analyze", self.validate_after_analyze)
+        builder.add_node("delegate", self.delegate_to_georges)
         builder.add_node("validate_draft", self.validate_before_draft)
         builder.add_node("draft", self.draft_report)
 
@@ -93,7 +94,8 @@ class Researcher(AgentFlow):
         builder.set_entry_point("gather")
         builder.add_edge("gather", "validate_gather")
         builder.add_edge("validate_gather", "analyze")
-        builder.add_edge("analyze", "validate_draft")
+        builder.add_edge("analyze", "delegate")
+        builder.add_edge("delegate", "validate_draft")
         builder.add_edge("validate_draft", "draft")
         builder.add_edge("draft", END)
 
@@ -167,6 +169,72 @@ class Researcher(AgentFlow):
         return {
             "messages": [AIMessage(content="Analyzed data. Key trend: AI is growing.")]
         }
+
+    async def delegate_to_georges(self, state: ResearchAgentState):
+        """
+        Delegate to the generalist agent (Georges) via Temporal and wait for completion.
+
+        This keeps the current LangGraph node paused while the child workflow runs.
+        Heartbeats are sent so the parent Temporal activity does not time out.
+        """
+
+        original_request = self._content_to_text(
+            state.get("messages", [])[0].content if state.get("messages") else ""
+        )
+        project_id = state.get("project_id")
+
+        # Build a lightweight context for the delegated agent
+        context = AgentContextRefsV1(project_id=project_id)
+
+        # The runtime_context is set in async_init; may be absent when run outside Temporal
+        user_id = getattr(getattr(self, "runtime_context", None), "user_id", None)
+
+        invoker = TemporalAgentInvoker()
+        logger.info(
+            "[Researcher] Delegating to Georges via Temporal (project=%s user=%s)",
+            project_id,
+            user_id,
+        )
+
+        result, workflow_id = await invoker.execute_agent(
+            target_agent="Georges",
+            request_text=original_request or "Assist with research findings",
+            user_id=user_id,
+            context=context,
+            parameters={"project_id": project_id},
+            heartbeat_label="waiting_for_georges",
+        )
+
+        summary = result.final_summary or "Delegate returned no summary"
+        status = result.status
+
+        if status == AgentResultStatus.COMPLETED:
+            msg = f"Delegate agent Georges completed. Summary: {summary}"
+        elif status == AgentResultStatus.BLOCKED:
+            msg = (
+                "Delegate agent Georges is waiting for input (BLOCKED). "
+                f"Workflow id={workflow_id}."
+            )
+        else:
+            msg = (
+                f"Delegate agent Georges failed: {summary} (workflow id={workflow_id})"
+            )
+
+        return {
+            "messages": [AIMessage(content=msg)],
+            "delegate_workflow_id": workflow_id,
+            "delegate_summary": summary,
+        }
+
+    @staticmethod
+    def _content_to_text(content: Any) -> str:
+        """Normalize LangChain content (str | list | dict) to string for downstream calls."""
+        if isinstance(content, str):
+            return content
+        try:
+            return json.dumps(content, ensure_ascii=False)
+        except Exception:  # pragma: no cover - defensive fallback
+            return str(content)
 
     async def validate_after_analyze(self, state: ResearchAgentState):
         """
@@ -257,10 +325,18 @@ class Researcher(AgentFlow):
         # state['messages'][0] is the HumanMessage hydrated from input_data.request_text
         original_request = state["messages"][0].content
 
+        delegate_info = ""
+        if state.get("delegate_summary"):
+            delegate_info = (
+                f"\nDelegated agent (Georges) summary: {state['delegate_summary']}"
+            )
+        if state.get("delegate_workflow_id"):
+            delegate_info += f"\nDelegated workflow id: {state['delegate_workflow_id']}"
+
         final_text = (
             f"RESEARCH REPORT for Project: {state.get('project_id')}\n"
             f"Based on request: {original_request}\n"
-            f"Findings: Validated successfully."
+            f"Findings: Validated successfully.{delegate_info}"
         )
 
         return {"messages": [AIMessage(content=final_text)]}
