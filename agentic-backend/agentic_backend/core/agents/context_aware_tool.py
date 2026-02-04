@@ -14,6 +14,7 @@ from agentic_backend.common.token_expiry import (
     is_expired_httpx_status_error,
     unwrap_httpx_status_error,
 )
+from agentic_backend.common.tool_node_utils import normalize_mcp_content
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContextProvider,
     get_document_library_tags_ids,
@@ -176,7 +177,8 @@ class ContextAwareTool(BaseTool):
         kpi, timer, base_dims, groups = self._kpi_timer(context=context)
         with timer as kpi_dims:
             try:
-                return self.base_tool._run(**kwargs)
+                result = self.base_tool._run(**kwargs)
+                return normalize_mcp_content(result)
             except Exception as e:
                 # 1. Metrics & Logging
                 kpi_dims["error_code"] = type(e).__name__
@@ -226,7 +228,8 @@ class ContextAwareTool(BaseTool):
         kpi, timer, base_dims, groups = self._kpi_timer(context=context)
         with timer as kpi_dims:
             try:
-                return await self.base_tool._arun(config=config, **kwargs)
+                result = await self.base_tool._arun(config=config, **kwargs)
+                return normalize_mcp_content(result)
             except Exception as e:
                 # 1. Metrics & Logging
                 kpi_dims["error_code"] = type(e).__name__

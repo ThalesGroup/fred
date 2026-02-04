@@ -16,7 +16,6 @@ from agentic_backend.agents.jira.single_item_tools import SingleItemTools
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.common.structures import AgentChatOptions
-from agentic_backend.common.tool_node_utils import normalize_mcp_tool_content
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import (
     AgentTuning,
@@ -272,6 +271,4 @@ Stratégie obligatoire pour generate_* :
             ],
             checkpointer=checkpointer,
             state_schema=CustomState,
-            # Normalize MCP content blocks to strings (fixes OpenAI 422 errors)
-            middleware=[normalize_mcp_tool_content],
         )

@@ -7,7 +7,6 @@ from langgraph.types import Checkpointer
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.common.structures import AgentChatOptions
-from agentic_backend.common.tool_node_utils import normalize_mcp_tool_content
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.runtime_context import RuntimeContext
@@ -139,6 +138,4 @@ class BasicReActAgent(AgentFlow):
             system_prompt=f"{base_prompt}{_CITATION_POLICY}",
             tools=[*self.mcp.get_tools()],
             checkpointer=checkpointer,
-            # Normalize MCP content blocks to strings (fixes OpenAI 422 errors)
-            middleware=[normalize_mcp_tool_content],
         )

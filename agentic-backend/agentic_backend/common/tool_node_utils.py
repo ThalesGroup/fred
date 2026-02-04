@@ -16,19 +16,15 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Awaitable, Callable, Sequence
+from typing import Any, Sequence
 
-from langchain.agents.middleware import AgentMiddleware
-from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.prebuilt import ToolNode
-from langgraph.prebuilt.tool_node import ToolCallRequest
-from langgraph.types import Command
 
 logger = logging.getLogger(__name__)
 
 
-def _normalize_mcp_content(content: Any) -> str:
+def normalize_mcp_content(content: Any) -> Any:
     """
     Normalize MCP tool content blocks to a plain string.
 
@@ -37,7 +33,15 @@ def _normalize_mcp_content(content: Any) -> str:
 
     This function extracts text from content blocks and joins them,
     or returns the original content if already a string.
+
+    For tools with response_format='content_and_artifact', the content is a
+    tuple (content, artifact). In this case, only the content part is normalized.
     """
+    # Handle content_and_artifact tuple format: (content, artifact)
+    if isinstance(content, tuple) and len(content) == 2:
+        normalized_content = normalize_mcp_content(content[0])
+        return (normalized_content, content[1])
+
     if isinstance(content, str):
         return content
 
@@ -57,52 +61,6 @@ def _normalize_mcp_content(content: Any) -> str:
 
     # For other types, convert to JSON string
     return json.dumps(content)
-
-
-class NormalizeMCPToolContent(AgentMiddleware[Any, Any]):
-    """
-    Middleware that normalizes MCP tool content blocks to strings.
-
-    This fixes the 422 error from OpenAI when MCP tools return content blocks
-    like [{"type": "text", "text": "..."}] instead of plain strings.
-
-    Usage with create_agent:
-        return create_agent(
-            model=...,
-            tools=[...],
-            middleware=[normalize_mcp_tool_content],
-        )
-    """
-
-    tools: list[BaseTool] = []
-
-    async def awrap_tool_call(
-        self,
-        request: ToolCallRequest,
-        handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
-    ) -> ToolMessage | Command[Any]:
-        """Normalize MCP content blocks after tool execution."""
-        result = await handler(request)
-
-        # Handle ToolMessage results
-        if isinstance(result, ToolMessage):
-            normalized_content = _normalize_mcp_content(result.content)
-            if normalized_content != result.content:
-                logger.debug(
-                    "[MCP] Normalized content blocks to string for tool=%s",
-                    request.tool_call.get("name", "unknown"),
-                )
-                return ToolMessage(
-                    content=normalized_content,
-                    tool_call_id=result.tool_call_id,
-                    name=result.name,
-                )
-
-        return result
-
-
-# Singleton instance for use with create_agent middleware parameter
-normalize_mcp_tool_content = NormalizeMCPToolContent()
 
 
 def friendly_mcp_tool_error_handler(e: Exception) -> str:

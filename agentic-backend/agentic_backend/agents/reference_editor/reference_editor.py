@@ -17,7 +17,6 @@ from agentic_backend.agents.reference_editor.powerpoint_template_util import (
 )
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
-from agentic_backend.common.tool_node_utils import normalize_mcp_tool_content
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import (
     AgentTuning,
@@ -268,8 +267,6 @@ class ReferenceEditor(AgentFlow):
                 *self.mcp.get_tools(),
             ],
             checkpointer=checkpointer,
-            # Normalize MCP content blocks to strings (fixes OpenAI 422 errors)
-            middleware=[normalize_mcp_tool_content],
         )
 
     def get_validator_tool(self):

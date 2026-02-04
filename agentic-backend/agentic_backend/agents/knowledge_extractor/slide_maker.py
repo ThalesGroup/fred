@@ -21,7 +21,6 @@ from agentic_backend.agents.knowledge_extractor.tool_validator import (
 )
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
-from agentic_backend.common.tool_node_utils import normalize_mcp_tool_content
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import (
     AgentTuning,
@@ -353,8 +352,6 @@ class SlideMaker(AgentFlow):
             middleware=[
                 extract_text_from_thinking_model,
                 validate_tool_calls,
-                # Normalize MCP content blocks to strings (fixes OpenAI 422 errors)
-                normalize_mcp_tool_content,
             ],
         )
 
