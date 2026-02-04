@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import dataclasses
 import inspect
 import json
@@ -50,13 +49,13 @@ from knowledge_flow_backend.core.stores.vector.base_vector_store import (
 from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 from knowledge_flow_backend.features.scheduler.activities import input_process, output_process
 from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
-from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess, FileToProcessWithoutUser
+from knowledge_flow_backend.features.scheduler.scheduler_structures import (
+    FileToProcess,
+    FileToProcessWithoutUser,
+    ProcessDocumentsProgressResponse,
+)
 
 logger = logging.getLogger(__name__)
-
-TEMPORAL_PROGRESS_POLL_INTERVAL_SEC = 2.0
-TEMPORAL_PROGRESS_TIMEOUT_SEC = 30 * 60
-
 
 class IngestionInput(BaseModel):
     tags: List[str] = []
@@ -450,98 +449,18 @@ class IngestionController:
                 )
                 workflow_id = handle.workflow_id
                 logger.info("Queued scheduler workflow %s from /upload-process-documents", handle.workflow_id)
-                yield ProcessingProgress(step=current_step, status=Status.SUCCESS, filename="scheduler").model_dump_json() + "\n"
-
-                # Block until all scheduled documents are either fully processed or failed.
-                current_step = "scheduler processing"
-                pending_by_uid = {document_uid: filename for filename, document_uid, _ in scheduled_candidates}
-                deadline = time.monotonic() + TEMPORAL_PROGRESS_TIMEOUT_SEC
-
-                while pending_by_uid:
-                    progress = await scheduler_task_service.get_progress(
-                        user=user,
-                        workflow_id=workflow_id,
+                success += len(scheduled_candidates)
+                yield (
+                    json.dumps(
+                        {
+                            "step": current_step,
+                            "status": Status.SUCCESS,
+                            "filename": "scheduler",
+                            "workflow_id": workflow_id,
+                        }
                     )
-                    docs_by_uid = {doc.document_uid: doc for doc in progress.documents}
-
-                    resolved_uids: list[str] = []
-                    for document_uid, filename in pending_by_uid.items():
-                        doc = docs_by_uid.get(document_uid)
-                        if doc is None:
-                            continue
-                        if doc.has_failed:
-                            last_error = f"Scheduler processing failed for document_uid={document_uid}"
-                            yield (
-                                ProcessingProgress(
-                                    step=current_step,
-                                    status=Status.ERROR,
-                                    error=last_error,
-                                    filename=filename,
-                                    document_uid=document_uid,
-                                ).model_dump_json()
-                                + "\n"
-                            )
-                            resolved_uids.append(document_uid)
-                            continue
-                        if doc.fully_processed:
-                            yield (
-                                ProcessingProgress(
-                                    step=current_step,
-                                    status=Status.SUCCESS,
-                                    filename=filename,
-                                    document_uid=document_uid,
-                                ).model_dump_json()
-                                + "\n"
-                            )
-                            yield (
-                                ProcessingProgress(
-                                    step="Finished",
-                                    filename=filename,
-                                    status=Status.FINISHED,
-                                    document_uid=document_uid,
-                                ).model_dump_json()
-                                + "\n"
-                            )
-                            success += 1
-                            resolved_uids.append(document_uid)
-
-                    for document_uid in resolved_uids:
-                        pending_by_uid.pop(document_uid, None)
-
-                    if not pending_by_uid:
-                        break
-
-                    if time.monotonic() >= deadline:
-                        timeout_message = f"Timed out waiting for scheduler completion after {TEMPORAL_PROGRESS_TIMEOUT_SEC}s"
-                        last_error = timeout_message
-                        logger.warning(
-                            "Timeout while waiting for scheduler workflow %s completion; pending=%d",
-                            workflow_id,
-                            len(pending_by_uid),
-                        )
-                        for document_uid, filename in pending_by_uid.items():
-                            yield (
-                                ProcessingProgress(
-                                    step=current_step,
-                                    status=Status.ERROR,
-                                    error=timeout_message,
-                                    filename=filename,
-                                    document_uid=document_uid,
-                                ).model_dump_json()
-                                + "\n"
-                            )
-                        pending_by_uid.clear()
-                        break
-
-                    yield (
-                        ProcessingProgress(
-                            step=current_step,
-                            status=Status.IN_PROGRESS,
-                            filename="scheduler",
-                        ).model_dump_json()
-                        + "\n"
-                    )
-                    await asyncio.sleep(TEMPORAL_PROGRESS_POLL_INTERVAL_SEC)
+                    + "\n"
+                )
             except Exception as e:
                 error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
                 last_error = error_message
@@ -921,6 +840,27 @@ class IngestionController:
                 )
 
                 return StreamingResponse(event_stream, media_type="application/x-ndjson")
+
+        @router.get(
+            "/upload-process-documents/progress",
+            tags=["Processing"],
+            response_model=ProcessDocumentsProgressResponse,
+            summary="Get scheduler progress for a workflow submitted from /upload-process-documents",
+        )
+        async def get_upload_process_documents_progress(
+            workflow_id: str = Query(..., description="Workflow id returned by /upload-process-documents"),
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> ProcessDocumentsProgressResponse:
+            if self.scheduler_task_service is None:
+                raise HTTPException(status_code=400, detail="Scheduler backend is disabled")
+            try:
+                return await self.service.get_processing_progress(
+                    user=user,
+                    scheduler_task_service=self.scheduler_task_service,
+                    workflow_id=workflow_id,
+                )
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Failed to retrieve progress: {e}")
 
         @router.post(
             "/fast/text",

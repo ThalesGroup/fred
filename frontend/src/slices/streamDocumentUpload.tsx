@@ -13,8 +13,92 @@
 // limitations under the License.
 
 import { getConfig } from "../common/config";
+import { store } from "../common/store";
 import { KeyCloakService } from "../security/KeycloakService";
+import {
+  GetUploadProcessDocumentsProgressKnowledgeFlowV1UploadProcessDocumentsProgressGetApiResponse,
+  knowledgeFlowApi,
+} from "./knowledgeFlow/knowledgeFlowOpenApi";
 import { ProcessingProgress } from "../types/ProcessingProgress";
+
+const UPLOAD_PROCESS_POLL_INTERVAL_MS = 2000;
+const UPLOAD_PROCESS_POLL_TIMEOUT_MS = 30 * 60 * 1000;
+
+async function pollUploadProcessProgress(
+  workflowId: string,
+  fileName: string,
+  onProgress: (update: ProcessingProgress) => void,
+): Promise<void> {
+  const startedAt = Date.now();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  return new Promise<void>((resolve, reject) => {
+    const poll = async () => {
+      try {
+        const progress = (await store.dispatch(
+          knowledgeFlowApi.endpoints.getUploadProcessDocumentsProgressKnowledgeFlowV1UploadProcessDocumentsProgressGet.initiate(
+            { workflowId },
+            { subscribe: false },
+          ),
+        ).unwrap()) as GetUploadProcessDocumentsProgressKnowledgeFlowV1UploadProcessDocumentsProgressGetApiResponse;
+        const hasFailed = progress.documents_failed > 0;
+        const hasSucceeded =
+          progress.total_documents > 0 &&
+          progress.documents_fully_processed + progress.documents_failed + progress.documents_missing >= progress.total_documents;
+
+        if (hasSucceeded && hasFailed) {
+          onProgress({
+            step: "scheduler processing",
+            status: "error",
+            filename: fileName,
+            error: "Scheduler processing failed",
+          });
+          resolve();
+          return;
+        }
+
+        if (hasSucceeded) {
+          onProgress({
+            step: "scheduler processing",
+            status: "success",
+            filename: fileName,
+          });
+          onProgress({
+            step: "Finished",
+            status: "finished",
+            filename: fileName,
+          });
+          resolve();
+          return;
+        }
+
+        if (Date.now() - startedAt >= UPLOAD_PROCESS_POLL_TIMEOUT_MS) {
+          onProgress({
+            step: "scheduler processing",
+            status: "error",
+            filename: fileName,
+            error: "Timed out waiting for scheduler completion",
+          });
+          resolve();
+          return;
+        }
+
+        onProgress({
+          step: "scheduler processing",
+          status: "in_progress",
+          filename: fileName,
+        });
+        timeoutId = setTimeout(poll, UPLOAD_PROCESS_POLL_INTERVAL_MS);
+      } catch (e) {
+        reject(e);
+      }
+    };
+
+    poll();
+  }).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
 
 export async function streamUploadOrProcessDocument(
   file: File,
@@ -51,6 +135,7 @@ export async function streamUploadOrProcessDocument(
   const reader = response.body.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
+  let workflowId: string | undefined;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -65,6 +150,9 @@ export async function streamUploadOrProcessDocument(
       if (!line.trim()) continue;
       try {
         const progress: ProcessingProgress = JSON.parse(line);
+        if (progress.workflow_id) {
+          workflowId = progress.workflow_id;
+        }
         if (progress.step !== "done") {
           onProgress(progress);
         }
@@ -72,5 +160,9 @@ export async function streamUploadOrProcessDocument(
         console.warn("Failed to parse progress line:", line, e);
       }
     }
+  }
+
+  if (mode === "process" && workflowId) {
+    await pollUploadProcessProgress(workflowId, file.name, onProgress);
   }
 }
