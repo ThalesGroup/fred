@@ -82,9 +82,7 @@ class CustomState(AgentState):
     """Custom state for Jira agent with requirements, user stories, and tests."""
 
     requirements: Annotated[list[dict], list_reducer]
-    user_story_titles: Annotated[list[dict], list_reducer]
     user_stories: Annotated[list[dict], list_reducer]
-    test_titles: Annotated[list[dict], list_reducer]
     tests: Annotated[list[dict], list_reducer]
 
 
@@ -118,8 +116,8 @@ class JiraAgent(AgentFlow):
 
 **Pour générer en masse (après recherche documentaire):**
 - `generate_requirements(context_summary)` - Génère plusieurs exigences depuis le contexte
-- `generate_user_stories(context_summary)` - Génère plusieurs User Stories
-- `generate_tests()` - Génère plusieurs tests depuis les User Stories
+- `generate_user_stories(context_summary, quantity?)` - Génère plusieurs User Stories
+- `generate_tests(quantity?)` - Génère plusieurs tests depuis les User Stories
 
 **Règle de choix:**
 - Utilise `add_*` pour les demandes simples ("ajoute une US pour le login", "ajoute un test pour US-01")
@@ -138,7 +136,7 @@ Stratégie obligatoire pour generate_* :
 - Pour génération en masse → utilise generate_requirements / generate_user_stories / generate_tests
 
 **3. Export (OBLIGATOIRE)**
-- export_deliverables() → fichier Markdown
+- export_deliverables() → fichier Markdown (à utiliser par défaut)
 - export_jira_csv() → CSV pour import Jira
 
 ## RÈGLES

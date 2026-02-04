@@ -4,24 +4,21 @@ import re
 
 
 def get_next_user_story_id(state: dict) -> str:
-    """Generate next US-XX ID based on existing stories and titles."""
+    """Generate next US-XX ID based on existing stories."""
     existing_stories = state.get("user_stories") or []
-    existing_titles = state.get("user_story_titles") or []
-    all_ids = [s.get("id", "") for s in existing_stories + existing_titles]
 
     max_num = 0
-    for id_str in all_ids:
-        match = re.search(r"US-(\d+)", id_str)
+    for story in existing_stories:
+        match = re.search(r"US-(\d+)", story.get("id", ""))
         if match:
             max_num = max(max_num, int(match.group(1)))
     return f"US-{max_num + 1:02d}"
 
 
 def get_next_test_id(state: dict) -> str:
-    """Generate next SC-XX ID based on existing tests and titles."""
+    """Generate next SC-XX ID based on existing tests."""
     existing_tests = state.get("tests") or []
-    existing_titles = state.get("test_titles") or []
-    all_ids = [t.get("id", "") for t in existing_tests + existing_titles]
+    all_ids = [t.get("id", "") for t in existing_tests]
 
     max_num = 0
     for id_str in all_ids:
