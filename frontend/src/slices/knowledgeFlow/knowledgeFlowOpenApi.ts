@@ -1195,9 +1195,7 @@ export type UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiArg = {
   teamId: string;
   teamUpdate: TeamUpdate;
 };
-export type UploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostApiResponse = /** status 200 Successful Response */ {
-  [key: string]: any;
-};
+export type UploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostApiResponse = unknown;
 export type UploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostApiArg = {
   teamId: string;
   bodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost: BodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost;
@@ -1977,13 +1975,13 @@ export type LogQuery = {
 };
 export type Team = {
   description?: string | null;
-  banner_object_storage_key?: string | null;
   is_private?: boolean;
   id: string;
   name: string;
   member_count?: number | null;
   owners?: UserSummary[];
   is_member?: boolean;
+  banner_image_url?: string | null;
 };
 export type TeamUpdate = {
   description?: string | null;

@@ -1,8 +1,12 @@
+import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import {
+  Autocomplete,
   Box,
+  CircularProgress,
   IconButton,
+  InputAdornment,
   MenuItem,
   Paper,
   Select,
@@ -12,18 +16,24 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
   Tooltip,
   Typography,
   useTheme,
 } from "@mui/material";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
   useRemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteMutation,
   useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation,
 } from "../../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
-import { UserTeamRelation } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-
+import {
+  useAddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostMutation,
+  useListUsersKnowledgeFlowV1UsersGetQuery,
+  UserSummary,
+  UserTeamRelation,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 export interface TeamMembersPageProps {
   teamId: string;
 }
@@ -33,6 +43,7 @@ const TEAM_ROLES: UserTeamRelation[] = ["owner", "manager", "member"];
 export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
   const { t } = useTranslation();
   const theme = useTheme();
+  const [inputValue, setInputValue] = useState("");
 
   const { data: members } = useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery({ teamId: teamId });
   // todo: handle loading
@@ -41,6 +52,12 @@ export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
 
   const [updateTeamMember] = useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation();
   const [removeTeamMember] = useRemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteMutation();
+  const [addTeamMember, { isLoading: isAddingMember }] = useAddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostMutation();
+
+  const { data: users } = useListUsersKnowledgeFlowV1UsersGetQuery();
+
+  const membersId = members?.map((m) => m.user.id);
+  const usersNotInTeam = membersId && users?.filter((u) => !membersId.includes(u.id));
 
   const handleRoleChange = async (userId: string, newRelation: UserTeamRelation) => {
     await updateTeamMember({
@@ -57,32 +74,81 @@ export function TeamMembersPage({ teamId }: TeamMembersPageProps) {
     });
   };
 
+  const handleAddMember = async (userToAdd: UserSummary | null | undefined) => {
+    if (!userToAdd || isAddingMember) return;
+
+    setInputValue(""); // Clear immediately
+
+    await addTeamMember({
+      teamId,
+      addTeamMemberRequest: {
+        user_id: userToAdd.id,
+        relation: "member", // Default role
+      },
+    });
+  };
+
   return (
     <Box sx={{ px: 2, pb: 2, display: "flex", height: "100%" }}>
       <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
         {/* Header */}
-        <Box sx={{ display: "flex", alignItems: "center", height: "3rem", gap: 0.75, px: 2 }}>
-          <Typography variant="body2" color="textSecondary">
-            {t("teamMembersPage.headerTitle")}
-          </Typography>
-          <Tooltip
-            title={t("teamMembersPage.headerInfoTooltip")}
-            placement="top"
-            slotProps={{
-              popper: {
-                modifiers: [
-                  {
-                    name: "offset",
-                    options: {
-                      offset: [0, -12],
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pr: 2, py: 1 }}>
+          <Box sx={{ display: "flex", alignItems: "center", height: "3rem", gap: 0.75, px: 2 }}>
+            <Typography variant="body2" color="textSecondary">
+              {t("teamMembersPage.headerTitle")}
+            </Typography>
+            <Tooltip
+              title={t("teamMembersPage.headerInfoTooltip")}
+              placement="top"
+              slotProps={{
+                popper: {
+                  modifiers: [
+                    {
+                      name: "offset",
+                      options: {
+                        offset: [0, -12],
+                      },
                     },
+                  ],
+                },
+              }}
+            >
+              <InfoOutlinedIcon fontSize="small" color="disabled" />
+            </Tooltip>
+          </Box>
+          <Autocomplete
+            options={usersNotInTeam || []}
+            getOptionLabel={(user) => `${user.first_name} ${user.last_name} (${user.username})`}
+            id="free-solo-2-demo"
+            size="small"
+            sx={{ maxWidth: "280px", flex: 1 }}
+            value={null}
+            inputValue={inputValue}
+            onInputChange={(_event, newInputValue) => setInputValue(newInputValue)}
+            onChange={(_event, value) => handleAddMember(value)}
+            disabled={isAddingMember}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder={t("teamMembersPage.addUserInputPlaceholder")}
+                slotProps={{
+                  input: {
+                    ...params.InputProps,
+                    endAdornment: undefined,
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        {isAddingMember ? (
+                          <CircularProgress size={20} sx={{ color: theme.palette.text.secondary }} />
+                        ) : (
+                          <AddIcon sx={{ color: theme.palette.text.secondary }} />
+                        )}
+                      </InputAdornment>
+                    ),
                   },
-                ],
-              },
-            }}
-          >
-            <InfoOutlinedIcon fontSize="small" color="disabled" />
-          </Tooltip>
+                }}
+              />
+            )}
+          />
         </Box>
 
         {/* Table */}
