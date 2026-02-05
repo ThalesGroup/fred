@@ -77,9 +77,14 @@ interface NavigationTabsProps {
    * Optional sx props for the content container Box
    */
   contentContainerSx?: SxProps<Theme>;
+  /**
+   * When true, prevents redirecting to defaultPath if current path doesn't match any tab.
+   * Useful when tabs are dynamically loaded based on async data (e.g., permissions).
+   */
+  isLoading?: boolean;
 }
 
-export function NavigationTabs({ tabs, defaultPath, tabsContainerSx, contentContainerSx }: NavigationTabsProps) {
+export function NavigationTabs({ tabs, defaultPath, tabsContainerSx, contentContainerSx, isLoading }: NavigationTabsProps) {
   const location = useLocation();
 
   // Find the current tab index based on the pathname
@@ -111,7 +116,7 @@ export function NavigationTabs({ tabs, defaultPath, tabsContainerSx, contentCont
             return <Route key={relativePath} path={relativePath} element={<>{tab.component}</>} />;
           })}
           <Route index element={<Navigate to={redirectToPath} replace />} />
-          <Route path="*" element={<Navigate to={redirectToPath} replace />} />
+          {!isLoading && <Route path="*" element={<Navigate to={redirectToPath} replace />} />}
         </Routes>
       </Box>
     </>

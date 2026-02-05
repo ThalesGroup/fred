@@ -2,21 +2,21 @@ import { Avatar, Box, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { NavigationTabs, TabConfig } from "../components/NavigationTabs";
-import { TeamAgentHub } from "../components/teamDetails/TeamAgentHub";
 import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
 import { TeamMembersPage } from "../components/teamDetails/TeamMembersPage";
 import { TeamSettingsPage } from "../components/teamDetails/TeamSettingsPage";
-import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery } from "../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
-import { capitalize } from "../utils/capitalize";
 
 export function TeamDetailsPage() {
   const { t } = useTranslation();
-  const { agentsNicknamePlural } = useFrontendProperties();
+  // todo: uncomment when we add agent tab back
+  // const { agentsNicknamePlural } = useFrontendProperties();
 
   const { teamId } = useParams<{ teamId: string }>();
-  const { data: team } = useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery({ teamId: teamId || "" }, { skip: !teamId });
-  // todo: handle loading
+  const { data: team, isLoading } = useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery(
+    { teamId: teamId || "" },
+    { skip: !teamId },
+  );
   // todo: handle error (404)
 
   if (teamId === undefined) {
@@ -37,20 +37,21 @@ export function TeamDetailsPage() {
   };
 
   const tabs: TabConfig[] = [
-    {
-      label: capitalize(agentsNicknamePlural || "..."),
-      path: `/team/${teamId}/${agentsNicknamePlural}`,
-      component: <TeamAgentHub />,
-    },
-    {
-      label: t("teamDetails.tabs.resources"),
-      path: `/team/${teamId}/resources`,
-      component: (
-        <Box>
-          <Typography>Resources content for {team?.name || "..."}</Typography>
-        </Box>
-      ),
-    },
+    // todo: add back when this tabs are ready:
+    // {
+    //   label: capitalize(agentsNicknamePlural || "..."),
+    //   path: `/team/${teamId}/${agentsNicknamePlural}`,
+    //   component: <TeamAgentHub />,
+    // },
+    // {
+    //   label: t("teamDetails.tabs.resources"),
+    //   path: `/team/${teamId}/resources`,
+    //   component: (
+    //     <Box>
+    //       <Typography>Resources content for {team?.name || "..."}</Typography>
+    //     </Box>
+    //   ),
+    // },
     {
       label: t("teamDetails.tabs.apps"),
       path: `/team/${teamId}/apps`,
@@ -100,6 +101,7 @@ export function TeamDetailsPage() {
         tabs={tabs}
         tabsContainerSx={{ px: 2, pb: 1 }}
         contentContainerSx={{ flex: 1, overflow: "auto" }}
+        isLoading={isLoading}
       />
     </Box>
   );
