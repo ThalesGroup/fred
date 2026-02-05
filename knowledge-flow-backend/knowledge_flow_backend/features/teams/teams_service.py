@@ -66,7 +66,7 @@ async def get_team_by_id(user: KeycloakUser, team_id: TeamId) -> TeamWithPermiss
     metadata_store = app_context.get_team_metadata_store()
 
     # Validate team exists and check permissions
-    admin, raw_group, consistency_token = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_READ)
+    admin, raw_group, consistency_token = await _validate_team_and_check_permission(user, team_id, rebac, [TeamPermission.CAN_READ])
 
     group_summary = KeycloakGroupSummary(
         id=team_id,
@@ -96,7 +96,7 @@ async def update_team(user: KeycloakUser, team_id: TeamId, update_data: TeamUpda
     metadata_store = app_context.get_team_metadata_store()
 
     # Validate team exists and check permissions
-    _, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_INFO)
+    _, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, [TeamPermission.CAN_UPDATE_INFO])
 
     # Update metadata
     await metadata_store.upsert(team_id, update_data)
@@ -145,7 +145,7 @@ async def upload_team_banner(user: KeycloakUser, team_id: TeamId, file: UploadFi
     content_store = app_context.get_content_store()
 
     # Validate team exists and check permissions
-    _, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_INFO)
+    _, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, [TeamPermission.CAN_UPDATE_INFO])
 
     # Validate file size (5MB max)
     MAX_SIZE = 5 * 1024 * 1024
@@ -211,7 +211,7 @@ async def list_team_members(user: KeycloakUser, team_id: TeamId) -> list[TeamMem
     rebac = app_context.get_rebac_engine()
 
     # Validate team exists and check permissions
-    admin, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_READ_MEMEBERS)
+    admin, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, [TeamPermission.CAN_READ_MEMEBERS])
 
     # Retrieve all member ids + ids of owners and managers
     owner_ids, manager_ids, member_ids = await asyncio.gather(
@@ -257,7 +257,7 @@ async def add_team_member(user: KeycloakUser, team_id: TeamId, request: AddTeamM
     rebac = app_context.get_rebac_engine()
 
     # Validate team exists and check permissions
-    admin, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
+    admin, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, [TeamPermission.CAN_ADMINISTER_MEMBERS])
 
     # Add user to Keycloak group
     await _add_keycloak_user_to_group(admin, request.user_id, team_id)
@@ -283,8 +283,12 @@ async def remove_team_member(user: KeycloakUser, team_id: TeamId, user_id: str) 
     app_context = ApplicationContext.get_instance()
     rebac = app_context.get_rebac_engine()
 
+    # Get permission to check depending on targeted user role
+    target_role = await _get_user_role_in_team(rebac, team_id, user_id)
+    permission_to_check = _get_administer_permission_for_team_role_relation(target_role)
+
     # Validate team exists and check permissions
-    admin, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
+    admin, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, [permission_to_check])
 
     # Remove user from Keycloak group
     await _remove_keycloak_user_from_group(admin, user_id, team_id)
@@ -311,8 +315,13 @@ async def update_team_member(user: KeycloakUser, team_id: TeamId, user_id: str, 
     app_context = ApplicationContext.get_instance()
     rebac = app_context.get_rebac_engine()
 
+    # Get permissiosn to check depending on current and wanted targeted user role
+    target_current_role = await _get_user_role_in_team(rebac, team_id, user_id)
+    target_wanted_role = request.relation
+    permissions_to_check = [_get_administer_permission_for_team_role_relation(target_current_role), _get_administer_permission_for_team_role_relation(target_wanted_role)]
+
     # Validate team exists and check permissions
-    _, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, TeamPermission.CAN_UPDATE_MEMBERS)
+    _, _, _ = await _validate_team_and_check_permission(user, team_id, rebac, permissions_to_check)
 
     # Remove all existing relations
     await _remove_all_team_member_relations(rebac, team_id, user_id)
@@ -559,7 +568,7 @@ def _sanitize_name(value: object, fallback: str) -> str:
     return name or fallback
 
 
-async def _validate_team_and_check_permission(user: KeycloakUser, team_id: TeamId, rebac: RebacEngine, permission: TeamPermission) -> tuple[KeycloakAdmin, dict, str | None]:
+async def _validate_team_and_check_permission(user: KeycloakUser, team_id: TeamId, rebac: RebacEngine, permissions: list[TeamPermission]) -> tuple[KeycloakAdmin, dict, str | None]:
     """Validate that a team exists and check if user has the specified permission.
 
     Args:
@@ -594,7 +603,7 @@ async def _validate_team_and_check_permission(user: KeycloakUser, team_id: TeamI
     consistency_token = await _ensure_team_organization_relations(rebac, [team_id])
 
     # Check user has the required permission
-    await rebac.check_user_permission_or_raise(user, permission, team_id, consistency_token=consistency_token)
+    await asyncio.gather(*[rebac.check_user_permission_or_raise(user, perm, team_id, consistency_token=consistency_token) for perm in permissions])
 
     return admin, raw_group, consistency_token
 
@@ -615,6 +624,30 @@ async def _add_team_member_relation(rebac: RebacEngine, team_id: TeamId, user_id
             resource=RebacReference(Resource.TEAM, team_id),
         )
     )
+
+
+def _get_administer_permission_for_team_role_relation(target: UserTeamRelation):
+    """Get the right `can_administer_*` permission for a given target relation"""
+    if target == UserTeamRelation.MANAGER:
+        return TeamPermission.CAN_ADMINISTER_MANAGERS
+    elif target == UserTeamRelation.OWNER:
+        return TeamPermission.CAN_ADMINISTER_OWNERS
+    return TeamPermission.CAN_ADMINISTER_MEMBERS
+
+
+async def _get_user_role_in_team(rebac: RebacEngine, team_id: TeamId, user_id: str) -> UserTeamRelation:
+    """Return team role of a user in a given team"""
+    owner_ids, manager_ids = await asyncio.gather(
+        _get_team_users_by_relation(rebac, team_id, RelationType.OWNER),
+        _get_team_users_by_relation(rebac, team_id, RelationType.MANAGER),
+    )
+
+    if user_id in owner_ids:
+        return UserTeamRelation.OWNER
+    if user_id in manager_ids:
+        return UserTeamRelation.MANAGER
+
+    return UserTeamRelation.MEMBER
 
 
 async def _remove_all_team_member_relations(rebac: RebacEngine, team_id: TeamId, user_id: str) -> None:

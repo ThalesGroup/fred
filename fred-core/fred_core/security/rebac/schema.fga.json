@@ -38,11 +38,13 @@
     {
       "metadata": {
         "relations": {
+          "can_administer_managers": {},
+          "can_administer_members": {},
+          "can_administer_owners": {},
           "can_read": {},
           "can_read_members": {},
           "can_update_agents": {},
           "can_update_info": {},
-          "can_update_members": {},
           "can_update_resources": {},
           "manager": { "directly_related_user_types": [{ "type": "user" }] },
           "member": { "directly_related_user_types": [{ "type": "user" }] },
@@ -56,6 +58,13 @@
         }
       },
       "relations": {
+        "can_administer_managers": {
+          "computedUserset": { "relation": "manager" }
+        },
+        "can_administer_members": {
+          "computedUserset": { "relation": "manager" }
+        },
+        "can_administer_owners": { "computedUserset": { "relation": "owner" } },
         "can_read": {
           "union": {
             "child": [
@@ -67,7 +76,6 @@
         "can_read_members": { "computedUserset": { "relation": "member" } },
         "can_update_agents": { "computedUserset": { "relation": "manager" } },
         "can_update_info": { "computedUserset": { "relation": "owner" } },
-        "can_update_members": { "computedUserset": { "relation": "manager" } },
         "can_update_resources": {
           "computedUserset": { "relation": "manager" }
         },

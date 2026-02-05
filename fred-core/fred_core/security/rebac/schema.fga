@@ -35,9 +35,11 @@ type team
     # -> must be at least owner
     define can_update_info: owner
 
-    # Can manage members: add/remove members, handle join request
-    # -> must be at least manager
-    define can_update_members: manager
+    # Can manage members: add/remove/change role of members depending on their current role
+    # To give a given role to a user, you must be able to administer it
+    define can_administer_members: manager
+    define can_administer_managers: manager
+    define can_administer_owners: owner
 
     # Can list all team memebers with their role
     # -> must be member

@@ -1984,7 +1984,13 @@ export type Team = {
   is_member?: boolean;
   banner_image_url?: string | null;
 };
-export type TeamPermission = "can_read" | "can_update_info" | "can_update_members" | "can_read_members";
+export type TeamPermission =
+  | "can_read"
+  | "can_update_info"
+  | "can_read_members"
+  | "can_administer_members"
+  | "can_administer_managers"
+  | "can_administer_owners";
 export type TeamWithPermissions = {
   description?: string | null;
   is_private?: boolean;
