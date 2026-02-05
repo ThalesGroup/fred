@@ -39,6 +39,12 @@ import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 
 const TEAM_ROLES: UserTeamRelation[] = ["owner", "manager", "member"];
 
+const ROLE_PRIORITY: Record<UserTeamRelation, number> = {
+  owner: 0,
+  manager: 1,
+  member: 2,
+};
+
 export interface TeamMembersPageProps {
   teamId: string;
   permissions?: TeamPermission[];
@@ -65,6 +71,24 @@ export function TeamMembersPage({ teamId, permissions }: TeamMembersPageProps) {
 
   const membersId = members?.map((m) => m.user.id);
   const usersNotInTeam = membersId && users?.filter((u) => !membersId.includes(u.id));
+
+  const sortedMembers = members?.slice().sort((a, b) => {
+    const roleDiff = ROLE_PRIORITY[a.relation] - ROLE_PRIORITY[b.relation];
+    if (roleDiff !== 0) return roleDiff;
+
+    const compare = (valA: string | null | undefined, valB: string | null | undefined): number => {
+      if (!valA && !valB) return 0;
+      if (!valA) return 1;
+      if (!valB) return -1;
+      return valA.localeCompare(valB);
+    };
+
+    return (
+      compare(a.user.last_name, b.user.last_name) ||
+      compare(a.user.first_name, b.user.first_name) ||
+      compare(a.user.username, b.user.username)
+    );
+  });
 
   const handleRoleChange = async (userId: string, newRelation: UserTeamRelation) => {
     await updateTeamMember({
@@ -194,8 +218,8 @@ export function TeamMembersPage({ teamId, permissions }: TeamMembersPageProps) {
             </TableRow>
           </TableHead>
           <TableBody>
-            {members &&
-              members.map((member) => {
+            {sortedMembers &&
+              sortedMembers.map((member) => {
                 const can_administer_this_member = getAdministerPermissionForTeamRole(member.relation);
 
                 return (
