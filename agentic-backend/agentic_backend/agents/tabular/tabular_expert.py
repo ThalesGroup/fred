@@ -127,49 +127,9 @@ class Tessa(AgentFlow):
                 return self._maybe_parse_json(msg.content)
         return None
 
-    def _normalize_database_context(
-        self, payload: Any
-    ) -> Dict[str, List[Dict[str, Any]]]:
-        payload = self._maybe_parse_json(payload)
-
-        if isinstance(payload, dict):
-            return payload
-
-        if isinstance(payload, list):
-            # Some MCP adapters return a list of content blocks (e.g. [{"type":"text","text":"{...}"}]).
-            for item in payload:
-                item = self._maybe_parse_json(item)
-                if isinstance(item, dict):
-                    text = item.get("text")
-                    if isinstance(text, str):
-                        parsed_text = self._maybe_parse_json(text)
-                        if isinstance(parsed_text, dict):
-                            return parsed_text
-                    if all(isinstance(v, list) for v in item.values()):
-                        return item
-                elif isinstance(item, str):
-                    parsed_item = self._maybe_parse_json(item)
-                    if isinstance(parsed_item, dict):
-                        return parsed_item
-
-            # Fallback: list of database entries -> map by name.
-            collapsed: Dict[str, List[Dict[str, Any]]] = {}
-            for item in payload:
-                if not isinstance(item, dict):
-                    continue
-                db_name = (
-                    item.get("db_name") or item.get("database") or item.get("name")
-                )
-                tables = item.get("tables")
-                if isinstance(db_name, str) and isinstance(tables, list):
-                    collapsed[db_name] = tables
-            if collapsed:
-                return collapsed
-
-        logger.warning("Unexpected tabular context format: %s", type(payload).__name__)
-        return {}
-
-    def _format_context_for_prompt(self, database_context: Any) -> str:
+    def _format_context_for_prompt(
+        self, database_context: Dict[str, List[Dict[str, Any]]] | list | str
+    ) -> str:
         """
         Format DB context where the dict structure is:
         {
@@ -183,7 +143,15 @@ class Tessa(AgentFlow):
         if not database_context:
             return "No databases or tables currently loaded.\n"
 
-        database_context = self._normalize_database_context(database_context)
+        # If entry is JSON in string form → parse it
+        database_context = self._maybe_parse_json(database_context)
+
+        # Accept legacy list format: treat as single unnamed database
+        if isinstance(database_context, list):
+            database_context = {"default": database_context}
+
+        if not isinstance(database_context, dict):
+            return "No databases or tables currently loaded.\n"
 
         lines = ["You have access to:"]
 
@@ -251,7 +219,10 @@ class Tessa(AgentFlow):
 
             raw_context = await tool.ainvoke({})
 
-            context = self._normalize_database_context(raw_context)
+            # Parser la string JSON en liste de dicts
+            context = (
+                json.loads(raw_context) if isinstance(raw_context, str) else raw_context
+            )
 
             # Sauvegarder dans l'état pour les appels suivants
             state["database_context"] = context
@@ -332,7 +303,7 @@ class Tessa(AgentFlow):
             )
             return {
                 "messages": [fallback],
-                "database_context": {},
+                "database_context": [],
             }
 
     # ---------------------------

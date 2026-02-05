@@ -18,7 +18,7 @@ from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError
 
 from agentic_backend.scheduler.agent_contracts import (
-    AgentInputV1,
+    AgentInputArgsV1,
     AgentResultStatus,
     AgentResultV1,
     ProgressEventV1,
@@ -28,7 +28,7 @@ from agentic_backend.scheduler.agent_contracts import (
 @workflow.defn(name="AgentWorkflow")
 class AgentWorkflow:
     @workflow.run
-    async def run(self, input: AgentInputV1) -> AgentResultV1:
+    async def run(self, input: AgentInputArgsV1) -> AgentResultV1:
         # 1. Define Activity Options
         # We allow long execution (e.g. 1 hour) but require heartbeats every minute
         retry_policy = RetryPolicy(
@@ -48,17 +48,14 @@ class AgentWorkflow:
             )
             return result
         except ActivityError as e:
-            # FIX: Use ActivityError from temporalio.exceptions
-            workflow.logger.error(
-                f"Workflow execution failed at the activity level: {e}"
-            )
+            # Logging inside the Temporal workflow sandbox can trigger restricted
+            # handlers (e.g., OpenSearch). Keep side effects minimal here.
             return AgentResultV1(
                 status=AgentResultStatus.FAILED,
                 final_summary=f"Activity failed: {str(e.__cause__ or e)}",
             )
         except Exception as e:
-            # Catch-all for other workflow-level issues
-            workflow.logger.exception("Workflow encountered an unexpected error")
+            # Catch-all for other workflow-level issues (logging avoided in sandbox)
             return AgentResultV1(
                 status=AgentResultStatus.FAILED,
                 final_summary=f"Unexpected workflow error: {str(e)}",

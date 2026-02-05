@@ -77,7 +77,7 @@ from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec
 from agentic_backend.core.agents.agent_state import Prepared, resolve_prepared
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
 from agentic_backend.core.agents.runtime_context import RuntimeContext, get_language
-from agentic_backend.scheduler.agent_contracts import AgentInputV1
+from agentic_backend.scheduler.agent_contracts import AgentInputArgsV1
 
 logger = logging.getLogger(__name__)
 
@@ -1082,7 +1082,7 @@ class AgentFlow:
             val = hi
         return val
 
-    def hydrate_state(self, input_data: AgentInputV1) -> Dict[str, Any]:
+    def hydrate_state(self, input_data: AgentInputArgsV1) -> Dict[str, Any]:
         """
         Maps AgentInputV1 into the specific TypedDict of the agent.
         """

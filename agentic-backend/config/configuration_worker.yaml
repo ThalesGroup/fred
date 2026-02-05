@@ -18,7 +18,7 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
-  metrics_enabled: false
+  metrics_enabled: true
   metrics_address: "0.0.0.0"
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
 
@@ -32,15 +32,20 @@ scheduler:
 
 security:
   m2m:
-    enabled: false
+    enabled: true
     client_id: "agentic"
     realm_url: "http://app-keycloak:8080/realms/app"
   user:
-    enabled: false
+    enabled: true
     client_id: "app"
     realm_url: "http://app-keycloak:8080/realms/app"
   authorized_origins:
     - "http://localhost:5173"
+  rebac:
+    enabled: true
+    type: openfga
+    api_url: "http://localhost:9080"
+
 frontend_settings:
   feature_flags:
     # If true activate the backend and frontend modules in charge of K8
@@ -100,11 +105,20 @@ ai:
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:
-    - name: "Researcher"
+    - name: "OpsWorker"
       type: "agent"
-      # Corrected module path to the existing ResearchAgent implementation
-      class_path: "agentic_backend.agents.research.research_agent.ResearchAgent"
+      class_path: "agentic_backend.academy.08_business_workflow.business_ops_worker.OpsWorker"
       enabled: true
+    - name: "SalesWorker"
+      type: "agent"
+      class_path: "agentic_backend.academy.08_business_workflow.business_sales_worker.SalesWorker"
+      enabled: true
+    - name: "Georges"
+      type: "agent"
+      class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
+      enabled: true
+      chat_options:
+        attach_files: false
 
 mcp:
   servers:
@@ -129,7 +143,7 @@ mcp:
       url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - id: "mcp-knowledge-flow-fs
+    - id: "mcp-knowledge-flow-fs"
       name: "mcp.servers.filesystem.name"
       description: "mcp.servers.filesystem.description"
       transport: "streamable_http"
@@ -165,30 +179,45 @@ storage:
     host: localhost
     port: 5432
     database: fred
-    username: admin
+    username: fred
+
   opensearch:
     host: https://localhost:9200
     secure: true
     verify_certs: false
     username: admin
+
   feedback_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/agentic/feedback.duckdb"
+    type: "postgres"
+    table: feedbacks
+
   agent_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/agentic/agent.duckdb"
+    type: "postgres"
+    table: agent
+
   mcp_servers_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/agentic/mcp_servers.duckdb"
+    type: "postgres"
+    table: mcp-server
+
   session_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/agentic/session.duckdb"
-  history_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/agentic/history.duckdb"
+    type: "postgres"
+    table: session
+
   attachments_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/agentic/session_attachments.duckdb"
+    type: "postgres"
+    table: session_attachments
+
+  history_store:
+    type: "postgres"
+    table: session_history
+
+  task_store:
+    type: "postgres"
+    table: tasks
+
   kpi_store:
     type: "log"
-    level: "INFO"
+    level: "info"
+
+  log_store:
+    type: "stdout"

@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
+import inspect
 import logging
 
 from langchain_core.callbacks import BaseCallbackHandler
@@ -47,35 +49,42 @@ class TemporalHeartbeatCallback(BaseCallbackHandler):
                 label=f"Executing phase: {node_name}", phase=node_name
             )
 
-            # SENT TO TEMPORAL SERVER
-            # The workflow can check this heartbeat to know "Phase: analyze"
-            try:
-                # Only heartbeat when inside an activity context; info() raises if not.
-                activity.info()
-                activity.heartbeat(event.model_dump(mode="json"))
-            except RuntimeError as exc:
-                # Can happen if callback runs off-loop; log and continue without failing the activity.
-                logger.warning(
-                    "Heartbeat skipped (no running loop?): task=%s node=%s err=%s",
-                    self.task_id,
-                    node_name,
-                    exc,
-                )
+            self._safe_heartbeat(
+                event.model_dump(mode="json"),
+                label=f"node:{node_name}",
+            )
 
     def on_tool_start(self, serialized, input_str, **kwargs):
         """Called when a tool is invoked."""
         tool_name = kwargs.get("name")
+        self._safe_heartbeat(
+            ProgressEventV1(
+                label=f"Using tool: {tool_name}", phase="tool_execution"
+            ).model_dump(mode="json"),
+            label=f"tool:{tool_name}",
+        )
+
+    # --- helpers ---
+    def _safe_heartbeat(self, payload: dict, *, label: str) -> None:
+        """
+        Send a heartbeat if we're inside a Temporal activity context.
+        - Handles the case where activity.heartbeat returns a coroutine (no running loop).
+        - Suppresses warnings when not in an activity (e.g., local tests).
+        """
         try:
             activity.info()
-            activity.heartbeat(
-                ProgressEventV1(
-                    label=f"Using tool: {tool_name}", phase="tool_execution"
-                ).model_dump(mode="json")
-            )
+            hb = activity.heartbeat(payload)
+            if inspect.isawaitable(hb):
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(hb)
+                except RuntimeError:
+                    # No running loop (e.g., sync worker thread); drop quietly to avoid warnings.
+                    return
         except RuntimeError as exc:
             logger.warning(
-                "Heartbeat skipped (no running loop?): task=%s tool=%s err=%s",
+                "Heartbeat skipped (no activity context): task=%s label=%s err=%s",
                 self.task_id,
-                tool_name,
+                label,
                 exc,
             )

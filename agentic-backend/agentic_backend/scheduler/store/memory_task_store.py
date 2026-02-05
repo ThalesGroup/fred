@@ -15,7 +15,7 @@ import threading
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence
 
-from agentic_backend.scheduler.base_task_store import (
+from agentic_backend.scheduler.store.base_task_store import (
     BaseAgentTaskStore,
     is_valid_status_transition,
 )

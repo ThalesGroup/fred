@@ -9,6 +9,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import after_model
 from langchain.tools import tool
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Checkpointer
 
 from agentic_backend.agents.knowledge_extractor.jsonschema import globalSchema
 from agentic_backend.agents.knowledge_extractor.powerpoint_template_util import (
@@ -296,7 +297,9 @@ class SlideMaker(AgentFlow):
                     yield event
                 break
 
-    def get_compiled_graph(self) -> CompiledStateGraph:
+    def get_compiled_graph(
+        self, checkpointer: Checkpointer | None = None
+    ) -> CompiledStateGraph:
         template_tool = self.get_template_tool()
         validator_tool = self.get_validator_tool()
 
@@ -345,7 +348,7 @@ class SlideMaker(AgentFlow):
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[template_tool, validator_tool, *self.mcp.get_tools()],
-            checkpointer=self.streaming_memory,
+            checkpointer=checkpointer,
             middleware=[
                 extract_text_from_thinking_model,
                 validate_tool_calls,

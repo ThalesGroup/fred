@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from __future__ import annotations
 
 import asyncio
@@ -26,6 +27,12 @@ logger = logging.getLogger(__name__)
 
 
 class TemporalClientProvider:
+    """
+    Provides a singleton Temporal client connection based on the given config.
+    The connection is established lazily upon the first request.
+    Safe for concurrent use.
+    """
+
     def __init__(self, config: TemporalSchedulerConfig) -> None:
         self._config = config
         self._client: Optional[Client] = None
