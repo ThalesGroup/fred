@@ -96,6 +96,13 @@ class AgentChatOptions(BaseModel):
             "for this message (session-scoped context)."
         ),
     )
+    include_corpus_in_search: bool = Field(
+        default=True,
+        description=(
+            "Allow vector search on corpus documents. If false, corpus retrieval is disabled "
+            "for this agent even when the client requests it."
+        ),
+    )
     record_audio_files: bool = Field(
         default=False,
         description=(
