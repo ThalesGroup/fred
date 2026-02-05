@@ -26,6 +26,7 @@ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 class InMemoryLogStorageConfig(BaseModel):
     type: Literal["in_memory"]
 
+
 class StdoutLogStorageConfig(BaseModel):
     type: Literal["stdout"]
 
