@@ -15,6 +15,7 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
   TextField,
   Tooltip,
@@ -55,6 +56,8 @@ export function TeamMembersPage({ teamId, permissions }: TeamMembersPageProps) {
   const theme = useTheme();
   const { showConfirmationDialog } = useConfirmationDialog();
 
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [inputValue, setInputValue] = useState("");
 
   const { data: members } = useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery({ teamId: teamId });
@@ -89,6 +92,9 @@ export function TeamMembersPage({ teamId, permissions }: TeamMembersPageProps) {
       compare(a.user.username, b.user.username)
     );
   });
+
+  const paginatedMembers =
+    rowsPerPage > 0 ? sortedMembers?.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage) : sortedMembers;
 
   const handleRoleChange = async (userId: string, newRelation: UserTeamRelation) => {
     await updateTeamMember({
@@ -141,7 +147,7 @@ export function TeamMembersPage({ teamId, permissions }: TeamMembersPageProps) {
 
   return (
     <Box sx={{ px: 2, pb: 2, display: "flex", height: "100%" }}>
-      <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
+      <Paper sx={{ borderRadius: 2, display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
         {/* Header */}
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pr: 2, py: 1 }}>
           <Box sx={{ display: "flex", alignItems: "center", height: "3rem", gap: 0.75, px: 2 }}>
@@ -207,66 +213,91 @@ export function TeamMembersPage({ teamId, permissions }: TeamMembersPageProps) {
         </Box>
 
         {/* Table */}
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>{t("teamMembersPage.tableHeader.username")}</TableCell>
-              <TableCell>{t("teamMembersPage.tableHeader.firstName")}</TableCell>
-              <TableCell>{t("teamMembersPage.tableHeader.lastName")}</TableCell>
-              <TableCell>{t("teamMembersPage.tableHeader.role")}</TableCell>
-              {can_administer_anyone && <TableCell>{t("teamMembersPage.tableHeader.actions")}</TableCell>}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {sortedMembers &&
-              sortedMembers.map((member) => {
-                const can_administer_this_member = getAdministerPermissionForTeamRole(member.relation);
+        <TableContainer sx={{ flex: 1, overflow: "auto" }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>{t("teamMembersPage.tableHeader.username")}</TableCell>
+                <TableCell>{t("teamMembersPage.tableHeader.firstName")}</TableCell>
+                <TableCell>{t("teamMembersPage.tableHeader.lastName")}</TableCell>
+                <TableCell>{t("teamMembersPage.tableHeader.role")}</TableCell>
+                {can_administer_anyone && <TableCell>{t("teamMembersPage.tableHeader.actions")}</TableCell>}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {paginatedMembers &&
+                paginatedMembers.map((member) => {
+                  const can_administer_this_member = getAdministerPermissionForTeamRole(member.relation);
 
-                return (
-                  <TableRow key={member.user.id}>
-                    <TableCell>{member.user.username}</TableCell>
-                    <TableCell>{member.user.first_name}</TableCell>
-                    <TableCell>{member.user.last_name}</TableCell>
-                    <TableCell>
-                      {can_administer_this_member && (
-                        <Select<UserTeamRelation>
-                          value={member.relation}
-                          size="small"
-                          onChange={(event) => handleRoleChange(member.user.id, event.target.value as UserTeamRelation)} // not sure why casting was necessary...
-                        >
-                          {TEAM_ROLES.map((role) => {
-                            const can_assign_role = getAdministerPermissionForTeamRole(role);
-                            if (!can_assign_role) {
-                              return;
-                            }
-
-                            return (
-                              <MenuItem key={role} value={role}>
-                                {t(`teamMembersPage.teamRole.${role}`)}
-                              </MenuItem>
-                            );
-                          })}
-                        </Select>
-                      )}
-                      {!can_administer_this_member && (
-                        <Typography>{t(`teamMembersPage.teamRole.${member.relation}`)}</Typography>
-                      )}
-                    </TableCell>
-                    {can_administer_anyone && (
+                  return (
+                    <TableRow key={member.user.id}>
+                      <TableCell>{member.user.username}</TableCell>
+                      <TableCell>{member.user.first_name}</TableCell>
+                      <TableCell>{member.user.last_name}</TableCell>
                       <TableCell>
                         {can_administer_this_member && (
-                          <IconButton size="small" onClick={() => handleRemoveMember(member.user.id)} color="error">
-                            <DeleteOutlineIcon fontSize="small" />
-                          </IconButton>
+                          <Select<UserTeamRelation>
+                            value={member.relation}
+                            size="small"
+                            onChange={(event) =>
+                              handleRoleChange(member.user.id, event.target.value as UserTeamRelation)
+                            } // not sure why casting was necessary...
+                          >
+                            {TEAM_ROLES.map((role) => {
+                              const can_assign_role = getAdministerPermissionForTeamRole(role);
+                              if (!can_assign_role) {
+                                return;
+                              }
+
+                              return (
+                                <MenuItem key={role} value={role}>
+                                  {t(`teamMembersPage.teamRole.${role}`)}
+                                </MenuItem>
+                              );
+                            })}
+                          </Select>
+                        )}
+                        {!can_administer_this_member && (
+                          <Typography>{t(`teamMembersPage.teamRole.${member.relation}`)}</Typography>
                         )}
                       </TableCell>
-                    )}
-                  </TableRow>
-                );
-              })}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                      {can_administer_anyone && (
+                        <TableCell>
+                          {can_administer_this_member && (
+                            <IconButton size="small" onClick={() => handleRemoveMember(member.user.id)} color="error">
+                              <DeleteOutlineIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  );
+                })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+
+        {/* Pagination - always at bottom */}
+        <TablePagination
+          count={sortedMembers?.length || 0}
+          page={page}
+          onPageChange={(_, page) => setPage(page)}
+          rowsPerPageOptions={[10, 50]}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={(event) => {
+            setPage(0);
+            setRowsPerPage(parseInt(event.target.value, 10));
+          }}
+          colSpan={3}
+          sx={{
+            borderBottomWidth: "0px",
+            "div p": {
+              // Not sure why, there is margin on p making them not centered...
+              margin: "0px",
+            },
+          }}
+        />
+      </Paper>
     </Box>
   );
 }
