@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { CssBaseline } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { PageError } from "./PageError";
 
@@ -19,9 +20,12 @@ export default function Unauthorized() {
   const { t } = useTranslation();
 
   return (
-    <PageError
-      title={t("unauthorized.title", "Unauthorized")}
-      message={t("unauthorized.message", "You do not have the required permissions to access this page.")}
-    />
+    <>
+      <CssBaseline enableColorScheme />
+      <PageError
+        title={t("unauthorized.title", "Unauthorized")}
+        message={t("unauthorized.message", "You do not have the required permissions to access this page.")}
+      />
+    </>
   );
 }
