@@ -25,9 +25,10 @@ interface EmptyStateProps {
     startIcon?: React.ReactNode;
     variant?: "contained" | "outlined" | "text";
   };
+  descriptionMaxWidth?: number | string;
 }
 
-export const EmptyState = ({ icon, title, description, actionButton }: EmptyStateProps) => {
+export const EmptyState = ({ icon, title, description, actionButton, descriptionMaxWidth = 400 }: EmptyStateProps) => {
   return (
     <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" py={8} gap={1}>
       {React.cloneElement(icon as React.ReactElement, {
@@ -36,7 +37,7 @@ export const EmptyState = ({ icon, title, description, actionButton }: EmptyStat
       <Typography variant="h6" color="text.secondary">
         {title}
       </Typography>
-      <Typography variant="body2" color="text.secondary" textAlign="center" maxWidth={400}>
+      <Typography variant="body2" color="text.secondary" textAlign="center" maxWidth={descriptionMaxWidth}>
         {description}
       </Typography>
       {actionButton && (
