@@ -31,7 +31,7 @@ Create (or verify) the clients below:
 > - `knowledge-flow` → `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET` (only required when Knowledge Flow calls other services)
 
 When ReBAC is enabled: grant the `knowledge-flow` service account the ability to read users/groups so it can resolve relationships:
-- Client roles on `realm-management`: `query-users`, `query-groups`, `view-users`
+- Client roles on `realm-management`: `query-users`, `query-groups`, `view-users`, `manage-users`
 - Client role on `account`: `view-groups`
 
 ### 1.3 Roles for user RBAC

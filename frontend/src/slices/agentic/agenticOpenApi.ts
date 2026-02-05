@@ -990,6 +990,8 @@ export type Properties = {
   agentsNicknamePlural?: string;
   agentIconPath?: string | null;
   contactSupportLink?: string | null;
+  /** Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme. */
+  agentIconName?: string | null;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;

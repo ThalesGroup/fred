@@ -130,8 +130,8 @@ class TagController:
             summary="List users and groups who can access a tag",
         )
         async def list_tag_members(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
-            users, groups = await self.service.list_tag_members(tag_id, user)
-            return TagMembersResponse(users=users, groups=groups)
+            users = await self.service.list_tag_members(tag_id, user)
+            return TagMembersResponse(users=users)
 
         @router.post(
             "/tags",
@@ -176,7 +176,7 @@ class TagController:
             share_request: TagShareRequest,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await self.service.share_tag_with_user_or_group(
+            await self.service.share_tag_with_user(
                 user,
                 tag_id,
                 share_request.target_id,
@@ -196,7 +196,7 @@ class TagController:
             target_type: ShareTargetResource,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            await self.service.unshare_tag_with_user_or_group(user, tag_id, target_id, target_type.to_resource())
+            await self.service.unshare_tag_with_user(user, tag_id, target_id, target_type.to_resource())
 
         @router.post(
             "/tags/rebac/backfill",

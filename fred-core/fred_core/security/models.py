@@ -52,6 +52,7 @@ class Resource(str, Enum):
     FEEDBACK = "feedback"
     PROMPT_COMPLETIONS = "prompt_completions"
     METRICS = "metrics"
+    AGENT = "agent"
     AGENTS = "agents"
     SESSIONS = "sessions"
     MESSAGE_ATTACHMENTS = "message_attachments"
@@ -59,7 +60,8 @@ class Resource(str, Enum):
 
     # Authorization subject
     USER = "user"
-    GROUP = "group"
+    TEAM = "team"
+    ORGANIZATION = "organization"
 
 
 class AuthorizationError(Exception):

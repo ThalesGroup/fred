@@ -12,5 +12,5 @@ export const knowledgeFlowApi = createApi({
   refetchOnReconnect: true,
   endpoints: () => ({}),
   reducerPath: "knowledgeFlowApi",
-  tagTypes: ["BenchRun"],
+  tagTypes: ["BenchRun", "Team", "TeamMember"],
 });

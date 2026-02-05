@@ -14,7 +14,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import BinaryIO, List, Optional
 
@@ -205,5 +205,23 @@ class BaseContentStore(ABC):
     def delete_object(self, key: str) -> None:
         """
         Delete object 'key'; raise FileNotFoundError if absent.
+        """
+        pass
+
+    @abstractmethod
+    def get_presigned_url(self, key: str, expires: timedelta = timedelta(hours=1)) -> str:
+        """
+        Generate a presigned URL for direct browser access to an object.
+
+        Args:
+            key: The object key (e.g., "teams/abc/banner-uuid.jpg")
+            expires: URL expiration time (default: 1 hour)
+
+        Returns:
+            Presigned URL string
+
+        Raises:
+            FileNotFoundError: If object doesn't exist
+            NotImplementedError: If the storage backend doesn't support presigned URLs
         """
         pass

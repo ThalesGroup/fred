@@ -3,34 +3,96 @@ model
 
 type user
 
-type group
+type organization
   relations
-    # A group can have members that are users or other groups (nested groups)
-    define member: [user, group#member]
+    # organization role defined from Keycloak roles
+    define admin: [user]
+    define editor: [user] or admin
+    define viewer: [user] or editor
+
+  define can_create_team: admin
+  define can_create_agent: editor
+
+
+type team
+  relations
+    define organization: [organization]
+
+    # A team can have members that are users or other teams (nested teams)
+    define owner: [user] or admin from organization
+    define manager: [user] or owner
+    define member: [user] or manager
+
+    # Public visibility - allows anyone to read team info
+    define public: [user:*]
+
+    # --- Permissions (computed relations) ---
+    # Can read team info (name, description, banner, owners list...)
+    # -> must be at least member or team is public
+    define can_read: member or public
+
+    # Can update team infio (description, banner...)
+    # -> must be at least owner
+    define can_update_info: owner
+
+    # Can manage members: add/remove/change role of members depending on their current role
+    # To give a given role to a user, you must be able to administer it
+    define can_administer_members: manager
+    define can_administer_managers: manager
+    define can_administer_owners: owner
+
+    # Can list all team memebers with their role
+    # -> must be member
+    define can_read_members: member
+
+    # -- Helpers (not permission to use directly, only to help define) --
+
+    # Can upload/rename/delete team resources (file/folders)
+    # -> must be at least manager
+    define can_update_resources: manager
+
+    # Can create/update/delete team agents
+    # -> must be at least manager
+    define can_update_agents: manager
+
+type agent
+  relations
+    define owner: [user, team]
+
+    # --- Permissions (computed relations) ---
+
+
+    # Can update agent configuration
+    # -> must be owner
+    define update: owner or can_update_agents from owner
+
+    # Can delete agent
+    # -> must be owner
+    define delete: owner or can_update_agents from owner
 
 type tag
   relations
-    define owner: [user, group#member]
-    define editor: [user, group#member]
-    define viewer: [user, group#member]
+    define owner: [user, team]
+    define editor: [user]
+    define viewer: [user]
     define parent: [tag]
 
     # --- Permissions (computed relations) ---
     # Can read tag: see its name, description, list documents...
     # -> must be at least viewer
-    define read: viewer or editor or owner or read from parent
+    define read: viewer or editor or owner or read from parent or member from owner
 
     # Can update tag: change its name, description... add or remove content (like documents) in the tag
     # -> must be at least editor
-    define update: editor or owner or update from parent
+    define update: editor or owner or update from parent or can_update_resources from owner
 
     # Can delete tag
     # -> must be owner
-    define delete: owner or delete from parent
+    define delete: owner or delete from parent or can_update_resources from owner
 
     # Can share tag: add/remove editors/viewers
     # -> must be owner
-    define share: owner or share from parent
+    define share: owner or share from parent or can_update_resources from owner
 
 type document
   relations
@@ -72,5 +134,5 @@ type resource
     define delete: update from parent
 
     # Can share resources: add/remove editors/viewers
-    # -> must be owner
+    # -> must be able to share parent tag
     define share: share from parent

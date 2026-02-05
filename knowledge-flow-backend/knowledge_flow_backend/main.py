@@ -39,6 +39,7 @@ from fred_core.kpi import emit_process_kpis
 from fred_core.scheduler import TemporalClientProvider
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
+from sqlmodel import SQLModel
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.application_state import attach_app
@@ -56,7 +57,6 @@ from knowledge_flow_backend.features.content.content_controller import ContentCo
 from knowledge_flow_backend.features.corpus_manager.corpus_manager_controller import CorpusManagerController
 from knowledge_flow_backend.features.filesystem.mcp_fs_controller import McpFilesystemController
 from knowledge_flow_backend.features.filesystem.workspace_storage_controller import WorkspaceStorageController
-from knowledge_flow_backend.features.groups import groups_controller
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
 from knowledge_flow_backend.features.kpi import logs_controller
 from knowledge_flow_backend.features.kpi.kpi_controller import KPIController
@@ -71,6 +71,7 @@ from knowledge_flow_backend.features.scheduler.scheduler_controller import Sched
 from knowledge_flow_backend.features.statistic.controller import StatisticController
 from knowledge_flow_backend.features.tabular.controller import TabularController
 from knowledge_flow_backend.features.tag.tag_controller import TagController
+from knowledge_flow_backend.features.teams import teams_controller
 from knowledge_flow_backend.features.users import users_controller
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
@@ -139,6 +140,13 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        # Initialize database tables
+        # todo: migration tool like Alembic instead of this
+        engine = application_context.get_async_sql_engine()
+        async with engine.begin() as conn:
+            await conn.run_sync(SQLModel.metadata.create_all)
+        logger.info("%s Database tables created/verified", LOG_PREFIX)
+
         async def periodic_reconciliation() -> None:
             while True:
                 try:
@@ -190,12 +198,14 @@ def create_app() -> FastAPI:
 
     # Register exception handlers
     register_exception_handlers(app)
+    teams_controller.register_exception_handlers(app)
+
     allowed_origins = list({_norm_origin(o) for o in configuration.security.authorized_origins})
     logger.info("%s[CORS] allow_origins=%s", LOG_PREFIX, allowed_origins)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
     )
     initialize_user_security(configuration.security.user)
@@ -222,7 +232,7 @@ def create_app() -> FastAPI:
     McpFilesystemController(router)
     CorpusManagerController(router)
     router.include_router(logs_controller.router)
-    router.include_router(groups_controller.router)
+    router.include_router(teams_controller.router)
     router.include_router(users_controller.router)
     # Developer benchmarking tools (always mounted; auth-protected)
     BenchmarkController(router)

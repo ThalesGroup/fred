@@ -13,6 +13,8 @@ from fred_core.security.keycloak.keycloack_admin_client import (
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.structure import KeycloakUser, M2MSecurity
 
+ORGANIZATION_ID = "fred"
+
 
 @dataclass(frozen=True)
 class RebacReference:
@@ -26,10 +28,14 @@ class RelationType(str, Enum):
     """Relationship labels encoded in the graph."""
 
     OWNER = "owner"
+    MANAGER = "manager"
     EDITOR = "editor"
     VIEWER = "viewer"
     PARENT = "parent"
     MEMBER = "member"
+    ORGANIZATION = "organization"
+    ADMIN = "admin"
+    PUBLIC = "public"
 
 
 class TagPermission(str, Enum):
@@ -58,7 +64,31 @@ class ResourcePermission(str, Enum):
     SHARE = "share"
 
 
-RebacPermission = TagPermission | DocumentPermission | ResourcePermission
+class TeamPermission(str, Enum):
+    """Team permissions encoded in the graph."""
+
+    CAN_READ = "can_read"
+    CAN_UPDATE_INFO = "can_update_info"
+    CAN_READ_MEMEBERS = "can_read_members"
+    CAN_ADMINISTER_MEMBERS = "can_administer_members"
+    CAN_ADMINISTER_MANAGERS = "can_administer_managers"
+    CAN_ADMINISTER_OWNERS = "can_administer_owners"
+
+
+class AgentPermission(str, Enum):
+    """Agent permissions encoded in the graph."""
+
+    UPDATE = "update"
+    DELETE = "delete"
+
+
+RebacPermission = (
+    TagPermission
+    | DocumentPermission
+    | ResourcePermission
+    | TeamPermission
+    | AgentPermission
+)
 
 
 def _resource_for_permission(permission: RebacPermission) -> Resource:
@@ -68,6 +98,10 @@ def _resource_for_permission(permission: RebacPermission) -> Resource:
         return Resource.DOCUMENTS
     if isinstance(permission, ResourcePermission):
         return Resource.RESOURCES
+    if isinstance(permission, TeamPermission):
+        return Resource.TEAM
+    if isinstance(permission, AgentPermission):
+        return Resource.AGENT
     raise ValueError(f"Unsupported permission type: {permission!r}")
 
 
@@ -241,13 +275,16 @@ class RebacEngine(ABC):
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
         """Convenience helper to lookup resources for a user."""
-        group_relations = await self.groups_list_to_relations(user)
+        group_relations, org_relations = await asyncio.gather(
+            self.groups_list_to_relations(user),
+            self.user_role_to_organization_relation(user),
+        )
 
         return await self.lookup_resources(
             subject=RebacReference(Resource.USER, user.uid),
             permission=permission,
             resource_type=_resource_for_permission(permission),
-            contextual_relations=group_relations,
+            contextual_relations=group_relations | org_relations,
             consistency_token=consistency_token,
         )
 
@@ -293,14 +330,17 @@ class RebacEngine(ABC):
         consistency_token: str | None = None,
     ) -> None:
         """Convenience helper to check permission for a user, raising if unauthorized."""
-        group_relations = await self.groups_list_to_relations(user)
+        group_relations, org_relations = await asyncio.gather(
+            self.groups_list_to_relations(user),
+            self.user_role_to_organization_relation(user),
+        )
 
         resource_type = _resource_for_permission(permission)
         await self.check_permission_or_raise(
             RebacReference(Resource.USER, user.uid),
             permission,
             RebacReference(resource_type, resource_id),
-            contextual_relations=group_relations,
+            contextual_relations=group_relations | org_relations,
             consistency_token=consistency_token,
         )
 
@@ -312,30 +352,12 @@ class RebacEngine(ABC):
         relation: set[Relation] = set()
 
         for group in user.groups:
-            for parent, child in self._iterate_on_parent_child_path(group):
-                relation.add(
-                    Relation(
-                        subject=RebacReference(
-                            Resource.GROUP,
-                            (await self.keycloak_client.a_get_group_by_path(child))[
-                                "id"
-                            ],
-                        ),
-                        relation=RelationType.MEMBER,
-                        resource=RebacReference(
-                            Resource.GROUP,
-                            (await self.keycloak_client.a_get_group_by_path(parent))[
-                                "id"
-                            ],
-                        ),
-                    )
-                )
             relation.add(
                 Relation(
                     subject=RebacReference(Resource.USER, user.uid),
                     relation=RelationType.MEMBER,
                     resource=RebacReference(
-                        Resource.GROUP,
+                        Resource.TEAM,
                         (await self.keycloak_client.a_get_group_by_path(group))["id"],
                     ),
                 )
@@ -343,12 +365,39 @@ class RebacEngine(ABC):
 
         return relation
 
-    @staticmethod
-    def _iterate_on_parent_child_path(group_path: str) -> Iterable[tuple[str, str]]:
-        """Helper to iterate over parent-child group paths."""
-        parts = group_path.strip("/").split("/")
+    async def user_role_to_organization_relation(
+        self, user: KeycloakUser
+    ) -> set[Relation]:
+        """Helper to convert user role to organization relation.
 
-        for i in range(len(parts) - 1):
-            parent = "/".join(parts[: i + 1])
-            child = "/".join(parts[: i + 2])
-            yield parent, child
+        Creates a relation between the user and the singleton 'fred' organization
+        based on the user's Keycloak role (admin, editor, or viewer).
+        """
+        if isinstance(self.keycloak_client, KeycloackDisabled):
+            return set()
+
+        relations: set[Relation] = set()
+
+        # Map Keycloak roles to organization relations based on the schema
+        for role in user.roles:
+            try:
+                relation_type = RelationType(role)
+                if relation_type in (
+                    RelationType.ADMIN,
+                    RelationType.EDITOR,
+                    RelationType.VIEWER,
+                ):
+                    relations.add(
+                        Relation(
+                            subject=RebacReference(Resource.USER, user.uid),
+                            relation=relation_type,
+                            resource=RebacReference(
+                                Resource.ORGANIZATION, ORGANIZATION_ID
+                            ),
+                        )
+                    )
+            except ValueError:
+                # Role is not a valid RelationType, skip it
+                continue
+
+        return relations

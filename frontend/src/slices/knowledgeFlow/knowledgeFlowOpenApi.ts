@@ -702,11 +702,72 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/logs/query`, method: "POST", body: queryArg.logQuery }),
     }),
-    listGroupsKnowledgeFlowV1GroupsGet: build.query<
-      ListGroupsKnowledgeFlowV1GroupsGetApiResponse,
-      ListGroupsKnowledgeFlowV1GroupsGetApiArg
+    listTeamsKnowledgeFlowV1TeamsGet: build.query<
+      ListTeamsKnowledgeFlowV1TeamsGetApiResponse,
+      ListTeamsKnowledgeFlowV1TeamsGetApiArg
     >({
-      query: () => ({ url: `/knowledge-flow/v1/groups` }),
+      query: () => ({ url: `/knowledge-flow/v1/teams` }),
+    }),
+    getTeamKnowledgeFlowV1TeamsTeamIdGet: build.query<
+      GetTeamKnowledgeFlowV1TeamsTeamIdGetApiResponse,
+      GetTeamKnowledgeFlowV1TeamsTeamIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/teams/${queryArg.teamId}` }),
+    }),
+    updateTeamKnowledgeFlowV1TeamsTeamIdPatch: build.mutation<
+      UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiResponse,
+      UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/teams/${queryArg.teamId}`,
+        method: "PATCH",
+        body: queryArg.teamUpdate,
+      }),
+    }),
+    uploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost: build.mutation<
+      UploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostApiResponse,
+      UploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/teams/${queryArg.teamId}/banner`,
+        method: "POST",
+        body: queryArg.bodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost,
+      }),
+    }),
+    listTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGet: build.query<
+      ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiResponse,
+      ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/teams/${queryArg.teamId}/members` }),
+    }),
+    addTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPost: build.mutation<
+      AddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostApiResponse,
+      AddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/teams/${queryArg.teamId}/members`,
+        method: "POST",
+        body: queryArg.addTeamMemberRequest,
+      }),
+    }),
+    removeTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDelete: build.mutation<
+      RemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteApiResponse,
+      RemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/teams/${queryArg.teamId}/members/${queryArg.userId}`,
+        method: "DELETE",
+      }),
+    }),
+    updateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatch: build.mutation<
+      UpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchApiResponse,
+      UpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/teams/${queryArg.teamId}/members/${queryArg.userId}`,
+        method: "PATCH",
+        body: queryArg.updateTeamMemberRequest,
+      }),
     }),
     listUsersKnowledgeFlowV1UsersGet: build.query<
       ListUsersKnowledgeFlowV1UsersGetApiResponse,
@@ -1369,8 +1430,44 @@ export type QueryLogsKnowledgeFlowV1LogsQueryPostApiResponse = /** status 200 Su
 export type QueryLogsKnowledgeFlowV1LogsQueryPostApiArg = {
   logQuery: LogQuery;
 };
-export type ListGroupsKnowledgeFlowV1GroupsGetApiResponse = /** status 200 Successful Response */ GroupSummary[];
-export type ListGroupsKnowledgeFlowV1GroupsGetApiArg = void;
+export type ListTeamsKnowledgeFlowV1TeamsGetApiResponse = /** status 200 Successful Response */ Team[];
+export type ListTeamsKnowledgeFlowV1TeamsGetApiArg = void;
+export type GetTeamKnowledgeFlowV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ TeamWithPermissions;
+export type GetTeamKnowledgeFlowV1TeamsTeamIdGetApiArg = {
+  teamId: string;
+};
+export type UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiResponse =
+  /** status 200 Successful Response */ TeamWithPermissions;
+export type UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiArg = {
+  teamId: string;
+  teamUpdate: TeamUpdate;
+};
+export type UploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostApiResponse = unknown;
+export type UploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostApiArg = {
+  teamId: string;
+  bodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost: BodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost;
+};
+export type ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiResponse =
+  /** status 200 Successful Response */ TeamMember[];
+export type ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiArg = {
+  teamId: string;
+};
+export type AddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostApiResponse = unknown;
+export type AddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostApiArg = {
+  teamId: string;
+  addTeamMemberRequest: AddTeamMemberRequest;
+};
+export type RemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteApiResponse = unknown;
+export type RemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteApiArg = {
+  teamId: string;
+  userId: string;
+};
+export type UpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchApiResponse = unknown;
+export type UpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchApiArg = {
+  teamId: string;
+  userId: string;
+  updateTeamMemberRequest: UpdateTeamMemberRequest;
+};
 export type ListUsersKnowledgeFlowV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
 export type ListUsersKnowledgeFlowV1UsersGetApiArg = void;
 export type ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiResponse =
@@ -1923,23 +2020,10 @@ export type TagMemberUser = {
   relation: UserTagRelation;
   user: UserSummary;
 };
-export type GroupSummary = {
-  id: string;
-  name: string;
-  member_count?: number | null;
-  total_member_count?: number | null;
-  sub_groups?: GroupSummary[];
-};
-export type TagMemberGroup = {
-  type?: "group";
-  relation: UserTagRelation;
-  group: GroupSummary;
-};
 export type TagMembersResponse = {
   users?: TagMemberUser[];
-  groups?: TagMemberGroup[];
 };
-export type ShareTargetResource = "user" | "group";
+export type ShareTargetResource = "user";
 export type TagShareRequest = {
   target_id: string;
   target_type: ShareTargetResource;
@@ -2225,6 +2309,56 @@ export type LogQuery = {
   filters?: LogFilter;
   limit?: number;
   order?: "asc" | "desc";
+};
+export type Team = {
+  description?: string | null;
+  is_private?: boolean;
+  id: string;
+  name: string;
+  member_count?: number | null;
+  owners?: UserSummary[];
+  is_member?: boolean;
+  banner_image_url?: string | null;
+};
+export type TeamPermission =
+  | "can_read"
+  | "can_update_info"
+  | "can_read_members"
+  | "can_administer_members"
+  | "can_administer_managers"
+  | "can_administer_owners";
+export type TeamWithPermissions = {
+  description?: string | null;
+  is_private?: boolean;
+  id: string;
+  name: string;
+  member_count?: number | null;
+  owners?: UserSummary[];
+  is_member?: boolean;
+  banner_image_url?: string | null;
+  permissions?: TeamPermission[];
+};
+export type TeamUpdate = {
+  description?: string | null;
+  banner_object_storage_key?: string | null;
+  is_private?: boolean | null;
+};
+export type BodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost = {
+  /** Banner image file (max 5MB, JPEG/PNG/WebP) */
+  file: Blob;
+};
+export type UserTeamRelation = "owner" | "manager" | "member";
+export type TeamMember = {
+  type?: "user";
+  relation: UserTeamRelation;
+  user: UserSummary;
+};
+export type AddTeamMemberRequest = {
+  user_id: string;
+  relation: UserTeamRelation;
+};
+export type UpdateTeamMemberRequest = {
+  relation: UserTeamRelation;
 };
 export type ProcessorDescriptor = {
   id: string;
@@ -2545,8 +2679,17 @@ export const {
   useCorpusTasksResultMutation,
   useCorpusTasksListMutation,
   useQueryLogsKnowledgeFlowV1LogsQueryPostMutation,
-  useListGroupsKnowledgeFlowV1GroupsGetQuery,
-  useLazyListGroupsKnowledgeFlowV1GroupsGetQuery,
+  useListTeamsKnowledgeFlowV1TeamsGetQuery,
+  useLazyListTeamsKnowledgeFlowV1TeamsGetQuery,
+  useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery,
+  useLazyGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery,
+  useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation,
+  useUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostMutation,
+  useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
+  useLazyListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
+  useAddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostMutation,
+  useRemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteMutation,
+  useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation,
   useListUsersKnowledgeFlowV1UsersGetQuery,
   useLazyListUsersKnowledgeFlowV1UsersGetQuery,
   useListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,

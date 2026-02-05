@@ -12,3 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import NewType
+
+# TeamId is a distinct type from str for type-checking purposes.
+# This provides type safety without runtime overhead - the type checker
+# will catch incorrect usage, but at runtime this is still a plain string.
+TeamId = NewType("TeamId", str)

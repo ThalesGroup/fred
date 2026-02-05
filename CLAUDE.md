@@ -31,7 +31,8 @@ Fred is a production-ready multi-agent AI platform with three main components:
 ### Knowledge Flow Backend (`knowledge_flow_backend/`)
 - `make run` - Start FastAPI server with hot reload on port 8111
 - `make run-worker` - Start Temporal ingestion worker (requires Temporal daemon)
-- `make test` - Run pytest with coverage report  
+- `make test` - Run pytest with coverage report
+- `make type-check` - Run pyright type checker
 - `make lint` - Run ruff linter
 - `make lint-fix` - Auto-fix linting issues
 - `make format` - Format code with ruff
@@ -115,7 +116,13 @@ Fred is a production-ready multi-agent AI platform with three main components:
 
 ## Development Patterns
 
-### Document Processing Extensions  
+### Python Virtual Environments
+- **IMPORTANT**: When running Python commands for backend modules, always use `.venv/bin/python` instead of `python`
+  - Example: `.venv/bin/python -c "from fred_core import TeamPermission; print(TeamPermission)"`
+  - This ensures the correct virtual environment dependencies are used
+  - Each backend module (agentic-backend, knowledge-flow-backend, fred-core) has its own `.venv`
+
+### Document Processing Extensions
 1. **Input Processors**: Add new file type support in `knowledge-flow-backend/knowledge_flow_backend/core/processors/input/`
 2. **Output Processors**: Custom processing logic in `knowledge-flow-backend/knowledge_flow_backend/core/processors/output/`
 3. Update processor mappings in `configuration.yaml`
