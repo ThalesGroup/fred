@@ -388,6 +388,7 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
         if not name:
             raise ValueError("Ollama embeddings require 'name' (model).")
         base_url = settings.pop("base_url", None)
+        settings.pop("max_retries", None)
         _info_provider(cfg, settings)
         return OllamaEmbeddings(
             model=name,
