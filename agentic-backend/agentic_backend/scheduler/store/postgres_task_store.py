@@ -24,14 +24,14 @@ from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.engine import Engine
 
 from agentic_backend.scheduler.agent_contracts import AgentContextRefsV1
-
-from .base_task_store import BaseAgentTaskStore
-from .task_structures import (
+from agentic_backend.scheduler.task_structures import (
     AgentTaskForbiddenError,
     AgentTaskNotFoundError,
     AgentTaskRecordV1,
     AgentTaskStatus,
 )
+
+from .base_task_store import BaseAgentTaskStore
 
 logger = logging.getLogger(__name__)
 

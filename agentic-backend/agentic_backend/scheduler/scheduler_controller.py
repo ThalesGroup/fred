@@ -20,7 +20,6 @@ from fastapi import APIRouter, Depends, Query
 from fred_core import KeycloakUser, get_current_user, raise_internal_error
 from fred_core.scheduler import TemporalClientProvider
 
-# Import the application context to get the specific store implementation
 from agentic_backend.application_context import get_task_store
 from agentic_backend.scheduler.scheduler_service import AgentTaskService
 from agentic_backend.scheduler.task_structures import (
