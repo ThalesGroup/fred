@@ -17,7 +17,7 @@ import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import PersonAddAltIcon from "@mui/icons-material/PersonAddAlt";
-import { Box, Button, Checkbox, IconButton, Skeleton, Tooltip } from "@mui/material";
+import { Box, Button, Checkbox, IconButton, Skeleton } from "@mui/material";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import * as React from "react";
@@ -26,6 +26,7 @@ import { useTranslation } from "react-i18next";
 import { getConfig } from "../../../common/config";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import { TagNode } from "../../../shared/utils/tagTree";
 import type { DocumentMetadata, TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DocumentRowCompact } from "./DocumentLibraryRow";
@@ -287,7 +288,7 @@ export function DocumentLibraryTree({
                 />
                 {isExpanded ? <FolderOpenOutlinedIcon fontSize="small" /> : <FolderOutlinedIcon fontSize="small" />}
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
-                <Tooltip key={`${c.name}_count`} title={`${displayCount} Documents`} arrow>
+                <SimpleTooltip key={`${c.name}_count`} title={`${displayCount} Documents`}>
                   <Box
                     sx={{
                       bgcolor: "#e0e0e0",
@@ -305,13 +306,13 @@ export function DocumentLibraryTree({
                   >
                     {displayCount}
                   </Box>
-                </Tooltip>
+                </SimpleTooltip>
               </Box>
 
               {/* Right: owner + share + delete */}
               <Box sx={{ ml: "auto", display: "flex", alignItems: "center" }}>
                 {feature_flags.is_rebac_enabled && ownerName && (
-                  <Tooltip title={t("documentLibraryTree.ownerTooltip", { name: ownerName })}>
+                  <SimpleTooltip title={t("documentLibraryTree.ownerTooltip", { name: ownerName })}>
                     <Box
                       sx={{
                         display: "inline-flex",
@@ -337,14 +338,17 @@ export function DocumentLibraryTree({
                       />
                       <span style={{ whiteSpace: "nowrap" }}>{ownerName}</span>
                     </Box>
-                  </Tooltip>
+                  </SimpleTooltip>
                 )}
                 {feature_flags.is_rebac_enabled &&
                   folderTag &&
                   folderTag.owner_id &&
                   currentUserId &&
                   folderTag.owner_id === currentUserId && (
-                    <Tooltip title={t("documentLibraryTree.shareFolder")} enterTouchDelay={10}>
+                    <SimpleTooltip
+                      title={t("documentLibraryTree.shareFolder")}
+                      // ATTENTION enterTouchDelay={10}
+                    >
                       <IconButton
                         size="small"
                         onClick={(e) => {
@@ -354,13 +358,13 @@ export function DocumentLibraryTree({
                       >
                         <PersonAddAltIcon fontSize="small" />
                       </IconButton>
-                    </Tooltip>
+                    </SimpleTooltip>
                   )}
-                <Tooltip
+                <SimpleTooltip
                   title={
                     canBeDeleted ? t("documentLibraryTree.deleteFolder") : t("documentLibraryTree.deleteFolderDisabled")
                   }
-                  enterTouchDelay={10}
+                  // ATTENTION enterTouchDelay={10}
                 >
                   {/* span needed to trigger tooltip when IconButton is disabled */}
                   <span style={{ display: "inline-flex" }}>
@@ -374,7 +378,7 @@ export function DocumentLibraryTree({
                       disabled={!canBeDeleted}
                     />
                   </span>
-                </Tooltip>
+                </SimpleTooltip>
               </Box>
             </Box>
           }

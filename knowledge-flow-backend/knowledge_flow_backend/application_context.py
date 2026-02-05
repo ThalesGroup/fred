@@ -121,6 +121,15 @@ EXTENSION_CATEGORY = {
     ".xlsm": "tabular",
     ".duckdb": "duckdb",
     ".jsonl": "markdown",
+    # Image extensions - processed as markdown with metadata
+    ".png": "markdown",
+    ".jpg": "markdown",
+    ".jpeg": "markdown",
+    ".gif": "markdown",
+    ".bmp": "markdown",
+    ".svg": "markdown",
+    ".webp": "markdown",
+    ".ico": "markdown",
 }
 
 logger = logging.getLogger(__name__)
@@ -761,6 +770,8 @@ class ApplicationContext:
         self._kpi_writer = KPIWriter(
             store=self.get_kpi_store(),
             defaults=KPIDefaults(static_dims={"service": "knowledge-flow"}),
+            summary_interval_s=self.configuration.app.kpi_log_summary_interval_sec,
+            summary_top_n=self.configuration.app.kpi_log_summary_top_n,
         )
         return self._kpi_writer
 

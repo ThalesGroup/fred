@@ -34,40 +34,51 @@ def _sanitize_metric_name(name: str) -> str:
     return safe
 
 
-_DEFAULT_DIM_LABELS: Tuple[str, ...] = (
-    "env",
-    "cluster",
-    "actor_type",
-    "user_id",
-    "groups",
-    "status",
-    "http_status",
-    "error_code",
-    "exception_type",
-    "route",
-    "method",
-    "scope_type",
-    "scope_id",
-    "exchange_id",
-    "agent_id",
-    "model",
-    "doc_uid",
-    "doc_source",
-    "file_type",
-    "index",
-    "tool_name",
-    "agent_step",
-    "policy",
-    "step",
-    "source",
-)
-
-
 def _sanitize_label_name(name: str) -> str:
     safe = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in name)
     if not safe or safe[0].isdigit():
         safe = f"dim_{safe}"
     return safe
+
+
+# Buckets for metrics in milliseconds (e.g. LLM latencies).
+# Default Prometheus buckets (0.005 to 10.0) are optimized for seconds.
+MS_BUCKETS = (
+    5.0,
+    10.0,
+    25.0,
+    50.0,
+    100.0,
+    250.0,
+    500.0,
+    1000.0,
+    2500.0,
+    5000.0,
+    10000.0,
+    30000.0,
+    60000.0,
+    120000.0,
+)
+
+# Buckets for metrics in seconds (e.g. HTTP latencies).
+SECONDS_BUCKETS = (
+    0.005,
+    0.01,
+    0.025,
+    0.05,
+    0.075,
+    0.1,
+    0.25,
+    0.5,
+    0.75,
+    1.0,
+    2.5,
+    5.0,
+    7.5,
+    10.0,
+    30.0,
+    60.0,
+)
 
 
 class PrometheusKPIStore(BaseKPIStore):
@@ -127,8 +138,17 @@ class PrometheusKPIStore(BaseKPIStore):
             elif metric_type == "gauge":
                 metric = Gauge(name, "KPI gauge", list(label_names), registry=REGISTRY)
             else:
+                buckets = Histogram.DEFAULT_BUCKETS
+                if name.endswith("_ms"):
+                    buckets = MS_BUCKETS
+                elif name.endswith("_seconds"):
+                    buckets = SECONDS_BUCKETS
                 metric = Histogram(
-                    name, "KPI timer", list(label_names), registry=REGISTRY
+                    name,
+                    "KPI timer",
+                    list(label_names),
+                    registry=REGISTRY,
+                    buckets=buckets,
                 )
             self._metrics[key] = metric
             return metric
@@ -163,9 +183,8 @@ class PrometheusKPIStore(BaseKPIStore):
         label_names = self._label_names.get(key)
         label_map = self._label_maps.get(key)
         if label_names is None or label_map is None:
-            raw_keys = set(_DEFAULT_DIM_LABELS)
-            if event.dims:
-                raw_keys.update(event.dims.keys())
+            # Use only the dims provided on the event (no global defaults).
+            raw_keys = set(event.dims.keys() if event.dims else [])
             label_map = {}
             for raw_key in sorted(raw_keys):
                 safe_key = _sanitize_label_name(raw_key)

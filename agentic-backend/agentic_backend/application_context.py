@@ -59,6 +59,9 @@ from fred_core.kpi import (
     OpenSearchKPIStore,
     PrometheusKPIStore,
 )
+from fred_core.logs.log_structures import StdoutLogStorageConfig
+from fred_core.logs.null_log_store import NullLogStore
+from fred_core.scheduler import TemporalClientProvider
 from fred_core.sql import create_engine_from_config
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -93,7 +96,7 @@ from agentic_backend.core.session.stores.postgres_session_attachment_store impor
 from agentic_backend.core.session.stores.postgres_session_store import (
     PostgresSessionStore,
 )
-from agentic_backend.scheduler.base_task_store import BaseAgentTaskStore
+from agentic_backend.scheduler.store.base_task_store import BaseAgentTaskStore
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +194,10 @@ def get_feedback_store() -> BaseFeedbackStore:
 
 def get_task_store() -> BaseAgentTaskStore:
     return get_app_context().get_task_store()
+
+
+def get_temporal_client_provider() -> TemporalClientProvider:
+    return get_app_context().get_temporal_client_provider()
 
 
 def get_enabled_agent_names() -> List[str]:
@@ -307,6 +314,8 @@ class ApplicationContext:
     _kpi_writer: Optional[KPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
     _io_executor: ThreadPoolExecutor | None = None
+    _default_chat_model_instance: Optional[BaseChatModel] = None
+    _default_model_instance: Optional[BaseLanguageModel] = None
 
     def __new__(cls, configuration: Configuration):
         with cls._lock:
@@ -368,7 +377,15 @@ class ApplicationContext:
         """
         Retrieves the default chat model instance.
         """
-        return get_model(self.configuration.ai.default_chat_model)
+        if self._default_chat_model_instance is None:
+            self._default_chat_model_instance = get_model(
+                self.configuration.ai.default_chat_model
+            )
+            logger.info(
+                "[MODEL] cached default chat model instance %s",
+                type(self._default_chat_model_instance).__name__,
+            )
+        return self._default_chat_model_instance
 
     def get_default_model(self) -> BaseLanguageModel:
         """
@@ -382,7 +399,15 @@ class ApplicationContext:
                 "Please set 'default_language_model' in the AI configuration to avoid this warning."
             )
             return self.get_default_chat_model()
-        return get_model(self.configuration.ai.default_language_model)
+        if self._default_model_instance is None:
+            self._default_model_instance = get_model(
+                self.configuration.ai.default_language_model
+            )
+            logger.info(
+                "[MODEL] cached default language model instance %s",
+                type(self._default_model_instance).__name__,
+            )
+        return self._default_model_instance
 
     # --- Agent classes ---
 
@@ -543,6 +568,8 @@ class ApplicationContext:
                 secure=opensearch_config.secure,
                 verify_certs=opensearch_config.verify_certs,
             )
+        elif isinstance(config, StdoutLogStorageConfig):
+            self._log_store_instance = NullLogStore()
         elif isinstance(config, InMemoryLogStorageConfig) or config is None:
             self._log_store_instance = RamLogStore(
                 capacity=1000
@@ -648,13 +675,18 @@ class ApplicationContext:
     def get_task_store(self):
         if self._task_store_instance is not None:
             return self._task_store_instance
-        from agentic_backend.scheduler.memory_task_store import MemoryAgentTaskStore
-        from agentic_backend.scheduler.postgres_task_store import PostgresAgentTaskStore
+        from agentic_backend.scheduler.store.memory_task_store import (
+            MemoryAgentTaskStore,
+        )
 
         store_config = get_configuration().storage.task_store
         # Allow the task store to be optional for workers that don't need it.
         try:
             if isinstance(store_config, PostgresTableConfig):
+                from agentic_backend.scheduler.store.postgres_task_store import (
+                    PostgresAgentTaskStore,
+                )
+
                 if not os.getenv("POSTGRES_PASSWORD"):
                     logger.error(
                         "[TASKS][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres task store)"
@@ -680,6 +712,19 @@ class ApplicationContext:
             )
             self._task_store_instance = MemoryAgentTaskStore()
             return self._task_store_instance
+
+    def get_temporal_client_provider(self) -> TemporalClientProvider:
+        if getattr(self, "_temporal_provider", None) is not None:
+            return self._temporal_provider  # type: ignore[attr-defined]
+
+        cfg = get_configuration().scheduler
+        if cfg.backend.lower() != "temporal":
+            raise RuntimeError(
+                f"Temporal client requested but scheduler backend is {cfg.backend}"
+            )
+
+        self._temporal_provider = TemporalClientProvider(cfg.temporal)
+        return self._temporal_provider
 
     def get_agent_store(self) -> BaseAgentStore:
         """
@@ -851,6 +896,8 @@ class ApplicationContext:
         self._kpi_writer = KPIWriter(
             store=self.get_kpi_store(),
             defaults=KPIDefaults(static_dims={"service": "agentic"}),
+            summary_interval_s=self.configuration.app.kpi_log_summary_interval_sec,
+            summary_top_n=self.configuration.app.kpi_log_summary_top_n,
         )
         return self._kpi_writer
 
@@ -1000,7 +1047,9 @@ class ApplicationContext:
 
         # Timeouts
         tcfg = cfg.ai.timeout
-        logger.info("  ⏱️  Timeouts: connect=%ss, read=%ss", tcfg.connect, tcfg.read)
+        logger.info(
+            "  ⏱️  Rest Call Timeouts: connect=%ss, read=%ss", tcfg.connect, tcfg.read
+        )
 
         # Agents
         enabled_agents = [a.name for a in cfg.ai.agents if a.enabled]

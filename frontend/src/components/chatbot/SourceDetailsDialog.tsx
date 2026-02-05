@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import {
   Box,
   Button,
@@ -21,14 +22,13 @@ import {
   DialogTitle,
   Divider,
   Link as MUILink,
-  Tooltip,
   Typography,
 } from "@mui/material";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
-import { VectorSearchHit } from "../../slices/agentic/agenticOpenApi";
+import { useTranslation } from "react-i18next";
 import { useMarkdownDocumentViewer } from "../../common/useMarkdownDocumentViewer";
 import { usePdfDocumentViewer } from "../../common/usePdfDocumentViewer";
-import { useTranslation } from "react-i18next";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
+import { VectorSearchHit } from "../../slices/agentic/agenticOpenApi";
 import MarkdownRenderer from "../markdown/MarkdownRenderer";
 
 export function SourceDetailsDialog({
@@ -200,11 +200,11 @@ function Meta({ label, value }: { label: string; value: string }) {
       <Typography variant="caption" color="text.secondary">
         {label}
       </Typography>
-      <Tooltip title={value}>
+      <SimpleTooltip title={value}>
         <Typography variant="body2" noWrap>
           {value}
         </Typography>
-      </Tooltip>
+      </SimpleTooltip>
     </Box>
   );
 }

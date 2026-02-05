@@ -23,6 +23,8 @@
 // - Uses RTK OpenAPI hooks you already generated: useQueryLogs... + useTailLogsFile...
 // - Minimal UI plumbing: level floor, service filter, logger contains, text contains.
 
+import ClearIcon from "@mui/icons-material/Clear";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import {
   Box,
   Chip,
@@ -36,13 +38,11 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
-  Tooltip,
 } from "@mui/material";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import { LEVELS, SERVICE_OPTIONS, Level, ServiceId } from "./logType";
 import InputAdornment from "@mui/material/InputAdornment";
-import ClearIcon from "@mui/icons-material/Clear";
 import { t } from "i18next";
+import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
+import { Level, LEVELS, SERVICE_OPTIONS, ServiceId } from "./logType";
 
 const CONTROL_HEIGHT = 32; // one height to rule them all
 
@@ -262,7 +262,7 @@ export function LogControls({
           }}
         />
 
-        <Tooltip title="Refresh now">
+        <SimpleTooltip title="Refresh now">
           <IconButton
             size="small"
             onClick={onRefresh}
@@ -279,7 +279,7 @@ export function LogControls({
           >
             <RefreshIcon fontSize="small" />
           </IconButton>
-        </Tooltip>
+        </SimpleTooltip>
       </Stack>
 
       <Divider />

@@ -47,10 +47,12 @@ from agentic_backend.application_context import (
     get_default_model,
 )
 from agentic_backend.common.kf_fast_text_client import KfFastTextClient
+from agentic_backend.common.mcp_utils import MCPConnectionError
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.chatbot.chat_error_replies import human_error_message
 from agentic_backend.core.chatbot.chat_schema import (
     AttachmentRef,
     Channel,
@@ -65,7 +67,14 @@ from agentic_backend.core.chatbot.chat_schema import (
     ToolResultPart,
 )
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
-from agentic_backend.core.chatbot.stream_transcoder import StreamTranscoder
+from agentic_backend.core.chatbot.stream_transcoder import (
+    InterruptRaised,
+    StreamAgentError,
+    StreamTranscoder,
+)
+from agentic_backend.core.interrupts.streaming_interrupt_handler import (
+    StreamingInterruptHandler,
+)
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.session.attachement_processing import AttachementProcessing
 from agentic_backend.core.session.stores.base_session_attachment_store import (
@@ -75,6 +84,7 @@ from agentic_backend.core.session.stores.base_session_attachment_store import (
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 
 logger = logging.getLogger(__name__)
+PHASE_METRIC_ACTOR = KPIActor(type="system", user_id=None, groups=None)
 
 # Callback type used by WS controller to push events to clients
 CallbackType = Callable[[dict], None] | Callable[[dict], Awaitable[None]]
@@ -91,33 +101,23 @@ def _utcnow_dt() -> datetime:
 def _record_phase_metric(
     *,
     kpi: BaseKPIWriter,
-    actor: KPIActor,
     phase: str,
     start_ts: float,
-    session_id: str,
-    exchange_id: str,
     agent_name: str,
-    user_id: str | None = None,
-    status: str | None = None,
 ) -> None:
     ms = int((time.monotonic() - start_ts) * 1000)
+    # Keep cardinality low for Prometheus: only agent + phase + status.
     dims: Dims = {
-        "agent_id": agent_name,
-        "exchange_id": exchange_id,
-        "scope_type": "session",
-        "scope_id": session_id,
-        "agent_step": phase,
+        "agent_name": agent_name,
+        "phase": phase,
     }
-    if user_id:
-        dims["user_id"] = user_id
-    if status:
-        dims["status"] = status
-    kpi.gauge(
-        "chat.phase_latency_ms",
-        ms,
+    kpi.emit(
+        name="chat.phase_latency_ms",
+        type="timer",
+        value=ms,
         unit="ms",
         dims=dims,
-        actor=actor,
+        actor=PHASE_METRIC_ACTOR,
     )
 
 
@@ -183,11 +183,28 @@ class SessionOrchestrator:
         return lock
 
     async def _ensure_next_rank(self, session: SessionSchema) -> int:
+        # If next_rank is missing or stale (e.g., old sessions persisted without partial HITL steps),
+        # recompute from stored history length.
+        prior_msgs: List[ChatMessage] = []
         if session.next_rank is None:
             prior_msgs = await asyncio.to_thread(self.history_store.get, session.id)
-            prior: List[ChatMessage] = prior_msgs or []
-            session.next_rank = len(prior)
+        else:
+            # Lazy fetch only if we need to validate monotonicity
+            prior_msgs = await asyncio.to_thread(self.history_store.get, session.id)
+            if session.next_rank < len(prior_msgs):
+                logger.warning(
+                    "[SESSIONS] next_rank corrected from %s to %s for session=%s",
+                    session.next_rank,
+                    len(prior_msgs),
+                    session.id,
+                )
+                session.next_rank = len(prior_msgs)
+                await asyncio.to_thread(self.session_store.save, session)
+
+        if session.next_rank is None:
+            session.next_rank = len(prior_msgs)
             await asyncio.to_thread(self.session_store.save, session)
+
         return session.next_rank
 
     @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
@@ -233,28 +250,20 @@ class SessionOrchestrator:
             "chat.user_message_total",
             1,
             dims={
-                "agent_id": agent_name,
-                "scope_type": "session",
-                "scope_id": session_id,
-                "exchange_id": exchange_id,
+                "agent_name": agent_name,
             },
             actor=actor,
         )
-        t_total = time.monotonic()
         # 1) Get or create the session. We receive a None session_id for new sessions.
-        t_session = time.monotonic()
+        t_initial = time.monotonic()
         session = await self._get_or_create_session(
             user_id=user.uid, query=message, session_id=session_id
         )
         _record_phase_metric(
             kpi=self.kpi,
-            actor=actor,
             phase="session_get_create",
-            start_ts=t_session,
-            session_id=session.id,
-            exchange_id=exchange_id,
+            start_ts=t_initial,
             agent_name=agent_name,
-            user_id=user.uid,
         )
         # If this session was created with a placeholder title, refresh it now from the first prompt.
         t_title = time.monotonic()
@@ -266,41 +275,72 @@ class SessionOrchestrator:
             await asyncio.to_thread(self.session_store.save, session)
         _record_phase_metric(
             kpi=self.kpi,
-            actor=actor,
             phase="title_refresh",
             start_ts=t_title,
-            session_id=session.id,
-            exchange_id=exchange_id,
             agent_name=agent_name,
-            user_id=user.uid,
         )
         # Propagate effective session_id into runtime context so downstream calls
         # (vector search, attachments) can scope to the correct conversation.
         runtime_context.session_id = session.id
         # 2) Check if an agent instance can be created/initialized/reused
         t_agent_init = time.monotonic()
-        agent, is_cached = await self.agent_factory.create_and_init(
-            agent_name=agent_name,
-            runtime_context=runtime_context,
-            session_id=session.id,
-        )
+        try:
+            agent, is_cached = await self.agent_factory.create_and_init(
+                agent_name=agent_name,
+                runtime_context=runtime_context,
+                session_id=session.id,
+            )
+        except MCPConnectionError as mcp_err:
+            self.kpi.count(
+                "chat.exchange_error",
+                1,
+                dims={"agent_name": agent_name},
+                actor=actor,
+            )
+            logger.error(
+                "[SESSIONS] MCP init failed for agent=%s session=%s err=%s",
+                agent_name,
+                session.id,
+                mcp_err,
+            )
+            lang = (runtime_context.language or "").lower() if runtime_context else ""
+            if lang.startswith("fr"):
+                user_msg = (
+                    "L'agent n'a pas pu démarrer : au moins un serveur MCP requis est inaccessible. "
+                    "Réessayez plus tard ou contactez le support."
+                )
+            else:
+                user_msg = (
+                    "The agent cannot start because a required MCP server is unreachable. "
+                    "Please try again later or contact support."
+                )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "mcp_connection_failed",
+                    "message": user_msg,
+                },
+            )
         _record_phase_metric(
             kpi=self.kpi,
-            actor=actor,
             phase="agent_init",
             start_ts=t_agent_init,
-            session_id=session.id,
-            exchange_id=exchange_id,
             agent_name=agent_name,
-            user_id=user.uid,
         )
-        cache_result = "hit" if is_cached else "miss"
-        self.kpi.count(
-            "agent.cache_lookup_total",
-            1,
-            dims={"agent_id": agent_name, "result": cache_result},
-            actor=actor,
-        )
+        if is_cached:
+            self.kpi.count(
+                "agent.cache_hit",
+                1,
+                dims={"agent_name": agent_name},
+                actor=actor,
+            )
+        else:
+            self.kpi.count(
+                "agent.cache_miss",
+                1,
+                dims={"agent_name": agent_name},
+                actor=actor,
+            )
 
         try:
             if title_changed and session_callback:
@@ -317,13 +357,9 @@ class SessionOrchestrator:
                 )
                 _record_phase_metric(
                     kpi=self.kpi,
-                    actor=actor,
                     phase="history_restore",
                     start_ts=t_restore,
-                    session_id=session.id,
-                    exchange_id=exchange_id,
                     agent_name=agent_name,
-                    user_id=user.uid,
                 )
                 label = f"agent={agent_name} session={session.id}"
                 log_agent_message_summary(lc_history, label=label)
@@ -334,20 +370,17 @@ class SessionOrchestrator:
                 base_rank = await self._ensure_next_rank(session)
                 _record_phase_metric(
                     kpi=self.kpi,
-                    actor=actor,
                     phase="rank_seed",
                     start_ts=t_rank,
-                    session_id=session.id,
-                    exchange_id=exchange_id,
                     agent_name=agent_name,
-                    user_id=user.uid,
                 )
 
                 # 4) Emit the user message immediately
+                next_rank_cursor = base_rank  # first free rank in this session
                 user_msg = ChatMessage(
                     session_id=session.id,
                     exchange_id=exchange_id,
-                    rank=base_rank,
+                    rank=next_rank_cursor,
                     timestamp=_utcnow_dt(),
                     role=Role.user,
                     channel=Channel.final,
@@ -356,132 +389,182 @@ class SessionOrchestrator:
                 )
                 all_msgs: List[ChatMessage] = [user_msg]
                 await self._emit(callback, user_msg)
+                next_rank_cursor += 1  # advance past the user message
 
                 # Stream agent responses via the transcoder
-                saw_final_assistant = False
                 agent_msgs: List[ChatMessage] = []
-                had_error = False
-                had_cancelled = False
-                error_code: Optional[str] = None
-                try:
-                    # Timer covers the entire exchange; default status="ok" unless overridden.
-                    with self.kpi.timer(
-                        "chat.exchange_latency_ms",
-                        dims={
-                            "agent_id": agent_name,
-                            "user_id": user.uid,
-                            "session_id": session.id,
-                            "exchange_id": exchange_id,
-                        },
-                        actor=actor,
-                    ) as kpi_dims:
-                        # Build input messages ensuring the last message is the Human question.
-                        input_messages = lc_history + [HumanMessage(message)]
 
-                        stream_start = time.monotonic()
-                        stream_status = "ok"
-                        try:
-                            agent_msgs = await self.transcoder.stream_agent_response(
-                                agent=agent,
-                                input_messages=input_messages,
-                                session_id=session.id,
-                                exchange_id=exchange_id,
-                                agent_name=agent_name,
-                                base_rank=base_rank,
-                                start_seq=1,  # user message already consumed rank=base_rank
-                                callback=callback,
-                                user_context=user,
-                                runtime_context=runtime_context,
-                            )
-                        except WebSocketDisconnect:
-                            stream_status = "disconnect"
-                            had_cancelled = True
-                            error_code = "client_disconnect"
-                            kpi_dims["status"] = "cancelled"
-                            kpi_dims["error_code"] = error_code
-                            logger.info(
-                                "Agent execution cancelled by client disconnect (agent=%s session=%s exchange=%s)",
-                                agent_name,
-                                session.id,
-                                exchange_id,
-                            )
-                        except asyncio.CancelledError:
-                            stream_status = "cancelled"
-                            had_cancelled = True
-                            error_code = "cancelled"
-                            kpi_dims["error_code"] = error_code
-                            raise
-                        except Exception:
-                            stream_status = "error"
-                            raise
-                        finally:
-                            _record_phase_metric(
-                                kpi=self.kpi,
-                                actor=actor,
-                                phase="stream",
-                                start_ts=stream_start,
-                                session_id=session.id,
-                                exchange_id=exchange_id,
-                                agent_name=agent_name,
-                                user_id=user.uid,
-                                status=stream_status,
-                            )
-                        all_msgs.extend(agent_msgs)
-                        # Success signal: exactly one assistant/final per exchange (enforced by transcoder)
-                        saw_final_assistant = any(
-                            (m.role == Role.assistant and m.channel == Channel.final)
-                            for m in agent_msgs
-                        )
-                        # Error signal: explicit error marker from the transcoder.
-                        for msg in agent_msgs:
-                            extras = msg.metadata.extras if msg.metadata else {}
-                            if (
-                                extras.get("error") is True
-                                or msg.channel == Channel.error
-                            ):
-                                had_error = True
-                                error_code = extras.get("error_code") or error_code
-                                break
-                        if had_error:
-                            kpi_dims["status"] = "error"
-                            if error_code:
-                                kpi_dims["error_code"] = error_code
-                except asyncio.CancelledError:
-                    logger.info(
-                        "Agent execution cancelled by client (agent=%s session=%s exchange=%s)",
+                # Build input messages ensuring the last message is the Human question.
+                input_messages = lc_history + [HumanMessage(message)]
+                stream_start = time.monotonic()
+                try:
+                    agent_msgs = await self.transcoder.stream_agent_response(
+                        agent=agent,
+                        input_messages=input_messages,
+                        session_id=session.id,
+                        exchange_id=exchange_id,
+                        agent_name=agent_name,
+                        base_rank=next_rank_cursor,
+                        start_seq=0,  # start at the next free rank
+                        callback=callback,
+                        user_context=user,
+                        runtime_context=runtime_context,
+                        interrupt_handler=self._make_streaming_interrupt_handler(
+                            session.id, exchange_id, callback
+                        ),
+                    )
+                except WebSocketDisconnect:
+                    self.kpi.count(
+                        "chat.exchange_error",
+                        1,
+                        dims={
+                            "agent_name": agent_name,
+                        },
+                        actor=PHASE_METRIC_ACTOR,
+                    )
+                    logger.error(
+                        "Agent execution cancelled by client disconnect (agent=%s session=%s exchange=%s)",
                         agent_name,
                         session.id,
                         exchange_id,
                     )
+                    # do we need raise here ?
+                except InterruptRaised as ir:
+                    # Persist what we already streamed (user + any partial agent msgs)
+                    if not agent_msgs and getattr(ir, "partial_messages", None):
+                        agent_msgs = ir.partial_messages
+                    all_msgs.extend(agent_msgs)
+                    session.updated_at = _utcnow_dt()
+                    session.next_rank = base_rank + len(all_msgs)
+                    await asyncio.to_thread(self.session_store.save, session)
+                    await asyncio.to_thread(
+                        self.history_store.save, session.id, all_msgs, user.uid
+                    )
+                    logger.info(
+                        "[SESSIONS] interrupt persisted session=%s exchange=%s msgs=%d",
+                        session.id,
+                        exchange_id,
+                        len(all_msgs),
+                    )
                     raise
-                except Exception:
-                    logger.exception("Agent execution failed")
-                    # KPI timer already recorded status="error" on exception
-                finally:
-                    # Count the exchange outcome
-                    exchange_status = (
-                        "cancelled"
-                        if had_cancelled
-                        else (
-                            "error"
-                            if had_error
-                            else ("ok" if saw_final_assistant else "error")
+                except asyncio.CancelledError:
+                    self.kpi.count(
+                        "chat.exchange_error",
+                        1,
+                        dims={
+                            "agent_name": agent_name,
+                        },
+                        actor=PHASE_METRIC_ACTOR,
+                    )
+                    raise
+                except StreamAgentError as sae:
+                    # Preserve everything already emitted by the transcoder.
+                    agent_msgs = sae.partial_messages
+                    user_msg = human_error_message(runtime_context, sae.original)
+                    # Next free rank after all agent messages (base_rank consumed by user at 0).
+                    safe_rank = base_rank + len(agent_msgs) + 1
+                    agent_msgs.append(
+                        ChatMessage(
+                            session_id=session.id,
+                            exchange_id=exchange_id,
+                            rank=safe_rank,
+                            timestamp=_utcnow_dt(),
+                            role=Role.assistant,
+                            channel=Channel.final,
+                            parts=[TextPart(text=user_msg)],
+                            metadata=ChatMetadata(),
                         )
                     )
-                    exchange_dims: Dict[str, str | None] = {
-                        "agent_id": agent_name,
-                        "user_id": user.uid,
-                        "session_id": session.id,
-                        "exchange_id": exchange_id,
-                        "status": exchange_status,
-                    }
-                    if exchange_status in {"error", "cancelled"} and error_code:
-                        exchange_dims["error_code"] = error_code
+                    # Important: reset cached agent state to avoid stale tool_calls in MemorySaver
+                    try:
+                        await self.agent_factory.teardown_session_agents(session.id)
+                    except Exception:
+                        logger.warning(
+                            "[SESSIONS] teardown_session_agents failed session=%s after StreamAgentError",
+                            session.id,
+                            exc_info=True,
+                        )
                     self.kpi.count(
-                        "chat.exchange_total",
+                        "chat.exchange_error",
                         1,
-                        dims=exchange_dims,
-                        actor=actor,
+                        dims={
+                            "agent_name": agent_name,
+                        },
+                        actor=PHASE_METRIC_ACTOR,
+                    )
+                except Exception as e:
+                    user_msg = human_error_message(runtime_context, e)
+                    safe_rank = base_rank + len(agent_msgs) + 1
+                    agent_msgs.append(
+                        ChatMessage(
+                            session_id=session.id,
+                            exchange_id=exchange_id,
+                            rank=safe_rank,
+                            timestamp=_utcnow_dt(),
+                            role=Role.assistant,
+                            channel=Channel.final,
+                            parts=[
+                                TextPart(text=user_msg),
+                            ],
+                            metadata=ChatMetadata(),
+                        )
+                    )
+                    try:
+                        await self.agent_factory.teardown_session_agents(session.id)
+                    except Exception:
+                        logger.warning(
+                            "[SESSIONS] teardown_session_agents failed session=%s after generic exception",
+                            session.id,
+                            exc_info=True,
+                        )
+                    self.kpi.count(
+                        "chat.exchange_error",
+                        1,
+                        dims={
+                            "agent_name": agent_name,
+                        },
+                        actor=PHASE_METRIC_ACTOR,
+                    )
+                finally:
+                    _record_phase_metric(
+                        kpi=self.kpi,
+                        phase="stream",
+                        start_ts=stream_start,
+                        agent_name=agent_name,
+                    )
+                all_msgs.extend(agent_msgs)
+
+                # Trace what will be persisted for this exchange (helps diagnose missing items on reload)
+                try:
+                    msg_summary = [
+                        {
+                            "rank": m.rank,
+                            "role": m.role,
+                            "channel": m.channel,
+                            "exchange": m.exchange_id,
+                            "parts": [
+                                getattr(p, "type", None) for p in (m.parts or [])
+                            ],
+                        }
+                        for m in all_msgs
+                    ]
+                    logger.info(
+                        "[SESSIONS][PERSIST_TRACE] session=%s exchange=%s total_msgs=%d ranks=%s",
+                        session.id,
+                        exchange_id,
+                        len(all_msgs),
+                        [m.get("rank") for m in msg_summary],
+                    )
+                    logger.debug(
+                        "[SESSIONS][PERSIST_TRACE] details=%s",
+                        msg_summary,
+                    )
+                except Exception as trace_err:
+                    logger.warning(
+                        "[SESSIONS][PERSIST_TRACE] failed to summarize messages session=%s exchange=%s err=%s",
+                        session.id,
+                        exchange_id,
+                        trace_err,
                     )
 
                 # 6) Attach the raw runtime context (single source of truth)
@@ -502,56 +585,252 @@ class SessionOrchestrator:
                 )
                 _record_phase_metric(
                     kpi=self.kpi,
-                    actor=actor,
                     phase="persist",
                     start_ts=t_persist,
-                    session_id=session.id,
-                    exchange_id=exchange_id,
                     agent_name=agent_name,
-                    user_id=user.uid,
-                )
-
-                _record_phase_metric(
-                    kpi=self.kpi,
-                    actor=actor,
-                    phase="total",
-                    start_ts=t_total,
-                    session_id=session.id,
-                    exchange_id=exchange_id,
-                    agent_name=agent_name,
-                    user_id=user.uid,
                 )
 
                 return session, all_msgs
         finally:
+            _record_phase_metric(
+                kpi=self.kpi,
+                phase="total",
+                start_ts=t_initial,
+                agent_name=agent_name,
+            )
             self.agent_factory.release_agent(session.id, agent_name)
             stats = self.agent_factory.get_cache_stats()
             if stats:
+                self.kpi.gauge("agent.cache_entries", stats.size, actor=actor)
                 self.kpi.gauge(
-                    "agent.cache_entries",
-                    stats.size,
-                    actor=actor,
+                    "agent.cache_inflight_total", stats.in_use_total, actor=actor
                 )
                 self.kpi.gauge(
-                    "agent.cache_inflight_total",
-                    stats.in_use_total,
-                    actor=actor,
+                    "agent.cache_inflight_entries", stats.in_use_entries, actor=actor
                 )
                 self.kpi.gauge(
-                    "agent.cache_inflight_entries",
-                    stats.in_use_entries,
-                    actor=actor,
-                )
-                self.kpi.gauge(
-                    "agent.cache_evictions_total",
-                    stats.evictions,
-                    actor=actor,
+                    "agent.cache_evictions_total", stats.evictions, actor=actor
                 )
                 self.kpi.gauge(
                     "agent.cache_blocked_evictions_total",
                     stats.blocked_evictions,
                     actor=actor,
                 )
+
+    @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
+    @authorize(action=Action.UPDATE, resource=Resource.SESSIONS)
+    async def resume_interrupted_exchange(
+        self,
+        *,
+        user: KeycloakUser,
+        callback: CallbackType,
+        session_callback: SessionCallbackType | None = None,
+        session_id: str,
+        exchange_id: str,
+        agent_name: str | None,
+        resume_payload: Dict[str, Any],
+        runtime_context: RuntimeContext | None = None,
+    ) -> Tuple[SessionSchema, List[ChatMessage]]:
+        """
+        Resumes an execution that was interrupted (e.g. for Human-in-the-loop).
+        Delegates to the transcoder with the resume payload.
+        """
+        logger.info(
+            "[SESSIONS] resume_interrupted_exchange start session=%s exchange=%s agent=%s user=%s resume_keys=%s",
+            session_id,
+            exchange_id,
+            agent_name,
+            user.uid,
+            list((resume_payload or {}).keys()),
+        )
+        # 1. Authorize
+        await asyncio.to_thread(
+            self._authorize_user_action_on_session, session_id, user, Action.UPDATE
+        )
+
+        logger.info(
+            "resume_interrupted_exchange user_id=%s session_id=%s exchange_id=%s",
+            user.uid,
+            session_id,
+            exchange_id,
+        )
+
+        # 2. Retrieve Session
+        session = self.session_store.get(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "session_not_found",
+                    "message": f"Session {session_id} not found.",
+                },
+            )
+
+        # 3. Resolve Agent
+        actual_agent_name = agent_name or session.agent_name
+        if not actual_agent_name:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "agent_not_specified",
+                    "message": "No agent specified for resume.",
+                },
+            )
+
+        # 4. Setup Context
+        if runtime_context:
+            runtime_context.session_id = session.id
+        else:
+            runtime_context = RuntimeContext(session_id=session.id)
+        logger.info(
+            "[SESSIONS] resume runtime_context session_id=%s has_tokens=%s",
+            runtime_context.session_id,
+            bool(runtime_context.access_token),
+        )
+
+        # 5. KPI Actor
+        actor = KPIActor(type="human", user_id=user.uid, groups=user.groups)
+
+        # 6. Get Agent (Must be cached for in-memory checkpointer to work)
+        agent, is_cached = await self.agent_factory.create_and_init(
+            agent_name=actual_agent_name,
+            runtime_context=runtime_context,
+            session_id=session.id,
+        )
+        logger.info(
+            "[SESSIONS] resume agent_ready agent=%s cached=%s session=%s",
+            actual_agent_name,
+            is_cached,
+            session.id,
+        )
+        if not is_cached:
+            logger.warning(
+                "[SESSIONS] resume aborted: agent cache miss session=%s exchange=%s agent=%s",
+                session.id,
+                exchange_id,
+                actual_agent_name,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "resume_unavailable",
+                    "message": "Cannot resume this exchange because the agent state is unavailable. Please restart the request.",
+                },
+            )
+
+        # Optional: fetch checkpoint from the agent's in-memory saver (best-effort) to observe state reuse.
+        checkpoint_obj: dict | None = None
+        try:
+            streaming_mem = getattr(agent, "streaming_memory", None)
+            if streaming_mem and hasattr(streaming_mem, "get"):
+                checkpoint_obj = streaming_mem.get(
+                    {"configurable": {"thread_id": session.id}}
+                )
+            elif streaming_mem and hasattr(streaming_mem, "get_state"):
+                checkpoint_obj = streaming_mem.get_state(
+                    {"configurable": {"thread_id": session.id}}
+                )
+            if checkpoint_obj:
+                logger.info(
+                    "[SESSIONS] resume checkpoint fetched agent=%s session=%s checkpoint_keys=%s",
+                    actual_agent_name,
+                    session.id,
+                    list(checkpoint_obj.keys())
+                    if isinstance(checkpoint_obj, dict)
+                    else type(checkpoint_obj).__name__,
+                )
+                if isinstance(resume_payload, dict):
+                    resume_payload.setdefault(
+                        "checkpoint",
+                        checkpoint_obj.get("checkpoint", checkpoint_obj)
+                        if isinstance(checkpoint_obj, dict)
+                        else checkpoint_obj,
+                    )
+        except Exception as cp_err:
+            logger.warning(
+                "[SESSIONS] resume could not fetch checkpoint agent=%s session=%s err=%s",
+                actual_agent_name,
+                session.id,
+                cp_err,
+            )
+
+        try:
+            rank_lock = self.get_rank_lock(session.id)
+            async with rank_lock:
+                base_rank = await self._ensure_next_rank(session)
+                logger.info(
+                    "[SESSIONS] resume base_rank=%s next_rank=%s session=%s",
+                    base_rank,
+                    session.next_rank,
+                    session.id,
+                )
+                all_msgs: List[ChatMessage] = []
+
+                try:
+                    with self.kpi.timer(
+                        "chat.resume_latency_ms",
+                        dims={
+                            "agent_id": actual_agent_name,
+                            "user_id": user.uid,
+                            "session_id": session.id,
+                            "exchange_id": exchange_id,
+                        },
+                        actor=actor,
+                    ):
+                        agent_msgs = await self.transcoder.stream_agent_response(
+                            agent=agent,
+                            input_messages=[],  # Resume does not inject new messages into state
+                            session_id=session.id,
+                            exchange_id=exchange_id,
+                            agent_name=actual_agent_name,
+                            base_rank=base_rank,
+                            start_seq=0,
+                            callback=callback,
+                            user_context=user,
+                            runtime_context=runtime_context,
+                            interrupt_handler=self._make_streaming_interrupt_handler(
+                                session.id, exchange_id, callback
+                            ),
+                            resume_payload=resume_payload,
+                        )
+                        all_msgs.extend(agent_msgs)
+                        logger.info(
+                            "[SESSIONS] resume completed agent_msgs=%d session=%s exchange=%s",
+                            len(agent_msgs),
+                            session.id,
+                            exchange_id,
+                        )
+                except InterruptRaised as ir:
+                    # Persist partial messages before the next HITL turn
+                    agent_msgs = getattr(ir, "partial_messages", [])
+                    all_msgs.extend(agent_msgs)
+                    session.updated_at = _utcnow_dt()
+                    session.next_rank = base_rank + len(all_msgs)
+                    await asyncio.to_thread(self.session_store.save, session)
+                    await asyncio.to_thread(
+                        self.history_store.save, session.id, all_msgs, user.uid
+                    )
+                    logger.info(
+                        "[SESSIONS] resume interrupt persisted session=%s exchange=%s msgs=%d",
+                        session.id,
+                        exchange_id,
+                        len(all_msgs),
+                    )
+                    raise
+
+                # 7. Persist
+                if all_msgs:
+                    session.updated_at = _utcnow_dt()
+                    session.next_rank = base_rank + len(all_msgs)
+                    await asyncio.to_thread(self.session_store.save, session)
+                    await asyncio.to_thread(
+                        self.history_store.save, session.id, all_msgs, user.uid
+                    )
+
+                return session, all_msgs
+
+        finally:
+            self.agent_factory.release_agent(session.id, actual_agent_name)
 
     # ---------------- Session/History helpers (intentionally here) ----------------
 
@@ -1029,6 +1308,27 @@ class SessionOrchestrator:
         # Ensure the user has rights on this session (create/update if needed)
         self._authorize_user_action_on_session(session.id, user, Action.UPDATE)
 
+        # Prevent duplicate filenames within a session (UI convenience + avoids double ingest)
+        try:
+            if self.attachments_store:
+                existing = await asyncio.to_thread(
+                    self.attachments_store.list_for_session, session.id
+                )
+                if any(rec.name == file.filename for rec in existing):
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "attachment_duplicate",
+                            "message": f"Attachment '{file.filename}' already exists in this session.",
+                        },
+                    )
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception(
+                "[SESSIONS][ATTACH] Failed during duplicate attachment check"
+            )
+
         # 1) Secure session-mode client for Knowledge Flow (Bearer user token)
         client = KfFastTextClient(
             access_token=access_token,
@@ -1247,6 +1547,16 @@ class SessionOrchestrator:
         # action is passed for future flexibility (ex: session sharing with attached permissions)
         return session.user_id == user.uid
 
+    def _make_streaming_interrupt_handler(
+        self, session_id: str, exchange_id: str, callback: CallbackType
+    ) -> StreamingInterruptHandler:
+        async def emit(event):
+            await self._emit(callback, event)
+
+        # Checkpoint persistence is already done by the agent's MemorySaver;
+        # we don't need an extra saver here for the PoC.
+        return StreamingInterruptHandler(emit=emit)
+
     async def _emit(self, callback: CallbackType, message: ChatMessage) -> None:
         """
         Purpose:
@@ -1284,6 +1594,33 @@ class SessionOrchestrator:
         if not hist:
             _rlog("empty", msg="No messages to restore", session_id=session.id)
             return []
+
+        try:
+            logger.info(
+                "[RESTORE][LOAD] session=%s loaded_msgs=%d ranks=%s",
+                session.id,
+                len(hist),
+                [m.rank for m in hist],
+            )
+            logger.debug(
+                "[RESTORE][LOAD] details=%s",
+                [
+                    {
+                        "rank": m.rank,
+                        "role": m.role,
+                        "channel": m.channel,
+                        "exchange": m.exchange_id,
+                        "parts": [getattr(p, "type", None) for p in (m.parts or [])],
+                    }
+                    for m in hist
+                ],
+            )
+        except Exception as trace_err:
+            logger.warning(
+                "[RESTORE][LOAD] failed to log summary session=%s err=%s",
+                session.id,
+                trace_err,
+            )
 
         # 1) Chronology (rank is authoritative)
         hist = sorted(hist, key=lambda m: m.rank)
@@ -1343,6 +1680,7 @@ class SessionOrchestrator:
         pending_tool_calls_by_ex: dict[str, list[dict]] = defaultdict(list)
         call_name_by_ex: dict[str, dict[str, str]] = defaultdict(dict)
         known_call_ids_by_ex: dict[str, set[str]] = defaultdict(set)
+        seen_tool_results_by_ex: dict[str, set[str]] = defaultdict(set)
         current_exchange: str | None = None
 
         def flush_exchange_calls_if_any(ex_id: str | None):
@@ -1351,13 +1689,21 @@ class SessionOrchestrator:
                 return
             calls = pending_tool_calls_by_ex.get(ex_id)
             if calls:
+                # Emit tool_calls only if at least one tool_result was seen in this exchange.
+                if len(seen_tool_results_by_ex.get(ex_id, set())) == 0:
+                    logger.info(
+                        "[RESTORE][SKIP_CALLS] exchange=%s pending_calls=%d reason=no_tool_result_in_exchange",
+                        ex_id,
+                        len(calls),
+                    )
+                    pending_tool_calls_by_ex[ex_id].clear()
+                    return
                 ai = AIMessage(content="", tool_calls=list(calls))
                 lc_history.append(ai)
-                _rlog(
-                    "emit_ai_calls",
-                    msg="Emitted AI(tool_calls)",
-                    exchange_id=ex_id,
-                    calls=[{"id": c.get("id"), "name": c.get("name")} for c in calls],
+                logger.info(
+                    "[RESTORE][EMIT_CALLS] exchange=%s calls=%s",
+                    ex_id,
+                    [{"id": c.get("id"), "name": c.get("name")} for c in calls],
                 )
                 pending_tool_calls_by_ex[ex_id].clear()
 
@@ -1400,27 +1746,35 @@ class SessionOrchestrator:
                             known_call_ids_by_ex[current_exchange].add(call_id)
                         if call_id and p.name:
                             call_name_by_ex[current_exchange][call_id] = p.name
-                        _rlog(
-                            "acc_call",
-                            msg="Accumulate tool_call",
-                            exchange_id=current_exchange,
-                            call_id=call_id,
-                            name=name,
+                        logger.info(
+                            "[RESTORE][ACC_CALL] exchange=%s call_id=%s name=%s pending_calls=%d",
+                            current_exchange,
+                            call_id,
+                            name,
+                            len(pending_tool_calls_by_ex[current_exchange]),
                         )
                 continue
 
             # Tool result → only if matching call_id exists in THIS exchange
             if m.role == Role.tool and m.channel == Channel.tool_result:
+                # Pre-mark results so grouped tool_calls aren't skipped
+                for p in m.parts or []:
+                    if (
+                        isinstance(p, ToolResultPart)
+                        and p.call_id in known_call_ids_by_ex[current_exchange]
+                    ):
+                        seen_tool_results_by_ex[current_exchange].add(p.call_id)
+
                 # Ensure the grouped AI(tool_calls=[...]) for *this* exchange precedes the ToolMessage(s).
                 flush_exchange_calls_if_any(current_exchange)
+
                 for p in m.parts or []:
                     if isinstance(p, ToolResultPart):
                         if p.call_id not in known_call_ids_by_ex[current_exchange]:
-                            _rlog(
-                                "skip_orphan_tool_result",
-                                msg="Skip orphan ToolMessage (no matching call in this exchange)",
-                                exchange_id=current_exchange,
-                                call_id=p.call_id,
+                            logger.info(
+                                "[RESTORE][SKIP_ORPHAN_RESULT] exchange=%s call_id=%s",
+                                current_exchange,
+                                p.call_id,
                             )
                             continue
                         content = p.content
@@ -1438,21 +1792,19 @@ class SessionOrchestrator:
                                 content=content, name=name, tool_call_id=p.call_id
                             )
                             lc_history.append(tm)
-                            _rlog(
-                                "emit_tool",
-                                msg="Emitted ToolMessage",
-                                exchange_id=current_exchange,
-                                call_id=p.call_id,
-                                name=name,
-                                preview=_preview(content),
+                            seen_tool_results_by_ex[current_exchange].add(p.call_id)
+                            logger.info(
+                                "[RESTORE][EMIT_TOOL_RESULT] exchange=%s call_id=%s name=%s",
+                                current_exchange,
+                                p.call_id,
+                                name,
                             )
                         except Exception:
-                            _rlog(
-                                "emit_tool_error",
-                                msg="Failed to restore ToolMessage",
-                                exchange_id=current_exchange,
-                                call_id=p.call_id,
-                                name=name,
+                            logger.warning(
+                                "[RESTORE][EMIT_TOOL_ERROR] exchange=%s call_id=%s name=%s",
+                                current_exchange,
+                                p.call_id,
+                                name,
                             )
                             continue
                 continue
@@ -1502,7 +1854,33 @@ class SessionOrchestrator:
 
         # Tail: if transcript ends with pending calls and no results, keep the grouped AI(tool_calls=...)
         flush_exchange_calls_if_any(current_exchange)
-        _rlog("restore_done", msg="Restoration complete", total=len(lc_history))
+        try:
+            logger.info(
+                "[RESTORE][SUMMARY] session=%s total=%d exchanges=%d",
+                session.id,
+                len(lc_history),
+                len({m.exchange_id for m in hist}),
+            )
+            logger.debug(
+                "[RESTORE][SUMMARY] exchanges_calls_results=%s",
+                {
+                    ex: {
+                        "calls": len(pending_tool_calls_by_ex.get(ex, [])),
+                        "seen_results": len(seen_tool_results_by_ex.get(ex, set())),
+                    }
+                    for ex in set(
+                        list(pending_tool_calls_by_ex.keys())
+                        + list(seen_tool_results_by_ex.keys())
+                    )
+                },
+            )
+        except Exception:
+            logger.debug(
+                "[RESTORE][SUMMARY] session=%s total=%d (failed to log details)",
+                session.id,
+                len(lc_history),
+            )
+            pass
 
         return lc_history
 

@@ -124,3 +124,12 @@ class SimpleAgentFlow(AgentFlow):
             # Note: response_metadata is often critical and should be preserved
             response_metadata=getattr(temp_message, "response_metadata", {}),
         )
+
+    # --- State schema for Temporal hydration ---
+    def get_state_schema(self):
+        """
+        Minimal state: just the message history required by SimpleExpertState.
+
+        This lets AgentFlow.hydrate_state work when the agent is run via Temporal.
+        """
+        return SimpleExpertState

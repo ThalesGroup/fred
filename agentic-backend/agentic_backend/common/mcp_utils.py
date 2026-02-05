@@ -168,6 +168,8 @@ async def get_connected_mcp_client_for_agent(
     agent_name: str,
     mcp_servers: List[MCPServerConfiguration],
     runtime_context: RuntimeContext,
+    *,
+    tool_interceptors: list | None = None,
     # -----------------------------------------------
 ) -> MultiServerMCPClient:
     """
@@ -243,7 +245,9 @@ async def get_connected_mcp_client_for_agent(
             raise
         connections[server.id] = conn_cfg
 
-    client = MultiServerMCPClient(connections)
+    client = MultiServerMCPClient(
+        connections, tool_interceptors=tool_interceptors or []
+    )
 
     # Validate connections by attempting to load tools per server
     exceptions: list[Exception] = []

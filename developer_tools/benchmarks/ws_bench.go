@@ -65,6 +65,7 @@ type config struct {
 	Timeout            time.Duration
 	InsecureTLS        bool
 	AllowEmptyTok      bool
+	DebugEvents        bool
 }
 
 type result struct {
@@ -208,6 +209,7 @@ func parseFlags() config {
 	timeoutFlag := flag.Duration("timeout", 90*time.Second, "Timeout per request")
 	insecureFlag := flag.Bool("insecure", false, "Skip TLS verification for wss://")
 	allowEmptyTok := flag.Bool("allow-empty-token", false, "Allow missing token (not recommended)")
+	debugEvents := flag.Bool("debug-events", false, "Print every WebSocket event payload")
 
 	flag.Parse()
 
@@ -243,6 +245,7 @@ func parseFlags() config {
 		Timeout:            *timeoutFlag,
 		InsecureTLS:        *insecureFlag,
 		AllowEmptyTok:      *allowEmptyTok,
+		DebugEvents:        *debugEvents,
 	}
 }
 
@@ -362,6 +365,9 @@ func runOnceWithSession(cfg config, sessionID string) result {
 		_, msg, err := conn.Read(ctx)
 		if err != nil {
 			return result{Err: err}
+		}
+		if cfg.DebugEvents {
+			fmt.Printf("event raw: %s\n", string(msg))
 		}
 		var env eventEnvelope
 		if err := json.Unmarshal(msg, &env); err != nil {
@@ -612,9 +618,16 @@ func deriveSessionURL(wsURL string) (string, error) {
 		parsed.Scheme = "https"
 	}
 
-	if strings.Contains(parsed.Path, "/chatbot/query/ws") {
-		parsed.Path = strings.Replace(parsed.Path, "/chatbot/query/ws", "/chatbot/session", 1)
-		return parsed.String(), nil
+	// Support both main and baseline websocket routes.
+	replacements := []string{
+		"/chatbot/query/ws-baseline",
+		"/chatbot/query/ws",
+	}
+	for _, old := range replacements {
+		if strings.Contains(parsed.Path, old) {
+			parsed.Path = strings.Replace(parsed.Path, old, "/chatbot/session", 1)
+			return parsed.String(), nil
+		}
 	}
 
 	return "", fmt.Errorf("cannot derive session URL from %s (set -session-url)", wsURL)

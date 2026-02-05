@@ -1,30 +1,19 @@
+# fred_core/model/factory.py
+#
 # Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Licensed under the Apache License, Version 2.0
+
+from __future__ import annotations
 
 import logging
 import os
-from typing import Dict, Iterable, Optional, Type
+from typing import Any, Dict, Iterable, Optional, Type
 
 from langchain_core.embeddings import Embeddings as LCEmbeddings
-
-# Chat + Embeddings base types
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_ollama import ChatOllama, OllamaEmbeddings
-
-# Provider implementations
 from langchain_openai import (
     AzureChatOpenAI,
     AzureOpenAIEmbeddings,
@@ -34,12 +23,41 @@ from langchain_openai import (
 from pydantic import BaseModel
 
 from fred_core.common.structures import ModelConfiguration
+from fred_core.model.http_clients import get_shared_stack, strip_transport_settings
 from fred_core.model.models import ModelProvider
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Logging hygiene
+# ---------------------------------------------------------------------------
 
-# ---------- Small shared helpers (DRY) ----------
+_REDACT_SUBSTRINGS = ("key", "token", "secret", "password", "authorization")
+
+
+def _redact_settings(d: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for k, v in (d or {}).items():
+        lk = k.lower()
+        if any(s in lk for s in _REDACT_SUBSTRINGS):
+            out[k] = "***REDACTED***"
+        else:
+            out[k] = v
+    return out
+
+
+def _info_provider(cfg: ModelConfiguration, settings: Dict[str, Any]) -> None:
+    logger.info(
+        "[MODEL] Provider=%s Name=%s Settings=%s",
+        cfg.provider,
+        cfg.name,
+        _redact_settings(settings),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Small shared helpers (DRY)
+# ---------------------------------------------------------------------------
 
 
 def _require_env(var: str) -> str:
@@ -49,69 +67,139 @@ def _require_env(var: str) -> str:
     return v
 
 
-def _require_settings(settings: Dict, required: Iterable[str], context: str) -> None:
+def _require_settings(
+    settings: Dict[str, Any], required: Iterable[str], context: str
+) -> None:
     missing = [k for k in required if not settings.get(k)]
     if missing:
         raise ValueError(f"Missing {missing} in {context} settings")
 
 
-def _info_provider(cfg: ModelConfiguration) -> None:
-    logger.info(
-        "[MODEL] Provider=%s Name=%s Settings=%s",
-        cfg.provider,
-        cfg.name,
-        cfg.settings or {},
-    )
+# ---------------------------------------------------------------------------
+# Defaults: model behavior (NOT transport)
+# Keep transport defaults in http_clients.py only.
+# ---------------------------------------------------------------------------
+
+_DEFAULT_CHAT_BEHAVIOR: Dict[str, Any] = {
+    "temperature": 0.0,
+    "max_retries": 0,
+}
 
 
-# =================================================
-# =============== Chat model factory ===============
-# =================================================
+def _apply_chat_defaults(settings: Dict[str, Any]) -> None:
+    for k, v in _DEFAULT_CHAT_BEHAVIOR.items():
+        settings.setdefault(k, v)
+
+
+def _apply_embedding_defaults(settings: Dict[str, Any]) -> None:
+    # Embeddings do not use temperature; keep only retry default.
+    settings.pop("temperature", None)
+    settings.setdefault("max_retries", 0)
+
+
+def _normalize_openai_compat(settings: Dict[str, Any]) -> None:
+    """
+    Users often write base_url in YAML. LangChain/OpenAI wrappers typically use openai_api_base.
+    We accept both and normalize to openai_api_base.
+    """
+    if "base_url" in settings and "openai_api_base" not in settings:
+        settings["openai_api_base"] = settings.pop("base_url")
+
+
+# ---------------------------------------------------------------------------
+# Chat model factory
+# ---------------------------------------------------------------------------
 
 
 def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
     if cfg is None:
-        # In YAML, model can be omitted and replaced by default; we should never hit this.
         raise ValueError("Model configuration is None")
-    """
-    Fred rationale:
-    - One place to instantiate chat models for all providers.
-    - Only this function knows per-vendor auth/wiring.
-    """
-    assert cfg and cfg.provider, "Model configuration is required"
-    provider = cfg.provider.lower()
-    settings: Dict = dict(cfg.settings or {})
+    if not cfg.provider:
+        raise ValueError("Model configuration provider is required")
 
+    provider = cfg.provider.lower()
+    settings: Dict[str, Any] = dict(cfg.settings or {})
+
+    # Prevent user from injecting their own clients and breaking lifecycle.
+    settings.pop("http_client", None)
+    settings.pop("http_async_client", None)
+
+    # Provider-specific and type-specific defaults
+    _apply_chat_defaults(settings)
+    if provider in (
+        ModelProvider.OPENAI.value,
+        ModelProvider.AZURE_OPENAI.value,
+        ModelProvider.AZURE_APIM.value,
+    ):
+        _normalize_openai_compat(settings)
+
+    # Extract an optional request-level timeout (applied at OpenAI client level)
+    request_level_timeout = settings.get("request_timeout", None)
+
+    # Allocate / reuse shared HTTP clients based on (possibly empty) settings
+    # IMPORTANT: strip transport keys before forwarding to LangChain wrappers.
+    tuning, h_client, a_client = get_shared_stack(cfg, settings=settings)
+    strip_transport_settings(settings)
+
+    # Determine effective timeout to pass to the SDK wrapper.
+    # If request_timeout is explicit, use it. Otherwise, enforce the transport timeout.
+    # This prevents the OpenAI SDK from overriding our strict httpx client timeout with its default (600s).
+    effective_timeout = (
+        request_level_timeout if request_level_timeout is not None else tuning.timeout
+    )
+
+    base_kwargs = {
+        "http_client": h_client,
+        "http_async_client": a_client,
+        "timeout": effective_timeout,
+    }
+
+    # --- Provider: OpenAI ---
     if provider == ModelProvider.OPENAI.value:
         _require_env("OPENAI_API_KEY")
-        _info_provider(cfg)
         if not cfg.name:
             raise ValueError(
                 "OpenAI chat requires 'name' (model id, e.g., gpt-4o-mini)."
             )
-        return ChatOpenAI(model=cfg.name, **settings)
+        _info_provider(cfg, settings)
+        logger.info(
+            "[MODEL][OPENAI] Constructing ChatOpenAI model=%s with explicit timeout=%s (overriding SDK default)",
+            cfg.name,
+            base_kwargs.get("timeout"),
+        )
+        return ChatOpenAI(
+            model=cfg.name,
+            **base_kwargs,
+            **settings,
+        )
 
+    # --- Provider: Azure OpenAI ---
     if provider == ModelProvider.AZURE_OPENAI.value:
         _require_env("AZURE_OPENAI_API_KEY")
         _require_settings(
             settings, ["azure_endpoint", "azure_openai_api_version"], "Azure chat"
         )
-        _info_provider(cfg)
         if not cfg.name:
             raise ValueError("Azure chat requires 'name' (deployment).")
         api_version = settings.pop("azure_openai_api_version")
+        _info_provider(cfg, settings)
+        logger.info(
+            "[MODEL][AZURE_OPENAI] Constructing AzureChatOpenAI deployment=%s with explicit timeout=%s",
+            cfg.name,
+            base_kwargs.get("timeout"),
+        )
         return AzureChatOpenAI(
-            azure_deployment=cfg.name, api_version=api_version, **settings
+            azure_deployment=cfg.name,
+            api_version=api_version,
+            **base_kwargs,
+            **settings,
         )
 
+    # --- Provider: Azure APIM ---
     if provider == ModelProvider.AZURE_APIM.value:
-        # Fred rationale (hover):
-        # - Enterprise setup via APIM: APIM subscription header + AAD bearer.
-        # - We DO NOT mint a static token here. We pass an azure_ad_token_provider
-        #   callable so each request gets a fresh token (no 1h expiry issues).
         required = [
             "azure_ad_client_id",
-            "azure_ad_client_scope",  # e.g., "https://cognitiveservices.azure.com/.default"
+            "azure_ad_client_scope",
             "azure_apim_base_url",
             "azure_apim_resource_path",
             "azure_openai_api_version",
@@ -128,7 +216,6 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         if not cfg.name:
             raise ValueError("Azure APIM chat requires 'name' (deployment).")
 
-        # Build a token *provider* (fresh token per call) instead of minting once.
         from azure.identity import ClientSecretCredential
 
         credential = ClientSecretCredential(
@@ -139,49 +226,89 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         scope = settings["azure_ad_client_scope"]
 
         def _token_provider() -> str:
-            # Called by the SDK on each request → auto-refresh tokens.
             return credential.get_token(scope).token
 
-        # Pass through any client kwargs that aren't our required keys.
         passthrough = {k: v for k, v in settings.items() if k not in required}
-        _info_provider(cfg)
+        _info_provider(cfg, passthrough)
+        logger.info(
+            "[MODEL][AZURE_APIM] Constructing AzureChatOpenAI (APIM) deployment=%s with explicit timeout=%s",
+            cfg.name,
+            base_kwargs.get("timeout"),
+        )
 
         return AzureChatOpenAI(
             azure_endpoint=f"{base}{path}/deployments/{cfg.name}/chat/completions?api-version={api_version}",
             api_version=api_version,
-            azure_ad_token_provider=_token_provider,  # ← per-request AAD token
+            azure_ad_token_provider=_token_provider,
             default_headers={
                 "TrustNest-Apim-Subscription-Key": os.environ[
                     "AZURE_APIM_SUBSCRIPTION_KEY"
                 ]
             },
+            **base_kwargs,
             **passthrough,
         )
 
+    # --- Provider: Ollama ---
     if provider == ModelProvider.OLLAMA.value:
         if not cfg.name:
             raise ValueError("Ollama chat requires 'name' (model).")
+
+        # Ollama transport differs: do not force OpenAI/Azure httpx client injection.
+        # We only pass value objects (limits/timeout) via client_kwargs.
         base_url = settings.pop("base_url", None)
-        _info_provider(cfg)
-        return ChatOllama(model=cfg.name, base_url=base_url, **settings)
+        settings.pop("max_retries", None)
+        _info_provider(cfg, settings)
+
+        # Depending on langchain_ollama version, the kwargs key can differ.
+        # "client_kwargs" is supported by current releases; if your pinned version differs,
+        # adapt here centrally.
+        return ChatOllama(
+            model=cfg.name,
+            base_url=base_url,
+            client_kwargs={
+                "limits": tuning.limits,
+                "timeout": tuning.timeout,
+            },
+            **settings,
+        )
 
     raise ValueError(f"Unsupported chat provider: {provider}")
 
 
-# =================================================
-# ============ Embeddings model factory ============
-# =================================================
+# ---------------------------------------------------------------------------
+# Embeddings model factory
+# ---------------------------------------------------------------------------
 
 
 def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
-    """
-    Fred rationale:
-    - Mirrors get_model() for embeddings.
-    - Keeps auth rules consistent with our "env-only for secrets" policy.
-    """
-    assert cfg and cfg.provider, "Embedding configuration is required"
+    if not cfg.provider:
+        raise ValueError("Embedding configuration provider is required")
+
     provider = cfg.provider.lower()
-    settings: Dict = dict(cfg.settings or {})
+    settings: Dict[str, Any] = dict(cfg.settings or {})
+
+    settings.pop("http_client", None)
+    settings.pop("http_async_client", None)
+
+    _apply_embedding_defaults(settings)
+    if provider in (
+        ModelProvider.OPENAI.value,
+        ModelProvider.AZURE_OPENAI.value,
+        ModelProvider.AZURE_APIM.value,
+    ):
+        _normalize_openai_compat(settings)
+
+    tuning, h_client, a_client = get_shared_stack(cfg, settings=settings)
+    strip_transport_settings(settings)
+
+    base_kwargs = {
+        "http_client": h_client,
+        "http_async_client": a_client,
+        # Explicitly pass the configured timeout to override the OpenAI SDK default.
+        "timeout": tuning.timeout,
+    }
+
     name = cfg.name
 
     if provider == ModelProvider.OPENAI.value:
@@ -190,8 +317,8 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
             raise ValueError(
                 "OpenAI embeddings require 'name' (e.g., text-embedding-3-large)."
             )
-        _info_provider(cfg)
-        return OpenAIEmbeddings(model=name, **settings)
+        _info_provider(cfg, settings)
+        return OpenAIEmbeddings(model=name, **base_kwargs, **settings)
 
     if provider == ModelProvider.AZURE_OPENAI.value:
         _require_env("AZURE_OPENAI_API_KEY")
@@ -201,13 +328,15 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
         if not name:
             raise ValueError("Azure embeddings require 'name' (deployment).")
         api_version = settings.pop("azure_openai_api_version")
-        _info_provider(cfg)
+        _info_provider(cfg, settings)
         return AzureOpenAIEmbeddings(
-            azure_deployment=name, api_version=api_version, **settings
+            azure_deployment=name,
+            api_version=api_version,
+            **base_kwargs,
+            **settings,
         )
 
     if provider == ModelProvider.AZURE_APIM.value:
-        # Same token-provider logic as chat: per-request AAD token via APIM.
         required = [
             "azure_ad_client_id",
             "azure_ad_client_scope",
@@ -223,6 +352,7 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
         base = settings["azure_apim_base_url"].rstrip("/")
         path = settings["azure_apim_resource_path"].rstrip("/")
         api_version = settings["azure_openai_api_version"]
+
         if not name:
             raise ValueError("Azure APIM embeddings require 'name' (deployment).")
 
@@ -239,17 +369,18 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
             return credential.get_token(scope).token
 
         passthrough = {k: v for k, v in settings.items() if k not in required}
-        _info_provider(cfg)
+        _info_provider(cfg, passthrough)
 
         return AzureOpenAIEmbeddings(
             azure_endpoint=f"{base}{path}/deployments/{cfg.name}/embeddings?api-version={api_version}",
             api_version=api_version,
-            azure_ad_token_provider=_token_provider,  # ← per-request AAD token
+            azure_ad_token_provider=_token_provider,
             default_headers={
                 "TrustNest-Apim-Subscription-Key": os.environ[
                     "AZURE_APIM_SUBSCRIPTION_KEY"
                 ]
             },
+            **base_kwargs,
             **passthrough,
         )
 
@@ -257,63 +388,28 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
         if not name:
             raise ValueError("Ollama embeddings require 'name' (model).")
         base_url = settings.pop("base_url", None)
-        _info_provider(cfg)
-        return OllamaEmbeddings(model=name, base_url=base_url, **settings)
+        _info_provider(cfg, settings)
+        return OllamaEmbeddings(
+            model=name,
+            base_url=base_url,
+            client_kwargs={"timeout": tuning.timeout, "limits": tuning.limits},
+            **settings,
+        )
 
     raise ValueError(f"Unsupported embeddings provider: {provider}")
 
 
-# =================================================
-# ===== Optional helper for image-aware routing ====
-# =================================================
+# ---------------------------------------------------------------------------
+# Structured chain helper
+# ---------------------------------------------------------------------------
 
 
 def get_structured_chain(schema: Type[BaseModel], model_config: ModelConfiguration):
-    """
-    Creates a LangChain Runnable sequence designed to force a Large Language Model (LLM)
-    to return a structured JSON object conforming to a specified Pydantic schema.
-
-    This function prioritizes vendor-native structured output methods (like OpenAI's
-    Function Calling) for reliability and performance, falling back to a prompt-injection
-    parser method if native support is unavailable.
-
-    Args:
-        schema (Type[BaseModel]):
-            The Pydantic BaseModel class defining the desired output structure (e.g., RoutingDecision).
-            The LLM's final response will be parsed into an instance of this class.
-
-        model_config (ModelConfiguration):
-            Configuration detailing the target chat model, including its provider (e.g., 'openai', 'azure_apim').
-
-    Returns:
-        Runnable:
-            A LangChain Runnable sequence (e.g., a chain of prompts, model, and parser).
-            When invoked with a list of messages, the final output will be an instance of the provided `schema`.
-
-    Execution Flow:
-    ----------------
-    1.  **Model Loading**: Loads the specified chat model using `get_model(model_config)`.
-    2.  **Native Function Calling (Preference)**:
-        - Checks if the model provider is OpenAI or an Azure variant (Azure_OpenAI, Azure_APIM).
-        - If so, it attempts to bind the Pydantic `schema` to the model using `model.with_structured_output(..., method="function_calling")`.
-        - This leverages the model's native tool-use capability, which is the most reliable way to get structured JSON.
-    3.  **Prompt-Injection Fallback**:
-        - If the provider does not support function calling or the attempt fails (e.g., model is too old), it falls back to a prompt-based method.
-        - **Parser**: A `PydanticOutputParser` is created to handle the raw text response.
-        - **System Prompt**: A rigorous system message is constructed, providing the model with:
-            a. The complete JSON schema (`schema.model_json_schema()`).
-            b. Explicit formatting instructions (`parser.get_format_instructions()`) generated by the parser.
-        - The resulting chain is `prompt | model | parser`. The model outputs raw JSON text, and the parser converts it to the final `schema` object.
-
-    The input to the returned chain must be a dictionary containing a key named **"messages"** (e.g., `{"messages": [HumanMessage(...)]}`), as defined by the `MessagesPlaceholder`.
-    """
     model = get_model(model_config)
     provider = (model_config.provider or "").lower()
 
     passthrough = ChatPromptTemplate.from_messages([MessagesPlaceholder("messages")])
 
-    # Fred rationale (hover):
-    # - Azure APIM uses the same Azure client; function calling is available if the model supports it.
     if provider in {
         ModelProvider.OPENAI.value,
         ModelProvider.AZURE_OPENAI.value,
@@ -322,11 +418,13 @@ def get_structured_chain(schema: Type[BaseModel], model_config: ModelConfigurati
         try:
             structured = model.with_structured_output(schema, method="function_calling")
             return passthrough | structured
-        except Exception:
+        except Exception as e:
+            # Do not silently swallow operational errors without breadcrumbs.
             logger.debug(
-                "Function calling not supported, falling back to prompt-based parsing"
+                "Structured output unavailable (%s): %s; falling back to prompt-based parsing",
+                type(e).__name__,
+                e,
             )
-            # fall through to parser path
 
     parser = PydanticOutputParser(pydantic_object=schema)
     prompt = ChatPromptTemplate.from_messages(

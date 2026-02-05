@@ -31,7 +31,7 @@ from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.scheduler.agent_contracts import (
-    AgentInputV1,
+    AgentInputArgsV1,
     AgentResultStatus,
     AgentResultV1,
 )
@@ -104,7 +104,7 @@ class AgentTaskRunner:
                 "[TASKS] Failed to update task status for %s: %s", task_id, exc
             )
 
-    async def run_temporal_task(self, task_input: AgentInputV1) -> AgentResultV1:
+    async def run_temporal_task(self, task_input: AgentInputArgsV1) -> AgentResultV1:
         """
         Main orchestration bridge.
         Supports:
@@ -119,7 +119,7 @@ class AgentTaskRunner:
 
         # 2. Agent Initialization
         agent, _ = await self._agent_factory.create_and_init(
-            agent_name=task_input.target_agent,
+            agent_name=task_input.target_ref,
             runtime_context=runtime_context,
             session_id=session_id,
         )

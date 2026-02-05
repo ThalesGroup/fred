@@ -96,13 +96,22 @@ class MinioFilesystem(BaseFilesystem):
         path = path.lstrip("/")
 
         if not self.prefix:
-            return path
+            resolved = path
+        else:
+            # Remove existing prefix if present
+            stripped = path
+            if stripped.startswith(self.prefix):
+                stripped = stripped[len(self.prefix) :]
+            resolved = f"{self.prefix}{stripped}"
 
-        # Remove existing prefix if present
-        if path.startswith(self.prefix):
-            path = path[len(self.prefix) :]
-
-        return f"{self.prefix}{path}"
+        logger.debug(
+            "[MINIO_RESOLVE] bucket=%s prefix=%s input=%s resolved=%s",
+            self.bucket_name,
+            self.prefix,
+            path,
+            resolved,
+        )
+        return resolved
 
     # --- Core FS API ---
 
@@ -119,7 +128,9 @@ class MinioFilesystem(BaseFilesystem):
         Returns:
             bytes: The full content of the object.
         """
-        obj = self.client.get_object(self.bucket_name, self._resolve_path(path))
+        resolved = self._resolve_path(path)
+        logger.info("[MINIO_READ] bucket=%s path=%s", self.bucket_name, resolved)
+        obj = self.client.get_object(self.bucket_name, resolved)
         data = obj.read()
         obj.close()
         return data
@@ -139,6 +150,13 @@ class MinioFilesystem(BaseFilesystem):
             data_bytes = data.encode("utf-8")
         else:
             data_bytes = data
+
+        logger.info(
+            "[MINIO_WRITE] bucket=%s path=%s bytes=%d",
+            self.bucket_name,
+            full,
+            len(data_bytes),
+        )
 
         parent = "/".join(full.rstrip("/").split("/")[:-1])
         if parent:
@@ -169,6 +187,7 @@ class MinioFilesystem(BaseFilesystem):
             List[FilesystemResourceInfoResult]: List of files and directories.
         """
         full_prefix = self._resolve_path(prefix)
+        logger.info("[MINIO_LIST] bucket=%s prefix=%s", self.bucket_name, full_prefix)
 
         all_objects = list(
             self.client.list_objects(
@@ -223,7 +242,9 @@ class MinioFilesystem(BaseFilesystem):
             path (str): Path of the object to delete.
         """
 
-        self.client.remove_object(self.bucket_name, self._resolve_path(path))
+        resolved = self._resolve_path(path)
+        logger.info("[MINIO_DELETE] bucket=%s path=%s", self.bucket_name, resolved)
+        self.client.remove_object(self.bucket_name, resolved)
 
     async def print_root_dir(self) -> str:
         """
@@ -246,6 +267,7 @@ class MinioFilesystem(BaseFilesystem):
 
         # Ensure path ends with a slash
         dir_path = self._resolve_path(path).rstrip("/") + "/"
+        logger.info("[MINIO_MKDIR] bucket=%s path=%s", self.bucket_name, dir_path)
 
         # Put empty object to represent the directory
         from io import BytesIO
@@ -266,6 +288,7 @@ class MinioFilesystem(BaseFilesystem):
 
         full = self._resolve_path(path)
         try:
+            logger.info("[MINIO_EXISTS] stat bucket=%s path=%s", self.bucket_name, full)
             self.client.stat_object(self.bucket_name, full)
             return True
         except Exception:
@@ -273,6 +296,12 @@ class MinioFilesystem(BaseFilesystem):
                 self.client.list_objects(
                     self.bucket_name, prefix=full.rstrip("/") + "/", recursive=False
                 )
+            )
+            logger.info(
+                "[MINIO_EXISTS] list bucket=%s prefix=%s count=%d",
+                self.bucket_name,
+                full.rstrip("/") + "/",
+                len(objs),
             )
             return len(objs) > 0
 
@@ -305,6 +334,7 @@ class MinioFilesystem(BaseFilesystem):
         """
         full = self._resolve_path(path)
         try:
+            logger.info("[MINIO_STAT] file bucket=%s path=%s", self.bucket_name, full)
             # Try as a file
             obj = self.client.stat_object(self.bucket_name, full)
             return FilesystemResourceInfoResult(
@@ -314,6 +344,9 @@ class MinioFilesystem(BaseFilesystem):
                 modified=obj.last_modified,
             )
         except Exception:
+            logger.info(
+                "[MINIO_STAT] treat-as-dir bucket=%s path=%s", self.bucket_name, full
+            )
             # File not found, treat as directory (even if empty)
             # cd freprefix = full.rstrip("/") + "/"
             # objs = list(self.client.list_objects(self.bucket_name, prefix=prefix, recursive=False))

@@ -54,16 +54,18 @@ class McpServerManager:
             merged = dict(self.static_servers)
         else:
             persisted = {srv.id: srv for srv in self.store.load_all()}
-            if not self.store.static_seeded():
-                # First run: seed all static servers (allows later delete/restore to be persisted)
-                for srv_id, srv in self.static_servers.items():
+
+            # Reconcile static servers on every bootstrap (new or changed entries)
+            for srv_id, srv in self.static_servers.items():
+                persisted_srv = persisted.get(srv_id)
+                if persisted_srv != srv:
                     self.store.save(srv)
                     persisted[srv_id] = srv
                     logger.info(
-                        "[MCP] Seeded static server id=%s into storage (first run)",
+                        "[MCP] Upserted static server id=%s into storage (new or updated)",
                         srv_id,
                     )
-                self.store.mark_static_seeded()
+            self.store.mark_static_seeded()
 
             merged = dict(persisted)
 

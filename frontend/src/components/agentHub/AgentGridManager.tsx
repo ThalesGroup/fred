@@ -23,18 +23,18 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AnyAgent, isLeader } from "../../common/agent";
-import { Leader } from "../../slices/agentic/agenticOpenApi";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
+import { Leader } from "../../slices/agentic/agenticOpenApi";
 import { useLazyGetRuntimeSourceTextQuery } from "../../slices/agentic/agenticSourceApi";
-import { useToast } from "../ToastProvider";
 import { LoadingSpinner } from "../../utils/loadingSpinner";
+import { useToast } from "../ToastProvider";
 
-import { AgentCard } from "./AgentCard";
-import { AgentEditDrawer } from "./AgentEditDrawer";
-import { CrewEditor } from "./CrewEditor";
-import { AgentAssetManagerDrawer } from "./AgentAssetManagerDrawer";
-import { CreateAgentModal } from "./CreateAgentModal";
 import { A2aCardDialog } from "./A2aCardDialog";
+import { AgentCard } from "./AgentCard";
+import { AgentConfigWorkspaceManagerDrawer } from "./AgentConfigWorkspaceManagerDrawer";
+import { AgentEditDrawer } from "./AgentEditDrawer";
+import { CreateAgentModal } from "./CreateAgentModal";
+import { CrewEditor } from "./CrewEditor";
 
 interface AgentGridManagerProps {
   // Data
@@ -314,7 +314,7 @@ export const AgentGridManager = ({
         onSaved={handleRefetch}
       />
       {agentForAssetManagement && (
-        <AgentAssetManagerDrawer
+        <AgentConfigWorkspaceManagerDrawer
           isOpen={assetManagerOpen}
           onClose={handleCloseAssetManager}
           agentId={agentForAssetManagement.name}

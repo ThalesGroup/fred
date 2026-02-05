@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 from fred_core import (
@@ -33,6 +35,7 @@ from knowledge_flow_backend.common.structures import (
     Configuration,
     InMemoryVectorStorage,
     LocalContentStorageConfig,
+    LocalFilesystemConfig,
     ProcessingConfig,
     ProcessorConfig,
     PushSourceConfig,
@@ -86,7 +89,7 @@ def app_context(monkeypatch, fake_embedder):
                 host="localhost:7233",
                 namespace="default",
                 task_queue="ingestion",
-                workflow_prefix="test-pipeline",
+                workflow_id_prefix="test-pipeline",
                 connect_timeout_seconds=3,
             ),
         ),
@@ -157,7 +160,10 @@ def app_context(monkeypatch, fake_embedder):
                 description="Test output processor for docx files",
             ),
         ],
+        filesystem=LocalFilesystemConfig(type="local", root="/tmp/knowledge-flow-test-fs"),
     )
+
+    os.makedirs("/tmp/knowledge-flow-test-fs", exist_ok=True)
 
     return ApplicationContext(config)
 

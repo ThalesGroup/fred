@@ -206,7 +206,8 @@ class AIConfig(BaseModel):
         description="URL of the Knowledge Flow backend.",
     )
     timeout: TimeoutSettings = Field(
-        ..., description="Timeout settings for the AI client."
+        ...,
+        description="Timeout settings for the REST AI clients. This does not affect model calls.",
     )
     use_static_config_only: Optional[bool] = Field(
         True,
@@ -221,7 +222,7 @@ class AIConfig(BaseModel):
     )
 
     max_concurrent_agents: int = Field(
-        128,
+        1024,
         description="Maximum number of agents that can be cached in memory for faster access.",
     )
     max_attached_files_per_user: int = Field(
@@ -289,8 +290,16 @@ class AppConfig(BaseModel):
     metrics_address: str = "127.0.0.1"
     metrics_port: int = 9000
     kpi_process_metrics_interval_sec: int = Field(
-        10,
+        0,
         description="Interval in seconds for processing and logging KPI metrics.",
+    )
+    kpi_log_summary_interval_sec: float = Field(
+        default=0.0,
+        description="Emit KPI summary logs every N seconds (bench/debug). Set 0 to disable.",
+    )
+    kpi_log_summary_top_n: int = Field(
+        default=0,
+        description="Top-N metrics to show in KPI summary logs. 0 means all / disabled.",
     )
 
 

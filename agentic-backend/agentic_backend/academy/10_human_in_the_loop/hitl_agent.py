@@ -1,0 +1,347 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from typing import Annotated, Any, List, Optional, Type, TypedDict
+
+from langchain_core.messages import AIMessage, BaseMessage
+from langgraph.graph import END, StateGraph
+from langgraph.graph.message import add_messages
+from langgraph.types import interrupt
+
+from agentic_backend.common.structures import AgentSettings
+from agentic_backend.core.agents.agent_flow import AgentFlow
+from agentic_backend.core.agents.agent_spec import AgentTuning
+from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.scheduler.agent_contracts import (
+    AgentContextRefsV1,
+    AgentResultStatus,
+)
+from agentic_backend.scheduler.temporal.delegate_client import TemporalAgentInvoker
+
+logger = logging.getLogger(__name__)
+
+"""
+Sample "Researcher" agent used to show how a LangGraph agent can be run from a
+Temporal workflow without pulling Temporal dependencies into agent code.
+
+Key idea: the worker (activity) hydrates the graph state from AgentInputV1
+before invoking the compiled graph. To let the worker know what to hydrate,
+the agent exposes a lightweight schema via get_state_schema().
+"""
+
+
+# 1. Define the State
+# The worker looks at this schema to know which fields from AgentInputV1
+# belong in the LangGraph state (messages, parameters, context, etc.).
+class ResearchAgentState(TypedDict):
+    messages: Annotated[List[BaseMessage], add_messages]
+    research_data: str
+    project_id: str  # Hydrated from AgentInputV1.context.project_id
+    research_depth: int  # Hydrated from AgentInputV1.parameters['research_depth']
+    delegate_workflow_id: Optional[str]
+    delegate_summary: Optional[str]
+
+
+class HitlAgent(AgentFlow):
+    """
+    A minimal long-running research agent that ask confirmation to the user
+    """
+
+    tuning = AgentTuning(
+        role="Deep Researcher",
+        description="Performs deep research tasks with automatic state hydration.",
+        tags=["research", "long-running"],
+        fields=[],
+    )
+
+    def __init__(self, agent_settings: AgentSettings):
+        super().__init__(agent_settings)
+        # Build the uncompiled graph; AgentFlow.get_compiled_graph() will compile it lazily.
+        self._graph = self._build_graph()
+
+    def get_state_schema(self) -> Type:
+        """
+        Advertise the expected LangGraph state shape to the worker.
+
+        The activity uses this to map AgentInputV1 fields into the initial state:
+        - request_text -> messages (as a HumanMessage)
+        - context.project_id -> project_id
+        - parameters['research_depth'] -> research_depth
+
+        Keep it simple: include every state key your nodes rely on.
+        """
+        return ResearchAgentState
+
+    async def async_init(self, runtime_context: RuntimeContext) -> None:
+        """Required by AgentFlow to set up context (databases, APIs, etc)."""
+        self.runtime_context = runtime_context
+
+    def _build_graph(self) -> StateGraph:
+        builder = StateGraph(ResearchAgentState)
+
+        # Define Nodes
+        builder.add_node("gather", self.gather_information)
+        builder.add_node("validate_gather", self.validate_after_gather)
+        builder.add_node("analyze", self.analyze_data)
+        builder.add_node("validate_analyze", self.validate_after_analyze)
+        builder.add_node("delegate", self.delegate_to_georges)
+        builder.add_node("validate_draft", self.validate_before_draft)
+        builder.add_node("draft", self.draft_report)
+
+        # Define Edges
+        builder.set_entry_point("gather")
+        builder.add_edge("gather", "validate_gather")
+        builder.add_edge("validate_gather", "analyze")
+        builder.add_edge("analyze", "delegate")
+        builder.add_edge("delegate", "validate_draft")
+        builder.add_edge("validate_draft", "draft")
+        builder.add_edge("draft", END)
+
+        return builder
+
+    # --- Node Logic ---
+
+    async def gather_information(self, state: ResearchAgentState):
+        """
+        Notice: project_id and research_depth are already present in the state
+        thanks to the AgentFlow.hydrate_state call in the Activity.
+        """
+        p_id = state.get("project_id", "Default-Project")
+        depth = state.get("research_depth", 1)
+
+        logger.info(
+            "[Researcher] gather_information project_id=%s depth=%s state_keys=%s",
+            p_id,
+            depth,
+            list(state.keys()),
+        )
+
+        await asyncio.sleep(2)  # Simulate long-running work
+        return {
+            "messages": [
+                AIMessage(content=f"Gathered data for project {p_id} at depth {depth}.")
+            ],
+            "research_data": "raw_html_content_mock",
+        }
+
+    async def validate_after_gather(self, state: ResearchAgentState):
+        """
+        HITL pause after data gathering: ask user to validate collected data.
+        """
+        logger.info(
+            "[Researcher] validate_after_gather invoked state_keys=%s",
+            list(state.keys()),
+        )
+        interrupt(
+            {
+                "stage": "gather",
+                "title": "Validate gathered material",
+                "question": "Are these collected sources acceptable to continue?",
+                "choices": [
+                    {
+                        "id": "proceed",
+                        "label": "Yes, use them",
+                        "description": "Data looks good; move to analysis.",
+                        "default": True,
+                    },
+                    {
+                        "id": "retry",
+                        "label": "No, re-collect",
+                        "description": "Discard current gather step and try again.",
+                    },
+                    {
+                        "id": "adjust",
+                        "label": "Refine scope then continue",
+                        "description": "I’ll add a short note with tweaks.",
+                    },
+                ],
+                "free_text": True,
+                "metadata": {"sample": str(state.get("research_data"))[:400]},
+            }
+        )
+
+    async def analyze_data(self, state: ResearchAgentState):
+        """Simulates CPU intensive analysis."""
+        logger.info(f"[{state.get('project_id')}] Analyzing content...")
+        await asyncio.sleep(2)
+        return {
+            "messages": [AIMessage(content="Analyzed data. Key trend: AI is growing.")]
+        }
+
+    async def delegate_to_georges(self, state: ResearchAgentState):
+        """
+        Delegate to the generalist agent (Georges) via Temporal and wait for completion.
+
+        This keeps the current LangGraph node paused while the child workflow runs.
+        Heartbeats are sent so the parent Temporal activity does not time out.
+        """
+
+        original_request = self._content_to_text(
+            state.get("messages", [])[0].content if state.get("messages") else ""
+        )
+        project_id = state.get("project_id")
+
+        # Build a lightweight context for the delegated agent
+        context = AgentContextRefsV1(project_id=project_id)
+
+        # The runtime_context is set in async_init; may be absent when run outside Temporal
+        user_id = getattr(getattr(self, "runtime_context", None), "user_id", None)
+
+        invoker = TemporalAgentInvoker()
+        logger.info(
+            "[Researcher] Delegating to Georges via Temporal (project=%s user=%s)",
+            project_id,
+            user_id,
+        )
+
+        result, workflow_id = await invoker.execute_agent(
+            target_agent="Georges",
+            request_text=original_request or "Assist with research findings",
+            user_id=user_id,
+            context=context,
+            parameters={"project_id": project_id},
+            heartbeat_label="waiting_for_georges",
+        )
+
+        # delegate_client may return Pydantic model or a plain dict depending on caller context
+        if isinstance(result, dict):
+            summary = result.get("final_summary") or "Delegate returned no summary"
+            status = result.get("status", AgentResultStatus.FAILED)
+        else:
+            summary = result.final_summary or "Delegate returned no summary"
+            status = result.status
+
+        if status == AgentResultStatus.COMPLETED:
+            msg = f"Delegate agent Georges completed. Summary: {summary}"
+        elif status == AgentResultStatus.BLOCKED:
+            msg = (
+                "Delegate agent Georges is waiting for input (BLOCKED). "
+                f"Workflow id={workflow_id}."
+            )
+        else:
+            msg = (
+                f"Delegate agent Georges failed: {summary} (workflow id={workflow_id})"
+            )
+
+        return {
+            "messages": [AIMessage(content=msg)],
+            "delegate_workflow_id": workflow_id,
+            "delegate_summary": summary,
+        }
+
+    @staticmethod
+    def _content_to_text(content: Any) -> str:
+        """Normalize LangChain content (str | list | dict) to string for downstream calls."""
+        if isinstance(content, str):
+            return content
+        try:
+            return json.dumps(content, ensure_ascii=False)
+        except Exception:  # pragma: no cover - defensive fallback
+            return str(content)
+
+    async def validate_after_analyze(self, state: ResearchAgentState):
+        """
+        HITL pause after analysis: ask user to validate insights.
+        """
+        logger.info(
+            "[Researcher] validate_after_analyze invoked state_keys=%s",
+            list(state.keys()),
+        )
+        interrupt(
+            {
+                "stage": "analyze",
+                "title": "Validate insights",
+                "question": "Do these preliminary findings look correct?",
+                "choices": [
+                    {
+                        "id": "approve_analysis",
+                        "label": "Looks correct",
+                        "description": "Proceed to drafting with these insights.",
+                        "default": True,
+                    },
+                    {
+                        "id": "revise_analysis",
+                        "label": "Needs revision",
+                        "description": "Re-run analysis with adjustments I’ll describe.",
+                    },
+                    {
+                        "id": "deepen_analysis",
+                        "label": "Go deeper",
+                        "description": "Increase depth/coverage before drafting.",
+                    },
+                ],
+                "free_text": True,
+                "metadata": {
+                    "messages": [m.content for m in state.get("messages", [])][-3:]
+                },
+            }
+        )
+
+    async def validate_before_draft(self, state: ResearchAgentState):
+        """
+        HITL pause before drafting the final report: request final approval.
+        """
+        logger.info(
+            "[Researcher] validate_before_draft invoked state_keys=%s",
+            list(state.keys()),
+        )
+        interrupt(
+            {
+                "stage": "draft",
+                "title": "Ready to draft",
+                "question": "Choose how to finalize the report:",
+                "choices": [
+                    {
+                        "id": "draft_full",
+                        "label": "Draft full report",
+                        "description": "Generate the complete summary now.",
+                        "default": True,
+                    },
+                    {
+                        "id": "draft_brief",
+                        "label": "Draft brief version",
+                        "description": "Produce a concise one-pager.",
+                    },
+                    {
+                        "id": "add_notes",
+                        "label": "Add guidance first",
+                        "description": "I’ll type specific instructions, then draft.",
+                    },
+                    {
+                        "id": "cancel",
+                        "label": "Stop here",
+                        "description": "End the flow without drafting.",
+                    },
+                ],
+                "free_text": True,
+                "metadata": {
+                    "messages": [m.content for m in state.get("messages", [])][-3:]
+                },
+            }
+        )
+
+    async def draft_report(self, state: ResearchAgentState):
+        """Finalizes the output using the initial human request."""
+        logger.info(f"[{state.get('project_id')}] Drafting output...")
+        await asyncio.sleep(1)
+
+        # state['messages'][0] is the HumanMessage hydrated from input_data.request_text
+        original_request = state["messages"][0].content
+
+        delegate_info = ""
+        if state.get("delegate_summary"):
+            delegate_info = (
+                f"\nDelegated agent (Georges) summary: {state['delegate_summary']}"
+            )
+        if state.get("delegate_workflow_id"):
+            delegate_info += f"\nDelegated workflow id: {state['delegate_workflow_id']}"
+
+        final_text = (
+            f"RESEARCH REPORT for Project: {state.get('project_id')}\n"
+            f"Based on request: {original_request}\n"
+            f"Findings: Validated successfully.{delegate_info}"
+        )
+
+        return {"messages": [AIMessage(content=final_text)]}

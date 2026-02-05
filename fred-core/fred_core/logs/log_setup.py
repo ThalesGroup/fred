@@ -192,7 +192,7 @@ def log_setup(
     console_handler.setLevel(log_level.upper())
     root.addHandler(console_handler)
 
-    # 3) Store (machine)
+    # 3) Store (machine) — optional for sandbox compatibility
     store_h = StoreEmitHandler(service_name=service_name, store=store)
     store_h.setLevel(log_level.upper())
     store_h.setFormatter(CompactJsonFormatter(service_name))
@@ -216,6 +216,7 @@ def log_setup(
         "websockets.protocol",
         "websockets.client",
         "httptools",
+        "mcp.client.streamable_http",
     )
     for noisy in noisy_libs:
         lg = logging.getLogger(noisy)

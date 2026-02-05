@@ -9,6 +9,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import after_model
 from langchain.tools import tool
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Checkpointer
 
 from agentic_backend.agents.knowledge_extractor.jsonschema import globalSchema
 from agentic_backend.agents.knowledge_extractor.powerpoint_template_util import (
@@ -296,7 +297,9 @@ class SlideMaker(AgentFlow):
                     yield event
                 break
 
-    def get_compiled_graph(self) -> CompiledStateGraph:
+    def get_compiled_graph(
+        self, checkpointer: Checkpointer | None = None
+    ) -> CompiledStateGraph:
         template_tool = self.get_template_tool()
         validator_tool = self.get_validator_tool()
 
@@ -345,7 +348,7 @@ class SlideMaker(AgentFlow):
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[template_tool, validator_tool, *self.mcp.get_tools()],
-            checkpointer=self.streaming_memory,
+            checkpointer=checkpointer,
             middleware=[
                 extract_text_from_thinking_model,
                 validate_tool_calls,
@@ -405,7 +408,7 @@ class SlideMaker(AgentFlow):
             template_key = (
                 self.get_tuned_text("ppt.template_key") or "simple_template.pptx"
             )
-            template_path = await self.fetch_asset_blob_to_tempfile(
+            template_path = await self.fetch_config_blob_to_tempfile(
                 template_key, suffix=".pptx"
             )
 
@@ -421,18 +424,15 @@ class SlideMaker(AgentFlow):
             final_key = f"{user_id_to_store_asset}_{output_path.name}"
 
             with open(output_path, "rb") as f_out:
-                upload_result = await self.upload_user_asset(
+                upload_result = await self.upload_user_blob(
                     key=final_key,
                     file_content=f_out,
                     filename=f"Generated_Slide_{self.get_name()}.pptx",
                     content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    user_id_override=user_id_to_store_asset,
                 )
 
-            # 4. Construct the structured message for the UI
-            final_download_url = self.get_asset_download_url(
-                asset_key=upload_result.key, scope="user"
-            )
+                # 4. Construct the structured message for the UI
+                final_download_url = upload_result.download_url
 
             return LinkPart(
                 href=final_download_url,

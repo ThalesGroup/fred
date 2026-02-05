@@ -13,16 +13,16 @@
 # limitations under the License.
 
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user, raise_internal_error
+from fred_core.scheduler import TemporalClientProvider
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.metadata.service import MetadataService
-from knowledge_flow_backend.features.scheduler.in_memory_scheduler import InMemoryScheduler
+from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
-    FileToProcess,
-    PipelineDefinition,
     ProcessDocumentsProgressRequest,
     ProcessDocumentsProgressResponse,
     ProcessDocumentsRequest,
@@ -30,7 +30,6 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     ProcessLibraryRequest,
     ProcessLibraryResponse,
 )
-from knowledge_flow_backend.features.scheduler.temporal_scheduler import TemporalScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -40,16 +39,15 @@ class SchedulerController:
     Controller for triggering ingestion workflows through Temporal.
     """
 
-    def __init__(self, router: APIRouter):
+    def __init__(self, router: APIRouter, temporal_client_provider: Optional[TemporalClientProvider] = None):
         app_config = ApplicationContext.get_instance().get_config()
         self.scheduler_config = app_config.scheduler
         self.metadata_service = MetadataService()
-        if self.scheduler_config.backend.lower() == "memory":
-            self.workflow_client = InMemoryScheduler(self.metadata_service)
-        elif self.scheduler_config.backend.lower() == "temporal":
-            self.workflow_client = TemporalScheduler(self.scheduler_config, self.metadata_service)
-        else:
-            raise ValueError(f"Unsupported scheduler backend: {self.scheduler_config.backend}")
+        self.task_service = IngestionTaskService(
+            scheduler_config=self.scheduler_config,
+            metadata_service=self.metadata_service,
+            temporal_client_provider=temporal_client_provider,
+        )
 
         @router.post(
             "/process-documents",
@@ -68,13 +66,12 @@ class SchedulerController:
             logger.info("Processing %d file(s) via scheduler backend=%s", len(req.files), self.scheduler_config.backend)
 
             try:
-                # You may batch files per-source_tag if needed
-                definition = PipelineDefinition(
-                    name=req.pipeline_name,
-                    # Assign file to the authenticated user
-                    files=[FileToProcess.from_file_to_process_without_user(f, user) for f in req.files],
+                definition, handle = await self.task_service.submit_documents(
+                    user=user,
+                    pipeline_name=req.pipeline_name,
+                    files=req.files,
+                    background_tasks=background_tasks,
                 )
-                handle = await self.workflow_client.start_document_processing(user, definition, background_tasks)
 
                 return ProcessDocumentsResponse(
                     status="queued",
@@ -100,7 +97,7 @@ class SchedulerController:
             authorize_or_raise(user, Action.PROCESS, Resource.DOCUMENTS)
 
             try:
-                handle = await self.workflow_client.start_library_processing(
+                handle = await self.task_service.submit_library_processing(
                     user=user,
                     library_tag=req.library_tag,
                     processor_path=req.processor,
@@ -129,4 +126,4 @@ class SchedulerController:
             user: KeycloakUser = Depends(get_current_user),
         ):
             authorize_or_raise(user, Action.PROCESS, Resource.DOCUMENTS)
-            return await self.workflow_client.get_progress(user, workflow_id=req.workflow_id)
+            return await self.task_service.get_progress(user=user, workflow_id=req.workflow_id)

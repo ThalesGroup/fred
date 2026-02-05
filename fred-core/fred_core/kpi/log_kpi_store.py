@@ -44,11 +44,11 @@ class KpiLogStore(BaseKPIStore):
         self.logger = logging.getLogger("KPI")
 
     def ensure_ready(self) -> None:
-        self._log("[KPI][log] ensure_ready called")
+        self._log("[KPI][LOG] ensure_ready called")
 
     def index_event(self, event: KPIEvent) -> None:
         self._log(
-            f"[KPI][log] index_event: {event.metric.name} {event.metric.value} dims={event.dims}"
+            f"[KPI][LOG] index_event: {event.metric.name} {event.metric.value} dims={event.dims}"
         )
 
     def bulk_index(self, events: List[KPIEvent]) -> None:

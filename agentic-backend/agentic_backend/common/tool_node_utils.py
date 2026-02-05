@@ -14,13 +14,53 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import Sequence
+from typing import Any, Sequence
 
 from langchain_core.tools import BaseTool
 from langgraph.prebuilt import ToolNode
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_mcp_content(content: Any) -> Any:
+    """
+    Normalize MCP tool content blocks to a plain string.
+
+    MCP tools return content as: [{"type": "text", "text": "..."}]
+    OpenAI API expects ToolMessage.content to be a string.
+
+    This function extracts text from content blocks and joins them,
+    or returns the original content if already a string.
+
+    For tools with response_format='content_and_artifact', the content is a
+    tuple (content, artifact). In this case, only the content part is normalized.
+    """
+    # Handle content_and_artifact tuple format: (content, artifact)
+    if isinstance(content, tuple) and len(content) == 2:
+        normalized_content = normalize_mcp_content(content[0])
+        return (normalized_content, content[1])
+
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        # Extract text from content blocks
+        texts = []
+        for block in content:
+            if isinstance(block, dict):
+                if block.get("type") == "text":
+                    texts.append(block.get("text", ""))
+                else:
+                    # For non-text blocks, serialize to JSON
+                    texts.append(json.dumps(block))
+            else:
+                texts.append(str(block))
+        return "\n".join(texts) if texts else ""
+
+    # For other types, convert to JSON string
+    return json.dumps(content)
 
 
 def friendly_mcp_tool_error_handler(e: Exception) -> str:

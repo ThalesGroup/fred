@@ -17,13 +17,15 @@ import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
 import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
 import UploadIcon from "@mui/icons-material/Upload";
-import { Box, Breadcrumbs, Button, Card, Chip, IconButton, Link, TextField, Tooltip, Typography } from "@mui/material";
+import { Box, Breadcrumbs, Button, Card, Chip, IconButton, Link, TextField, Typography } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { LibraryCreateDrawer } from "../../common/LibraryCreateDrawer";
 import { useTagCommands } from "../../common/useTagCommands";
 import { useLocalStorageState } from "../../hooks/useLocalStorageState";
 import { usePermissions } from "../../security/usePermissions";
+import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
+import { buildTree, findNode, TagNode } from "../../shared/utils/tagTree";
 import {
   Resource,
   ResourceKind,
@@ -34,7 +36,6 @@ import {
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { EmptyState } from "../EmptyState";
-import { buildTree, findNode, TagNode } from "../../shared/utils/tagTree";
 import { ChatContextEditorModal } from "./ChatContextEditorModal";
 import { PromptEditorModal } from "./PromptEditorModal";
 import { ResourceImportDrawer } from "./ResourceImportDrawer";
@@ -378,11 +379,11 @@ export default function ResourceLibraryList({ kind }: Props) {
             <Typography variant="subtitle2" color="text.secondary">
               {t("resourceLibrary.folders")}
             </Typography>
-            <Tooltip title={allExpanded ? t("resourceLibrary.collapseAll") : t("resourceLibrary.expandAll")}>
+            <SimpleTooltip title={allExpanded ? t("resourceLibrary.collapseAll") : t("resourceLibrary.expandAll")}>
               <IconButton size="small" onClick={() => setAllExpanded(!allExpanded)} disabled={!tree}>
                 {allExpanded ? <UnfoldLessIcon fontSize="small" /> : <UnfoldMoreIcon fontSize="small" />}
               </IconButton>
-            </Tooltip>
+            </SimpleTooltip>
           </Box>
 
           {/* Recursive rendering */}

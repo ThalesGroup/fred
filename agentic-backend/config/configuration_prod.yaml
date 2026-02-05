@@ -21,7 +21,10 @@ app:
   metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
-  kpi_process_metrics_interval_sec: 10
+  # KPI settings for local benchmarks and debugging. Disable in production.
+  kpi_process_metrics_interval_sec: 0
+  kpi_log_summary_interval_sec: 0.0
+  kpi_log_summary_top_n: 0
 
 scheduler:
   enabled: true
@@ -73,7 +76,7 @@ ai:
   agentic_restore_max_exchanges: 20
 
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
-  max_concurrent_agents: 128
+  max_concurrent_agents: 1024
 
   # Maximum number of files a user can attach across all sessions
   max_attached_files_per_user: 20
@@ -109,11 +112,17 @@ ai:
     provider: "openai"
     name: "gpt-5.1"
     settings:
-      # Benchmark (mock OpenAI): uncomment the base_url below to target the mock server.
-      # base_url: "http://localhost:8383/v1"
+      max_retries: 0
+      timeout:
+        connect: 10.0
+        read: 30.0
+        write: 30.0
+        pool: 5.0
+      http_client_limits:
+        max_connections: 500
+        max_keepalive_connections: 200
+        keepalive_expiry_seconds: 10
       temperature: 0.0
-      max_retries: 2
-      request_timeout: 30
 
   # Default language model used for non-chat interactions. This one is optional
   # and if not set, the default_chat_model will be used as fallback.
@@ -123,18 +132,24 @@ ai:
     provider: "openai"
     name: "gpt-5.1"
     settings:
-      # Benchmark (mock OpenAI): uncomment the base_url below to target the mock server.
-      # base_url: "http://localhost:8383/v1"
+      max_retries: 0
+      timeout:
+        connect: 10.0
+        read: 30.0
+        write: 30.0
+        pool: 5.0
+      http_client_limits:
+        max_connections: 500
+        max_keepalive_connections: 200
+        keepalive_expiry_seconds: 10
       temperature: 0.0
-      max_retries: 2
-      request_timeout: 30
 
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:
-    - name: "Researcher"
+    - name: "Custodian"
       type: "agent"
-      class_path: "agentic_backend.agents.research.research_agent.ResearchAgent"
+      class_path: "agentic_backend.agents.custodian.custodian.Custodian"
       enabled: true
     - name: "Georges"
       type: "agent"
@@ -153,17 +168,18 @@ ai:
         search_policy_selection: true
         libraries_selection: true
         search_rag_scoping: true
-        deep_search_delegate: true
+        deep_search_delegate: false
         attach_files: true
-      metadata:
-        # Deep-search delegation target
-        deep_search_delegate_to: "Rico Senior"
     - name: "Rico Senior"
       type: "agent"
       class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
       enabled: true
-      metadata:
-        deep_search_hidden_in_ui: true
+      chat_options:
+        search_policy_selection: true
+        libraries_selection: true
+        search_rag_scoping: true
+        deep_search_delegate: false
+        attach_files: true
     - name: "Tessa"
       type: "agent"
       class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
@@ -183,6 +199,14 @@ ai:
     - name: "LogGenius"
       type: "agent"
       class_path: "agentic_backend.agents.log_genius.log_genius_expert.LogGenius"
+      enabled: true
+    - name: "BusinessAgent"
+      type: "agent"
+      class_path: "agentic_backend.academy.08_business_workflow.business_agent.BusinessAgent"
+      enabled: true
+    - name: "HITL"
+      type: "agent"
+      class_path: "agentic_backend.academy.10_human_in_the_loop.hitl_agent.HitlAgent"
       enabled: true
 
 mcp:
@@ -216,12 +240,20 @@ mcp:
       url: "http://localhost:8081/mcp"
       sse_read_timeout: 2000
       auth_mode: "user_token"
-    - id: "mcp-fs"
+    - id: "mcp-knowledge-flow-fs"
       name: "mcp.servers.filesystem.name"
       description: "mcp.servers.filesystem.description"
       enabled: true
       transport: "streamable_http"
-      url: "http://localhost:8111/knowledge-flow/v1/mcp-filesystem"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-fs"
+      sse_read_timeout: 2000
+      auth_mode: "user_token"
+    - id: "mcp-knowledge-flow-corpus"
+      name: "mcp.servers.corpus.name"
+      description: "mcp.servers.corpus.description"
+      enabled: true
+      transport: "streamable_http"
+      url: "http://localhost:8111/knowledge-flow/v1/mcp-corpus"
       sse_read_timeout: 2000
       auth_mode: "user_token"
     - id: "mcp-neo4j-graph-db"

@@ -169,6 +169,10 @@ applications:
         metrics_enabled: true # Prometheus exporter
         metrics_address: "0.0.0.0"
         metrics_port: 9000
+        kpi_process_metrics_interval_sec: 0
+        kpi_log_summary_interval_sec: 0.0
+        kpi_log_summary_top_n: 0
+
       security:
         m2m:
           enabled: true
@@ -228,7 +232,7 @@ applications:
         agentic_restore_max_exchanges: 20
 
         # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
-        max_concurrent_agents: 128
+        max_concurrent_agents: 1024
 
         # Maximum number of files a user can attach across all sessions
         max_attached_files_per_user: 20
@@ -243,28 +247,40 @@ applications:
           connect: 5 # Time to wait for a connection in seconds
           read: 15 # Time to wait for a response in seconds
         default_chat_model:
-          # Required in .env:
-          # - OPENAI_API_KEY
           provider: "openai"
-          name: "gpt-4o"
+          name: "gpt-4o-mini"
           settings:
             temperature: 0.0
-            max_retries: 2
-            request_timeout: 30
+            max_retries: 1
+            timeout:
+              connect: 10.0
+              read: 120.0
+              write: 30.0
+              pool: 5.0
+            http_client_limits:
+              max_connections: 500
+              max_keepalive_connections: 200
+              keepalive_expiry_seconds: 10
         default_language_model:
-          # Required in .env:
-          # - OPENAI_API_KEY
           provider: "openai"
           name: "gpt-4o"
           settings:
             temperature: 0.0
-            max_retries: 2
-            request_timeout: 30
-        crossencoder_model:
-          name: cross-encoder/ms-marco-MiniLM-L-12-v2
-          settings:
-            online: false
-            local_path: /app/models
+            max_retries: 1
+            timeout:
+              connect: 10.0
+              read: 180.0
+              write: 30.0
+              pool: 5.0
+            http_client_limits:
+              max_connections: 500
+              max_keepalive_connections: 200
+              keepalive_expiry_seconds: 10
+          crossencoder_model:
+            name: cross-encoder/ms-marco-MiniLM-L-12-v2
+            settings:
+              online: false
+              local_path: /app/models
 
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the chat model
@@ -634,6 +650,10 @@ applications:
         metrics_enabled: true # Prometheus exporter
         metrics_address: "0.0.0.0"
         metrics_port: 9111
+        kpi_process_metrics_interval_sec: 0
+        kpi_log_summary_interval_sec: 0.0
+        kpi_log_summary_top_n: 0
+
       processing:
         generate_summary: true
         use_gpu: true
@@ -670,7 +690,7 @@ applications:
           host: "localhost:7233"
           namespace: "default"
           task_queue: "ingestion"
-          workflow_prefix: "pipeline"
+          workflow_id_prefix: "pipeline"
           connect_timeout_seconds: 5
       input_processors:
         - prefix: ".pdf"
