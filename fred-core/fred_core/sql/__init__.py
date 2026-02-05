@@ -6,7 +6,11 @@ Usage:
     from fred_core.sql import SeedMarkerMixin, PydanticJsonMixin
 """
 
-from fred_core.sql.base_sql import BaseSqlStore, create_async_engine_from_config, create_engine_from_config
+from fred_core.sql.base_sql import (
+    BaseSqlStore,
+    create_async_engine_from_config,
+    create_engine_from_config,
+)
 from fred_core.sql.mixin import PydanticJsonMixin, SeedMarkerMixin
 
 __all__ = [
