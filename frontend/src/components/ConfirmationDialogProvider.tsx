@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from "@mui/material";
-import React, { createContext, useContext, useState } from "react";
+import { createContext, PropsWithChildren, useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 // Define the structure for the confirmation dialog
@@ -35,10 +35,7 @@ interface ConfirmationDialogContextType {
 // Create the ConfirmationDialogContext
 const ConfirmationDialogContext = createContext<ConfirmationDialogContextType | null>(null);
 
-export const ConfirmationDialogProvider: React.FC<{
-  children: React.ReactNode;
-  showConfirmationDialog;
-}> = ({ children }) => {
+export const ConfirmationDialogProvider = ({ children }: PropsWithChildren) => {
   const { t } = useTranslation();
   const [dialogOptions, setDialogOptions] = useState<ConfirmationDialogOptions | null>(null);
 
