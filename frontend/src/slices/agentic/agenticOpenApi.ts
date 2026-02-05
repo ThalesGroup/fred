@@ -568,6 +568,8 @@ export type AgentChatOptions = {
   search_policy_selection?: boolean;
   /** Display a picker to include document libraries/knowledge sources that the agent can use for this message (session-scoped context). */
   libraries_selection?: boolean;
+  /** Allow vector search on corpus documents. If false, corpus retrieval is disabled for this agent even when the client requests it. */
+  include_corpus_in_search?: boolean;
   /** Add a microphone control to record a short audio clip and attach it to the message. */
   record_audio_files?: boolean;
   /** Allow attaching local files (e.g., PDFs, images, text) to the message and show existing attachments. */
