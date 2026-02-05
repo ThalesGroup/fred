@@ -812,7 +812,7 @@ applications:
     # Toggle Temporal worker pod deployment.
     # Note: You need to have set knowledge-flow-backend.configuration.scheduler.enabled = true
     # otherwise this deployment will not be created.
-    enabled: true
+    enabled: false
     applicationName: knowledge-flow-worker
     replicaCount: 3 # 3 temporal workers
     configuration:
