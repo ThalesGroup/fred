@@ -46,8 +46,8 @@ class SalesWorker(AgentFlow):
     """
 
     tuning = AgentTuning(
-        role="Commercial Control (CMA CGM)",
-        description="Simule une tour de contrôle commerciale CMA CGM : SLAs/clients sensibles, risques pénalités, priorisation slots/allocs.",
+        role="Commercial Control (Demo)",
+        description="Simule une tour de contrôle commerciale : SLAs/clients sensibles, risques pénalités, priorisation d'allocations.",
         tags=["demo", "temporal", "commercial"],
         fields=[],
     )
@@ -81,7 +81,7 @@ class SalesWorker(AgentFlow):
 
     # --- Phases ---
     async def phase_one(self, state: DemoAgentState):
-        project = state.get("project_id") or "Sales-CMA-CGM"
+        project = state.get("project_id") or "Sales-Demo"
         await asyncio.sleep(10)
         return {
             "messages": [
@@ -95,7 +95,7 @@ class SalesWorker(AgentFlow):
         }
 
     async def phase_two(self, state: DemoAgentState):
-        project = state.get("project_id") or "Sales-CMA-CGM"
+        project = state.get("project_id") or "Sales-Demo"
         await asyncio.sleep(10)
         return {
             "messages": [
@@ -110,7 +110,7 @@ class SalesWorker(AgentFlow):
         }
 
     async def phase_three(self, state: DemoAgentState):
-        project = state.get("project_id") or "Sales-CMA-CGM"
+        project = state.get("project_id") or "Sales-Demo"
         await asyncio.sleep(10)
         return {
             "messages": [
@@ -124,7 +124,7 @@ class SalesWorker(AgentFlow):
         }
 
     async def draft_report(self, state: DemoAgentState):
-        project = state.get("project_id") or "Sales-CMA-CGM"
+        project = state.get("project_id") or "Sales-Demo"
         original_request = state["messages"][0].content if state.get("messages") else ""
         final_text = (
             f"DEMO REPORT for {project}\n"
@@ -132,6 +132,6 @@ class SalesWorker(AgentFlow):
             "Phases: 1) brief commercial/SLAs, 2) analyse pénalités & slots, "
             "3) plan d'actions clients.\n"
             "Status: Completed (no HITL).\n"
-            "Note: contenu simulé pour démonstration CMA CGM (commercial)."
+            "Note: contenu simulé pour démonstration générique commerciale."
         )
         return {"messages": [AIMessage(content=final_text)]}

@@ -25,6 +25,7 @@ class TemporalTools:
             target_agent: str,
             project_id: Optional[str] = None,
         ) -> str:
+            """Submit a long-running Temporal workflow for the given agent and return submission details as JSON."""
             submission = await self._gateway.submit(
                 request_text=request_text,
                 project_id=project_id,
@@ -36,6 +37,7 @@ class TemporalTools:
 
         @tool("temporal_status", return_direct=True)
         async def status(workflow_id: Optional[str] = None) -> str:
+            """Return the current status of a workflow (defaults to the last submitted one) as JSON."""
             wf = workflow_id or self._last_workflow_id
             if not wf:
                 return "Aucun workflow connu. Soumets d'abord une requête."

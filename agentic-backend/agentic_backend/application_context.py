@@ -59,6 +59,8 @@ from fred_core.kpi import (
     OpenSearchKPIStore,
     PrometheusKPIStore,
 )
+from fred_core.logs.log_structures import StdoutLogStorageConfig
+from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import TemporalClientProvider
 from fred_core.sql import create_engine_from_config
 from langchain_core.language_models.base import BaseLanguageModel
@@ -566,6 +568,8 @@ class ApplicationContext:
                 secure=opensearch_config.secure,
                 verify_certs=opensearch_config.verify_certs,
             )
+        elif isinstance(config, StdoutLogStorageConfig):
+            self._log_store_instance = NullLogStore()
         elif isinstance(config, InMemoryLogStorageConfig) or config is None:
             self._log_store_instance = RamLogStore(
                 capacity=1000

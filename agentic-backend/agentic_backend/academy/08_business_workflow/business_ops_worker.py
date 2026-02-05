@@ -40,14 +40,14 @@ class DemoAgentState(TypedDict):
     project_id: Optional[str]
 
 
-class TemporalWorkerOps(AgentFlow):
+class OpsWorker(AgentFlow):
     """
     Long-running demo agent: three timed phases, no HITL, no delegation.
     """
 
     tuning = AgentTuning(
-        role="Ops Control (CMA CGM)",
-        description="Simule une tour de contrôle opérations flotte CMA CGM : brief flotte, analyse retards/congestion, plan d'actions rapides.",
+        role="Ops Control (Demo)",
+        description="Simule une tour de contrôle opérations pour un réseau logistique : brief flotte/actifs, analyse retards/congestion, plan d'actions rapides.",
         tags=["demo", "temporal", "ops"],
         fields=[],
     )
@@ -81,27 +81,27 @@ class TemporalWorkerOps(AgentFlow):
 
     # --- Phases ---
     async def phase_one(self, state: DemoAgentState):
-        project = state.get("project_id") or "Ops-CMA-CGM"
+        project = state.get("project_id") or "Ops-Demo"
         await asyncio.sleep(10)
         return {
             "messages": [
                 AIMessage(
                     content=(
                         f"[Phase 1/3] Brief opérationnel créé pour {project} : "
-                        "collecte flotte CMA CGM en rotation, dernières ETA/ETD et météo portuaire clé."
+                        "collecte des actifs en rotation, dernières ETA/ETD et météo portuaire clé."
                     )
                 )
             ]
         }
 
     async def phase_two(self, state: DemoAgentState):
-        project = state.get("project_id") or "Ops-CMA-CGM"
+        project = state.get("project_id") or "Ops-Demo"
         await asyncio.sleep(10)
         return {
             "messages": [
                 AIMessage(
                     content=(
-                        f"[Phase 2/3] Analyse flotte {project} : retards probables, "
+                        f"[Phase 2/3] Analyse opérations {project} : retards probables, "
                         "risques congestion (top hubs) et alertes météo/fuel."
                     )
                 )
@@ -109,21 +109,21 @@ class TemporalWorkerOps(AgentFlow):
         }
 
     async def phase_three(self, state: DemoAgentState):
-        project = state.get("project_id") or "Ops-CMA-CGM"
+        project = state.get("project_id") or "Ops-Demo"
         await asyncio.sleep(10)
         return {
             "messages": [
                 AIMessage(
                     content=(
                         f"[Phase 3/3] Consolidation {project} : plan d'actions rapides "
-                        "(reroutage léger, priorisation escales, notifications clients sensibles)."
+                        "(reroutage léger, priorisation escales, notifications parties prenantes)."
                     )
                 )
             ]
         }
 
     async def draft_report(self, state: DemoAgentState):
-        project = state.get("project_id") or "Ops-CMA-CGM"
+        project = state.get("project_id") or "Ops-Demo"
         original_request = state["messages"][0].content if state.get("messages") else ""
         final_text = (
             f"DEMO REPORT for {project}\n"
@@ -131,6 +131,6 @@ class TemporalWorkerOps(AgentFlow):
             "Phases: 1) brief flotte/ETA/météo, 2) analyse retards & congestion, "
             "3) plan d'actions rapides.\n"
             "Status: Completed (no HITL).\n"
-            "Note: contenu simulé pour démonstration CMA CGM."
+            "Note: contenu simulé pour démonstration générique opérations."
         )
         return {"messages": [AIMessage(content=final_text)]}

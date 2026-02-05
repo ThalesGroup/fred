@@ -17,7 +17,6 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
-from fred_core.scheduler import SchedulerInputArgsV1
 from pydantic import BaseModel, Field
 
 
@@ -40,9 +39,15 @@ class AgentContextRefsV1(BaseModel):
     document_uids: List[str] = Field(default_factory=list)
 
 
-# -----------------------------
-# Inputs (Workflow -> Activity)
-# -----------------------------
+class SchedulerInputArgsV1(BaseModel):
+    """
+    Minimal envelope used by schedulers (kept local to avoid heavy imports during Temporal workflow validation).
+    """
+
+    task_id: str  # unique identifier for the scheduled task
+    target_ref: str  # the workflow/agent/app unique identifier to invoke
+    target_kind: Literal["agent", "app"] = "agent"
+    parameters: Dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentInputArgsV1(SchedulerInputArgsV1):

@@ -77,9 +77,11 @@ class BusinessAgent(AgentFlow):
             raise RuntimeError("TemporalMCPClient: model non initialisé")
 
         system_prompt = (
-            "Tu peux lancer un workflow Temporal avec temporal_submit(request_text, target_agent, project_id?). "
-            "Choisis explicitement target_agent (ex: CmaOps ou CmaSales) selon le besoin. "
-            "Utilise temporal_status(workflow_id?) pour suivre. Réponds en français, concis."
+            "Tu es l'agent interactif BusinessAgent. "
+            "Pour déléguer une tâche longue, appelle temporal_submit(request_text, target_agent, project_id?). "
+            "Choisis target_agent parmi: OpsWorker (ops longues) ou SalesWorker (commercial longues). "
+            "Utilise temporal_status(workflow_id?) pour suivre l'état du dernier workflow (ou préciser un id). "
+            "Réponds en français, de façon concise."
         )
         messages = self.with_system(system_prompt, state["messages"])
         response = await self.model.ainvoke(messages)

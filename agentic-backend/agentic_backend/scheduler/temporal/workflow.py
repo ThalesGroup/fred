@@ -48,17 +48,14 @@ class AgentWorkflow:
             )
             return result
         except ActivityError as e:
-            # FIX: Use ActivityError from temporalio.exceptions
-            workflow.logger.error(
-                f"Workflow execution failed at the activity level: {e}"
-            )
+            # Logging inside the Temporal workflow sandbox can trigger restricted
+            # handlers (e.g., OpenSearch). Keep side effects minimal here.
             return AgentResultV1(
                 status=AgentResultStatus.FAILED,
                 final_summary=f"Activity failed: {str(e.__cause__ or e)}",
             )
         except Exception as e:
-            # Catch-all for other workflow-level issues
-            workflow.logger.exception("Workflow encountered an unexpected error")
+            # Catch-all for other workflow-level issues (logging avoided in sandbox)
             return AgentResultV1(
                 status=AgentResultStatus.FAILED,
                 final_summary=f"Unexpected workflow error: {str(e)}",

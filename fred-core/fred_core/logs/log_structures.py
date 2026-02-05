@@ -26,9 +26,13 @@ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 class InMemoryLogStorageConfig(BaseModel):
     type: Literal["in_memory"]
 
+class StdoutLogStorageConfig(BaseModel):
+    type: Literal["stdout"]
+
 
 LogStorageConfig = Annotated[
-    Union[InMemoryLogStorageConfig, OpenSearchIndexConfig], Field(discriminator="type")
+    Union[InMemoryLogStorageConfig, StdoutLogStorageConfig, OpenSearchIndexConfig],
+    Field(discriminator="type"),
 ]
 
 

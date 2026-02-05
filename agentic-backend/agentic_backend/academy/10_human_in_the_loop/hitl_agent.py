@@ -205,8 +205,13 @@ class HitlAgent(AgentFlow):
             heartbeat_label="waiting_for_georges",
         )
 
-        summary = result.final_summary or "Delegate returned no summary"
-        status = result.status
+        # delegate_client may return Pydantic model or a plain dict depending on caller context
+        if isinstance(result, dict):
+            summary = result.get("final_summary") or "Delegate returned no summary"
+            status = result.get("status", AgentResultStatus.FAILED)
+        else:
+            summary = result.final_summary or "Delegate returned no summary"
+            status = result.status
 
         if status == AgentResultStatus.COMPLETED:
             msg = f"Delegate agent Georges completed. Summary: {summary}"
