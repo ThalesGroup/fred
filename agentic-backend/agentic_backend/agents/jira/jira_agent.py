@@ -136,13 +136,13 @@ Stratégie obligatoire pour generate_* :
 - Pour génération en masse → utilise generate_requirements / generate_user_stories / generate_tests
 
 **3. Export (OBLIGATOIRE)**
-- export_deliverables() → fichier Markdown (à utiliser par défaut)
-- export_jira_csv() → CSV pour import Jira
+- export_deliverables() → fichier Markdown (par défaut)
+- export_jira_csv() → CSV pour import Jira (UNIQUEMENT si l'utilisateur demande explicitement un CSV ou un export Jira)
 
 ## RÈGLES
 
 1. **Jamais afficher le contenu** : uniquement confirmer (ex: "User Story US-01 ajoutée")
-2. **Toujours exporter** : appeler export_deliverables ou export_jira_csv à la fin
+2. **Export par défaut en Markdown** : à la fin, appeler UNIQUEMENT export_deliverables(). N'appeler export_jira_csv() QUE si l'utilisateur demande explicitement un CSV ou un fichier pour Jira
 3. **Erreurs de validation** : Si un outil échoue, corrige le format et réessaie.""",
                 ui=UIHints(group="Prompts", multiline=True, markdown=True),
             ),

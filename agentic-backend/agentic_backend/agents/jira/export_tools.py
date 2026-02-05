@@ -256,7 +256,7 @@ class ExportTools:
             IMPORTANT: Cet outil nécessite que generate_user_stories ait été appelé au préalable.
 
             Le fichier CSV généré contient les colonnes standard Jira:
-            - Summary, Description, IssueType, Priority, Epic Name, Epic Link, Story Points, Labels, Requirement IDs, Dependencies
+            - Summary, Description, Issue Type, Priority, Epic Name, Story Points, Labels
 
             Note: Les critères d'acceptation sont ajoutés à la Description car ce n'est pas un champ standard Jira.
 
@@ -282,14 +282,11 @@ class ExportTools:
             fieldnames = [
                 "Summary",
                 "Description",
-                "IssueType",
+                "Issue Type",
                 "Priority",
                 "Epic Name",
-                "Epic Link",
                 "Story Points",
                 "Labels",
-                "Requirement IDs",
-                "Dependencies",
             ]
             writer = csv.DictWriter(
                 output, fieldnames=fieldnames, quoting=csv.QUOTE_ALL
@@ -319,32 +316,15 @@ class ExportTools:
                 if isinstance(labels, list):
                     labels = ",".join(labels)
 
-                # Convert requirement_ids list to comma-separated string
-                requirement_ids = story.get("requirement_ids", [])
-                if isinstance(requirement_ids, list):
-                    requirement_ids = ",".join(requirement_ids)
-
-                # Convert dependencies list to comma-separated string
-                dependencies = story.get("dependencies", [])
-                if isinstance(dependencies, list):
-                    dependencies = ",".join(dependencies)
-
                 writer.writerow(
                     {
                         "Summary": story.get("summary", story.get("id", "")),
                         "Description": description,
-                        "IssueType": story.get("issue_type", "Story"),
+                        "Issue Type": story.get("issue_type", "Story"),
                         "Priority": story.get("priority", "Medium"),
-                        "Epic Name": story.get("epic_name", "")
-                        if story.get("issue_type") == "Epic"
-                        else "",
-                        "Epic Link": story.get("epic_name", "")
-                        if story.get("issue_type") != "Epic"
-                        else "",
+                        "Epic Name": story.get("epic_name", ""),
                         "Story Points": story.get("story_points", ""),
                         "Labels": labels,
-                        "Requirement IDs": requirement_ids,
-                        "Dependencies": dependencies,
                     }
                 )
 
@@ -385,7 +365,9 @@ class ExportTools:
                             f"**Pour importer dans Jira:**\n"
                             f"1. Allez dans votre projet Jira\n"
                             f"2. Menu **Project settings** > **External system import**\n"
-                            f"3. Sélectionnez **CSV** et uploadez le fichier",
+                            f"3. Sélectionnez **CSV** et uploadez le fichier\n"
+                            f"4. Mappez le champ **Epic Name** vers le champ Epic Link de Jira\n"
+                            f"5. Les Epics doivent exister dans le projet ou être créés avant l'import",
                             tool_call_id=runtime.tool_call_id,
                         ),
                     ],
