@@ -461,10 +461,18 @@ async def test_team_hierarchy_and_permissions(
     # Test manager can update members
     assert await rebac_engine.has_permission(
         team_manager,
-        TeamPermission.CAN_UPDATE_MEMBERS,
+        TeamPermission.CAN_ADMINISTER_MEMBERS,
         team,
         consistency_token=token,
     ), "Team manager should be able to update members"
+
+    # Test manager can't update owner members
+    assert not await rebac_engine.has_permission(
+        team_manager,
+        TeamPermission.CAN_ADMINISTER_OWNERS,
+        team,
+        consistency_token=token,
+    ), "Team manager should not be able to administer owners members"
 
     # Test manager can update tag via team ownership
     assert await rebac_engine.has_permission(
@@ -528,13 +536,21 @@ async def test_team_hierarchy_and_permissions(
         consistency_token=token,
     ), "Organization admin should be able to update team info"
 
-    # Test organization admin can edit team info
+    # Test organization admin edit members
     assert await rebac_engine.has_permission(
         organization_admin,
-        TeamPermission.CAN_UPDATE_MEMBERS,
+        TeamPermission.CAN_ADMINISTER_MEMBERS,
         team,
         consistency_token=token,
     ), "Organization admin should be able to update team members"
+
+    # Test organization admin can edit owner member
+    assert await rebac_engine.has_permission(
+        organization_admin,
+        TeamPermission.CAN_ADMINISTER_OWNERS,
+        team,
+        consistency_token=token,
+    ), "Organization admin should be able to administer owner team members"
 
 
 @pytest.mark.integration
@@ -746,7 +762,7 @@ async def test_public_team_read_access(
     # Test stranger CANNOT update public team members
     assert not await rebac_engine.has_permission(
         stranger,
-        TeamPermission.CAN_UPDATE_MEMBERS,
+        TeamPermission.CAN_ADMINISTER_MEMBERS,
         public_team,
         consistency_token=token,
     ), "Stranger should not be able to update public team members"
