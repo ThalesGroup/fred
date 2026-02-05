@@ -57,6 +57,7 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
 
 logger = logging.getLogger(__name__)
 
+
 class IngestionInput(BaseModel):
     tags: List[str] = []
     source_tag: str = "fred"
