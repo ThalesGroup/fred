@@ -117,10 +117,19 @@ def _build_engine_from_config(
                 pool_size=config.pool_size or 5,
                 connect_args=connect_args,
             )
-        logger.info("[SQL][%s] %s created successfully.", context, "Async engine" if async_mode else "Engine")
+        logger.info(
+            "[SQL][%s] %s created successfully.",
+            context,
+            "Async engine" if async_mode else "Engine",
+        )
         return engine
     except Exception as exc:
-        logger.exception("[SQL][%s] Failed to create %s: %s", context, "async engine" if async_mode else "engine", exc)
+        logger.exception(
+            "[SQL][%s] Failed to create %s: %s",
+            context,
+            "async engine" if async_mode else "engine",
+            exc,
+        )
         logger.error(
             "[SQL][%s] Debug details: url=%s host=%s port=%s db=%s user=%s pwd_set=%s echo=%s pool_size=%s connect_args=%s",
             context,
