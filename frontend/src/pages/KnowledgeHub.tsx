@@ -22,6 +22,7 @@ import { UserAssetsList } from "../components/documents/libraries/UserAssetsList
 import { DocumentOperations } from "../components/documents/operations/DocumentOperations";
 import InvisibleLink from "../components/InvisibleLink";
 import ResourceLibraryList from "../components/resources/ResourceLibraryList";
+import { usePermissions } from "../security/usePermissions";
 import { useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 const knowledgeHubViews = ["operations", "documents", "chatContexts", "userAssets"] as const;
@@ -35,6 +36,8 @@ const defaultView: KnowledgeHubView = "documents";
 
 export const KnowledgeHub = () => {
   const { t } = useTranslation();
+  const { can } = usePermissions();
+  const canCreateTag = can("tag", "create");
 
   const [searchParams, setSearchParams] = useSearchParams();
   const viewParam = searchParams.get("view");
@@ -94,7 +97,7 @@ export const KnowledgeHub = () => {
         )}
         {selectedView === "documents" && (
           <Container maxWidth="xl">
-            <DocumentLibraryList />
+            <DocumentLibraryList canCreateTag={canCreateTag} />
           </Container>
         )}
         {selectedView === "userAssets" && <UserAssetsTab />}

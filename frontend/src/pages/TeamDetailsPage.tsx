@@ -47,7 +47,12 @@ export function TeamDetailsPage() {
     {
       label: t("teamDetails.tabs.resources"),
       path: `/team/${teamId}/resources`,
-      component: <TeamDocumentsLibrary teamId={teamId} />,
+      component: (
+        <TeamDocumentsLibrary
+          teamId={teamId}
+          canCreateTag={team?.permissions?.includes("can_update_resources")}
+        />
+      ),
     },
     {
       label: t("teamDetails.tabs.apps"),

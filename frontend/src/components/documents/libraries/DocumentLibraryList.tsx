@@ -23,7 +23,6 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { LibraryCreateDrawer } from "../../../common/LibraryCreateDrawer";
 import { useTagCommands } from "../../../common/useTagCommands";
-import { usePermissions } from "../../../security/usePermissions";
 import { EmptyState } from "../../EmptyState";
 
 import { useLocalStorageState } from "../../../hooks/useLocalStorageState";
@@ -46,9 +45,10 @@ import { LibraryPipelineDrawer } from "./LibraryPipelineDrawer";
 
 export interface DocumentLibraryListProps {
   teamId?: string;
+  canCreateTag?: boolean;
 }
 
-export default function DocumentLibraryList({ teamId }: DocumentLibraryListProps) {
+export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLibraryListProps) {
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
 
@@ -69,12 +69,6 @@ export default function DocumentLibraryList({ teamId }: DocumentLibraryListProps
   const selectedCount = React.useMemo(() => Object.keys(selectedDocs).length, [selectedDocs]);
   const clearSelection = React.useCallback(() => setSelectedDocs({}), []);
 
-  // Permissions (RBAC)
-  const { can } = usePermissions();
-  const canCreateDocument = can("document", "create");
-  const canDeleteDocument = can("document", "delete");
-  const canDeleteFolder = can("tag", "delete");
-  const canCreateTag = can("tag", "create");
   const { data: users = [] } = useListUsersKnowledgeFlowV1UsersGetQuery();
   const ownerNamesById = React.useMemo(() => {
     const m: Record<string, string> = {};
@@ -105,6 +99,13 @@ export default function DocumentLibraryList({ teamId }: DocumentLibraryListProps
 
   const tree = React.useMemo<TagNode | null>(() => (libraryTags ? buildTree(libraryTags) : null), [libraryTags]);
   const hasFolders = Boolean(tree && tree.children.size > 0);
+
+  // Derive "can update" from the selected tag's permissions (controls upload + bulk remove)
+  const canUpdateSelectedTag = React.useMemo(() => {
+    if (!tree || !selectedFolder) return false;
+    const node = findNode(tree, selectedFolder);
+    return node?.tagsHere?.[0]?.permissions?.includes("update") ?? false;
+  }, [tree, selectedFolder]);
 
   const getChildren = React.useCallback((n: TagNode) => {
     const arr = Array.from(n.children.values());
@@ -506,7 +507,7 @@ export default function DocumentLibraryList({ teamId }: DocumentLibraryListProps
                 setOpenUploadDrawer(true);
               }
             }}
-            disabled={!selectedFolder || !canCreateDocument}
+            disabled={!selectedFolder || !canUpdateSelectedTag}
             sx={{ borderRadius: "8px" }}
           >
             {t("documentLibrary.uploadInLibrary")}
@@ -528,7 +529,7 @@ export default function DocumentLibraryList({ teamId }: DocumentLibraryListProps
             variant="contained"
             color="error"
             onClick={bulkRemoveFromLibrary}
-            disabled={!canDeleteDocument}
+            disabled={!canUpdateSelectedTag}
           >
             {t("documentLibrary.bulkRemoveFromLibrary") || "Remove from library"}
           </Button>
@@ -620,8 +621,6 @@ export default function DocumentLibraryList({ teamId }: DocumentLibraryListProps
               loadingTagIds={loadingTags}
               onLoadMore={loadMore}
               onLoadAll={loadAll}
-              canDeleteDocument={canDeleteDocument}
-              canDeleteFolder={canDeleteFolder}
               ownerNamesById={ownerNamesById}
             />
           </Box>

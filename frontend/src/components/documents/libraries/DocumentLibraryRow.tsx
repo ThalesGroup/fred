@@ -22,7 +22,6 @@ import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
 import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
 
-import { usePermissions } from "../../../security/usePermissions";
 import { type DocumentMetadata } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DOCUMENT_PROCESSING_STAGES } from "../../../utils/const";
 import { getDocumentIcon } from "../common/DocumentIcon";
@@ -38,6 +37,8 @@ export type DocumentRowCompactProps = {
   onPdfPreview?: (doc: DocumentMetadata) => void;
   onDownload?: (doc: DocumentMetadata) => void;
   isDownloading?: boolean;
+  /** Whether the user has "update" permission on the parent tag */
+  canUpdateTag?: boolean;
   onRemoveFromLibrary?: (doc: DocumentMetadata) => void;
   onToggleRetrievable?: (doc: DocumentMetadata) => void;
 };
@@ -48,13 +49,11 @@ export function DocumentRowCompact({
   onPdfPreview,
   onDownload,
   isDownloading = false,
+  canUpdateTag = false,
   onRemoveFromLibrary,
   onToggleRetrievable,
 }: DocumentRowCompactProps) {
   const { t } = useTranslation();
-  const { can } = usePermissions();
-  const canToggle = can("document", "update");
-  const canDeleteDocument = can("document", "delete");
 
   const formatDate = (date?: string) => (date ? dayjs(date).format("DD/MM/YYYY") : "-");
   const isPdf = doc.identity.document_name.toLowerCase().endsWith(".pdf");
@@ -183,15 +182,15 @@ export function DocumentRowCompact({
           <span>
             <IconButton
               size="small"
-              disabled={!canToggle}
+              disabled={!canUpdateTag}
               onClick={() => {
-                if (!canToggle) return;
+                if (!canUpdateTag) return;
                 onToggleRetrievable?.(doc);
               }}
               sx={{
                 width: 28,
                 height: 28,
-                color: canToggle ? (doc.source.retrievable ? "success.main" : "error.main") : "action.disabled",
+                color: canUpdateTag ? (doc.source.retrievable ? "success.main" : "error.main") : "action.disabled",
               }}
               aria-label={
                 doc.source.retrievable
@@ -219,9 +218,9 @@ export function DocumentRowCompact({
           <SimpleTooltip title={t("documentLibrary.removeFromLibrary")}>
             <DeleteIconButton
               size="small"
-              disabled={!canDeleteDocument}
+              disabled={!canUpdateTag}
               onClick={() => {
-                if (!canDeleteDocument) return;
+                if (!canUpdateTag) return;
                 onRemoveFromLibrary(doc);
               }}
               iconSize="inherit"

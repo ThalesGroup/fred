@@ -3,12 +3,13 @@ import DocumentLibraryList from "../documents/libraries/DocumentLibraryList";
 
 export interface TeamDocumentsLibraryProps {
   teamId?: string;
+  canCreateTag?: boolean;
 }
 
-export function TeamDocumentsLibrary({ teamId }: TeamDocumentsLibraryProps) {
+export function TeamDocumentsLibrary({ teamId, canCreateTag }: TeamDocumentsLibraryProps) {
   return (
     <Box sx={{ p: 3 }}>
-      <DocumentLibraryList teamId={teamId} />
+      <DocumentLibraryList teamId={teamId} canCreateTag={canCreateTag} />
     </Box>
   );
 }
