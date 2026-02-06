@@ -26,7 +26,7 @@ type team
     # Public visibility - allows anyone to read team info
     define public: [user:*]
 
-    # --- Permissions (computed relations) ---
+    # --------------- Permissions (computed relations) ---------------
     # Can read team info (name, description, banner, owners list...)
     # -> must be at least member or team is public
     define can_read: member or public
@@ -45,7 +45,7 @@ type team
     # -> must be member
     define can_read_members: member
 
-    # -- Helpers (not permission to use directly, only to help define) --
+    # --------------- Helpers (not permission to use directly, only to help define them) ---------------
 
     # Can upload/rename/delete team resources (file/folders)
     # -> must be at least manager
@@ -59,7 +59,7 @@ type agent
   relations
     define owner: [user, team]
 
-    # --- Permissions (computed relations) ---
+    # --------------- Permissions (computed relations) ---------------
 
 
     # Can update agent configuration
@@ -77,28 +77,28 @@ type tag
     define viewer: [user]
     define parent: [tag]
 
-    # --- Permissions (computed relations) ---
+    # --------------- Permissions (computed relations) ---------------
     # Can read tag: see its name, description, list documents...
-    # -> must be at least viewer
+    # -> must be at least viewer or team member
     define read: viewer or editor or owner or read from parent or member from owner
 
     # Can update tag: change its name, description... add or remove content (like documents) in the tag
-    # -> must be at least editor
+    # -> must be at least editor or team manager
     define update: editor or owner or update from parent or can_update_resources from owner
 
     # Can delete tag
-    # -> must be owner
+    # -> must be owner or team manager
     define delete: owner or delete from parent or can_update_resources from owner
 
     # Can share tag: add/remove editors/viewers
-    # -> must be owner
-    define share: owner or share from parent or can_update_resources from owner
+    # -> must be direct owner (no sharing for team owned tag)
+    define share: owner or share from parent
 
 type document
   relations
     define parent: [tag]
 
-    # --- Permissions (computed relations) ---
+    # --------------- Permissions (computed relations) ---------------
     # Can read document: see its content
     # -> must be able to read parent tag (at least viewer)
     define read: read from parent
@@ -120,7 +120,7 @@ type resource
   relations
     define parent: [tag]
 
-    # --- Permissions (computed relations) ---
+    # --------------- Permissions (computed relations) ---------------
     # Can read resources: see its content
     # -> must be able to read parent tag (at least viewer)
     define read: read from parent

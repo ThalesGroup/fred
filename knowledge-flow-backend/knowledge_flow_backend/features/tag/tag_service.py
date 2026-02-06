@@ -28,6 +28,7 @@ from fred_core import (
     RelationType,
     Resource,
     TagPermission,
+    TeamPermission,
     authorize,
 )
 
@@ -132,16 +133,25 @@ class TagService:
 
     @authorize(Action.CREATE, Resource.TAGS)
     async def create_tag_for_user(self, tag_data: TagCreate, user: KeycloakUser) -> TagWithItemsId:
+        team_id = tag_data.team_id
+
+        # If team_id is provided, check user has permission to manage team resources
+        if team_id:
+            await self.rebac.check_user_permission_or_raise(user, TeamPermission.CAN_UPDATE_RESOURCES, team_id)
+
+        # owner_id is the team or user, used for uniqueness scoping
+        owner_id = team_id or user.uid
+
         # Normalize + uniqueness
         norm_path = self._normalize_path(tag_data.path)
         full_path = self._compose_full_path(norm_path, tag_data.name)
-        self._ensure_unique_full_path(owner_id=user.uid, tag_type=tag_data.type, full_path=full_path)
+        self._ensure_unique_full_path(owner_id=owner_id, tag_type=tag_data.type, full_path=full_path)
 
         now = datetime.now()
         tag = self._tag_store.create_tag(
             Tag(
                 id=str(uuid4()),
-                owner_id=user.uid,
+                owner_id=owner_id,
                 created_at=now,
                 updated_at=now,
                 name=tag_data.name,
@@ -151,11 +161,21 @@ class TagService:
             )
         )
 
-        await self.rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.TAGS, resource_id=tag.id)
+        # Create ReBAC ownership: team owns the tag, or user owns the tag
+        if team_id:
+            await self.rebac.add_relation(
+                Relation(
+                    subject=RebacReference(type=Resource.TEAM, id=team_id),
+                    relation=RelationType.OWNER,
+                    resource=RebacReference(type=Resource.TAGS, id=tag.id),
+                )
+            )
+        else:
+            await self.rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.TAGS, resource_id=tag.id)
 
         # Link to parent tag in ReBAC when the new tag is nested.
         if norm_path:
-            parent_tag = self._tag_store.get_by_owner_type_full_path(owner_id=user.uid, tag_type=tag_data.type, full_path=norm_path)
+            parent_tag = self._tag_store.get_by_owner_type_full_path(owner_id=owner_id, tag_type=tag_data.type, full_path=norm_path)
             if parent_tag:
                 await self.rebac.add_relation(
                     Relation(
@@ -168,7 +188,7 @@ class TagService:
                 logger.warning(
                     "[TAGS] Parent tag not found for full_path=%s (owner=%s, type=%s) during creation of %s",
                     norm_path,
-                    user.uid,
+                    owner_id,
                     tag_data.type,
                     tag.id,
                 )

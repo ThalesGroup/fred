@@ -228,12 +228,6 @@
                   "computedUserset": { "relation": "share" },
                   "tupleset": { "relation": "parent" }
                 }
-              },
-              {
-                "tupleToUserset": {
-                  "computedUserset": { "relation": "can_update_resources" },
-                  "tupleset": { "relation": "owner" }
-                }
               }
             ]
           }

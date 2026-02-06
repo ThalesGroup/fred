@@ -48,12 +48,14 @@ class TagCreate(BaseModel):
     """
     name: leaf segment (e.g. 'HR')
     path: optional parent path (e.g. 'Sales'); full path becomes 'Sales/HR'
+    team_id: optional team ID. If provided, the tag is owned by the team instead of the user.
     """
 
     name: str
     path: Optional[str] = None
     description: Optional[str] = None
     type: TagType
+    team_id: Optional[str] = None
 
     @field_validator("path")
     @classmethod
