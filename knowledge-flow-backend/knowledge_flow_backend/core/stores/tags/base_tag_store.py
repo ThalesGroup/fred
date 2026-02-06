@@ -15,8 +15,6 @@
 from abc import ABC, abstractmethod
 from typing import List
 
-from fred_core import KeycloakUser
-
 from knowledge_flow_backend.features.tag.structure import Tag, TagType
 
 
@@ -40,10 +38,10 @@ class TagDeserializationError(Exception):
 
 class BaseTagStore(ABC):
     """
-    Abstract base class for storing and retrieving tags, user-scoped.
+    Abstract base class for storing and retrieving tags.
 
     Exceptions:
-        - list_tags_for_user: (should not throw)
+        - list_all_tags: (should not throw)
         - get_tag_by_id: TagNotFoundError if tag does not exist
         - create_tag: TagAlreadyExistsError if tag already exists
         - update_tag_by_id: TagNotFoundError if tag does not exist
@@ -51,7 +49,7 @@ class BaseTagStore(ABC):
     """
 
     @abstractmethod
-    def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
+    def list_all_tags(self) -> List[Tag]:
         pass
 
     @abstractmethod

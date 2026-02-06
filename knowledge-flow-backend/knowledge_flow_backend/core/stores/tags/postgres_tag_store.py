@@ -17,7 +17,6 @@ from __future__ import annotations
 import logging
 from typing import Any, List
 
-from fred_core import KeycloakUser
 from fred_core.sql import BaseSqlStore, PydanticJsonMixin
 from sqlalchemy import Column, DateTime, MetaData, String, Table, select
 from sqlalchemy.dialects.postgresql import JSONB
@@ -78,10 +77,9 @@ class PostgresTagStore(BaseTagStore, PydanticJsonMixin):
 
     # CRUD implementation mirroring DuckDB store
 
-    def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
-        owner_id = getattr(user, "uid", None) or getattr(user, "id", None) or getattr(user, "sub", None)
+    def list_all_tags(self) -> List[Tag]:
         with self.store.begin() as conn:
-            rows = conn.execute(select(self.table.c.doc).where(self.table.c.owner_id == owner_id).order_by(self.table.c.path.nullsfirst(), self.table.c.name)).fetchall()
+            rows = conn.execute(select(self.table.c.doc).order_by(self.table.c.path.nullsfirst(), self.table.c.name)).fetchall()
         return [self._from_dict(r[0]) for r in rows]
 
     def get_tag_by_id(self, tag_id: str) -> Tag:
