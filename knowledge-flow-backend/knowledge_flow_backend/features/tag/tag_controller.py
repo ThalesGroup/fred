@@ -33,11 +33,11 @@ from knowledge_flow_backend.features.tag.structure import (
     ShareTargetResource,
     TagCreate,
     TagMembersResponse,
-    TagPermissionsResponse,
     TagShareRequest,
     TagType,
     TagUpdate,
     TagWithItemsId,
+    TagWithPermissions,
 )
 from knowledge_flow_backend.features.tag.tag_service import TagService
 
@@ -86,7 +86,7 @@ class TagController:
     def _register_routes(self, router: APIRouter):
         @router.get(
             "/tags",
-            response_model=list[TagWithItemsId],
+            response_model=list[TagWithPermissions],
             response_model_exclude_none=True,
             tags=["Tags"],
             summary=("List tags (optionally filter by type or path prefix). Supports pagination to avoid huge payloads."),
@@ -108,7 +108,7 @@ class TagController:
                 Query(description="Team ID, required when owner_filter is 'team'"),
             ] = None,
             user: KeycloakUser = Depends(get_current_user),
-        ) -> list[TagWithItemsId]:
+        ) -> list[TagWithPermissions]:
             return await self.service.list_all_tags_for_user(
                 user,
                 tag_type=type,
@@ -128,16 +128,6 @@ class TagController:
         )
         async def get_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
             return await self.service.get_tag_for_user(tag_id, user)
-
-        @router.get(
-            "/tags/{tag_id}/permissions",
-            response_model=TagPermissionsResponse,
-            tags=["Tags"],
-            summary="List permissions available on a tag for the current user",
-        )
-        async def get_tag_permissions(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
-            permissions = await self.service.get_tag_permissions_for_user(tag_id, user)
-            return TagPermissionsResponse(permissions=permissions)
 
         @router.get(
             "/tags/{tag_id}/members",

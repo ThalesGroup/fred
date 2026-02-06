@@ -498,12 +498,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/tags/${queryArg.tagId}`, method: "DELETE" }),
     }),
-    getTagPermissionsKnowledgeFlowV1TagsTagIdPermissionsGet: build.query<
-      GetTagPermissionsKnowledgeFlowV1TagsTagIdPermissionsGetApiResponse,
-      GetTagPermissionsKnowledgeFlowV1TagsTagIdPermissionsGetApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/tags/${queryArg.tagId}/permissions` }),
-    }),
     listTagMembersKnowledgeFlowV1TagsTagIdMembersGet: build.query<
       ListTagMembersKnowledgeFlowV1TagsTagIdMembersGetApiResponse,
       ListTagMembersKnowledgeFlowV1TagsTagIdMembersGetApiArg
@@ -1268,7 +1262,7 @@ export type DeleteFastIngestKnowledgeFlowV1FastIngestDocumentUidDeleteApiArg = {
   /** Optional session_id for scoped cleanup */
   sessionId?: string | null;
 };
-export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithItemsId[];
+export type ListAllTagsKnowledgeFlowV1TagsGetApiResponse = /** status 200 Successful Response */ TagWithPermissions[];
 export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
   /** Filter by tag type */
   type?: TagType | null;
@@ -1298,11 +1292,6 @@ export type UpdateTagKnowledgeFlowV1TagsTagIdPutApiArg = {
 };
 export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiResponse = unknown;
 export type DeleteTagKnowledgeFlowV1TagsTagIdDeleteApiArg = {
-  tagId: string;
-};
-export type GetTagPermissionsKnowledgeFlowV1TagsTagIdPermissionsGetApiResponse =
-  /** status 200 Successful Response */ TagPermissionsResponse;
-export type GetTagPermissionsKnowledgeFlowV1TagsTagIdPermissionsGetApiArg = {
   tagId: string;
 };
 export type ListTagMembersKnowledgeFlowV1TagsTagIdMembersGetApiResponse =
@@ -1986,6 +1975,20 @@ export type BodyFastIngestKnowledgeFlowV1FastIngestPost = {
   scope?: string;
 };
 export type TagType = "document" | "prompt" | "template" | "chat-context";
+export type TagPermission = "read" | "update" | "delete" | "share" | "owner" | "editor" | "viewer";
+export type TagWithPermissions = {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  owner_id: string;
+  name: string;
+  path?: string | null;
+  description?: string | null;
+  type: TagType;
+  item_ids: string[];
+  permissions?: TagPermission[];
+};
+export type OwnerFilter = "personal" | "team";
 export type TagWithItemsId = {
   id: string;
   created_at: string;
@@ -1997,7 +2000,6 @@ export type TagWithItemsId = {
   type: TagType;
   item_ids: string[];
 };
-export type OwnerFilter = "personal" | "team";
 export type TagCreate = {
   name: string;
   path?: string | null;
@@ -2011,10 +2013,6 @@ export type TagUpdate = {
   description?: string | null;
   type: TagType;
   item_ids?: string[];
-};
-export type TagPermission = "read" | "update" | "delete" | "share" | "owner" | "editor" | "viewer";
-export type TagPermissionsResponse = {
-  permissions: TagPermission[];
 };
 export type UserTagRelation = "owner" | "editor" | "viewer";
 export type UserSummary = {
@@ -2645,8 +2643,6 @@ export const {
   useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery,
   useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation,
   useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation,
-  useGetTagPermissionsKnowledgeFlowV1TagsTagIdPermissionsGetQuery,
-  useLazyGetTagPermissionsKnowledgeFlowV1TagsTagIdPermissionsGetQuery,
   useListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery,
   useLazyListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery,
   useShareTagKnowledgeFlowV1TagsTagIdSharePostMutation,

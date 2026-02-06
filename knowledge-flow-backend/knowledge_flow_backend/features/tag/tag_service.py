@@ -46,6 +46,7 @@ from knowledge_flow_backend.features.tag.structure import (
     TagType,
     TagUpdate,
     TagWithItemsId,
+    TagWithPermissions,
     UserTagRelation,
 )
 from knowledge_flow_backend.features.tag.tag_item_service import get_specific_tag_item_service
@@ -79,7 +80,7 @@ class TagService:
         offset: int = 0,
         owner_filter: Optional[OwnerFilter] = None,
         team_id: Optional[str] = None,
-    ) -> list[TagWithItemsId]:
+    ) -> list[TagWithPermissions]:
         """
         List user tags, optionally filtered by type and hierarchical prefix (e.g. 'Sales' or 'Sales/HR').
         Pagination included.
@@ -114,21 +115,27 @@ class TagService:
         sliced = tags[offset : offset + limit]
 
         # 6) attach item ids
-        result: list[TagWithItemsId] = []
+        tags_with_items: list[TagWithItemsId] = []
         for tag in sliced:
             item_service = get_specific_tag_item_service(tag.type)
             item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
+            tags_with_items.append(TagWithItemsId.from_tag(tag, item_ids))
 
-            result.append(TagWithItemsId.from_tag(tag, item_ids))
+        # 7) batch-resolve permissions for all returned tags
+        tag_ids = {t.id for t in tags_with_items}
+        permissions_map = await self._get_tag_permissions_for_list(user, tag_ids)
+
+        tags_with_perm = [TagWithPermissions.from_tag_with_items(t, permissions_map.get(t.id, [])) for t in tags_with_items]
+
         logger.info(
             "[TAGS] list_all_tags_for_user user=%s type=%s owner_filter=%s returned=%d tags=%s",
             user.uid,
             tag_type,
             owner_filter,
-            len(result),
-            [t.id for t in result],
+            len(tags_with_perm),
+            [t.id for t in tags_with_perm],
         )
-        return result
+        return tags_with_perm
 
     @authorize(Action.READ, Resource.TAGS)
     async def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
@@ -291,17 +298,6 @@ class TagService:
             )
 
     @authorize(Action.READ, Resource.TAGS)
-    async def get_tag_permissions_for_user(self, tag_id: str, user: KeycloakUser) -> list[TagPermission]:
-        """
-        Retrieve the list of permissions the user has on the given tag.
-        """
-        await self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
-
-        tag_reference = RebacReference(type=Resource.TAGS, id=tag_id)
-        user_reference = RebacReference(type=Resource.USER, id=user.uid)
-        return [permission for permission in TagPermission if await self.rebac.has_permission(user_reference, permission, tag_reference)]
-
-    @authorize(Action.READ, Resource.TAGS)
     async def list_tag_members(self, tag_id: str, user: KeycloakUser) -> list[TagMemberUser]:
         """
         List users who have access to the tag along with their relation level.
@@ -430,6 +426,40 @@ class TagService:
         }
 
     # ---------- Internals / helpers ----------
+
+    # Permissions that are actual ReBAC relations (owner/editor/viewer),
+    # not action-based permissions. We exclude them from the batch permission
+    # check since they are not useful for frontend UI gating.
+    _RELATION_PERMISSIONS: set[TagPermission] = {perm for perm in TagPermission if perm.value in {rt.value for rt in RelationType}}
+
+    async def _get_tag_permissions_for_list(
+        self,
+        user: KeycloakUser,
+        tag_ids: set[str],
+    ) -> dict[str, list[TagPermission]]:
+        """Batch-resolve action permissions for multiple tags using lookup_resources.
+
+        Uses one lookup_resources call per permission type (O(permissions), not O(tags × permissions)).
+        """
+        if not tag_ids:
+            return {}
+
+        action_permissions = [p for p in TagPermission if p not in self._RELATION_PERMISSIONS]
+
+        results = await asyncio.gather(*[self.rebac.lookup_user_resources(user, perm) for perm in action_permissions])
+
+        perm_map: dict[str, list[TagPermission]] = {tid: [] for tid in tag_ids}
+        for perm, authorized_refs in zip(action_permissions, results):
+            if isinstance(authorized_refs, RebacDisabledResult):
+                # ReBAC disabled: grant all action permissions to every tag
+                for tid in tag_ids:
+                    perm_map[tid] = list(action_permissions)
+                return perm_map
+            authorized_ids = {ref.id for ref in authorized_refs}
+            for tid in tag_ids & authorized_ids:
+                perm_map[tid].append(perm)
+
+        return perm_map
 
     async def _resolve_authorized_tag_ids(
         self,

@@ -112,6 +112,16 @@ class TagWithItemsId(Tag):
         return cls(**tag.model_dump(), item_ids=item_ids)
 
 
+class TagWithPermissions(TagWithItemsId):
+    """Tag with user-specific permissions included."""
+
+    permissions: list[TagPermission] = Field(default_factory=list)
+
+    @classmethod
+    def from_tag_with_items(cls, tag: TagWithItemsId, permissions: list[TagPermission]) -> "TagWithPermissions":
+        return cls(**tag.model_dump(), permissions=permissions)
+
+
 # Subset of RelationType for user-tag relations
 class UserTagRelation(str, Enum):
     OWNER = RelationType.OWNER.value
@@ -134,10 +144,6 @@ class TagShareRequest(BaseModel):
     target_id: str
     target_type: ShareTargetResource
     relation: UserTagRelation
-
-
-class TagPermissionsResponse(BaseModel):
-    permissions: list[TagPermission]
 
 
 class TagMemberUser(BaseModel):
