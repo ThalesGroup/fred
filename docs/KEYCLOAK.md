@@ -154,11 +154,6 @@ In `fred-core/fred_core/security/whitelist_access_control` create a file named `
 - `users.txt` present and **non-empty** → whitelist **enabled**
 - `users.txt` present but **unreadable** → whitelist **disabled** (logged)
 
-**File location**
-```
-fred-core/fred_core/security/whitelist_access_control/users.txt
-```
-
 **Format**
 - One email per line
 - Blank lines allowed
