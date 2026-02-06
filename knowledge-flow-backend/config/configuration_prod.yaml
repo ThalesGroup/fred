@@ -252,12 +252,15 @@ storage:
     index: log-index
 
   tabular_stores:
-    base_database: # Minimal configuration to enable CSV document ingestion
+    base_database:
       type: "sql"
-      driver: "duckdb"
-      database: "base_database"
-      path: "~/.fred/knowledge-flow/db.duckdb"
       mode: "read_and_write"
+      driver: "postgresql+psycopg2"
+      host: "localhost"
+      port: 5432
+      database: "data"
+      path: null # (important: remove the `path` default value)
+      username: "tabular"
 
 mcp:
   reports_enabled: true

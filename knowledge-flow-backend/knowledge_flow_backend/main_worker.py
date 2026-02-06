@@ -22,9 +22,7 @@ Start with:
 import asyncio
 import logging
 
-from fred_core import log_setup
-
-from knowledge_flow_backend.application_context import ApplicationContext, get_app_context
+from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.scheduler.worker import run_worker
 from knowledge_flow_backend.main import load_configuration
 
@@ -34,12 +32,11 @@ logger = logging.getLogger(__name__)
 async def main() -> None:
     configuration = load_configuration()
     ApplicationContext(configuration)
-    app_context = get_app_context()
-    log_setup(
-        service_name="knowledge-flow-worker",
-        log_level=configuration.app.log_level,
-        store=app_context.get_log_store(),
-        use_rich=False,  # Temporal workflow sandbox disallows Rich imports; use plain logging.
+    # Keep worker logging local-only: Temporal workflow sandbox must not trigger
+    # external log sinks (OpenSearch/HTTP imports) from workflow threads.
+    logging.basicConfig(
+        level=getattr(logging, configuration.app.log_level.upper(), logging.INFO),
+        format="%(asctime)s | %(levelname)s | [pid=%(process)d %(threadName)s] | %(message)s",
     )
 
     if not configuration.scheduler.enabled:
