@@ -10,6 +10,13 @@ global:
     reclaimPolicy: "Retain"
     storageClass: "local-path" # if empty = default storage class
     hostPath: "/mnt/fred-data" # only used if dynamic=false & storageClass=local-path, remind to create this directory on your host
+  whitelist:
+    enabled: false
+    configMapName: ""
+    filePath: "files/whitelist/users.txt"
+    user_list_inline: ""
+    mountPath: /fred-core/fred_core/security/whitelist_access_control/
+    subPath: users.txt
 
 applications:
   agentic-backend:

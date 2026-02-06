@@ -143,12 +143,9 @@ FRED_AUTH_VERBOSE=false
 ```
 
 ### 2.4 Whitelist (optional, file-based)
-You can restrict access to **only** users whose email is listed in a local file.
+You can restrict access to **only** users whose email is listed in a file.
 
 **Activation rules**
-
-In `fred-core/fred_core/security/whitelist_access_control` create a file named `users.txt`:
-
 - `users.txt` **absent** → whitelist **disabled**
 - `users.txt` present but **empty / comments only (# at the beginning of the line)** → whitelist **disabled**
 - `users.txt` present and **non-empty** → whitelist **enabled**
@@ -163,8 +160,49 @@ In `fred-core/fred_core/security/whitelist_access_control` create a file named `
 **Example**
 ```
 # Allowed users
-alice.watson@thalesgroup.com
+alice@app.com
 simon.cariou@thalesgroup.com
+```
+
+**Kubernetes (Helm chart)**
+Use the file-based ConfigMap shipped in the chart:
+
+1) Put the whitelist in the chart:
+```
+deploy/charts/fred/files/whitelist/users.txt
+```
+
+2) Enable the whitelist in `values.yaml`:
+```yaml
+global:
+  whitelist:
+    enabled: true
+    filePath: "files/whitelist/users.txt"
+    # Optional: custom file location inside the chart
+    # filePath: "contrib/whitelist/users.txt"
+    # Optional: inline content (useful with --set-file)
+    # user_list_inline: |
+    #   alice@app.com
+    #   bob@app.com
+```
+
+3) The ConfigMap is mounted into both backends at:
+```
+/fred-core/fred_core/security/whitelist_access_control/users.txt
+```
+
+**Dev (no k8s)**
+Edit the local file directly:
+```
+fred-core/fred_core/security/whitelist_access_control/users.txt
+```
+
+**Installing from a `.tgz` without chart changes**
+You can inject the file content at install time:
+```bash
+helm upgrade --install fred ./fred-<version>.tgz \
+  --set global.whitelist.enabled=true \
+  --set-file global.whitelist.user_list_inline=/path/to/users.txt
 ```
 
 **Behavior**
