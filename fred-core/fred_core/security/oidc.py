@@ -27,6 +27,10 @@ from jwt import PyJWKClient
 
 from fred_core.common.lru_cache import ThreadSafeLRUCache
 from fred_core.security.structure import KeycloakUser, UserSecurity
+from fred_core.security.whitelist_access_control.access_control import (
+    is_user_whitelisted,
+    is_whitelist_active,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -371,4 +375,12 @@ def get_current_user(token: str = Security(oauth2_scheme)) -> KeycloakUser:
 
     # do NOT log the full token
     logger.debug("[SECURITY] Received token prefix: %s...", token[:10])
-    return decode_jwt(token)
+    user = decode_jwt(token)
+    if is_whitelist_active() and not is_user_whitelisted(user):
+        logger.warning(
+            "[SECURITY] User not in whitelist: uid=%s email=%s",
+            user.uid,
+            user.email,
+        )
+        raise HTTPException(status_code=403, detail="user_not_whitelisted")
+    return user
