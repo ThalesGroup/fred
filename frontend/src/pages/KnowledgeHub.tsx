@@ -89,14 +89,14 @@ export const KnowledgeHub = () => {
         </Box>
       </TopBar>
 
-      <Box sx={{ mb: 3, mt: 3 }}>
+      <Box sx={{ mb: 3, mt: 3, flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
         {selectedView === "chatContexts" && (
           <Container maxWidth="xl">
             <ResourceLibraryList kind="chat-context" />
           </Container>
         )}
         {selectedView === "documents" && (
-          <Container maxWidth="xl">
+          <Container maxWidth="xl" sx={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
             <DocumentLibraryList canCreateTag={canCreateTag} />
           </Container>
         )}

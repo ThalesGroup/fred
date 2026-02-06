@@ -48,10 +48,7 @@ export function TeamDetailsPage() {
       label: t("teamDetails.tabs.resources"),
       path: `/team/${teamId}/resources`,
       component: (
-        <TeamDocumentsLibrary
-          teamId={teamId}
-          canCreateTag={team?.permissions?.includes("can_update_resources")}
-        />
+        <TeamDocumentsLibrary teamId={teamId} canCreateTag={team?.permissions?.includes("can_update_resources")} />
       ),
     },
     {
@@ -102,7 +99,7 @@ export function TeamDetailsPage() {
       <NavigationTabs
         tabs={tabs}
         tabsContainerSx={{ px: 2, pb: 1 }}
-        contentContainerSx={{ flex: 1, overflow: "auto" }}
+        contentContainerSx={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column", minHeight: 0 }}
         isLoading={isLoading}
       />
     </Box>

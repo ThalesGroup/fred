@@ -458,7 +458,7 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
   );
 
   return (
-    <Box display="flex" flexDirection="column" gap={2} sx={{ height: "calc(100vh - 120px)", minHeight: 0 }}>
+    <Box display="flex" flexDirection="column" gap={2} sx={{ flex: 1, minHeight: 0 }}>
       {/* Top toolbar */}
       <Box display="flex" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
         <Breadcrumbs>
