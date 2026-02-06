@@ -28,6 +28,8 @@ from knowledge_flow_backend.core.stores.tags.base_tag_store import (
 )
 from knowledge_flow_backend.features.metadata.service import MetadataNotFound
 from knowledge_flow_backend.features.tag.structure import (
+    MissingTeamIdError,
+    OwnerFilter,
     ShareTargetResource,
     TagCreate,
     TagMembersResponse,
@@ -77,6 +79,10 @@ class TagController:
         async def metadata_not_found_handler(request: Request, exc: MetadataNotFound) -> JSONResponse:
             return JSONResponse(status_code=404, content={"detail": str(exc)})
 
+        @app.exception_handler(MissingTeamIdError)
+        async def missing_team_id_handler(request: Request, exc: MissingTeamIdError) -> JSONResponse:
+            return JSONResponse(status_code=400, content={"detail": str(exc)})
+
     def _register_routes(self, router: APIRouter):
         @router.get(
             "/tags",
@@ -93,6 +99,14 @@ class TagController:
             ] = None,
             limit: Annotated[int, Query(ge=1, le=10000, description="Max items to return")] = 10000,
             offset: Annotated[int, Query(ge=0, description="Items to skip")] = 0,
+            owner_filter: Annotated[
+                Optional[OwnerFilter],
+                Query(description="Filter by ownership: 'personal' for user-owned tags, 'team' for team-owned tags"),
+            ] = None,
+            team_id: Annotated[
+                Optional[str],
+                Query(description="Team ID, required when owner_filter is 'team'"),
+            ] = None,
             user: KeycloakUser = Depends(get_current_user),
         ) -> list[TagWithItemsId]:
             return await self.service.list_all_tags_for_user(
@@ -101,6 +115,8 @@ class TagController:
                 path_prefix=path_prefix,
                 limit=limit,
                 offset=offset,
+                owner_filter=owner_filter,
+                team_id=team_id,
             )
 
         @router.get(

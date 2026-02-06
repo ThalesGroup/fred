@@ -22,8 +22,6 @@ from pydantic import BaseModel, Field, field_validator
 from knowledge_flow_backend.features.resources.structures import ResourceKind
 from knowledge_flow_backend.features.users.users_structures import UserSummary
 
-VALID_RESOURCE_KIND_IN_TAG = {}
-
 
 class TagType(str, Enum):
     DOCUMENT = "document"
@@ -150,3 +148,20 @@ class TagMemberUser(BaseModel):
 
 class TagMembersResponse(BaseModel):
     users: list[TagMemberUser] = Field(default_factory=list)
+
+
+class OwnerFilter(str, Enum):
+    """Filter tags by ownership type.
+
+    - PERSONAL: tags where the user is directly owner/editor/viewer (not via team)
+    - TEAM: tags owned by a specific team (requires team_id parameter)
+    """
+
+    PERSONAL = "personal"
+    TEAM = "team"
+
+
+class MissingTeamIdError(Exception):
+    """Raised when owner_filter is 'team' but no team_id is provided."""
+
+    pass

@@ -73,8 +73,8 @@ type agent
 type tag
   relations
     define owner: [user, team]
-    define editor: [user]
-    define viewer: [user]
+    define editor: [user, team]
+    define viewer: [user, team]
     define parent: [tag]
 
     # --------------- Permissions (computed relations) ---------------
