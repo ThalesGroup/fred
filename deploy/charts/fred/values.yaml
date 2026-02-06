@@ -15,7 +15,7 @@ global:
     configMapName: ""
     filePath: "files/whitelist/users.txt"
     user_list_inline: ""
-    mountPath: /fred-core/fred_core/security/whitelist_access_control/
+    mountPath: /fred-core/fred_core/security/whitelist_access_control/users.txt
     subPath: users.txt
 
 applications:
