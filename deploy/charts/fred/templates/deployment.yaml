@@ -118,7 +118,7 @@ spec:
           {{- if and .app.extraVolumeMounts (gt (len .app.extraVolumeMounts) 0) }}
 {{ toYaml .app.extraVolumeMounts| nindent 12 }}
           {{- end }}
-          {{- if .root.Values.global.whitelist.enabled }}
+          {{- if and .root.Values.global.whitelist.enabled (or (eq .app.applicationName "agentic-backend") (eq .app.applicationName "knowledge-flow-backend")) }}
             - name: {{ $applicationName }}-whitelist
               mountPath: {{ .root.Values.global.whitelist.mountPath | default "/fred-core/fred_core/security/whitelist_access_control/users.txt" }}
               subPath: {{ .root.Values.global.whitelist.subPath | default "users.txt" }}
@@ -151,7 +151,7 @@ spec:
       {{- if and .app.extraVolumes (gt (len .app.extraVolumes) 0) }}
 {{ toYaml .app.extraVolumes | nindent 8 }}
       {{- end }}
-      {{- if .root.Values.global.whitelist.enabled }}
+      {{- if and .root.Values.global.whitelist.enabled (or (eq .app.applicationName "agentic-backend") (eq .app.applicationName "knowledge-flow-backend")) }}
         - name: {{ $applicationName }}-whitelist
           configMap:
             name: {{ default (printf "%s-whitelist" .root.Release.Name) .root.Values.global.whitelist.configMapName }}
