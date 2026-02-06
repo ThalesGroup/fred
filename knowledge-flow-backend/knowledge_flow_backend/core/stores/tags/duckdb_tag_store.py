@@ -16,7 +16,6 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
-from fred_core import KeycloakUser
 from fred_core.store.duckdb_store import DuckDBTableStore
 
 from knowledge_flow_backend.core.stores.tags.base_tag_store import BaseTagStore, TagAlreadyExistsError, TagNotFoundError
@@ -100,7 +99,7 @@ class DuckdbTagStore(BaseTagStore):
 
     # ---- CRUD ----
 
-    def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
+    def list_all_tags(self) -> List[Tag]:
         try:
             with self.store._connect() as conn:
                 rows = conn.execute(
@@ -112,7 +111,7 @@ class DuckdbTagStore(BaseTagStore):
                 ).fetchall()
             return [self._deserialize(row) for row in rows]
         except Exception as e:
-            logger.error(f"[TAGS] Failed to list tags for user '{user.uid}': {e}")
+            logger.error(f"[TAGS] Failed to list all tags: {e}")
             raise
 
     def get_tag_by_id(self, tag_id: str) -> Tag:

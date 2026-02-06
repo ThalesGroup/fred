@@ -161,7 +161,12 @@
       "metadata": {
         "relations": {
           "delete": {},
-          "editor": { "directly_related_user_types": [{ "type": "user" }] },
+          "editor": {
+            "directly_related_user_types": [
+              { "type": "user" },
+              { "type": "team" }
+            ]
+          },
           "owner": {
             "directly_related_user_types": [
               { "type": "user" },
@@ -172,7 +177,12 @@
           "read": {},
           "share": {},
           "update": {},
-          "viewer": { "directly_related_user_types": [{ "type": "user" }] }
+          "viewer": {
+            "directly_related_user_types": [
+              { "type": "user" },
+              { "type": "team" }
+            ]
+          }
         }
       },
       "relations": {
@@ -227,12 +237,6 @@
                 "tupleToUserset": {
                   "computedUserset": { "relation": "share" },
                   "tupleset": { "relation": "parent" }
-                }
-              },
-              {
-                "tupleToUserset": {
-                  "computedUserset": { "relation": "can_update_resources" },
-                  "tupleset": { "relation": "owner" }
                 }
               }
             ]

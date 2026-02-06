@@ -46,6 +46,13 @@ class TagPermission(str, Enum):
     DELETE = "delete"
     SHARE = "share"
 
+    # Normaly those 3 are "relation" and not "permission"
+    # but openfga does not make distinction so we added
+    # them here to use lookup_resources on them
+    OWNER = RelationType.OWNER.value
+    EDITOR = RelationType.EDITOR.value
+    VIEWER = RelationType.VIEWER.value
+
 
 class DocumentPermission(str, Enum):
     """Document permissions encoded in the graph."""
@@ -69,6 +76,7 @@ class TeamPermission(str, Enum):
 
     CAN_READ = "can_read"
     CAN_UPDATE_INFO = "can_update_info"
+    CAN_UPDATE_RESOURCES = "can_update_resources"
     CAN_READ_MEMEBERS = "can_read_members"
     CAN_ADMINISTER_MEMBERS = "can_administer_members"
     CAN_ADMINISTER_MANAGERS = "can_administer_managers"

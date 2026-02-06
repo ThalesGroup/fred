@@ -15,7 +15,7 @@
 import logging
 from typing import List, Optional
 
-from fred_core import KeycloakUser, ThreadSafeLRUCache, validate_index_mapping
+from fred_core import ThreadSafeLRUCache, validate_index_mapping
 from opensearchpy import ConflictError, NotFoundError, OpenSearch, RequestsHttpConnection
 
 from knowledge_flow_backend.core.stores.tags.base_tag_store import BaseTagStore, TagAlreadyExistsError, TagNotFoundError
@@ -127,22 +127,13 @@ class OpenSearchTagStore(BaseTagStore):
             # Validate existing mapping matches expected mapping
             validate_index_mapping(self.client, self.index_name, TAGS_INDEX_MAPPING)
 
-    def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
+    def list_all_tags(self) -> List[Tag]:
         try:
-            query = {
-                "query": {
-                    "bool": {
-                        "must": [
-                            # {"term": {"owner_id": user.uid}} # Tag will be public until we add ReBAC
-                            # {"term": {"type": tag_type.value}},
-                        ]
-                    }
-                }
-            }
+            query = {"query": {"bool": {"must": []}}}
             response = self.client.search(index=self.index_name, body=query, params={"size": 10000})
             return [Tag(**hit["_source"]) for hit in response["hits"]["hits"]]
         except Exception as e:
-            logger.error(f"[TAGS] Failed to list tags for user '{user.uid}': {e}")
+            logger.error(f"[TAGS] Failed to list all tags: {e}")
             raise
 
     def get_tag_by_id(self, tag_id: str) -> Tag:

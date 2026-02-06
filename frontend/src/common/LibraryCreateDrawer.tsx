@@ -4,7 +4,11 @@ import { Alert, Box, Button, Drawer, TextField, Typography } from "@mui/material
 import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "../components/ToastProvider";
-import { TagType, useCreateTagKnowledgeFlowV1TagsPostMutation } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  TagCreate,
+  TagType,
+  useCreateTagKnowledgeFlowV1TagsPostMutation,
+} from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 interface LibraryCreateDrawerProps {
   isOpen: boolean;
@@ -13,6 +17,7 @@ interface LibraryCreateDrawerProps {
   mode: TagType;
   /** Parent folder as a path like "thales/six" or "/" or undefined */
   currentPath?: string;
+  teamId?: string;
 }
 
 /** ---- Helpers ---- */
@@ -30,6 +35,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
   onLibraryCreated,
   mode,
   currentPath,
+  teamId,
 }) => {
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
@@ -70,12 +76,12 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
     }
 
     try {
-      const payload = {
+      const payload: TagCreate = {
         name: trimmed,
         path: parentPath, // ✅ always normalized (null at root)
         description: description.trim() || null,
         type: mode,
-        item_ids: [] as string[],
+        team_id: teamId,
       };
 
       await createTag({ tagCreate: payload }).unwrap();
