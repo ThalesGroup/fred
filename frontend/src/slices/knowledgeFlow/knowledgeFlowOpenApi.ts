@@ -465,6 +465,8 @@ const injectedRtkApi = api.injectEndpoints({
           path_prefix: queryArg.pathPrefix,
           limit: queryArg.limit,
           offset: queryArg.offset,
+          owner_filter: queryArg.ownerFilter,
+          team_id: queryArg.teamId,
         },
       }),
     }),
@@ -1276,6 +1278,10 @@ export type ListAllTagsKnowledgeFlowV1TagsGetApiArg = {
   limit?: number;
   /** Items to skip */
   offset?: number;
+  /** Filter by ownership: 'personal' for user-owned tags, 'team' for team-owned tags */
+  ownerFilter?: OwnerFilter | null;
+  /** Team ID, required when owner_filter is 'team' */
+  teamId?: string | null;
 };
 export type CreateTagKnowledgeFlowV1TagsPostApiResponse = /** status 201 Successful Response */ TagWithItemsId;
 export type CreateTagKnowledgeFlowV1TagsPostApiArg = {
@@ -1991,11 +1997,13 @@ export type TagWithItemsId = {
   type: TagType;
   item_ids: string[];
 };
+export type OwnerFilter = "personal" | "team";
 export type TagCreate = {
   name: string;
   path?: string | null;
   description?: string | null;
   type: TagType;
+  team_id?: string | null;
 };
 export type TagUpdate = {
   name: string;
@@ -2004,7 +2012,7 @@ export type TagUpdate = {
   type: TagType;
   item_ids?: string[];
 };
-export type TagPermission = "read" | "update" | "delete" | "share";
+export type TagPermission = "read" | "update" | "delete" | "share" | "owner" | "editor" | "viewer";
 export type TagPermissionsResponse = {
   permissions: TagPermission[];
 };
@@ -2323,6 +2331,7 @@ export type Team = {
 export type TeamPermission =
   | "can_read"
   | "can_update_info"
+  | "can_update_resources"
   | "can_read_members"
   | "can_administer_members"
   | "can_administer_managers"

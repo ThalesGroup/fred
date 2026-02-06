@@ -44,7 +44,11 @@ import { DocumentLibraryTree } from "./DocumentLibraryTree";
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
 import { LibraryPipelineDrawer } from "./LibraryPipelineDrawer";
 
-export default function DocumentLibraryList() {
+export interface DocumentLibraryListProps {
+  teamId?: string;
+}
+
+export default function DocumentLibraryList({ teamId }: DocumentLibraryListProps) {
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
 
@@ -89,7 +93,7 @@ export default function DocumentLibraryList() {
     isError,
     refetch,
   } = useListAllTagsKnowledgeFlowV1TagsGetQuery(
-    { type: "document", limit: 10000, offset: 0 },
+    { type: "document", limit: 10000, offset: 0, ownerFilter: teamId ? "team" : "personal", teamId },
     { refetchOnMountOrArgChange: true },
   );
 
@@ -672,6 +676,7 @@ export default function DocumentLibraryList() {
         }}
         mode="document"
         currentPath={selectedFolder}
+        teamId={teamId}
       />
 
       {/* Pipeline configuration drawer */}

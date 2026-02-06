@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { NavigationTabs, TabConfig } from "../components/NavigationTabs";
 import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
+import { TeamDocumentsLibrary } from "../components/teamDetails/TeamDocumentsLibrary";
 import { TeamMembersPage } from "../components/teamDetails/TeamMembersPage";
 import { TeamSettingsPage } from "../components/teamDetails/TeamSettingsPage";
 import { useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery } from "../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
@@ -43,15 +44,11 @@ export function TeamDetailsPage() {
     //   path: `/team/${teamId}/${agentsNicknamePlural}`,
     //   component: <TeamAgentHub />,
     // },
-    // {
-    //   label: t("teamDetails.tabs.resources"),
-    //   path: `/team/${teamId}/resources`,
-    //   component: (
-    //     <Box>
-    //       <Typography>Resources content for {team?.name || "..."}</Typography>
-    //     </Box>
-    //   ),
-    // },
+    {
+      label: t("teamDetails.tabs.resources"),
+      path: `/team/${teamId}/resources`,
+      component: <TeamDocumentsLibrary teamId={teamId} />,
+    },
     {
       label: t("teamDetails.tabs.apps"),
       path: `/team/${teamId}/apps`,
