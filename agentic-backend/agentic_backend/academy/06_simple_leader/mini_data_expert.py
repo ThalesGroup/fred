@@ -47,8 +47,6 @@ class MiniDataExpert(SimpleAgentFlow):
 
     tuning = TUNING
 
-    tuning = TUNING
-
     async def arun(self, *, messages: Sequence[AnyMessage]) -> AIMessage:
         last_user = next(
             (m for m in reversed(messages) if isinstance(m, HumanMessage)), None

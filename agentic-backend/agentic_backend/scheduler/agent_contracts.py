@@ -39,20 +39,28 @@ class AgentContextRefsV1(BaseModel):
     document_uids: List[str] = Field(default_factory=list)
 
 
-# -----------------------------
-# Inputs (Workflow -> Activity)
-# -----------------------------
+class SchedulerInputArgsV1(BaseModel):
+    """
+    Minimal envelope used by schedulers (kept local to avoid heavy imports during Temporal workflow validation).
+    """
+
+    task_id: str  # unique identifier for the scheduled task
+    target_ref: str  # the workflow/agent/app unique identifier to invoke
+    target_kind: Literal["agent", "app"] = "agent"
+    parameters: Dict[str, Any] = Field(default_factory=dict)
 
 
-class AgentInputV1(BaseModel):
-    """The complete context needed for an agent to perform a task."""
+class AgentInputArgsV1(SchedulerInputArgsV1):
+    """
+    The complete context needed for an agent to perform a task.
 
-    task_id: str
-    target_agent: str
+    This is a specialization of SchedulerInputArgsV1 with agent-specific fields.
+    """
+
+    target_kind: Literal["agent"] = "agent"
     user_id: Optional[str] = None
     request_text: str
     context: AgentContextRefsV1 = Field(default_factory=AgentContextRefsV1)
-    parameters: Dict[str, Any] = Field(default_factory=dict)
 
     # HITL / Resumption
     checkpoint_ref: Optional[str] = None

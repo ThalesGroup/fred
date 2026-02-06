@@ -168,7 +168,9 @@
     "allAgents": "Tous les agents",
     "deleteSessionFailed": "La supression de la conversation a échoué",
     "monitoring_graph": "Graphe",
-    "newChat": "Nouvelle conversation"
+    "newChat": "Nouvelle conversation",
+    "teams": "Équipes",
+    "yourTeamsSectionTitle": "Vos équipes"
   },
   "apps": {
     "scheduler": {
@@ -1191,5 +1193,77 @@
     "selectAgentTitle": "Bienvenue {{userName}}, à qui souhaitez-vous parler ?",
     "yourAgents": "Vos agents",
     "loadingAgentError": "Impossible de charger la liste des agents."
+  },
+  "teamCard": {
+    "memberCountLabel": "membres",
+    "privateTeamTooltip": "Équipe privée"
+  },
+  "teamsPage": {
+    "title": "Équipes de la communauté",
+    "yourTeamsSubtitle": "Vos équipes",
+    "communityTeamsSubtitle": "Découvrez d'autres équipes"
+  },
+  "teamDetails": {
+    "tabs": {
+      "resources": "Ressources",
+      "apps": "Apps",
+      "members": "Membres",
+      "settings": "Paramètres"
+    },
+    "noAgents": "Aucun agent d'équipe configuré pour le moment. Créez votre premier agent d'équipe pour commencer."
+  },
+  "appCard": {
+    "launch": "Lancer"
+  },
+  "teamAppsPage": {
+    "headerSubtitle": "Apps de l'équipe",
+    "headerInfoTooltip": "Seuls les propriétaires de l’équipe peuvent gérer ces applications, qui sont accessibles uniquement à ses membres.",
+    "noAppDescription": "Les propriétaires de l’équipe n’ont configuré aucune application pour ce groupe pour le moment.",
+    "noAppTitle": "Aucune app"
+  },
+  "teamSettingsPage": {
+    "teamBanner": {
+      "label": "Bannière de l'équipe",
+      "buttonLabel": "Télécharger une image...",
+      "alt": "Image de bannière de l'équipe",
+      "noImage": "Aucune image de bannière téléchargée",
+      "uploadSuccess": "Bannière téléchargée avec succès",
+      "uploadError": "Échec du téléchargement de l'image de bannière",
+      "invalidType": "Type de fichier invalide. Veuillez utiliser le format JPEG, PNG ou WebP.",
+      "tooLarge": "Le fichier est trop volumineux. La taille maximale est de 5 Mo."
+    },
+    "description": {
+      "label": "Description de l'équipe",
+      "placeholder": "Décrivez ici la raison d'être de votre équipe ainsi que ses enjeux. "
+    },
+    "private": {
+      "label": "Équipe privée"
+    }
+  },
+  "teamMembersPage": {
+    "tableHeader": {
+      "username": "Identifiant",
+      "firstName": "Prénom",
+      "lastName": "Nom de famille",
+      "role": "Rôle",
+      "actions": "Actions"
+    },
+    "headerTitle": "Membres de l'équipe",
+    "headerInfoTooltip": "Voici les membres de cette équipe. Un membre peut faire partie de plusieurs équipes à la fois.",
+    "teamRole": {
+      "member": "Membre",
+      "manager": "Manager",
+      "owner": "Propriétaire"
+    },
+    "addUserInputPlaceholder": "Ajouter un utilisateur...",
+    "removeMemberConfonfirmationDialog": {
+      "title": "Confirmer la suppression ?",
+      "message": "Vous etes sur le point de supprimer cet utilisateur de l'équipe. Êtes-vous certain de vouloir continuer ?",
+      "confirmButtonLabel": "Supprimer"
+    }
+  },
+  "confirmationDialog": {
+    "defaultCancelButtonLabel": "Annuler",
+    "defaultConfirmButtonLabel": "Confirmer"
   }
 }

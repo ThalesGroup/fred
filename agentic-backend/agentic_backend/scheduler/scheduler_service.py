@@ -21,8 +21,11 @@ from fred_core.scheduler import TemporalClientProvider
 from temporalio.client import Client
 from temporalio.common import WorkflowIDReusePolicy
 
-from agentic_backend.scheduler.agent_contracts import AgentContextRefsV1, AgentInputV1
-from agentic_backend.scheduler.base_task_store import BaseAgentTaskStore
+from agentic_backend.scheduler.agent_contracts import (
+    AgentContextRefsV1,
+    AgentInputArgsV1,
+)
+from agentic_backend.scheduler.store.base_task_store import BaseAgentTaskStore
 from agentic_backend.scheduler.task_structures import AgentTaskRecordV1, AgentTaskStatus
 
 logger = logging.getLogger(__name__)
@@ -78,8 +81,9 @@ class AgentTaskService:
         workflow_id = f"{self._workflow_id_prefix}-{tid}"
 
         # 2. Construct the Typed Input for Temporal
-        agent_input = AgentInputV1(
-            target_agent=target_agent,
+        agent_input = AgentInputArgsV1(
+            target_ref=target_agent,
+            target_kind="agent",
             task_id=tid,
             user_id=user_id,
             request_text=request_text,

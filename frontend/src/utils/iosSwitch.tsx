@@ -137,7 +137,7 @@ export const IOSSwitch = styled(Switch)(({ theme }) => ({
       opacity: 0.5,
     },
     "&:not(.Mui-checked) + .MuiSwitch-track": {
-      backgroundColor: theme.palette.mode === "dark" ? theme.palette.error.main : theme.palette.error.light,
+      backgroundColor: theme.palette.error.main,
     },
   },
 }));

@@ -179,6 +179,7 @@ ai:
         search_rag_scoping: true
         deep_search_delegate: false
         attach_files: true
+        include_corpus_in_search: true # default value, set to false if you want to prevent the agent from searching in the corpus. Coupled with libraries_selection=false gives you an agent only capable of searching through attachments with a disabled widget for searching through the libraries.
     - name: "Rico Senior"
       type: "agent"
       class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
@@ -192,10 +193,6 @@ ai:
     - name: "Tessa"
       type: "agent"
       class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
-      enabled: true
-    - name: "SlideMaker"
-      type: "agent"
-      class_path: "agentic_backend.academy.04_slide_maker.slide_maker.SlideMaker"
       enabled: true
     - name: "Kellia"
       type: "agent"
@@ -212,6 +209,14 @@ ai:
     - name: "LogGenius"
       type: "agent"
       class_path: "agentic_backend.agents.log_genius.log_genius_expert.LogGenius"
+      enabled: true
+    - name: "BusinessAgent"
+      type: "agent"
+      class_path: "agentic_backend.academy.08_business_workflow.business_agent.BusinessAgent"
+      enabled: true
+    - name: "HITL"
+      type: "agent"
+      class_path: "agentic_backend.academy.10_human_in_the_loop.hitl_agent.HitlAgent"
       enabled: true
 
 mcp:

@@ -8,6 +8,7 @@ from jsonschema import Draft7Validator
 from langchain.agents import create_agent
 from langchain.tools import tool
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Checkpointer
 
 from agentic_backend.agents.reference_editor.powerpoint_template_util import (
     fill_slide_from_structured_response,
@@ -249,7 +250,9 @@ class ReferenceEditor(AgentFlow):
     async def aclose(self):
         await self.mcp.aclose()
 
-    def get_compiled_graph(self) -> CompiledStateGraph:
+    def get_compiled_graph(
+        self, checkpointer: Checkpointer | None = None
+    ) -> CompiledStateGraph:
         template_tool = self.get_template_tool()
         word_template_tool = self.get_word_template_tool()
         validator_tool = self.get_validator_tool()
@@ -263,8 +266,7 @@ class ReferenceEditor(AgentFlow):
                 validator_tool,
                 *self.mcp.get_tools(),
             ],
-            checkpointer=self.streaming_memory,
-            middleware=[],
+            checkpointer=checkpointer,
         )
 
     def get_validator_tool(self):

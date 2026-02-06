@@ -5,7 +5,6 @@ import { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { UserTagRelation } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DocumentLibraryPendingRecipient } from "./sharing/DocumentLibraryShareTypes";
-import { GroupListItem } from "./sharing/GroupListItem";
 import { UserListItem } from "./sharing/UserListItem";
 
 interface DocumentLibraryPendingRecipientsListProps {
@@ -27,7 +26,7 @@ export function DocumentLibraryPendingRecipientsList({
     return (
       <Typography variant="body2" color="text.secondary">
         {t("documentLibraryShareDialog.emptySelection", {
-          defaultValue: "Add people or groups to start building the invite list.",
+          defaultValue: "Add people to start building the invite list.",
         })}
       </Typography>
     );
@@ -67,15 +66,7 @@ export function DocumentLibraryPendingRecipientsList({
           </Stack>
         );
 
-        if (recipient.target_type === "user") {
-          return <UserListItem user={recipient.data} secondaryAction={secondaryAction} />;
-        }
-
-        if (recipient.target_type === "group") {
-          return <GroupListItem group={recipient.data} secondaryAction={secondaryAction} />;
-        }
-
-        return "Unknown recipient type";
+        return <UserListItem key={recipient.target_id} user={recipient.data} secondaryAction={secondaryAction} />;
       })}
     </List>
   );

@@ -43,7 +43,6 @@ from agentic_backend.common.config_loader import (
     load_configuration,
 )
 from agentic_backend.common.structures import Configuration
-from agentic_backend.core import logs_controller
 from agentic_backend.core.agents import agent_controller
 from agentic_backend.core.agents.agent_factory import AgentFactory
 from agentic_backend.core.agents.agent_loader import AgentLoader
@@ -51,6 +50,7 @@ from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.chatbot import chatbot_controller
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
 from agentic_backend.core.feedback import feedback_controller
+from agentic_backend.core.logs import logs_controller
 from agentic_backend.core.mcp import mcp_controller
 from agentic_backend.core.monitoring import monitoring_controller
 from agentic_backend.scheduler.scheduler_controller import AgentTasksController

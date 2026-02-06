@@ -5,15 +5,12 @@ import { Box, CircularProgress, List, Stack, Typography } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
-  GroupSummary,
-  TagMemberGroup,
   TagMemberUser,
   TagWithItemsId,
   UserSummary,
   UserTagRelation,
   useListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery,
 } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { GroupListItem } from "./GroupListItem";
 import { UserListItem } from "./UserListItem";
 
 const relationPriority = {
@@ -25,10 +22,6 @@ const relationPriority = {
 const getUserDisplayName = (user: UserSummary): string => {
   const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
   return user.username ?? (fullName || user.id);
-};
-
-const getGroupDisplayName = (group: GroupSummary): string => {
-  return group.name ?? group.id;
 };
 
 const sortMembers = <T extends { relation: UserTagRelation }>(list: T[], getKey: (item: T) => string) => {
@@ -72,11 +65,7 @@ export function DocumentLibraryShareCurrentAccessTab({ tag, open }: DocumentLibr
 
   const users = React.useMemo<TagMemberUser[]>(() => {
     return sortMembers(members?.users ?? [], (member) => getUserDisplayName(member.user));
-  }, [members?.users, getUserDisplayName, sortMembers]);
-
-  const groups = React.useMemo<TagMemberGroup[]>(() => {
-    return sortMembers(members?.groups ?? [], (member) => getGroupDisplayName(member.group));
-  }, [members?.groups, getGroupDisplayName, sortMembers]);
+  }, [members?.users]);
 
   if (isLoading) {
     return (
@@ -94,7 +83,7 @@ export function DocumentLibraryShareCurrentAccessTab({ tag, open }: DocumentLibr
     );
   }
 
-  if (!users.length && !groups.length) {
+  if (!users.length) {
     return (
       <Typography variant="body2" color="text.secondary">
         {t("documentLibraryShareDialog.noMembers")}
@@ -104,47 +93,25 @@ export function DocumentLibraryShareCurrentAccessTab({ tag, open }: DocumentLibr
 
   return (
     <Box display="flex" flexDirection="column" gap={3} sx={{ flex: 1, minHeight: 0, overflow: "auto", pb: 1 }}>
-      {users.length > 0 && (
-        <Box component="section">
-          <Typography variant="subtitle2" color="text.secondary" sx={{ px: 2, py: 1 }}>
-            {t("documentLibraryShareDialog.usersSectionTitle")}
-          </Typography>
-          <List dense disablePadding>
-            {users.map((userMember) => (
-              <UserListItem
-                user={userMember.user}
-                secondaryAction={
-                  <Stack alignItems="center" direction="row" gap={1}>
-                    <RelationIcon relation={userMember.relation} />
-                    {relationLabels[userMember.relation]}
-                  </Stack>
-                }
-              />
-            ))}
-          </List>
-        </Box>
-      )}
-
-      {groups.length > 0 && (
-        <Box component="section">
-          <Typography variant="subtitle2" color="text.secondary" sx={{ px: 2, py: 1 }}>
-            {t("documentLibraryShareDialog.groupsSectionTitle")}
-          </Typography>
-          <List dense disablePadding>
-            {groups.map((groupMember) => (
-              <GroupListItem
-                group={groupMember.group}
-                secondaryAction={
-                  <Stack alignItems="center" direction="row" gap={1}>
-                    <RelationIcon relation={groupMember.relation} />
-                    {relationLabels[groupMember.relation]}
-                  </Stack>
-                }
-              />
-            ))}
-          </List>
-        </Box>
-      )}
+      <Box component="section">
+        <Typography variant="subtitle2" color="text.secondary" sx={{ px: 2, py: 1 }}>
+          {t("documentLibraryShareDialog.usersSectionTitle")}
+        </Typography>
+        <List dense disablePadding>
+          {users.map((userMember) => (
+            <UserListItem
+              key={userMember.user.id}
+              user={userMember.user}
+              secondaryAction={
+                <Stack alignItems="center" direction="row" gap={1}>
+                  <RelationIcon relation={userMember.relation} />
+                  {relationLabels[userMember.relation]}
+                </Stack>
+              }
+            />
+          ))}
+        </List>
+      </Box>
     </Box>
   );
 }

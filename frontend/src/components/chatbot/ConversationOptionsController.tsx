@@ -169,6 +169,9 @@ export function useConversationOptionsController({
   const { prefs: initialCtx, resetToDefaults } = useInitialChatInputContext(
     currentAgent?.name || "default",
     chatSessionId,
+    {
+      includeCorpusScope: currentAgent?.chat_options?.include_corpus_in_search ?? true,
+    },
   );
   const defaultSearchPolicy: SearchPolicyName = initialCtx.searchPolicy ?? "semantic";
   const defaultSearchRagScope: SearchRagScope = initialCtx.searchRagScope ?? defaultRagScope;

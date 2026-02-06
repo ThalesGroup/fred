@@ -128,7 +128,7 @@ class Tessa(AgentFlow):
         return None
 
     def _format_context_for_prompt(
-        self, database_context: Dict[str, List[Dict[str, Any]]]
+        self, database_context: Dict[str, List[Dict[str, Any]]] | list | str
     ) -> str:
         """
         Format DB context where the dict structure is:
@@ -145,6 +145,13 @@ class Tessa(AgentFlow):
 
         # If entry is JSON in string form → parse it
         database_context = self._maybe_parse_json(database_context)
+
+        # Accept legacy list format: treat as single unnamed database
+        if isinstance(database_context, list):
+            database_context = {"default": database_context}
+
+        if not isinstance(database_context, dict):
+            return "No databases or tables currently loaded.\n"
 
         lines = ["You have access to:"]
 

@@ -96,6 +96,13 @@ class AgentChatOptions(BaseModel):
             "for this message (session-scoped context)."
         ),
     )
+    include_corpus_in_search: bool = Field(
+        default=True,
+        description=(
+            "Allow vector search on corpus documents. If false, corpus retrieval is disabled "
+            "for this agent even when the client requests it."
+        ),
+    )
     record_audio_files: bool = Field(
         default=False,
         description=(
@@ -267,6 +274,10 @@ class Properties(BaseModel):
     agentsNicknamePlural: str = "agents"
     agentIconPath: str | None = None
     contactSupportLink: str | None = None
+    agentIconName: str | None = Field(
+        default=None,
+        description="Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme.",
+    )
 
 
 class FrontendSettings(BaseModel):
