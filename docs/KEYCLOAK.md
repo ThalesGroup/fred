@@ -146,6 +146,9 @@ FRED_AUTH_VERBOSE=false
 You can restrict access to **only** users whose email is listed in a local file.
 
 **Activation rules**
+
+In `fred-core/fred_core/security/whitelist_access_control` create a file named `users.txt`:
+
 - `users.txt` **absent** → whitelist **disabled**
 - `users.txt` present but **empty / comments only (# at the beginning of the line)** → whitelist **disabled**
 - `users.txt` present and **non-empty** → whitelist **enabled**
