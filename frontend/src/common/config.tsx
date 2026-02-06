@@ -117,6 +117,19 @@ export const isFeatureEnabled = (flag: FeatureFlagKeyType): boolean => !!getConf
 /** Properties helper */
 export const getProperty = (key: string): string => getConfig().properties?.[key];
 
+const normalizeBasename = (basename: string): string => {
+  if (!basename || basename === "/") return "";
+  return basename.endsWith("/") ? basename.slice(0, -1) : basename;
+};
+
+const redirectToComingSoon = () => {
+  const base = normalizeBasename(getConfig().frontend_basename);
+  const target = `${base}/coming-soon`;
+  if (window.location.pathname !== target) {
+    window.location.replace(target);
+  }
+};
+
 export const loadPermissions = async () => {
   try {
     const token = KeyCloakService.GetToken();
@@ -128,7 +141,21 @@ export const loadPermissions = async () => {
       },
     });
 
-    if (!res.ok) throw new Error(`Cannot load permissions: ${res.status} ${res.statusText}`);
+    if (!res.ok) {
+      if (res.status === 403) {
+        let detail: unknown = null;
+        try {
+          const body = await res.json();
+          detail = body?.detail;
+        } catch {
+          detail = null;
+        }
+        if (typeof detail === "string" && detail.toLowerCase().includes("whitelist")) {
+          redirectToComingSoon();
+        }
+      }
+      throw new Error(`Cannot load permissions: ${res.status} ${res.statusText}`);
+    }
     const perms: string[] = await res.json();
     if (config) config.permissions = perms;
     return perms;

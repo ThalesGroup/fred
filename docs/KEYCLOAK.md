@@ -142,6 +142,37 @@ FRED_JWT_CLOCK_SKEW=0
 FRED_AUTH_VERBOSE=false
 ```
 
+### 2.4 Whitelist (optional, file-based)
+You can restrict access to **only** users whose email is listed in a local file.
+
+**Activation rules**
+- `users.txt` **absent** → whitelist **disabled**
+- `users.txt` present but **empty / comments only (# at the beginning of the line)** → whitelist **disabled**
+- `users.txt` present and **non-empty** → whitelist **enabled**
+- `users.txt` present but **unreadable** → whitelist **disabled** (logged)
+
+**File location**
+```
+fred-core/fred_core/security/whitelist_access_control/users.txt
+```
+
+**Format**
+- One email per line
+- Blank lines allowed
+- Lines starting with `#` are comments and ignored
+- Emails are normalized with `strip().lower()`
+
+**Example**
+```
+# Allowed users
+alice.watson@thalesgroup.com
+simon.cariou@thalesgroup.com
+```
+
+**Behavior**
+- When enabled, non-whitelisted users receive `HTTP 403` with `detail="user_not_whitelisted"`.
+- The UI redirects those users to `/coming-soon`.
+
 ---
 
 ## 3) Runtime Flow — User Identity Forwarding
