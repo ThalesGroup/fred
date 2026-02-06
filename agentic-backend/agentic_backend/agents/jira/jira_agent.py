@@ -33,23 +33,38 @@ def list_reducer(current: list[dict], update: list[dict]) -> list[dict]:
     """
     Custom reducer for list state that handles concurrent updates.
 
-    Supports two operations:
-    - Add: Items without __remove__ marker are appended to the list
+    Supports three operations:
+    - Add: Items without special markers are appended to the list
     - Remove: Items with {"__remove__": item_id} remove that ID from the list
+    - Update: Items with {"__update__": item_id, ...fields} merge fields into existing item
 
     Also resolves ID conflicts from parallel tool calls by reassigning IDs.
     """
     remove_ids = set()
     add_items = []
+    update_items = {}  # id -> fields to merge
 
     for item in update:
         if "__remove__" in item:
             remove_ids.add(item["__remove__"])
+        elif "__update__" in item:
+            item_id = item["__update__"]
+            fields = {k: v for k, v in item.items() if k != "__update__"}
+            update_items[item_id] = fields
         else:
             add_items.append(item)
 
-    # Filter out removed items from current list
-    result = [item for item in current if item.get("id") not in remove_ids]
+    # Apply updates and filter removed items
+    result = []
+    for item in current:
+        item_id = item.get("id")
+        if item_id in remove_ids:
+            continue
+        if item_id in update_items:
+            # Merge update fields into existing item
+            result.append({**item, **update_items[item_id]})
+        else:
+            result.append(item)
 
     # Track existing IDs to detect conflicts
     existing_ids = {item.get("id") for item in result if item.get("id")}
@@ -106,22 +121,32 @@ class JiraAgent(AgentFlow):
 
 ## OUTILS DE MODIFICATION
 
-**Pour ajouter UN élément:**
-- `add_user_story(title, epic_name?, requirement_ids?, context?)` - Ajoute UNE User Story
-- `add_test(title, user_story_id, test_type?)` - Ajoute UN test
-- `add_requirement(title, req_type?, priority?)` - Ajoute UNE exigence
-
-**Pour supprimer:**
-- `remove_item(item_type, item_id)` - Supprime UN élément par son ID
-
 **Pour générer en masse (après recherche documentaire):**
 - `generate_requirements(context_summary)` - Génère plusieurs exigences depuis le contexte
 - `generate_user_stories(context_summary, quantity?)` - Génère plusieurs User Stories
 - `generate_tests(quantity?)` - Génère plusieurs tests depuis les User Stories
 
+**Pour consulter (READ):**
+- `get_requirements(ids)` - Récupère des exigences (ids = liste d'IDs ou "all")
+- `get_user_stories(ids)` - Récupère des User Stories (ids = liste d'IDs ou "all")
+- `get_tests(ids)` - Récupère des tests (ids = liste d'IDs ou "all")
+
+**Pour ajouter UN élément:**
+- `add_user_story(title, epic_name?, requirement_ids?, context?)` - Ajoute UNE User Story
+- `add_test(title, user_story_id, test_type?)` - Ajoute UN test
+- `add_requirement(title, req_type?, priority?)` - Ajoute UNE exigence
+
+**Pour modifier UN élément:**
+- `update_requirement(item_id, title?, description?, priority?, regenerate_description?)` - Modifie une exigence
+- `update_user_story(item_id, summary?, description?, epic_name?, priority?, story_points?, labels?, requirement_ids?, dependencies?, acceptance_criteria?, regenerate?)` - Modifie une User Story
+- `update_test(item_id, name?, user_story_id?, description?, preconditions?, steps?, test_data?, priority?, test_type?, expected_result?, regenerate?)` - Modifie un test
+
+**Pour supprimer:**
+- `remove_item(item_type, item_id)` - Supprime UN élément par son ID
+
 **Règle de choix:**
-- Utilise `add_*` pour les demandes simples ("ajoute une US pour le login", "ajoute un test pour US-01")
 - Utilise `generate_*` pour les demandes complexes ("génère toutes les US du projet")
+- Utilise `add_*` pour les demandes simples ("ajoute une US pour le login", "ajoute un test pour US-01")
 
 ## WORKFLOW STANDARD
 
@@ -132,8 +157,8 @@ Stratégie obligatoire pour generate_* :
 - Puis cibler avec le vocabulaire DÉCOUVERT (jamais inventé)
 
 **2. Génération ou ajout (selon la demande)**
-- Pour ajout simple → utilise add_user_story / add_test / add_requirement
 - Pour génération en masse → utilise generate_requirements / generate_user_stories / generate_tests
+- Pour ajout simple → utilise add_user_story / add_test / add_requirement
 
 **3. Export (OBLIGATOIRE)**
 - export_deliverables() → fichier Markdown (par défaut)
@@ -244,6 +269,16 @@ Stratégie obligatoire pour generate_* :
         add_test_tool = self.single_item_tools.get_add_test_tool()
         remove_item_tool = self.single_item_tools.get_remove_item_tool()
 
+        # Get single-item update tools
+        update_requirement_tool = self.single_item_tools.get_update_requirement_tool()
+        update_user_story_tool = self.single_item_tools.get_update_user_story_tool()
+        update_test_tool = self.single_item_tools.get_update_test_tool()
+
+        # Get read tools
+        get_requirements_tool = self.single_item_tools.get_read_requirements_tool()
+        get_user_stories_tool = self.single_item_tools.get_read_user_stories_tool()
+        get_tests_tool = self.single_item_tools.get_read_tests_tool()
+
         # Get export tools
         export_tool = self.export_tools.get_export_tool()
         export_jira_csv_tool = self.export_tools.get_export_jira_csv_tool()
@@ -261,6 +296,14 @@ Stratégie obligatoire pour generate_* :
                 add_test_tool,
                 add_requirement_tool,
                 remove_item_tool,
+                # Single-item update
+                update_requirement_tool,
+                update_user_story_tool,
+                update_test_tool,
+                # Read/inspect
+                get_requirements_tool,
+                get_user_stories_tool,
+                get_tests_tool,
                 # Export
                 export_tool,
                 export_jira_csv_tool,
