@@ -129,13 +129,7 @@ class OpenSearchTagStore(BaseTagStore):
 
     def list_all_tags(self) -> List[Tag]:
         try:
-            query = {
-                "query": {
-                    "bool": {
-                        "must": []
-                    }
-                }
-            }
+            query = {"query": {"bool": {"must": []}}}
             response = self.client.search(index=self.index_name, body=query, params={"size": 10000})
             return [Tag(**hit["_source"]) for hit in response["hits"]["hits"]]
         except Exception as e:
