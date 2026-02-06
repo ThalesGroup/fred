@@ -44,6 +44,7 @@ stages:
 
 workflow:
   rules:
+    - if: '$CI_COMMIT_TAG'
     - if: '$CI_PIPELINE_SOURCE == "web"'
 
 # -----------------------------------------------------------------------------
@@ -82,6 +83,9 @@ docker-frontend:
     CONTEXT: ${CI_PROJECT_DIR}
     DOCKER_FILE: frontend/dockerfiles/Dockerfile-prod
   rules:
+    - if: '$CI_COMMIT_TAG'
+      variables:
+        IMAGE_TAG: ${CI_COMMIT_TAG}
     - if: $BUILD_FRONTEND_DOCKER_IMAGE == "true"
 
 docker-backend-api:
@@ -92,6 +96,9 @@ docker-backend-api:
     CONTEXT: ${CI_PROJECT_DIR}
     DOCKER_FILE: agentic-backend/dockerfiles/Dockerfile-prod
   rules:
+    - if: '$CI_COMMIT_TAG'
+      variables:
+        IMAGE_TAG: ${CI_COMMIT_TAG}
     - if: $BUILD_BACKEND_API_DOCKER_IMAGE == "true"
 
 docker-backend-knowledge:
@@ -102,6 +109,9 @@ docker-backend-knowledge:
     CONTEXT: ${CI_PROJECT_DIR}
     DOCKER_FILE: knowledge-flow-backend/dockerfiles/Dockerfile-prod
   rules:
+    - if: '$CI_COMMIT_TAG'
+      variables:
+        IMAGE_TAG: ${CI_COMMIT_TAG}
     - if: $BUILD_BACKEND_KNOWLEDGE_DOCKER_IMAGE == "true"
 
 docker-benchmark:
