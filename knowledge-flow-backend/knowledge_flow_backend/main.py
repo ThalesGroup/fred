@@ -173,6 +173,13 @@ def create_app() -> FastAPI:
             background_task.cancel()
             with suppress(asyncio.CancelledError):
                 await background_task
+            # Close shared HTTP clients to avoid lingering threads/tasks blocking exit
+            import fred_core.model.http_clients as http_clients
+
+            try:
+                await http_clients.async_shutdown_shared_clients()
+            except Exception:
+                http_clients.shutdown_shared_clients()
 
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs",

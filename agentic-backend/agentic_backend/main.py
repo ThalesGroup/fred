@@ -139,8 +139,8 @@ def create_app() -> FastAPI:
                 "❌ AgentManager bootstrap FAILED! Application cannot proceed.",
                 exc_info=True,
             )
-            # Depending on severity, you might re-raise the exception or use sys.exit()
-            # to prevent the server from starting in a broken state.
+            # Fail fast: prevent server from starting in a broken state.
+            raise
 
         # Store state on app.state for access via dependency injection
         app.state.mcp_manager = mcp_manager
@@ -154,6 +154,12 @@ def create_app() -> FastAPI:
                 process_kpi_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await process_kpi_task
+            import fred_core.model.http_clients as http_clients
+            # Prefer async close to avoid lingering tasks/threads
+            try:
+                await http_clients.async_shutdown_shared_clients()
+            except Exception:
+                http_clients.shutdown_shared_clients()
             logger.info("🧹 Lifespan exit: orderly shutdown.")
             logger.info("✅ Shutdown complete.")
 

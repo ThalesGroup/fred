@@ -133,8 +133,9 @@ func main() {
 			}
 			go func(id string) {
 				defer wg.Done()
-				for j := 0; j < cfg.RequestsPerClient; j++ {
-					results <- runOnceWithSession(cfg, id)
+				resList := runClientPersistent(cfg, id)
+				for _, r := range resList {
+					results <- r
 				}
 			}(sessionID)
 		}
@@ -251,6 +252,115 @@ func parseFlags() config {
 
 func runOnce(cfg config) result {
 	return runOnceWithSession(cfg, cfg.SessionID)
+}
+
+// runClientPersistent keeps a single WebSocket open for all requests of one client
+// and optionally deletes the session at the end if it was created here.
+func runClientPersistent(cfg config, sessionID string) []result {
+	results := make([]result, 0, maxInt(1, cfg.RequestsPerClient))
+
+	createdByBench := false
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout*time.Duration(maxInt(1, cfg.RequestsPerClient)))
+	defer cancel()
+
+	if sessionID == "" && cfg.CreateSession {
+		createdID, err := createSession(ctx, cfg)
+		if err != nil {
+			results = append(results, result{Err: err})
+			return results
+		}
+		sessionID = createdID
+		createdByBench = true
+	}
+
+	urlStr, err := buildURL(cfg.URL, cfg.Token, cfg.TokenInQuery)
+	if err != nil {
+		results = append(results, result{Err: err})
+		return results
+	}
+
+	dialOpts := &websocket.DialOptions{CompressionMode: websocket.CompressionDisabled}
+	if cfg.Token != "" && !cfg.TokenInQuery {
+		dialOpts.HTTPHeader = http.Header{"Authorization": []string{"Bearer " + cfg.Token}}
+	}
+	if cfg.InsecureTLS {
+		dialOpts.HTTPClient = &http.Client{
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+		}
+	}
+
+	conn, _, err := websocket.Dial(ctx, urlStr, dialOpts)
+	if err != nil {
+		results = append(results, result{Err: err})
+		return results
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "done")
+
+	for i := 0; i < cfg.RequestsPerClient; i++ {
+		res := runOverOpenConn(ctx, conn, cfg, sessionID)
+		results = append(results, res)
+		if res.Err != nil {
+			break
+		}
+	}
+
+	if createdByBench && cfg.DeleteSession {
+		ctxDel, cancelDel := context.WithTimeout(context.Background(), cfg.Timeout)
+		_ = deleteSession(ctxDel, cfg, sessionID)
+		cancelDel()
+	}
+
+	return results
+}
+
+// runOverOpenConn sends one ask over an existing connection and waits for final.
+func runOverOpenConn(ctx context.Context, conn *websocket.Conn, cfg config, sessionID string) result {
+	start := time.Now()
+	reqCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+
+	payload := askPayload{
+		SessionID:        sessionID,
+		Message:          cfg.Message,
+		AgentName:        cfg.Agent,
+		ClientExchangeID: newExchangeID(),
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return result{Err: err}
+	}
+
+	if err := conn.Write(reqCtx, websocket.MessageText, payloadBytes); err != nil {
+		return result{Err: err}
+	}
+
+	for {
+		_, msg, err := conn.Read(reqCtx)
+		if err != nil {
+			return result{Err: err}
+		}
+		if cfg.DebugEvents {
+			fmt.Printf("event raw: %s\n", string(msg))
+		}
+		var env eventEnvelope
+		if err := json.Unmarshal(msg, &env); err != nil {
+			return result{Err: fmt.Errorf("invalid event: %w", err)}
+		}
+		switch env.Type {
+		case "stream":
+			continue
+		case "final":
+			return result{Duration: time.Since(start)}
+		case "error":
+			var evt errorEvent
+			if err := json.Unmarshal(msg, &evt); err != nil {
+				return result{Err: fmt.Errorf("error event parse failed: %w", err)}
+			}
+			return result{Err: fmt.Errorf("server error: %s", evt.Content)}
+		default:
+			return result{Err: fmt.Errorf("unknown event type: %s", env.Type)}
+		}
+	}
 }
 
 func printConfigRecap(cfg config, perClientMode bool, totalRequests int, effectiveClients int) {
@@ -757,6 +867,13 @@ func percentile(sorted []time.Duration, p float64) time.Duration {
 
 func minInt(a, b int) int {
 	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
 		return a
 	}
 	return b

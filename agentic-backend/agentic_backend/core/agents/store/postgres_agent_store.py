@@ -18,6 +18,8 @@ import asyncio
 import logging
 from typing import List, Optional
 
+from sqlalchemy.exc import OperationalError
+
 from fred_core.sql import AsyncBaseSqlStore, json_for_engine
 from pydantic import TypeAdapter
 from sqlalchemy import Column, MetaData, String, Table, select
@@ -62,14 +64,26 @@ class PostgresAgentStore(BaseAgentStore):
 
         async def _create():
             async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
-                await conn.run_sync(metadata.create_all)
+                try:
+                    await conn.run_sync(metadata.create_all)
+                except OperationalError as exc:
+                    # SQLite may raise if create_all races; ignore "already exists"
+                    msg = str(exc).lower()
+                    if "already exists" not in msg:
+                        raise
 
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(_create())
+            self._create_task = loop.create_task(_create())
         except RuntimeError:
+            self._create_task = None
             asyncio.run(_create())
         logger.info("[AGENTS][PG][ASYNC] Table ready: %s", self.table_name)
+
+    async def _ensure_table(self) -> None:
+        task = getattr(self, "_create_task", None)
+        if task is not None and not task.done():
+            await task
 
     @staticmethod
     def _doc_id(name: str, scope: str, scope_id: Optional[str]) -> str:
@@ -82,6 +96,7 @@ class PostgresAgentStore(BaseAgentStore):
         scope: str = SCOPE_GLOBAL,
         scope_id: Optional[str] = None,
     ) -> None:
+        await self._ensure_table()
         doc_id = self._doc_id(settings.name, scope, scope_id)
         if doc_id == self._seed_marker_id:
             raise ValueError("Invalid agent name: reserved for seed marker")
@@ -118,6 +133,7 @@ class PostgresAgentStore(BaseAgentStore):
         scope: str,
         scope_id: Optional[str] = None,
     ) -> List[AgentSettings]:
+        await self._ensure_table()
         async with self.store.begin() as conn:
             if scope_id is None:
                 result = await conn.execute(
@@ -152,6 +168,7 @@ class PostgresAgentStore(BaseAgentStore):
         scope: str = SCOPE_GLOBAL,
         scope_id: Optional[str] = None,
     ) -> Optional[AgentSettings]:
+        await self._ensure_table()
         doc_id = self._doc_id(name, scope, scope_id)
         if doc_id == self._seed_marker_id:
             return None
@@ -178,6 +195,7 @@ class PostgresAgentStore(BaseAgentStore):
         scope: str = SCOPE_GLOBAL,
         scope_id: Optional[str] = None,
     ) -> None:
+        await self._ensure_table()
         doc_id = self._doc_id(name, scope, scope_id)
         if doc_id == self._seed_marker_id:
             return
@@ -189,6 +207,7 @@ class PostgresAgentStore(BaseAgentStore):
             raise AgentNotFoundError(f"Agent '{name}' not found")
 
     async def static_seeded(self) -> bool:
+        await self._ensure_table()
         async with self.store.begin() as conn:
             result = await conn.execute(
                 select(self.table.c.doc_id).where(
@@ -199,6 +218,7 @@ class PostgresAgentStore(BaseAgentStore):
         return bool(row)
 
     async def mark_static_seeded(self) -> None:
+        await self._ensure_table()
         async with self.store.begin() as conn:
             await self.store.upsert(
                 conn,

@@ -214,34 +214,40 @@ mcp:
 
 storage:
   postgres:
-    host: localhost
-    port: 5432
-    database: fred
-    username: admin
-  opensearch:
-    host: https://localhost:9200
-    secure: true
-    verify_certs: false
-    username: admin
+    sqlite_path: "~/.fred/agentic/agentic.sqlite3"
+
   feedback_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/agentic/feedback.duckdb"
+    type: "postgres"
+    table: feedbacks
+
   agent_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/agentic/agent.duckdb"
+    type: "postgres"
+    table: agent
+
   mcp_servers_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/agentic/mcp_servers.duckdb"
+    type: "postgres"
+    table: mcp-server
+
   session_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/agentic/session.duckdb"
-  history_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/agentic/history.duckdb"
+    type: "postgres"
+    table: session
+
   attachments_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/agentic/session_attachments.duckdb"
+    type: "postgres"
+    table: session_attachments
+
+  history_store:
+    type: "postgres"
+    table: session_history
+
+  task_store:
+    type: "postgres"
+    table: tasks
 
   kpi_store:
     type: "log"
+    level: "INFO"
+
+  log_store:
+    type: "stdout"
     level: "INFO"
