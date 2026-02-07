@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from agentic_backend.core.chatbot.chat_schema import (
     ChatMessage,
@@ -23,12 +23,14 @@ from agentic_backend.core.chatbot.metric_structures import MetricsResponse
 
 class BaseHistoryStore(ABC):
     @abstractmethod
-    def save(self, session_id: str, messages: List[ChatMessage], user_id: str) -> None:
+    async def save(
+        self, session_id: str, messages: List[ChatMessage], user_id: str
+    ) -> None:
         """Save a batch of messages to the session history."""
         pass
 
     @abstractmethod
-    def get(
+    async def get(
         self,
         session_id: str,
     ) -> List[ChatMessage]:
@@ -36,7 +38,7 @@ class BaseHistoryStore(ABC):
         pass
 
     @abstractmethod
-    def get_chatbot_metrics(
+    async def get_chatbot_metrics(
         self,
         start: str,
         end: str,
@@ -46,4 +48,13 @@ class BaseHistoryStore(ABC):
         agg_mapping: Dict[str, List[str]],
     ) -> MetricsResponse:
         """Retrieve messages for a given session."""
+        pass
+
+    @abstractmethod
+    async def save_with_conn(
+        self, conn: Any, session_id: str, messages: List[ChatMessage], user_id: str
+    ) -> None:
+        """
+        Reuse an existing DB connection/transaction.
+        """
         pass

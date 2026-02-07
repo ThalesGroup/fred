@@ -116,6 +116,6 @@ class ReportsService:
             ),
         )
 
-        self._metadata_store.save_metadata(metadata)
+        await self._metadata_store.save_metadata(metadata)
 
         return document_uid, md_url, html_url, pdf_url

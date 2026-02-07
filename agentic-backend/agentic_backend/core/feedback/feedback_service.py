@@ -30,32 +30,32 @@ class FeedbackService:
         self.store = store
 
     @authorize(action=Action.READ, resource=Resource.FEEDBACK)
-    def get_feedback(self, user: KeycloakUser) -> List[FeedbackRecord]:
+    async def get_feedback(self, user: KeycloakUser) -> List[FeedbackRecord]:
         """
         Returns all feedback entries stored.
         """
-        return self.store.list()
+        return await self.store.list()
 
     @authorize(action=Action.CREATE, resource=Resource.FEEDBACK)
-    def add_feedback(self, user: KeycloakUser, feedback: FeedbackRecord) -> None:
+    async def add_feedback(self, user: KeycloakUser, feedback: FeedbackRecord) -> None:
         """
         Adds a new feedback entry with a UUID and timestamp.
         """
-        self.store.save(feedback)
+        await self.store.save(feedback)
 
     @authorize(action=Action.DELETE, resource=Resource.FEEDBACK)
-    def delete_feedback(self, user: KeycloakUser, feedback_id: str) -> None:
+    async def delete_feedback(self, user: KeycloakUser, feedback_id: str) -> None:
         """
         Deletes a feedback entry by ID.
         Returns True if the entry was deleted, False if it was not found.
         """
-        self.store.delete(feedback_id)
+        await self.store.delete(feedback_id)
 
     @authorize(action=Action.READ, resource=Resource.FEEDBACK)
-    def get_feedback_by_id(
+    async def get_feedback_by_id(
         self, user: KeycloakUser, feedback_id: str
     ) -> FeedbackRecord | None:
         """
         Returns a single feedback entry by ID, or None if not found.
         """
-        return self.store.get(feedback_id)
+        return await self.store.get(feedback_id)

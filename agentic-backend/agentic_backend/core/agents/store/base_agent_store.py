@@ -28,7 +28,7 @@ class BaseAgentStore(ABC):
     """
 
     @abstractmethod
-    def save(
+    async def save(
         self,
         settings: AgentSettings,
         tuning: AgentTuning,
@@ -41,7 +41,7 @@ class BaseAgentStore(ABC):
         pass
 
     @abstractmethod
-    def load_by_scope(
+    async def load_by_scope(
         self,
         scope: str,
         scope_id: Optional[str] = None,
@@ -56,14 +56,14 @@ class BaseAgentStore(ABC):
         pass
 
     @abstractmethod
-    def load_all_global_scope(self) -> List[AgentSettings]:
+    async def load_all_global_scope(self) -> List[AgentSettings]:
         """
         Retrieve all persisted agent definitions.
         """
         pass
 
     @abstractmethod
-    def get(
+    async def get(
         self,
         name: str,
         scope: str = SCOPE_GLOBAL,
@@ -75,7 +75,7 @@ class BaseAgentStore(ABC):
         pass
 
     @abstractmethod
-    def delete(
+    async def delete(
         self,
         name: str,
         scope: str = SCOPE_GLOBAL,
@@ -93,7 +93,7 @@ class BaseAgentStore(ABC):
         pass
 
     @abstractmethod
-    def static_seeded(self) -> bool:
+    async def static_seeded(self) -> bool:
         """
         True when static agents have already been seeded into the persistent store.
         Used to avoid re-seeding deleted static agents after a restart.
@@ -101,7 +101,7 @@ class BaseAgentStore(ABC):
         pass
 
     @abstractmethod
-    def mark_static_seeded(self) -> None:
+    async def mark_static_seeded(self) -> None:
         """
         Mark the store as having seeded static agents.
         """

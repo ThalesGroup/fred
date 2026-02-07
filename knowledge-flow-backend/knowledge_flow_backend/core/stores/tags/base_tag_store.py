@@ -51,11 +51,11 @@ class BaseTagStore(ABC):
     """
 
     @abstractmethod
-    def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
+    async def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
         pass
 
     @abstractmethod
-    def get_tag_by_id(self, tag_id: str) -> Tag:
+    async def get_tag_by_id(self, tag_id: str) -> Tag:
         """
         Retrieve a tag by its ID.
         Raises:
@@ -64,17 +64,17 @@ class BaseTagStore(ABC):
         pass
 
     @abstractmethod
-    def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str) -> Tag | None:
+    async def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str) -> Tag | None:
         pass
 
     @abstractmethod
-    def create_tag(self, tag: Tag) -> Tag:
+    async def create_tag(self, tag: Tag) -> Tag:
         pass
 
     @abstractmethod
-    def update_tag_by_id(self, tag_id: str, tag: Tag) -> Tag:
+    async def update_tag_by_id(self, tag_id: str, tag: Tag) -> Tag:
         pass
 
     @abstractmethod
-    def delete_tag_by_id(self, tag_id: str) -> None:
+    async def delete_tag_by_id(self, tag_id: str) -> None:
         pass

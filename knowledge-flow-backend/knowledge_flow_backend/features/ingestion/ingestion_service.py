@@ -81,7 +81,7 @@ class IngestionService:
             versions.append(max(0, int(version)))
         return versions
 
-    def _apply_versioning(self, metadata: DocumentMetadata) -> DocumentMetadata:
+    async def _apply_versioning(self, metadata: DocumentMetadata) -> DocumentMetadata:
         """
         Ensure the incoming document gets a suffix-based version within its primary folder/tag.
         """
@@ -92,7 +92,7 @@ class IngestionService:
         if primary_tag:
             filters = {"tags": {"tag_ids": [primary_tag]}}
 
-        existing_docs = self.metadata_service.metadata_store.get_all_metadata(filters)
+        existing_docs = await self.metadata_service.metadata_store.get_all_metadata(filters)
         existing_versions = self._existing_versions(canonical_name, primary_tag, existing_docs)
 
         # Prevent cascading (2), (3)… — keep at most one alternate version (1)
@@ -152,7 +152,7 @@ class IngestionService:
         return self.content_store.get_local_copy(metadata.document_uid, target_dir)
 
     @authorize(Action.CREATE, Resource.DOCUMENTS)
-    def extract_metadata(self, user: KeycloakUser, file_path: pathlib.Path, tags: list[str], source_tag: str) -> DocumentMetadata:
+    async def extract_metadata(self, user: KeycloakUser, file_path: pathlib.Path, tags: list[str], source_tag: str) -> DocumentMetadata:
         """
         Extracts metadata from the input file.
         This method is responsible for determining the file type and using the appropriate processor
@@ -164,7 +164,7 @@ class IngestionService:
 
         # Step 1: run processor
         metadata = processor.process_metadata(file_path, tags=tags, source_tag=source_tag)
-        metadata = self._apply_versioning(metadata)
+        metadata = await self._apply_versioning(metadata)
 
         # Step 2: enrich/clean metadata
         if source_config:

@@ -14,14 +14,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, List
 
 from fred_core import KeycloakUser
-from fred_core.sql import BaseSqlStore, PydanticJsonMixin
+from fred_core.sql import AsyncBaseSqlStore, PydanticJsonMixin, json_for_engine
 from sqlalchemy import Column, DateTime, MetaData, String, Table, select
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from knowledge_flow_backend.core.stores.tags.base_tag_store import (
     BaseTagStore,
@@ -39,9 +39,11 @@ class PostgresTagStore(BaseTagStore, PydanticJsonMixin):
     PostgreSQL-backed tag store using JSONB.
     """
 
-    def __init__(self, engine: Engine, table_name: str, prefix: str):
-        self.store = BaseSqlStore(engine, prefix=prefix)
+    def __init__(self, engine: AsyncEngine, table_name: str, prefix: str):
+        self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
+
+        json_type = json_for_engine(self.store.engine)
 
         metadata = MetaData()
         self.table = Table(
@@ -55,12 +57,20 @@ class PostgresTagStore(BaseTagStore, PydanticJsonMixin):
             Column("path", String, index=True),
             Column("description", String),
             Column("type", String, index=True),
-            Column("doc", JSONB),
+            Column("doc", json_type),
             keep_existing=True,
         )
 
-        metadata.create_all(self.store.engine)
-        logger.info("[TAGS][PG] Table ready: %s", self.table_name)
+        async def _create():
+            async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
+                await conn.run_sync(metadata.create_all)
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_create())
+        except RuntimeError:
+            asyncio.run(_create())
+        logger.info("[TAGS][PG][ASYNC] Table ready: %s", self.table_name)
 
     @staticmethod
     def _from_dict(data: Any) -> Tag:
@@ -78,24 +88,26 @@ class PostgresTagStore(BaseTagStore, PydanticJsonMixin):
 
     # CRUD implementation mirroring DuckDB store
 
-    def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
+    async def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
         owner_id = getattr(user, "uid", None) or getattr(user, "id", None) or getattr(user, "sub", None)
-        with self.store.begin() as conn:
-            rows = conn.execute(select(self.table.c.doc).where(self.table.c.owner_id == owner_id).order_by(self.table.c.path.nullsfirst(), self.table.c.name)).fetchall()
+        async with self.store.begin() as conn:
+            result = await conn.execute(select(self.table.c.doc).where(self.table.c.owner_id == owner_id).order_by(self.table.c.path.nullsfirst(), self.table.c.name))
+            rows = result.fetchall()
         return [self._from_dict(r[0]) for r in rows]
 
-    def get_tag_by_id(self, tag_id: str) -> Tag:
-        with self.store.begin() as conn:
-            row = conn.execute(select(self.table.c.doc).where(self.table.c.tag_id == tag_id)).fetchone()
+    async def get_tag_by_id(self, tag_id: str) -> Tag:
+        async with self.store.begin() as conn:
+            result = await conn.execute(select(self.table.c.doc).where(self.table.c.tag_id == tag_id))
+            row = result.fetchone()
         if not row:
             raise TagNotFoundError(f"Tag with id '{tag_id}' not found.")
         return self._from_dict(row[0])
 
-    def create_tag(self, tag: Tag) -> Tag:
+    async def create_tag(self, tag: Tag) -> Tag:
         tid = self._require_id(tag)
         # fail if exists
         try:
-            self.get_tag_by_id(tid)
+            await self.get_tag_by_id(tid)
             raise TagAlreadyExistsError(f"Tag with id '{tid}' already exists.")
         except TagNotFoundError:
             pass
@@ -110,12 +122,12 @@ class PostgresTagStore(BaseTagStore, PydanticJsonMixin):
             "type": tag.type.value,
             "doc": tag.model_dump(mode="json"),
         }
-        with self.store.begin() as conn:
-            conn.execute(self.table.insert().values(**values))
+        async with self.store.begin() as conn:
+            await conn.execute(self.table.insert().values(**values))
         return tag
 
-    def update_tag_by_id(self, tag_id: str, tag: Tag) -> Tag:
-        self.get_tag_by_id(tag_id)
+    async def update_tag_by_id(self, tag_id: str, tag: Tag) -> Tag:
+        await self.get_tag_by_id(tag_id)
         values = {
             "created_at": tag.created_at,
             "updated_at": tag.updated_at,
@@ -126,24 +138,25 @@ class PostgresTagStore(BaseTagStore, PydanticJsonMixin):
             "type": tag.type.value,
             "doc": tag.model_dump(mode="json"),
         }
-        with self.store.begin() as conn:
-            conn.execute(self.table.update().where(self.table.c.tag_id == tag_id).values(**values))
+        async with self.store.begin() as conn:
+            await conn.execute(self.table.update().where(self.table.c.tag_id == tag_id).values(**values))
         return tag
 
-    def delete_tag_by_id(self, tag_id: str) -> None:
-        with self.store.begin() as conn:
-            result = conn.execute(self.table.delete().where(self.table.c.tag_id == tag_id))
+    async def delete_tag_by_id(self, tag_id: str) -> None:
+        async with self.store.begin() as conn:
+            result = await conn.execute(self.table.delete().where(self.table.c.tag_id == tag_id))
         if result.rowcount == 0:
             raise TagNotFoundError(f"Tag with id '{tag_id}' not found.")
 
-    def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str) -> Tag | None:
-        with self.store.begin() as conn:
-            rows = conn.execute(
+    async def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str) -> Tag | None:
+        async with self.store.begin() as conn:
+            result = await conn.execute(
                 select(self.table.c.doc).where(
                     self.table.c.owner_id == owner_id,
                     self.table.c.type == tag_type.value,
                 )
-            ).fetchall()
+            )
+            rows = result.fetchall()
         for r in rows:
             t = self._from_dict(r[0])
             if t.full_path == full_path and t.type == tag_type:
@@ -151,12 +164,14 @@ class PostgresTagStore(BaseTagStore, PydanticJsonMixin):
         return None
 
     # Convenience helpers used elsewhere
-    def list_all(self) -> List[Tag]:
-        with self.store.begin() as conn:
-            rows = conn.execute(select(self.table.c.doc)).fetchall()
+    async def list_all(self) -> List[Tag]:
+        async with self.store.begin() as conn:
+            result = await conn.execute(select(self.table.c.doc))
+            rows = result.fetchall()
         return [self._from_dict(r[0]) for r in rows]
 
-    def list_by_type(self, tag_type: str) -> List[Tag]:
-        with self.store.begin() as conn:
-            rows = conn.execute(select(self.table.c.doc).where(self.table.c.type == tag_type)).fetchall()
+    async def list_by_type(self, tag_type: str) -> List[Tag]:
+        async with self.store.begin() as conn:
+            result = await conn.execute(select(self.table.c.doc).where(self.table.c.type == tag_type))
+            rows = result.fetchall()
         return [self._from_dict(r[0]) for r in rows]

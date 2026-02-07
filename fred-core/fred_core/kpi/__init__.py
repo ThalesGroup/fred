@@ -14,6 +14,7 @@
 
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
+from fred_core.kpi.kpi_phase_metric import phase_timer, record_phase_metric
 from fred_core.kpi.kpi_process import emit_process_kpis
 from fred_core.kpi.kpi_reader_structures import (
     FilterTerm,
@@ -58,4 +59,6 @@ __all__ = [
     "OpenSearchKPIStore",
     "PrometheusKPIStore",
     "emit_process_kpis",
+    "record_phase_metric",
+    "phase_timer",
 ]

@@ -42,7 +42,7 @@ async def healthz():
 
 
 @router.get("/ready", summary="Readiness check for Kubernetes")
-def ready():
+async def ready():
     return {"status": "ready"}
 
 
@@ -51,7 +51,7 @@ def ready():
     summary="Get aggregated numerical chatbot metrics",
     response_model=MetricsResponse,
 )
-def get_node_numerical_metrics(
+async def get_node_numerical_metrics(
     start: str,
     end: str,
     precision: str = "hour",
@@ -72,7 +72,7 @@ def get_node_numerical_metrics(
             raise HTTPException(400, detail=f"Unsupported aggregation op: {op}")
         agg_mapping.setdefault(field, []).append(op)
 
-    return session_orchestrator.get_metrics(
+    return await session_orchestrator.get_metrics(
         user,
         start=start,
         end=end,
@@ -87,8 +87,8 @@ def get_node_numerical_metrics(
     summary="Get simple per-user runtime summary",
     response_model=ChatbotRuntimeSummary,
 )
-def get_runtime_summary(
+async def get_runtime_summary(
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> ChatbotRuntimeSummary:
-    return session_orchestrator.get_runtime_summary(user)
+    return await session_orchestrator.get_runtime_summary(user)

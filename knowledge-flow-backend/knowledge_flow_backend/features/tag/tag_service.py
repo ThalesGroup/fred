@@ -83,7 +83,7 @@ class TagService:
         Pagination included.
         """
         # 1) fetch
-        tags: list[Tag] = self._tag_store.list_tags_for_user(user)
+        tags: list[Tag] = await self._tag_store.list_tags_for_user(user)
 
         # Filter by permission (todo: use rebac ids to filter at store (DB) level)
         authorized_tags_refs = await self.rebac.lookup_user_resources(user, TagPermission.READ)
@@ -127,7 +127,7 @@ class TagService:
     async def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
 
-        tag = self._tag_store.get_tag_by_id(tag_id)
+        tag = await self._tag_store.get_tag_by_id(tag_id)
         item_service = get_specific_tag_item_service(tag.type)
         item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
 
@@ -138,10 +138,10 @@ class TagService:
         # Normalize + uniqueness
         norm_path = self._normalize_path(tag_data.path)
         full_path = self._compose_full_path(norm_path, tag_data.name)
-        self._ensure_unique_full_path(owner_id=user.uid, tag_type=tag_data.type, full_path=full_path)
+        await self._ensure_unique_full_path(owner_id=user.uid, tag_type=tag_data.type, full_path=full_path)
 
         now = datetime.now()
-        tag = self._tag_store.create_tag(
+        tag = await self._tag_store.create_tag(
             Tag(
                 id=str(uuid4()),
                 owner_id=user.uid,
@@ -158,7 +158,7 @@ class TagService:
 
         # Link to parent tag in ReBAC when the new tag is nested.
         if norm_path:
-            parent_tag = self._tag_store.get_by_owner_type_full_path(owner_id=user.uid, tag_type=tag_data.type, full_path=norm_path)
+            parent_tag = await self._tag_store.get_by_owner_type_full_path(owner_id=user.uid, tag_type=tag_data.type, full_path=norm_path)
             if parent_tag:
                 await self.rebac.add_relation(
                     Relation(
@@ -182,7 +182,7 @@ class TagService:
     async def update_tag_for_user(self, tag_id: str, tag_data: TagUpdate, user: KeycloakUser) -> TagWithItemsId:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
 
-        tag = self._tag_store.get_tag_by_id(tag_id)
+        tag = await self._tag_store.get_tag_by_id(tag_id)
         item_service = get_specific_tag_item_service(tag.type)
 
         # Add / remove changed item ids
@@ -196,7 +196,7 @@ class TagService:
 
         # Update tag
         tag.updated_at = datetime.now()
-        updated_tag = self._tag_store.update_tag_by_id(tag_id, tag)
+        updated_tag = await self._tag_store.update_tag_by_id(tag_id, tag)
 
         # Return the up-to-date list of item ids
         item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
@@ -206,7 +206,7 @@ class TagService:
     async def delete_tag_for_user(self, tag_id: str, user: KeycloakUser) -> None:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.DELETE, tag_id)
 
-        tag = self._tag_store.get_tag_by_id(tag_id)
+        tag = await self._tag_store.get_tag_by_id(tag_id)
 
         # Get all sub tags (recusrively) and the current tag
         sub_tags = await self.list_all_tags_for_user(user, tag.type, path_prefix=tag.full_path)
@@ -225,7 +225,7 @@ class TagService:
         )
 
         # Remove tag
-        self._tag_store.delete_tag_by_id(tag.id)
+        await self._tag_store.delete_tag_by_id(tag.id)
 
         # TODO: remove all relation of this tag in ReBAC
 
@@ -307,9 +307,9 @@ class TagService:
     async def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
 
-        tag = self._tag_store.get_tag_by_id(tag_id)
+        tag = await self._tag_store.get_tag_by_id(tag_id)
         tag.updated_at = datetime.now()
-        self._tag_store.update_tag_by_id(tag_id, tag)
+        await self._tag_store.update_tag_by_id(tag_id, tag)
 
     @authorize(Action.UPDATE, Resource.TAGS)
     async def backfill_rebac_relations(self, user: KeycloakUser) -> dict:
@@ -328,7 +328,7 @@ class TagService:
                 "tag_parent_relations_created": 0,
             }
 
-        tags = self._tag_store.list_tags_for_user(user)
+        tags = await self._tag_store.list_tags_for_user(user)
         tag_owner_relations_created = 0
         tag_parent_relations_created = 0
         documents_seen = 0
@@ -354,7 +354,7 @@ class TagService:
             # Tags drive parent relations depending on their type (documents vs other resources)
             if tag.type == TagType.DOCUMENT:
                 try:
-                    docs = metadata_store.get_metadata_in_tag(tag.id)
+                    docs = await metadata_store.get_metadata_in_tag(tag.id)
                 except Exception as exc:
                     logger.warning("Failed to list documents for tag %s during backfill: %s", tag.id, exc)
                     continue
@@ -377,7 +377,7 @@ class TagService:
                         logger.warning("Failed to backfill tag->document relation for tag %s doc %s: %s", tag.id, doc_uid, exc)
             elif tag.type == TagType.CHAT_CONTEXT:
                 try:
-                    resources = resource_store.get_resources_in_tag(tag.id)
+                    resources = await resource_store.get_resources_in_tag(tag.id)
                 except ResourceNotFoundError:
                     resources = []
                 except Exception as exc:
@@ -456,7 +456,7 @@ class TagService:
     def _full_path_of(self, tag: Tag) -> str:
         return self._compose_full_path(tag.path, tag.name)
 
-    def _ensure_unique_full_path(
+    async def _ensure_unique_full_path(
         self,
         owner_id: str,
         tag_type: TagType,
@@ -466,7 +466,7 @@ class TagService:
         """
         Check uniqueness of (owner_id, type, full_path). Prefer delegating to the store if it exposes a method.
         """
-        existing = self._tag_store.get_by_owner_type_full_path(owner_id, tag_type, full_path)
+        existing = await self._tag_store.get_by_owner_type_full_path(owner_id, tag_type, full_path)
         if existing and existing.id != (exclude_tag_id or ""):
             if existing.type == tag_type:
                 raise TagAlreadyExistsError(f"Tag '{full_path}' already exists for owner {owner_id} and type {tag_type}.")

@@ -14,14 +14,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import List, Optional
 
-from fred_core.sql import BaseSqlStore
+from fred_core.sql import AsyncBaseSqlStore, json_for_engine
 from pydantic import TypeAdapter
 from sqlalchemy import Column, MetaData, String, Table, select
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from agentic_backend.core.agents.agent_spec import MCPServerConfiguration
 from agentic_backend.core.mcp.store.base_mcp_server_store import BaseMcpServerStore
@@ -37,28 +37,46 @@ class PostgresMcpServerStore(BaseMcpServerStore):
     Schema mirrors DuckDB/OpenSearch variants.
     """
 
-    def __init__(self, engine: Engine, table_name: str, prefix: str = "mcp_"):
-        self.store = BaseSqlStore(engine, prefix=prefix)
+    def __init__(self, engine: AsyncEngine, table_name: str, prefix: str = "mcp_"):
+        self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
         self._seed_marker_id = "__static_seeded__"
+
+        json_type = json_for_engine(self.store.engine)
 
         metadata = MetaData()
         self.table = Table(
             self.table_name,
             metadata,
             Column("server_id", String, primary_key=True),
-            Column("payload_json", JSONB),
+            Column("payload_json", json_type),
             keep_existing=True,
         )
 
-        metadata.create_all(self.store.engine)
-        logger.info("[MCP][PG] Table ready: %s", self.table_name)
+        async def _create():
+            async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
+                await conn.run_sync(metadata.create_all)
 
-    def load_all(self) -> List[MCPServerConfiguration]:
-        with self.store.begin() as conn:
-            rows = conn.execute(
+        try:
+            loop = asyncio.get_running_loop()
+            self._create_task = loop.create_task(_create())
+        except RuntimeError:
+            self._create_task = None
+            asyncio.run(_create())
+        logger.info("[MCP][PG][ASYNC] Table ready: %s", self.table_name)
+
+    async def _ensure_table(self) -> None:
+        task = getattr(self, "_create_task", None)
+        if task is not None and not task.done():
+            await task
+
+    async def load_all(self) -> List[MCPServerConfiguration]:
+        await self._ensure_table()
+        async with self.store.begin() as conn:
+            result = await conn.execute(
                 select(self.table.c.server_id, self.table.c.payload_json)
-            ).fetchall()
+            )
+            rows = result.fetchall()
 
         servers: List[MCPServerConfiguration] = []
         for server_id, payload in rows:
@@ -74,15 +92,17 @@ class PostgresMcpServerStore(BaseMcpServerStore):
                 )
         return servers
 
-    def get(self, server_id: str) -> Optional[MCPServerConfiguration]:
+    async def get(self, server_id: str) -> Optional[MCPServerConfiguration]:
+        await self._ensure_table()
         if server_id == self._seed_marker_id:
             return None
-        with self.store.begin() as conn:
-            row = conn.execute(
+        async with self.store.begin() as conn:
+            result = await conn.execute(
                 select(self.table.c.payload_json).where(
                     self.table.c.server_id == server_id
                 )
-            ).fetchone()
+            )
+            row = result.fetchone()
         if not row:
             return None
         try:
@@ -92,23 +112,25 @@ class PostgresMcpServerStore(BaseMcpServerStore):
             logger.exception("[STORE][PG][MCP] Failed to parse server id=%s", server_id)
             return None
 
-    def save(self, server: MCPServerConfiguration) -> None:
+    async def save(self, server: MCPServerConfiguration) -> None:
+        await self._ensure_table()
         values = {
             "server_id": server.id,
             "payload_json": McpServerAdapter.dump_python(
                 server, mode="json", exclude_none=True
             ),
         }
-        with self.store.begin() as conn:
-            self.store.upsert(conn, self.table, values, pk_cols=["server_id"])
+        async with self.store.begin() as conn:
+            await self.store.upsert(conn, self.table, values, pk_cols=["server_id"])
         logger.debug("[STORE][PG][MCP] Saved server id=%s", server.id)
 
-    def delete(self, server_id: str) -> None:
+    async def delete(self, server_id: str) -> None:
+        await self._ensure_table()
         if server_id == self._seed_marker_id:
             logger.info("[STORE][PG][MCP] Seed marker delete skipped")
             return
-        with self.store.begin() as conn:
-            result = conn.execute(
+        async with self.store.begin() as conn:
+            result = await conn.execute(
                 self.table.delete().where(self.table.c.server_id == server_id)
             )
         deleted = getattr(result, "rowcount", None)
@@ -117,22 +139,25 @@ class PostgresMcpServerStore(BaseMcpServerStore):
         else:
             logger.info("[STORE][PG][MCP] Deleted server id=%s", server_id)
 
-    def static_seeded(self) -> bool:
-        with self.store.begin() as conn:
-            row = conn.execute(
+    async def static_seeded(self) -> bool:
+        await self._ensure_table()
+        async with self.store.begin() as conn:
+            result = await conn.execute(
                 select(self.table.c.server_id)
                 .where(self.table.c.server_id == self._seed_marker_id)
                 .limit(1)
-            ).fetchone()
+            )
+            row = result.fetchone()
         return bool(row)
 
-    def mark_static_seeded(self) -> None:
+    async def mark_static_seeded(self) -> None:
+        await self._ensure_table()
         marker = {
             "server_id": self._seed_marker_id,
             "payload_json": {},
         }
-        with self.store.begin() as conn:
-            self.store.upsert(
+        async with self.store.begin() as conn:
+            await self.store.upsert(
                 conn,
                 self.table,
                 marker,

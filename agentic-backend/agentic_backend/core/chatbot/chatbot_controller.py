@@ -452,6 +452,8 @@ async def websocket_chatbot_question(
         ):
             raise WebSocketDisconnect
 
+    last_session_id: str | None = None
+
     try:
         while True:
             # We loop here receiving and replying with the same WebSocket connection
@@ -522,6 +524,10 @@ async def websocket_chatbot_question(
                     refresh_token=active_refresh_token,
                     user=user,
                 )
+                if isinstance(parsed, ChatAskInput):
+                    last_session_id = parsed.session_id or last_session_id
+                elif isinstance(parsed, HumanResumeInput):
+                    last_session_id = parsed.session_id or last_session_id
                 logger.info(
                     "[CHATBOT WS] parsed type=%s session_id=%s exchange_id=%s agent=%s has_runtime_ctx=%s",
                     type(parsed).__name__,
@@ -641,6 +647,16 @@ async def websocket_chatbot_question(
         except Exception:
             logger.debug("WebSocket close failed", exc_info=True)
             pass
+    finally:
+        if last_session_id:
+            try:
+                await session_orchestrator.release_session(last_session_id)
+            except Exception:
+                logger.debug(
+                    "Session release failed for session_id=%s",
+                    last_session_id,
+                    exc_info=True,
+                )
 
 
 @router.websocket("/chatbot/query/ws-baseline")
@@ -667,11 +683,11 @@ async def websocket_chatbot_openai_baseline(websocket: WebSocket):
     description="Get the list of active chatbot sessions.",
     summary="Get the list of active chatbot sessions.",
 )
-def get_sessions(
+async def get_sessions(
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> list[SessionWithFiles]:
-    return session_orchestrator.get_sessions(user)
+    return await session_orchestrator.get_sessions(user)
 
 
 @router.post(
@@ -680,12 +696,12 @@ def get_sessions(
     summary="Create chatbot session.",
     response_model=SessionSchema,
 )
-def create_session(
+async def create_session(
     payload: CreateSessionPayload = Body(default_factory=CreateSessionPayload),
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> SessionSchema:
-    return session_orchestrator.create_empty_session(
+    return await session_orchestrator.create_empty_session(
         user=user, agent_name=payload.agent_name, title=payload.title
     )
 
@@ -696,7 +712,7 @@ def create_session(
     summary="Get the history of a chatbot session.",
     response_model=List[ChatMessage],
 )
-def get_session_history(
+async def get_session_history(
     session_id: str,
     limit: Optional[int] = Query(None, ge=1),
     offset: int = Query(0, ge=0),
@@ -705,7 +721,7 @@ def get_session_history(
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> list[ChatMessage]:
-    history = session_orchestrator.get_session_history(
+    history = await session_orchestrator.get_session_history(
         session_id=session_id,
         user=user,
         limit=limit,
@@ -727,7 +743,7 @@ def get_session_history(
     summary="Get a single chatbot message.",
     response_model=ChatMessage,
 )
-def get_session_message(
+async def get_session_message(
     session_id: str,
     rank: int,
     text_limit: Optional[int] = Query(None, ge=1),
@@ -741,7 +757,7 @@ def get_session_message(
         rank,
         user.uid,
     )
-    message = session_orchestrator.get_session_message(session_id, rank, user)
+    message = await session_orchestrator.get_session_message(session_id, rank, user)
     if text_limit is not None or text_offset > 0:
         message = _paginate_message_text(
             message, text_offset=text_offset, text_limit=text_limit
@@ -764,12 +780,12 @@ class SessionPreferencesPayload(BaseModel):
     response_model=dict,
     tags=["Chatbot"],
 )
-def get_session_preferences(
+async def get_session_preferences(
     session_id: str,
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
     user: KeycloakUser = Depends(get_current_user),
 ):
-    return session_orchestrator.get_session_preferences(session_id, user)
+    return await session_orchestrator.get_session_preferences(session_id, user)
 
 
 @router.put(
@@ -777,13 +793,13 @@ def get_session_preferences(
     response_model=dict,
     tags=["Chatbot"],
 )
-def update_session_preferences(
+async def update_session_preferences(
     session_id: str,
     payload: SessionPreferencesPayload,
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
     user: KeycloakUser = Depends(get_current_user),
 ):
-    return session_orchestrator.update_session_preferences(
+    return await session_orchestrator.update_session_preferences(
         session_id, user, payload.preferences
     )
 

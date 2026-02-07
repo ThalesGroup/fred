@@ -99,7 +99,7 @@ class MetadataService:
         authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
 
         try:
-            docs = self.metadata_store.get_all_metadata(filters_dict)
+            docs = await self.metadata_store.get_all_metadata(filters_dict)
 
             if isinstance(authorized_doc_ref, RebacDisabledResult):
                 # if rebac is disabled, do not filter
@@ -124,7 +124,7 @@ class MetadataService:
         authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
 
         try:
-            docs = self.metadata_store.get_metadata_in_tag(tag_id)
+            docs = await self.metadata_store.get_metadata_in_tag(tag_id)
 
             if isinstance(authorized_doc_ref, RebacDisabledResult):
                 # if rebac is disabled, do not filter
@@ -145,7 +145,7 @@ class MetadataService:
         await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
 
         try:
-            metadata = self.metadata_store.get_metadata_by_uid(document_uid)
+            metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
         except Exception as e:
             logger.error(f"Error retrieving metadata for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to get metadata: {e}")
@@ -239,7 +239,7 @@ class MetadataService:
         """
         authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
 
-        docs, total = self.metadata_store.browse_metadata_in_tag(tag_id, offset=offset, limit=limit)
+        docs, total = await self.metadata_store.browse_metadata_in_tag(tag_id, offset=offset, limit=limit)
         logger.debug(
             "[PAGINATION] browse_documents_in_tag tag=%s offset=%s limit=%s -> fetched=%s total=%s",
             tag_id,
@@ -343,7 +343,7 @@ class MetadataService:
         authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
 
         try:
-            docs = self.metadata_store.get_all_metadata({})
+            docs = await self.metadata_store.get_all_metadata({})
         except MetadataDeserializationError as e:
             logger.error(f"[Metadata] Deserialization error while building processing graph: {e}")
             raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
@@ -497,7 +497,7 @@ class MetadataService:
         authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
 
         try:
-            docs = self.metadata_store.get_all_metadata({})
+            docs = await self.metadata_store.get_all_metadata({})
         except MetadataDeserializationError as e:
             logger.error(f"[Metadata] Deserialization error while building processing summary: {e}")
             raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
@@ -572,7 +572,7 @@ class MetadataService:
                 metadata.tags.tag_ids = tag_ids
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = user.uid
-                self.metadata_store.save_metadata(metadata)
+                await self.metadata_store.save_metadata(metadata)
                 await self._set_tag_as_parent_in_rebac(new_tag_id, metadata.document_uid)
 
                 logger.info(f"[METADATA] Added tag '{new_tag_id}' to document '{metadata.document_name}' by '{user.uid}'")
@@ -619,7 +619,7 @@ class MetadataService:
                 # Promote an alternate version (version=1) to base if present
                 if getattr(metadata.identity, "version", 0) == 0:
                     try:
-                        promoted = self._promote_alternate_version(
+                        promoted = await self._promote_alternate_version(
                             canonical_name=metadata.identity.canonical_name or metadata.document_name,
                             source_tag=metadata.source.source_tag,
                             removed_tag_id=tag_id_to_remove,
@@ -641,13 +641,13 @@ class MetadataService:
                     except Exception as e:
                         logger.warning(f"[CONTENT] Could not delete content for '{metadata.document_name}': {e}")
 
-                self.metadata_store.delete_metadata(metadata.document_uid)
+                await self.metadata_store.delete_metadata(metadata.document_uid)
                 # TODO: remove all rebac relations for this document
 
             else:
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = user.uid
-                self.metadata_store.save_metadata(metadata)
+                await self.metadata_store.save_metadata(metadata)
                 logger.info(f"[METADATA] Removed tag '{tag_id_to_remove}' from document '{metadata.document_name}' by '{user.uid}'")
 
             await self._remove_tag_as_parent_in_rebac(tag_id_to_remove, metadata.document_uid)
@@ -664,7 +664,7 @@ class MetadataService:
         await self.rebac.check_user_permission_or_raise(user, DocumentPermission.UPDATE, document_uid)
 
         try:
-            metadata = self.metadata_store.get_metadata_by_uid(document_uid)
+            metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
             if not metadata:
                 raise MetadataNotFound(f"Document '{document_uid}' not found.")
 
@@ -673,7 +673,7 @@ class MetadataService:
             metadata.identity.modified = datetime.now(timezone.utc)
             metadata.identity.last_modified_by = modified_by
 
-            self.metadata_store.save_metadata(metadata)
+            await self.metadata_store.save_metadata(metadata)
             logger.info(f"[METADATA] Set retrievable={value} for document '{document_uid}' by '{modified_by}'")
 
             # 2) If the document was vectorized, reflect the toggle in the vector index
@@ -714,7 +714,7 @@ class MetadataService:
 
         try:
             # Save the metadata first
-            self.metadata_store.save_metadata(metadata)
+            await self.metadata_store.save_metadata(metadata)
             for tag_id in metadata.tags.tag_ids:
                 await self._set_tag_as_parent_in_rebac(tag_id, metadata.document_uid)
 
@@ -732,7 +732,7 @@ class MetadataService:
         """
         try:
             # Get old tags from current document metadata
-            old_document = self.metadata_store.get_metadata_by_uid(document_uid)
+            old_document = await self.metadata_store.get_metadata_by_uid(document_uid)
             old_tags = (old_document.tags.tag_ids if old_document and old_document.tags else []) or []
 
             # Find tags that were added or removed
@@ -779,7 +779,7 @@ class MetadataService:
         """
         await self.rebac.delete_relation(self._get_tag_as_parent_relation(tag_id, document_uid))
 
-    def _promote_alternate_version(self, canonical_name: str, source_tag: str | None, removed_tag_id: str, actor: str) -> DocumentMetadata | None:
+    async def _promote_alternate_version(self, canonical_name: str, source_tag: str | None, removed_tag_id: str, actor: str) -> DocumentMetadata | None:
         """
         Find a version=1 sibling with the same canonical_name and tag, promote it to version=0, and save.
         """
@@ -789,7 +789,7 @@ class MetadataService:
         if source_tag:
             filters.setdefault("source", {})["source_tag"] = source_tag
 
-        siblings = self.metadata_store.get_all_metadata(filters)
+        siblings = await self.metadata_store.get_all_metadata(filters)
         candidate = next((d for d in siblings if getattr(d.identity, "version", 0) == 1), None)
         if not candidate:
             return None
@@ -798,7 +798,7 @@ class MetadataService:
         candidate.identity.document_name = candidate.identity.canonical_name or candidate.identity.document_name
         candidate.identity.modified = datetime.now(timezone.utc)
         candidate.identity.last_modified_by = actor
-        self.metadata_store.save_metadata(candidate)
+        await self.metadata_store.save_metadata(candidate)
         return candidate
 
     def _get_tag_as_parent_relation(self, tag_id: str, document_uid: str) -> Relation:
@@ -857,7 +857,7 @@ class MetadataService:
         Scan metadata, content, and vector stores to surface orphan or partial data.
         """
         try:
-            docs = self.metadata_store.get_all_metadata({})
+            docs = await self.metadata_store.get_all_metadata({})
         except MetadataDeserializationError as e:
             logger.error(f"[AUDIT] Deserialization error while building audit report: {e}")
             raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
@@ -955,7 +955,7 @@ class MetadataService:
 
             if remove_metadata:
                 try:
-                    self.metadata_store.delete_metadata(doc_uid)
+                    await self.metadata_store.delete_metadata(doc_uid)
                     deleted_metadata.append(doc_uid)
                 except Exception as e:
                     logger.warning("[AUDIT] Failed to delete metadata for %s: %s", doc_uid, e)

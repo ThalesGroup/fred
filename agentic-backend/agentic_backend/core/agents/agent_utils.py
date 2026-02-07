@@ -1,3 +1,17 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import logging
 from typing import (
     Sequence,
@@ -21,11 +35,16 @@ def log_agent_message_summary(
     Each line shows:
         [index] role/type | content preview | tool_call_id(s)
     """
+    if not logger.isEnabledFor(logging.DEBUG):
+        return
+
     if not messages:
         logger.info(f"[AGENTS] {label}: (empty)")
         return
 
-    logger.info(f"[AGENTS] ---- Restored history {label} messages={len(messages)} ----")
+    logger.debug(
+        f"[AGENTS] ---- Restored history {label} messages={len(messages)} ----"
+    )
     for i, msg in enumerate(messages):
         # Determine message role/type
         role = (
@@ -64,4 +83,4 @@ def log_agent_message_summary(
 
         logger.info(f"[AGENTS] [{i:02d}] {role:<10} | {preview}{extra}")
 
-    logger.info(f"[AGENTS] ---- End restored summary {label} ----")
+    logger.debug(f"[AGENTS] ---- End restored summary {label} ----")

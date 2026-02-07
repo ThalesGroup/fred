@@ -48,14 +48,14 @@ class McpServerService:
         if not existing and not allow_upsert:
             # no specific action; create path will handle absence
             pass
-        self.manager.upsert(server)
+        await self.manager.upsert(server)
 
     @authorize(action=Action.DELETE, resource=Resource.MCP_SERVERS)
     async def delete_server(self, user: KeycloakUser, server_id: str) -> None:
         if not self.manager.get(server_id):
             raise McpServerNotFound(f"MCP server '{server_id}' not found.")
-        self.manager.delete(server_id)
+        await self.manager.delete(server_id)
 
     @authorize(action=Action.UPDATE, resource=Resource.MCP_SERVERS)
     async def restore_static_servers(self, user: KeycloakUser) -> None:
-        self.manager.restore_static_servers()
+        await self.manager.restore_static_servers()

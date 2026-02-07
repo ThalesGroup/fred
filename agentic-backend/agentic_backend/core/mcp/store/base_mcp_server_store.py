@@ -24,35 +24,35 @@ class BaseMcpServerStore(ABC):
     """
 
     @abstractmethod
-    def save(self, server: MCPServerConfiguration) -> None:
+    async def save(self, server: MCPServerConfiguration) -> None:
         """
         Persist or replace an MCP server configuration.
         """
         pass
 
     @abstractmethod
-    def load_all(self) -> List[MCPServerConfiguration]:
+    async def load_all(self) -> List[MCPServerConfiguration]:
         """
         Retrieve all persisted MCP server configurations.
         """
         pass
 
     @abstractmethod
-    def get(self, server_id: str) -> Optional[MCPServerConfiguration]:
+    async def get(self, server_id: str) -> Optional[MCPServerConfiguration]:
         """
         Retrieve a single MCP server configuration by id.
         """
         pass
 
     @abstractmethod
-    def delete(self, server_id: str) -> None:
+    async def delete(self, server_id: str) -> None:
         """
         Delete an MCP server configuration.
         """
         pass
 
     @abstractmethod
-    def static_seeded(self) -> bool:
+    async def static_seeded(self) -> bool:
         """
         Return True if static servers have already been seeded into the store.
         Used to avoid re-adding statics after they were intentionally deleted.
@@ -60,7 +60,7 @@ class BaseMcpServerStore(ABC):
         pass
 
     @abstractmethod
-    def mark_static_seeded(self) -> None:
+    async def mark_static_seeded(self) -> None:
         """
         Mark the store as having seeded static servers.
         """

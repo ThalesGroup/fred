@@ -210,6 +210,10 @@ class AgentFactory(BaseAgentFactory):
         """
         Asynchronously closes and removes all cached agents associated with the given session_id.
         This must be called from an async context (e.g., a FastAPI endpoint).
+
+        Why this ? If a user leaves a conversation, we want to free up resources by closing any active agents.
+        We also want to ensure that we properly await the asynchronous cleanup logic (e.g., Tessa's aclose) to prevent resource leaks.
+        By iterating sequentially and awaiting each agent's aclose, we ensure a clean shutdown without overwhelming the event loop.
         """
         keys_to_clean = [
             key for key in self._agent_cache.keys() if key[0] == session_id

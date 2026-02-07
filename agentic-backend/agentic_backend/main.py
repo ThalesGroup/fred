@@ -101,7 +101,7 @@ def create_app() -> FastAPI:
 
         # Instantiate dependencies *within* the lifespan context
         app.state.configuration = configuration
-        mcp_manager = application_context.get_mcp_server_manager()
+        mcp_manager = await application_context.get_mcp_server_manager()
         agent_loader = AgentLoader(configuration, get_agent_store())
         agent_manager = AgentManager(configuration, agent_loader, get_agent_store())
         agent_factory = AgentFactory(
