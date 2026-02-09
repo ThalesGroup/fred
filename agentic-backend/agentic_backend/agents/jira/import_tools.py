@@ -1,114 +1,212 @@
 """Import tools for Jira agent - parse markdown exports back into state."""
 
-import asyncio
 import logging
+import re
 
 from langchain.tools import ToolRuntime, tool
-from langchain_core.messages import SystemMessage, ToolMessage
-from langchain_core.runnables import RunnableConfig
+from langchain_core.messages import ToolMessage
 from langgraph.types import Command
-
-from agentic_backend.agents.jira.pydantic_models import (
-    RequirementsList,
-    TestsList,
-    UserStoriesList,
-)
-from agentic_backend.application_context import get_default_chat_model
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Markdown parsing helpers (deterministic, no LLM)
+# ---------------------------------------------------------------------------
+
+def _split_into_sections(markdown: str) -> dict[str, str]:
+    """Split markdown into named sections by ``## `` headers."""
+    sections: dict[str, str] = {}
+    parts = re.split(r"^## ", markdown, flags=re.MULTILINE)
+    for part in parts[1:]:
+        header, _, body = part.partition("\n")
+        sections[header.strip()] = body
+    return sections
+
+
+def _split_into_items(section_text: str) -> list[str]:
+    """Split a section into individual items by ``### `` headers."""
+    parts = re.split(r"^### ", section_text, flags=re.MULTILINE)
+    return [p for p in parts[1:] if p.strip()]
+
+
+def _extract_bullet(text: str, label: str) -> str | None:
+    """Extract ``- **Label:** value`` from *text*."""
+    m = re.search(rf"^- \*\*{re.escape(label)}:\*\*\s*(.+)", text, re.MULTILINE)
+    return m.group(1).strip() if m else None
+
+
+def _extract_bold_field(text: str, label: str) -> str | None:
+    """Extract standalone ``**Label:** value`` (not a bullet)."""
+    m = re.search(rf"^\*\*{re.escape(label)}:\*\*\s*(.+)", text, re.MULTILINE)
+    return m.group(1).strip() if m else None
+
+
+# ---- Requirements ---------------------------------------------------------
+
+def _parse_requirements(section_text: str) -> list[dict]:
+    results: list[dict] = []
+    for item in _split_into_items(section_text):
+        first_line, _, rest = item.partition("\n")
+        m = re.match(r"(.+?):\s*(.+)", first_line.strip())
+        if not m:
+            continue
+        results.append({
+            "id": m.group(1).strip(),
+            "title": m.group(2).strip(),
+            "priority": _extract_bullet(rest, "Priorité") or "Moyenne",
+            "description": _extract_bullet(rest, "Description") or "",
+        })
+    return results
+
+
+# ---- User Stories ---------------------------------------------------------
+
+def _parse_acceptance_criteria(text: str) -> list[dict]:
+    m = re.search(
+        r"\*\*Critères d'acceptation:\*\*\n(.*?)(?=\n\*\*Questions de clarification:\*\*|\Z)",
+        text,
+        re.DOTALL,
+    )
+    if not m:
+        return []
+
+    criteria: list[dict] = []
+    current_scenario: str | None = None
+    current_steps: list[str] = []
+
+    for line in m.group(1).split("\n"):
+        scenario_m = re.match(r"^- \*\*(.+?)\*\*\s*$", line)
+        if scenario_m:
+            if current_scenario is not None:
+                criteria.append({"scenario": current_scenario, "steps": current_steps})
+            current_scenario = scenario_m.group(1)
+            current_steps = []
+        elif re.match(r"^\s+- ", line):
+            current_steps.append(re.sub(r"^\s+- ", "", line))
+
+    if current_scenario is not None:
+        criteria.append({"scenario": current_scenario, "steps": current_steps})
+    return criteria
+
+
+def _parse_clarification_questions(text: str) -> list[str]:
+    m = re.search(r"\*\*Questions de clarification:\*\*\n(.*)", text, re.DOTALL)
+    if not m:
+        return []
+    return [
+        qm.group(1).strip()
+        for line in m.group(1).split("\n")
+        if (qm := re.match(r"^- (.+)", line))
+    ]
+
+
+def _parse_user_stories(section_text: str) -> list[dict]:
+    results: list[dict] = []
+    for item in _split_into_items(section_text):
+        first_line, _, rest = item.partition("\n")
+        m = re.match(r"(.+?):\s*(.+)", first_line.strip())
+        if not m:
+            continue
+
+        story: dict = {
+            "id": m.group(1).strip(),
+            "summary": m.group(2).strip(),
+            "description": _extract_bold_field(rest, "Description") or "",
+            "priority": _extract_bullet(rest, "Priorité") or "Moyenne",
+        }
+
+        v = _extract_bullet(rest, "Type")
+        if v:
+            story["issue_type"] = v
+        v = _extract_bullet(rest, "Epic")
+        if v:
+            story["epic_name"] = v
+        v = _extract_bullet(rest, "Exigences")
+        if v:
+            story["requirement_ids"] = [x.strip() for x in v.split(",")]
+        v = _extract_bullet(rest, "Dépendances")
+        if v:
+            story["dependencies"] = [x.strip() for x in v.split(",")]
+        v = _extract_bullet(rest, "Story Points")
+        if v and v.isdigit():
+            story["story_points"] = int(v)
+        v = _extract_bullet(rest, "Labels")
+        if v:
+            story["labels"] = [x.strip() for x in v.split(",")]
+
+        criteria = _parse_acceptance_criteria(rest)
+        if criteria:
+            story["acceptance_criteria"] = criteria
+
+        questions = _parse_clarification_questions(rest)
+        if questions:
+            story["clarification_questions"] = questions
+
+        results.append(story)
+    return results
+
+
+# ---- Tests ----------------------------------------------------------------
+
+def _parse_numbered_steps(text: str) -> list[str]:
+    m = re.search(r"\*\*Étapes:\*\*\n(.*?)(?=\n\*\*|\Z)", text, re.DOTALL)
+    if not m:
+        return []
+    return [
+        sm.group(1).strip()
+        for line in m.group(1).split("\n")
+        if (sm := re.match(r"^\d+\.\s+(.+)", line))
+    ]
+
+
+def _parse_tests(section_text: str) -> list[dict]:
+    results: list[dict] = []
+    for item in _split_into_items(section_text):
+        first_line, _, rest = item.partition("\n")
+        m = re.match(r"(.+?):\s*(.+)", first_line.strip())
+        if not m:
+            continue
+
+        test: dict = {
+            "id": m.group(1).strip(),
+            "name": m.group(2).strip(),
+            "steps": _parse_numbered_steps(rest),
+            "expected_result": _extract_bold_field(rest, "Résultat attendu") or "",
+        }
+
+        v = _extract_bullet(rest, "User Story")
+        if v:
+            test["user_story_id"] = v
+        v = _extract_bullet(rest, "Priorité")
+        if v:
+            test["priority"] = v
+        v = _extract_bullet(rest, "Type")
+        if v:
+            test["test_type"] = v
+        v = _extract_bold_field(rest, "Description")
+        if v:
+            test["description"] = v
+        v = _extract_bold_field(rest, "Préconditions")
+        if v:
+            test["preconditions"] = v
+        v = _extract_bold_field(rest, "Données de test")
+        if v:
+            test["test_data"] = [v]
+
+        results.append(test)
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Tool class
+# ---------------------------------------------------------------------------
 
 class ImportTools:
     """Tools for importing markdown exports back into agent state."""
 
     def __init__(self, agent):
-        """Initialize import tools with reference to parent agent."""
         self.agent = agent
-
-    def _get_langfuse_handler(self):
-        """Get Langfuse handler from parent agent."""
-        return self.agent._get_langfuse_handler()
-
-    def _build_llm_config(self) -> RunnableConfig:
-        """Build a RunnableConfig with Langfuse callback if enabled."""
-        handler = self._get_langfuse_handler()
-        return {"callbacks": [handler]} if handler else {}
-
-    async def _parse_requirements(self, markdown_content: str) -> list[dict]:
-        """Parse requirements from markdown content using LLM structured output."""
-        prompt = """Extrais toutes les exigences du document Markdown suivant.
-
-Le document peut contenir une section "Exigences" avec des entrées au format:
-### ID: Titre
-- **Priorité:** ...
-- **Description:** ...
-
-Si aucune exigence n'est présente dans le document, retourne une liste vide.
-
-Document Markdown:
-{markdown_content}"""
-
-        model = get_default_chat_model().with_structured_output(
-            RequirementsList, method="json_schema"
-        )
-        response = await model.ainvoke(
-            [SystemMessage(content=prompt.format(markdown_content=markdown_content))],
-            config=self._build_llm_config(),
-        )
-        if not isinstance(response, RequirementsList):
-            response = RequirementsList.model_validate(response)
-        return [r.model_dump() for r in response.items]
-
-    async def _parse_user_stories(self, markdown_content: str) -> list[dict]:
-        """Parse user stories from markdown content using LLM structured output."""
-        prompt = """Extrais toutes les User Stories du document Markdown suivant.
-
-Le document peut contenir une section "User Stories" avec des entrées détaillées incluant:
-- ID, titre/summary, description, priorité, epic, story points, labels
-- Exigences liées (requirement_ids)
-- Dépendances (dependencies)
-- Critères d'acceptation (acceptance_criteria) avec scénarios et étapes Gherkin
-- Questions de clarification
-
-Si aucune User Story n'est présente dans le document, retourne une liste vide.
-
-Document Markdown:
-{markdown_content}"""
-
-        model = get_default_chat_model().with_structured_output(
-            UserStoriesList, method="json_schema"
-        )
-        response = await model.ainvoke(
-            [SystemMessage(content=prompt.format(markdown_content=markdown_content))],
-            config=self._build_llm_config(),
-        )
-        if not isinstance(response, UserStoriesList):
-            response = UserStoriesList.model_validate(response)
-        return [s.model_dump() for s in response.items]
-
-    async def _parse_tests(self, markdown_content: str) -> list[dict]:
-        """Parse tests from markdown content using LLM structured output."""
-        prompt = """Extrais tous les scénarios de tests du document Markdown suivant.
-
-Le document peut contenir une section "Scénarios de Tests" avec des entrées incluant:
-- ID, nom, User Story liée, priorité, type de test
-- Description, préconditions, étapes (Gherkin), données de test, résultat attendu
-
-Si aucun test n'est présent dans le document, retourne une liste vide.
-
-Document Markdown:
-{markdown_content}"""
-
-        model = get_default_chat_model().with_structured_output(
-            TestsList, method="json_schema"
-        )
-        response = await model.ainvoke(
-            [SystemMessage(content=prompt.format(markdown_content=markdown_content))],
-            config=self._build_llm_config(),
-        )
-        if not isinstance(response, TestsList):
-            response = TestsList.model_validate(response)
-        return [t.model_dump() for t in response.items]
 
     def get_import_markdown_tool(self):
         """Tool that imports a previously exported markdown file back into state."""
@@ -124,6 +222,7 @@ Document Markdown:
 
             Cet outil parse le contenu Markdown pour en extraire les exigences,
             User Stories et tests, puis les charge dans l'état.
+            Aucun appel LLM n'est effectué — le parsing est déterministe.
 
             IMPORTANT:
             - Le contenu doit provenir d'un fichier Markdown généré par export_deliverables()
@@ -158,12 +257,12 @@ Document Markdown:
                     }
                 )
 
-            # Parse all three sections in parallel
-            requirements, user_stories, tests = await asyncio.gather(
-                self._parse_requirements(markdown_content),
-                self._parse_user_stories(markdown_content),
-                self._parse_tests(markdown_content),
-            )
+            # Deterministic parsing — no LLM calls
+            sections = _split_into_sections(markdown_content)
+
+            requirements = _parse_requirements(sections.get("Exigences", ""))
+            user_stories = _parse_user_stories(sections.get("User Stories", ""))
+            tests = _parse_tests(sections.get("Scénarios de Tests", ""))
 
             if not any([requirements, user_stories, tests]):
                 return Command(
@@ -171,7 +270,8 @@ Document Markdown:
                         "messages": [
                             ToolMessage(
                                 "⚠️ Aucun élément n'a pu être extrait du Markdown fourni. "
-                                "Vérifie que le fichier contient des exigences, User Stories ou tests.",
+                                "Vérifie que le fichier contient des sections "
+                                "Exigences, User Stories ou Scénarios de Tests.",
                                 tool_call_id=runtime.tool_call_id,
                             ),
                         ],
@@ -181,26 +281,17 @@ Document Markdown:
             # Build state update
             state_update: dict = {}
 
-            # In overwrite mode, remove all existing items first
             if mode == "overwrite":
-                existing_reqs = runtime.state.get("requirements") or []
-                existing_stories = runtime.state.get("user_stories") or []
-                existing_tests = runtime.state.get("tests") or []
+                for key, existing in [
+                    ("requirements", runtime.state.get("requirements") or []),
+                    ("user_stories", runtime.state.get("user_stories") or []),
+                    ("tests", runtime.state.get("tests") or []),
+                ]:
+                    if existing:
+                        state_update[key] = [
+                            {"__remove__": item.get("id")} for item in existing
+                        ]
 
-                if existing_reqs:
-                    state_update["requirements"] = [
-                        {"__remove__": r.get("id")} for r in existing_reqs
-                    ]
-                if existing_stories:
-                    state_update["user_stories"] = [
-                        {"__remove__": s.get("id")} for s in existing_stories
-                    ]
-                if existing_tests:
-                    state_update["tests"] = [
-                        {"__remove__": t.get("id")} for t in existing_tests
-                    ]
-
-            # Add imported items
             summary_parts = []
             if requirements:
                 state_update.setdefault("requirements", []).extend(requirements)
@@ -221,11 +312,7 @@ Document Markdown:
                 )
             ]
 
-            logger.info(
-                "[JiraAgent] Markdown import (mode=%s): %s",
-                mode,
-                summary,
-            )
+            logger.info("[JiraAgent] Markdown import (mode=%s): %s", mode, summary)
 
             return Command(update=state_update)
 
