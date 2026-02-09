@@ -13,15 +13,17 @@
 # limitations under the License.
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
-from fred_core.sql import BaseSqlStore
+from fred_core.sql import AsyncBaseSqlStore, json_for_engine
 from pydantic import TypeAdapter
 from sqlalchemy import Column, Float, MetaData, String, Table, select
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
-from sqlalchemy.engine import Engine
+from sqlalchemy.dialects.postgresql import TIMESTAMP
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from agentic_backend.scheduler.agent_contracts import AgentContextRefsV1
 from agentic_backend.scheduler.task_structures import (
@@ -45,12 +47,16 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
     """
 
     def __init__(
-        self, engine: Engine, table_name: str = "agent_tasks", prefix: str = "sched_"
+        self,
+        engine: AsyncEngine,
+        table_name: str = "agent_tasks",
+        prefix: str = "sched_",
     ):
-        self.store = BaseSqlStore(engine, prefix=prefix)
+        self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
 
         metadata = MetaData()
+        json_type = json_for_engine(self.store.engine)
         self.table = Table(
             self.table_name,
             metadata,
@@ -63,20 +69,42 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
             Column("status", String, index=True, nullable=False),
             Column("created_at", TIMESTAMP(timezone=True), nullable=False),
             Column("updated_at", TIMESTAMP(timezone=True), nullable=False),
-            Column("context_json", JSONB, nullable=False),
-            Column("parameters_json", JSONB, nullable=False),
+            Column("context_json", json_type, nullable=False),
+            Column("parameters_json", json_type, nullable=False),
             Column("last_message", String, nullable=True),
             Column("percent_complete", Float, nullable=False, default=0.0),
-            Column("blocked_json", JSONB, nullable=True),
-            Column("artifacts_json", JSONB, nullable=True),
-            Column("error_json", JSONB, nullable=True),  # Standardized to _json
+            Column("blocked_json", json_type, nullable=True),
+            Column("artifacts_json", json_type, nullable=True),
+            Column("error_json", json_type, nullable=True),  # Standardized to _json
             keep_existing=True,
         )
 
-        metadata.create_all(self.store.engine)
-        logger.info("[SCHEDULER][PG] Agent tasks table ready: %s", self.table_name)
+        async def _create():
+            async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
+                try:
+                    await conn.run_sync(metadata.create_all)
+                except OperationalError as exc:
+                    if "already exists" not in str(exc).lower():
+                        raise
 
-    def create(
+        # Kick off table creation without blocking callers.
+        try:
+            loop = asyncio.get_running_loop()
+            self._create_task = loop.create_task(_create())
+        except RuntimeError:
+            self._create_task = None
+            asyncio.run(_create())
+
+        logger.info(
+            "[SCHEDULER][PG][ASYNC] Agent tasks table ready: %s", self.table_name
+        )
+
+    async def _ensure_table(self) -> None:
+        task = getattr(self, "_create_task", None)
+        if task is not None and not task.done():
+            await task
+
+    async def create(
         self,
         *,
         task_id: str,
@@ -88,6 +116,7 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
         context: Optional[AgentContextRefsV1] = None,
         parameters: Optional[Dict[str, Any]] = None,
     ) -> AgentTaskRecordV1:
+        await self._ensure_table()
         now = datetime.now(timezone.utc)
         ctx_obj = context or AgentContextRefsV1()
 
@@ -106,33 +135,38 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
             "percent_complete": 0.0,
         }
 
-        with self.store.begin() as conn:
+        async with self.store.begin() as conn:
             # Idempotent create: if the task already exists, return it untouched.
-            existing = conn.execute(
+            existing_result = await conn.execute(
                 select(self.table).where(self.table.c.task_id == task_id)
-            ).fetchone()
+            )
+            existing = existing_result.fetchone()
             if existing:
                 return self._row_to_record(existing)
-            conn.execute(self.table.insert().values(**values))
+            await conn.execute(self.table.insert().values(**values))
 
-        return self.get(task_id)
+        return await self.get(task_id)
 
-    def get(self, task_id: str) -> AgentTaskRecordV1:
-        with self.store.begin() as conn:
-            row = conn.execute(
+    async def get(self, task_id: str) -> AgentTaskRecordV1:
+        await self._ensure_table()
+        async with self.store.begin() as conn:
+            result = await conn.execute(
                 select(self.table).where(self.table.c.task_id == task_id)
-            ).fetchone()
+            )
+            row = result.fetchone()
 
         if not row:
             raise AgentTaskNotFoundError(f"Task '{task_id}' not found")
 
         return self._row_to_record(row)
 
-    def get_for_user(self, *, task_id: str, user_id: str) -> AgentTaskRecordV1:
-        with self.store.begin() as conn:
-            row = conn.execute(
+    async def get_for_user(self, *, task_id: str, user_id: str) -> AgentTaskRecordV1:
+        await self._ensure_table()
+        async with self.store.begin() as conn:
+            result = await conn.execute(
                 select(self.table).where(self.table.c.task_id == task_id)
-            ).fetchone()
+            )
+            row = result.fetchone()
 
         if not row:
             raise AgentTaskNotFoundError(f"Task '{task_id}' not found")
@@ -144,7 +178,7 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
 
         return self._row_to_record(row)
 
-    def list_for_user(
+    async def list_for_user(
         self,
         *,
         user_id: str,
@@ -152,6 +186,7 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
         statuses: Optional[Sequence[AgentTaskStatus]] = None,
         target_agent: Optional[str] = None,
     ) -> List[AgentTaskRecordV1]:
+        await self._ensure_table()
         query = select(self.table).where(self.table.c.user_id == user_id)
 
         if statuses:
@@ -164,22 +199,24 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
 
         query = query.order_by(self.table.c.created_at.desc()).limit(limit)
 
-        with self.store.begin() as conn:
-            rows = conn.execute(query).fetchall()
+        async with self.store.begin() as conn:
+            result = await conn.execute(query)
+            rows = result.fetchall()
 
         return [self._row_to_record(row) for row in rows]
 
-    def update_handle(
+    async def update_handle(
         self, *, task_id: str, workflow_id: str, run_id: Optional[str]
     ) -> None:
+        await self._ensure_table()
         values: Dict[str, Any] = {
             "workflow_id": workflow_id,
             "run_id": run_id,
             "updated_at": datetime.now(timezone.utc),
         }
 
-        with self.store.begin() as conn:
-            result = conn.execute(
+        async with self.store.begin() as conn:
+            result = await conn.execute(
                 self.table.update()
                 .where(self.table.c.task_id == task_id)
                 .values(**values)
@@ -188,7 +225,7 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
         if result.rowcount == 0:
             raise AgentTaskNotFoundError(f"Task '{task_id}' not found")
 
-    def update_status(
+    async def update_status(
         self,
         *,
         task_id: str,
@@ -199,6 +236,7 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
         artifacts: Optional[List[str]] = None,
         error_json: Optional[Dict[str, Any]] = None,  # Corrected parameter name
     ) -> None:
+        await self._ensure_table()
         values: Dict[str, Any] = {
             "status": status.value,
             "updated_at": datetime.now(timezone.utc),
@@ -215,8 +253,8 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
         if error_json is not None:
             values["error_json"] = error_json
 
-        with self.store.begin() as conn:
-            result = conn.execute(
+        async with self.store.begin() as conn:
+            result = await conn.execute(
                 self.table.update()
                 .where(self.table.c.task_id == task_id)
                 .values(**values)

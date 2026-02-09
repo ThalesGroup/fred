@@ -60,7 +60,7 @@ async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
 
         # Step 3: Extract and save metadata
         ingestion_service = IngestionService()
-        metadata = ingestion_service.extract_metadata(file.processed_by, full_path, tags=file.tags, source_tag=file.source_tag)
+        metadata = await ingestion_service.extract_metadata(file.processed_by, full_path, tags=file.tags, source_tag=file.source_tag)
         metadata.source.pull_location = file.external_path
         logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] metadata={metadata}")
 

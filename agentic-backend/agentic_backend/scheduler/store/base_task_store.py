@@ -40,7 +40,7 @@ class BaseAgentTaskStore(ABC):
     """
 
     @abstractmethod
-    def create(
+    async def create(
         self,
         *,
         task_id: str,
@@ -62,17 +62,17 @@ class BaseAgentTaskStore(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get(self, task_id: str) -> AgentTaskRecordV1:
+    async def get(self, task_id: str) -> AgentTaskRecordV1:
         """Return task by id or raise AgentTaskNotFoundError."""
         raise NotImplementedError
 
     @abstractmethod
-    def get_for_user(self, *, task_id: str, user_id: str) -> AgentTaskRecordV1:
+    async def get_for_user(self, *, task_id: str, user_id: str) -> AgentTaskRecordV1:
         """Return task if owned by user, else raise AgentTaskForbiddenError/NotFound."""
         raise NotImplementedError
 
     @abstractmethod
-    def list_for_user(
+    async def list_for_user(
         self,
         *,
         user_id: str,
@@ -84,7 +84,7 @@ class BaseAgentTaskStore(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def update_handle(
+    async def update_handle(
         self,
         *,
         task_id: str,
@@ -95,7 +95,7 @@ class BaseAgentTaskStore(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def update_status(
+    async def update_status(
         self,
         *,
         task_id: str,

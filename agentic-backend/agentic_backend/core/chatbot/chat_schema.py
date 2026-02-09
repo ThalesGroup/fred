@@ -217,7 +217,7 @@ class BaseWsInput(BaseModel):
 
 class ChatAskInput(BaseWsInput):
     type: Literal["ask"] = "ask"
-    session_id: Optional[str] = None  # optionnel côté ask, requis côté resume
+    session_id: str
     message: str
     client_exchange_id: Optional[str] = (
         None  # le front l’envoie; sinon backend génère l’exchange_id

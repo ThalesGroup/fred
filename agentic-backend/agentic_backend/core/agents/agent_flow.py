@@ -36,7 +36,7 @@ from typing import (
 )
 
 from fred_core import get_keycloak_client_id, get_keycloak_url
-from fred_core.kpi import KPIActor
+from fred_core.kpi import KPIActor, phase_timer
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
@@ -960,6 +960,15 @@ class AgentFlow:
                 groups=getattr(self.runtime_context, "user_groups", None),
             ),
         )
+
+    @property
+    def kpi(self):
+        """Convenient access to the KPI writer for subclasses."""
+        return get_app_context().get_kpi_writer()
+
+    def phase(self, phase: str):
+        """Async context manager to time a phase with standard naming."""
+        return phase_timer(self.kpi, phase)
 
     def __str__(self) -> str:
         """String representation of the agent."""

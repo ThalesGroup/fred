@@ -15,16 +15,16 @@ app:
   base_url: "/agentic/v1"
   address: "127.0.0.1"
   port: 8000
-  log_level: "info"
+  log_level: "warning"
   reload: false
   reload_dir: "."
   metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
   # KPI settings for local benchmarks and debugging. Disable in production.
-  kpi_process_metrics_interval_sec: 0
-  kpi_log_summary_interval_sec: 0.0
-  kpi_log_summary_top_n: 0
+  kpi_process_metrics_interval_sec: 30
+  kpi_log_summary_interval_sec: 10.0
+  kpi_log_summary_top_n: 200
 
 scheduler:
   enabled: true
@@ -77,6 +77,9 @@ ai:
 
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
   max_concurrent_agents: 1024
+
+  # Maximum number of concurrent sessions per user. This is used to prevent abuse and manage resource usage.
+  max_concurrent_sessions_per_user: 10
 
   # Maximum number of files a user can attach across all sessions
   max_attached_files_per_user: 20
@@ -266,6 +269,9 @@ mcp:
       auth_mode: "user_token"
 
 storage:
+  sqlite:
+    path: "./fred_data.db"
+
   postgres:
     host: localhost
     port: 5432

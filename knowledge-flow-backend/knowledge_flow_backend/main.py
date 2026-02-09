@@ -173,6 +173,7 @@ def create_app() -> FastAPI:
             background_task.cancel()
             with suppress(asyncio.CancelledError):
                 await background_task
+            await application_context.shutdown()
 
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs",

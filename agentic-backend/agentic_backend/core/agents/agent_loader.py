@@ -80,21 +80,21 @@ class AgentLoader:
 
         return instances
 
-    def load_persisted(self) -> List[AgentFlow]:
+    async def load_persisted(self) -> List[AgentFlow]:
         """
         Build agents from persistent storage (e.g., DuckDB), run `async_init()`,
         and return ready instances. Agents with missing/invalid class_path are skipped.
         """
         out: List[AgentFlow] = []
 
-        for agent_settings in self.store.load_all_global_scope():
+        for agent_settings in await self.store.load_all_global_scope():
             if not agent_settings.class_path:
                 logger.warning(
                     "agent=%s No class_path found — deleting stale entry from store.",
                     agent_settings.name,
                 )
                 try:
-                    self.store.delete(agent_settings.name)
+                    await self.store.delete(agent_settings.name)
                 except Exception:
                     logger.exception(
                         "agent=%s Failed to delete stale entry without class_path",
@@ -125,7 +125,7 @@ class AgentLoader:
                     agent_settings.name,
                 )
                 try:
-                    self.store.delete(agent_settings.name)
+                    await self.store.delete(agent_settings.name)
                     logger.info(
                         "agent=%s Successfully deleted stale agent from persistent store.",
                         agent_settings.name,

@@ -24,12 +24,12 @@ Includes:
 """
 
 import asyncio
+import atexit
 import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from pathlib import Path
 from threading import Lock
 from typing import Any, Callable, Dict, List, Optional
 
@@ -62,10 +62,12 @@ from fred_core.kpi import (
 from fred_core.logs.log_structures import StdoutLogStorageConfig
 from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import TemporalClientProvider
-from fred_core.sql import create_engine_from_config
+from fred_core.sql import create_async_engine_from_config
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_core.language_models.chat_models import BaseChatModel
 from requests.auth import AuthBase
+from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from agentic_backend.common.structures import (
     Configuration,
@@ -87,9 +89,6 @@ from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
 )
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
-from agentic_backend.core.session.stores.opensearch_session_attachment_store import (
-    OpensearchSessionAttachmentStore,
-)
 from agentic_backend.core.session.stores.postgres_session_attachment_store import (
     PostgresSessionAttachmentStore,
 )
@@ -174,6 +173,19 @@ def get_kpi_writer() -> KPIWriter:
     return get_app_context().get_kpi_writer()
 
 
+def pg_async_tx():
+    """
+    Convenience helper to open a short async Postgres transaction using the
+    shared async engine. Usage:
+
+        async with pg_async_tx() as conn:
+            ...
+
+    This allows callers to update cleanly one or two tables in a single transaction without needing to manage the connection or transaction scope themselves.
+    """
+    return get_app_context().begin_pg_transaction()
+
+
 def get_rebac_engine() -> RebacEngine:
     """Expose the shared ReBAC engine instance."""
 
@@ -184,8 +196,8 @@ def get_agent_store() -> BaseAgentStore:
     return get_app_context().get_agent_store()
 
 
-def get_mcp_server_manager() -> "McpServerManager":
-    return get_app_context().get_mcp_server_manager()
+async def get_mcp_server_manager() -> "McpServerManager":
+    return await get_app_context().get_mcp_server_manager()
 
 
 def get_feedback_store() -> BaseFeedbackStore:
@@ -316,6 +328,9 @@ class ApplicationContext:
     _io_executor: ThreadPoolExecutor | None = None
     _default_chat_model_instance: Optional[BaseChatModel] = None
     _default_model_instance: Optional[BaseLanguageModel] = None
+    _pg_engine: Optional[Engine] = None
+    _pg_async_engine: Optional[AsyncEngine] = None
+    _temporal_provider: Optional[TemporalClientProvider] = None
 
     def __new__(cls, configuration: Configuration):
         with cls._lock:
@@ -332,6 +347,7 @@ class ApplicationContext:
                 cls._instance._service_instances = {}  # Cache for service instances
                 cls._instance._log_config_summary()
                 cls._instance._io_executor = ThreadPoolExecutor(max_workers=10)
+                cls._instance._pg_engine = None
 
             return cls._instance
 
@@ -364,6 +380,26 @@ class ApplicationContext:
         if self._io_executor is not None:
             self._io_executor.shutdown(wait=True)
             self._io_executor = None
+
+    async def shutdown(self):
+        """Gracefully shut down global resources."""
+        # HTTP clients (LLM / external calls)
+        try:
+            from fred_core.model import http_clients
+
+            await http_clients.async_shutdown_shared_clients()
+        except Exception:
+            logger.warning("[HTTP] Failed to shutdown shared clients", exc_info=True)
+
+        # Async PG engine
+        if self._pg_async_engine is not None:
+            try:
+                await self._pg_async_engine.dispose()
+            finally:
+                self._pg_async_engine = None
+
+        # Thread pool executor
+        self.shutdown_io_executor()
 
     def get_knowledge_flow_base_url(self) -> str:
         """
@@ -420,6 +456,34 @@ class ApplicationContext:
         """
         return [agent.name for agent in self.configuration.ai.agents if agent.enabled]
 
+    def get_pg_async_engine(self):
+        """
+        Lazily create and cache a single async Postgres Engine for all the postgres async stores.
+        """
+        if self._pg_async_engine is None:
+            pg_cfg = self.configuration.storage.postgres
+            self._pg_async_engine = create_async_engine_from_config(pg_cfg)
+            engine = self._pg_async_engine
+
+            def _dispose_async_engine():
+                try:
+                    asyncio.run(engine.dispose())
+                except Exception:
+                    logger.debug(
+                        "[SQL] Async engine dispose at exit failed", exc_info=True
+                    )
+
+            atexit.register(_dispose_async_engine)
+            logger.info("[SQL] Shared Postgres async initialized.")
+        return self._pg_async_engine
+
+    def begin_pg_transaction(self):
+        """
+        Returns an async context manager for a short Postgres transaction
+        using the shared async engine.
+        """
+        return self.get_pg_async_engine().begin()
+
     def get_session_store(self) -> BaseSessionStore:
         """
         Factory function to create a sessions store instance based on the configuration.
@@ -432,47 +496,13 @@ class ApplicationContext:
             return self._session_store_instance
 
         store_config = get_configuration().storage.session_store
-        if isinstance(store_config, DuckdbStoreConfig):
-            from agentic_backend.core.session.stores.duckdb_session_store import (
-                DuckdbSessionStore,
-            )
-
-            db_path = Path(store_config.duckdb_path).expanduser()
-            return DuckdbSessionStore(db_path)
-        elif isinstance(store_config, PostgresTableConfig):
-            pg = get_configuration().storage.postgres
-            engine = create_engine_from_config(pg)
+        if isinstance(store_config, PostgresTableConfig):
             return PostgresSessionStore(
-                engine=engine,
+                engine=self.get_pg_async_engine(),
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )
-        elif isinstance(store_config, OpenSearchIndexConfig):
-            opensearch_config = get_configuration().storage.opensearch
-            if opensearch_config is None:
-                raise ValueError(
-                    "OpenSearch configuration is required but not provided"
-                )
-            from agentic_backend.core.session.stores.opensearch_session_store import (
-                OpensearchSessionStore,
-            )
-
-            password = opensearch_config.password
-            if not password:
-                raise ValueError(
-                    "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
-                )
-
-            return OpensearchSessionStore(
-                host=opensearch_config.host,
-                username=opensearch_config.username,
-                password=password,
-                secure=opensearch_config.secure,
-                verify_certs=opensearch_config.verify_certs,
-                index=store_config.index,
-            )
-        else:
-            raise ValueError("Unsupported sessions storage backend")
+        raise ValueError("Unsupported sessions storage backend (async-only)")
 
     def get_session_attachment_store(self) -> Optional[BaseSessionAttachmentStore]:
         """
@@ -490,46 +520,15 @@ class ApplicationContext:
             )
 
         if isinstance(store_config, PostgresTableConfig):
-            engine = create_engine_from_config(storage_cfg.postgres)
             table_name = (
                 store_config.table
                 if storage_cfg.attachments_store is not None
                 else f"{store_config.table}_attachments"
             )
             self._session_attachment_store_instance = PostgresSessionAttachmentStore(
-                engine=engine,
+                engine=self.get_pg_async_engine(),
                 table_name=table_name,
                 prefix=store_config.prefix or "",
-            )
-            return self._session_attachment_store_instance
-
-        if isinstance(store_config, DuckdbStoreConfig):
-            from agentic_backend.core.session.stores.duckdb_session_attachment_store import (
-                DuckdbSessionAttachmentStore,
-            )
-
-            db_path = Path(store_config.duckdb_path).expanduser()
-            self._session_attachment_store_instance = DuckdbSessionAttachmentStore(
-                db_path=db_path
-            )
-            return self._session_attachment_store_instance
-
-        if isinstance(store_config, OpenSearchIndexConfig):
-            opensearch_config = storage_cfg.opensearch
-            if opensearch_config is None:
-                raise ValueError(
-                    "OpenSearch configuration is required for attachments store but not provided"
-                )
-            password = opensearch_config.password
-            if not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
-            self._session_attachment_store_instance = OpensearchSessionAttachmentStore(
-                host=opensearch_config.host,
-                username=opensearch_config.username,
-                password=password,
-                secure=opensearch_config.secure,
-                verify_certs=opensearch_config.verify_certs,
-                index=store_config.index,
             )
             return self._session_attachment_store_instance
 
@@ -589,48 +588,10 @@ class ApplicationContext:
         """
         if self._history_store_instance is not None:
             return self._history_store_instance
-        from agentic_backend.core.monitoring.duckdb_history_store import (
-            DuckdbHistoryStore,
-        )
-
         store_config = get_configuration().storage.history_store
-        if isinstance(store_config, DuckdbStoreConfig):
-            from agentic_backend.core.monitoring.duckdb_history_store import (
-                DuckdbHistoryStore,
-            )
-
-            db_path = Path(store_config.duckdb_path).expanduser()
-            self._history_store_instance = DuckdbHistoryStore(db_path)
-            return self._history_store_instance
-        elif isinstance(store_config, OpenSearchIndexConfig):
-            opensearch_config = get_configuration().storage.opensearch
-            if opensearch_config is None:
-                raise ValueError(
-                    "OpenSearch configuration is required but not provided"
-                )
-            password = opensearch_config.password
-            if not password:
-                raise ValueError(
-                    "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
-                )
-            from agentic_backend.core.monitoring.opensearch_history_store import (
-                OpensearchHistoryStore,
-            )
-
-            self._history_store_instance = OpensearchHistoryStore(
-                host=opensearch_config.host,
-                username=opensearch_config.username,
-                password=password,
-                secure=opensearch_config.secure,
-                verify_certs=opensearch_config.verify_certs,
-                index=store_config.index,
-            )
-            return self._history_store_instance
-        elif isinstance(store_config, PostgresTableConfig):
-            pg = get_configuration().storage.postgres
-            engine = create_engine_from_config(pg)
+        if isinstance(store_config, PostgresTableConfig):
             self._history_store_instance = PostgresHistoryStore(
-                engine=engine,
+                engine=self.get_pg_async_engine(),
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )
@@ -641,7 +602,7 @@ class ApplicationContext:
             )
             return self._history_store_instance
         else:
-            raise ValueError("Unsupported sessions storage backend")
+            raise ValueError("Unsupported history storage backend (async-only)")
 
     def get_kpi_store(self) -> BaseKPIStore:
         if self._kpi_store_instance is not None:
@@ -675,47 +636,23 @@ class ApplicationContext:
     def get_task_store(self):
         if self._task_store_instance is not None:
             return self._task_store_instance
-        from agentic_backend.scheduler.store.memory_task_store import (
-            MemoryAgentTaskStore,
-        )
-
         store_config = get_configuration().storage.task_store
-        # Allow the task store to be optional for workers that don't need it.
-        try:
-            if isinstance(store_config, PostgresTableConfig):
-                from agentic_backend.scheduler.store.postgres_task_store import (
-                    PostgresAgentTaskStore,
-                )
-
-                if not os.getenv("POSTGRES_PASSWORD"):
-                    logger.error(
-                        "[TASKS][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres task store)"
-                    )
-                    raise RuntimeError(
-                        "POSTGRES_PASSWORD is required for Postgres task store"
-                    )
-                pg = get_configuration().storage.postgres
-                engine = create_engine_from_config(pg)
-                self._task_store_instance = PostgresAgentTaskStore(
-                    engine=engine,
-                    table_name=store_config.table,
-                    prefix=store_config.prefix or "",
-                )
-                return self._task_store_instance
-            if getattr(store_config, "type", None) == "memory":
-                self._task_store_instance = MemoryAgentTaskStore()
-                return self._task_store_instance
-            raise ValueError("Unsupported tasks storage backend")
-        except Exception as exc:
-            logger.warning(
-                "[TASKS][STORE] Falling back to in-memory store (reason: %s)", exc
+        if isinstance(store_config, PostgresTableConfig):
+            from agentic_backend.scheduler.store.postgres_task_store import (
+                PostgresAgentTaskStore,
             )
-            self._task_store_instance = MemoryAgentTaskStore()
+
+            self._task_store_instance = PostgresAgentTaskStore(
+                engine=self.get_pg_async_engine(),
+                table_name=store_config.table,
+                prefix=store_config.prefix or "",
+            )
             return self._task_store_instance
+        raise ValueError(f"Unsupported tasks storage backend {type(store_config)}")
 
     def get_temporal_client_provider(self) -> TemporalClientProvider:
-        if getattr(self, "_temporal_provider", None) is not None:
-            return self._temporal_provider  # type: ignore[attr-defined]
+        if self._temporal_provider is not None:
+            return self._temporal_provider
 
         cfg = get_configuration().scheduler
         if cfg.backend.lower() != "temporal":
@@ -736,65 +673,22 @@ class ApplicationContext:
         """
         if self._agent_store_instance is not None:
             return self._agent_store_instance
-        from agentic_backend.core.agents.store.duckdb_agent_store import (
-            DuckDBAgentStore,
-        )
-        from agentic_backend.core.agents.store.opensearch_agent_store import (
-            OpenSearchAgentStore,
-        )
 
         store_config = get_configuration().storage.agent_store
-        if isinstance(store_config, DuckdbStoreConfig):
-            from agentic_backend.core.agents.store.duckdb_agent_store import (
-                DuckDBAgentStore,
-            )
-
-            db_path = Path(store_config.duckdb_path).expanduser()
-            return DuckDBAgentStore(db_path)
-        elif isinstance(store_config, OpenSearchIndexConfig):
-            opensearch_config = get_configuration().storage.opensearch
-            if opensearch_config is None:
-                raise ValueError(
-                    "OpenSearch configuration is required but not provided"
-                )
-            password = opensearch_config.password
-            if not password:
-                raise ValueError(
-                    "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
-                )
-            from agentic_backend.core.agents.store.opensearch_agent_store import (
-                OpenSearchAgentStore,
-            )
-
-            return OpenSearchAgentStore(
-                host=opensearch_config.host,
-                username=opensearch_config.username,
-                password=password,
-                secure=opensearch_config.secure,
-                verify_certs=opensearch_config.verify_certs,
-                index=store_config.index,
-            )
-        elif isinstance(store_config, PostgresTableConfig):
-            if not os.getenv("POSTGRES_PASSWORD"):
-                logger.error(
-                    "[AGENTS][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres agent store)"
-                )
-                raise RuntimeError(
-                    "POSTGRES_PASSWORD is required for Postgres agent store"
-                )
-            pg = get_configuration().storage.postgres
-            engine = create_engine_from_config(pg)
+        if isinstance(store_config, PostgresTableConfig):
             from agentic_backend.core.agents.store.postgres_agent_store import (
                 PostgresAgentStore,
             )
 
             return PostgresAgentStore(
-                engine=engine,
+                engine=self.get_pg_async_engine(),
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )
         else:
-            raise ValueError("Unsupported sessions storage backend")
+            raise ValueError(
+                f"Unsupported sessions storage backend {type(store_config)}"
+            )
 
     def get_mcp_server_store(self) -> BaseMcpServerStore:
         """
@@ -809,73 +703,21 @@ class ApplicationContext:
             or get_configuration().storage.agent_store
         )
 
-        if isinstance(store_config, DuckdbStoreConfig):
-            from agentic_backend.core.mcp.store.duckdb_mcp_server_store import (
-                DuckDBMcpServerStore,
-            )
-
-            db_path = Path(store_config.duckdb_path).expanduser()
-            self._mcp_server_store_instance = DuckDBMcpServerStore(db_path)
-            logger.info("[MCP][STORE] Using DuckDB backend at %s", db_path)
-        elif isinstance(store_config, OpenSearchIndexConfig):
-            from agentic_backend.core.mcp.store.opensearch_mcp_server_store import (
-                OpenSearchMcpServerStore,
-            )
-
-            opensearch_config = get_configuration().storage.opensearch
-            if opensearch_config is None:
-                raise ValueError(
-                    "OpenSearch configuration is required but not provided"
-                )
-            password = opensearch_config.password
-            if not password:
-                raise ValueError(
-                    "Missing OpenSearch credentials: OPENSEARCH_USER and/or OPENSEARCH_PASSWORD"
-                )
-            self._mcp_server_store_instance = OpenSearchMcpServerStore(
-                host=opensearch_config.host,
-                username=opensearch_config.username,
-                password=password,
-                secure=opensearch_config.secure,
-                verify_certs=opensearch_config.verify_certs,
-                index=store_config.index,
-            )
-            logger.info(
-                "[MCP][STORE] Using OpenSearch backend host=%s index=%s secure=%s verify_certs=%s",
-                opensearch_config.host,
-                store_config.index,
-                opensearch_config.secure,
-                opensearch_config.verify_certs,
-            )
-        elif isinstance(store_config, PostgresTableConfig):
-            if not os.getenv("POSTGRES_PASSWORD"):
-                logger.error(
-                    "[MCP][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres MCP server store)"
-                )
-                raise RuntimeError(
-                    "POSTGRES_PASSWORD is required for Postgres MCP server store"
-                )
-            pg = get_configuration().storage.postgres
-            engine = create_engine_from_config(pg)
+        if isinstance(store_config, PostgresTableConfig):
             self._mcp_server_store_instance = PostgresMcpServerStore(
-                engine=engine,
+                engine=self.get_pg_async_engine(),
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )
-            logger.info(
-                "[MCP][STORE] Using Postgres backend table=%s prefix=%s",
-                store_config.table,
-                store_config.prefix or "",
-            )
-        else:
-            raise ValueError("Unsupported MCP servers storage backend")
-
-        return self._mcp_server_store_instance
+            return self._mcp_server_store_instance
+        raise ValueError(
+            f"Unsupported MCP servers storage backend {type(store_config)}"
+        )
 
     def get_mcp_configuration(self) -> McpConfiguration:
         return self.configuration.mcp
 
-    def get_mcp_server_manager(self) -> McpServerManager:
+    async def get_mcp_server_manager(self) -> McpServerManager:
         """
         Lazily create the MCP server manager using the configured store.
         """
@@ -885,7 +727,7 @@ class ApplicationContext:
         manager = McpServerManager(
             config=self.configuration, store=self.get_mcp_server_store()
         )
-        manager.bootstrap()
+        await manager.bootstrap()
         self._mcp_server_manager = manager
         return manager
 
@@ -913,59 +755,14 @@ class ApplicationContext:
             return self._feedback_store_instance
 
         store_config = get_configuration().storage.feedback_store
-        if isinstance(store_config, DuckdbStoreConfig):
-            db_path = Path(store_config.duckdb_path).expanduser()
-            from agentic_backend.core.feedback.store.duckdb_feedback_store import (
-                DuckdbFeedbackStore,
-            )
-
-            self._feedback_store_instance = DuckdbFeedbackStore(db_path)
-            return self._feedback_store_instance
-        elif isinstance(store_config, OpenSearchIndexConfig):
-            opensearch_config = get_configuration().storage.opensearch
-            if opensearch_config is None:
-                raise ValueError(
-                    "OpenSearch configuration is required but not provided"
-                )
-            password = opensearch_config.password
-            if not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
-            from agentic_backend.core.feedback.store.opensearch_feedback_store import (
-                OpenSearchFeedbackStore,
-            )
-
-            self._feedback_store_instance = OpenSearchFeedbackStore(
-                host=opensearch_config.host,
-                username=opensearch_config.username,
-                password=password,
-                secure=opensearch_config.secure,
-                verify_certs=opensearch_config.verify_certs,
-                index=store_config.index,
-            )
-            return self._feedback_store_instance
-        elif isinstance(store_config, PostgresTableConfig):
-            if not os.getenv("POSTGRES_PASSWORD"):
-                logger.error(
-                    "[FEEDBACK][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres feedback store)"
-                )
-                raise RuntimeError(
-                    "POSTGRES_PASSWORD is required for Postgres feedback store"
-                )
-            pg = get_configuration().storage.postgres
-            engine = create_engine_from_config(pg)
+        if isinstance(store_config, PostgresTableConfig):
             self._feedback_store_instance = PostgresFeedbackStore(
-                engine=engine,
+                engine=self.get_pg_async_engine(),
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )
-            logger.info(
-                "[FEEDBACK][STORE] Using Postgres backend table=%s prefix=%s",
-                store_config.table,
-                store_config.prefix or "",
-            )
             return self._feedback_store_instance
-        else:
-            raise ValueError("Unsupported sessions storage backend")
+        raise ValueError("Unsupported sessions storage backend")
 
     def get_outbound_auth(self) -> OutboundAuth:
         """
