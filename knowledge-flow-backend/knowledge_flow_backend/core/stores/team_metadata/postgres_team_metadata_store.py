@@ -177,7 +177,15 @@ class PostgresTeamMetadataStore(BaseTeamMetadataStore):
                 id=team_id,
                 **update_dict,
             )
-            return await self.create(new_metadata)
+            try:
+                return await self.create(new_metadata)
+            except TeamMetadataAlreadyExistsError:
+                # Possible race: another request created the row after our get().
+                logger.info(
+                    "[TEAM_METADATA][PG] Metadata appeared during upsert race; falling back to update for team_id: %s",
+                    team_id,
+                )
+                return await self.update(team_id, update_data)
 
     async def delete(self, team_id: TeamId) -> None:
         """
