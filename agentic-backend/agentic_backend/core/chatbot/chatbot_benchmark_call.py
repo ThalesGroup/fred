@@ -178,14 +178,18 @@ async def handle_chatbot_baseline_websocket(
                         )
                         continue
                     msg_value = cast(str, msg_value)
-                    ask = ChatAskInput(
-                        agent_name=client_request.get("agent_name")
-                        or "openai-baseline",
-                        message=msg_value,
-                        session_id=client_request.get("session_id"),
-                        client_exchange_id=client_request.get("client_exchange_id"),
-                        type="ask",
-                    )
+                    session_id = client_request.get("session_id")
+                    if session_id is not None:
+                        ask = ChatAskInput(
+                            agent_name=client_request.get("agent_name")
+                            or "openai-baseline",
+                            message=msg_value,
+                            session_id=session_id,
+                            client_exchange_id=client_request.get("client_exchange_id"),
+                            type="ask",
+                        )
+                    else:
+                        raise ValueError("Missing session_id in payload")
                 else:
                     summary = summarize_error(e, "BASELINE Invalid payload")
                     await safe_send_text(
@@ -210,7 +214,7 @@ async def handle_chatbot_baseline_websocket(
         try:
             kpi = get_app_context().get_kpi_writer()
             with kpi.timer(
-                "chat.phase_latency_ms",
+                "app.phase_latency_ms",
                 dims={
                     "agent_name": ask.agent_name or "baseline",
                     "phase": "llm_invoke",

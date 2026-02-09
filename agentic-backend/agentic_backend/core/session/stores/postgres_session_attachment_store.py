@@ -27,6 +27,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    func,
     inspect,
     select,
     text,
@@ -166,3 +167,14 @@ class PostgresSessionAttachmentStore(BaseSessionAttachmentStore):
             await conn.execute(
                 self.table.delete().where(self.table.c.session_id == session_id)
             )
+
+    async def count_for_sessions(self, session_ids: List[str]) -> int:
+        if not session_ids:
+            return 0
+        async with self.store.begin() as conn:
+            result = await conn.execute(
+                select(func.count())
+                .select_from(self.table)
+                .where(self.table.c.session_id.in_(session_ids))
+            )
+            return result.scalar() or 0

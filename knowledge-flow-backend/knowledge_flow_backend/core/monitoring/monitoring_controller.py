@@ -14,11 +14,6 @@
 
 from fastapi import APIRouter
 
-from knowledge_flow_backend.application_monitoring import (
-    KnowledgeFlowDBSnapshot,
-    collect_db_snapshot,
-)
-
 
 class MonitoringController:
     def __init__(
@@ -32,11 +27,3 @@ class MonitoringController:
         @app.get("/ready")
         def ready():
             return {"status": "ready"}
-
-        @app.get(
-            "/metrics/db/snapshot",
-            summary="Lightweight counts of key database tables",
-            response_model=KnowledgeFlowDBSnapshot,
-        )
-        async def db_snapshot():
-            return await collect_db_snapshot()

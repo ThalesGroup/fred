@@ -24,6 +24,7 @@ Includes:
 """
 
 import asyncio
+import atexit
 import logging
 import os
 import re
@@ -329,6 +330,7 @@ class ApplicationContext:
     _default_model_instance: Optional[BaseLanguageModel] = None
     _pg_engine: Optional[Engine] = None
     _pg_async_engine: Optional[AsyncEngine] = None
+    _temporal_provider: Optional[TemporalClientProvider] = None
 
     def __new__(cls, configuration: Configuration):
         with cls._lock:
@@ -378,6 +380,26 @@ class ApplicationContext:
         if self._io_executor is not None:
             self._io_executor.shutdown(wait=True)
             self._io_executor = None
+
+    async def shutdown(self):
+        """Gracefully shut down global resources."""
+        # HTTP clients (LLM / external calls)
+        try:
+            from fred_core.model import http_clients
+
+            await http_clients.async_shutdown_shared_clients()
+        except Exception:
+            logger.warning("[HTTP] Failed to shutdown shared clients", exc_info=True)
+
+        # Async PG engine
+        if self._pg_async_engine is not None:
+            try:
+                await self._pg_async_engine.dispose()
+            finally:
+                self._pg_async_engine = None
+
+        # Thread pool executor
+        self.shutdown_io_executor()
 
     def get_knowledge_flow_base_url(self) -> str:
         """
@@ -441,6 +463,17 @@ class ApplicationContext:
         if self._pg_async_engine is None:
             pg_cfg = self.configuration.storage.postgres
             self._pg_async_engine = create_async_engine_from_config(pg_cfg)
+            engine = self._pg_async_engine
+
+            def _dispose_async_engine():
+                try:
+                    asyncio.run(engine.dispose())
+                except Exception:
+                    logger.debug(
+                        "[SQL] Async engine dispose at exit failed", exc_info=True
+                    )
+
+            atexit.register(_dispose_async_engine)
             logger.info("[SQL] Shared Postgres async initialized.")
         return self._pg_async_engine
 
@@ -618,8 +651,8 @@ class ApplicationContext:
         raise ValueError(f"Unsupported tasks storage backend {type(store_config)}")
 
     def get_temporal_client_provider(self) -> TemporalClientProvider:
-        if getattr(self, "_temporal_provider", None) is not None:
-            return self._temporal_provider  # type: ignore[attr-defined]
+        if self._temporal_provider is not None:
+            return self._temporal_provider
 
         cfg = get_configuration().scheduler
         if cfg.backend.lower() != "temporal":

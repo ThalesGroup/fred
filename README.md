@@ -44,7 +44,7 @@ To ensure a smooth first-time experience, Fred’s maintainers designed Dev Cont
 
 By default, using either Dev Container or native startup:
 
-- Fred stores all data on the local filesystem or through local-first tools such as DuckDB (for SQL-like data) and ChromaDB (for local embeddings). Data includes metrics, chat conversations, document uploads, and embeddings.
+- Fred stores all data locally using **SQLite** for SQL/metadata and **ChromaDB** for vectors/embeddings. (DuckDB has been deprecated.) Data includes metrics, chat conversations, document uploads, and embeddings.
 - Authentication and authorization are mocked.
 
 > **Note:**  
@@ -522,19 +522,20 @@ See `agentic-backend/config/configuration.yaml` (section `ai:`) and `knowledge-f
 ### Advanced Integrations
 
 - Enable Keycloak or another OIDC provider for authentication
-- Persist metrics and files in PostgreSQL/pgvector (no OpenSearch required) **or** OpenSearch + MinIO
+- Persistence options:
+  - **Laptop / dev (default):** SQLite for metadata + ChromaDB for vectors (embedded, no external services)
+  - **Production:** PostgreSQL + pgvector for metadata/vectors, and optionally MinIO/S3 + OpenSearch if you prefer that stack
 
 ## Core Architecture and Licensing Clarity
 
-The three components just described form the _entirety of the Fred platform_. They are self-contained and do not
-require any external dependencies such as MinIO, OpenSearch, or Weaviate.
+The three components just described form the _entirety of the Fred platform_. By default they run self-contained on a laptop using **SQLite + ChromaDB** (no external services).
 
-Instead, Fred is designed with a modular architecture that allows optional integration with these technologies. By default, a minimal Fred deployment can use just the local filesystem for all storage needs.
+Fred is modular: you can optionally add Keycloak/OpenFGA, MinIO/S3, OpenSearch, and PostgreSQL/pgvector for production-grade persistence.
 
-For persistent deployments you now have two options:
+Persistence options:
 
-- **PostgreSQL-only**: metadata + vectors stored in PostgreSQL via `pgvector`. No OpenSearch dependency.
-- **OpenSearch + object storage**: production-grade vector search with OpenSearch and MinIO/S3 for raw files.
+- **Dev/laptop (default):** SQLite for all SQL stores, ChromaDB for vectors, local filesystem for blobs.
+- **Production (recommended):** PostgreSQL + pgvector for SQL + vectors; optionally pair with MinIO/S3 + OpenSearch if you prefer that stack.
 
 ## Documentation
 

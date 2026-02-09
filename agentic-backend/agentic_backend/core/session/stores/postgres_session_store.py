@@ -18,7 +18,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from fred_core.sql import AsyncBaseSqlStore
-from sqlalchemy import Column, DateTime, JSON, MetaData, String, Table, select
+from sqlalchemy import Column, DateTime, JSON, MetaData, String, Table, select, func
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from agentic_backend.core.chatbot.chat_schema import SessionSchema
@@ -111,3 +111,10 @@ class PostgresSessionStore(BaseSessionStore):
             )
             rows = result.fetchall()
         return [SessionSchema.model_validate(r[0]) for r in rows]
+
+    async def count_for_user(self, user_id: str) -> int:
+        async with self.store.begin() as conn:
+            result = await conn.execute(
+                select(func.count()).where(self.table.c.user_id == user_id)
+            )
+            return int(result.scalar_one())

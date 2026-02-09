@@ -460,13 +460,14 @@ async def websocket_chatbot_question(
             client_request = None
             try:
                 client_request = await websocket.receive_json()
-                logger.debug(
-                    "[CHATBOT WS] recv raw session_id=%s payload=%s",
-                    client_request.get("session_id")
-                    if isinstance(client_request, dict)
-                    else None,
-                    client_request,
-                )
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "[CHATBOT] recv raw session_id=%s payload=%s",
+                        client_request.get("session_id")
+                        if isinstance(client_request, dict)
+                        else None,
+                        client_request,
+                    )
 
                 async def ws_callback(msg_dict: dict):
                     # Callback to stream agent tokens/messages back to the client
@@ -687,6 +688,8 @@ async def get_sessions(
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> list[SessionWithFiles]:
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("[CHATBOT] get_sessions start user=%s", user.uid)
     return await session_orchestrator.get_sessions(user)
 
 
@@ -701,6 +704,13 @@ async def create_session(
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> SessionSchema:
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "[CHATBOT] create_session start user=%s agent_name=%s title=%s",
+            user.uid,
+            payload.agent_name,
+            payload.title,
+        )
     return await session_orchestrator.create_empty_session(
         user=user, agent_name=payload.agent_name, title=payload.title
     )
@@ -721,6 +731,12 @@ async def get_session_history(
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> list[ChatMessage]:
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "[CHATBOT] get_session_history start session=%s user=%s",
+            session_id,
+            user.uid,
+        )
     history = await session_orchestrator.get_session_history(
         session_id=session_id,
         user=user,
@@ -751,12 +767,13 @@ async def get_session_message(
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> ChatMessage:
-    logger.info(
-        "[CHATBOT] get_session_message start session=%s rank=%s user=%s",
-        session_id,
-        rank,
-        user.uid,
-    )
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "[CHATBOT] get_session_message start session=%s rank=%s user=%s",
+            session_id,
+            rank,
+            user.uid,
+        )
     message = await session_orchestrator.get_session_message(session_id, rank, user)
     if text_limit is not None or text_offset > 0:
         message = _paginate_message_text(
@@ -785,6 +802,12 @@ async def get_session_preferences(
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
     user: KeycloakUser = Depends(get_current_user),
 ):
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "[CHATBOT] get_session_preferences start session=%s user=%s",
+            session_id,
+            user.uid,
+        )
     return await session_orchestrator.get_session_preferences(session_id, user)
 
 
@@ -799,6 +822,12 @@ async def update_session_preferences(
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
     user: KeycloakUser = Depends(get_current_user),
 ):
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "[CHATBOT] update_session_preferences start session=%s user=%s",
+            session_id,
+            user.uid,
+        )
     return await session_orchestrator.update_session_preferences(
         session_id, user, payload.preferences
     )
@@ -849,6 +878,13 @@ async def get_file_summary(
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> dict:
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "[CHATBOT] get_file_summary start session=%s attachment=%s user=%s",
+            session_id,
+            attachment_id,
+            user.uid,
+        )
     return await session_orchestrator.get_attachment_summary(
         user=user, session_id=session_id, attachment_id=attachment_id
     )

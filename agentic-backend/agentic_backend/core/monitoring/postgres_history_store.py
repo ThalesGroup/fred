@@ -21,7 +21,6 @@ from typing import Any, Dict, List, Optional
 from fred_core.sql import AsyncBaseSqlStore, json_for_engine
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, select
-from sqlalchemy import JSON
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from agentic_backend.common.utils import truncate_datetime

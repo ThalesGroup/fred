@@ -61,3 +61,9 @@ class BaseSessionAttachmentStore:
         self, session_id: str
     ) -> None:  # pragma: no cover - interface
         pass
+
+    @abstractmethod
+    async def count_for_sessions(
+        self, session_ids: List[str]
+    ) -> int:  # pragma: no cover - interface
+        pass

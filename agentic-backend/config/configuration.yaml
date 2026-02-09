@@ -21,8 +21,13 @@ app:
   metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
+  kpi_process_metrics_interval_sec: 30
+  kpi_log_summary_interval_sec: 10.0
+  kpi_log_summary_top_n: 200
 
 scheduler:
+  # Keep the scheduler disable to properly regenerate  the openapi UI code. If enabled the
+  # openapi code generator will not exit because of background temporal task.
   enabled: true
   backend: temporal
   temporal:
@@ -65,7 +70,10 @@ ai:
   agentic_restore_max_exchanges: 20
 
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
-  max_concurrent_agents: 128
+  max_concurrent_agents: 1024
+
+  # Maximum number of concurrent sessions per user. This is used to prevent abuse and manage resource usage.
+  max_concurrent_sessions_per_user: 10
 
   # Maximum number of files a user can attach across all sessions
   max_attached_files_per_user: 20

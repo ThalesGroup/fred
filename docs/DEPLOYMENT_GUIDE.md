@@ -36,7 +36,7 @@ Fred is composed of three main runtime components:
    - Hosts the multi-agent runtime (LangGraph + LangChain).  
    - Integrates with:
      - LLM providers (OpenAI, Azure OpenAI, Ollama, etc.).
-     - Optional Postgres/OpenSearch backends for metrics, logs, and future features.
+     - Storage: **SQLite (dev/laptop default)** or **PostgreSQL (prod)**; OpenSearch is optional.
 
 3. **Knowledge Flow backend** (`./knowledge-flow-backend`)  
    - FastAPI application focused on:
@@ -45,10 +45,10 @@ Fred is composed of three main runtime components:
      - Document search / retrieval APIs.
    - Integrates with:
      - LLM/embedding providers.
-     - **Either** PostgreSQL + pgvector **or** OpenSearch for vector + metadata storage.
+     - **Either** SQLite + ChromaDB (dev default) **or** PostgreSQL + pgvector (prod); OpenSearch is optional.
      - Optional object store (e.g., MinIO, S3) for raw documents.
 
-In local dev, these can run with minimal external dependencies.  
+In local dev, these run with **no external data services** (SQLite + ChromaDB embedded).  
 In production, you typically deploy:
 
 - Frontend as static assets served by a reverse proxy (NGINX, ingress, etc.).
@@ -72,7 +72,7 @@ Each backend has two configuration layers:
    - Functional / structural configuration:
      - Model providers, model names, temperature, timeouts.
      - Feature flags (frontend behavior, optional agents).
-     - Backend integration options.
+     - Backend integration options (SQLite vs PostgreSQL, OpenSearch optional).
 
 Files of interest:
 
@@ -96,9 +96,10 @@ In a production-like setup you will typically manage:
    - Requirements: stable network access, quotas, and API keys / credentials.
 
 2. **Vector + metadata storage**
-   - Choose one:
-     - **PostgreSQL + pgvector** (simplest persistence stack, no OpenSearch dependency).
-     - **OpenSearch** (recommended when you already operate OS and want Lucene/OS-native features).  
+   - Dev default: **SQLite + ChromaDB** (embedded, zero external services).
+   - Production: choose one:
+     - **PostgreSQL + pgvector** (recommended, no OpenSearch dependency).
+     - **OpenSearch** (only if your platform standardizes on OS/Lucene).  
        **Strict mapping and version requirements are enforced.** See [`DEPLOYMENT_GUIDE_OPENSEARCH.md`](./DEPLOYMENT_GUIDE_OPENSEARCH.md).
    - Both store document metadata and vectors; pick based on platform standards.
 

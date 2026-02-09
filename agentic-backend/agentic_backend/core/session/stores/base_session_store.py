@@ -50,6 +50,14 @@ class BaseSessionStore(ABC):
         pass
 
     @abstractmethod
+    async def count_for_user(self, user_id: str) -> int:
+        """
+        Return how many sessions exist for the given user_id.
+        Should be efficient (COUNT in the backend, not full fetch).
+        """
+        pass
+
+    @abstractmethod
     async def save_with_conn(self, conn: Any, session: SessionSchema) -> None:
         """
         Reuse an existing DB connection/transaction.

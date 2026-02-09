@@ -140,6 +140,10 @@ class SessionOrchestrator:
         self.restore_max_exchanges = configuration.ai.restore_max_exchanges
         # Stateless worker that knows how to turn LangGraph events into ChatMessage[]
         self.transcoder = StreamTranscoder()
+        cfg_max_sessions_per_user = configuration.ai.max_concurrent_sessions_per_user
+        self.max_sessions_per_user = (
+            20 if cfg_max_sessions_per_user is None else cfg_max_sessions_per_user
+        )
         cfg_max_files = configuration.ai.max_attached_files_per_user
         self.max_attached_files_per_user = (
             20 if cfg_max_files is None else cfg_max_files
@@ -182,9 +186,11 @@ class SessionOrchestrator:
         if session.next_rank is not None:
             return session.next_rank
 
-        prior_msgs = await self.history_store.get(session.id)
+        async with phase_timer(self.kpi, "history_get_seed_rank"):
+            prior_msgs = await self.history_store.get(session.id)
         session.next_rank = len(prior_msgs)
-        await self.session_store.save(session)
+        async with phase_timer(self.kpi, "session_write_seed_rank"):
+            await self.session_store.save(session)
         self.session_cache.touch_session(session.id, session)
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
@@ -203,7 +209,7 @@ class SessionOrchestrator:
         user: KeycloakUser,
         callback: CallbackType,
         session_callback: SessionCallbackType | None = None,
-        session_id: str | None,
+        session_id: str,
         message: str,
         agent_name: str,
         runtime_context: RuntimeContext,
@@ -221,26 +227,10 @@ class SessionOrchestrator:
         # Check if user is authorized to talk in this session
         session_updated = False
         t_initial = time.monotonic()
-        if session_id is not None:
-            session = await self._get_session(
-                user_id=user.uid,
-                session_id=session_id,
-            )
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(
-                    "[SESSIONS] Authorizing user action on session %s for user %s",
-                    session_id,
-                    user.uid,
-                )
-            await self._authorize_user_action_on_session(
-                session_id, user, Action.UPDATE
-            )
-        else:
-            session = await self._create_session(
-                user_id=user.uid,
-                query=message,
-            )
-            session_updated = True
+        session = await self._get_session(
+            user_id=user.uid,
+            session_id=session_id,
+        )
 
         # KPI: count incoming question early (before any work)
         # Simply count the user message here; downstream errors or early returns will be captured in the phase metrics and error counts.
@@ -260,7 +250,10 @@ class SessionOrchestrator:
             session=session, prompt=message
         )
         if title_updated:
-            # mark this session as updated so it will be saved at the end of this method (avoids multiple saves if we also update the title after agent response)
+            # Save immediately so that concurrent REST calls (e.g. get_sessions) see the new title
+            async with phase_timer(self.kpi, "session_write_title"):
+                await self.session_store.save(session)
+            self.session_cache.touch_session(session.id, session)
             session_updated = True
 
         # Propagate effective session_id into runtime context so downstream calls
@@ -607,26 +600,12 @@ class SessionOrchestrator:
             user.uid,
             list((resume_payload or {}).keys()),
         )
-        # 1. Authorize
-        await self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
 
-        logger.info(
-            "resume_interrupted_exchange user_id=%s session_id=%s exchange_id=%s",
-            user.uid,
-            session_id,
-            exchange_id,
+        # 2. Retrieve Session (checks cache, checks auth)
+        session = await self._get_session(
+            user_id=user.uid,
+            session_id=session_id,
         )
-
-        # 2. Retrieve Session
-        session = await self.session_store.get(session_id)
-        if not session:
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "code": "session_not_found",
-                    "message": f"Session {session_id} not found.",
-                },
-            )
 
         # 3. Resolve Agent
         actual_agent_name = agent_name or session.agent_name
@@ -766,8 +745,10 @@ class SessionOrchestrator:
                 all_msgs.extend(agent_msgs)
                 session.updated_at = _utcnow_dt()
                 session.next_rank = base_rank + len(all_msgs)
-                await self.session_store.save(session)
-                await self.history_store.save(session.id, all_msgs, user.uid)
+                async with phase_timer(self.kpi, "session_save_on_resume_interrupt"):
+                    await self.session_store.save(session)
+                async with phase_timer(self.kpi, "history_save_on_resume_interrupt"):
+                    await self.history_store.save(session.id, all_msgs, user.uid)
                 logger.info(
                     "[SESSIONS] resume interrupt persisted session=%s exchange=%s msgs=%d",
                     session.id,
@@ -780,8 +761,10 @@ class SessionOrchestrator:
             if all_msgs:
                 session.updated_at = _utcnow_dt()
                 session.next_rank = base_rank + len(all_msgs)
-                await self.session_store.save(session)
-                await self.history_store.save(session.id, all_msgs, user.uid)
+                async with phase_timer(self.kpi, "session_save_on_resume"):
+                    await self.session_store.save(session)
+                async with phase_timer(self.kpi, "history_save_on_resume"):
+                    await self.history_store.save(session.id, all_msgs, user.uid)
 
             return session, all_msgs
 
@@ -800,16 +783,13 @@ class SessionOrchestrator:
         This method is only used by the UI to list sessions. It is not part of the
         chat exchange flow.
         """
-        sessions = await self.session_store.get_for_user(user.uid)
+        async with phase_timer(self.kpi, "session_list"):
+            sessions = await self.session_store.get_for_user(user.uid)
         enriched: List[SessionWithFiles] = []
         for session in sessions:
-            if not await self._is_user_action_authorized_on_session(
-                session.id, user, Action.READ
-            ):
-                continue
-
             # Retrieve all agents
-            history = await self.get_session_history(session.id, user)
+            async with phase_timer(self.kpi, "history_list_item"):
+                history = await self.get_session_history(session.id, user)
             agents = {
                 msg.metadata.agent_name for msg in history if msg.metadata.agent_name
             }
@@ -818,7 +798,10 @@ class SessionOrchestrator:
             attachments: list[AttachmentRef] = []
             if self.attachments_store:
                 try:
-                    records = await self.attachments_store.list_for_session(session.id)
+                    async with phase_timer(self.kpi, "attachments_list_item"):
+                        records = await self.attachments_store.list_for_session(
+                            session.id
+                        )
                     files_names = [r.name for r in records]
                     attachments = [
                         AttachmentRef(id=r.attachment_id, name=r.name) for r in records
@@ -846,6 +829,23 @@ class SessionOrchestrator:
         title: Optional[str] = None,
     ) -> SessionSchema:
         """Explicitly create a new empty session (used by the UI before first upload/message)."""
+        # Enforce max sessions per user if configured
+        try:
+            async with phase_timer(self.kpi, "session_count_for_user"):
+                current = await self.session_store.count_for_user(user.uid)
+            if current >= self.max_sessions_per_user:
+                raise AuthorizationError(
+                    user.uid,
+                    Action.CREATE,
+                    Resource.SESSIONS,
+                    f"Session limit reached ({self.max_sessions_per_user} sessions per user).",
+                )
+        except AuthorizationError:
+            raise
+        except Exception:
+            logger.exception("[SESSIONS] Failed to enforce session limit")
+            raise
+
         prefs: Optional[Dict[str, Any]] = (
             {"agent_name": agent_name} if agent_name else None
         )
@@ -858,7 +858,11 @@ class SessionOrchestrator:
             preferences=prefs,
             next_rank=0,
         )
-        await self.session_store.save(session)
+        async with phase_timer(self.kpi, "session_write"):
+            await self.session_store.save(session)
+        self.session_cache.set(
+            session.id, CachedSession(session=session, attachments=None)
+        )
         logger.info(
             "[SESSIONS] Created empty session %s for user %s", session.id, user.uid
         )
@@ -923,7 +927,8 @@ class SessionOrchestrator:
         offset: int = 0,
     ) -> List[ChatMessage]:
         await self._authorize_user_action_on_session(session_id, user, Action.READ)
-        history = await self.history_store.get(session_id) or []
+        async with phase_timer(self.kpi, "history_get"):
+            history = await self.history_store.get(session_id) or []
         if limit is None:
             return history
         total = len(history)
@@ -936,7 +941,8 @@ class SessionOrchestrator:
         self, session_id: str, rank: int, user: KeycloakUser
     ) -> ChatMessage:
         await self._authorize_user_action_on_session(session_id, user, Action.READ)
-        history = await self.history_store.get(session_id) or []
+        async with phase_timer(self.kpi, "history_get_single"):
+            history = await self.history_store.get(session_id) or []
         for msg in history:
             if msg.rank == rank:
                 return msg
@@ -954,7 +960,8 @@ class SessionOrchestrator:
     ) -> Dict[str, Any]:
         """Return stored per-session preferences, if any."""
         await self._authorize_user_action_on_session(session_id, user, Action.READ)
-        session = await self.session_store.get(session_id)
+        async with phase_timer(self.kpi, "session_read_prefs"):
+            session = await self.session_store.get(session_id)
         if not session:
             raise HTTPException(
                 status_code=404,
@@ -981,7 +988,8 @@ class SessionOrchestrator:
     ) -> Dict[str, Any]:
         """Replace the stored preferences blob for a session."""
         await self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
-        session = await self.session_store.get(session_id)
+        async with phase_timer(self.kpi, "session_read_prefs"):
+            session = await self.session_store.get(session_id)
         if not session:
             raise HTTPException(
                 status_code=404,
@@ -1007,7 +1015,8 @@ class SessionOrchestrator:
         # Important: do NOT bump session.updated_at for preference changes.
         # The UI orders conversations by updated_at and expects it to change only
         # on actual conversation activity (messages), not when viewing/toggling settings.
-        await self.session_store.save(session)
+        async with phase_timer(self.kpi, "session_write_prefs"):
+            await self.session_store.save(session)
         try:
             prefs_str = json.dumps(session.preferences, default=str)
         except Exception:
@@ -1030,7 +1039,8 @@ class SessionOrchestrator:
         doc_uids: set[str] = set()
         if self.attachments_store:
             try:
-                records = await self.attachments_store.list_for_session(session_id)
+                async with phase_timer(self.kpi, "attachments_list_on_delete"):
+                    records = await self.attachments_store.list_for_session(session_id)
                 for rec in records:
                     if rec.document_uid:
                         doc_uids.add(rec.document_uid)
@@ -1153,7 +1163,8 @@ class SessionOrchestrator:
         await self._authorize_user_action_on_session(session_id, user, Action.READ)
 
         try:
-            records = await self.attachments_store.list_for_session(session_id)
+            async with phase_timer(self.kpi, "attachments_list_on_get_summary"):
+                records = await self.attachments_store.list_for_session(session_id)
         except Exception:
             logger.exception(
                 "[SESSIONS][ATTACH] Failed to list attachments for session %s",
@@ -1226,16 +1237,13 @@ class SessionOrchestrator:
             if max_files_user is not None and self.attachments_store:
                 total_for_user = 0
                 # Count attachments across all sessions for this user
-                for sess in await self.session_store.get_for_user(user.uid):
-                    try:
-                        list = await self.attachments_store.list_for_session(sess.id)
-                        total_for_user += len(list)
-                    except Exception:
-                        logger.warning(
-                            "[SESSIONS][ATTACH] Failed to count attachments for session %s",
-                            sess.id,
-                        )
-                        continue
+                user_sessions = await self.session_store.get_for_user(user.uid)
+                if user_sessions:
+                    session_ids = [s.id for s in user_sessions]
+                    total_for_user = await self.attachments_store.count_for_sessions(
+                        session_ids
+                    )
+
                 if total_for_user >= max_files_user:
                     raise HTTPException(
                         status_code=400,
@@ -1280,7 +1288,7 @@ class SessionOrchestrator:
         # If no session_id was provided (first interaction), create one now.
         # Use a lightweight title based on the filename to keep UX sensible.
         if not session_id:
-            session = await self._create_session(user_id=user.uid, query=None)
+            session = await self.create_empty_session(user=user)
         else:
             session = await self._get_session(user_id=user.uid, session_id=session_id)
 
@@ -1549,7 +1557,13 @@ class SessionOrchestrator:
         self, session_id: str, user: KeycloakUser, action: Action
     ) -> bool:
         """Check if a user can perform an action on a session"""
-        session = await self.session_store.get(session_id)
+        # Try cache first to avoid DB hit on hot sessions
+        cached = self.session_cache.get(session_id)
+        if cached:
+            session = cached.session
+        else:
+            session = await self.session_store.get(session_id)
+
         if session is None:
             # A2A proxy sessions are not persisted locally; allow access to avoid noisy warnings.
             return False
@@ -1601,7 +1615,7 @@ class SessionOrchestrator:
         - Emit ToolMessage only if its call_id exists in the **same exchange**.
         - Windowing by "last N exchanges" always keeps whole exchanges.
         """
-        hist = await self.get_session_history(session.id, user) or []
+        hist = await self.history_store.get(session.id) or []
         if not hist:
             _rlog("empty", msg="No messages to restore", session_id=session.id)
             return []
@@ -1930,9 +1944,10 @@ class SessionOrchestrator:
                 attachments = None
                 if self.attachments_store:
                     try:
-                        attachments = await self.attachments_store.list_for_session(
-                            session_id
-                        )
+                        async with phase_timer(self.kpi, "attachments_list_for_cache"):
+                            attachments = await self.attachments_store.list_for_session(
+                                session_id
+                            )
                         if logger.isEnabledFor(logging.DEBUG):
                             logger.debug(
                                 "[SESSIONS] seeded cache attachments session=%s count=%d",
@@ -1962,45 +1977,6 @@ class SessionOrchestrator:
                 f"Not authorized to create session {session_id}",
             )
         raise ValueError(f"Session {session_id} not found for user {user_id}")
-
-    async def _create_session(
-        self, *, user_id: str, query: Optional[str]
-    ) -> SessionSchema:
-        """
-        Load if needed the session from the store, or create a new one if no session_id was provided or if loading failed.
-        This method takes care of recording phase metrics.
-        """
-        new_session_id = secrets.token_urlsafe(8)
-        if query:
-            async with phase_timer(self.kpi, "session_generate_title"):
-                response = await get_default_model().ainvoke(
-                    "Give a short, clear title for this conversation based on the user's question. "
-                    "Return a few keywords only. Question: " + query
-                )
-            title = response.content
-        else:
-            title = "New Conversation"
-
-        session = SessionSchema(
-            id=new_session_id,
-            user_id=user_id,
-            title=title,
-            updated_at=_utcnow_dt(),
-            preferences=None,
-            next_rank=0,
-        )
-        async with phase_timer(self.kpi, "session_write"):
-            await self.session_store.save(session)
-        self.session_cache.set(
-            session.id, CachedSession(session=session, attachments=None)
-        )
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                "[AGENTS] Created new session %s for user %s (cached, attachments=0)",
-                new_session_id,
-                user_id,
-            )
-        return session
 
     # ---------------- runtime context attachment ----------------
 

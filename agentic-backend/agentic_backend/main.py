@@ -28,7 +28,6 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_user_security, log_setup, register_exception_handlers
 from fred_core.kpi import emit_process_kpis
-from fred_core.scheduler import TemporalClientProvider
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -76,7 +75,7 @@ def create_app() -> FastAPI:
     configuration: Configuration = load_configuration()
     env_file = get_loaded_env_file_path() or "<unset>"
     config_file = get_loaded_config_file_path() or "<unset>"
-    logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
+
     base_url = configuration.app.base_url
 
     application_context = ApplicationContext(configuration)
@@ -85,7 +84,7 @@ def create_app() -> FastAPI:
         log_level=configuration.app.log_level,
         store=application_context.get_log_store(),
     )
-    logger.info(f"🛠️ create_app() called with base_url={base_url}")
+    logger.info(f"[MAIN] create_app() called with .env={env_file} config={config_file}")
     application_context._log_config_summary()
 
     # The correct and final code to use
@@ -97,7 +96,7 @@ def create_app() -> FastAPI:
         - `yield` hands control to the server.
         - `finally` gracefully shuts down all tasks and services.
         """
-        logger.info("🚀 Lifespan enter.")
+        logger.info("[MAIN] Lifespan enter.")
 
         # Instantiate dependencies *within* the lifespan context
         app.state.configuration = configuration
@@ -154,14 +153,9 @@ def create_app() -> FastAPI:
                 process_kpi_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await process_kpi_task
-            import fred_core.model.http_clients as http_clients
-            # Prefer async close to avoid lingering tasks/threads
-            try:
-                await http_clients.async_shutdown_shared_clients()
-            except Exception:
-                http_clients.shutdown_shared_clients()
-            logger.info("🧹 Lifespan exit: orderly shutdown.")
-            logger.info("✅ Shutdown complete.")
+            await application_context.shutdown()
+            logger.info("[MAIN] Lifespan exit: orderly shutdown.")
+            logger.info("[] Shutdown complete.")
 
     app = FastAPI(
         docs_url=f"{base_url}/docs",
@@ -182,7 +176,7 @@ def create_app() -> FastAPI:
     allowed_origins = list(
         {_norm_origin(o) for o in configuration.security.authorized_origins}
     )
-    logger.info("[CORS] allow_origins=%s", allowed_origins)
+    logger.info("[MAIN][CORS] allow_origins=%s", allowed_origins)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
@@ -200,24 +194,13 @@ def create_app() -> FastAPI:
     router.include_router(feedback_controller.router)
     router.include_router(logs_controller.router)
     if configuration.scheduler.enabled:
-        logger.info("🛠️ Activating agent scheduler controller.")
-        if not configuration.scheduler.temporal:
-            raise ValueError("Scheduler enabled but Temporal configuration is missing!")
+        logger.info("[MAIN] Activating temporal scheduler.")
         task_queue = configuration.scheduler.temporal.task_queue
-        if not task_queue:
-            raise ValueError(
-                "Scheduler enabled but Temporal task_queue is not set in configuration!"
-            )
-        temporal_client_provider = TemporalClientProvider(
-            configuration.scheduler.temporal
-        )
+        temporal_client_provider = application_context.get_temporal_client_provider()
         AgentTasksController(router, temporal_client_provider, task_queue)
-    else:
-        logger.warning(
-            "🛑 Agent scheduler controller disabled via configuration.scheduler.enabled=false"
-        )
+
     app.include_router(router)
-    logger.info("🧩 All controllers registered.")
+    logger.info("[MAIN] All controllers registered.")
     return app
 
 

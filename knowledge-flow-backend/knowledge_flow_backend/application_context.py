@@ -270,6 +270,7 @@ class ApplicationContext:
     _rebac_engine: Optional[RebacEngine] = None
     _neo4j_driver: Optional[Driver] = None
     _filesystem_instance: Optional[BaseFilesystem] = None
+    _async_engines: list[Any] = []
 
     def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
@@ -668,6 +669,7 @@ class ApplicationContext:
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )
+            self._async_engines.append(engine)
             return self._metadata_store_instance
         raise ValueError(f"Unsupported metadata storage backend type: {store_config.type}")
 
@@ -769,6 +771,7 @@ class ApplicationContext:
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )
+            self._async_engines.append(engine)
             return self._tag_store_instance
         raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
 
@@ -785,6 +788,7 @@ class ApplicationContext:
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )
+            self._async_engines.append(engine)
             return self._resource_store_instance
         raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
 
@@ -1104,3 +1108,41 @@ class ApplicationContext:
             logger.info(f"    • {ext} → {cls.__name__}")
 
         logger.info("--------------------------------------------------")
+
+    async def shutdown(self) -> None:
+        """
+        Best-effort cleanup of shared resources.
+        """
+        # HTTP clients
+        try:
+            from fred_core.model import http_clients
+
+            await http_clients.async_shutdown_shared_clients()
+        except Exception:
+            logger.debug("[HTTP] Failed to shutdown shared clients", exc_info=True)
+
+        # OpenSearch client
+        if self._opensearch_client is not None:
+            try:
+                self._opensearch_client.close()
+            except Exception:
+                logger.debug("[OS] Error closing OpenSearch client", exc_info=True)
+            finally:
+                self._opensearch_client = None
+
+        # Neo4j driver
+        if self._neo4j_driver is not None:
+            try:
+                self._neo4j_driver.close()
+            except Exception:
+                logger.debug("[NEO4J] Error closing driver", exc_info=True)
+            finally:
+                self._neo4j_driver = None
+
+        # Async SQLAlchemy engines created here
+        for engine in self._async_engines:
+            try:
+                await engine.dispose()
+            except Exception:
+                logger.debug("[DB] Error disposing async engine", exc_info=True)
+        self._async_engines.clear()

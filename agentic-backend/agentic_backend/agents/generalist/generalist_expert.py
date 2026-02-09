@@ -124,13 +124,7 @@ class Georges(SimpleAgentFlow):
             )
 
         # 5) Invoke the model
-        with self.kpi_timer(
-            "chat.phase_latency_ms",
-            dims={
-                "phase": "llm_invoke",
-                "agent_name": "Georges",
-            },
-        ):
+        async with self.phase("llm_invoke"):
             response = await self.model.ainvoke(llm_messages)
         logger.debug("[AGENTS] Georges: LLM call successful (await complete).")
         return self.ensure_aimessage(response)

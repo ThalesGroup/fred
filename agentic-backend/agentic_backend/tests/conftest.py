@@ -95,6 +95,7 @@ def minimal_generalist_config() -> Configuration:
             restore_max_exchanges=20,
             knowledge_flow_url="http://localhost:8000/agentic/v1",
             timeout=TimeoutSettings(connect=5, read=15),
+            max_concurrent_sessions_per_user=10,
             max_attached_files_per_user=10,
             max_attached_file_size_mb=10,
             default_chat_model=ModelConfiguration(

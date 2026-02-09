@@ -35,7 +35,7 @@ def record_phase_metric(
         "phase": phase,
     }
     kpiWriter.emit(
-        name="fred.phase_latency_ms",
+        name="app.phase_latency_ms",
         type="timer",
         value=ms,
         unit="ms",

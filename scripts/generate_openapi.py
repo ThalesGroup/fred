@@ -4,6 +4,7 @@ Generic script to generate OpenAPI JSON specification for any FastAPI backend
 without starting the server.
 """
 
+import asyncio
 import json
 import os
 import sys
@@ -52,6 +53,25 @@ def main():
         
         backend_name = backend_dir.name
         print(f"✅ OpenAPI specification generated for {backend_name}: {output_file}")
+        # Cleanup ApplicationContext resources (e.g. ThreadPoolExecutor) to ensure clean exit
+        try:
+            # Try to find the application_context module for this app
+            app_ctx_module_name = f"{app_name}.application_context"
+            if app_ctx_module_name in sys.modules:
+                ctx_module = sys.modules[app_ctx_module_name]
+                if hasattr(ctx_module, "get_app_context"):
+                    try:
+                        ctx = ctx_module.get_app_context()
+                        if hasattr(ctx, "shutdown"):
+                            import asyncio
+                            asyncio.run(ctx.shutdown())
+                        elif hasattr(ctx, "shutdown_io_executor"):
+                            ctx.shutdown_io_executor()
+                    except RuntimeError:
+                        pass  # Context might not be initialized
+        except Exception:
+            pass
+
         return 0
         
     except Exception as e:

@@ -173,7 +173,9 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
     # over real Postgres. This keeps existing Postgres-backed stores reusable without
     # requiring a running database container.
     if config.sqlite_path is not None:
-        sqlite_path = str(Path(config.sqlite_path).expanduser())
+        sqlite_path_obj = Path(config.sqlite_path).expanduser()
+        sqlite_path_obj.parent.mkdir(parents=True, exist_ok=True)
+        sqlite_path = str(sqlite_path_obj)
         async_dsn = f"sqlite+aiosqlite:///{sqlite_path}"
         logger.info(
             "[SQL][AsyncEngine] sqlite_path provided; using SQLite fallback at %s",
