@@ -1,5 +1,5 @@
 import PersonIcon from "@mui/icons-material/Person";
-import { Box, Skeleton, Typography, useTheme } from "@mui/material";
+import { alpha, Box, Skeleton, Typography, useTheme } from "@mui/material";
 import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -59,7 +59,7 @@ export function SideBarConversationCard({ session, refetchSessions }: SideBarCon
           py: 1,
           borderRadius: 1,
           userSelect: "none",
-          background: isSelected ? theme.palette.action.selected : "transparent",
+          background: isSelected ? alpha(theme.palette.primary.main, 0.16) : "transparent",
           ...(isSelected ? {} : { "&:hover": { background: theme.palette.action.hover } }),
           "&:hover .delete-button": { display: "flex" },
           display: "flex",
@@ -112,8 +112,8 @@ export function SideBarConversationCard({ session, refetchSessions }: SideBarCon
           className="delete-button"
           size="small"
           onClick={handleDelete}
+          color="error"
           sx={{
-            color: theme.palette.error.light,
             display: "none",
           }}
         />

@@ -12,23 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { createContext, useContext, useState } from "react";
-import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button } from "@mui/material";
+import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from "@mui/material";
+import { createContext, PropsWithChildren, useContext, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 // Define the structure for the confirmation dialog
 interface ConfirmationDialogOptions {
   title: string;
   message?: string;
+  confirmButtonLabel?: string;
+  cancelButtonLabel?: string;
+  criticalAction?: boolean;
   onConfirm: () => void;
   onCancel?: () => void;
 }
 
-// Create the ConfirmationDialogContext
-const ConfirmationDialogContext = createContext<any>(null);
+// Define the context type
+interface ConfirmationDialogContextType {
+  showConfirmationDialog: (options: ConfirmationDialogOptions) => void;
+}
 
-export const ConfirmationDialogProvider: React.FC<{
-  children: React.ReactNode;
-}> = ({ children }) => {
+// Create the ConfirmationDialogContext
+const ConfirmationDialogContext = createContext<ConfirmationDialogContextType | null>(null);
+
+export const ConfirmationDialogProvider = ({ children }: PropsWithChildren) => {
+  const { t } = useTranslation();
   const [dialogOptions, setDialogOptions] = useState<ConfirmationDialogOptions | null>(null);
 
   // Function to show a confirmation dialog
@@ -40,6 +48,8 @@ export const ConfirmationDialogProvider: React.FC<{
   const closeConfirmationDialog = () => {
     setDialogOptions(null);
   };
+
+  const { criticalAction = false } = dialogOptions || {};
 
   return (
     <ConfirmationDialogContext.Provider value={{ showConfirmationDialog }}>
@@ -53,19 +63,21 @@ export const ConfirmationDialogProvider: React.FC<{
               <DialogContentText>{dialogOptions.message}</DialogContentText>
             </DialogContent>
           )}
+
           <DialogActions>
-            <Button onClick={closeConfirmationDialog} color="secondary">
-              Cancel
+            <Button onClick={closeConfirmationDialog} variant={criticalAction ? "contained" : undefined}>
+              {dialogOptions.cancelButtonLabel || t("confirmationDialog.defaultCancelButtonLabel")}
             </Button>
             <Button
+              variant={criticalAction ? undefined : "contained"}
               onClick={() => {
                 dialogOptions.onConfirm();
                 closeConfirmationDialog();
               }}
-              color="primary"
+              color={criticalAction ? "error" : undefined}
               autoFocus
             >
-              Confirm
+              {dialogOptions.confirmButtonLabel || t("confirmationDialog.defaultConfirmButtonLabel")}
             </Button>
           </DialogActions>
         </Dialog>
@@ -74,6 +86,10 @@ export const ConfirmationDialogProvider: React.FC<{
   );
 };
 
-export const useConfirmationDialog = () => {
-  return useContext(ConfirmationDialogContext);
+export const useConfirmationDialog = (): ConfirmationDialogContextType => {
+  const context = useContext(ConfirmationDialogContext);
+  if (!context) {
+    throw new Error("useConfirmationDialog must be used within a ConfirmationDialogProvider");
+  }
+  return context;
 };

@@ -31,7 +31,7 @@ from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.scheduler.agent_contracts import (
-    AgentInputV1,
+    AgentInputArgsV1,
     AgentResultStatus,
     AgentResultV1,
 )
@@ -75,7 +75,7 @@ class AgentTaskRunner:
             self._task_store = None
         return self._task_store
 
-    def _safe_update_status(
+    async def _safe_update_status(
         self,
         *,
         task_id: str,
@@ -90,7 +90,7 @@ class AgentTaskRunner:
         if store is None:
             return
         try:
-            store.update_status(
+            await store.update_status(
                 task_id=task_id,
                 status=status,
                 last_message=last_message,
@@ -104,7 +104,7 @@ class AgentTaskRunner:
                 "[TASKS] Failed to update task status for %s: %s", task_id, exc
             )
 
-    async def run_temporal_task(self, task_input: AgentInputV1) -> AgentResultV1:
+    async def run_temporal_task(self, task_input: AgentInputArgsV1) -> AgentResultV1:
         """
         Main orchestration bridge.
         Supports:
@@ -119,7 +119,7 @@ class AgentTaskRunner:
 
         # 2. Agent Initialization
         agent, _ = await self._agent_factory.create_and_init(
-            agent_name=task_input.target_agent,
+            agent_name=task_input.target_ref,
             runtime_context=runtime_context,
             session_id=session_id,
         )
@@ -144,7 +144,7 @@ class AgentTaskRunner:
                 # We use Command(resume=...) to pass the human data directly
                 # into the node that called interrupt().
                 logger.info(f"Resuming agent {session_id} with human input.")
-                self._safe_update_status(
+                await self._safe_update_status(
                     task_id=task_input.task_id,
                     status=AgentTaskStatus.RUNNING,
                     last_message="Resuming with human input",
@@ -156,7 +156,7 @@ class AgentTaskRunner:
                 # START CASE: Fresh task. Hydrate the state from the input.
                 initial_state = agent.hydrate_state(task_input)
                 logger.info(f"Starting agent {session_id} fresh.")
-                self._safe_update_status(
+                await self._safe_update_status(
                     task_id=task_input.task_id,
                     status=AgentTaskStatus.RUNNING,
                     last_message="Agent started",
@@ -172,7 +172,7 @@ class AgentTaskRunner:
                 task.interrupts for task in state_snapshot.tasks
             ):
                 logger.info(f"Agent {session_id} hit a breakpoint. Returning BLOCKED.")
-                self._safe_update_status(
+                await self._safe_update_status(
                     task_id=task_input.task_id,
                     status=AgentTaskStatus.BLOCKED,
                     last_message="Waiting for human input/approval",
@@ -195,7 +195,7 @@ class AgentTaskRunner:
                 Optional[List[str]], result.get("artifacts")
             )
 
-            self._safe_update_status(
+            await self._safe_update_status(
                 task_id=task_input.task_id,
                 status=AgentTaskStatus.COMPLETED,
                 last_message=str(final_summary),
@@ -211,7 +211,7 @@ class AgentTaskRunner:
 
         except Exception as e:
             logger.exception(f"Failure in LangGraph execution for task {session_id}")
-            self._safe_update_status(
+            await self._safe_update_status(
                 task_id=task_input.task_id,
                 status=AgentTaskStatus.FAILED,
                 last_message=str(e),

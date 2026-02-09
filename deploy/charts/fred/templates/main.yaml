@@ -1,4 +1,9 @@
 {{- range $name, $app := .Values.applications }}
+  {{- $appEnabled := true }}
+  {{- if hasKey $app "enabled" }}
+    {{- $appEnabled = $app.enabled }}
+  {{- end }}
+  {{- if $appEnabled }}
   {{- $ctx := dict "app" $app "root" $ }}
   {{- include "common-library.service" $ctx }}
   {{- include "common-library.service-metrics" $ctx }}
@@ -14,4 +19,5 @@
   {{- include "common-library.secrets-env" $ctx }}
   {{- include "common-library.job" $ctx }}
   {{- include "common-library.job-opensearch-index-creation" $ctx }}
+  {{- end }}
 {{- end }}

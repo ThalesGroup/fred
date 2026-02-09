@@ -17,10 +17,9 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fred_core.sql import BaseSqlStore
-from sqlalchemy import Column, DateTime, MetaData, String, Table, select
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.engine import Engine
+from fred_core.sql import AsyncBaseSqlStore
+from sqlalchemy import JSON, Column, DateTime, MetaData, String, Table, func, select
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from agentic_backend.core.chatbot.chat_schema import SessionSchema
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
@@ -33,8 +32,8 @@ class PostgresSessionStore(BaseSessionStore):
     PostgreSQL-backed session store using JSONB.
     """
 
-    def __init__(self, engine: Engine, table_name: str, prefix: str = "sessions_"):
-        self.store = BaseSqlStore(engine, prefix=prefix)
+    def __init__(self, engine: AsyncEngine, table_name: str, prefix: str = "sessions_"):
+        self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
 
         metadata = MetaData()
@@ -44,52 +43,78 @@ class PostgresSessionStore(BaseSessionStore):
             Column("session_id", String, primary_key=True),
             Column("user_id", String, index=True),
             Column("agent_name", String, index=True),
-            Column("session_data", JSONB),
+            Column("session_data", JSON),
             Column("updated_at", DateTime(timezone=True), index=True),
             keep_existing=True,
         )
 
-        metadata.create_all(self.store.engine)
-        logger.info("[SESSION][PG] Table ready: %s", self.table_name)
+        async def _create():
+            async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
+                await conn.run_sync(metadata.create_all)
 
-    def save(self, session: SessionSchema) -> None:
+        import asyncio
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_create())
+        except RuntimeError:
+            asyncio.run(_create())
+        logger.info("[SESSION][PG][ASYNC] Table ready: %s", self.table_name)
+
+    async def save(self, session: SessionSchema) -> None:
+        async with self.store.begin() as conn:
+            await self.save_with_conn(conn, session)
+
+    async def save_with_conn(self, conn, session: SessionSchema) -> None:
+        """
+        Same as save(), but reuses the provided AsyncConnection so callers can
+        bundle writes in a single transaction.
+        """
         payload: Dict[str, Any] = session.model_dump(mode="json")
-        with self.store.begin() as conn:
-            self.store.upsert(
-                conn,
-                self.table,
-                values={
-                    "session_id": session.id,
-                    "user_id": session.user_id,
-                    "agent_name": payload.get("agent_name", ""),
-                    "session_data": payload,
-                    "updated_at": session.updated_at,
-                },
-                pk_cols=["session_id"],
-            )
+        await self.store.upsert(
+            conn,
+            self.table,
+            values={
+                "session_id": session.id,
+                "user_id": session.user_id,
+                "agent_name": payload.get("agent_name", ""),
+                "session_data": payload,
+                "updated_at": session.updated_at,
+            },
+            pk_cols=["session_id"],
+        )
 
-    def get(self, session_id: str) -> Optional[SessionSchema]:
-        with self.store.begin() as conn:
-            row = conn.execute(
+    async def get(self, session_id: str) -> Optional[SessionSchema]:
+        async with self.store.begin() as conn:
+            result = await conn.execute(
                 select(self.table.c.session_data).where(
                     self.table.c.session_id == session_id
                 )
-            ).fetchone()
+            )
+            row = result.fetchone()
         if not row:
             return None
         return SessionSchema.model_validate(row[0])
 
-    def delete(self, session_id: str) -> None:
-        with self.store.begin() as conn:
-            conn.execute(
+    async def delete(self, session_id: str) -> None:
+        async with self.store.begin() as conn:
+            await conn.execute(
                 self.table.delete().where(self.table.c.session_id == session_id)
             )
 
-    def get_for_user(self, user_id: str) -> List[SessionSchema]:
-        with self.store.begin() as conn:
-            rows = conn.execute(
+    async def get_for_user(self, user_id: str) -> List[SessionSchema]:
+        async with self.store.begin() as conn:
+            result = await conn.execute(
                 select(self.table.c.session_data)
                 .where(self.table.c.user_id == user_id)
                 .order_by(self.table.c.updated_at.desc())
-            ).fetchall()
+            )
+            rows = result.fetchall()
         return [SessionSchema.model_validate(r[0]) for r in rows]
+
+    async def count_for_user(self, user_id: str) -> int:
+        async with self.store.begin() as conn:
+            result = await conn.execute(
+                select(func.count()).where(self.table.c.user_id == user_id)
+            )
+            return int(result.scalar_one())

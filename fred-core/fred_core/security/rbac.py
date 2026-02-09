@@ -61,7 +61,6 @@ class RBACProvider(AuthorizationProvider):
                 Resource.MCP_SERVERS: CRU,
                 Resource.MESSAGE_ATTACHMENTS: {Action.CREATE, Action.READ},
                 Resource.USER: READ_ONLY,
-                Resource.GROUP: READ_ONLY,
                 # Editor can create and use files in the filesystem endpoint
                 Resource.FILES: CRUD,
             },

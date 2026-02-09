@@ -77,22 +77,26 @@ class Georges(SimpleAgentFlow):
         The core single-step execution for a SimpleAgentFlow.
         Takes the current message history and returns the response message.
         """
-        logger.debug(f"Georges.arun START. Input message count: {len(messages)}")
-        logger.debug(f"Georges.arun Input messages: {messages}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Georges.arun START. Input message count: %s", len(messages))
+            logger.debug("Georges.arun Input messages: %s", messages)
 
         # 1) Get the tuned system prompt
         tpl = self.get_tuned_text("prompts.system") or ""
 
         # 2) Render tokens (like {agent_name}, {user_name}, etc.)
         sys = self.render(tpl)
-        logger.debug(f"Georges: Rendered final system prompt (len={len(sys)}).")
-        logger.debug(f"Georges: System prompt: {sys[:100]}...")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Georges: Rendered final system prompt (len=%s).", len(sys))
+            logger.debug("Georges: System prompt: %s", sys[:100] + "...")
 
         # 3) Prepend the system prompt to the messages
         llm_messages = self.with_system(sys, messages)
-        logger.debug(
-            f"Georges: Messages after adding system prompt. Count: {len(llm_messages)}"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Georges: Messages after adding system prompt. Count: %s",
+                len(llm_messages),
+            )
 
         # 4) Optionally add the chat context text (if available)
         chat_context = self.chat_context_text()
@@ -100,22 +104,27 @@ class Georges(SimpleAgentFlow):
             "prompts.include_chat_context"
         ) is None or bool(self.get_tuned_any("prompts.include_chat_context"))
         response_language = get_language(self.get_runtime_context()) or "English"
-        logger.debug(
-            "[AGENT] Georges prompt check: response_language=%s include_chat_context=%s system_prompt=%r chat_context=%r",
-            response_language,
-            include_chat_context,
-            sys,
-            chat_context,
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "[AGENT] Georges prompt check: response_language=%s include_chat_context=%s system_prompt=%r chat_context=%r",
+                response_language,
+                include_chat_context,
+                sys,
+                chat_context,
+            )
         llm_messages = self.with_chat_context_text(llm_messages)
-        logger.debug(
-            f"Georges: Messages after adding context text. Final count: {len(llm_messages)}"
-        )
-        logger.debug(
-            f"Georges: Final messages sent to LLM: {[type(m).__name__ for m in llm_messages]}"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Georges: Messages after adding context text. Final count: %s",
+                len(llm_messages),
+            )
+            logger.debug(
+                "Georges: Final messages sent to LLM: %s",
+                [type(m).__name__ for m in llm_messages],
+            )
 
         # 5) Invoke the model
-        response = await self.model.ainvoke(llm_messages)
+        async with self.phase("llm_invoke"):
+            response = await self.model.ainvoke(llm_messages)
         logger.debug("[AGENTS] Georges: LLM call successful (await complete).")
         return self.ensure_aimessage(response)

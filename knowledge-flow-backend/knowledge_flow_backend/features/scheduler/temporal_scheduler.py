@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
+from uuid import uuid4
 
 from fastapi import BackgroundTasks
 from fred_core import KeycloakUser
@@ -28,7 +29,7 @@ from knowledge_flow_backend.features.scheduler.base_scheduler import BaseSchedul
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     PipelineDefinition,
 )
-from knowledge_flow_backend.features.scheduler.workflow import Process
+from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors, Process
 
 logger = logging.getLogger(__name__)
 
@@ -82,3 +83,21 @@ class TemporalScheduler(BaseScheduler):
         background_tasks: Optional[BackgroundTasks] = None,
     ) -> WorkflowHandle:
         raise NotImplementedError("Library processing is not yet supported with the Temporal scheduler.")
+
+    async def store_fast_vectors(self, payload: dict) -> dict:
+        client: Client = await self._client_provider.get_client()
+        return await client.execute_workflow(
+            FastStoreVectors.run,
+            payload,
+            id=f"fast-ingest-{uuid4().hex}",
+            task_queue=self._scheduler_config.temporal.task_queue,
+        )
+
+    async def delete_fast_vectors(self, payload: dict) -> dict:
+        client: Client = await self._client_provider.get_client()
+        return await client.execute_workflow(
+            FastDeleteVectors.run,
+            payload,
+            id=f"fast-delete-{uuid4().hex}",
+            task_queue=self._scheduler_config.temporal.task_queue,
+        )

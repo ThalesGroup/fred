@@ -96,6 +96,13 @@ class AgentChatOptions(BaseModel):
             "for this message (session-scoped context)."
         ),
     )
+    include_corpus_in_search: bool = Field(
+        default=True,
+        description=(
+            "Allow vector search on corpus documents. If false, corpus retrieval is disabled "
+            "for this agent even when the client requests it."
+        ),
+    )
     record_audio_files: bool = Field(
         default=False,
         description=(
@@ -225,6 +232,12 @@ class AIConfig(BaseModel):
         1024,
         description="Maximum number of agents that can be cached in memory for faster access.",
     )
+    max_concurrent_sessions_per_user: int = Field(
+        10,
+        description=(
+            "Maximum number of concurrent sessions allowed per user. This is used to prevent abuse and manage resource usage."
+        ),
+    )
     max_attached_files_per_user: int = Field(
         20,
         description="Maximum number of files a user can attach across all sessions.",
@@ -267,6 +280,10 @@ class Properties(BaseModel):
     agentsNicknamePlural: str = "agents"
     agentIconPath: str | None = None
     contactSupportLink: str | None = None
+    agentIconName: str | None = Field(
+        default=None,
+        description="Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme.",
+    )
 
 
 class FrontendSettings(BaseModel):

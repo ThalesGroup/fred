@@ -121,6 +121,20 @@ class AssetService:  # RENAMED from AgentAssetService
         content_type: Optional[str],
         file_name: Optional[str] = None,
     ):
+        norm_key = self._normalize_key(key)
+        storage_key = self._prefix(scope, entity_id) + norm_key
+        ct = content_type or (mimetypes.guess_type(file_name or norm_key)[0]) or "application/octet-stream"
+
+        # For agent-generated assets, skip ingestion and store directly
+        # This avoids processing overhead and potential errors for binary outputs
+        if scope == "agents" or scope == "users":
+            info = self.store.put_object(storage_key, stream, content_type=ct)
+            # Set file_name for proper display
+            info.file_name = file_name or norm_key
+            return self._to_meta(scope, entity_id, user, norm_key, info)
+
+        # Legacy path: Full ingestion for other scopes (currently unused)
+        # This is kept for backward compatibility but may be removed in the future
         ingestion_service = IngestionService()
         tag_service = TagService()
 
@@ -162,9 +176,6 @@ class AssetService:  # RENAMED from AgentAssetService
         await ingestion_service.save_metadata(user, metadata=metadata)
 
         # 5️⃣ Store the file in the content store with the correct name
-        norm_key = self._normalize_key(key)
-        storage_key = self._prefix(scope, entity_id) + norm_key
-        ct = content_type or (mimetypes.guess_type(file_name or norm_key)[0]) or "application/octet-stream"
         info = self.store.put_object(storage_key, final_file_path.open("rb"), content_type=ct)
         info.document_uid = metadata.document_uid
 

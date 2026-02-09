@@ -50,7 +50,7 @@ You can define environment-based credentials using a .env file at the project ro
 
 ```env
 SQL_USERNAME=admin
-SQL_PASSWORD=secret123
+TABULAR_POSTGRES_PASSWORD=secret123
 ```
 If both the YAML file and .env define username or password, **the YAML value takes precedence.**
 
@@ -87,6 +87,5 @@ For debugging, host and driver info can also be printed if needed.
 # Next
 
 - Update the CSV processing pipeline to save the processed data to a separate database from the one loaded.
-
 
 

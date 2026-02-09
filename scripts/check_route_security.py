@@ -9,9 +9,11 @@ import os
 import sys
 from pathlib import Path
 from typing import Dict, List, Set, Optional
+import importlib
+import asyncio
 
 
-def setup_backend_environment(backend_dir: Path):
+def setup_backend_environment(backend_dir: Path) -> Path:
     """Setup environment to import the FastAPI app."""
     config_dir = backend_dir / "config"
     # --- Flexible App Directory Discovery ---
@@ -51,6 +53,33 @@ def setup_backend_environment(backend_dir: Path):
     os.environ.setdefault("ENV_FILE", str(config_dir / ".env"))
     os.environ.setdefault("CONFIG_FILE", str(config_dir / "configuration.yaml"))
     os.environ.setdefault("OPENAI_API_KEY", "sk-dummy-key-for-static-analysis")
+    return app_dir
+
+
+def shutdown_app_context(app_dir: Path) -> None:
+    """
+    Best-effort shutdown of ApplicationContext resources (thread pools, executors)
+    to avoid hanging processes after static inspection.
+    """
+    try:
+        module_name = f"{app_dir.name}.application_context"
+        ctx_module = sys.modules.get(module_name)
+        if ctx_module is None:
+            ctx_module = importlib.import_module(module_name)
+
+        get_ctx = getattr(ctx_module, "get_app_context", None)
+        if get_ctx:
+            ctx = get_ctx()
+            if hasattr(ctx, "shutdown"):
+                try:
+                    asyncio.run(ctx.shutdown())
+                except RuntimeError:
+                    # Event loop already running; ignore
+                    pass
+            elif hasattr(ctx, "shutdown_io_executor"):
+                ctx.shutdown_io_executor()
+    except Exception:
+        pass
 
 
 def get_route_function_info(app, path: str, method: str) -> Optional[tuple[str, int]]:
@@ -136,8 +165,9 @@ def check_route_security(backend_dir: Path) -> tuple[bool, List[Dict]]:
     Returns:
         tuple: (is_secure, unsecured_routes)
     """
+    app_dir: Optional[Path] = None
     try:
-        setup_backend_environment(backend_dir)
+        app_dir = setup_backend_environment(backend_dir)
         
         # Import and create the FastAPI app
         from main import create_app
@@ -184,6 +214,9 @@ def check_route_security(backend_dir: Path) -> tuple[bool, List[Dict]]:
         import traceback
         traceback.print_exc()
         return False, []
+    finally:
+        if app_dir:
+            shutdown_app_context(app_dir)
 
 
 def main():

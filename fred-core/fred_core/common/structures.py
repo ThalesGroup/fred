@@ -70,16 +70,36 @@ class DuckdbStoreConfig(BaseModel):
 
 class PostgresStoreConfig(BaseModel):
     type: Literal["postgres"] = "postgres"
-    host: str = Field(..., description="PostgreSQL host")
+    host: Optional[str] = Field(default=None, description="PostgreSQL host")
     port: int = 5432
-    database: str
-    username: str
+    sqlite_path: Optional[str] = Field(
+        default=None,
+        description="Path to the SQLite database file (for local dev/testing).",
+    )
+    database: Optional[str] = None
+    username: Optional[str] = None
     password: Optional[str] = Field(
-        default_factory=lambda: os.getenv("POSTGRES_PASSWORD")
+        default_factory=lambda: os.getenv("FRED_POSTGRES_PASSWORD")
     )
     echo: bool = Field(default=False, description="SQLAlchemy echo flag.")
     pool_size: Optional[int] = Field(
         default=None, description="Optional pool size for the engine."
+    )
+    max_overflow: Optional[int] = Field(
+        default=None,
+        description="Optional max_overflow for SQLAlchemy pool (defaults to SQLAlchemy's 10 if unset).",
+    )
+    pool_timeout: Optional[int] = Field(
+        default=None,
+        description="Seconds to wait for a connection from the pool before timing out.",
+    )
+    pool_recycle: Optional[int] = Field(
+        default=None,
+        description="Recycle connections after this many seconds (prevents stale TCP / server timeouts).",
+    )
+    pool_pre_ping: Optional[bool] = Field(
+        default=None,
+        description="Enable SQLAlchemy pool_pre_ping to evict stale connections.",
     )
     connect_args: Optional[dict[str, Any]] = Field(
         default=None, description="Optional connect_args passed to SQLAlchemy."
@@ -90,6 +110,7 @@ class PostgresStoreConfig(BaseModel):
 
 
 class PostgresTableConfig(BaseModel):
+    # Allow reusing the same table-oriented config for local SQLite runs.
     type: Literal["postgres"]
     table: str = Field(..., description="Table name used by the store.")
     prefix: Optional[str] = Field(
@@ -112,8 +133,13 @@ class SQLStorageConfig(BaseModel):
     database: Optional[str] = None
     host: Optional[str] = None
     port: Optional[int] = None
-    username: Optional[str] = Field(default_factory=lambda: os.getenv("SQL_USERNAME"))
-    password: Optional[str] = Field(default_factory=lambda: os.getenv("SQL_PASSWORD"))
+    username: Optional[str] = Field(
+        default_factory=lambda: os.getenv("TABULAR_POSTGRES_USERNAME")
+    )
+    # Prefer TABULAR_POSTGRES_PASSWORD; fall back to legacy SQL_PASSWORD for backward compatibility.
+    password: Optional[str] = Field(
+        default_factory=lambda: os.getenv("TABULAR_POSTGRES_PASSWORD")
+    )
     path: Optional[str] = None
 
     @model_validator(mode="after")

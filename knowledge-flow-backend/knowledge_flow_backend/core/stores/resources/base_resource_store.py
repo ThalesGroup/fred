@@ -43,27 +43,27 @@ class BaseResourceStore(ABC):
     """
 
     @abstractmethod
-    def get_all_resources(self, kind: ResourceKind) -> list[Resource]:
+    async def get_all_resources(self, kind: ResourceKind) -> list[Resource]:
         pass
 
     @abstractmethod
-    def get_resource_by_id(self, resource_id: str) -> Resource:
+    async def get_resource_by_id(self, resource_id: str) -> Resource:
         pass
 
     @abstractmethod
-    def create_resource(self, resource: Resource) -> Resource:
+    async def create_resource(self, resource: Resource) -> Resource:
         pass
 
     @abstractmethod
-    def update_resource(self, resource_id: str, resource: Resource) -> Resource:
+    async def update_resource(self, resource_id: str, resource: Resource) -> Resource:
         pass
 
     @abstractmethod
-    def delete_resource(self, resource_id: str) -> None:
+    async def delete_resource(self, resource_id: str) -> None:
         pass
 
     @abstractmethod
-    def get_resources_in_tag(self, tag_id: str) -> List[Resource]:
+    async def get_resources_in_tag(self, tag_id: str) -> List[Resource]:
         """
         Retrieve all resources associated with a specific tag.
         Raises:

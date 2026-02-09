@@ -34,7 +34,8 @@ run-worker: dev tools-check ## Run an ingestion worker (requires Temporal daemon
 	PYTHONPATH=. \
 	LOG_LEVEL=$(LOG_LEVEL) \
 	ENV_FILE=$(ENV_FILE) \
-	$(PYTHON) $(PY_PACKAGE)/main_worker.py --config-path ./config/configuration_worker.yaml
+	CONFIG_FILE="./config/configuration_worker.yaml" \
+	$(PYTHON) $(PY_PACKAGE)/main_worker.py
 
 .PHONY: docker-run
 docker-run: ## Run the app in Docker

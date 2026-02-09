@@ -66,7 +66,7 @@ class AgentService:
         Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
         """
         # Guard: disallow duplicates at the store level (with helpful diagnostics)
-        existing = self._safe_get(name)
+        existing = await self._safe_get(name)
         if existing:
             if not getattr(existing, "class_path", None):
                 logger.warning(
@@ -75,7 +75,7 @@ class AgentService:
                     name,
                 )
                 try:
-                    self.store.delete(name)
+                    await self.store.delete(name)
                 except Exception:
                     logger.exception(
                         "Failed to delete stale agent '%s' lacking class_path", name
@@ -114,7 +114,7 @@ class AgentService:
                     "a2a_card": card_payload,
                 },
             )
-            self.agent_manager.create_dynamic_agent(agent_settings, tuning)
+            await self.agent_manager.create_dynamic_agent(agent_settings, tuning)
         else:
             agent_settings = Agent(
                 name=name,
@@ -125,7 +125,9 @@ class AgentService:
                 chat_options=AgentChatOptions(),
                 mcp_servers=[],  # Empty list by default; to be configured later
             )
-            self.agent_manager.create_dynamic_agent(agent_settings, BASIC_REACT_TUNING)
+            await self.agent_manager.create_dynamic_agent(
+                agent_settings, BASIC_REACT_TUNING
+            )
 
     @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
     async def update_agent(
@@ -148,7 +150,7 @@ class AgentService:
         await self.agent_manager.delete_agent(agent_name)
 
         # Delete from DuckDB
-        self.store.delete(agent_name)
+        await self.store.delete(agent_name)
 
         return {"message": f"✅ Agent '{agent_name}' deleted successfully."}
 
@@ -213,10 +215,10 @@ class AgentService:
             return base.rstrip("/"), path
         return cleaned.rstrip("/"), default_path
 
-    def _safe_get(self, name: str) -> Optional[AgentSettings]:
+    async def _safe_get(self, name: str) -> Optional[AgentSettings]:
         """Wrapper to protect create/update flows from store.get anomalies."""
         try:
-            return self.store.get(name)
+            return await self.store.get(name)
         except Exception:
             logger.warning(
                 "store.get raised unexpectedly while checking existence for agent=%s",

@@ -55,146 +55,158 @@ input_processors:
   - prefix: ".xlsm"
     class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
 
-# -----------------------------------------------------------------------------
-# OUTPUT PROCESSORS (Optional)
-# -----------------------------------------------------------------------------
-# Optional: You can override the default behavior for output processing.
-# If not defined, the system automatically selects based on input type:
-#   - Markdown files → VectorizationProcessor
-#   - Tabular files (CSV, XLSX) → TabularProcessor
-#
-# You can specialize behavior by mapping file extensions to custom classes.
-#
-# Example to OVERRIDE default behavior:
-#
-# output_processors:
-#   - prefix: ".docx"
-#     class_path: knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor
-#   - prefix: ".csv"
-#     class_path: knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor.TabularProcessor
-#   - prefix: ".xlsx"
-#     class_path: knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor.TabularProcessor
-#   - prefix: ".pptx"
-#     class_path: knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor
-#
-# To SKIP processing for a specific file type, you can specify an empty output processor.
-#
-# output_processors:
-#  - prefix: ".txt"
-#    class_path: knowledge_flow_backend.core.processors.output.empty_output_processor.EmptyOutputProcessor
+# Optional: fast processors used for chat attachments (/fast/text, /fast/ingest).
+# If omitted, defaults to the Unstructured fast processor.
+attachment_processors:
+  - prefix: "*"
+    class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_unstructured_text_processor.FastUnstructuredTextProcessingProcessor
 
 content_storage:
-  # The content store type can be either "local" or "minio" or "gcs"
-  # If you are using minio, make sure to set the following environment variables:
-  # - MINIO_SECRET_KEY
-  # If you are using gcs, make sure to set the following environment variables:
-  # - GCS_PROJECT_ID
-  # - GCS_BUCKET_NAME
-  # - GCS_CREDENTIALS_PATH
-  # If you are using local storage, make sure to set the following environment variable:
-  # - LOCAL_CONTENT_STORAGE_PATH default to '~/.knowledge-flow/content-store'
-  type: "local"
-  ################################################
-  # Example using MinIO as content storage backend
-  ################################################
-  # type: "minio"
-  # endpoint: localhost:9000
-  # access_key: minioadmin
-  # secret_key: minioadmin # Overrides the MINIO_SECRET_KEY environment variable
-  # secure: False
-  # bucket_name: app-bucket
+  type: minio
+  endpoint: http://localhost:9000
+  access_key: "admin"
+  bucket_name: "knowledge-flow-content"
+  secure: false
 
-metadata_storage:
-  # Metadata Storage Configuration
-  #
-  # Available backends:
-  # - local       → stores metadata in a JSON file on disk
-  # - opensearch  → stores metadata in a persistent OpenSearch index (recommended for production)
-  #
-  # ✅ Default is "local" for easy startup. No external services are needed.
-  # If you are using local storage, make sure to set the following environment variable:
-  # - LOCAL_METADATA_STORAGE_PATH default to '~/.knowledge-flow/metadata-store.json'
-  type: "local"
-  root_path: ~/.fred/knowledge-flow/metadata-store.json
+document_sources:
+  fred:
+    type: push
+    description: "Documents manually uploaded by users"
 
-  # --- Example: OpenSearch configuration
-  #
-  # type: opensearch
-  # host: https://localhost:9200              # OpenSearch host
-  # secure: true                              # Use HTTPS (set to false for HTTP)
-  # verify_certs: false                       # Whether to verify TLS certificates
-  # metadata_index: metadata-index            # Index for storing metadata
-  # vector_index: vector-index                # Vector index (required if reusing OpenSearch backend)
-  # ➤ Required environment variables (not stored in this file):
-  #   OPENSEARCH_USER=admin
-  #   OPENSEARCH_PASSWORD=xxx
-
-# --- Vector storage ---
-# type: one of [in_memory, opensearch, weaviate]
-vector_storage:
-  type: in_memory
-  # type: opensearch
-  # host: https://localhost:9200              # Opensearch HTTP URL
-  # secure: true                              # Use HTTPS (set to false for HTTP)
-  # verify_certs: false                       # Whether to verify TLS certificates
-  # index: vector-index                       # Index name for vectors
-
-tabular_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
-
-# --- Catalog storage ---
-# type: one of [duckdb]
-catalog_storage:
-  type: "duckdb"
-  duckdb_path: "~/.fred/knowledge-flow/db.duckdb"
-
-# --- Embedding backend ---
-# type: string (e.g., openai, azure-openai, ollama, etc.)
+chat_model:
+  provider: openai
+  name: gpt-4o-mini # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
+  settings:
+    temperature: 0
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 30.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
 embedding_model:
-  type:
-    "openai"
-    # -----------------------------------------------------------------------------
-  # EMBEDDING BACKEND
-  # -----------------------------------------------------------------------------
-  # Set the embedding backend to use:
-  #   - "openai"      → Use OpenAI's public API
-  #   - "azure-openai" → Use Azure OpenAI service directly
-  #   - "azure-apim"   → Use Azure OpenAI via Azure APIM Gateway (OAuth2 + subscription key)
-  #   - "ollama"      → Use Ollama's API
-  #
-  # Required environment variables based on the selected backend:
-  #
-  # BACKEND: "openai"
-  # -------------------------------------
-  # - OPENAI_API_KEY
-  # - OPENAI_API_BASE (optional if using default)
-  # - OPENAI_API_VERSION (optional)
-  #
-  # BACKEND: "azure-openai"
-  # -------------------------------------
-  # - AZURE_OPENAI_API_KEY
-  # - AZURE_OPENAI_ENDPOINT
-  # - AZURE_OPENAI_API_VERSION
-  # - AZURE_DEPLOYMENT_EMBEDDING
-  #
-  # BACKEND: "azure-apim"
-  # -------------------------------------
-  # - AZURE_TENANT_ID
-  # - AZURE_AD_CLIENT_ID
-  # - AZURE_AD_CLIENT_SECRET
-  # - AZURE_AD_CLIENT_SCOPE
-  # - AZURE_APIM_BASE_URL
-  # - AZURE_APIM_SUBSCRIPTION_KEY
-  # - AZURE_OPENAI_API_VERSION
-  # - AZURE_DEPLOYMENT_EMBEDDING
-  #
-  # BACKEND: "ollama"
-  # -------------------------------------
-  # - OLLAMA_API_URL (optional)
-  # - OLLAMA_EMBEDDING_MODEL_NAME
-  # - OLLAMA_VISION_MODEL_NAME (optional, for vision tasks)
-  #
-  # All environment variables are expected to be present in the .env file
-  # pointed to by the ENV_FILE variable in your Makefile.
-  #
+  provider: openai
+  name: text-embedding-3-large # or text-embedding-3-small
+  settings:
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 30.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
+
+vision_model:
+  provider: openai
+  name: gpt-4o-mini # or gpt-4o if you want higher fidelity
+  settings:
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 30.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
+    temperature: 0 # optional
+crossencoder_model:
+  name: cross-encoder/ms-marco-MiniLM-L-12-v2
+  settings:
+    online: true
+    local_path: ~/.cache/huggingface/hub
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 30.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
+
+storage:
+  postgres:
+    host: localhost
+    port: 5432
+    database: fred
+    username: fred
+
+  opensearch:
+    host: https://localhost:9200
+    secure: true
+    verify_certs: false
+    username: admin
+
+  catalog_store:
+    type: "postgres"
+    table: catalog
+
+  prompt_store:
+    type: "postgres"
+    table: prompt
+
+  resource_store:
+    type: "postgres"
+    table: resource
+
+  kpi_store:
+    type: "opensearch"
+    index: kpi-index
+
+  tag_store:
+    type: "postgres"
+    table: tag
+
+  metadata_store:
+    type: "postgres"
+    table: metadata
+
+  vector_store:
+    type: opensearch
+    index: vector-index
+    # Default bulk size for vector insertions is 500. Increase if you have
+    # enough memory and want faster ingestion. Or if run into ingestion errors
+    # while ingesting large documents.
+    bulk_size: 1000
+
+  log_store:
+    type: "opensearch"
+    index: log-index
+
+  tabular_stores:
+    base_database:
+      type: "sql"
+      mode: "read_and_write"
+      driver: "postgresql+psycopg2"
+      host: "localhost"
+      port: 5432
+      database: "data"
+      path: null # (important: remove the `path` default value)
+      username: "tabular"
+
+mcp:
+  reports_enabled: true
+  kpi_enabled: true
+  tabular_enabled: true
+  statistic_enabled: true
+  text_enabled: true
+  templates_enabled: true
+  resources_enabled: true
+  opensearch_ops_enabled: true
+  neo4j_enabled: false
+  filesystem_enabled: true
+
+filesystem:
+  type: minio
+  endpoint: http://localhost:9000
+  access_key: admin
+  bucket_name: filesystem
+  secure: false
+
+# Workspace storage layout (paths inside the bucket/filesystem)
+workspace_layout:
+  user_pattern: "users/{user_id}/{key}"
+  agent_config_pattern: "agents/{agent_id}/config/{key}"
+  agent_user_pattern: "agents/{agent_id}/users/{user_id}/{key}"
