@@ -4,7 +4,6 @@ Generic script to generate OpenAPI JSON specification for any FastAPI backend
 without starting the server.
 """
 
-import asyncio
 import json
 import os
 import sys
