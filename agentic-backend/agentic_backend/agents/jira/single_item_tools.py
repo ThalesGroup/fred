@@ -1,6 +1,6 @@
 """Single-item add/remove tools for Jira agent."""
 
-from typing import cast
+import json
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import SystemMessage, ToolMessage
@@ -33,6 +33,11 @@ class SingleItemTools:
     def _get_langfuse_handler(self):
         """Get Langfuse handler from parent agent."""
         return self.agent._get_langfuse_handler()
+
+    def _build_llm_config(self) -> RunnableConfig:
+        """Build a RunnableConfig with Langfuse callback if enabled."""
+        handler = self._get_langfuse_handler()
+        return {"callbacks": [handler]} if handler else {}
 
     async def _expand_requirement(
         self,
@@ -76,15 +81,15 @@ Génère une description de l'exigence qui:
         model = get_default_chat_model().with_structured_output(
             QuickRequirement, method="json_schema"
         )
-        langfuse_handler = self._get_langfuse_handler()
-        config: RunnableConfig = (
-            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
-        )
-        result = cast(
-            QuickRequirement,
-            await model.ainvoke([SystemMessage(content=prompt)], config=config),
-        )
-        return result.model_dump()
+        try:
+            result = await model.ainvoke(
+                [SystemMessage(content=prompt)], config=self._build_llm_config()
+            )
+            if not isinstance(result, QuickRequirement):
+                result = QuickRequirement.model_validate(result)
+            return result.model_dump()
+        except Exception as e:
+            raise RuntimeError(f"Erreur lors de la génération de l'exigence: {e}") from e
 
     async def _expand_user_story(
         self,
@@ -110,22 +115,22 @@ Génère:
 - Description au format "En tant que [persona], je veux [action], afin de [bénéfice]"
 - 2-4 critères d'acceptation avec étapes Gherkin (Étant donné/Quand/Alors)
 - Story points (Fibonacci: 1, 2, 3, 5, 8, 13, 21)
-- Priorité (High/Medium/Low)
+- Priorité (Haute/Moyenne/Basse)
 - 1 à 3 questions de clarification pour lever les ambiguïtés
 """
 
         model = get_default_chat_model().with_structured_output(
             QuickUserStory, method="json_schema"
         )
-        langfuse_handler = self._get_langfuse_handler()
-        config: RunnableConfig = (
-            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
-        )
-        result = cast(
-            QuickUserStory,
-            await model.ainvoke([SystemMessage(content=prompt)], config=config),
-        )
-        return result.model_dump()
+        try:
+            result = await model.ainvoke(
+                [SystemMessage(content=prompt)], config=self._build_llm_config()
+            )
+            if not isinstance(result, QuickUserStory):
+                result = QuickUserStory.model_validate(result)
+            return result.model_dump()
+        except Exception as e:
+            raise RuntimeError(f"Erreur lors de la génération de la User Story: {e}") from e
 
     async def _expand_test(
         self,
@@ -168,15 +173,15 @@ Génère:
         model = get_default_chat_model().with_structured_output(
             QuickTest, method="json_schema"
         )
-        langfuse_handler = self._get_langfuse_handler()
-        config: RunnableConfig = (
-            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
-        )
-        result = cast(
-            QuickTest,
-            await model.ainvoke([SystemMessage(content=prompt)], config=config),
-        )
-        return result.model_dump()
+        try:
+            result = await model.ainvoke(
+                [SystemMessage(content=prompt)], config=self._build_llm_config()
+            )
+            if not isinstance(result, QuickTest):
+                result = QuickTest.model_validate(result)
+            return result.model_dump()
+        except Exception as e:
+            raise RuntimeError(f"Erreur lors de la génération du test: {e}") from e
 
     def get_add_requirement_tool(self):
         """Tool to add a single requirement from a title."""
@@ -436,7 +441,7 @@ Génère:
                     item_type: [{"__remove__": item_id}],
                     "messages": [
                         ToolMessage(
-                            f"✓ {type_labels[item_type]} {item_id} supprimée",
+                            f"✓ {type_labels[item_type]} {item_id} supprimé(e)",
                             tool_call_id=runtime.tool_call_id,
                         )
                     ],
@@ -586,7 +591,7 @@ Génère:
                 summary: Nouveau titre/résumé (optionnel)
                 description: Nouvelle description (optionnel)
                 epic_name: Nouveau nom d'Epic (optionnel)
-                priority: Nouvelle priorité - "High", "Medium", ou "Low" (optionnel)
+                priority: Nouvelle priorité - "Haute", "Moyenne", ou "Basse" (optionnel)
                 story_points: Nouveaux story points - Fibonacci: 1, 2, 3, 5, 8, 13, 21 (optionnel)
                 labels: Nouvelles étiquettes (optionnel)
                 requirement_ids: Nouveaux IDs d'exigences liées (optionnel)
@@ -635,7 +640,7 @@ Génère:
                 update_fields["epic_name"] = epic_name
 
             if priority is not None:
-                valid_priorities = ["High", "Medium", "Low"]
+                valid_priorities = ["Haute", "Moyenne", "Basse"]
                 if priority not in valid_priorities:
                     return Command(
                         update={
@@ -973,10 +978,7 @@ Génère:
                     }
                 )
 
-            # Handle "all" case
             if ids == "all":
-                import json
-
                 return Command(
                     update={
                         "messages": [
@@ -988,26 +990,17 @@ Génère:
                     }
                 )
 
-            # Handle list of IDs
             if not isinstance(ids, list):
                 ids = [ids]
 
             found = []
             missing = []
-
             for item_id in ids:
-                item = None
-                for req in requirements:
-                    if req.get("id") == item_id:
-                        item = req
-                        break
-
+                item = next((r for r in requirements if r.get("id") == item_id), None)
                 if item:
                     found.append(item)
                 else:
                     missing.append(item_id)
-
-            import json
 
             message_parts = []
             if found:
@@ -1058,10 +1051,7 @@ Génère:
                     }
                 )
 
-            # Handle "all" case
             if ids == "all":
-                import json
-
                 return Command(
                     update={
                         "messages": [
@@ -1073,26 +1063,17 @@ Génère:
                     }
                 )
 
-            # Handle list of IDs
             if not isinstance(ids, list):
                 ids = [ids]
 
             found = []
             missing = []
-
             for item_id in ids:
-                item = None
-                for story in user_stories:
-                    if story.get("id") == item_id:
-                        item = story
-                        break
-
+                item = next((s for s in user_stories if s.get("id") == item_id), None)
                 if item:
                     found.append(item)
                 else:
                     missing.append(item_id)
-
-            import json
 
             message_parts = []
             if found:
@@ -1143,10 +1124,7 @@ Génère:
                     }
                 )
 
-            # Handle "all" case
             if ids == "all":
-                import json
-
                 return Command(
                     update={
                         "messages": [
@@ -1158,26 +1136,17 @@ Génère:
                     }
                 )
 
-            # Handle list of IDs
             if not isinstance(ids, list):
                 ids = [ids]
 
             found = []
             missing = []
-
             for item_id in ids:
-                item = None
-                for test in tests:
-                    if test.get("id") == item_id:
-                        item = test
-                        break
-
+                item = next((t for t in tests if t.get("id") == item_id), None)
                 if item:
                     found.append(item)
                 else:
                     missing.append(item_id)
-
-            import json
 
             message_parts = []
             if found:

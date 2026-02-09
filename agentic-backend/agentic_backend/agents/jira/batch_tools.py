@@ -2,14 +2,13 @@
 
 import json
 import logging
-import re
-from typing import cast
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
+from agentic_backend.agents.jira.helpers import get_max_id_number
 from agentic_backend.agents.jira.pydantic_models import (
     RequirementsList,
     TestsList,
@@ -32,6 +31,11 @@ class BatchTools:
     def _get_langfuse_handler(self):
         """Get Langfuse handler from parent agent."""
         return self.agent._get_langfuse_handler()
+
+    def _build_llm_config(self) -> RunnableConfig:
+        """Build a RunnableConfig with Langfuse callback if enabled."""
+        handler = self._get_langfuse_handler()
+        return {"callbacks": [handler]} if handler else {}
 
     def get_requirements_tool(self):
         """Tool that generates requirements using a separate LLM call."""
@@ -94,14 +98,9 @@ Règles:
                 )
             ]
 
-            langfuse_handler = self._get_langfuse_handler()
-            config: RunnableConfig = (
-                {"callbacks": [langfuse_handler]} if langfuse_handler else {}
-            )
-
-            response = cast(
-                RequirementsList, await model.ainvoke(messages, config=config)
-            )
+            response = await model.ainvoke(messages, config=self._build_llm_config())
+            if not isinstance(response, RequirementsList):
+                response = RequirementsList.model_validate(response)
             requirements = [r.model_dump() for r in response.items]
 
             return Command(
@@ -175,15 +174,10 @@ Exigences à respecter:
         existing_stories = runtime.state.get("user_stories") or []
 
         # Determine the next ID hint based on existing stories
-        next_id_hint = "01"
-        if existing_stories:
-            max_num = 0
-            for story in existing_stories:
-                match = re.search(r"US-(\d+)", story.get("id", ""))
-                if match:
-                    max_num = max(max_num, int(match.group(1)))
-            next_id_hint = f"{max_num + 1:02d}"
+        max_num = get_max_id_number(existing_stories, r"US-(\d+)")
+        next_id_hint = f"{max_num + 1:02d}"
 
+        if existing_stories:
             existing_info = [
                 {
                     "id": story.get("id"),
@@ -225,14 +219,9 @@ Ni plus, ni moins. Exactement {quantity} éléments."""
             )
         ]
 
-        langfuse_handler = self._get_langfuse_handler()
-        config: RunnableConfig = (
-            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
-        )
-
-        response = cast(
-            UserStoryTitlesList, await model.ainvoke(messages, config=config)
-        )
+        response = await model.ainvoke(messages, config=self._build_llm_config())
+        if not isinstance(response, UserStoryTitlesList):
+            response = UserStoryTitlesList.model_validate(response)
         return [t.model_dump() for t in response.items]
 
     async def _generate_user_story_batch(
@@ -281,7 +270,7 @@ Contexte projet extrait des documents:
 
 **Métadonnées:**
 - **Estimation:** Fibonacci (1, 2, 3, 5, 8, 13, 21)
-- **Priorisation:** High, Medium, Low
+- **Priorisation:** Haute, Moyenne, Basse
 
 **Questions de clarification :** Pour chaque story, ajoute 1 à 3 questions précises pour lever les ambiguïtés.
 
@@ -312,12 +301,9 @@ Exigences à respecter:
             )
         ]
 
-        langfuse_handler = self._get_langfuse_handler()
-        config: RunnableConfig = (
-            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
-        )
-
-        response = cast(UserStoriesList, await model.ainvoke(messages, config=config))
+        response = await model.ainvoke(messages, config=self._build_llm_config())
+        if not isinstance(response, UserStoriesList):
+            response = UserStoriesList.model_validate(response)
         return [s.model_dump() for s in response.items]
 
     def get_user_stories_tool(self):
@@ -330,14 +316,13 @@ Exigences à respecter:
             quantity: int | None = None,
         ):
             """
-            Génère TOUTES les User Stories complètes à partir du contexte projet en une seule invocation.
+            Génère des User Stories complètes à partir du contexte projet en une seule invocation.
 
-            Cet outil est pour la GÉNÉRATION INITIALE uniquement (quand aucune User Story n'existe).
-            Il génère automatiquement les titres puis génère toutes les stories par lots internes.
+            Cet outil génère automatiquement les titres puis développe toutes les stories par lots internes.
+            Il peut être utilisé même si des User Stories existent déjà : les stories existantes
+            seront prises en compte pour éviter les doublons et continuer la numérotation.
 
-            ⚠️ NE PAS UTILISER si des User Stories existent déjà!
-            Pour ajouter des User Stories de manière incrémentale (ex: après add_requirement),
-            utilise add_user_story() plusieurs fois à la place.
+            Pour ajouter une seule User Story, utilise plutôt add_user_story().
 
             IMPORTANT:
             - AVANT d'appeler cet outil, tu DOIS faire une recherche documentaire avec les outils MCP
@@ -389,7 +374,7 @@ Exigences à respecter:
 
             # Process batches
             while pending_titles:
-                current_batch_size = min(batch_size, total_to_generate)
+                current_batch_size = min(batch_size, len(pending_titles))
                 titles_batch = pending_titles[:current_batch_size]
                 pending_titles = pending_titles[current_batch_size:]
 
@@ -458,15 +443,8 @@ Pour chaque User Story, génère des titres de tests couvrant:
         existing_tests = runtime.state.get("tests") or []
 
         # Determine the next ID hint based on existing tests
-        next_id_hint = "01"
-        all_existing_ids = [t.get("id", "") for t in existing_tests]
-        if all_existing_ids:
-            max_num = 0
-            for id_str in all_existing_ids:
-                match = re.search(r"SC-(\d+)", id_str)
-                if match:
-                    max_num = max(max_num, int(match.group(1)))
-            next_id_hint = f"{max_num + 1:02d}"
+        max_num = get_max_id_number(existing_tests, r"SC-(\d+)")
+        next_id_hint = f"{max_num + 1:02d}"
 
         # Build existing tests section to avoid duplicates
         existing_tests_section = ""
@@ -511,12 +489,9 @@ Ni plus, ni moins. Exactement {quantity} éléments."""
             )
         ]
 
-        langfuse_handler = self._get_langfuse_handler()
-        config: RunnableConfig = (
-            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
-        )
-
-        response = cast(TestTitlesList, await model.ainvoke(messages, config=config))
+        response = await model.ainvoke(messages, config=self._build_llm_config())
+        if not isinstance(response, TestTitlesList):
+            response = TestTitlesList.model_validate(response)
         return [t.model_dump() for t in response.items]
 
     async def _generate_test_batch(
@@ -542,15 +517,15 @@ Tu es un expert en tests logiciels. Génère des scénarios de tests COMPLETS po
 
 ## Titres de tests à développer
 
-{TITLES_JSON}
+{titles_json}
 
 ## User Stories associées (pour contexte)
 
-{USER_STORIES}
+{user_stories_json}
 
 ## Jeu de Données (JDD)
 
-{JDD}
+{jdd}
 
 ## Instructions
 
@@ -576,24 +551,21 @@ Règles:
         messages = [
             SystemMessage(
                 content=tests_prompt.format(
-                    TITLES_JSON=json.dumps(
+                    titles_json=json.dumps(
                         titles_to_process, ensure_ascii=False, indent=2
                     ),
-                    USER_STORIES=json.dumps(
+                    user_stories_json=json.dumps(
                         relevant_stories, ensure_ascii=False, indent=2
                     ),
-                    JDD=jdd if jdd else "Aucun JDD fourni",
+                    jdd=jdd if jdd else "Aucun JDD fourni",
                     count=len(titles_to_process),
                 )
             )
         ]
 
-        langfuse_handler = self._get_langfuse_handler()
-        config: RunnableConfig = (
-            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
-        )
-
-        response = cast(TestsList, await model.ainvoke(messages, config=config))
+        response = await model.ainvoke(messages, config=self._build_llm_config())
+        if not isinstance(response, TestsList):
+            response = TestsList.model_validate(response)
         return [t.model_dump() for t in response.items]
 
     def get_tests_tool(self):
@@ -660,7 +632,7 @@ Règles:
 
             # Process batches
             while pending_titles:
-                current_batch_size = min(batch_size, total_to_generate)
+                current_batch_size = min(batch_size, len(pending_titles))
                 titles_batch = pending_titles[:current_batch_size]
                 pending_titles = pending_titles[current_batch_size:]
 

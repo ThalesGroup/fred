@@ -162,27 +162,27 @@ class ExportTools:
             output_path = Path(f.name)
 
         # Upload to user storage
-        user_id = self.agent.get_end_user_id()
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        final_key = f"{user_id}_livrables_{timestamp}.md"
+        try:
+            user_id = self.agent.get_end_user_id()
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            final_key = f"{user_id}_livrables_{timestamp}.md"
 
-        with open(output_path, "rb") as f_out:
-            upload_result = await self.agent.upload_user_blob(
-                key=final_key,
-                file_content=f_out,
-                filename=f"Livrables_{timestamp}.md",
-                content_type="text/markdown",
+            with open(output_path, "rb") as f_out:
+                upload_result = await self.agent.upload_user_blob(
+                    key=final_key,
+                    file_content=f_out,
+                    filename=f"Livrables_{timestamp}.md",
+                    content_type="text/markdown",
+                )
+
+            return LinkPart(
+                href=upload_result.download_url,
+                title=f"📥 Télécharger {upload_result.file_name}",
+                kind=LinkKind.download,
+                mime="text/markdown",
             )
-
-        # Clean up temp file
-        output_path.unlink(missing_ok=True)
-
-        return LinkPart(
-            href=upload_result.download_url,
-            title=f"📥 Télécharger {upload_result.file_name}",
-            kind=LinkKind.download,
-            mime="text/markdown",
-        )
+        finally:
+            output_path.unlink(missing_ok=True)
 
     def get_export_tool(self):
         """Tool that exports all generated deliverables to a markdown file."""
@@ -321,7 +321,7 @@ class ExportTools:
                         "Summary": story.get("summary", story.get("id", "")),
                         "Description": description,
                         "Issue Type": story.get("issue_type", "Story"),
-                        "Priority": story.get("priority", "Medium"),
+                        "Priority": story.get("priority", "Moyenne"),
                         "Epic Name": story.get("epic_name", ""),
                         "Story Points": story.get("story_points", ""),
                         "Labels": labels,
@@ -342,20 +342,20 @@ class ExportTools:
                 output_path = Path(f.name)
 
             # Upload to user storage
-            user_id = self.agent.get_end_user_id()
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            final_key = f"{user_id}_jira_import_{timestamp}.csv"
+            try:
+                user_id = self.agent.get_end_user_id()
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                final_key = f"{user_id}_jira_import_{timestamp}.csv"
 
-            with open(output_path, "rb") as f_out:
-                upload_result = await self.agent.upload_user_blob(
-                    key=final_key,
-                    file_content=f_out,
-                    filename=f"jira_import_{timestamp}.csv",
-                    content_type="text/csv",
-                )
-
-            # Clean up temp file
-            output_path.unlink(missing_ok=True)
+                with open(output_path, "rb") as f_out:
+                    upload_result = await self.agent.upload_user_blob(
+                        key=final_key,
+                        file_content=f_out,
+                        filename=f"jira_import_{timestamp}.csv",
+                        content_type="text/csv",
+                    )
+            finally:
+                output_path.unlink(missing_ok=True)
 
             return Command(
                 update={

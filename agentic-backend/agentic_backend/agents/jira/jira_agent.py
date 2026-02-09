@@ -56,15 +56,29 @@ def list_reducer(current: list[dict], update: list[dict]) -> list[dict]:
 
     # Apply updates and filter removed items
     result = []
+    applied_updates = set()
     for item in current:
         item_id = item.get("id")
         if item_id in remove_ids:
             continue
         if item_id in update_items:
-            # Merge update fields into existing item
-            result.append({**item, **update_items[item_id]})
+            fields = update_items[item_id]
+            if "id" in fields:
+                logger.warning(
+                    "[list_reducer] __update__ should not change item ID (got id=%s for %s)",
+                    fields["id"],
+                    item_id,
+                )
+                fields = {k: v for k, v in fields.items() if k != "id"}
+            result.append({**item, **fields})
+            applied_updates.add(item_id)
         else:
             result.append(item)
+
+    # Warn about updates that targeted non-existent items
+    missed = set(update_items.keys()) - applied_updates
+    if missed:
+        logger.warning("[list_reducer] __update__ targets not found: %s", missed)
 
     # Track existing IDs to detect conflicts
     existing_ids = {item.get("id") for item in result if item.get("id")}
