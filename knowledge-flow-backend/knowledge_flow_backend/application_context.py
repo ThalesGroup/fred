@@ -1044,12 +1044,12 @@ class ApplicationContext:
                 self._log_sensitive("OPENSEARCH_PASSWORD", os.getenv("OPENSEARCH_PASSWORD"))
             elif isinstance(store, PgVectorStorageConfig):
                 pg = self.configuration.storage.postgres
-                _require_env("POSTGRES_PASSWORD")
+                _require_env("FRED_POSTGRES_PASSWORD")
                 logger.info("     ↳ Backend: pgvector")
                 logger.info("     ↳ Host: %s  Port: %s  DB: %s", pg.host, pg.port, pg.database)
                 logger.info("     ↳ Collection: %s", store.collection_name)
                 logger.info("     ↳ Username: %s", pg.username)
-                self._log_sensitive("POSTGRES_PASSWORD", os.getenv("POSTGRES_PASSWORD"))
+                self._log_sensitive("FRED_POSTGRES_PASSWORD", os.getenv("FRED_POSTGRES_PASSWORD"))
             elif isinstance(store, WeaviateVectorStorage):
                 _require_env("WEAVIATE_API_KEY")
                 logger.info(f"     ↳ Host: {store.host}")
@@ -1082,7 +1082,18 @@ class ApplicationContext:
                         os_cfg.verify_certs,
                     )
                 elif isinstance(store_cfg, SQLStorageConfig):
-                    logger.info("     • %-14s SQLStorage  database=%s  host=%s", label, store_cfg.database or "unset", store_cfg.host or "unset")
+                    logger.info(
+                        "     • %-14s SQLStorage  driver=%s  mode=%s  database=%s  host=%s",
+                        label,
+                        store_cfg.driver,
+                        store_cfg.mode,
+                        store_cfg.database or "unset",
+                        store_cfg.host or "unset",
+                    )
+                    # Prefer tabular-specific secret if present, otherwise fall back to legacy/other env.
+                    secret = store_cfg.password or os.getenv("TABULAR_POSTGRES_PASSWORD") or os.getenv("SQL_PASSWORD") or os.getenv("FRED_POSTGRES_PASSWORD")
+                    logger.info("     ↳ Username: %s", store_cfg.username or "<unset>")
+                    self._log_sensitive("TABULAR_POSTGRES_PASSWORD|SQL_PASSWORD|FRED_POSTGRES_PASSWORD", secret)
                 elif isinstance(store_cfg, ChromaVectorStorageConfig):
                     logger.info("     • %-14s ChromaDB  database=%s  host=%s  distance=%s", label, store_cfg.local_path or "unset", store_cfg.collection_name or "unset", store_cfg.distance or "unset")
                 elif isinstance(store_cfg, PgVectorStorageConfig):
@@ -1106,6 +1117,26 @@ class ApplicationContext:
             _describe("metadata_store", st.metadata_store)
             _describe("vector_store", st.vector_store)
             _describe("resource_store", st.resource_store)
+
+            # Tabular stores (CSV ingestion / statistic)
+            tabular_map = st.tabular_stores or {}
+            if tabular_map:
+                logger.info("  🗄️  Tabular stores:")
+                for name, cfg in tabular_map.items():
+                    if isinstance(cfg, SQLStorageConfig):
+                        logger.info(
+                            "     • %-14s SQLStorage  driver=%s  mode=%s  database=%s  host=%s",
+                            name,
+                            cfg.driver,
+                            cfg.mode,
+                            cfg.database or "unset",
+                            cfg.host or "unset",
+                        )
+                        secret = cfg.password or os.getenv("TABULAR_POSTGRES_PASSWORD") or os.getenv("SQL_PASSWORD")
+                        logger.info("     ↳ Username: %s", cfg.username or "<unset>")
+                        self._log_sensitive("TABULAR_POSTGRES_PASSWORD|SQL_PASSWORD", secret)
+                    else:
+                        logger.info("     • %-14s %s", name, type(cfg).__name__)
 
         except Exception:
             logger.warning("  ⚠️ Failed to read storage section (some variables may be missing).")

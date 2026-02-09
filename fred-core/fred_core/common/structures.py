@@ -79,7 +79,7 @@ class PostgresStoreConfig(BaseModel):
     database: Optional[str] = None
     username: Optional[str] = None
     password: Optional[str] = Field(
-        default_factory=lambda: os.getenv("POSTGRES_PASSWORD")
+        default_factory=lambda: os.getenv("FRED_POSTGRES_PASSWORD")
     )
     echo: bool = Field(default=False, description="SQLAlchemy echo flag.")
     pool_size: Optional[int] = Field(
@@ -133,8 +133,13 @@ class SQLStorageConfig(BaseModel):
     database: Optional[str] = None
     host: Optional[str] = None
     port: Optional[int] = None
-    username: Optional[str] = Field(default_factory=lambda: os.getenv("SQL_USERNAME"))
-    password: Optional[str] = Field(default_factory=lambda: os.getenv("SQL_PASSWORD"))
+    username: Optional[str] = Field(
+        default_factory=lambda: os.getenv("TABULAR_POSTGRES_USERNAME")
+    )
+    # Prefer TABULAR_POSTGRES_PASSWORD; fall back to legacy SQL_PASSWORD for backward compatibility.
+    password: Optional[str] = Field(
+        default_factory=lambda: os.getenv("TABULAR_POSTGRES_PASSWORD")
+    )
     path: Optional[str] = None
 
     @model_validator(mode="after")

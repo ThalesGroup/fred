@@ -395,7 +395,7 @@ applications:
       OPENSEARCH_PASSWORD: ""
       M2M_CLIENT_SECRET: ""
       OPENFGA_API_TOKEN: ""
-      POSTGRES_PASSWORD: ""
+      FRED_POSTGRES_PASSWORD: ""
 
   frontend:
     enabled: true
@@ -814,8 +814,8 @@ applications:
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
       OPENFGA_API_TOKEN: ""
-      SQL_PASSWORD: ""
-      POSTGRES_PASSWORD: ""
+      FRED_POSTGRES_PASSWORD: ""
+      TABULAR_POSTGRES_PASSWORD: ""
 
   knowledge-flow-worker:
     <<: *knowledgeFlowBackend

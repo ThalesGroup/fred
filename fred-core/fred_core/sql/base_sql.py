@@ -199,11 +199,11 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
             )
             raise
 
-    if not os.getenv("POSTGRES_PASSWORD"):
+    if not os.getenv("FRED_POSTGRES_PASSWORD"):
         logger.error(
-            "[TASKS][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres task store)"
+            "[TASKS][STORE] Missing FRED_POSTGRES_PASSWORD environment variable (required for Postgres task store)"
         )
-        raise RuntimeError("POSTGRES_PASSWORD is required for Postgres task store")
+        raise RuntimeError("FRED_POSTGRES_PASSWORD is required for Postgres task store")
     missing = [
         name
         for name in ("host", "database", "username")
