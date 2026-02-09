@@ -22,9 +22,9 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
 from sqlalchemy import JSON, Table, create_engine
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
