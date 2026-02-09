@@ -12,6 +12,7 @@ from langgraph.types import Checkpointer
 
 from agentic_backend.agents.jira.batch_tools import BatchTools
 from agentic_backend.agents.jira.export_tools import ExportTools
+from agentic_backend.agents.jira.import_tools import ImportTools
 from agentic_backend.agents.jira.single_item_tools import SingleItemTools
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
@@ -158,6 +159,9 @@ class JiraAgent(AgentFlow):
 **Pour supprimer:**
 - `remove_item(item_type, item_id)` - Supprime UN élément par son ID
 
+**Pour importer depuis un fichier Markdown:**
+- `import_markdown(markdown_content, mode?)` - Importe les exigences, User Stories et tests depuis un fichier Markdown exporté. mode="merge" (défaut) fusionne avec l'existant, mode="overwrite" remplace tout.
+
 **Règle de choix:**
 - Utilise `generate_*` pour les demandes complexes ("génère toutes les US du projet")
 - Utilise `add_*` pour les demandes simples ("ajoute une US pour le login", "ajoute un test pour US-01")
@@ -251,6 +255,7 @@ Stratégie obligatoire pour generate_* :
         self.batch_tools = BatchTools(self)
         self.single_item_tools = SingleItemTools(self)
         self.export_tools = ExportTools(self)
+        self.import_tools = ImportTools(self)
 
         # Check if Langfuse is configured
         self.langfuse_enabled = bool(
@@ -273,57 +278,33 @@ Stratégie obligatoire pour generate_* :
         self, checkpointer: Checkpointer | None = None
     ) -> CompiledStateGraph:
         """Create the agent graph with all tools."""
-        # Get batch generation tools
-        requirements_tool = self.batch_tools.get_requirements_tool()
-        user_stories_tool = self.batch_tools.get_user_stories_tool()
-        tests_tool = self.batch_tools.get_tests_tool()
-
-        # Get single-item add/remove tools
-        add_requirement_tool = self.single_item_tools.get_add_requirement_tool()
-        add_user_story_tool = self.single_item_tools.get_add_user_story_tool()
-        add_test_tool = self.single_item_tools.get_add_test_tool()
-        remove_item_tool = self.single_item_tools.get_remove_item_tool()
-
-        # Get single-item update tools
-        update_requirement_tool = self.single_item_tools.get_update_requirement_tool()
-        update_user_story_tool = self.single_item_tools.get_update_user_story_tool()
-        update_test_tool = self.single_item_tools.get_update_test_tool()
-
-        # Get read tools
-        get_requirements_tool = self.single_item_tools.get_read_requirements_tool()
-        get_user_stories_tool = self.single_item_tools.get_read_user_stories_tool()
-        get_tests_tool = self.single_item_tools.get_read_tests_tool()
-
-        # Get export tools
-        export_tool = self.export_tools.get_export_tool()
-        export_jira_csv_tool = self.export_tools.get_export_jira_csv_tool()
-        export_zephyr_csv_tool = self.export_tools.get_export_zephyr_csv_tool()
-
         return create_agent(
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[
                 # Bulk generation
-                requirements_tool,
-                user_stories_tool,
-                tests_tool,
+                self.batch_tools.get_requirements_tool(),
+                self.batch_tools.get_user_stories_tool(),
+                self.batch_tools.get_tests_tool(),
                 # Single-item add/remove
-                add_user_story_tool,
-                add_test_tool,
-                add_requirement_tool,
-                remove_item_tool,
+                self.single_item_tools.get_add_requirement_tool(),
+                self.single_item_tools.get_add_user_story_tool(),
+                self.single_item_tools.get_add_test_tool(),
+                self.single_item_tools.get_remove_item_tool(),
                 # Single-item update
-                update_requirement_tool,
-                update_user_story_tool,
-                update_test_tool,
+                self.single_item_tools.get_update_requirement_tool(),
+                self.single_item_tools.get_update_user_story_tool(),
+                self.single_item_tools.get_update_test_tool(),
                 # Read/inspect
-                get_requirements_tool,
-                get_user_stories_tool,
-                get_tests_tool,
+                self.single_item_tools.get_read_requirements_tool(),
+                self.single_item_tools.get_read_user_stories_tool(),
+                self.single_item_tools.get_read_tests_tool(),
                 # Export
-                export_tool,
-                export_jira_csv_tool,
-                export_zephyr_csv_tool,
+                self.export_tools.get_export_tool(),
+                self.export_tools.get_export_jira_csv_tool(),
+                self.export_tools.get_export_zephyr_csv_tool(),
+                # Import
+                self.import_tools.get_import_markdown_tool(),
                 # MCP tools
                 *self.mcp.get_tools(),
             ],
