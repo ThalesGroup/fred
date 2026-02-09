@@ -15,7 +15,7 @@ app:
   base_url: "/agentic/v1"
   address: "127.0.0.1"
   port: 8000
-  log_level: "warning"
+  log_level: "debug"
   reload: false
   reload_dir: "."
   metrics_enabled: true
@@ -77,6 +77,8 @@ ai:
 
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
   max_concurrent_agents: 1024
+  # Maximum number of concurrent sessions per user. This is used to prevent abuse and manage resource usage.
+  max_concurrent_sessions_per_user: 10
 
   # Maximum number of files a user can attach across all sessions
   max_attached_files_per_user: 20
@@ -100,10 +102,10 @@ ai:
       # Benchmark (mock OpenAI): uncomment the base_url below to target the mock server.
       base_url: "http://localhost:8383/v1"
       timeout:
-        connect: 10.0
-        read: 30.0
-        write: 30.0
-        pool: 5.0
+        connect: 20.0
+        read: 60.0
+        write: 60.0
+        pool: 20.0
       http_client_limits:
         max_connections: 500
         max_keepalive_connections: 200
@@ -195,6 +197,10 @@ storage:
     port: 5432
     database: fred
     username: fred
+    pool_size: 20
+    max_overflow: 20
+    pool_timeout: 30
+    pool_recycle: 1800
 
   opensearch:
     host: https://localhost:9200

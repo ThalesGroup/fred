@@ -167,7 +167,9 @@
     "allAgents": "All agents",
     "deleteSessionFailed": "Failed to delete conversation",
     "monitoring_graph": "Graph",
-    "newChat": "New chat"
+    "newChat": "New chat",
+    "teams": "Teams",
+    "yourTeamsSectionTitle": "Your teams"
   },
   "apps": {
     "scheduler": {
@@ -1189,5 +1191,77 @@
   "newChat": {
     "yourAgents": "Your agents",
     "selectAgentTitle": "Welcome {{userName}}, who would you like to speak to?"
+  },
+  "teamCard": {
+    "memberCountLabel": "members",
+    "privateTeamTooltip": "Private team"
+  },
+  "teamsPage": {
+    "title": "Community teams",
+    "yourTeamsSubtitle": "Your teams",
+    "communityTeamsSubtitle": "Discover other teams"
+  },
+  "teamDetails": {
+    "tabs": {
+      "resources": "Resources",
+      "apps": "Apps",
+      "members": "Members",
+      "settings": "Settings"
+    },
+    "noAgents": "No team agents configured yet. Create your first team agent to get started."
+  },
+  "appCard": {
+    "launch": "Start"
+  },
+  "teamAppsPage": {
+    "headerSubtitle": "Team's apps",
+    "headerInfoTooltip": "These apps are only available to your team and are managed by team owners.",
+    "noAppTitle": "No app",
+    "noAppDescription": "The team owners have not configured any applications for this group at this time."
+  },
+  "teamSettingsPage": {
+    "teamBanner": {
+      "label": "Team banner",
+      "buttonLabel": "Upload image...",
+      "alt": "Team banner image",
+      "noImage": "No banner image uploaded",
+      "uploadSuccess": "Banner uploaded successfully",
+      "uploadError": "Failed to upload banner image",
+      "invalidType": "Invalid file type. Please use JPEG, PNG, or WebP format.",
+      "tooLarge": "File is too large. Maximum size is 5MB."
+    },
+    "description": {
+      "label": "Team description",
+      "placeholder": "Describe here the purpose of your team and its key challenges."
+    },
+    "private": {
+      "label": "Private team"
+    }
+  },
+  "teamMembersPage": {
+    "tableHeader": {
+      "username": "Username",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "role": "Role",
+      "actions": "Actions"
+    },
+    "headerTitle": "Team members",
+    "headerInfoTooltip": "Here are the members of this team. A member can belong to multiple teams at the same time.",
+    "teamRole": {
+      "member": "Member",
+      "manager": "Manager",
+      "owner": "Owner"
+    },
+    "addUserInputPlaceholder": "Add a user...",
+    "removeMemberConfonfirmationDialog": {
+      "title": "Confirm deletion ?",
+      "message": "You're about to remove this user from the team. Do you want to continue?",
+      "confirmButtonLabel": "Delete"
+    }
+  },
+  "confirmationDialog": {
+    "defaultCancelButtonLabel": "Cancel",
+    "defaultConfirmButtonLabel": "Confirm"
   }
 }

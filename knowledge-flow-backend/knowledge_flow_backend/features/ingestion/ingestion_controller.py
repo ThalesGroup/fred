@@ -321,7 +321,7 @@ class IngestionController:
                 output_temp_dir = input_temp_file.parent.parent
 
                 yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                metadata = self.service.extract_metadata(
+                metadata = await self.service.extract_metadata(
                     user,
                     file_path=input_temp_file,
                     tags=tags,
@@ -733,7 +733,7 @@ class IngestionController:
                     current_step = "metadata extraction"
                     try:
                         yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                        metadata = self.service.extract_metadata(
+                        metadata = await self.service.extract_metadata(
                             user,
                             file_path=input_temp_file,
                             tags=tags,
@@ -748,7 +748,6 @@ class IngestionController:
                             ).model_dump_json()
                             + "\n"
                         )
-
                         current_step = "input content saving"
                         yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                         output_temp_dir = input_temp_file.parent.parent

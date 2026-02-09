@@ -10,6 +10,13 @@ global:
     reclaimPolicy: "Retain"
     storageClass: "local-path" # if empty = default storage class
     hostPath: "/mnt/fred-data" # only used if dynamic=false & storageClass=local-path, remind to create this directory on your host
+  whitelist:
+    enabled: false
+    configMapName: ""
+    filePath: "files/whitelist/users.txt"
+    user_list_inline: ""
+    mountPath: /fred-core/fred_core/security/whitelist_access_control/users.txt
+    subPath: users.txt
 
 applications:
   agentic-backend:
@@ -233,6 +240,9 @@ applications:
 
         # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
         max_concurrent_agents: 1024
+
+        # Maximum number of concurrent sessions per user. This is used to prevent abuse and manage resource usage.
+        max_concurrent_sessions_per_user: 10
 
         # Maximum number of files a user can attach across all sessions
         max_attached_files_per_user: 20

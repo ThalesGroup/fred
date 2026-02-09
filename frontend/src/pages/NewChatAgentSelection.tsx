@@ -4,11 +4,9 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { AnyAgent } from "../common/agent";
 import { AgentTile } from "../components/chatbot/AgentTile";
+import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { KeyCloakService } from "../security/KeycloakService";
-import {
-  useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
-  useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
-} from "../slices/agentic/agenticOpenApi";
+import { useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
 export function NewChatAgentSelection() {
@@ -20,7 +18,7 @@ export function NewChatAgentSelection() {
     KeyCloakService.GetUserName?.() ||
     "";
 
-  const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
+  const { contactSupportLink } = useFrontendProperties();
   const {
     data: rawAgents,
     isLoading: agentLoading,
@@ -65,14 +63,10 @@ export function NewChatAgentSelection() {
             {agentError && (
               <Alert severity="error">
                 {t("newChat.loadingAgentError")}
-                {frontendConfig.frontend_settings.properties.contactSupportLink !== undefined && (
+                {contactSupportLink && (
                   <>
                     {" "}
-                    <Link
-                      to={frontendConfig.frontend_settings.properties.contactSupportLink}
-                      target="_blank"
-                      style={{ color: theme.palette.primary.main }}
-                    >
+                    <Link to={contactSupportLink} target="_blank" style={{ color: theme.palette.primary.main }}>
                       {t("common.contactSupport")}
                     </Link>
                   </>

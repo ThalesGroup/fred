@@ -409,10 +409,7 @@ class Archie(AgentFlow):
                 logger.warning(
                     "Archie: runtime_context.session_id is missing; attached-file retrieval will be skipped."
                 )
-            with self.kpi_timer(
-                "agent.step_latency_ms",
-                dims={"step": "vector_search", "policy": search_policy},
-            ):
+            async with self.phase("vector_search"):
                 hits: List[VectorSearchHit] = self.search_client.search(
                     question=augmented_question,
                     top_k=top_k,
@@ -450,9 +447,7 @@ class Archie(AgentFlow):
                     )
                 messages = self.with_chat_context_text([HumanMessage(content=warn)])
 
-                with self.kpi_timer(
-                    "agent.step_latency_ms", dims={"step": "answer_no_results"}
-                ):
+                async with self.phase("answer_no_results"):
                     return {"messages": [await self.model.ainvoke(messages)]}
 
             # 3) Deterministic ordering + fill ranks
@@ -505,9 +500,7 @@ class Archie(AgentFlow):
                 human_msg = HumanMessage(content=no_sources_text)
                 messages = [sys_msg, *history, human_msg]
                 messages = self.with_chat_context_text(messages)
-                with self.kpi_timer(
-                    "agent.step_latency_ms", dims={"step": "answer_no_sources"}
-                ):
+                async with self.phase("answer_no_sources"):
                     answer = await self.model.ainvoke(messages)
                 return {"messages": [answer]}
 
@@ -562,9 +555,7 @@ class Archie(AgentFlow):
                 len(sys_msg.content),
                 len(human_msg.content),
             )
-            with self.kpi_timer(
-                "agent.step_latency_ms", dims={"step": "answer_with_sources"}
-            ):
+            async with self.phase("answer_with_sources"):
                 answer = await self.model.ainvoke(messages)
 
             # 6) Attach rich sources metadata for the UI

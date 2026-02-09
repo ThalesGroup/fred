@@ -18,7 +18,7 @@ import logging
 from datetime import datetime, timezone
 from typing import List
 
-from fred_core.sql import BaseSqlStore
+from fred_core.sql import AsyncBaseSqlStore
 from sqlalchemy import (
     Column,
     DateTime,
@@ -27,11 +27,12 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    func,
     inspect,
     select,
     text,
 )
-from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
@@ -47,9 +48,9 @@ class PostgresSessionAttachmentStore(BaseSessionAttachmentStore):
     """
 
     def __init__(
-        self, engine: Engine, table_name: str, prefix: str = "session_"
+        self, engine: AsyncEngine, table_name: str, prefix: str = "sessions_"
     ) -> None:
-        self.store = BaseSqlStore(engine, prefix=prefix)
+        self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
 
         metadata = MetaData()
@@ -68,29 +69,44 @@ class PostgresSessionAttachmentStore(BaseSessionAttachmentStore):
             keep_existing=True,
         )
 
-        metadata.create_all(self.store.engine)
-        # Backward compatibility: add missing column if table pre-existed without document_uid
-        try:
-            insp = inspect(self.store.engine)
+        def _ensure_schema(sync_conn):
+            metadata.create_all(sync_conn)
+            insp = inspect(sync_conn)
             cols = {c["name"] for c in insp.get_columns(self.table_name)}
             if "document_uid" not in cols:
-                alter_stmt = text(
-                    f'ALTER TABLE "{self.table_name}" ADD COLUMN IF NOT EXISTS document_uid VARCHAR'
+                sync_conn.execute(
+                    text(
+                        f'ALTER TABLE "{self.table_name}" '
+                        "ADD COLUMN IF NOT EXISTS document_uid VARCHAR"
+                    )
                 )
-                with self.store.begin() as conn:
-                    conn.execute(alter_stmt)
                 logger.info(
                     "[SESSION][PG] Added missing document_uid column to %s",
                     self.table_name,
                 )
-        except Exception:
-            logger.exception(
-                "[SESSION][PG] Failed to ensure document_uid column on %s",
-                self.table_name,
-            )
-        logger.info("[SESSION][PG] Attachments table ready: %s", self.table_name)
 
-    def save(self, record: SessionAttachmentRecord) -> None:
+        import asyncio
+
+        async def _create_async():
+            try:
+                async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
+                    await conn.run_sync(_ensure_schema)
+                logger.info(
+                    "[SESSION][PG] Attachments table ready: %s", self.table_name
+                )
+            except Exception:
+                logger.exception(
+                    "[SESSION][PG] Failed to ensure document_uid column on %s",
+                    self.table_name,
+                )
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_create_async())
+        except RuntimeError:
+            asyncio.run(_create_async())
+
+    async def save(self, record: SessionAttachmentRecord) -> None:
         now = datetime.now(timezone.utc)
         created = record.created_at or now
         values = {
@@ -104,21 +120,22 @@ class PostgresSessionAttachmentStore(BaseSessionAttachmentStore):
             "created_at": created,
             "updated_at": record.updated_at or now,
         }
-        with self.store.begin() as conn:
-            self.store.upsert(
+        async with self.store.begin() as conn:
+            await self.store.upsert(
                 conn,
                 self.table,
                 values=values,
                 pk_cols=["session_id", "attachment_id"],
             )
 
-    def list_for_session(self, session_id: str) -> List[SessionAttachmentRecord]:
-        with self.store.begin() as conn:
-            rows = conn.execute(
+    async def list_for_session(self, session_id: str) -> List[SessionAttachmentRecord]:
+        async with self.store.begin() as conn:
+            result = await conn.execute(
                 select(self.table)
                 .where(self.table.c.session_id == session_id)
                 .order_by(self.table.c.created_at.asc())
-            ).fetchall()
+            )
+            rows = result.fetchall()
         records: List[SessionAttachmentRecord] = []
         for row in rows:
             records.append(
@@ -136,17 +153,28 @@ class PostgresSessionAttachmentStore(BaseSessionAttachmentStore):
             )
         return records
 
-    def delete(self, session_id: str, attachment_id: str) -> None:
-        with self.store.begin() as conn:
-            conn.execute(
+    async def delete(self, session_id: str, attachment_id: str) -> None:
+        async with self.store.begin() as conn:
+            await conn.execute(
                 self.table.delete().where(
                     self.table.c.session_id == session_id,
                     self.table.c.attachment_id == attachment_id,
                 )
             )
 
-    def delete_for_session(self, session_id: str) -> None:
-        with self.store.begin() as conn:
-            conn.execute(
+    async def delete_for_session(self, session_id: str) -> None:
+        async with self.store.begin() as conn:
+            await conn.execute(
                 self.table.delete().where(self.table.c.session_id == session_id)
             )
+
+    async def count_for_sessions(self, session_ids: List[str]) -> int:
+        if not session_ids:
+            return 0
+        async with self.store.begin() as conn:
+            result = await conn.execute(
+                select(func.count())
+                .select_from(self.table)
+                .where(self.table.c.session_id.in_(session_ids))
+            )
+            return result.scalar() or 0

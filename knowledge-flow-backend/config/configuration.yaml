@@ -187,33 +187,30 @@ crossencoder_model:
 
 storage:
   postgres:
-    host: localhost
-    port: 5432
-    database: fred
-    username: admin
+    sqlite_path: "~/.fred/knowledge-flow/knowledge-flow.db"
   opensearch:
     host: https://localhost:9200
     secure: true
     verify_certs: false
     username: admin
   catalog_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/knowledge-flow/catalog.duckdb"
+    type: "postgres"
+    table: catalog
   prompt_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/knowledge-flow/prompt.duckdb"
+    type: "postgres"
+    table: prompts
   resource_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/knowledge-flow/resource.duckdb"
+    type: "postgres"
+    table: resource
   kpi_store:
     type: "log"
     level: "INFO"
   tag_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/knowledge-flow/tag.duckdb"
+    type: "postgres"
+    table: tags
   metadata_store:
-    type: "duckdb"
-    duckdb_path: "~/.fred/knowledge-flow/metadata.duckdb"
+    type: "postgres"
+    table: metadata
   vector_store:
     type: chroma
   tabular_stores:
@@ -238,3 +235,8 @@ mcp:
 
 filesystem:
   type: local
+
+workspace_layout:
+  user_pattern: "users/{user_id}/{key}"
+  agent_config_pattern: "agents/{agent_id}/config/{key}"
+  agent_user_pattern: "agents/{agent_id}/users/{user_id}/{key}"

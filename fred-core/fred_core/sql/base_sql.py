@@ -16,17 +16,37 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import re
+from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
-from sqlalchemy import Table, create_engine
+from sqlalchemy import JSON, Table, create_engine
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    AsyncEngine,
+    create_async_engine,
+)
 from sqlalchemy.sql import ClauseElement
 
 from fred_core.common.structures import PostgresStoreConfig
 
 logger = logging.getLogger(__name__)
+
+
+def json_for_engine(engine: Engine | AsyncEngine):
+    """
+    Return a JSON-capable column type appropriate for the given engine.
+
+    - Postgres: JSONB
+    - Others (e.g., SQLite): JSON (maps to JSON1 where available)
+    """
+    dialect = engine.dialect.name if engine is not None else ""
+    return JSONB if dialect == "postgresql" else JSON
 
 
 def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
@@ -52,8 +72,25 @@ def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
         return re.sub(r":([^:@]+)@", ":***@", dsn)
 
     masked_dsn = _mask_dsn(config.dsn())
-    logger.info(
-        "[SQL][Engine] Creating engine: url=%s host=%s port=%s db=%s user=%s pwd_set=%s echo=%s pool_size=%s connect_args=%s",
+    effective_pool_size = config.pool_size or 5
+    effective_max_overflow = (
+        config.max_overflow if config.max_overflow is not None else 10
+    )
+    effective_pool_timeout = (
+        config.pool_timeout if config.pool_timeout is not None else 30
+    )
+    # SQLAlchemy expects an int; None would later be compared with ints and crash
+    effective_pool_recycle = (
+        config.pool_recycle if config.pool_recycle is not None else -1
+    )
+    effective_pool_pre_ping = (
+        config.pool_pre_ping if config.pool_pre_ping is not None else False
+    )
+    logger.warning(
+        "[SQL][Engine] Creating engine (single PG config assumed): "
+        "dsn=%s host=%s port=%s db=%s user=%s password_set=%s "
+        "echo=%s pool_size=%s max_overflow=%s pool_timeout=%s pool_recycle=%s pool_pre_ping=%s "
+        "connect_args=%s raw_config=%s",
         masked_dsn,
         config.host,
         config.port,
@@ -61,23 +98,55 @@ def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
         config.username,
         bool(config.password),
         config.echo,
-        config.pool_size,
+        effective_pool_size,
+        effective_max_overflow,
+        effective_pool_timeout,
+        effective_pool_recycle,
+        effective_pool_pre_ping,
         connect_args,
+        {
+            "host": config.host,
+            "port": config.port,
+            "database": config.database,
+            "username": config.username,
+            "password_set": bool(config.password),
+            "echo": config.echo,
+            "pool_size": config.pool_size,
+            "max_overflow": config.max_overflow,
+            "pool_timeout": config.pool_timeout,
+            "pool_recycle": config.pool_recycle,
+            "pool_pre_ping": config.pool_pre_ping,
+            "connect_args": connect_args,
+        },
     )
 
     try:
         engine = create_engine(
             config.dsn(),
             echo=config.echo,
-            pool_size=config.pool_size or 5,
+            pool_size=effective_pool_size,
+            max_overflow=effective_max_overflow,
+            pool_timeout=effective_pool_timeout,
+            pool_recycle=effective_pool_recycle,
+            pool_pre_ping=effective_pool_pre_ping,
             connect_args=connect_args,
         )
-        logger.info("[SQL][Engine] Engine created successfully.")
+        logger.warning(
+            "[SQL][Engine] Engine created successfully with pool_size=%s max_overflow=%s "
+            "pool_timeout=%s pool_recycle=%s pool_pre_ping=%s connect_args=%s",
+            effective_pool_size,
+            effective_max_overflow,
+            effective_pool_timeout,
+            effective_pool_recycle,
+            effective_pool_pre_ping,
+            connect_args,
+        )
         return engine
     except Exception as exc:
         logger.exception("[SQL][Engine] Failed to create engine: %s", exc)
         logger.error(
-            "[SQL][Engine] Debug details: url=%s host=%s port=%s db=%s user=%s pwd_set=%s echo=%s pool_size=%s connect_args=%s",
+            "[SQL][Engine] Debug details: url=%s host=%s port=%s db=%s user=%s pwd_set=%s "
+            "echo=%s pool_size=%s max_overflow=%s pool_timeout=%s pool_recycle=%s pool_pre_ping=%s connect_args=%s",
             masked_dsn,
             config.host,
             config.port,
@@ -86,6 +155,164 @@ def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
             bool(config.password),
             config.echo,
             config.pool_size,
+            config.max_overflow,
+            config.pool_timeout,
+            config.pool_recycle,
+            config.pool_pre_ping,
+            connect_args,
+        )
+        raise
+
+
+def create_async_engine_from_config(config: PostgresStoreConfig):
+    """
+    Build an async SQLAlchemy Engine (asyncpg) from PostgresStoreConfig.
+    Mirrors the sync factory but returns an AsyncEngine to avoid thread-pool hops.
+    """
+    # Lightweight laptop-only escape hatch: if sqlite_path is set, prefer aiosqlite
+    # over real Postgres. This keeps existing Postgres-backed stores reusable without
+    # requiring a running database container.
+    if config.sqlite_path is not None:
+        sqlite_path_obj = Path(config.sqlite_path).expanduser()
+        sqlite_path_obj.parent.mkdir(parents=True, exist_ok=True)
+        sqlite_path = str(sqlite_path_obj)
+        async_dsn = f"sqlite+aiosqlite:///{sqlite_path}"
+        logger.info(
+            "[SQL][AsyncEngine] sqlite_path provided; using SQLite fallback at %s",
+            sqlite_path,
+        )
+        try:
+            engine = create_async_engine(
+                async_dsn,
+                echo=config.echo,
+                connect_args={"check_same_thread": False},
+            )
+            logger.info(
+                "[SQL][AsyncEngine] SQLite async engine created path=%s", sqlite_path
+            )
+            return engine
+        except Exception as exc:
+            logger.exception(
+                "[SQL][AsyncEngine] Failed to create SQLite engine at %s: %s",
+                sqlite_path,
+                exc,
+            )
+            raise
+
+    if not os.getenv("POSTGRES_PASSWORD"):
+        logger.error(
+            "[TASKS][STORE] Missing POSTGRES_PASSWORD environment variable (required for Postgres task store)"
+        )
+        raise RuntimeError("POSTGRES_PASSWORD is required for Postgres task store")
+    missing = [
+        name
+        for name in ("host", "database", "username")
+        if not getattr(config, name, None)
+    ]
+    if missing:
+        raise ValueError(
+            f"[SQL][AsyncEngine] Missing required Postgres config fields: {', '.join(missing)}"
+        )
+
+    connect_args: dict[str, Any] = (
+        dict(config.connect_args) if config.connect_args else {}
+    )
+
+    def _mask_dsn(dsn: str) -> str:
+        return re.sub(r":([^:@]+)@", ":***@", dsn)
+
+    async_dsn = (
+        f"postgresql+asyncpg://{config.username}:{config.password}"
+        f"@{config.host}:{config.port}/{config.database}"
+    )
+    masked_dsn = _mask_dsn(async_dsn)
+    effective_pool_size = config.pool_size or 5
+    effective_max_overflow = (
+        config.max_overflow if config.max_overflow is not None else 10
+    )
+    effective_pool_timeout = (
+        config.pool_timeout if config.pool_timeout is not None else 30
+    )
+    effective_pool_recycle = (
+        config.pool_recycle if config.pool_recycle is not None else -1
+    )
+    effective_pool_pre_ping = (
+        config.pool_pre_ping if config.pool_pre_ping is not None else False
+    )
+
+    logger.warning(
+        "[SQL][AsyncEngine] Creating async engine (single PG config assumed): "
+        "dsn=%s host=%s port=%s db=%s user=%s password_set=%s "
+        "echo=%s pool_size=%s max_overflow=%s pool_timeout=%s pool_recycle=%s pool_pre_ping=%s "
+        "connect_args=%s raw_config=%s",
+        masked_dsn,
+        config.host,
+        config.port,
+        config.database,
+        config.username,
+        bool(config.password),
+        config.echo,
+        effective_pool_size,
+        effective_max_overflow,
+        effective_pool_timeout,
+        effective_pool_recycle,
+        effective_pool_pre_ping,
+        connect_args,
+        {
+            "host": config.host,
+            "port": config.port,
+            "database": config.database,
+            "username": config.username,
+            "password_set": bool(config.password),
+            "echo": config.echo,
+            "pool_size": config.pool_size,
+            "max_overflow": config.max_overflow,
+            "pool_timeout": config.pool_timeout,
+            "pool_recycle": config.pool_recycle,
+            "pool_pre_ping": config.pool_pre_ping,
+            "connect_args": connect_args,
+        },
+    )
+
+    try:
+        engine = create_async_engine(
+            async_dsn,
+            echo=config.echo,
+            pool_size=effective_pool_size,
+            max_overflow=effective_max_overflow,
+            pool_timeout=effective_pool_timeout,
+            pool_recycle=effective_pool_recycle,
+            pool_pre_ping=effective_pool_pre_ping,
+            connect_args=connect_args,
+        )
+        logger.warning(
+            "[SQL][AsyncEngine] Engine created successfully with pool_size=%s max_overflow=%s "
+            "pool_timeout=%s pool_recycle=%s pool_pre_ping=%s connect_args=%s",
+            effective_pool_size,
+            effective_max_overflow,
+            effective_pool_timeout,
+            effective_pool_recycle,
+            effective_pool_pre_ping,
+            connect_args,
+        )
+        return engine
+    except Exception as exc:
+        logger.exception("[SQL][AsyncEngine] Failed to create engine: %s", exc)
+        logger.error(
+            "[SQL][AsyncEngine] Debug details: url=%s host=%s port=%s db=%s user=%s pwd_set=%s "
+            "echo=%s pool_size=%s max_overflow=%s pool_timeout=%s pool_recycle=%s pool_pre_ping=%s connect_args=%s",
+            masked_dsn,
+            config.host,
+            config.port,
+            config.database,
+            config.username,
+            bool(config.password),
+            config.echo,
+            config.pool_size,
+            config.max_overflow,
+            config.pool_timeout,
+            config.pool_recycle,
+            config.pool_pre_ping,
             connect_args,
         )
         raise
@@ -152,3 +379,62 @@ class BaseSqlStore:
                 index_elements=[table.c[col] for col in pk_cols]
             )
         conn.execute(stmt)
+
+
+class AsyncBaseSqlStore:
+    """
+    Async SQL helper for Postgres-backed stores (asyncpg).
+    Mirrors BaseSqlStore but uses AsyncEngine/AsyncConnection to avoid thread hops.
+    """
+
+    def __init__(self, engine: AsyncEngine, prefix: str = ""):
+        self.engine = engine
+        self.prefix = prefix
+
+    def prefixed(self, name: str) -> str:
+        return name if name.startswith(self.prefix) else f"{self.prefix}{name}"
+
+    @contextlib.asynccontextmanager
+    async def begin(self):
+        async with self.engine.begin() as conn:  # type: ignore[misc]
+            yield conn
+
+    def array_contains(self, column, value: Any) -> ClauseElement:
+        dialect = self.engine.dialect.name
+        if dialect != "postgresql":
+            raise ValueError(f"Unsupported dialect for array_contains: {dialect}")
+        return column.any(value)
+
+    async def upsert(
+        self,
+        conn: AsyncConnection,
+        table: Table,
+        values: Mapping[str, Any],
+        pk_cols: Sequence[str],
+        update_cols: Sequence[str] | None = None,
+    ) -> None:
+        dialect = conn.dialect.name
+        if update_cols is None:
+            update_cols = [c for c in values.keys() if c not in pk_cols]
+
+        # Select the correct insert function based on dialect
+        if dialect == "postgresql":
+            insert_stmt = pg_insert(table)
+        elif dialect == "sqlite":
+            insert_stmt = sqlite_insert(table)
+        else:
+            raise ValueError(f"Unsupported dialect for upsert: {dialect}")
+
+        stmt = insert_stmt.values(**values)
+
+        if update_cols:
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[table.c[col] for col in pk_cols],
+                set_={col: stmt.excluded[col] for col in update_cols},
+            )
+        else:
+            stmt = stmt.on_conflict_do_nothing(
+                index_elements=[table.c[col] for col in pk_cols]
+            )
+
+        await conn.execute(stmt)
