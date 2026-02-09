@@ -129,7 +129,7 @@ export function TeamCard({ team }: TeamCardProps) {
                   slotProps={tooltipOffset}
                 >
                   <Avatar sizes="small" sx={{ width: 24, height: 24, fontSize: "0.75rem" }}>
-                    {getInitials(owner.username)}
+                    {getInitials(`${owner.first_name} ${owner.last_name}`)}
                   </Avatar>
                 </Tooltip>
               ))}
