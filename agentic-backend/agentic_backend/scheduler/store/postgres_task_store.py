@@ -18,12 +18,11 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
-from sqlalchemy.exc import OperationalError
-
 from fred_core.sql import AsyncBaseSqlStore, json_for_engine
 from pydantic import TypeAdapter
 from sqlalchemy import Column, Float, MetaData, String, Table, select
 from sqlalchemy.dialects.postgresql import TIMESTAMP
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from agentic_backend.scheduler.agent_contracts import AgentContextRefsV1

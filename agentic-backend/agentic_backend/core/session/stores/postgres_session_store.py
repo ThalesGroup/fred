@@ -18,7 +18,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from fred_core.sql import AsyncBaseSqlStore
-from sqlalchemy import Column, DateTime, JSON, MetaData, String, Table, select, func
+from sqlalchemy import JSON, Column, DateTime, MetaData, String, Table, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from agentic_backend.core.chatbot.chat_schema import SessionSchema

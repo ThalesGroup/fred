@@ -18,11 +18,10 @@ import asyncio
 import logging
 from typing import List, Optional
 
-from sqlalchemy.exc import OperationalError
-
 from fred_core.sql import AsyncBaseSqlStore, json_for_engine
 from pydantic import TypeAdapter
 from sqlalchemy import Column, MetaData, String, Table, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from agentic_backend.common.structures import AgentSettings
