@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, Sequence
+from typing import List, Optional, Sequence
 from uuid import uuid4
 
 from fred_core.scheduler import TemporalClientProvider
@@ -93,7 +93,7 @@ class AgentTaskService:
 
         # 3. Create the Database Record (Immediate persistence)
         # We set status to QUEUED and run_id to None initially
-        self._store.create(
+        await self._store.create(
             task_id=tid,
             user_id=user_id,
             target_agent=target_agent,
@@ -118,7 +118,7 @@ class AgentTaskService:
             )
 
             # 5. Update the DB with the assigned Temporal Run ID
-            self._store.update_handle(
+            await self._store.update_handle(
                 task_id=tid, workflow_id=workflow_id, run_id=handle.run_id
             )
 
@@ -135,7 +135,7 @@ class AgentTaskService:
             )
 
             # 6. Mark as FAILED in DB so the UI doesn't show it as stuck in QUEUED
-            self._store.update_status(
+            await self._store.update_status(
                 task_id=tid,
                 status=AgentTaskStatus.FAILED,
                 error_json={
@@ -147,18 +147,18 @@ class AgentTaskService:
             raise
 
         # Return the most up-to-date record
-        return self._store.get(tid)
+        return await self._store.get(tid)
 
-    def list_for_user(
+    async def list_for_user(
         self,
         *,
         user_id: str,
         limit: int = 20,
         statuses: Optional[Sequence[AgentTaskStatus]] = None,
         target_agent: Optional[str] = None,
-    ) -> list[AgentTaskRecordV1]:
+    ) -> List[AgentTaskRecordV1]:
         """Fetch tasks for the authenticated user from the store."""
-        return self._store.list_for_user(
+        return await self._store.list_for_user(
             user_id=user_id,
             limit=limit,
             statuses=statuses,

@@ -323,3 +323,30 @@ def shutdown_shared_clients() -> None:
             logger.info("[NET] Async HTTPX client closed.")
         except Exception:
             logger.exception("[NET] Error closing Async HTTPX client.")
+
+
+async def async_shutdown_shared_clients() -> None:
+    """
+    Async variant that awaits async client closure when a running loop is available.
+    """
+    global _SYNC_CLIENT, _ASYNC_CLIENT
+
+    with _LOCK:
+        sync_client = _SYNC_CLIENT
+        async_client = _ASYNC_CLIENT
+        _SYNC_CLIENT = None
+        _ASYNC_CLIENT = None
+
+    if sync_client is not None:
+        try:
+            sync_client.close()
+            logger.info("[NET] Sync HTTPX client closed.")
+        except Exception:
+            logger.exception("[NET] Error closing Sync HTTPX client.")
+
+    if async_client is not None:
+        try:
+            await async_client.aclose()
+            logger.info("[NET] Async HTTPX client closed.")
+        except Exception:
+            logger.exception("[NET] Error closing Async HTTPX client.")

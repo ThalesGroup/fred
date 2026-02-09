@@ -17,8 +17,8 @@ import { LayoutWithSidebar } from "../app/LayoutWithSidebar";
 import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { AgentHub } from "../pages/AgentHub";
-import { AppsScheduler } from "../pages/AppsScheduler";
 import Chat from "../pages/Chat";
+import { ComingSoon } from "../pages/ComingSoon.tsx";
 import DataHub from "../pages/DataHub";
 import GraphHub from "../pages/GraphHub.tsx";
 import { KnowledgeHub } from "../pages/KnowledgeHub";
@@ -158,10 +158,6 @@ export const routes: RouteObject[] = [
         path: "tools",
         element: <McpHub />,
       },
-      {
-        path: "apps/scheduler",
-        element: <AppsScheduler />,
-      },
     ].filter(Boolean),
   },
   {
@@ -169,12 +165,8 @@ export const routes: RouteObject[] = [
     element: <Unauthorized />,
   },
   {
-    path: "/knowledge",
-    element: (
-      <RootLayout>
-        <KnowledgeHub />
-      </RootLayout>
-    ),
+    path: "coming-soon",
+    element: <ComingSoon />,
   },
   {
     path: "*",

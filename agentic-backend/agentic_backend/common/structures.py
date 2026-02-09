@@ -232,6 +232,12 @@ class AIConfig(BaseModel):
         1024,
         description="Maximum number of agents that can be cached in memory for faster access.",
     )
+    max_concurrent_sessions_per_user: int = Field(
+        10,
+        description=(
+            "Maximum number of concurrent sessions allowed per user. This is used to prevent abuse and manage resource usage."
+        ),
+    )
     max_attached_files_per_user: int = Field(
         20,
         description="Maximum number of files a user can attach across all sessions.",

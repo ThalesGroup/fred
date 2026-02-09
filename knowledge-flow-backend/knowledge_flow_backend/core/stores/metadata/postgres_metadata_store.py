@@ -14,14 +14,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, List, Optional, cast
 
-from fred_core.sql import BaseSqlStore, PydanticJsonMixin
+from fred_core.sql import AsyncBaseSqlStore, PydanticJsonMixin, json_for_engine
 from pydantic import ValidationError
 from sqlalchemy import ARRAY, Column, DateTime, Index, MetaData, String, Table, delete, func, select
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.sql.elements import ColumnElement
 
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
@@ -40,12 +40,16 @@ class PostgresMetadataStore(BaseMetadataStore, PydanticJsonMixin):
 
     def __init__(
         self,
-        engine: Engine,
+        engine: AsyncEngine,
         table_name: str,
         prefix: str,
     ):
-        self.store = BaseSqlStore(engine, prefix=prefix)
+        self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
+        self._is_postgres = self.store.engine.dialect.name == "postgresql"
+
+        json_type = json_for_engine(self.store.engine)
+        tag_ids_type = ARRAY(String) if self._is_postgres else json_type
 
         metadata = MetaData()
         self.table = Table(
@@ -54,16 +58,29 @@ class PostgresMetadataStore(BaseMetadataStore, PydanticJsonMixin):
             Column("document_uid", String, primary_key=True),
             Column("source_tag", String, index=True),
             Column("date_added_to_kb", DateTime(timezone=True)),
-            Column("tag_ids", ARRAY(String)),
-            Column("doc", JSONB),
+            Column("tag_ids", tag_ids_type),
+            Column("doc", json_type),
             keep_existing=True,
         )
 
-        # Helpful indexes for filters (GIN for array lookups)
-        Index(f"idx_{self.table_name}_tag_ids_gin", self.table.c.tag_ids, postgresql_using="gin")
+        # Helpful indexes for filters (GIN for array lookups on Postgres)
+        if self._is_postgres:
+            Index(
+                f"idx_{self.table_name}_tag_ids_gin",
+                self.table.c.tag_ids,
+                postgresql_using="gin",
+            )
 
-        metadata.create_all(self.store.engine)
-        logger.info("[METADATA][PG] Table ready: %s", self.table_name)
+        async def _create():
+            async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
+                await conn.run_sync(metadata.create_all)
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_create())
+        except RuntimeError:
+            asyncio.run(_create())
+        logger.info("[METADATA][PG][ASYNC] Table ready: %s", self.table_name)
 
     # ---------- helpers ----------
 
@@ -87,42 +104,60 @@ class PostgresMetadataStore(BaseMetadataStore, PydanticJsonMixin):
 
     # ---------- reads ----------
 
-    def get_metadata_by_uid(self, document_uid: str) -> Optional[DocumentMetadata]:
-        with self.store.begin() as conn:
-            row = conn.execute(select(self.table.c.doc).where(self.table.c.document_uid == document_uid)).fetchone()
+    async def get_metadata_by_uid(self, document_uid: str) -> Optional[DocumentMetadata]:
+        async with self.store.begin() as conn:
+            result = await conn.execute(select(self.table.c.doc).where(self.table.c.document_uid == document_uid))
+            row = result.fetchone()
         return self._from_dict(row[0]) if row else None
 
-    def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
-        with self.store.begin() as conn:
-            rows = conn.execute(select(self.table.c.doc).where(self.table.c.source_tag == source_tag)).fetchall()
+    async def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
+        async with self.store.begin() as conn:
+            result = await conn.execute(select(self.table.c.doc).where(self.table.c.source_tag == source_tag))
+            rows = result.fetchall()
         return [self._from_dict(r[0]) for r in rows]
 
-    def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
-        cond: ColumnElement[bool] = cast(ColumnElement[bool], self.store.array_contains(self.table.c.tag_ids, tag_id))
-        with self.store.begin() as conn:
-            rows = conn.execute(select(self.table.c.doc).where(cond)).fetchall()
-        return [self._from_dict(r[0]) for r in rows]
+    async def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
+        if self._is_postgres:
+            cond: ColumnElement[bool] = cast(ColumnElement[bool], self.store.array_contains(self.table.c.tag_ids, tag_id))
+            async with self.store.begin() as conn:
+                result = await conn.execute(select(self.table.c.doc).where(cond))
+                rows = result.fetchall()
+            return [self._from_dict(r[0]) for r in rows]
 
-    def browse_metadata_in_tag(self, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[list[DocumentMetadata], int]:
-        cond: ColumnElement[bool] = cast(ColumnElement[bool], self.store.array_contains(self.table.c.tag_ids, tag_id))
-        with self.store.begin() as conn:
-            total = conn.execute(select(func.count()).select_from(self.table).where(cond)).scalar_one()
-            rows = conn.execute(select(self.table.c.doc).where(cond).limit(limit).offset(offset)).fetchall()
-        docs = [self._from_dict(r[0]) for r in rows]
-        return docs, int(total)
+        # SQLite / other: load all and filter in Python
+        docs = await self.get_all_metadata(filters={})
+        return [md for md in docs if tag_id in (md.tags.tag_ids or [])]
 
-    def get_all_metadata(self, filters: dict) -> List[DocumentMetadata]:
+    async def browse_metadata_in_tag(self, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[list[DocumentMetadata], int]:
+        if self._is_postgres:
+            cond: ColumnElement[bool] = cast(ColumnElement[bool], self.store.array_contains(self.table.c.tag_ids, tag_id))
+            async with self.store.begin() as conn:
+                total_result = await conn.execute(select(func.count()).select_from(self.table).where(cond))
+                total = total_result.scalar_one()
+                rows_result = await conn.execute(select(self.table.c.doc).where(cond).limit(limit).offset(offset))
+                rows = rows_result.fetchall()
+            docs = [self._from_dict(r[0]) for r in rows]
+            return docs, int(total)
+
+        # SQLite / other: filter in Python
+        docs = await self.get_all_metadata(filters={})
+        filtered = [md for md in docs if tag_id in (md.tags.tag_ids or [])]
+        total = len(filtered)
+        return filtered[offset : offset + limit], total
+
+    async def get_all_metadata(self, filters: dict) -> List[DocumentMetadata]:
         """
         Load all documents then filter in Python for nested keys (parity with DuckDB store).
         """
-        with self.store.begin() as conn:
-            rows = conn.execute(select(self.table.c.doc)).fetchall()
+        async with self.store.begin() as conn:
+            result = await conn.execute(select(self.table.c.doc))
+            rows = result.fetchall()
         docs = [self._from_dict(r[0]) for r in rows]
         return [md for md in docs if self._match_nested(md.model_dump(mode="json"), filters)]
 
     # ---------- writes ----------
 
-    def save_metadata(self, metadata: DocumentMetadata) -> None:
+    async def save_metadata(self, metadata: DocumentMetadata) -> None:
         uid = self._require_uid(metadata)
         values = {
             "document_uid": uid,
@@ -131,18 +166,18 @@ class PostgresMetadataStore(BaseMetadataStore, PydanticJsonMixin):
             "tag_ids": list(metadata.tags.tag_ids or []),
             "doc": self._to_dict(metadata),
         }
-        with self.store.begin() as conn:
-            self.store.upsert(conn, self.table, values, pk_cols=["document_uid"])
+        async with self.store.begin() as conn:
+            await self.store.upsert(conn, self.table, values, pk_cols=["document_uid"])
 
-    def delete_metadata(self, document_uid: str) -> None:
-        with self.store.begin() as conn:
-            result = conn.execute(delete(self.table).where(self.table.c.document_uid == document_uid))
+    async def delete_metadata(self, document_uid: str) -> None:
+        async with self.store.begin() as conn:
+            result = await conn.execute(delete(self.table).where(self.table.c.document_uid == document_uid))
         if result.rowcount == 0:
             raise ValueError(f"No document found with UID {document_uid}")
 
-    def clear(self) -> None:
-        with self.store.begin() as conn:
-            conn.execute(delete(self.table))
+    async def clear(self) -> None:
+        async with self.store.begin() as conn:
+            await conn.execute(delete(self.table))
 
     # --- helper: nested filter (copied from DuckDB store for parity) ---
 

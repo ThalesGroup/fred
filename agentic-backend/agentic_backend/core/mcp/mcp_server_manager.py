@@ -45,7 +45,7 @@ class McpServerManager:
         self.servers: Dict[str, MCPServerConfiguration] = {}
         self.use_static_config_only = config.ai.use_static_config_only
 
-    def bootstrap(self) -> None:
+    async def bootstrap(self) -> None:
         self.static_servers = {srv.id: srv for srv in self.config.mcp.servers}
         if self.use_static_config_only:
             logger.warning(
@@ -53,19 +53,19 @@ class McpServerManager:
             )
             merged = dict(self.static_servers)
         else:
-            persisted = {srv.id: srv for srv in self.store.load_all()}
+            persisted = {srv.id: srv for srv in await self.store.load_all()}
 
             # Reconcile static servers on every bootstrap (new or changed entries)
             for srv_id, srv in self.static_servers.items():
                 persisted_srv = persisted.get(srv_id)
                 if persisted_srv != srv:
-                    self.store.save(srv)
+                    await self.store.save(srv)
                     persisted[srv_id] = srv
                     logger.info(
                         "[MCP] Upserted static server id=%s into storage (new or updated)",
                         srv_id,
                     )
-            self.store.mark_static_seeded()
+            await self.store.mark_static_seeded()
 
             merged = dict(persisted)
 
@@ -89,18 +89,18 @@ class McpServerManager:
     def get(self, server_id: str) -> Optional[MCPServerConfiguration]:
         return self.servers.get(server_id)
 
-    def upsert(self, server: MCPServerConfiguration) -> None:
+    async def upsert(self, server: MCPServerConfiguration) -> None:
         if self.use_static_config_only:
             raise McpUpdatesDisabled()
-        self.store.save(server)
+        await self.store.save(server)
         self.servers[server.id] = server
         self._sync_config()
         logger.info("[MCP] Saved server id=%s", server.id)
 
-    def delete(self, server_id: str) -> None:
+    async def delete(self, server_id: str) -> None:
         if self.use_static_config_only:
             raise McpUpdatesDisabled()
-        self.store.delete(server_id)
+        await self.store.delete(server_id)
         self.servers.pop(server_id, None)
         logger.info("[MCP] Deleted server id=%s", server_id)
 
@@ -110,7 +110,7 @@ class McpServerManager:
         # Keep application-wide configuration in sync for downstream consumers.
         self.config.mcp.servers = list(self.servers.values())
 
-    def restore_static_servers(self) -> None:
+    async def restore_static_servers(self) -> None:
         """
         Re-apply static configuration to the store, re-enabling any static servers that
         were disabled or removed by a persisted override. Dynamic servers are left as-is.
@@ -120,9 +120,9 @@ class McpServerManager:
             return
 
         for srv_id, srv in self.static_servers.items():
-            self.store.save(srv)
+            await self.store.save(srv)
             self.servers[srv_id] = srv
             logger.info("[MCP] Restored static server id=%s from configuration", srv_id)
 
-        self.store.mark_static_seeded()
+        await self.store.mark_static_seeded()
         self._sync_config()

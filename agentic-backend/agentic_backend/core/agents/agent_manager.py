@@ -124,9 +124,10 @@ class AgentManager:
                 overrides[key] = f.default
         return AgentChatOptions(**overrides)
 
-    def get_mcp_servers_configuration(self) -> List[MCPServerConfiguration]:
+    async def get_mcp_servers_configuration(self) -> List[MCPServerConfiguration]:
         try:
-            return get_mcp_server_manager().list_servers()
+            manager = await get_mcp_server_manager()
+            return manager.list_servers()
         except Exception:
             # Fallback to static configuration if manager unavailable (e.g., early boot)
             return [s for s in get_mcp_configuration().servers if s.enabled]
@@ -140,7 +141,7 @@ class AgentManager:
                 tuning.dump() if tuning else "N/A",
             )
 
-    def create_dynamic_agent(
+    async def create_dynamic_agent(
         self, agent_settings: AgentSettings, agent_tuning: AgentTuning
     ) -> None:
         """
@@ -150,13 +151,13 @@ class AgentManager:
         if self.use_static_config_only:
             raise AgentUpdatesDisabled()
 
-        existing = self.store.get(agent_settings.name)
+        existing = await self.store.get(agent_settings.name)
         if existing:
             raise AgentAlreadyExistsException(
                 f"Agent '{agent_settings.name}' already exists."
             )
 
-        self.store.save(agent_settings, agent_tuning)
+        await self.store.save(agent_settings, agent_tuning)
 
         self.agent_settings[agent_settings.name] = agent_settings
         logger.info(
@@ -206,7 +207,7 @@ class AgentManager:
             )
         # 1) Persist source of truth (DB)
         try:
-            self.store.save(
+            await self.store.save(
                 new_settings, tunings, scope=SCOPE_GLOBAL if is_global else SCOPE_USER
             )
         except Exception:
@@ -231,7 +232,7 @@ class AgentManager:
             return False
 
         try:
-            self.store.delete(name)
+            await self.store.delete(name)
         except Exception:
             logger.exception(
                 "[AGENTS] agent=%s could not be deleted from persistent store.", name
@@ -261,7 +262,7 @@ class AgentManager:
             )
             persisted_instances = []
         else:
-            persisted_instances = self.loader.load_persisted()
+            persisted_instances = await self.loader.load_persisted()
 
         static_catalogue: Dict[str, Tuple[AgentSettings, AgentTuning]] = {}
         persisted_state: Dict[str, Tuple[AgentSettings, AgentTuning]] = {}
@@ -279,16 +280,16 @@ class AgentManager:
             )
 
         # Seed statics into the store on first boot only (so deletes persist)
-        if not self.use_static_config_only and not self.store.static_seeded():
+        if not self.use_static_config_only and not await self.store.static_seeded():
             for name, (settings, tunings) in static_catalogue.items():
                 try:
-                    self.store.save(
+                    await self.store.save(
                         settings, tunings, scope=SCOPE_GLOBAL, scope_id=None
                     )
                     logger.info("[AGENTS] Seeded static agent '%s' into store", name)
                 except Exception:
                     logger.exception("[AGENTS] Failed to seed static agent '%s'", name)
-            self.store.mark_static_seeded()
+            await self.store.mark_static_seeded()
 
         for instance in persisted_instances:
             name = instance.get_name()
@@ -401,7 +402,9 @@ class AgentManager:
 
             if force_overwrite:
                 try:
-                    self.store.delete(agent_cfg.name, scope=SCOPE_GLOBAL, scope_id=None)
+                    await self.store.delete(
+                        agent_cfg.name, scope=SCOPE_GLOBAL, scope_id=None
+                    )
                     logger.info(
                         "[AGENTS] Overwrite restore: deleted persisted agent '%s' (GLOBAL)",
                         agent_cfg.name,
@@ -413,7 +416,7 @@ class AgentManager:
                     )
 
             try:
-                self.store.save(
+                await self.store.save(
                     settings_with_tuning, tuning, scope=SCOPE_GLOBAL, scope_id=None
                 )
                 logger.info(
@@ -424,7 +427,7 @@ class AgentManager:
                     "[AGENTS] Failed to restore static agent '%s'", agent_cfg.name
                 )
 
-        self.store.mark_static_seeded()
+        await self.store.mark_static_seeded()
         # Re-bootstrap to refresh in-memory catalog with restored entries
         self.agent_settings = {}
         self.agent_instances = {}

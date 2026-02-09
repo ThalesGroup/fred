@@ -16,16 +16,21 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime
 from typing import Awaitable, Callable, cast
 from uuid import uuid4
 
 from fastapi import HTTPException, WebSocket, WebSocketDisconnect
 from fred_core import decode_jwt
+from fred_core.kpi import KPIActor
 from langchain_core.messages import HumanMessage
 from pydantic import TypeAdapter, ValidationError
 
-from agentic_backend.application_context import get_default_chat_model
+from agentic_backend.application_context import (
+    get_app_context,
+    get_default_chat_model,
+)
 from agentic_backend.core.chatbot.chat_schema import (
     ChatAskInput,
     ChatTokenUsage,
@@ -39,6 +44,15 @@ from agentic_backend.core.chatbot.chat_schema import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def burn_cpu_ms(duration_ms: int = 200) -> None:
+    if duration_ms <= 0:
+        return
+    deadline = time.perf_counter() + duration_ms / 1000.0
+    x = 0
+    while time.perf_counter() < deadline:
+        x = (x * 3 + 1) % 10000019
 
 
 def _extract_usage(ai_message) -> ChatTokenUsage:
@@ -164,14 +178,18 @@ async def handle_chatbot_baseline_websocket(
                         )
                         continue
                     msg_value = cast(str, msg_value)
-                    ask = ChatAskInput(
-                        agent_name=client_request.get("agent_name")
-                        or "openai-baseline",
-                        message=msg_value,
-                        session_id=client_request.get("session_id"),
-                        client_exchange_id=client_request.get("client_exchange_id"),
-                        type="ask",
-                    )
+                    session_id = client_request.get("session_id")
+                    if session_id is not None:
+                        ask = ChatAskInput(
+                            agent_name=client_request.get("agent_name")
+                            or "openai-baseline",
+                            message=msg_value,
+                            session_id=session_id,
+                            client_exchange_id=client_request.get("client_exchange_id"),
+                            type="ask",
+                        )
+                    else:
+                        raise ValueError("Missing session_id in payload")
                 else:
                     summary = summarize_error(e, "BASELINE Invalid payload")
                     await safe_send_text(
@@ -194,11 +212,22 @@ async def handle_chatbot_baseline_websocket(
             break
 
         try:
-            start_ts = datetime.utcnow()
-            ai_message = await baseline_model.ainvoke(
-                [HumanMessage(content=ask.message)]
-            )
-            latency_ms = int((datetime.utcnow() - start_ts).total_seconds() * 1000)
+            kpi = get_app_context().get_kpi_writer()
+            with kpi.timer(
+                "app.phase_latency_ms",
+                dims={
+                    "agent_name": ask.agent_name or "baseline",
+                    "phase": "llm_invoke",
+                },
+                actor=KPIActor(type="system", user_id=None, groups=None),
+                unit="ms",
+            ):
+                start_ts = datetime.utcnow()
+                burn_cpu_ms(60)
+                ai_message = await baseline_model.ainvoke(
+                    [HumanMessage(content=ask.message)]
+                )
+                latency_ms = int((datetime.utcnow() - start_ts).total_seconds() * 1000)
         except asyncio.CancelledError:
             logger.error(
                 "[BASELINE] CancelledError (likely client disconnected) session_id=%s",
