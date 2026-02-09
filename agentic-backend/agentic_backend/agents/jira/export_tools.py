@@ -375,3 +375,140 @@ class ExportTools:
             )
 
         return export_jira_csv
+
+    def get_export_zephyr_csv_tool(self):
+        """Tool that exports generated tests to CSV format for Zephyr Scale import."""
+
+        @tool
+        async def export_zephyr_csv(runtime: ToolRuntime):
+            """
+            Exporte les tests générés dans un fichier CSV compatible avec l'import Zephyr Scale.
+
+            IMPORTANT: Cet outil nécessite que generate_tests ait été appelé au préalable.
+
+            Le fichier CSV généré contient les colonnes Zephyr Scale:
+            - Name, Objective, Precondition, Test Script (Plain Text), Folder, Priority, Labels, Coverage
+
+            Returns:
+                Lien de téléchargement du fichier CSV
+            """
+            tests = runtime.state.get("tests")
+            if not tests:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                "❌ Aucun test n'a été généré. Veuillez d'abord appeler generate_tests.",
+                                tool_call_id=runtime.tool_call_id,
+                            ),
+                        ],
+                    }
+                )
+
+            # Build CSV with Zephyr Scale-compatible field names
+            # See: https://support.smartbear.com/zephyr/docs/en/test-cases/import-test-cases.html
+            output = io.StringIO()
+            fieldnames = [
+                "Name",
+                "Objective",
+                "Precondition",
+                "Test Script (Plain Text)",
+                "Folder",
+                "Priority",
+                "Labels",
+                "Coverage",
+            ]
+            writer = csv.DictWriter(
+                output, fieldnames=fieldnames, quoting=csv.QUOTE_ALL
+            )
+            writer.writeheader()
+
+            for test in tests:
+                # Build precondition text (include test_data if present)
+                precondition = test.get("preconditions", "") or ""
+                test_data = test.get("test_data") or []
+                if test_data:
+                    test_data_text = "\n".join(test_data)
+                    if precondition:
+                        precondition = f"{precondition}\n\nDonnées de test:\n{test_data_text}"
+                    else:
+                        precondition = f"Données de test:\n{test_data_text}"
+
+                # Build test script (plain text with Gherkin steps + expected result)
+                steps = test.get("steps", [])
+                script_parts = list(steps)
+                expected_result = test.get("expected_result", "")
+                if expected_result:
+                    script_parts.append("")  # blank line separator
+                    script_parts.append(f"Résultat attendu:\n{expected_result}")
+                test_script = "\n".join(script_parts)
+
+                writer.writerow(
+                    {
+                        "Name": test.get("name", test.get("id", "")),
+                        "Objective": test.get("description", "") or "",
+                        "Precondition": precondition,
+                        "Test Script (Plain Text)": test_script,
+                        "Folder": test.get("test_type", "") or "",
+                        "Priority": test.get("priority", "") or "",
+                        "Labels": test.get("test_type", "") or "",
+                        "Coverage": test.get("user_story_id", "") or "",
+                    }
+                )
+
+            csv_content = output.getvalue()
+
+            # Create temp file
+            with tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=".csv",
+                prefix="zephyr_import_",
+                mode="w",
+                encoding="utf-8",
+            ) as f:
+                f.write(csv_content)
+                output_path = Path(f.name)
+
+            # Upload to user storage
+            try:
+                user_id = self.agent.get_end_user_id()
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                final_key = f"{user_id}_zephyr_import_{timestamp}.csv"
+
+                with open(output_path, "rb") as f_out:
+                    upload_result = await self.agent.upload_user_blob(
+                        key=final_key,
+                        file_content=f_out,
+                        filename=f"zephyr_import_{timestamp}.csv",
+                        content_type="text/csv",
+                    )
+            finally:
+                output_path.unlink(missing_ok=True)
+
+            # Build coverage summary for instructions
+            coverage_ids = sorted({t.get("user_story_id", "") for t in tests if t.get("user_story_id")})
+            coverage_note = ""
+            if coverage_ids:
+                coverage_note = f"\n6. Les issues de Coverage ({', '.join(coverage_ids)}) doivent exister dans le projet Jira"
+
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content=(
+                                f"✓ Fichier CSV Zephyr exporté avec succès: [{upload_result.file_name}]({upload_result.download_url})\n\n"
+                                f"**Pour importer dans Zephyr Scale:**\n"
+                                f"1. Allez dans votre projet Jira\n"
+                                f"2. Ouvrez Zephyr Scale > Test Cases\n"
+                                f"3. Cliquez sur **Import** (icône en haut à droite)\n"
+                                f"4. Sélectionnez **CSV** et uploadez le fichier\n"
+                                f"5. Vérifiez le mapping des colonnes (Priority, Labels)"
+                                f"{coverage_note}"
+                            ),
+                            tool_call_id=runtime.tool_call_id,
+                        ),
+                    ],
+                }
+            )
+
+        return export_zephyr_csv

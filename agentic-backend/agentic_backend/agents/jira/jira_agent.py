@@ -177,11 +177,12 @@ Stratégie obligatoire pour generate_* :
 **3. Export (OBLIGATOIRE)**
 - export_deliverables() → fichier Markdown (par défaut)
 - export_jira_csv() → CSV pour import Jira (UNIQUEMENT si l'utilisateur demande explicitement un CSV ou un export Jira)
+- export_zephyr_csv() → CSV pour import Zephyr Scale (UNIQUEMENT si l'utilisateur demande explicitement un export Zephyr)
 
 ## RÈGLES
 
 1. **Jamais afficher le contenu** : uniquement confirmer (ex: "User Story US-01 ajoutée")
-2. **Export par défaut en Markdown** : à la fin, appeler UNIQUEMENT export_deliverables(). N'appeler export_jira_csv() QUE si l'utilisateur demande explicitement un CSV ou un fichier pour Jira
+2. **Export par défaut en Markdown** : à la fin, appeler UNIQUEMENT export_deliverables(). N'appeler export_jira_csv() QUE si l'utilisateur demande explicitement un CSV ou un fichier pour Jira. N'appeler export_zephyr_csv() QUE si l'utilisateur demande explicitement un export Zephyr
 3. **Erreurs de validation** : Si un outil échoue, corrige le format et réessaie.""",
                 ui=UIHints(group="Prompts", multiline=True, markdown=True),
             ),
@@ -296,6 +297,7 @@ Stratégie obligatoire pour generate_* :
         # Get export tools
         export_tool = self.export_tools.get_export_tool()
         export_jira_csv_tool = self.export_tools.get_export_jira_csv_tool()
+        export_zephyr_csv_tool = self.export_tools.get_export_zephyr_csv_tool()
 
         return create_agent(
             model=get_default_chat_model(),
@@ -321,6 +323,7 @@ Stratégie obligatoire pour generate_* :
                 # Export
                 export_tool,
                 export_jira_csv_tool,
+                export_zephyr_csv_tool,
                 # MCP tools
                 *self.mcp.get_tools(),
             ],
