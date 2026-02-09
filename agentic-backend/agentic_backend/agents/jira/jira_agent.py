@@ -13,6 +13,7 @@ from langgraph.types import Checkpointer
 from agentic_backend.agents.jira.batch_tools import BatchTools
 from agentic_backend.agents.jira.export_tools import ExportTools
 from agentic_backend.agents.jira.import_tools import ImportTools
+from agentic_backend.agents.jira.quality_tools import QualityTools
 from agentic_backend.agents.jira.single_item_tools import SingleItemTools
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
@@ -162,6 +163,10 @@ class JiraAgent(AgentFlow):
 **Pour importer depuis un fichier Markdown:**
 - `import_markdown(markdown_content, mode?)` - Importe les exigences, User Stories et tests depuis un fichier Markdown exporté. mode="merge" (défaut) fusionne avec l'existant, mode="overwrite" remplace tout.
 
+**Pour analyser la qualité:**
+- `assess_user_story(story_id)` - Analyse la qualité d'une User Story (checklists analyse US + critères d'acceptation)
+- `assess_test(test_id)` - Analyse la qualité d'un test (checklist cas de test et jeux de données)
+
 **Règle de choix:**
 - Utilise `generate_*` pour les demandes complexes ("génère toutes les US du projet")
 - Utilise `add_*` pour les demandes simples ("ajoute une US pour le login", "ajoute un test pour US-01")
@@ -256,6 +261,7 @@ Stratégie obligatoire pour generate_* :
         self.single_item_tools = SingleItemTools(self)
         self.export_tools = ExportTools(self)
         self.import_tools = ImportTools(self)
+        self.quality_tools = QualityTools(self)
 
         # Check if Langfuse is configured
         self.langfuse_enabled = bool(
@@ -305,6 +311,9 @@ Stratégie obligatoire pour generate_* :
                 self.export_tools.get_export_zephyr_csv_tool(),
                 # Import
                 self.import_tools.get_import_markdown_tool(),
+                # Quality assessment
+                self.quality_tools.get_assess_user_story_tool(),
+                self.quality_tools.get_assess_test_tool(),
                 # MCP tools
                 *self.mcp.get_tools(),
             ],
