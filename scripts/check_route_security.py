@@ -210,7 +210,7 @@ def check_route_security(backend_dir: Path) -> tuple[bool, List[Dict]]:
         return len(unsecured_routes) == 0, unsecured_routes
         
     except Exception as e:
-        print(f\"❌ Error checking route security for {backend_dir.name}: {e}\")
+        print(f"❌ Error checking route security for {backend_dir.name}: {e}")
         import traceback
         traceback.print_exc()
         return False, []
