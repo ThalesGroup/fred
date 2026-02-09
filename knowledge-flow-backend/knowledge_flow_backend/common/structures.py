@@ -103,6 +103,8 @@ class MinioStorageConfig(BaseModel):
     secret_key: str = Field(..., description="MinIO secret key (from MINIO_SECRET_KEY env)")
     bucket_name: str = Field(default="app-bucket", description="Content store bucket name")
     secure: bool = Field(default=False, description="Use TLS (https)")
+    public_endpoint: Optional[str] = Field(default=None, description="Public MinIO endpoint for browser-facing presigned URLs (e.g. 'https://my.minio.ingress'). If not set, uses endpoint.")
+    public_secure: Optional[bool] = Field(default=None, description="Use TLS for public endpoint. If not set, inferred from public_endpoint scheme.")
 
     @model_validator(mode="before")
     @classmethod

@@ -42,6 +42,7 @@ docker-run: ## Run the app in Docker
 	docker run -it \
 		-p $(PORT):$(PORT) \
 		-v ~/.kube/:/home/fred-user/.kube/ \
+		-v $(realpath config/.env):/app/config/.env \
 		-v $(realpath config/configuration.yaml):/app/knowledge-flow-backend/config/configuration.yaml \
 		-e CONFIG_FILE=/app/knowledge-flow-backend/config/configuration.yaml \
 		$(IMAGE_FULL)
