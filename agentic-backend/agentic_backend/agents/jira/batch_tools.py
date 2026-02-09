@@ -150,7 +150,7 @@ Contexte projet extrait des documents:
 - Utiliser des verbes d'action (Créer, Afficher, Modifier, Supprimer, etc.)
 - Regrouper les stories liées sous le même Epic
 - Indiquer les dépendances entre US (US prérequises) (pas de dépendances circulaires)
-- **OBLIGATOIRE: Chaque User Story doit avoir au moins un requirement_id si des exigences existent**
+{req_mandatory_instruction}
 - **NE PAS générer de titres pour des fonctionnalités déjà couvertes par les User Stories existantes**
 - Les IDs doivent continuer la séquence existante (commencer à US-{next_id_hint})
 
@@ -168,6 +168,8 @@ Exigences à respecter:
             req_id_instruction = (
                 "- **Sont liées aux exigences correspondantes via requirement_ids**"
             )
+        else:
+            req_id_instruction = "- **Aucune exigence n'a été générée : requirement_ids doit être null pour TOUTES les User Stories. NE PAS inventer d'IDs d'exigences.**"
 
         # Build existing stories section to avoid duplicates
         existing_stories_section = ""
@@ -202,6 +204,12 @@ Ni plus, ni moins. Exactement {quantity} éléments."""
             quantity_header = ""
             quantity_instruction = "Génère le nombre approprié de User Stories pour couvrir l'ensemble du périmètre fonctionnel du projet."
 
+        # Build requirement mandatory instruction
+        if requirements:
+            req_mandatory_instruction = "- **OBLIGATOIRE: Chaque User Story doit avoir au moins un requirement_id parmi les exigences listées ci-dessus**"
+        else:
+            req_mandatory_instruction = "- **requirement_ids doit être null : aucune exigence n'existe, NE PAS inventer d'IDs**"
+
         model = get_default_chat_model().with_structured_output(
             UserStoryTitlesList, method="json_schema"
         )
@@ -212,6 +220,7 @@ Ni plus, ni moins. Exactement {quantity} éléments."""
                     requirements_section=requirements_section,
                     existing_stories_section=existing_stories_section,
                     req_id_instruction=req_id_instruction,
+                    req_mandatory_instruction=req_mandatory_instruction,
                     quantity_header=quantity_header,
                     quantity_instruction=quantity_instruction,
                     next_id_hint=next_id_hint,
@@ -284,6 +293,12 @@ Utilise les mêmes IDs, epic_name et requirement_ids que dans les titres."""
 Exigences à respecter:
 {json.dumps(requirements, ensure_ascii=False, indent=2)}
 """
+        else:
+            requirements_section = (
+                "**Aucune exigence n'a été générée. "
+                "requirement_ids doit être null pour toutes les User Stories. "
+                "NE PAS inventer d'IDs d'exigences.**"
+            )
 
         model = get_default_chat_model().with_structured_output(
             UserStoriesList, method="json_schema"
