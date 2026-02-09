@@ -26,6 +26,7 @@ export interface TeamCardProps {
 export function TeamCard({ team }: TeamCardProps) {
   const { t } = useTranslation();
 
+  // todo: use rebac instead (check for `can_read` permission on all teams)
   const userRoles = KeyCloakService.GetUserRoles();
   const isAdmin = userRoles.includes("admin");
   const isClickable = team.is_member || isAdmin;
@@ -45,7 +46,7 @@ export function TeamCard({ team }: TeamCardProps) {
   };
 
   const cardContent = (
-    <Paper elevation={2} sx={{ borderRadius: 2, userSelect: "none" }}>
+    <Paper elevation={2} sx={{ borderRadius: 2, userSelect: "none", height: "100%" }}>
       <HoverBox
         isClickable={isClickable}
         sx={{
