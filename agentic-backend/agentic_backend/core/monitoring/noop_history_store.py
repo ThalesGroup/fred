@@ -19,17 +19,25 @@ class NoOpHistoryStore(BaseHistoryStore):
     - This prevents flakiness from IO/mappings while keeping the same interface.
     """
 
-    def save(self, session_id: str, messages: List[ChatMessage], user_id: str) -> None:
+    async def save(
+        self, session_id: str, messages: List[ChatMessage], user_id: str
+    ) -> None:
         # Intentionally do nothing: the contract is "fire-and-forget".
         # Why: Tests that focus on reasoning should not assert on storage side-effects.
         return
 
-    def get(self, session_id: str) -> List[ChatMessage]:
+    async def get(self, session_id: str) -> List[ChatMessage]:
         # Always return an empty transcript.
         # Why: Each test starts with a clean slate unless you explicitly fake history upstream.
         return []
 
-    def get_chatbot_metrics(
+    async def save_with_conn(
+        self, conn, session_id: str, messages: List[ChatMessage], user_id: str
+    ) -> None:
+        # Same no-op behavior for transactional path.
+        return
+
+    async def get_chatbot_metrics(
         self,
         start: str,
         end: str,

@@ -1,0 +1,20 @@
+{{- if .Values.global.whitelist.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ default (printf "%s-whitelist" .Release.Name) .Values.global.whitelist.configMapName }}
+  namespace: {{ .Release.Namespace }}
+data:
+  users.txt: |
+{{- $inline := .Values.global.whitelist.user_list_inline | default "" -}}
+{{- if $inline }}
+{{- $inline | nindent 4 }}
+{{- else }}
+{{- $filePath := .Values.global.whitelist.filePath | default "files/whitelist/users.txt" -}}
+{{- $file := .Files.Get $filePath -}}
+{{- if $file }}
+{{- $file | nindent 4 }}
+{{- end }}
+{{- end }}
+{{- end }}

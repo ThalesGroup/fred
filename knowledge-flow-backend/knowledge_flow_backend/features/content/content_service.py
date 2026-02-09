@@ -55,7 +55,7 @@ class ContentService:
         if not document_uid:
             raise ValueError("Document UID is required")
 
-        metadata = self.metadata_store.get_metadata_by_uid(document_uid)
+        metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
         if metadata is None:
             # Let the controller map this to a 404
             raise FileNotFoundError(f"No metadata found for document {document_uid}")

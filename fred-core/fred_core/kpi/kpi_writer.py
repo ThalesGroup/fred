@@ -295,8 +295,8 @@ class KPIWriter(BaseKPIWriter):
             return
         metric_type = event.metric.type
         name = event.metric.name
-        # Preserve per-phase visibility for chat phases
-        if name == "chat.phase_latency_ms":
+        # Preserve per-phase visibility for app phases
+        if name == "app.phase_latency_ms":
             dims = event.dims or {}
             parts = [name]
             if dims.get("agent_name"):
@@ -342,11 +342,11 @@ class KPIWriter(BaseKPIWriter):
     def _format_summary(
         self, snapshot: Dict[str, _MetricRollup]
     ) -> list[tuple[str, _MetricRollup]]:
-        # Keep summary output focused on chat phase latencies only.
+        # Keep summary output focused on app phase latencies only.
         chat_items = [
             (name, rollup)
             for name, rollup in snapshot.items()
-            if name.startswith("chat.phase_latency_ms")
+            if name.startswith("app.phase_latency_ms")
         ]
         if not chat_items:
             return []

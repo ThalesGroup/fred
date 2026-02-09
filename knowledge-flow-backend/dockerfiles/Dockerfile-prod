@@ -56,7 +56,7 @@ ARG GROUP_ID=1000
 
 # System deps (minimal)
 RUN apt-get update && \
-    apt-get install -y curl pandoc inkscape libgl1 --no-install-recommends && \
+    apt-get install -y curl pandoc inkscape libgl1 libmagic1 --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
 # Create user

@@ -11,7 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import asyncio
+import atexit
 import importlib
 import logging
 import os
@@ -43,12 +44,11 @@ from fred_core import (
     split_realm_url,
 )
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIDefaults, KpiLogStore, KPIWriter, OpenSearchKPIStore, PrometheusKPIStore
-from fred_core.sql import create_async_engine_from_config, create_engine_from_config
+from fred_core.sql import create_async_engine_from_config
 from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from sentence_transformers import CrossEncoder
-from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from knowledge_flow_backend.common.structures import (
@@ -80,16 +80,10 @@ from knowledge_flow_backend.core.stores.files.base_file_store import BaseFileSto
 from knowledge_flow_backend.core.stores.files.local_file_store import LocalFileStore
 from knowledge_flow_backend.core.stores.files.minio_file_store import MinioFileStore
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import BaseMetadataStore
-from knowledge_flow_backend.core.stores.metadata.duckdb_metadata_store import DuckdbMetadataStore
-from knowledge_flow_backend.core.stores.metadata.opensearch_metadata_store import OpenSearchMetadataStore
 from knowledge_flow_backend.core.stores.metadata.postgres_metadata_store import PostgresMetadataStore
 from knowledge_flow_backend.core.stores.resources.base_resource_store import BaseResourceStore
-from knowledge_flow_backend.core.stores.resources.duckdb_resource_store import DuckdbResourceStore
-from knowledge_flow_backend.core.stores.resources.opensearch_resource_store import OpenSearchResourceStore
 from knowledge_flow_backend.core.stores.resources.postgres_resource_store import PostgresResourceStore
 from knowledge_flow_backend.core.stores.tags.base_tag_store import BaseTagStore
-from knowledge_flow_backend.core.stores.tags.duckdb_tag_store import DuckdbTagStore
-from knowledge_flow_backend.core.stores.tags.opensearch_tag_store import OpenSearchTagStore
 from knowledge_flow_backend.core.stores.tags.postgres_tag_store import PostgresTagStore
 from knowledge_flow_backend.core.stores.team_metadata.base_team_metadata_store import BaseTeamMetadataStore
 from knowledge_flow_backend.core.stores.team_metadata.postgres_team_metadata_store import PostgresTeamMetadataStore
@@ -279,8 +273,7 @@ class ApplicationContext:
     _rebac_engine: Optional[RebacEngine] = None
     _neo4j_driver: Optional[Driver] = None
     _filesystem_instance: Optional[BaseFilesystem] = None
-    _async_sql_engine: Optional[AsyncEngine] = None
-    _sql_engine: Optional[Engine] = None
+    _pg_async_engine: Optional[AsyncEngine] = None
 
     def __init__(self, configuration: Configuration):
         # Allow reuse if already initialized with same config
@@ -443,6 +436,25 @@ class ApplicationContext:
         module = importlib.import_module(module_path)
         cls = getattr(module, class_name)
         return cls
+
+    def get_pg_async_engine(self):
+        """
+        Lazily create and cache a single async Postgres Engine for all the postgres async stores.
+        """
+        if self._pg_async_engine is None:
+            pg_cfg = self.configuration.storage.postgres
+            self._pg_async_engine = create_async_engine_from_config(pg_cfg)
+            engine = self._pg_async_engine
+
+            def _dispose_async_engine():
+                try:
+                    asyncio.run(engine.dispose())
+                except Exception:
+                    logger.debug("[SQL] Async engine dispose at exit failed", exc_info=True)
+
+            atexit.register(_dispose_async_engine)
+            logger.info("[SQL] Shared Postgres async initialized.")
+        return self._pg_async_engine
 
     def get_log_store(self) -> BaseLogStore:
         """
@@ -671,33 +683,14 @@ class ApplicationContext:
             return self._metadata_store_instance
 
         store_config = get_configuration().storage.metadata_store
-        if isinstance(store_config, DuckdbStoreConfig):
-            db_path = Path(store_config.duckdb_path).expanduser()
-            self._metadata_store_instance = DuckdbMetadataStore(db_path)
-        elif isinstance(store_config, PostgresTableConfig):
+        if isinstance(store_config, PostgresTableConfig):
             self._metadata_store_instance = PostgresMetadataStore(
-                engine=self.get_sql_engine(),
+                engine=self.get_pg_async_engine(),
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )
-        elif isinstance(store_config, OpenSearchIndexConfig):
-            opensearch_config = get_configuration().storage.opensearch
-            if not opensearch_config:
-                raise ValueError("Missing OpenSearch configuration")
-            password = opensearch_config.password
-            if not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
-            self._metadata_store_instance = OpenSearchMetadataStore(
-                host=opensearch_config.host,
-                username=opensearch_config.username,
-                password=password,
-                secure=opensearch_config.secure,
-                verify_certs=opensearch_config.verify_certs,
-                index=store_config.index,
-            )
-        else:
-            raise ValueError("Unsupported metadata storage backend")
-        return self._metadata_store_instance
+            return self._metadata_store_instance
+        raise ValueError(f"Unsupported metadata storage backend type: {store_config.type}")
 
     def get_opensearch_client(self) -> OpenSearch:
         if self._opensearch_client is not None:
@@ -716,29 +709,17 @@ class ApplicationContext:
         )
         return self._opensearch_client
 
-    def get_sql_engine(self) -> Engine:
-        """Create one SQL engine for the whole app"""
-        if self._sql_engine is None:
-            # For now, only Postgres is supported
-            pg = get_configuration().storage.postgres
-            if not pg:
-                raise ValueError("PostgreSQL configuration is required for sql engine")
-
-            self._sql_engine = create_engine_from_config(pg)
-
-        return self._sql_engine
-
     def get_async_sql_engine(self) -> AsyncEngine:
         """Create one async SQL engine for the whole app"""
-        if self._async_sql_engine is None:
+        if self._pg_async_engine is None:
             # For now, only Postgres is supported
             pg = get_configuration().storage.postgres
             if not pg:
                 raise ValueError("PostgreSQL configuration is required for async sql engine")
 
-            self._async_sql_engine = create_async_engine_from_config(pg)
+            self._pg_async_engine = create_async_engine_from_config(pg)
 
-        return self._async_sql_engine
+        return self._pg_async_engine
 
     def get_neo4j_driver(self) -> Driver:
         """
@@ -813,33 +794,26 @@ class ApplicationContext:
             return self._tag_store_instance
 
         store_config = get_configuration().storage.tag_store
-        if isinstance(store_config, DuckdbStoreConfig):
-            db_path = Path(store_config.duckdb_path).expanduser()
-            self._tag_store_instance = DuckdbTagStore(db_path)
-        elif isinstance(store_config, PostgresTableConfig):
+        if isinstance(store_config, PostgresTableConfig):
             self._tag_store_instance = PostgresTagStore(
-                engine=self.get_sql_engine(),
+                engine=self.get_pg_async_engine(),
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )
-        elif isinstance(store_config, OpenSearchIndexConfig):
-            opensearch_config = get_configuration().storage.opensearch
-            if not opensearch_config:
-                raise ValueError("Missing OpenSearch configuration")
-            password = opensearch_config.password
-            if not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
-            self._tag_store_instance = OpenSearchTagStore(
-                host=opensearch_config.host,
-                username=opensearch_config.username,
-                password=password,
-                secure=opensearch_config.secure,
-                verify_certs=opensearch_config.verify_certs,
-                index=store_config.index,
-            )
-        else:
-            raise ValueError("Unsupported sessions storage backend")
-        return self._tag_store_instance
+            return self._tag_store_instance
+        raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
+
+    def get_team_metadata_store(self) -> BaseTeamMetadataStore:
+        """Get the team metadata store instance."""
+        # No choice, team store only support SQLAlchemy compatible db (Postgres, SQLite...)
+        if self._team_metadata_store_instance is not None:
+            return self._team_metadata_store_instance
+        pg = get_configuration().storage.postgres
+        engine = create_async_engine_from_config(pg)
+        self._team_metadata_store_instance = PostgresTeamMetadataStore(engine=engine)
+        return self._team_metadata_store_instance
+
+        # return PostgresTeamMetadataStore(engine=self.get_async_sql_engine())
 
     def get_team_metadata_store(self) -> BaseTeamMetadataStore:
         """Get the team metadata store instance."""
@@ -851,33 +825,14 @@ class ApplicationContext:
             return self._resource_store_instance
 
         store_config = get_configuration().storage.resource_store
-        if isinstance(store_config, DuckdbStoreConfig):
-            db_path = Path(store_config.duckdb_path).expanduser()
-            self._resource_store_instance = DuckdbResourceStore(db_path)
-        elif isinstance(store_config, PostgresTableConfig):
+        if isinstance(store_config, PostgresTableConfig):
             self._resource_store_instance = PostgresResourceStore(
-                engine=self.get_sql_engine(),
+                engine=self.get_pg_async_engine(),
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )
-        elif isinstance(store_config, OpenSearchIndexConfig):
-            opensearch_config = get_configuration().storage.opensearch
-            if not opensearch_config:
-                raise ValueError("Missing OpenSearch configuration")
-            password = opensearch_config.password
-            if not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
-            self._resource_store_instance = OpenSearchResourceStore(
-                host=opensearch_config.host,
-                username=opensearch_config.username,
-                password=password,
-                secure=opensearch_config.secure,
-                verify_certs=opensearch_config.verify_certs,
-                index=store_config.index,
-            )
-        else:
-            raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
-        return self._resource_store_instance
+            return self._resource_store_instance
+        raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
 
     def get_tabular_stores(self) -> Dict[str, StoreInfo]:
         if self._tabular_stores is not None:
@@ -1195,3 +1150,40 @@ class ApplicationContext:
             logger.info(f"    • {ext} → {cls.__name__}")
 
         logger.info("--------------------------------------------------")
+
+    async def shutdown(self) -> None:
+        """
+        Best-effort cleanup of shared resources.
+        """
+        # HTTP clients
+        try:
+            from fred_core.model import http_clients
+
+            await http_clients.async_shutdown_shared_clients()
+        except Exception:
+            logger.debug("[HTTP] Failed to shutdown shared clients", exc_info=True)
+
+        # Async PG engine
+        if self._pg_async_engine is not None:
+            try:
+                await self._pg_async_engine.dispose()
+            finally:
+                self._pg_async_engine = None
+
+        # OpenSearch client
+        if self._opensearch_client is not None:
+            try:
+                self._opensearch_client.close()
+            except Exception:
+                logger.debug("[OS] Error closing OpenSearch client", exc_info=True)
+            finally:
+                self._opensearch_client = None
+
+        # Neo4j driver
+        if self._neo4j_driver is not None:
+            try:
+                self._neo4j_driver.close()
+            except Exception:
+                logger.debug("[NEO4J] Error closing driver", exc_info=True)
+            finally:
+                self._neo4j_driver = None

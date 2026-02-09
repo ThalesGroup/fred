@@ -81,24 +81,30 @@ def _mk_orchestrator(minimal_generalist_config: Configuration):
 # -----------------------
 
 
-def test_empty_history_returns_empty(minimal_generalist_config, monkeypatch):
+async def test_empty_history_returns_empty(minimal_generalist_config, monkeypatch):
     """
     Fred rationale: Fast no-op when nothing to restore avoids side effects on fresh sessions.
     """
     orch, store = _mk_orchestrator(minimal_generalist_config)
     user, session = _mk_user_session()
-    store.save(session)
-    monkeypatch.setattr(orch, "get_session_history", lambda _sid, _u: [])
-    assert orch._restore_history(user=user, session=session) == []
+    await store.save(session)
+
+    async def _fake_history(_sid, _u):
+        return []
+
+    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+    assert await orch._restore_history(user=user, session=session) == []
 
 
-def test_orders_strictly_by_rank_not_exchange(minimal_generalist_config, monkeypatch):
+async def test_orders_strictly_by_rank_not_exchange(
+    minimal_generalist_config, monkeypatch
+):
     """
     Fred rationale: Rank is the single source of chronological truth. Sorting by exchange_id breaks replay.
     """
     orch, store = _mk_orchestrator(minimal_generalist_config)
     user, session = _mk_user_session()
-    store.save(session)
+    await store.save(session)
 
     ex1, ex2 = "zzz-ex", "aaa-ex"
     hist = [
@@ -119,14 +125,18 @@ def test_orders_strictly_by_rank_not_exchange(minimal_generalist_config, monkeyp
             parts=[TextPart(text="U2")],
         ),
     ]
-    monkeypatch.setattr(orch, "get_session_history", lambda _sid, _u: hist)
 
-    out = orch._restore_history(user=user, session=session)
+    async def _fake_history(_sid, _u):
+        return hist
+
+    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+
+    out = await orch._restore_history(user=user, session=session)
     assert isinstance(out[0], HumanMessage) and "U1" in out[0].content
     assert isinstance(out[1], HumanMessage) and "U2" in out[1].content
 
 
-def test_groups_tool_calls_then_tool_result_and_text(
+async def test_groups_tool_calls_then_tool_result_and_text(
     minimal_generalist_config, monkeypatch
 ):
     """
@@ -135,7 +145,7 @@ def test_groups_tool_calls_then_tool_result_and_text(
     """
     orch, store = _mk_orchestrator(minimal_generalist_config)
     user, session = _mk_user_session()
-    store.save(session)
+    await store.save(session)
 
     ex = "ex-1"
     hist = [
@@ -178,9 +188,13 @@ def test_groups_tool_calls_then_tool_result_and_text(
             parts=[TextPart(text="A")],
         ),
     ]
-    monkeypatch.setattr(orch, "get_session_history", lambda _sid, _u: hist)
 
-    out = orch._restore_history(user=user, session=session)
+    async def _fake_history(_sid, _u):
+        return hist
+
+    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+
+    out = await orch._restore_history(user=user, session=session)
 
     assert isinstance(out[0], HumanMessage) and "U" in out[0].content
     assert isinstance(out[1], AIMessage) and isinstance(
@@ -193,7 +207,7 @@ def test_groups_tool_calls_then_tool_result_and_text(
     assert isinstance(out[3], AIMessage) and "A" in out[3].content
 
 
-def test_skips_orphan_tool_result_cross_exchange(
+async def test_skips_orphan_tool_result_cross_exchange(
     minimal_generalist_config, monkeypatch
 ):
     """
@@ -201,7 +215,7 @@ def test_skips_orphan_tool_result_cross_exchange(
     """
     orch, store = _mk_orchestrator(minimal_generalist_config)
     user, session = _mk_user_session()
-    store.save(session)
+    await store.save(session)
 
     e1, e2 = "e1", "e2"
     hist = [
@@ -239,23 +253,29 @@ def test_skips_orphan_tool_result_cross_exchange(
             parts=[ToolResultPart(call_id="c-1", ok=True, content="OK")],
         ),
     ]
-    monkeypatch.setattr(orch, "get_session_history", lambda _sid, _u: hist)
 
-    out = orch._restore_history(user=user, session=session)
+    async def _fake_history(_sid, _u):
+        return hist
+
+    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+
+    out = await orch._restore_history(user=user, session=session)
     # Only one ToolMessage should make it (the valid one in e1)
     tool_msgs = [m for m in out if isinstance(m, ToolMessage)]
     assert len(tool_msgs) == 1 and "OK" in tool_msgs[0].content
     assert all("SHOULD_SKIP" not in getattr(m, "content", "") for m in out)
 
 
-def test_multiple_tool_calls_in_one_exchange(minimal_generalist_config, monkeypatch):
+async def test_multiple_tool_calls_in_one_exchange(
+    minimal_generalist_config, monkeypatch
+):
     """
     Fred rationale: The assistant can schedule multiple tool calls as a single batch intent.
     We emit one AIMessage(tool_calls=[...]) capturing both.
     """
     orch, store = _mk_orchestrator(minimal_generalist_config)
     user, session = _mk_user_session()
-    store.save(session)
+    await store.save(session)
 
     e = "e-multi"
     hist = [
@@ -295,9 +315,13 @@ def test_multiple_tool_calls_in_one_exchange(minimal_generalist_config, monkeypa
             parts=[ToolResultPart(call_id="b", ok=True, content="Rb")],
         ),
     ]
-    monkeypatch.setattr(orch, "get_session_history", lambda _sid, _u: hist)
 
-    out = orch._restore_history(user=user, session=session)
+    async def _fake_history(_sid, _u):
+        return hist
+
+    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+
+    out = await orch._restore_history(user=user, session=session)
     ai_calls = [
         m for m in out if isinstance(m, AIMessage) and getattr(m, "tool_calls", None)
     ]
@@ -308,13 +332,13 @@ def test_multiple_tool_calls_in_one_exchange(minimal_generalist_config, monkeypa
     assert {m.tool_call_id for m in tool_msgs} == {"a", "b"}
 
 
-def test_flushes_pending_calls_at_end(minimal_generalist_config, monkeypatch):
+async def test_flushes_pending_calls_at_end(minimal_generalist_config, monkeypatch):
     """
     Fred rationale: If the transcript ends during planning (tool calls) we must still preserve that intent.
     """
     orch, store = _mk_orchestrator(minimal_generalist_config)
     user, session = _mk_user_session()
-    store.save(session)
+    await store.save(session)
 
     e = "e-end"
     hist = [
@@ -336,14 +360,18 @@ def test_flushes_pending_calls_at_end(minimal_generalist_config, monkeypatch):
         ),
         # No tool result; end of transcript.
     ]
-    monkeypatch.setattr(orch, "get_session_history", lambda _sid, _u: hist)
 
-    out = orch._restore_history(user=user, session=session)
+    async def _fake_history(_sid, _u):
+        return hist
+
+    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+
+    out = await orch._restore_history(user=user, session=session)
     assert isinstance(out[-1], AIMessage)
     assert getattr(out[-1], "tool_calls")[0]["id"] == "tail"
 
 
-def test_windowing_keeps_whole_exchanges_and_preserves_chronology(
+async def test_windowing_keeps_whole_exchanges_and_preserves_chronology(
     minimal_generalist_config, monkeypatch
 ):
     """
@@ -351,7 +379,7 @@ def test_windowing_keeps_whole_exchanges_and_preserves_chronology(
     """
     orch, store = _mk_orchestrator(minimal_generalist_config)
     user, session = _mk_user_session()
-    store.save(session)
+    await store.save(session)
     orch.restore_max_exchanges = 1  # keep only the most recent exchange
 
     e1, e2 = "e1", "e2"
@@ -389,9 +417,13 @@ def test_windowing_keeps_whole_exchanges_and_preserves_chronology(
             parts=[TextPart(text="A2")],
         ),
     ]
-    monkeypatch.setattr(orch, "get_session_history", lambda _sid, _u: hist)
 
-    out = orch._restore_history(user=user, session=session)
+    async def _fake_history(_sid, _u):
+        return hist
+
+    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+
+    out = await orch._restore_history(user=user, session=session)
 
     # Only e2 remains, in rank order.
     assert len(out) == 2
@@ -399,7 +431,7 @@ def test_windowing_keeps_whole_exchanges_and_preserves_chronology(
     assert isinstance(out[1], AIMessage) and "A2" in out[1].content
 
 
-def test_args_dict_and_string_and_unparseable_string(
+async def test_args_dict_and_string_and_unparseable_string(
     minimal_generalist_config, monkeypatch
 ):
     """
@@ -407,7 +439,7 @@ def test_args_dict_and_string_and_unparseable_string(
     """
     orch, store = _mk_orchestrator(minimal_generalist_config)
     user, session = _mk_user_session()
-    store.save(session)
+    await store.save(session)
 
     e = "e-args"
     hist = [
@@ -436,9 +468,13 @@ def test_args_dict_and_string_and_unparseable_string(
             parts=[ToolCallPart(call_id="c", name="t", args=json.loads('"not-json"'))],
         ),
     ]
-    monkeypatch.setattr(orch, "get_session_history", lambda _sid, _u: hist)
 
-    out = orch._restore_history(user=user, session=session)
+    async def _fake_history(_sid, _u):
+        return hist
+
+    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+
+    out = await orch._restore_history(user=user, session=session)
     ai = [
         m for m in out if isinstance(m, AIMessage) and getattr(m, "tool_calls", None)
     ][0]
@@ -448,13 +484,13 @@ def test_args_dict_and_string_and_unparseable_string(
     assert calls["c"].get("_raw") == "not-json"
 
 
-def test_system_messages_are_emitted(minimal_generalist_config, monkeypatch):
+async def test_system_messages_are_emitted(minimal_generalist_config, monkeypatch):
     """
     Fred rationale: System scaffolding (policies, persona) is part of the replay state.
     """
     orch, store = _mk_orchestrator(minimal_generalist_config)
     user, session = _mk_user_session()
-    store.save(session)
+    await store.save(session)
 
     e = "e-sys"
     hist = [
@@ -483,15 +519,19 @@ def test_system_messages_are_emitted(minimal_generalist_config, monkeypatch):
             parts=[TextPart(text="A")],
         ),
     ]
-    monkeypatch.setattr(orch, "get_session_history", lambda _sid, _u: hist)
 
-    out = orch._restore_history(user=user, session=session)
+    async def _fake_history(_sid, _u):
+        return hist
+
+    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+
+    out = await orch._restore_history(user=user, session=session)
     assert isinstance(out[0], SystemMessage) and "SYS" in out[0].content
     assert isinstance(out[1], HumanMessage)
     assert isinstance(out[2], AIMessage)
 
 
-def test_tool_result_emits_only_after_flushing_calls(
+async def test_tool_result_emits_only_after_flushing_calls(
     minimal_generalist_config, monkeypatch
 ):
     """
@@ -499,7 +539,7 @@ def test_tool_result_emits_only_after_flushing_calls(
     """
     orch, store = _mk_orchestrator(minimal_generalist_config)
     user, session = _mk_user_session()
-    store.save(session)
+    await store.save(session)
 
     e = "e-order"
     hist = [
@@ -520,16 +560,20 @@ def test_tool_result_emits_only_after_flushing_calls(
             parts=[ToolResultPart(call_id="x", ok=True, content="R")],
         ),
     ]
-    monkeypatch.setattr(orch, "get_session_history", lambda _sid, _u: hist)
 
-    out = orch._restore_history(user=user, session=session)
+    async def _fake_history(_sid, _u):
+        return hist
+
+    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+
+    out = await orch._restore_history(user=user, session=session)
     assert (
         isinstance(out[0], AIMessage) and getattr(out[0], "tool_calls")[0]["id"] == "x"
     )
     assert isinstance(out[1], ToolMessage) and out[1].tool_call_id == "x"
 
 
-def test_ignores_unrelated_roles_or_channels_safely(
+async def test_ignores_unrelated_roles_or_channels_safely(
     minimal_generalist_config, monkeypatch
 ):
     """
@@ -537,7 +581,7 @@ def test_ignores_unrelated_roles_or_channels_safely(
     """
     orch, store = _mk_orchestrator(minimal_generalist_config)
     user, session = _mk_user_session()
-    store.save(session)
+    await store.save(session)
 
     # Simulate odd channel ordering and a no-op tool_result with unknown call_id.
     e = "e-odd"
@@ -567,15 +611,21 @@ def test_ignores_unrelated_roles_or_channels_safely(
             parts=[TextPart(text="A")],
         ),
     ]
-    monkeypatch.setattr(orch, "get_session_history", lambda _sid, _u: hist)
 
-    out = orch._restore_history(user=user, session=session)
+    async def _fake_history(_sid, _u):
+        return hist
+
+    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+
+    out = await orch._restore_history(user=user, session=session)
     assert isinstance(out[0], HumanMessage) and "U" in out[0].content
     assert isinstance(out[1], AIMessage) and "A" in out[1].content
     assert all(not isinstance(m, ToolMessage) for m in out)
 
 
-def test_sample_from_prompt_checks(minimal_generalist_config, app_context, monkeypatch):
+async def test_sample_from_prompt_checks(
+    minimal_generalist_config, app_context, monkeypatch
+):
     """
     Integration-flavored check mirroring your provided example to catch regressions.
     """
@@ -595,7 +645,7 @@ def test_sample_from_prompt_checks(minimal_generalist_config, app_context, monke
     session = SessionSchema(
         id="sess-1", user_id=user.uid, title="Ordering Test", updated_at=_utcnow()
     )
-    session_store.save(session)
+    await session_store.save(session)
 
     ex1, ex2 = "zzz-ex-1", "aaa-ex-2"
     hist = [
@@ -656,9 +706,13 @@ def test_sample_from_prompt_checks(minimal_generalist_config, app_context, monke
             parts=[TextPart(text="A-e2")],
         ),
     ]
-    monkeypatch.setattr(orch, "get_session_history", lambda _sid, _u: hist)
 
-    lc_messages = orch._restore_history(user=user, session=session)
+    async def _fake_history(_sid, _u):
+        return hist
+
+    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+
+    lc_messages = await orch._restore_history(user=user, session=session)
     assert isinstance(lc_messages[0], HumanMessage) and "U-e1" in lc_messages[0].content
     assert (
         isinstance(lc_messages[1], AIMessage)

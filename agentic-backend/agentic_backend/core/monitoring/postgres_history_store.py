@@ -12,16 +12,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from statistics import mean
 from typing import Any, Dict, List, Optional
 
-from fred_core.sql import BaseSqlStore
+from fred_core.sql import AsyncBaseSqlStore, json_for_engine
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, select
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from agentic_backend.common.utils import truncate_datetime
 from agentic_backend.core.chatbot.chat_schema import (
@@ -75,9 +75,11 @@ class PostgresHistoryStore(BaseHistoryStore):
     v2-native Postgres history store. Persists ChatMessage (role/channel/parts/metadata).
     """
 
-    def __init__(self, engine: Engine, table_name: str, prefix: str = "history_"):
-        self.store = BaseSqlStore(engine, prefix=prefix)
+    def __init__(self, engine: AsyncEngine, table_name: str, prefix: str = "history_"):
+        self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
+
+        json_type = json_for_engine(self.store.engine)
 
         metadata = MetaData()
         self.table = Table(
@@ -90,51 +92,68 @@ class PostgresHistoryStore(BaseHistoryStore):
             Column("role", String, nullable=False),
             Column("channel", String, nullable=False),
             Column("exchange_id", String),
-            Column("parts_json", JSONB),
-            Column("metadata_json", JSONB),
+            Column("parts_json", json_type),
+            Column("metadata_json", json_type),
             keep_existing=True,
         )
-        metadata.create_all(self.store.engine)
-        logger.info("[HISTORY][PG] Table ready: %s", self.table_name)
+
+        async def _create():
+            async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
+                await conn.run_sync(metadata.create_all)
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_create())
+        except RuntimeError:
+            asyncio.run(_create())
+        logger.info("[HISTORY][PG][ASYNC] Table ready: %s", self.table_name)
 
     # ------------------------------------------------------------------ io
-    def save(self, session_id: str, messages: List[ChatMessage], user_id: str) -> None:
-        with self.store.begin() as conn:
-            for i, msg in enumerate(messages):
-                parts_json = [
-                    p.model_dump(mode="json", exclude_none=True)
-                    for p in (msg.parts or [])
-                ]
-                metadata_json = (
-                    msg.metadata.model_dump(mode="json", exclude_none=True)
-                    if msg.metadata
-                    else {}
-                )
+    async def save(
+        self, session_id: str, messages: List[ChatMessage], user_id: str
+    ) -> None:
+        async with self.store.begin() as conn:
+            await self.save_with_conn(conn, session_id, messages, user_id)
 
-                self.store.upsert(
-                    conn,
-                    self.table,
-                    values={
-                        "session_id": session_id,
-                        "user_id": user_id,
-                        "rank": msg.rank if msg.rank is not None else i,
-                        "timestamp": _normalize_ts(msg.timestamp),
-                        "role": msg.role.value
-                        if isinstance(msg.role, Role)
-                        else msg.role,
-                        "channel": msg.channel.value
-                        if isinstance(msg.channel, Channel)
-                        else msg.channel,
-                        "exchange_id": msg.exchange_id,
-                        "parts_json": parts_json,
-                        "metadata_json": metadata_json,
-                    },
-                    pk_cols=["session_id", "user_id", "rank"],
-                )
+    async def save_with_conn(
+        self, conn, session_id: str, messages: List[ChatMessage], user_id: str
+    ) -> None:
+        """
+        Same as save(), but reuses the provided AsyncConnection so callers can
+        group history + session writes in one transaction.
+        """
+        for i, msg in enumerate(messages):
+            parts_json = [
+                p.model_dump(mode="json", exclude_none=True) for p in (msg.parts or [])
+            ]
+            metadata_json = (
+                msg.metadata.model_dump(mode="json", exclude_none=True)
+                if msg.metadata
+                else {}
+            )
 
-    def get(self, session_id: str) -> List[ChatMessage]:
-        with self.store.begin() as conn:
-            rows = conn.execute(
+            await self.store.upsert(
+                conn,
+                self.table,
+                values={
+                    "session_id": session_id,
+                    "user_id": user_id,
+                    "rank": msg.rank if msg.rank is not None else i,
+                    "timestamp": _normalize_ts(msg.timestamp),
+                    "role": msg.role.value if isinstance(msg.role, Role) else msg.role,
+                    "channel": msg.channel.value
+                    if isinstance(msg.channel, Channel)
+                    else msg.channel,
+                    "exchange_id": msg.exchange_id,
+                    "parts_json": parts_json,
+                    "metadata_json": metadata_json,
+                },
+                pk_cols=["session_id", "user_id", "rank"],
+            )
+
+    async def get(self, session_id: str) -> List[ChatMessage]:
+        async with self.store.begin() as conn:
+            result = await conn.execute(
                 select(
                     self.table.c.user_id,
                     self.table.c.rank,
@@ -147,7 +166,8 @@ class PostgresHistoryStore(BaseHistoryStore):
                 )
                 .where(self.table.c.session_id == session_id)
                 .order_by(self.table.c.rank.asc())
-            ).fetchall()
+            )
+            rows = result.fetchall()
 
         out: List[ChatMessage] = []
         for row in rows:
@@ -174,7 +194,7 @@ class PostgresHistoryStore(BaseHistoryStore):
         return out
 
     # ------------------------------------------------------------------ metrics
-    def get_chatbot_metrics(
+    async def get_chatbot_metrics(
         self,
         start: str,
         end: str,
@@ -183,8 +203,8 @@ class PostgresHistoryStore(BaseHistoryStore):
         groupby: List[str],
         agg_mapping: Dict[str, List[str]],
     ) -> MetricsResponse:
-        with self.store.begin() as conn:
-            rows = conn.execute(
+        async with self.store.begin() as conn:
+            result = await conn.execute(
                 select(
                     self.table.c.session_id,
                     self.table.c.user_id,
@@ -202,7 +222,8 @@ class PostgresHistoryStore(BaseHistoryStore):
                     self.table.c.user_id == user_id,
                 )
                 .order_by(self.table.c.timestamp.asc())
-            ).fetchall()
+            )
+            rows = result.fetchall()
 
         grouped: Dict[tuple, list] = {}
         for row in rows:

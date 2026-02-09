@@ -33,7 +33,7 @@ class BaseMetadataStore:
     """
 
     @abstractmethod
-    def get_all_metadata(self, filters: dict) -> List[DocumentMetadata]:
+    async def get_all_metadata(self, filters: dict) -> List[DocumentMetadata]:
         """
         Return all metadata documents matching the given filters.
 
@@ -47,7 +47,7 @@ class BaseMetadataStore:
         pass
 
     @abstractmethod
-    def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata | None:
+    async def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata | None:
         """
         Retrieve a metadata document by its UID.
 
@@ -58,7 +58,7 @@ class BaseMetadataStore:
         pass
 
     @abstractmethod
-    def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
+    async def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
         """
         Return all metadata entries that are tagged with a specific tag ID.
 
@@ -68,7 +68,7 @@ class BaseMetadataStore:
         """
         pass
 
-    def browse_metadata_in_tag(self, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[List[DocumentMetadata], int]:
+    async def browse_metadata_in_tag(self, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[List[DocumentMetadata], int]:
         """
         Return a paginated list of metadata entries tagged with a specific tag ID.
 
@@ -76,12 +76,12 @@ class BaseMetadataStore:
         the tag (ignoring pagination).
         """
         # Default fallback implementation: load all then slice.
-        all_docs = self.get_metadata_in_tag(tag_id)
+        all_docs = await self.get_metadata_in_tag(tag_id)
         total = len(all_docs)
         return all_docs[offset : offset + limit], total
 
     @abstractmethod
-    def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
+    async def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
         """
         Return all metadata entries originating from a specific pull source.
 
@@ -91,7 +91,7 @@ class BaseMetadataStore:
         pass
 
     @abstractmethod
-    def save_metadata(self, metadata: DocumentMetadata) -> None:
+    async def save_metadata(self, metadata: DocumentMetadata) -> None:
         """
         Create or update a metadata entry.
 
@@ -105,7 +105,7 @@ class BaseMetadataStore:
         pass
 
     @abstractmethod
-    def delete_metadata(self, document_uid: str) -> None:
+    async def delete_metadata(self, document_uid: str) -> None:
         """
         Create or update a metadata entry.
 
@@ -119,7 +119,7 @@ class BaseMetadataStore:
         pass
 
     @abstractmethod
-    def clear(self) -> None:
+    async def clear(self) -> None:
         """
         Delete all metadata records from the store.
 

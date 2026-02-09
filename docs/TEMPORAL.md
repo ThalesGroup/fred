@@ -98,12 +98,12 @@ Workflows MAY:
 - Start child workflows if required.
 
 #### 2.2 Activities are the only place for I/O and agent execution
-All non-deterministic work MUST be implemented as Activities:
-- LangGraph / LangChain execution
-- LLM, tool, retriever, embedding calls
-- Database access (Postgres, OpenSearch, DuckDB)
-- Object storage (MinIO/S3)
-- CPU-heavy processing
+ All non-deterministic work MUST be implemented as Activities:
+ - LangGraph / LangChain execution
+ - LLM, tool, retriever, embedding calls
+ - Database access (SQLite in dev, PostgreSQL in prod, OpenSearch if enabled)
+ - Object storage (MinIO/S3)
+ - CPU-heavy processing
 
 #### 2.3 Timeouts and retries are mandatory
 All Activities MUST define:

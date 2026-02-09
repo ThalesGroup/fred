@@ -841,7 +841,7 @@ export type ChatAskInput = {
   access_token?: string | null;
   refresh_token?: string | null;
   type?: "ask";
-  session_id?: string | null;
+  session_id: string;
   message: string;
   client_exchange_id?: string | null;
 };

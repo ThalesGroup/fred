@@ -33,7 +33,12 @@ from fred_core import (
     Resource,
     authorize,
 )
-from fred_core.kpi import BaseKPIWriter, Dims, KPIActor
+from fred_core.kpi import (
+    BaseKPIWriter,
+    KPIActor,
+    phase_timer,
+    record_phase_metric,
+)
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
@@ -43,9 +48,7 @@ from langchain_core.messages import (
 )
 from requests import HTTPError
 
-from agentic_backend.application_context import (
-    get_default_model,
-)
+from agentic_backend.application_context import get_default_model, pg_async_tx
 from agentic_backend.common.kf_fast_text_client import KfFastTextClient
 from agentic_backend.common.mcp_utils import MCPConnectionError
 from agentic_backend.common.structures import Configuration
@@ -77,6 +80,7 @@ from agentic_backend.core.interrupts.streaming_interrupt_handler import (
 )
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.session.attachement_processing import AttachementProcessing
+from agentic_backend.core.session.session_cache import CachedSession, SessionCache
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
     SessionAttachmentRecord,
@@ -96,29 +100,6 @@ SessionCallbackType = (
 def _utcnow_dt() -> datetime:
     """UTC timestamp (seconds resolution) for ISO-8601 serialization."""
     return datetime.now(timezone.utc).replace(microsecond=0)
-
-
-def _record_phase_metric(
-    *,
-    kpi: BaseKPIWriter,
-    phase: str,
-    start_ts: float,
-    agent_name: str,
-) -> None:
-    ms = int((time.monotonic() - start_ts) * 1000)
-    # Keep cardinality low for Prometheus: only agent + phase + status.
-    dims: Dims = {
-        "agent_name": agent_name,
-        "phase": phase,
-    }
-    kpi.emit(
-        name="chat.phase_latency_ms",
-        type="timer",
-        value=ms,
-        unit="ms",
-        dims=dims,
-        actor=PHASE_METRIC_ACTOR,
-    )
 
 
 class SessionOrchestrator:
@@ -143,6 +124,7 @@ class SessionOrchestrator:
         history_store: BaseHistoryStore,
         kpi: BaseKPIWriter,
     ):
+        self.session_cache: SessionCache = SessionCache(max_size=8 * 1024)
         self.session_store = session_store
         self.attachments_store = attachments_store
         self.agent_factory = agent_factory
@@ -156,9 +138,12 @@ class SessionOrchestrator:
         self.kpi: BaseKPIWriter = kpi
         self.attachement_processing = AttachementProcessing()
         self.restore_max_exchanges = configuration.ai.restore_max_exchanges
-        self._rank_locks: Dict[str, asyncio.Lock] = {}
         # Stateless worker that knows how to turn LangGraph events into ChatMessage[]
         self.transcoder = StreamTranscoder()
+        cfg_max_sessions_per_user = configuration.ai.max_concurrent_sessions_per_user
+        self.max_sessions_per_user = (
+            20 if cfg_max_sessions_per_user is None else cfg_max_sessions_per_user
+        )
         cfg_max_files = configuration.ai.max_attached_files_per_user
         self.max_attached_files_per_user = (
             20 if cfg_max_files is None else cfg_max_files
@@ -173,38 +158,47 @@ class SessionOrchestrator:
             else self.max_attached_file_size_mb * 1024 * 1024
         )
 
+    async def release_session(self, session_id: str) -> None:
+        """
+        Cleanup helpers for a session that is no longer active on this pod.
+        - evict session cache
+        - drop rank lock entry
+        - teardown cached agents
+        """
+        self.session_cache.delete(session_id)
+        try:
+            await self.agent_factory.teardown_session_agents(session_id)
+        except Exception:
+            logger.warning(
+                "[SESSIONS] teardown_session_agents failed during release_session session=%s",
+                session_id,
+                exc_info=True,
+            )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("[SESSIONS] release_session completed for %s", session_id)
+
     # ---------------- Public API (used by WS layer) ----------------
 
-    def get_rank_lock(self, session_id: str) -> asyncio.Lock:
-        lock = self._rank_locks.get(session_id)
-        if lock is None:
-            lock = asyncio.Lock()
-            self._rank_locks[session_id] = lock
-        return lock
-
     async def _ensure_next_rank(self, session: SessionSchema) -> int:
-        # If next_rank is missing or stale (e.g., old sessions persisted without partial HITL steps),
-        # recompute from stored history length.
-        prior_msgs: List[ChatMessage] = []
-        if session.next_rank is None:
-            prior_msgs = await asyncio.to_thread(self.history_store.get, session.id)
-        else:
-            # Lazy fetch only if we need to validate monotonicity
-            prior_msgs = await asyncio.to_thread(self.history_store.get, session.id)
-            if session.next_rank < len(prior_msgs):
-                logger.warning(
-                    "[SESSIONS] next_rank corrected from %s to %s for session=%s",
-                    session.next_rank,
-                    len(prior_msgs),
-                    session.id,
-                )
-                session.next_rank = len(prior_msgs)
-                await asyncio.to_thread(self.session_store.save, session)
+        """
+        Seed next_rank only when missing. Avoids history scans on the hot path.
+        """
+        if session.next_rank is not None:
+            return session.next_rank
 
-        if session.next_rank is None:
-            session.next_rank = len(prior_msgs)
-            await asyncio.to_thread(self.session_store.save, session)
-
+        async with phase_timer(self.kpi, "history_get_seed_rank"):
+            prior_msgs = await self.history_store.get(session.id)
+        session.next_rank = len(prior_msgs)
+        async with phase_timer(self.kpi, "session_write_seed_rank"):
+            await self.session_store.save(session)
+        self.session_cache.touch_session(session.id, session)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "[SESSIONS] seeded next_rank=%s from history_count=%d session=%s",
+                session.next_rank,
+                len(prior_msgs),
+                session.id,
+            )
         return session.next_rank
 
     @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
@@ -215,7 +209,7 @@ class SessionOrchestrator:
         user: KeycloakUser,
         callback: CallbackType,
         session_callback: SessionCallbackType | None = None,
-        session_id: str | None,
+        session_id: str,
         message: str,
         agent_name: str,
         runtime_context: RuntimeContext,
@@ -231,19 +225,15 @@ class SessionOrchestrator:
           - record KPIs (success/error)
         """
         # Check if user is authorized to talk in this session
-        if session_id is not None:
-            await asyncio.to_thread(
-                self._authorize_user_action_on_session, session_id, user, Action.UPDATE
-            )
-
-        logger.debug(
-            "chat_ask_websocket user_id=%s session_id=%s agent=%s",
-            user.uid,
-            session_id,
-            agent_name,
+        session_updated = False
+        t_initial = time.monotonic()
+        session = await self._get_session(
+            user_id=user.uid,
+            session_id=session_id,
         )
 
         # KPI: count incoming question early (before any work)
+        # Simply count the user message here; downstream errors or early returns will be captured in the phase metrics and error counts.
         actor = KPIActor(type="human", user_id=user.uid, groups=user.groups)
         exchange_id = client_exchange_id or str(uuid4())
         self.kpi.count(
@@ -254,42 +244,30 @@ class SessionOrchestrator:
             },
             actor=actor,
         )
-        # 1) Get or create the session. We receive a None session_id for new sessions.
-        t_initial = time.monotonic()
-        session = await self._get_or_create_session(
-            user_id=user.uid, query=message, session_id=session_id
-        )
-        _record_phase_metric(
-            kpi=self.kpi,
-            phase="session_get_create",
-            start_ts=t_initial,
-            agent_name=agent_name,
-        )
+
         # If this session was created with a placeholder title, refresh it now from the first prompt.
-        t_title = time.monotonic()
-        old_title = session.title
-        await self._maybe_refresh_title_from_prompt(session=session, prompt=message)
-        title_changed = session.title != old_title
-        if session.title != old_title:
-            session.updated_at = _utcnow_dt()
-            await asyncio.to_thread(self.session_store.save, session)
-        _record_phase_metric(
-            kpi=self.kpi,
-            phase="title_refresh",
-            start_ts=t_title,
-            agent_name=agent_name,
+        title_updated = await self._maybe_refresh_title_from_prompt(
+            session=session, prompt=message
         )
+        if title_updated:
+            # Save immediately so that concurrent REST calls (e.g. get_sessions) see the new title
+            async with phase_timer(self.kpi, "session_write_title"):
+                await self.session_store.save(session)
+            self.session_cache.touch_session(session.id, session)
+            session_updated = True
+
         # Propagate effective session_id into runtime context so downstream calls
         # (vector search, attachments) can scope to the correct conversation.
         runtime_context.session_id = session.id
         # 2) Check if an agent instance can be created/initialized/reused
-        t_agent_init = time.monotonic()
+
         try:
-            agent, is_cached = await self.agent_factory.create_and_init(
-                agent_name=agent_name,
-                runtime_context=runtime_context,
-                session_id=session.id,
-            )
+            async with phase_timer(self.kpi, "agent_init"):
+                agent, is_cached = await self.agent_factory.create_and_init(
+                    agent_name=agent_name,
+                    runtime_context=runtime_context,
+                    session_id=session.id,
+                )
         except MCPConnectionError as mcp_err:
             self.kpi.count(
                 "chat.exchange_error",
@@ -321,12 +299,7 @@ class SessionOrchestrator:
                     "message": user_msg,
                 },
             )
-        _record_phase_metric(
-            kpi=self.kpi,
-            phase="agent_init",
-            start_ts=t_agent_init,
-            agent_name=agent_name,
-        )
+
         if is_cached:
             self.kpi.count(
                 "agent.cache_hit",
@@ -343,61 +316,52 @@ class SessionOrchestrator:
             )
 
         try:
-            if title_changed and session_callback:
+            if session_updated and session_callback:
                 await self._emit_session(session_callback, session)
             # 3) Rebuild minimal LangChain history (user/assistant/system only),
             # This method will only restore history if the agent is not cached.
             lc_history: List[AnyMessage] = []
             if not is_cached:
-                t_restore = time.monotonic()
-                lc_history = await asyncio.to_thread(
-                    self._restore_history,
-                    user=user,
-                    session=session,
-                )
-                _record_phase_metric(
-                    kpi=self.kpi,
-                    phase="history_restore",
-                    start_ts=t_restore,
-                    agent_name=agent_name,
-                )
+                async with phase_timer(self.kpi, "history_restore"):
+                    lc_history = await self._restore_history(
+                        user=user,
+                        session=session,
+                    )
                 label = f"agent={agent_name} session={session.id}"
                 log_agent_message_summary(lc_history, label=label)
 
-            rank_lock = self.get_rank_lock(session.id)
-            async with rank_lock:
-                t_rank = time.monotonic()
-                base_rank = await self._ensure_next_rank(session)
-                _record_phase_metric(
-                    kpi=self.kpi,
-                    phase="rank_seed",
-                    start_ts=t_rank,
-                    agent_name=agent_name,
+            base_rank = await self._ensure_next_rank(session)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "[SESSIONS] base_rank=%s next_rank=%s session=%s",
+                    base_rank,
+                    session.next_rank,
+                    session.id,
                 )
 
-                # 4) Emit the user message immediately
-                next_rank_cursor = base_rank  # first free rank in this session
-                user_msg = ChatMessage(
-                    session_id=session.id,
-                    exchange_id=exchange_id,
-                    rank=next_rank_cursor,
-                    timestamp=_utcnow_dt(),
-                    role=Role.user,
-                    channel=Channel.final,
-                    parts=[TextPart(text=message)],
-                    metadata=ChatMetadata(),
-                )
-                all_msgs: List[ChatMessage] = [user_msg]
-                await self._emit(callback, user_msg)
-                next_rank_cursor += 1  # advance past the user message
+            # 4) Emit the user message immediately
+            next_rank_cursor = base_rank  # first free rank in this session
+            user_msg = ChatMessage(
+                session_id=session.id,
+                exchange_id=exchange_id,
+                rank=next_rank_cursor,
+                timestamp=_utcnow_dt(),
+                role=Role.user,
+                channel=Channel.final,
+                parts=[TextPart(text=message)],
+                metadata=ChatMetadata(),
+            )
+            all_msgs: List[ChatMessage] = [user_msg]
+            await self._emit(callback, user_msg)
+            next_rank_cursor += 1  # advance past the user message
 
-                # Stream agent responses via the transcoder
-                agent_msgs: List[ChatMessage] = []
+            # Stream agent responses via the transcoder
+            agent_msgs: List[ChatMessage] = []
 
-                # Build input messages ensuring the last message is the Human question.
-                input_messages = lc_history + [HumanMessage(message)]
-                stream_start = time.monotonic()
-                try:
+            # Build input messages ensuring the last message is the Human question.
+            input_messages = lc_history + [HumanMessage(message)]
+            try:
+                async with phase_timer(self.kpi, "stream_agent_response"):
                     agent_msgs = await self.transcoder.stream_agent_response(
                         agent=agent,
                         input_messages=input_messages,
@@ -412,191 +376,184 @@ class SessionOrchestrator:
                         interrupt_handler=self._make_streaming_interrupt_handler(
                             session.id, exchange_id, callback
                         ),
-                    )
-                except WebSocketDisconnect:
-                    self.kpi.count(
-                        "chat.exchange_error",
-                        1,
-                        dims={
-                            "agent_name": agent_name,
-                        },
-                        actor=PHASE_METRIC_ACTOR,
-                    )
-                    logger.error(
-                        "Agent execution cancelled by client disconnect (agent=%s session=%s exchange=%s)",
-                        agent_name,
-                        session.id,
-                        exchange_id,
-                    )
-                    # do we need raise here ?
-                except InterruptRaised as ir:
-                    # Persist what we already streamed (user + any partial agent msgs)
-                    if not agent_msgs and getattr(ir, "partial_messages", None):
-                        agent_msgs = ir.partial_messages
-                    all_msgs.extend(agent_msgs)
-                    session.updated_at = _utcnow_dt()
-                    session.next_rank = base_rank + len(all_msgs)
-                    await asyncio.to_thread(self.session_store.save, session)
-                    await asyncio.to_thread(
-                        self.history_store.save, session.id, all_msgs, user.uid
-                    )
-                    logger.info(
-                        "[SESSIONS] interrupt persisted session=%s exchange=%s msgs=%d",
-                        session.id,
-                        exchange_id,
-                        len(all_msgs),
-                    )
-                    raise
-                except asyncio.CancelledError:
-                    self.kpi.count(
-                        "chat.exchange_error",
-                        1,
-                        dims={
-                            "agent_name": agent_name,
-                        },
-                        actor=PHASE_METRIC_ACTOR,
-                    )
-                    raise
-                except StreamAgentError as sae:
-                    # Preserve everything already emitted by the transcoder.
-                    agent_msgs = sae.partial_messages
-                    user_msg = human_error_message(runtime_context, sae.original)
-                    # Next free rank after all agent messages (base_rank consumed by user at 0).
-                    safe_rank = base_rank + len(agent_msgs) + 1
-                    agent_msgs.append(
-                        ChatMessage(
-                            session_id=session.id,
-                            exchange_id=exchange_id,
-                            rank=safe_rank,
-                            timestamp=_utcnow_dt(),
-                            role=Role.assistant,
-                            channel=Channel.final,
-                            parts=[TextPart(text=user_msg)],
-                            metadata=ChatMetadata(),
-                        )
-                    )
-                    # Important: reset cached agent state to avoid stale tool_calls in MemorySaver
-                    try:
-                        await self.agent_factory.teardown_session_agents(session.id)
-                    except Exception:
-                        logger.warning(
-                            "[SESSIONS] teardown_session_agents failed session=%s after StreamAgentError",
-                            session.id,
-                            exc_info=True,
-                        )
-                    self.kpi.count(
-                        "chat.exchange_error",
-                        1,
-                        dims={
-                            "agent_name": agent_name,
-                        },
-                        actor=PHASE_METRIC_ACTOR,
-                    )
-                except Exception as e:
-                    user_msg = human_error_message(runtime_context, e)
-                    safe_rank = base_rank + len(agent_msgs) + 1
-                    agent_msgs.append(
-                        ChatMessage(
-                            session_id=session.id,
-                            exchange_id=exchange_id,
-                            rank=safe_rank,
-                            timestamp=_utcnow_dt(),
-                            role=Role.assistant,
-                            channel=Channel.final,
-                            parts=[
-                                TextPart(text=user_msg),
-                            ],
-                            metadata=ChatMetadata(),
-                        )
-                    )
-                    try:
-                        await self.agent_factory.teardown_session_agents(session.id)
-                    except Exception:
-                        logger.warning(
-                            "[SESSIONS] teardown_session_agents failed session=%s after generic exception",
-                            session.id,
-                            exc_info=True,
-                        )
-                    self.kpi.count(
-                        "chat.exchange_error",
-                        1,
-                        dims={
-                            "agent_name": agent_name,
-                        },
-                        actor=PHASE_METRIC_ACTOR,
-                    )
-                finally:
-                    _record_phase_metric(
                         kpi=self.kpi,
-                        phase="stream",
-                        start_ts=stream_start,
-                        agent_name=agent_name,
                     )
+            except WebSocketDisconnect:
+                self.kpi.count(
+                    "chat.exchange_error",
+                    1,
+                    dims={
+                        "agent_name": agent_name,
+                    },
+                    actor=PHASE_METRIC_ACTOR,
+                )
+                logger.error(
+                    "Agent execution cancelled by client disconnect (agent=%s session=%s exchange=%s)",
+                    agent_name,
+                    session.id,
+                    exchange_id,
+                )
+                # do we need raise here ?
+            except InterruptRaised as ir:
+                # Persist what we already streamed (user + any partial agent msgs)
+                if not agent_msgs and getattr(ir, "partial_messages", None):
+                    agent_msgs = ir.partial_messages
                 all_msgs.extend(agent_msgs)
 
-                # Trace what will be persisted for this exchange (helps diagnose missing items on reload)
-                try:
-                    msg_summary = [
-                        {
-                            "rank": m.rank,
-                            "role": m.role,
-                            "channel": m.channel,
-                            "exchange": m.exchange_id,
-                            "parts": [
-                                getattr(p, "type", None) for p in (m.parts or [])
-                            ],
-                        }
-                        for m in all_msgs
-                    ]
-                    logger.info(
-                        "[SESSIONS][PERSIST_TRACE] session=%s exchange=%s total_msgs=%d ranks=%s",
-                        session.id,
-                        exchange_id,
-                        len(all_msgs),
-                        [m.get("rank") for m in msg_summary],
-                    )
-                    logger.debug(
-                        "[SESSIONS][PERSIST_TRACE] details=%s",
-                        msg_summary,
-                    )
-                except Exception as trace_err:
-                    logger.warning(
-                        "[SESSIONS][PERSIST_TRACE] failed to summarize messages session=%s exchange=%s err=%s",
-                        session.id,
-                        exchange_id,
-                        trace_err,
-                    )
-
-                # 6) Attach the raw runtime context (single source of truth)
-                self._attach_runtime_context(
-                    runtime_context=runtime_context,
-                    messages=agent_msgs,
-                )
-
-                # 7) Persist session + history
-                t_persist = time.monotonic()
                 session.updated_at = _utcnow_dt()
                 session.next_rank = base_rank + len(all_msgs)
-                await asyncio.to_thread(self.session_store.save, session)
-                assert session.user_id == user.uid, "Session/user mismatch"
-                # Save only the new messages; history stores are append/upsert-capable.
-                await asyncio.to_thread(
-                    self.history_store.save, session.id, all_msgs, user.uid
+                async with phase_timer(self.kpi, "session_save_on_interrupt"):
+                    await self.session_store.save(session)
+                async with phase_timer(self.kpi, "history_save_on_interrupt"):
+                    await self.history_store.save(session.id, all_msgs, user.uid)
+                logger.info(
+                    "[SESSIONS] interrupt persisted session=%s exchange=%s msgs=%d",
+                    session.id,
+                    exchange_id,
+                    len(all_msgs),
                 )
-                _record_phase_metric(
-                    kpi=self.kpi,
-                    phase="persist",
-                    start_ts=t_persist,
-                    agent_name=agent_name,
+                raise
+            except asyncio.CancelledError:
+                self.kpi.count(
+                    "chat.exchange_error",
+                    1,
+                    dims={
+                        "agent_name": agent_name,
+                    },
+                    actor=PHASE_METRIC_ACTOR,
+                )
+                raise
+            except StreamAgentError as sae:
+                # Preserve everything already emitted by the transcoder.
+                agent_msgs = sae.partial_messages
+                user_msg = human_error_message(runtime_context, sae.original)
+                # Next free rank after all agent messages (base_rank consumed by user at 0).
+                safe_rank = base_rank + len(agent_msgs) + 1
+                agent_msgs.append(
+                    ChatMessage(
+                        session_id=session.id,
+                        exchange_id=exchange_id,
+                        rank=safe_rank,
+                        timestamp=_utcnow_dt(),
+                        role=Role.assistant,
+                        channel=Channel.final,
+                        parts=[TextPart(text=user_msg)],
+                        metadata=ChatMetadata(),
+                    )
+                )
+                # Important: reset cached agent state to avoid stale tool_calls in MemorySaver
+                try:
+                    await self.agent_factory.teardown_session_agents(session.id)
+                except Exception:
+                    logger.warning(
+                        "[SESSIONS] teardown_session_agents failed session=%s after StreamAgentError",
+                        session.id,
+                        exc_info=True,
+                    )
+                self.kpi.count(
+                    "chat.exchange_error",
+                    1,
+                    dims={
+                        "agent_name": agent_name,
+                    },
+                    actor=PHASE_METRIC_ACTOR,
+                )
+            except Exception as e:
+                user_msg = human_error_message(runtime_context, e)
+                safe_rank = base_rank + len(agent_msgs) + 1
+                agent_msgs.append(
+                    ChatMessage(
+                        session_id=session.id,
+                        exchange_id=exchange_id,
+                        rank=safe_rank,
+                        timestamp=_utcnow_dt(),
+                        role=Role.assistant,
+                        channel=Channel.final,
+                        parts=[
+                            TextPart(text=user_msg),
+                        ],
+                        metadata=ChatMetadata(),
+                    )
+                )
+                try:
+                    await self.agent_factory.teardown_session_agents(session.id)
+                except Exception:
+                    logger.warning(
+                        "[SESSIONS] teardown_session_agents failed session=%s after generic exception",
+                        session.id,
+                        exc_info=True,
+                    )
+                self.kpi.count(
+                    "chat.exchange_error",
+                    1,
+                    dims={
+                        "agent_name": agent_name,
+                    },
+                    actor=PHASE_METRIC_ACTOR,
+                )
+            all_msgs.extend(agent_msgs)
+
+            # Trace what will be persisted for this exchange (helps diagnose missing items on reload)
+            try:
+                msg_summary = [
+                    {
+                        "rank": m.rank,
+                        "role": m.role,
+                        "channel": m.channel,
+                        "exchange": m.exchange_id,
+                        "parts": [getattr(p, "type", None) for p in (m.parts or [])],
+                    }
+                    for m in all_msgs
+                ]
+                logger.info(
+                    "[SESSIONS][PERSIST_TRACE] session=%s exchange=%s total_msgs=%d ranks=%s",
+                    session.id,
+                    exchange_id,
+                    len(all_msgs),
+                    [m.get("rank") for m in msg_summary],
+                )
+                logger.debug(
+                    "[SESSIONS][PERSIST_TRACE] details=%s",
+                    msg_summary,
+                )
+            except Exception as trace_err:
+                logger.warning(
+                    "[SESSIONS][PERSIST_TRACE] failed to summarize messages session=%s exchange=%s err=%s",
+                    session.id,
+                    exchange_id,
+                    trace_err,
                 )
 
-                return session, all_msgs
+            # 6) Attach the raw runtime context (single source of truth)
+            self._attach_runtime_context(
+                runtime_context=runtime_context,
+                messages=agent_msgs,
+            )
+
+            session.updated_at = _utcnow_dt()
+            session.next_rank = base_rank + len(all_msgs)
+            async with phase_timer(self.kpi, "persist_tx"), pg_async_tx() as conn:
+                await self.history_store.save_with_conn(
+                    conn, session.id, all_msgs, user.uid
+                )
+                await self.session_store.save_with_conn(conn, session)
+            # Keep cache in sync for sticky sessions
+            self.session_cache.touch_session(session.id, session)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "[SESSIONS] cache touch after persist session=%s next_rank=%s msgs=%d",
+                    session.id,
+                    session.next_rank,
+                    len(all_msgs),
+                )
+
+            return session, all_msgs
+
         finally:
-            _record_phase_metric(
-                kpi=self.kpi,
-                phase="total",
+            record_phase_metric(
+                kpiWriter=self.kpi,
+                phase="stream_total",
                 start_ts=t_initial,
-                agent_name=agent_name,
             )
             self.agent_factory.release_agent(session.id, agent_name)
             stats = self.agent_factory.get_cache_stats()
@@ -643,28 +600,12 @@ class SessionOrchestrator:
             user.uid,
             list((resume_payload or {}).keys()),
         )
-        # 1. Authorize
-        await asyncio.to_thread(
-            self._authorize_user_action_on_session, session_id, user, Action.UPDATE
-        )
 
-        logger.info(
-            "resume_interrupted_exchange user_id=%s session_id=%s exchange_id=%s",
-            user.uid,
-            session_id,
-            exchange_id,
+        # 2. Retrieve Session (checks cache, checks auth)
+        session = await self._get_session(
+            user_id=user.uid,
+            session_id=session_id,
         )
-
-        # 2. Retrieve Session
-        session = self.session_store.get(session_id)
-        if not session:
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "code": "session_not_found",
-                    "message": f"Session {session_id} not found.",
-                },
-            )
 
         # 3. Resolve Agent
         actual_agent_name = agent_name or session.agent_name
@@ -755,79 +696,77 @@ class SessionOrchestrator:
             )
 
         try:
-            rank_lock = self.get_rank_lock(session.id)
-            async with rank_lock:
-                base_rank = await self._ensure_next_rank(session)
-                logger.info(
-                    "[SESSIONS] resume base_rank=%s next_rank=%s session=%s",
-                    base_rank,
-                    session.next_rank,
-                    session.id,
-                )
-                all_msgs: List[ChatMessage] = []
+            base_rank = await self._ensure_next_rank(session)
+            logger.info(
+                "[SESSIONS] resume base_rank=%s next_rank=%s session=%s",
+                base_rank,
+                session.next_rank,
+                session.id,
+            )
+            all_msgs: List[ChatMessage] = []
 
-                try:
-                    with self.kpi.timer(
-                        "chat.resume_latency_ms",
-                        dims={
-                            "agent_id": actual_agent_name,
-                            "user_id": user.uid,
-                            "session_id": session.id,
-                            "exchange_id": exchange_id,
-                        },
-                        actor=actor,
-                    ):
-                        agent_msgs = await self.transcoder.stream_agent_response(
-                            agent=agent,
-                            input_messages=[],  # Resume does not inject new messages into state
-                            session_id=session.id,
-                            exchange_id=exchange_id,
-                            agent_name=actual_agent_name,
-                            base_rank=base_rank,
-                            start_seq=0,
-                            callback=callback,
-                            user_context=user,
-                            runtime_context=runtime_context,
-                            interrupt_handler=self._make_streaming_interrupt_handler(
-                                session.id, exchange_id, callback
-                            ),
-                            resume_payload=resume_payload,
-                        )
-                        all_msgs.extend(agent_msgs)
-                        logger.info(
-                            "[SESSIONS] resume completed agent_msgs=%d session=%s exchange=%s",
-                            len(agent_msgs),
-                            session.id,
-                            exchange_id,
-                        )
-                except InterruptRaised as ir:
-                    # Persist partial messages before the next HITL turn
-                    agent_msgs = getattr(ir, "partial_messages", [])
-                    all_msgs.extend(agent_msgs)
-                    session.updated_at = _utcnow_dt()
-                    session.next_rank = base_rank + len(all_msgs)
-                    await asyncio.to_thread(self.session_store.save, session)
-                    await asyncio.to_thread(
-                        self.history_store.save, session.id, all_msgs, user.uid
+            try:
+                with self.kpi.timer(
+                    "chat.resume_latency_ms",
+                    dims={
+                        "agent_id": actual_agent_name,
+                        "user_id": user.uid,
+                        "session_id": session.id,
+                        "exchange_id": exchange_id,
+                    },
+                    actor=actor,
+                ):
+                    agent_msgs = await self.transcoder.stream_agent_response(
+                        agent=agent,
+                        input_messages=[],  # Resume does not inject new messages into state
+                        session_id=session.id,
+                        exchange_id=exchange_id,
+                        agent_name=actual_agent_name,
+                        base_rank=base_rank,
+                        start_seq=0,
+                        callback=callback,
+                        user_context=user,
+                        runtime_context=runtime_context,
+                        interrupt_handler=self._make_streaming_interrupt_handler(
+                            session.id, exchange_id, callback
+                        ),
+                        resume_payload=resume_payload,
                     )
+                    all_msgs.extend(agent_msgs)
                     logger.info(
-                        "[SESSIONS] resume interrupt persisted session=%s exchange=%s msgs=%d",
+                        "[SESSIONS] resume completed agent_msgs=%d session=%s exchange=%s",
+                        len(agent_msgs),
                         session.id,
                         exchange_id,
-                        len(all_msgs),
                     )
-                    raise
+            except InterruptRaised as ir:
+                # Persist partial messages before the next HITL turn
+                agent_msgs = getattr(ir, "partial_messages", [])
+                all_msgs.extend(agent_msgs)
+                session.updated_at = _utcnow_dt()
+                session.next_rank = base_rank + len(all_msgs)
+                async with phase_timer(self.kpi, "session_save_on_resume_interrupt"):
+                    await self.session_store.save(session)
+                async with phase_timer(self.kpi, "history_save_on_resume_interrupt"):
+                    await self.history_store.save(session.id, all_msgs, user.uid)
+                logger.info(
+                    "[SESSIONS] resume interrupt persisted session=%s exchange=%s msgs=%d",
+                    session.id,
+                    exchange_id,
+                    len(all_msgs),
+                )
+                raise
 
-                # 7. Persist
-                if all_msgs:
-                    session.updated_at = _utcnow_dt()
-                    session.next_rank = base_rank + len(all_msgs)
-                    await asyncio.to_thread(self.session_store.save, session)
-                    await asyncio.to_thread(
-                        self.history_store.save, session.id, all_msgs, user.uid
-                    )
+            # 7. Persist
+            if all_msgs:
+                session.updated_at = _utcnow_dt()
+                session.next_rank = base_rank + len(all_msgs)
+                async with phase_timer(self.kpi, "session_save_on_resume"):
+                    await self.session_store.save(session)
+                async with phase_timer(self.kpi, "history_save_on_resume"):
+                    await self.history_store.save(session.id, all_msgs, user.uid)
 
-                return session, all_msgs
+            return session, all_msgs
 
         finally:
             self.agent_factory.release_agent(session.id, actual_agent_name)
@@ -835,7 +774,7 @@ class SessionOrchestrator:
     # ---------------- Session/History helpers (intentionally here) ----------------
 
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
-    def get_sessions(
+    async def get_sessions(
         self,
         user: KeycloakUser,
     ) -> List[SessionWithFiles]:
@@ -844,16 +783,13 @@ class SessionOrchestrator:
         This method is only used by the UI to list sessions. It is not part of the
         chat exchange flow.
         """
-        sessions = self.session_store.get_for_user(user.uid)
+        async with phase_timer(self.kpi, "session_list"):
+            sessions = await self.session_store.get_for_user(user.uid)
         enriched: List[SessionWithFiles] = []
         for session in sessions:
-            if not self._is_user_action_authorized_on_session(
-                session.id, user, Action.READ
-            ):
-                continue
-
             # Retrieve all agents
-            history = self.get_session_history(session.id, user)
+            async with phase_timer(self.kpi, "history_list_item"):
+                history = await self.get_session_history(session.id, user)
             agents = {
                 msg.metadata.agent_name for msg in history if msg.metadata.agent_name
             }
@@ -862,7 +798,10 @@ class SessionOrchestrator:
             attachments: list[AttachmentRef] = []
             if self.attachments_store:
                 try:
-                    records = self.attachments_store.list_for_session(session.id)
+                    async with phase_timer(self.kpi, "attachments_list_item"):
+                        records = await self.attachments_store.list_for_session(
+                            session.id
+                        )
                     files_names = [r.name for r in records]
                     attachments = [
                         AttachmentRef(id=r.attachment_id, name=r.name) for r in records
@@ -883,13 +822,30 @@ class SessionOrchestrator:
         return enriched
 
     @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
-    def create_empty_session(
+    async def create_empty_session(
         self,
         user: KeycloakUser,
         agent_name: Optional[str] = None,
         title: Optional[str] = None,
     ) -> SessionSchema:
         """Explicitly create a new empty session (used by the UI before first upload/message)."""
+        # Enforce max sessions per user if configured
+        try:
+            async with phase_timer(self.kpi, "session_count_for_user"):
+                current = await self.session_store.count_for_user(user.uid)
+            if current >= self.max_sessions_per_user:
+                raise AuthorizationError(
+                    user.uid,
+                    Action.CREATE,
+                    Resource.SESSIONS,
+                    f"Session limit reached ({self.max_sessions_per_user} sessions per user).",
+                )
+        except AuthorizationError:
+            raise
+        except Exception:
+            logger.exception("[SESSIONS] Failed to enforce session limit")
+            raise
+
         prefs: Optional[Dict[str, Any]] = (
             {"agent_name": agent_name} if agent_name else None
         )
@@ -902,7 +858,11 @@ class SessionOrchestrator:
             preferences=prefs,
             next_rank=0,
         )
-        self.session_store.save(session)
+        async with phase_timer(self.kpi, "session_write"):
+            await self.session_store.save(session)
+        self.session_cache.set(
+            session.id, CachedSession(session=session, attachments=None)
+        )
         logger.info(
             "[SESSIONS] Created empty session %s for user %s", session.id, user.uid
         )
@@ -910,7 +870,7 @@ class SessionOrchestrator:
 
     async def _maybe_refresh_title_from_prompt(
         self, *, session: SessionSchema, prompt: str
-    ) -> None:
+    ) -> bool:
         """
         If a session was created with a placeholder title (e.g., via create_empty_session),
         generate a better one from the user's first question.
@@ -927,7 +887,7 @@ class SessionOrchestrator:
 
         try:
             if session.title and session.title.strip().lower() != "new conversation":
-                return
+                return False
             prompt_text = (
                 "Give a short, clear title for this conversation based on the user's question. "
                 "Summarize the user intent in 3 to 5 words. "
@@ -936,34 +896,39 @@ class SessionOrchestrator:
                 "User question: " + prompt
             )
             model = get_default_model()
-            resp = await model.ainvoke(prompt_text)
+            async with phase_timer(self.kpi, "llm_invoke_title"):
+                resp = await model.ainvoke(prompt_text)
             raw_title = resp.content if hasattr(resp, "content") else str(resp)
-            logger.debug(
-                "[SESSIONS] Title generation raw response model=%s prompt=%s raw=%s",
-                getattr(model, "model", None) or type(model).__name__,
-                prompt_text,
-                raw_title,
-            )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "[SESSIONS] Title generation raw response model=%s prompt=%s raw=%s",
+                    getattr(model, "model", None) or type(model).__name__,
+                    prompt_text,
+                    raw_title,
+                )
             new_title = _sanitize_title(raw_title)
             if not new_title:
                 raise ValueError("Empty title from model")
             session.title = new_title
+            return True
         except Exception:
             # Fallback: first few words of the prompt
             logger.warning("[SESSIONS] Failed to refresh session title", exc_info=True)
             words = prompt.strip().split()
             session.title = " ".join(words[:6]) if words else "New conversation"
+            return True
 
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
-    def get_session_history(
+    async def get_session_history(
         self,
         session_id: str,
         user: KeycloakUser,
         limit: int | None = None,
         offset: int = 0,
     ) -> List[ChatMessage]:
-        self._authorize_user_action_on_session(session_id, user, Action.READ)
-        history = self.history_store.get(session_id) or []
+        await self._authorize_user_action_on_session(session_id, user, Action.READ)
+        async with phase_timer(self.kpi, "history_get"):
+            history = await self.history_store.get(session_id) or []
         if limit is None:
             return history
         total = len(history)
@@ -972,11 +937,12 @@ class SessionOrchestrator:
         return history[start:end]
 
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
-    def get_session_message(
+    async def get_session_message(
         self, session_id: str, rank: int, user: KeycloakUser
     ) -> ChatMessage:
-        self._authorize_user_action_on_session(session_id, user, Action.READ)
-        history = self.history_store.get(session_id) or []
+        await self._authorize_user_action_on_session(session_id, user, Action.READ)
+        async with phase_timer(self.kpi, "history_get_single"):
+            history = await self.history_store.get(session_id) or []
         for msg in history:
             if msg.rank == rank:
                 return msg
@@ -989,12 +955,13 @@ class SessionOrchestrator:
         )
 
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
-    def get_session_preferences(
+    async def get_session_preferences(
         self, session_id: str, user: KeycloakUser
     ) -> Dict[str, Any]:
         """Return stored per-session preferences, if any."""
-        self._authorize_user_action_on_session(session_id, user, Action.READ)
-        session = self.session_store.get(session_id)
+        await self._authorize_user_action_on_session(session_id, user, Action.READ)
+        async with phase_timer(self.kpi, "session_read_prefs"):
+            session = await self.session_store.get(session_id)
         if not session:
             raise HTTPException(
                 status_code=404,
@@ -1016,12 +983,13 @@ class SessionOrchestrator:
         return prefs
 
     @authorize(action=Action.UPDATE, resource=Resource.SESSIONS)
-    def update_session_preferences(
+    async def update_session_preferences(
         self, session_id: str, user: KeycloakUser, preferences: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Replace the stored preferences blob for a session."""
-        self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
-        session = self.session_store.get(session_id)
+        await self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
+        async with phase_timer(self.kpi, "session_read_prefs"):
+            session = await self.session_store.get(session_id)
         if not session:
             raise HTTPException(
                 status_code=404,
@@ -1047,7 +1015,8 @@ class SessionOrchestrator:
         # Important: do NOT bump session.updated_at for preference changes.
         # The UI orders conversations by updated_at and expects it to change only
         # on actual conversation activity (messages), not when viewing/toggling settings.
-        self.session_store.save(session)
+        async with phase_timer(self.kpi, "session_write_prefs"):
+            await self.session_store.save(session)
         try:
             prefs_str = json.dumps(session.preferences, default=str)
         except Exception:
@@ -1065,12 +1034,14 @@ class SessionOrchestrator:
     async def delete_session(
         self, session_id: str, user: KeycloakUser, access_token: Optional[str] = None
     ) -> None:
-        self._authorize_user_action_on_session(session_id, user, Action.DELETE)
+        await self._authorize_user_action_on_session(session_id, user, Action.DELETE)
         # Collect doc_uids before clearing
         doc_uids: set[str] = set()
         if self.attachments_store:
             try:
-                for rec in self.attachments_store.list_for_session(session_id):
+                async with phase_timer(self.kpi, "attachments_list_on_delete"):
+                    records = await self.attachments_store.list_for_session(session_id)
+                for rec in records:
                     if rec.document_uid:
                         doc_uids.add(rec.document_uid)
             except Exception:
@@ -1078,10 +1049,12 @@ class SessionOrchestrator:
                     "[SESSIONS] Failed to collect attachment doc_uids before delete for session %s",
                     session_id,
                 )
+        self.session_cache.delete(session_id)
         await self.agent_factory.teardown_session_agents(session_id)
-        self.session_store.delete(session_id)
+        await self.session_store.delete(session_id)
         if self.attachments_store:
-            self.attachments_store.delete_for_session(session_id)
+            await self.attachments_store.delete_for_session(session_id)
+
         # Remote vector cleanup
         if doc_uids and access_token:
             client = KfFastTextClient(access_token=access_token)
@@ -1114,16 +1087,16 @@ class SessionOrchestrator:
         """
         Delete an attachment from a session (persistence + vectors).
         """
-        self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
+        await self._authorize_user_action_on_session(session_id, user, Action.UPDATE)
         doc_uid: Optional[str] = None
         if self.attachments_store:
             try:
-                records = self.attachments_store.list_for_session(session_id)
+                records = await self.attachments_store.list_for_session(session_id)
                 for rec in records:
                     if rec.attachment_id == attachment_id:
                         doc_uid = rec.document_uid
                         break
-                self.attachments_store.delete(
+                await self.attachments_store.delete(
                     session_id=session_id, attachment_id=attachment_id
                 )
             except Exception:
@@ -1150,6 +1123,22 @@ class SessionOrchestrator:
             attachment_id,
             session_id,
         )
+        # Update cache
+        cached = self.session_cache.get(session_id)
+        if cached and cached.attachments:
+            cached.attachments = [
+                rec for rec in cached.attachments if rec.attachment_id != attachment_id
+            ]
+            self.session_cache.set(
+                session_id,
+                CachedSession(session=cached.session, attachments=cached.attachments),
+            )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "[SESSIONS][ATTACH] cache updated after delete session=%s remaining=%d",
+                    session_id,
+                    len(cached.attachments),
+                )
 
     @authorize(action=Action.READ, resource=Resource.MESSAGE_ATTACHMENTS)
     async def get_attachment_summary(
@@ -1171,10 +1160,11 @@ class SessionOrchestrator:
                 },
             )
 
-        self._authorize_user_action_on_session(session_id, user, Action.READ)
+        await self._authorize_user_action_on_session(session_id, user, Action.READ)
 
         try:
-            records = self.attachments_store.list_for_session(session_id)
+            async with phase_timer(self.kpi, "attachments_list_on_get_summary"):
+                records = await self.attachments_store.list_for_session(session_id)
         except Exception:
             logger.exception(
                 "[SESSIONS][ATTACH] Failed to list attachments for session %s",
@@ -1240,23 +1230,20 @@ class SessionOrchestrator:
                     "message": "Attachment uploads are disabled (no attachment store configured).",
                 },
             )
+
         # Enforce per-user attachment count limit
         max_files_user = self.max_attached_files_per_user
         try:
             if max_files_user is not None and self.attachments_store:
                 total_for_user = 0
                 # Count attachments across all sessions for this user
-                for sess in self.session_store.get_for_user(user.uid):
-                    try:
-                        total_for_user += len(
-                            self.attachments_store.list_for_session(sess.id)
-                        )
-                    except Exception:
-                        logger.warning(
-                            "[SESSIONS][ATTACH] Failed to count attachments for session %s",
-                            sess.id,
-                        )
-                        continue
+                user_sessions = await self.session_store.get_for_user(user.uid)
+                if user_sessions:
+                    session_ids = [s.id for s in user_sessions]
+                    total_for_user = await self.attachments_store.count_for_sessions(
+                        session_ids
+                    )
+
                 if total_for_user >= max_files_user:
                     raise HTTPException(
                         status_code=400,
@@ -1300,19 +1287,16 @@ class SessionOrchestrator:
 
         # If no session_id was provided (first interaction), create one now.
         # Use a lightweight title based on the filename to keep UX sensible.
-        session = await self._get_or_create_session(
-            user_id=user.uid,
-            query=f"File: {file.filename}",
-            session_id=session_id if session_id else None,
-        )
-        # Ensure the user has rights on this session (create/update if needed)
-        self._authorize_user_action_on_session(session.id, user, Action.UPDATE)
+        if not session_id:
+            session = await self.create_empty_session(user=user)
+        else:
+            session = await self._get_session(user_id=user.uid, session_id=session_id)
 
         # Prevent duplicate filenames within a session (UI convenience + avoids double ingest)
         try:
             if self.attachments_store:
-                existing = await asyncio.to_thread(
-                    self.attachments_store.list_for_session, session.id
+                existing = await self.attachments_store.list_for_session(
+                    session_id=session.id
                 )
                 if any(rec.name == file.filename for rec in existing):
                     raise HTTPException(
@@ -1423,25 +1407,38 @@ class SessionOrchestrator:
         if self.attachments_store:
             now = _utcnow_dt()
             try:
-                self.attachments_store.save(
-                    SessionAttachmentRecord(
-                        session_id=session.id,
-                        attachment_id=attachment_id,
-                        name=file.filename,
-                        summary_md=summary_md,
-                        mime=file.content_type,
-                        size_bytes=len(content),
-                        document_uid=document_uid,
-                        created_at=now,
-                        updated_at=now,
-                    )
+                record = SessionAttachmentRecord(
+                    session_id=session.id,
+                    attachment_id=attachment_id,
+                    name=file.filename,
+                    summary_md=summary_md,
+                    mime=file.content_type,
+                    size_bytes=len(content),
+                    document_uid=document_uid,
+                    created_at=now,
+                    updated_at=now,
                 )
+                await self.attachments_store.save(record)
                 logger.info(
                     "[SESSIONS][ATTACH] Persisted summary for session=%s attachment=%s chars=%d",
                     session.id,
                     attachment_id,
                     len(summary_md),
                 )
+                # cache update
+                cached = self.session_cache.get(session.id)
+                if cached:
+                    attachments = (cached.attachments or []) + [record]
+                    self.session_cache.set(
+                        session.id,
+                        CachedSession(session=cached.session, attachments=attachments),
+                    )
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "[SESSIONS][ATTACH] cache updated after add session=%s attachments=%d",
+                            session.id,
+                            len(attachments),
+                        )
             except Exception:
                 logger.exception(
                     "[SESSIONS][ATTACH] Failed to persist attachment summary for session=%s attachment=%s",
@@ -1464,7 +1461,7 @@ class SessionOrchestrator:
 
     @authorize(action=Action.READ, resource=Resource.METRICS)
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
-    def get_metrics(
+    async def get_metrics(
         self,
         user: KeycloakUser,
         start: str,
@@ -1473,7 +1470,7 @@ class SessionOrchestrator:
         groupby: List[str],
         agg_mapping: dict[str, List[str]],
     ) -> MetricsResponse:
-        return self.history_store.get_chatbot_metrics(
+        return await self.history_store.get_chatbot_metrics(
             start=start,
             end=end,
             precision=precision,
@@ -1483,9 +1480,9 @@ class SessionOrchestrator:
         )
 
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
-    def get_runtime_summary(self, user: KeycloakUser) -> ChatbotRuntimeSummary:
+    async def get_runtime_summary(self, user: KeycloakUser) -> ChatbotRuntimeSummary:
         """Return a simple per-user snapshot: sessions, active agents, attachments."""
-        sessions = self.session_store.get_for_user(user.uid)
+        sessions = await self.session_store.get_for_user(user.uid)
         session_ids = {s.id for s in sessions}
         sessions_total = len(session_ids)
 
@@ -1502,7 +1499,7 @@ class SessionOrchestrator:
         if self.attachments_store:
             try:
                 for sid in session_ids:
-                    records = self.attachments_store.list_for_session(sid)
+                    records = await self.attachments_store.list_for_session(sid)
                     if records:
                         attachments_sessions += 1
                         attachments_total += len(records)
@@ -1520,11 +1517,13 @@ class SessionOrchestrator:
 
     # ---------------- internals ----------------
 
-    def _authorize_user_action_on_session(
+    async def _authorize_user_action_on_session(
         self, session_id: str, user: KeycloakUser, action: Action
     ):
         """Raise an AuthorizationError if a user can't perform an action on a session"""
-        if not self._is_user_action_authorized_on_session(session_id, user, action):
+        if not await self._is_user_action_authorized_on_session(
+            session_id, user, action
+        ):
             raise AuthorizationError(
                 user.uid,
                 action.value,
@@ -1532,15 +1531,41 @@ class SessionOrchestrator:
                 f"Not authorized to {action.value} session {session_id}",
             )
 
-    def _is_user_action_authorized_on_session(
+    async def _get_authorized_session(
+        self, session_id: str, user: KeycloakUser, action: Action
+    ) -> SessionSchema:
+        """Load a session and ensure the user can perform the action. One store read."""
+        session = await self.session_store.get(session_id)
+        if session is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "session_not_found",
+                    "message": f"Session {session_id} not found.",
+                },
+            )
+        if session.user_id != user.uid:
+            raise AuthorizationError(
+                user.uid,
+                action.value,
+                Resource.SESSIONS,
+                f"Not authorized to {action.value} session {session_id}",
+            )
+        return session
+
+    async def _is_user_action_authorized_on_session(
         self, session_id: str, user: KeycloakUser, action: Action
     ) -> bool:
         """Check if a user can perform an action on a session"""
-        session = self.session_store.get(session_id)
+        # Try cache first to avoid DB hit on hot sessions
+        cached = self.session_cache.get(session_id)
+        if cached:
+            session = cached.session
+        else:
+            session = await self.session_store.get(session_id)
+
         if session is None:
             # A2A proxy sessions are not persisted locally; allow access to avoid noisy warnings.
-            if session_id.startswith("a2a-"):
-                return True
             return False
 
         # For now, ignore action, only owners can access their sessions
@@ -1577,7 +1602,7 @@ class SessionOrchestrator:
         if asyncio.iscoroutine(result):
             await result
 
-    def _restore_history(
+    async def _restore_history(
         self,
         *,
         user: KeycloakUser,
@@ -1590,7 +1615,7 @@ class SessionOrchestrator:
         - Emit ToolMessage only if its call_id exists in the **same exchange**.
         - Windowing by "last N exchanges" always keeps whole exchanges.
         """
-        hist = self.get_session_history(session.id, user) or []
+        hist = await self.history_store.get(session.id) or []
         if not hist:
             _rlog("empty", msg="No messages to restore", session_id=session.id)
             return []
@@ -1884,38 +1909,74 @@ class SessionOrchestrator:
 
         return lc_history
 
-    # --- Small, focused helpers to keep logs readable ---
-
-    async def _get_or_create_session(
-        self, *, user_id: str, query: str, session_id: Optional[str]
-    ) -> SessionSchema:
-        if session_id:
-            existing = await asyncio.to_thread(self.session_store.get, session_id)
-            if existing:
-                logger.info(
-                    "[AGENTS] resumed session %s for user %s", session_id, user_id
+    async def _get_session(self, *, user_id: str, session_id: str) -> SessionSchema:
+        """
+        Load a session that we expect to exist based on the provided session_id.
+        Raise if not found. Raise if not authorized (user_id mismatch). This is used for session resumption.
+        This method takes care of recording phase metrics.
+        """
+        cached_session = self.session_cache.get(session_id)
+        if cached_session:
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "[AGENTS] resumed session %s for user %s (cache hit)",
+                    session_id,
+                    user_id,
                 )
+            if cached_session.session.user_id == user_id:
+                return cached_session.session
+            raise AuthorizationError(
+                user_id,
+                Action.CREATE,
+                Resource.SESSIONS,
+                f"Not authorized to create session {session_id}",
+            )
+        async with phase_timer(self.kpi, "session_read"):
+            existing = await self.session_store.get(session_id)
+        if existing:
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "[AGENTS] resumed session %s for user %s (store read)",
+                    session_id,
+                    user_id,
+                )
+            if existing.user_id == user_id:
+                attachments = None
+                if self.attachments_store:
+                    try:
+                        async with phase_timer(self.kpi, "attachments_list_for_cache"):
+                            attachments = await self.attachments_store.list_for_session(
+                                session_id
+                            )
+                        if logger.isEnabledFor(logging.DEBUG):
+                            logger.debug(
+                                "[SESSIONS] seeded cache attachments session=%s count=%d",
+                                session_id,
+                                len(attachments),
+                            )
+                    except Exception:
+                        logger.debug(
+                            "[SESSIONS] Failed to load attachments for cache seed session=%s",
+                            session_id,
+                            exc_info=True,
+                        )
+                self.session_cache.set(
+                    session_id, CachedSession(session=existing, attachments=attachments)
+                )
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "[SESSIONS] cached session=%s attachments=%d",
+                        session_id,
+                        len(attachments) if attachments else 0,
+                    )
                 return existing
-
-        new_session_id = secrets.token_urlsafe(8)
-        response = await get_default_model().ainvoke(
-            "Give a short, clear title for this conversation based on the user's question. "
-            "Return a few keywords only. Question: " + query
-        )
-        title = response.content
-        session = SessionSchema(
-            id=new_session_id,
-            user_id=user_id,
-            title=title,
-            updated_at=_utcnow_dt(),
-            preferences=None,
-            next_rank=0,
-        )
-        await asyncio.to_thread(self.session_store.save, session)
-        logger.info(
-            "[AGENTS] Created new session %s for user %s", new_session_id, user_id
-        )
-        return session
+            raise AuthorizationError(
+                user_id,
+                Action.CREATE,
+                Resource.SESSIONS,
+                f"Not authorized to create session {session_id}",
+            )
+        raise ValueError(f"Session {session_id} not found for user {user_id}")
 
     # ---------------- runtime context attachment ----------------
 
