@@ -60,7 +60,9 @@ type agent
     define owner: [user, team]
 
     # --------------- Permissions (computed relations) ---------------
-
+    # Can read agemt: see its name, description...
+    # -> must be at least viewer or team member
+    define read: owner or member from owner
 
     # Can update agent configuration
     # -> must be owner

@@ -21,9 +21,18 @@ from a2a.client import A2ACardResolver
 from a2a.client.errors import A2AClientJSONError
 from a2a.types import AgentCard
 from a2a.utils.constants import EXTENDED_AGENT_CARD_PATH
-from fred_core import Action, KeycloakUser, Resource, authorize
+from fred_core import (
+    Action,
+    KeycloakUser,
+    RebacReference,
+    Relation,
+    RelationType,
+    Resource,
+    TeamPermission,
+    authorize,
+)
 
-from agentic_backend.application_context import get_agent_store
+from agentic_backend.application_context import get_agent_store, get_rebac_engine
 from agentic_backend.common.structures import (
     Agent,
     AgentChatOptions,
@@ -64,12 +73,19 @@ class AgentService:
         name: str,
         *,
         agent_type: str = "basic",
+        team_id: Optional[str] = None,
         a2a_base_url: Optional[str] = None,
         a2a_token: Optional[str] = None,
     ):
         """
         Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
         """
+        rebac = get_rebac_engine()
+
+        # If team_id is provided, check user has permission to manage team agents
+        if team_id:
+            await rebac.check_user_permission_or_raise(user, TeamPermission.CAN_UPDATE_AGENTS, team_id)
+
         agent_id = str(uuid4())
 
         if agent_type == "a2a_proxy":
@@ -106,6 +122,18 @@ class AgentService:
             await self.agent_manager.create_dynamic_agent(
                 agent_settings, BASIC_REACT_TUNING
             )
+
+        # Create ReBAC ownership: team owns the agent, or user owns the agent (personal agent)
+        if team_id:
+            await rebac.add_relation(
+                Relation(
+                    subject=RebacReference(type=Resource.TEAM, id=team_id),
+                    relation=RelationType.OWNER,
+                    resource=RebacReference(type=Resource.AGENT, id=agent_id),
+                )
+            )
+        else:
+            await rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.AGENT, resource_id=agent_id)
 
     @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
     async def update_agent(

@@ -636,6 +636,7 @@ export type HttpValidationError = {
 export type CreateAgentRequest = {
   name: string;
   type?: string;
+  team_id?: string | null;
   a2a_base_url?: string | null;
   a2a_token?: string | null;
 };

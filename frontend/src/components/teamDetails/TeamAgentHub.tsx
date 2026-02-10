@@ -84,7 +84,11 @@ const agents: AnyAgent[] = [
   },
 ];
 
-export function TeamAgentHub() {
+interface TeamAgentHubProps {
+  teamId: string;
+}
+
+export function TeamAgentHub({ teamId }: TeamAgentHubProps) {
   const { t } = useTranslation();
 
   // Permissions
@@ -102,6 +106,7 @@ export function TeamAgentHub() {
     <AgentGridManager
       agents={agents}
       isLoading={false}
+      teamId={teamId}
       canEdit={canEditAgents}
       canCreate={canCreateAgents}
       canDelete={canEditAgents}

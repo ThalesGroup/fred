@@ -41,6 +41,9 @@ interface AgentGridManagerProps {
   agents: AnyAgent[];
   isLoading?: boolean;
 
+  // Ownership
+  teamId?: string;
+
   // Permissions
   canEdit?: boolean;
   canCreate?: boolean;
@@ -64,6 +67,7 @@ interface AgentGridManagerProps {
 export const AgentGridManager = ({
   agents,
   isLoading = false,
+  teamId,
   canEdit = false,
   canCreate = false,
   canDelete = false, // Reserved for future use
@@ -286,6 +290,7 @@ export const AgentGridManager = ({
                 }}
                 initialType={createModalType}
                 disableTypeToggle
+                teamId={teamId}
               />
             )}
 

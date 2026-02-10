@@ -125,6 +125,7 @@ router = APIRouter(tags=["Agents"])
 class CreateAgentRequest(BaseModel):
     name: str
     type: str = "basic"
+    team_id: str | None = None
     a2a_base_url: str | None = None
     a2a_token: str | None = None
 
@@ -134,7 +135,7 @@ class CreateAgentRequest(BaseModel):
     summary="Get the list of available agents",
     response_model=list[AgentSettings],
 )
-def list_agents(
+async def list_agents(
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
 ) -> list[AgentSettings]:
@@ -157,6 +158,7 @@ async def create_agent(
             user,
             request.name,
             agent_type=request.type,
+            team_id=request.team_id,
             a2a_base_url=request.a2a_base_url,
             a2a_token=request.a2a_token,
         )

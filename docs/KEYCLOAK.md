@@ -30,9 +30,12 @@ Create (or verify) the clients below:
 > - `agentic` → `KEYCLOAK_AGENTIC_CLIENT_SECRET`
 > - `knowledge-flow` → `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET` (only required when Knowledge Flow calls other services)
 
-When ReBAC is enabled: grant the `knowledge-flow` service account the ability to read users/groups so it can resolve relationships:
-- Client roles on `realm-management`: `query-users`, `query-groups`, `view-users`, `manage-users`
+When ReBAC is enabled: grant the `knowledge-flow` and `agentic` service account the ability to read users/groups so it can resolve relationships:
+- Client roles on `realm-management`: `query-users`, `query-groups`, `view-users`
 - Client role on `account`: `view-groups`
+
+Additionaly `knowledge-flow` need to be able to remove/add users in groups, grant it:
+- Client roles on `realm-management`: `manage-users`
 
 ### 1.3 Roles for user RBAC
 Create **client roles on `app`** (not realm roles) so Knowledge Flow receives them in `realm_access.roles`:

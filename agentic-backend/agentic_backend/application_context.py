@@ -657,11 +657,12 @@ class ApplicationContext:
                 PostgresAgentStore,
             )
 
-            return PostgresAgentStore(
+            self._agent_store_instance = PostgresAgentStore(
                 engine=self.get_pg_async_engine(),
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )
+            return self._agent_store_instance
         else:
             raise ValueError(
                 f"Unsupported sessions storage backend {type(store_config)}"
