@@ -32,6 +32,8 @@ export function NewChatAgentSelection() {
 
   const agents = useMemo<AnyAgent[]>(() => normalizeAgenticFlows(rawAgents), [rawAgents]);
 
+  const enabledAgents = agents.filter((a) => a.enabled);
+
   return (
     <Box sx={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <Box
@@ -78,7 +80,7 @@ export function NewChatAgentSelection() {
             )}
 
             {/* Agent list */}
-            {!agentLoading && !agentError && agents.map((agent) => <AgentTile key={agent.id} agent={agent} />)}
+            {!agentLoading && !agentError && enabledAgents.map((agent) => <AgentTile key={agent.id} agent={agent} />)}
           </Box>
         </Box>
       </Box>
