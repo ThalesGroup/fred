@@ -339,7 +339,7 @@ export type UpdateAgentAgenticV1AgentsUpdatePutApiArg = {
         type: "leader";
       } & Leader2);
 };
-export type DeleteAgentAgenticV1AgentsAgentIdDeleteApiResponse = /** status 200 Successful Response */ any;
+export type DeleteAgentAgenticV1AgentsAgentIdDeleteApiResponse = unknown;
 export type DeleteAgentAgenticV1AgentsAgentIdDeleteApiArg = {
   agentId: string;
 };
