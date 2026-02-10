@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 TUNING = AgentTuning(
     role="Reference Editor",
     description="Extracts information from reference powerpoint to fill another given reference PowerPoint template.",
-    mcp_servers=[MCPServerRef(name="mcp-knowledge-flow-mcp-text")],
+    mcp_servers=[MCPServerRef(id="mcp-knowledge-flow-mcp-text")],
     tags=[],
     fields=[
         FieldSpec(

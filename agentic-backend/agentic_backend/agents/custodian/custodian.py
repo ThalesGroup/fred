@@ -44,8 +44,8 @@ class Custodian(AgentFlow):
         tags=["corpus", "filesystem"],
         fields=[],
         mcp_servers=[
-            MCPServerRef(name="mcp-knowledge-flow-fs"),
-            MCPServerRef(name="mcp-knowledge-flow-corpus"),
+            MCPServerRef(id="mcp-knowledge-flow-fs"),
+            MCPServerRef(id="mcp-knowledge-flow-corpus"),
         ],
     )
 
