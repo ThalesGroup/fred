@@ -1194,6 +1194,10 @@
     "yourAgents": "Vos agents",
     "loadingAgentError": "Impossible de charger la liste des agents."
   },
+  "comingSoon": {
+    "title": "{{siteDisplayName}} arrive très bientôt.",
+    "description": "La plateforme \n d'innovation au service de votre quotidien : gagnez en clarté et en pertinence décisionnelle. Un nouveau service conçu pour vous épauler chaque jour et répondre à vos enjeux métiers et opérationnels."
+  },
   "teamCard": {
     "memberCountLabel": "membres",
     "privateTeamTooltip": "Équipe privée"
