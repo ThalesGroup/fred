@@ -113,6 +113,7 @@ def create_app() -> FastAPI:
             session_store=get_session_store(),
             attachments_store=application_context.get_session_attachment_store(),
             agent_factory=agent_factory,
+            agent_manager=agent_manager,
             history_store=application_context.get_history_store(),
             kpi=application_context.get_kpi_writer(),
         )

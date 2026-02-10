@@ -53,10 +53,12 @@ from agentic_backend.common.kf_fast_text_client import KfFastTextClient
 from agentic_backend.common.mcp_utils import MCPConnectionError
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
+from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.chatbot.chat_error_replies import human_error_message
 from agentic_backend.core.chatbot.chat_schema import (
+    AgentRef,
     AttachmentRef,
     Channel,
     ChatbotRuntimeSummary,
@@ -121,6 +123,7 @@ class SessionOrchestrator:
         session_store: BaseSessionStore,
         attachments_store: Optional[BaseSessionAttachmentStore],
         agent_factory: BaseAgentFactory,
+        agent_manager: AgentManager,
         history_store: BaseHistoryStore,
         kpi: BaseKPIWriter,
     ):
@@ -128,6 +131,7 @@ class SessionOrchestrator:
         self.session_store = session_store
         self.attachments_store = attachments_store
         self.agent_factory = agent_factory
+        self.agent_manager = agent_manager
         if self.attachments_store:
             logger.info(
                 "[SESSIONS] Attachment persistence enabled via %s",
@@ -790,7 +794,14 @@ class SessionOrchestrator:
             # Retrieve all agents
             async with phase_timer(self.kpi, "history_list_item"):
                 history = await self.get_session_history(session.id, user)
-            agents = {msg.metadata.agent_id for msg in history if msg.metadata.agent_id}
+            agents_ids = {
+                msg.metadata.agent_id for msg in history if msg.metadata.agent_id
+            }
+            agents = {
+                AgentRef.from_agent(settings)
+                for agent_id in agents_ids
+                if (settings := self.agent_manager.get_agent_settings(agent_id))
+            }
 
             files_names: list[str] = []
             attachments: list[AttachmentRef] = []

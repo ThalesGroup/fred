@@ -876,6 +876,10 @@ export type ErrorEvent = {
   content: string;
   session_id?: string | null;
 };
+export type AgentRef = {
+  id: string;
+  name: string;
+};
 export type AttachmentRef = {
   id: string;
   name: string;
@@ -890,7 +894,7 @@ export type SessionWithFiles = {
   preferences?: {
     [key: string]: any;
   } | null;
-  agents: string[];
+  agents: AgentRef[];
   file_names?: string[];
   attachments?: AttachmentRef[];
 };

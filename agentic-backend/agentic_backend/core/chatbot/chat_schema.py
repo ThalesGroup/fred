@@ -22,6 +22,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, TypeAlias, Uni
 from fred_core import VectorSearchHit
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,  # Unchanged, as requested
 )
@@ -273,8 +274,17 @@ class AttachmentRef(BaseModel):
     name: str
 
 
+class AgentRef(BaseModel, frozen=True):
+    id: str
+    name: str
+
+    @classmethod
+    def from_agent(cls, agent: AgentSettings) -> "AgentRef":
+        return cls(id=agent.id, name=agent.name)
+
+
 class SessionWithFiles(SessionSchema):
-    agents: set[str]  # Set of all agents used in this conversation
+    agents: set[AgentRef]  # Set of all agents used in this conversation
     file_names: List[str] = []
     attachments: List[AttachmentRef] = []
 

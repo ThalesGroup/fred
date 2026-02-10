@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
 from fred_core import KeycloakUser
 from fred_core.kpi import NoOpKPIWriter
@@ -70,6 +71,7 @@ def _mk_orchestrator(minimal_generalist_config: Configuration):
         session_store=session_store,
         attachments_store=None,
         agent_factory=NoOpAgentFactory(),
+        agent_manager=MagicMock(),
         history_store=NoOpHistoryStore(),
         kpi=NoOpKPIWriter(),
     )
@@ -636,6 +638,7 @@ async def test_sample_from_prompt_checks(
         session_store=session_store,
         attachments_store=None,
         agent_factory=NoOpAgentFactory(),
+        agent_manager=MagicMock(),
         history_store=NoOpHistoryStore(),
         kpi=NoOpKPIWriter(),
     )
