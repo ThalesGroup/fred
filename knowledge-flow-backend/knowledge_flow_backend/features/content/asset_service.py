@@ -61,7 +61,7 @@ SAFE_KEY = re.compile(r"^[A-Za-z0-9._-]{1,200}$")
 class AssetService:  # RENAMED from AgentAssetService
     """
     Unified service for all binary assets (agent templates and user results).
-    Handles two primary scopes: 'agents'/{agent_name} and 'users'/{user_uid}.
+    Handles two primary scopes: 'agents'/{agent_id} and 'users'/{user_uid}.
     """
 
     def __init__(self):

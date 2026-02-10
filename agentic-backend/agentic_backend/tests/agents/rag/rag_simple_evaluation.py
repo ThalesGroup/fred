@@ -34,7 +34,7 @@ from agentic_backend.tests.agents.base_deepeval_test import BaseEvaluator
 class RAGEvaluator(BaseEvaluator):
     async def run_evaluation(
         self,
-        agent_name: str,
+        agent_id: str,
         doc_lib_ids: list[str] | None = None,
     ):
         """
@@ -42,16 +42,16 @@ class RAGEvaluator(BaseEvaluator):
         and evaluating them using the defined metrics.
 
         Args:
-            agent_name (str): The name of the agent to be evaluated.
+            agent_id (str): The id of the agent to be evaluated.
             doc_lib_ids (list[str] | None, optional): List of document library IDs. Defaults to None.
 
         Returns:
             dict: A dictionary containing the results of the evaluation.
         """
         agent = await self.setup_agent(
-            agent_type=Rico, agent_name=agent_name, doc_lib_ids=doc_lib_ids
+            agent_type=Rico, agent_id=agent_id, doc_lib_ids=doc_lib_ids
         )
-        self.logger.info(f"🤖 Agent '{agent_name}' ready")
+        self.logger.info(f"🤖 Agent '{agent_id}' ready")
 
         self.logger.info(
             f"📝 {len(self.dataset)} questions loaded from {self.dataset_path.name if self.dataset_path else 'unknown'}"
@@ -120,7 +120,7 @@ class RAGEvaluator(BaseEvaluator):
 
 def main():
     evaluator = RAGEvaluator()
-    exit_code = asyncio.run(evaluator.main(agent_name="Rico"))
+    exit_code = asyncio.run(evaluator.main(agent_id="Rico"))
     sys.exit(exit_code)
 
 

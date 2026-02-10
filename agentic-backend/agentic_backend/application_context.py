@@ -231,11 +231,8 @@ def get_default_model() -> BaseLanguageModel:
     """
     Retrieves the default AI model instance.
 
-    Args:
-        agent_name (str): The name of the agent.
-
     Returns:
-        BaseLanguageModel: The AI model configured for the agent.
+        BaseLanguageModel: The default AI model.
     """
     return get_app_context().get_default_model()
 

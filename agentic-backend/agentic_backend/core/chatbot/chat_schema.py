@@ -196,7 +196,7 @@ class ChatMetadata(BaseModel):
     # Keep your VectorSearchHit untouched
     sources: List[VectorSearchHit] = Field(default_factory=list)
 
-    agent_name: Optional[str] = None
+    agent_id: Optional[str] = None
     latency_ms: Optional[int] = None
     finish_reason: Optional[FinishReason] = None
     runtime_context: Optional[RuntimeContext] = None
@@ -209,7 +209,7 @@ class ChatMetadata(BaseModel):
 
 
 class BaseWsInput(BaseModel):
-    agent_name: str
+    agent_id: str
     runtime_context: Optional[RuntimeContext] = None
     access_token: Optional[str] = None
     refresh_token: Optional[str] = None
@@ -261,7 +261,7 @@ class ChatMessage(BaseModel):
 class SessionSchema(BaseModel):
     id: str
     user_id: str
-    agent_name: str | None = None
+    agent_id: str | None = None
     title: str
     updated_at: datetime
     next_rank: int | None = None

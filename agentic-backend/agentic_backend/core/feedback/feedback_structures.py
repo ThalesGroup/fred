@@ -22,7 +22,7 @@ from pydantic import ConfigDict, Field
 class FeedbackRecord(BaseModelWithId):
     session_id: str = Field(..., description="Session ID associated with the feedback")
     message_id: str = Field(..., description="Message ID the feedback refers to")
-    agent_name: str = Field(
+    agent_id: str = Field(
         ..., description="Name of the agent that generated the message"
     )
     rating: int = Field(..., ge=1, le=5, description="User rating, typically 1–5 stars")
@@ -42,7 +42,7 @@ class FeedbackRecord(BaseModelWithId):
                 "id": "fbk_abc123",
                 "session_id": "sess_xyz789",
                 "message_id": "msg_001",
-                "agent_name": "rico",
+                "agent_id": "123456",
                 "rating": 4,
                 "comment": "Helpful but a bit long",
                 "created_at": "2025-08-06T12:00:00Z",

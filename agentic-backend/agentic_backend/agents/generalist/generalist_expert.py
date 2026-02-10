@@ -84,7 +84,7 @@ class Georges(SimpleAgentFlow):
         # 1) Get the tuned system prompt
         tpl = self.get_tuned_text("prompts.system") or ""
 
-        # 2) Render tokens (like {agent_name}, {user_name}, etc.)
+        # 2) Render tokens (like {user_name}, etc.)
         sys = self.render(tpl)
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("Georges: Rendered final system prompt (len=%s).", len(sys))

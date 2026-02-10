@@ -42,7 +42,7 @@ class PostgresSessionStore(BaseSessionStore):
             metadata,
             Column("session_id", String, primary_key=True),
             Column("user_id", String, index=True),
-            Column("agent_name", String, index=True),
+            Column("agent_id", String, index=True),
             Column("session_data", JSON),
             Column("updated_at", DateTime(timezone=True), index=True),
             keep_existing=True,
@@ -77,7 +77,7 @@ class PostgresSessionStore(BaseSessionStore):
             values={
                 "session_id": session.id,
                 "user_id": session.user_id,
-                "agent_name": payload.get("agent_name", ""),
+                "agent_id": payload.get("agent_id", ""),
                 "session_data": payload,
                 "updated_at": session.updated_at,
             },

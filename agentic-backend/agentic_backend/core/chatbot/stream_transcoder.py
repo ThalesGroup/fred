@@ -205,7 +205,7 @@ class StreamTranscoder:
         key: str,
         session_id: str,
         exchange_id: str,
-        agent_name: str,
+        agent_id: str,
         interrupt_handler: Optional[InterruptHandler],
         checkpointer: Optional[Any],
     ) -> None:
@@ -336,7 +336,7 @@ class StreamTranscoder:
             logger.info(
                 "[TRANSCODER] No checkpoint found in interrupt payload (agent=%s session=%s). "
                 "Assuming server-side persistence via thread_id.",
-                agent_name,
+                agent_id,
                 session_id,
             )
 
@@ -351,7 +351,7 @@ class StreamTranscoder:
             except Exception as ve:
                 logger.error(
                     "[TRANSCODER] HITL payload invalid agent=%s session=%s exchange=%s err=%s payload=%s",
-                    agent_name,
+                    agent_id,
                     session_id,
                     exchange_id,
                     ve,
@@ -388,7 +388,7 @@ class StreamTranscoder:
         input_messages: List[AnyMessage],
         session_id: str,
         exchange_id: str,
-        agent_name: str,
+        agent_id: str,
         base_rank: int,
         start_seq: int,
         callback: CallbackType,
@@ -412,7 +412,7 @@ class StreamTranscoder:
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
                 "[TRANSCODER] start agent=%s session=%s exchange=%s base_rank=%s start_seq=%s interrupt_handler=%s resume=%s",
-                agent_name,
+                agent_id,
                 session_id,
                 exchange_id,
                 base_rank,
@@ -475,7 +475,7 @@ class StreamTranscoder:
                         key,
                         session_id,
                         exchange_id,
-                        agent_name,
+                        agent_id,
                     )
 
                 # LangGraph can emit "interrupt" or "__interrupt__" depending on source.
@@ -485,7 +485,7 @@ class StreamTranscoder:
                         key=key,
                         session_id=session_id,
                         exchange_id=exchange_id,
-                        agent_name=agent_name,
+                        agent_id=agent_id,
                         interrupt_handler=interrupt_handler,
                         checkpointer=getattr(agent, "streaming_memory", None),
                     )
@@ -552,7 +552,7 @@ class StreamTranscoder:
                                 metadata=ChatMetadata(
                                     model=model_name,
                                     token_usage=token_usage,
-                                    agent_name=agent_name,
+                                    agent_id=agent_id,
                                     finish_reason=finish_reason,
                                     extras=raw_md.get("extras", {}),
                                     sources=sources_payload,  # Use synthesized sources if any],
@@ -620,7 +620,7 @@ class StreamTranscoder:
                                 )
                             ],
                             metadata=ChatMetadata(
-                                agent_name=agent_name,
+                                agent_id=agent_id,
                                 extras=raw_md.get("extras") or {},
                                 sources=sources_payload,
                             ),
@@ -689,7 +689,7 @@ class StreamTranscoder:
                                 channel=Channel.thought,
                                 parts=[TextPart(text=str(thought_txt))],
                                 metadata=ChatMetadata(
-                                    agent_name=agent_name,
+                                    agent_id=agent_id,
                                     extras=raw_md.get("extras") or {},
                                 ),
                             )
@@ -778,7 +778,7 @@ class StreamTranscoder:
                             metadata=ChatMetadata(
                                 model=model_name,
                                 token_usage=token_usage,
-                                agent_name=agent_name,
+                                agent_id=agent_id,
                                 finish_reason=finish_reason,
                                 extras=raw_md.get("extras") or {},
                                 sources=sources_payload,
@@ -794,7 +794,7 @@ class StreamTranscoder:
             # Expected control-flow for HITL; let caller handle without logging an error.
             logger.info(
                 "StreamTranscoder: interrupt raised agent=%s session=%s exchange=%s",
-                agent_name,
+                agent_id,
                 session_id,
                 exchange_id,
             )
@@ -805,7 +805,7 @@ class StreamTranscoder:
             # Preserve partial transcript so far; caller decides how to surface the failure.
             logger.exception(
                 "[TRANSCODER] stream failure agent=%s session=%s exchange=%s msgs=%d",
-                agent_name,
+                agent_id,
                 session_id,
                 exchange_id,
                 len(out),

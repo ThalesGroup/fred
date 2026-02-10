@@ -211,7 +211,7 @@ class SessionOrchestrator:
         session_callback: SessionCallbackType | None = None,
         session_id: str,
         message: str,
-        agent_name: str,
+        agent_id: str,
         runtime_context: RuntimeContext,
         client_exchange_id: Optional[str] = None,
     ) -> Tuple[SessionSchema, List[ChatMessage]]:
@@ -240,7 +240,7 @@ class SessionOrchestrator:
             "chat.user_message_total",
             1,
             dims={
-                "agent_name": agent_name,
+                "agent_id": agent_id,
             },
             actor=actor,
         )
@@ -264,7 +264,7 @@ class SessionOrchestrator:
         try:
             async with phase_timer(self.kpi, "agent_init"):
                 agent, is_cached = await self.agent_factory.create_and_init(
-                    agent_id=agent_name,
+                    agent_id=agent_id,
                     runtime_context=runtime_context,
                     session_id=session.id,
                 )
@@ -272,12 +272,12 @@ class SessionOrchestrator:
             self.kpi.count(
                 "chat.exchange_error",
                 1,
-                dims={"agent_name": agent_name},
+                dims={"agent_id": agent_id},
                 actor=actor,
             )
             logger.error(
                 "[SESSIONS] MCP init failed for agent=%s session=%s err=%s",
-                agent_name,
+                agent_id,
                 session.id,
                 mcp_err,
             )
@@ -304,14 +304,14 @@ class SessionOrchestrator:
             self.kpi.count(
                 "agent.cache_hit",
                 1,
-                dims={"agent_name": agent_name},
+                dims={"agent_id": agent_id},
                 actor=actor,
             )
         else:
             self.kpi.count(
                 "agent.cache_miss",
                 1,
-                dims={"agent_name": agent_name},
+                dims={"agent_id": agent_id},
                 actor=actor,
             )
 
@@ -327,7 +327,7 @@ class SessionOrchestrator:
                         user=user,
                         session=session,
                     )
-                label = f"agent={agent_name} session={session.id}"
+                label = f"agent={agent_id} session={session.id}"
                 log_agent_message_summary(lc_history, label=label)
 
             base_rank = await self._ensure_next_rank(session)
@@ -367,7 +367,7 @@ class SessionOrchestrator:
                         input_messages=input_messages,
                         session_id=session.id,
                         exchange_id=exchange_id,
-                        agent_name=agent_name,
+                        agent_id=agent_id,
                         base_rank=next_rank_cursor,
                         start_seq=0,  # start at the next free rank
                         callback=callback,
@@ -383,13 +383,13 @@ class SessionOrchestrator:
                     "chat.exchange_error",
                     1,
                     dims={
-                        "agent_name": agent_name,
+                        "agent_id": agent_id,
                     },
                     actor=PHASE_METRIC_ACTOR,
                 )
                 logger.error(
                     "Agent execution cancelled by client disconnect (agent=%s session=%s exchange=%s)",
-                    agent_name,
+                    agent_id,
                     session.id,
                     exchange_id,
                 )
@@ -418,7 +418,7 @@ class SessionOrchestrator:
                     "chat.exchange_error",
                     1,
                     dims={
-                        "agent_name": agent_name,
+                        "agent_id": agent_id,
                     },
                     actor=PHASE_METRIC_ACTOR,
                 )
@@ -454,7 +454,7 @@ class SessionOrchestrator:
                     "chat.exchange_error",
                     1,
                     dims={
-                        "agent_name": agent_name,
+                        "agent_id": agent_id,
                     },
                     actor=PHASE_METRIC_ACTOR,
                 )
@@ -487,7 +487,7 @@ class SessionOrchestrator:
                     "chat.exchange_error",
                     1,
                     dims={
-                        "agent_name": agent_name,
+                        "agent_id": agent_id,
                     },
                     actor=PHASE_METRIC_ACTOR,
                 )
@@ -555,7 +555,7 @@ class SessionOrchestrator:
                 phase="stream_total",
                 start_ts=t_initial,
             )
-            self.agent_factory.release_agent(session.id, agent_name)
+            self.agent_factory.release_agent(session.id, agent_id)
             stats = self.agent_factory.get_cache_stats()
             if stats:
                 self.kpi.gauge("agent.cache_entries", stats.size, actor=actor)
@@ -584,7 +584,7 @@ class SessionOrchestrator:
         session_callback: SessionCallbackType | None = None,
         session_id: str,
         exchange_id: str,
-        agent_name: str | None,
+        agent_id: str | None,
         resume_payload: Dict[str, Any],
         runtime_context: RuntimeContext | None = None,
     ) -> Tuple[SessionSchema, List[ChatMessage]]:
@@ -596,7 +596,7 @@ class SessionOrchestrator:
             "[SESSIONS] resume_interrupted_exchange start session=%s exchange=%s agent=%s user=%s resume_keys=%s",
             session_id,
             exchange_id,
-            agent_name,
+            agent_id,
             user.uid,
             list((resume_payload or {}).keys()),
         )
@@ -608,8 +608,8 @@ class SessionOrchestrator:
         )
 
         # 3. Resolve Agent
-        actual_agent_name = agent_name or session.agent_name
-        if not actual_agent_name:
+        actual_agent_id = agent_id or session.agent_id
+        if not actual_agent_id:
             raise HTTPException(
                 status_code=400,
                 detail={
@@ -634,13 +634,13 @@ class SessionOrchestrator:
 
         # 6. Get Agent (Must be cached for in-memory checkpointer to work)
         agent, is_cached = await self.agent_factory.create_and_init(
-            agent_id=actual_agent_name,
+            agent_id=actual_agent_id,
             runtime_context=runtime_context,
             session_id=session.id,
         )
         logger.info(
             "[SESSIONS] resume agent_ready agent=%s cached=%s session=%s",
-            actual_agent_name,
+            actual_agent_id,
             is_cached,
             session.id,
         )
@@ -649,7 +649,7 @@ class SessionOrchestrator:
                 "[SESSIONS] resume aborted: agent cache miss session=%s exchange=%s agent=%s",
                 session.id,
                 exchange_id,
-                actual_agent_name,
+                actual_agent_id,
             )
             raise HTTPException(
                 status_code=409,
@@ -674,7 +674,7 @@ class SessionOrchestrator:
             if checkpoint_obj:
                 logger.info(
                     "[SESSIONS] resume checkpoint fetched agent=%s session=%s checkpoint_keys=%s",
-                    actual_agent_name,
+                    actual_agent_id,
                     session.id,
                     list(checkpoint_obj.keys())
                     if isinstance(checkpoint_obj, dict)
@@ -690,7 +690,7 @@ class SessionOrchestrator:
         except Exception as cp_err:
             logger.warning(
                 "[SESSIONS] resume could not fetch checkpoint agent=%s session=%s err=%s",
-                actual_agent_name,
+                actual_agent_id,
                 session.id,
                 cp_err,
             )
@@ -709,7 +709,7 @@ class SessionOrchestrator:
                 with self.kpi.timer(
                     "chat.resume_latency_ms",
                     dims={
-                        "agent_id": actual_agent_name,
+                        "agent_id": actual_agent_id,
                         "user_id": user.uid,
                         "session_id": session.id,
                         "exchange_id": exchange_id,
@@ -721,7 +721,7 @@ class SessionOrchestrator:
                         input_messages=[],  # Resume does not inject new messages into state
                         session_id=session.id,
                         exchange_id=exchange_id,
-                        agent_name=actual_agent_name,
+                        agent_id=actual_agent_id,
                         base_rank=base_rank,
                         start_seq=0,
                         callback=callback,
@@ -769,7 +769,7 @@ class SessionOrchestrator:
             return session, all_msgs
 
         finally:
-            self.agent_factory.release_agent(session.id, actual_agent_name)
+            self.agent_factory.release_agent(session.id, actual_agent_id)
 
     # ---------------- Session/History helpers (intentionally here) ----------------
 
@@ -790,9 +790,7 @@ class SessionOrchestrator:
             # Retrieve all agents
             async with phase_timer(self.kpi, "history_list_item"):
                 history = await self.get_session_history(session.id, user)
-            agents = {
-                msg.metadata.agent_name for msg in history if msg.metadata.agent_name
-            }
+            agents = {msg.metadata.agent_id for msg in history if msg.metadata.agent_id}
 
             files_names: list[str] = []
             attachments: list[AttachmentRef] = []
@@ -825,7 +823,7 @@ class SessionOrchestrator:
     async def create_empty_session(
         self,
         user: KeycloakUser,
-        agent_name: Optional[str] = None,
+        agent_id: Optional[str] = None,
         title: Optional[str] = None,
     ) -> SessionSchema:
         """Explicitly create a new empty session (used by the UI before first upload/message)."""
@@ -846,13 +844,11 @@ class SessionOrchestrator:
             logger.exception("[SESSIONS] Failed to enforce session limit")
             raise
 
-        prefs: Optional[Dict[str, Any]] = (
-            {"agent_name": agent_name} if agent_name else None
-        )
+        prefs: Optional[Dict[str, Any]] = {"agent_id": agent_id} if agent_id else None
         session = SessionSchema(
             id=secrets.token_urlsafe(8),
             user_id=user.uid,
-            agent_name=agent_name,
+            agent_id=agent_id,
             title=title or "New conversation",
             updated_at=_utcnow_dt(),
             preferences=prefs,
@@ -978,8 +974,8 @@ class SessionOrchestrator:
         )
         prefs = session.preferences or {}
         # If the session was created with a chosen agent, surface it as a default pref.
-        if "agent_name" not in prefs and session.agent_name:
-            prefs = {**prefs, "agent_name": session.agent_name}
+        if "agent_id" not in prefs and session.agent_id:
+            prefs = {**prefs, "agent_id": session.agent_id}
         return prefs
 
     @authorize(action=Action.UPDATE, resource=Resource.SESSIONS)
@@ -999,14 +995,14 @@ class SessionOrchestrator:
                 },
             )
         session.preferences = preferences or {}
-        # Keep session.agent_name in sync with the latest user-selected agent, if provided.
+        # Keep session.agent_id in sync with the latest user-selected agent, if provided.
         try:
-            agent_name = session.preferences.get("agent_name")
-            if isinstance(agent_name, str) and agent_name.strip():
-                session.agent_name = agent_name.strip()
+            agent_id = session.preferences.get("agent_id")
+            if isinstance(agent_id, str) and agent_id.strip():
+                session.agent_id = agent_id.strip()
         except Exception:
             logger.warning(
-                "[SESSIONS][PREFS] Failed to update agent_name in session=%s preferences: %s",
+                "[SESSIONS][PREFS] Failed to update agent_id in session=%s preferences: %s",
                 session_id,
                 session.preferences,
                 exc_info=True,

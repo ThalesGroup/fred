@@ -299,8 +299,8 @@ class KPIWriter(BaseKPIWriter):
         if name == "app.phase_latency_ms":
             dims = event.dims or {}
             parts = [name]
-            if dims.get("agent_name"):
-                parts.append(f"agent={dims['agent_name']}")
+            if dims.get("agent_id"):
+                parts.append(f"agent={dims['agent_id']}")
             if dims.get("phase"):
                 parts.append(f"phase={dims['phase']}")
             if dims.get("agent_step"):

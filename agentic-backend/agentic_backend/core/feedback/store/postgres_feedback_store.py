@@ -47,7 +47,7 @@ class PostgresFeedbackStore(BaseFeedbackStore):
             Column("id", String, primary_key=True),
             Column("session_id", String, nullable=False),
             Column("message_id", String, nullable=False),
-            Column("agent_name", String, nullable=False),
+            Column("agent_id", String, nullable=False),
             Column("rating", Integer, nullable=False),
             Column("comment", Text, nullable=True),
             Column("created_at", DateTime(timezone=True), nullable=False),
