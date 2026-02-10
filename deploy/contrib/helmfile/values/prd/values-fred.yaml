@@ -257,7 +257,7 @@ applications:
         access_key: "admin"
         bucket_name: "knowledge-flow-content"
         secure: false # todo: pass to true
-        public_endpoint: https://prism-s3-prd.six.cloud.thales
+        public_endpoint: https://prism-minio-prd.six.cloud.thales
         public_secure: true
 
       # Use bge-m3 from TGS as embedding model
