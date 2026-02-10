@@ -268,6 +268,7 @@ class SessionOrchestrator:
         try:
             async with phase_timer(self.kpi, "agent_init"):
                 agent, is_cached = await self.agent_factory.create_and_init(
+                    user=user,
                     agent_id=agent_id,
                     runtime_context=runtime_context,
                     session_id=session.id,
@@ -638,6 +639,7 @@ class SessionOrchestrator:
 
         # 6. Get Agent (Must be cached for in-memory checkpointer to work)
         agent, is_cached = await self.agent_factory.create_and_init(
+            user=user,
             agent_id=actual_agent_id,
             runtime_context=runtime_context,
             session_id=session.id,

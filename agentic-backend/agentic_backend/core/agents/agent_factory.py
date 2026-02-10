@@ -16,6 +16,7 @@ import asyncio
 import logging
 from typing import Dict, Optional, Tuple, cast
 
+from fred_core import KeycloakUser
 from pyparsing import abstractmethod
 
 from agentic_backend.common.structures import AgentSettings, Configuration, Leader
@@ -23,6 +24,7 @@ from agentic_backend.core.agents.agent_cache import ActiveAgentCache, AgentCache
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_manager import AgentManager
+from agentic_backend.core.agents.agent_service import AgentService
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.leader.leader_flow import LeaderFlow
 
@@ -33,6 +35,7 @@ class BaseAgentFactory:
     @abstractmethod
     async def create_and_init(
         self,
+        user: KeycloakUser,
         agent_id: str,
         runtime_context: RuntimeContext,
         session_id: str,
@@ -84,13 +87,14 @@ class AgentFactory(BaseAgentFactory):
         self._agent_cache: ActiveAgentCache[Tuple[str, str], AgentFlow] = (
             ActiveAgentCache(max_size=configuration.ai.max_concurrent_agents)
         )
-        self.manager = manager
+        self.service = AgentService(agent_manager=manager)
         self.loader = loader
         self._main_event_loop = asyncio.get_event_loop()
 
     # ---------- Public entry point ----------
     async def create_and_init(
         self,
+        user: KeycloakUser,
         agent_id: str,
         runtime_context: RuntimeContext,
         session_id: str,
@@ -118,7 +122,7 @@ class AgentFactory(BaseAgentFactory):
             return cached, True
 
         # Build fresh
-        settings, agent = self._instantiate_from_settings(agent_id)
+        settings, agent = await self._instantiate_from_settings(user, agent_id)
 
         # Always apply merged settings and context before init
         agent.apply_settings(settings)
@@ -126,7 +130,7 @@ class AgentFactory(BaseAgentFactory):
             agent.set_runtime_context(runtime_context)
 
         # Initialize (Leader vs simple Agent handled here)
-        await self._initialize_agent(agent, settings, runtime_context)
+        await self._initialize_agent(user, agent, settings, runtime_context)
 
         # Cache and return
         self._agent_cache.set(cache_key, agent)
@@ -140,14 +144,14 @@ class AgentFactory(BaseAgentFactory):
 
     # ---------- Helpers (why-focused, no duplication) ----------
 
-    def _instantiate_from_settings(
-        self, agent_id: str
+    async def _instantiate_from_settings(
+        self, user: KeycloakUser, agent_id: str
     ) -> Tuple[AgentSettings, AgentFlow]:
         """
         Why: the Manager is the single source of truth for settings/class_path.
         Keeps class loading + validation in one place.
         """
-        settings = self.manager.get_agent_settings(agent_id)
+        settings = await self.service.get_agent_by_id(user, agent_id)
         if not settings:
             raise ValueError(f"Agent '{agent_id}' not found in catalog.")
         if not settings.class_path:
@@ -158,6 +162,7 @@ class AgentFactory(BaseAgentFactory):
 
     async def _initialize_agent(
         self,
+        user: KeycloakUser,
         agent: AgentFlow,
         settings_obj: object,
         runtime_context: RuntimeContext,
@@ -169,7 +174,7 @@ class AgentFactory(BaseAgentFactory):
         """
         if isinstance(agent, LeaderFlow):
             crew = await self._build_leader_crew(
-                cast(Leader, settings_obj), runtime_context
+                user, cast(Leader, settings_obj), runtime_context
             )
             logger.info(
                 "[AGENTS] leader='%s' async_init invoked (crew size=%d).",
@@ -186,6 +191,7 @@ class AgentFactory(BaseAgentFactory):
 
     async def _build_leader_crew(
         self,
+        user: KeycloakUser,
         leader_settings: Leader,
         runtime_context: RuntimeContext,
     ) -> Dict[str, AgentFlow]:
@@ -195,7 +201,9 @@ class AgentFactory(BaseAgentFactory):
         """
         crew: Dict[str, AgentFlow] = {}
         for expert_id in leader_settings.crew:
-            expert_settings, expert = self._instantiate_from_settings(expert_id)
+            expert_settings, expert = await self._instantiate_from_settings(
+                user, expert_id
+            )
             expert.apply_settings(expert_settings)
             expert.set_runtime_context(runtime_context)
             if hasattr(expert, "async_init"):

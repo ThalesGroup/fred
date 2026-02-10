@@ -100,6 +100,15 @@ class AgentService:
 
         return agents
 
+    async def get_agent_by_id(
+        self, user: KeycloakUser, agent_id: str
+    ) -> AgentSettings | None:
+        await self.rebac.check_user_permission_or_raise(
+            user, AgentPermission.UPDATE, agent_id
+        )
+
+        return self.agent_manager.get_agent_settings(agent_id)
+
     async def create_agent(
         self,
         user: KeycloakUser,
