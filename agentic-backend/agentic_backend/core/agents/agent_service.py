@@ -82,8 +82,8 @@ class AgentService:
     def __init__(self, agent_manager: AgentManager):
         self.store = get_agent_store()
         self.agent_manager = agent_manager
+        self.rebac = get_rebac_engine()
 
-    @authorize(action=Action.READ, resource=Resource.AGENTS)
     async def list_agents(
         self,
         user: KeycloakUser,
@@ -100,7 +100,6 @@ class AgentService:
 
         return agents
 
-    @authorize(action=Action.CREATE, resource=Resource.AGENTS)
     async def create_agent(
         self,
         user: KeycloakUser,
@@ -114,11 +113,9 @@ class AgentService:
         """
         Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
         """
-        rebac = get_rebac_engine()
-
         # If team_id is provided, check user has permission to manage team agents
         if team_id:
-            await rebac.check_user_permission_or_raise(
+            await self.rebac.check_user_permission_or_raise(
                 user, TeamPermission.CAN_UPDATE_AGENTS, team_id
             )
 
@@ -161,7 +158,7 @@ class AgentService:
 
         # Create ReBAC ownership: team owns the agent, or user owns the agent (personal agent)
         if team_id:
-            await rebac.add_relation(
+            await self.rebac.add_relation(
                 Relation(
                     subject=RebacReference(type=Resource.TEAM, id=team_id),
                     relation=RelationType.OWNER,
@@ -169,17 +166,20 @@ class AgentService:
                 )
             )
         else:
-            await rebac.add_user_relation(
+            await self.rebac.add_user_relation(
                 user,
                 RelationType.OWNER,
                 resource_type=Resource.AGENT,
                 resource_id=agent_id,
             )
 
-    @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
     async def update_agent(
         self, user: KeycloakUser, agent_settings: AgentSettings, is_global: bool
     ):
+        await self.rebac.check_user_permission_or_raise(
+            user, AgentPermission.UPDATE, agent_settings.id
+        )
+
         await self.agent_manager.update_agent(
             new_settings=agent_settings, is_global=is_global
         )
@@ -206,8 +206,7 @@ class AgentService:
         When an owner_filter is provided, the result is intersected with the
         owner-filtered agent IDs so only readable agents matching the filter are returned.
         """
-        rebac = get_rebac_engine()
-        readable_coro = rebac.lookup_user_resources(user, AgentPermission.READ)
+        readable_coro = self.rebac.lookup_user_resources(user, AgentPermission.READ)
 
         if owner_filter is None:
             readable_refs = await readable_coro
@@ -228,7 +227,9 @@ class AgentService:
         # Run lookups in parallel: security baseline + owner-filtered lookup
         readable_refs, owned = await asyncio.gather(
             readable_coro,
-            rebac.lookup_resources(subject_ref, AgentPermission.OWNER, Resource.AGENT),
+            self.rebac.lookup_resources(
+                subject_ref, AgentPermission.OWNER, Resource.AGENT
+            ),
         )
         if isinstance(readable_refs, RebacDisabledResult) or isinstance(
             owned, RebacDisabledResult
