@@ -23,9 +23,12 @@ export function NewChatAgentSelection() {
     data: rawAgents,
     isLoading: agentLoading,
     isError: agentError,
-  } = useListAgentsAgenticV1AgentsGetQuery(undefined, {
-    refetchOnMountOrArgChange: true,
-  });
+  } = useListAgentsAgenticV1AgentsGetQuery(
+    {},
+    {
+      refetchOnMountOrArgChange: true,
+    },
+  );
 
   const agents = useMemo<AnyAgent[]>(() => normalizeAgenticFlows(rawAgents), [rawAgents]);
 
@@ -45,7 +48,7 @@ export function NewChatAgentSelection() {
           {t("newChat.selectAgentTitle", { userName: username })}
         </Typography>
 
-        {/* Your agents */}
+        {/* Your agents title */}
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "center" }}>
           <Typography variant="subtitle1" color="textSecondary">
             {/* Todo: use nickname */}
