@@ -33,7 +33,7 @@ class CreatePullFileMetadata:
         return await workflow.execute_activity(
             "create_pull_file_metadata",
             args=[file],
-            schedule_to_close_timeout=timedelta(seconds=60),
+            schedule_to_close_timeout=timedelta(hours=1),
         )
 
 
@@ -45,7 +45,7 @@ class GetPushFileMetadata:
         return await workflow.execute_activity(
             "get_push_file_metadata",
             args=[file],
-            schedule_to_close_timeout=timedelta(seconds=60),
+            schedule_to_close_timeout=timedelta(hours=1),
         )
 
 
@@ -57,7 +57,7 @@ class LoadPullFile:
         return await workflow.execute_activity(
             "load_pull_file",
             args=[file, metadata],
-            schedule_to_close_timeout=timedelta(seconds=60),
+            schedule_to_close_timeout=timedelta(hours=1),
         )
 
 
@@ -69,7 +69,7 @@ class LoadPushFile:
         return await workflow.execute_activity(
             "load_push_file",
             args=[file, metadata],
-            schedule_to_close_timeout=timedelta(seconds=60),
+            schedule_to_close_timeout=timedelta(hours=1),
         )
 
 
@@ -81,7 +81,7 @@ class InputProcess:
         return await workflow.execute_activity(
             "input_process",
             args=[user, input_file, metadata],
-            schedule_to_close_timeout=timedelta(seconds=60),
+            schedule_to_close_timeout=timedelta(hours=1),
         )
 
 
@@ -93,7 +93,7 @@ class OutputProcess:
         await workflow.execute_activity(
             "output_process",
             args=[file, metadata, False],
-            schedule_to_close_timeout=timedelta(seconds=60),
+            schedule_to_close_timeout=timedelta(hours=1),
         )
 
 
@@ -104,7 +104,7 @@ class FastStoreVectors:
         return await workflow.execute_activity(
             "fast_store_vectors",
             args=[payload],
-            schedule_to_close_timeout=timedelta(seconds=60),
+            schedule_to_close_timeout=timedelta(hours=1),
         )
 
 
