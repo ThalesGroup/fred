@@ -3,7 +3,6 @@ name: Check pending request
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main]
 
 jobs:
   # Job to detect changes

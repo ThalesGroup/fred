@@ -18,7 +18,6 @@ import asyncio
 import logging
 from typing import Any, List
 
-from fred_core import KeycloakUser
 from fred_core.sql import AsyncBaseSqlStore, PydanticJsonMixin, json_for_engine
 from sqlalchemy import Column, DateTime, MetaData, String, Table, select
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -88,12 +87,8 @@ class PostgresTagStore(BaseTagStore, PydanticJsonMixin):
 
     # CRUD implementation mirroring DuckDB store
 
-    async def list_tags_for_user(self, user: KeycloakUser) -> List[Tag]:
-        owner_id = getattr(user, "uid", None) or getattr(user, "id", None) or getattr(user, "sub", None)
-        async with self.store.begin() as conn:
-            result = await conn.execute(select(self.table.c.doc).where(self.table.c.owner_id == owner_id).order_by(self.table.c.path.nullsfirst(), self.table.c.name))
-            rows = result.fetchall()
-        return [self._from_dict(r[0]) for r in rows]
+    async def list_all_tags(self) -> List[Tag]:
+        return await self.list_all()
 
     async def get_tag_by_id(self, tag_id: str) -> Tag:
         async with self.store.begin() as conn:

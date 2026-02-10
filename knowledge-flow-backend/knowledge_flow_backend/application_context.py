@@ -509,7 +509,14 @@ class ApplicationContext:
             document_bucket = f"{config.bucket_name}-documents"
             object_bucket = f"{config.bucket_name}-objects"
             return MinioStorageBackend(
-                endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, document_bucket=document_bucket, object_bucket=object_bucket, secure=config.secure
+                endpoint=config.endpoint,
+                access_key=config.access_key,
+                secret_key=config.secret_key,
+                document_bucket=document_bucket,
+                object_bucket=object_bucket,
+                secure=config.secure,
+                public_endpoint=config.public_endpoint,
+                public_secure=config.public_secure,
             )
         elif isinstance(config, LocalContentStorageConfig):
             document_root = Path(config.root_path).expanduser() / "documents"
@@ -818,8 +825,6 @@ class ApplicationContext:
         engine = create_async_engine_from_config(pg)
         self._team_metadata_store_instance = PostgresTeamMetadataStore(engine=engine)
         return self._team_metadata_store_instance
-
-        # return PostgresTeamMetadataStore(engine=self.get_async_sql_engine())
 
     def get_resource_store(self) -> BaseResourceStore:
         if self._resource_store_instance is not None:

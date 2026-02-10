@@ -722,6 +722,13 @@ applications:
       content_storage:
         type: local
         root_path: /home/fred-user/.fred/knowledge-flow/content-storage
+        # type: minio
+        # endpoint: http://minio:9000
+        # access_key: admin
+        # bucket_name: app-bucket
+        # secure: false
+        # public_endpoint: https://minio.example.com  # Public URL for browser-facing presigned URLs
+        # public_secure: true  # Optional, inferred from public_endpoint scheme if omitted
       document_sources:
         fred:
           type: push

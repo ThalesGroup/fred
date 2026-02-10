@@ -24,11 +24,15 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { getConfig } from "../../../common/config";
-import { KeyCloakService } from "../../../security/KeycloakService";
 import { DeleteIconButton } from "../../../shared/ui/buttons/DeleteIconButton";
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import { TagNode } from "../../../shared/utils/tagTree";
-import type { DocumentMetadata, TagWithItemsId } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type {
+  DocumentMetadata,
+  TagPermission,
+  TagWithItemsId,
+  TagWithPermissions,
+} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DocumentRowCompact } from "./DocumentLibraryRow";
 import { DocumentLibraryShareDialog } from "./sharing/DocumentLibraryShareDialog";
 
@@ -36,8 +40,12 @@ import { DocumentLibraryShareDialog } from "./sharing/DocumentLibraryShareDialog
  * Helpers
  * -------------------------------------------------------------------------- */
 
-function getPrimaryTag(n: TagNode): TagWithItemsId | undefined {
+function getPrimaryTag(n: TagNode): TagWithPermissions | undefined {
   return n.tagsHere?.[0];
+}
+
+function tagHasPermission(tag: TagWithPermissions | undefined, perm: TagPermission): boolean {
+  return tag?.permissions?.includes(perm) ?? false;
 }
 
 /** Docs linked to any of the provided tag ids (deduped). */
@@ -109,8 +117,6 @@ interface DocumentLibraryTreeProps {
   loadingTagIds?: Record<string, boolean>;
   onLoadMore?: (tagId: string) => void;
   onLoadAll?: (tagId: string) => void;
-  canDeleteDocument?: boolean;
-  canDeleteFolder?: boolean;
   ownerNamesById?: Record<string, string>;
 }
 
@@ -137,13 +143,10 @@ export function DocumentLibraryTree({
   loadingTagIds,
   onLoadMore,
   onLoadAll,
-  canDeleteDocument = true,
-  canDeleteFolder = true,
   ownerNamesById,
 }: DocumentLibraryTreeProps) {
   const { t } = useTranslation();
   const [shareTarget, setShareTarget] = React.useState<TagNode | null>(null);
-  const currentUserId = KeyCloakService.GetUserId?.() ?? null;
   const { feature_flags } = getConfig();
 
   const handleCloseShareDialog = React.useCallback(() => {
@@ -244,7 +247,7 @@ export function DocumentLibraryTree({
       const folderChecked = selectionTotalForTag > 0 && selectedForTag === selectionTotalForTag;
       const folderIndeterminate = selectedForTag > 0 && selectedForTag < selectionTotalForTag;
 
-      const canBeDeleted = !!folderTag && !!onDeleteFolder && canDeleteFolder;
+      const canBeDeleted = !!folderTag && !!onDeleteFolder && tagHasPermission(folderTag, "delete");
       const ownerName = folderTag ? ownerNamesById?.[folderTag.owner_id] : undefined;
 
       // When not selected and we never loaded docs for this tag, avoid showing 0 as if known.
@@ -340,11 +343,7 @@ export function DocumentLibraryTree({
                     </Box>
                   </SimpleTooltip>
                 )}
-                {feature_flags.is_rebac_enabled &&
-                  folderTag &&
-                  folderTag.owner_id &&
-                  currentUserId &&
-                  folderTag.owner_id === currentUserId && (
+                {feature_flags.is_rebac_enabled && tagHasPermission(folderTag, "share") && (
                     <SimpleTooltip
                       title={t("documentLibraryTree.shareFolder")}
                       // ATTENTION enterTouchDelay={10}
@@ -421,8 +420,9 @@ export function DocumentLibraryTree({
                       onPdfPreview={onPdfPreview}
                       onDownload={onDownload}
                       isDownloading={downloadingDocUid === doc.identity.document_uid}
+                      canUpdateTag={tagHasPermission(tag, "update")}
                       onRemoveFromLibrary={(d) => {
-                        if (!canDeleteDocument || !tag) return;
+                        if (!tag) return;
                         onRemoveFromLibrary(d, tag);
                       }}
                       onToggleRetrievable={onToggleRetrievable}
