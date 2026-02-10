@@ -17,7 +17,6 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../common/agent";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
-import { usePermissions } from "../../security/usePermissions";
 import {
   FieldSpec,
   McpServerRef,
@@ -40,16 +39,17 @@ type TopLevelTuningState = {
 type Props = {
   open: boolean;
   agent: AnyAgent | null;
+  canDelete?: boolean;
+
   onClose: () => void;
   onSaved?: () => void;
   onDeleted?: () => void;
 };
-export function AgentEditDrawer({ open, agent, onClose, onSaved, onDeleted }: Props) {
+export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDeleted }: Props) {
   const { updateTuning, isLoading } = useAgentUpdater();
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
-  const { can } = usePermissions();
-  const canDeleteAgents = can("agents", "delete");
+
   const [triggerDeleteAgent] = useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation();
   // State for dynamic fields
   const [fields, setFields] = useState<FieldSpec[]>([]);
@@ -244,7 +244,7 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved, onDeleted }: Pr
               color="error"
               startIcon={<DeleteIcon />}
               onClick={handleDelete}
-              disabled={!canDeleteAgents}
+              disabled={!canDelete}
             >
               {t("common.delete")}
             </Button>

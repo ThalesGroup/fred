@@ -70,7 +70,7 @@ export const AgentGridManager = ({
   teamId,
   canEdit = false,
   canCreate = false,
-  canDelete = false, // Reserved for future use
+  canDelete = false,
   onRefetchAgents,
   showRestoreButton = false,
   onRestore,
@@ -78,8 +78,6 @@ export const AgentGridManager = ({
   showA2ACard = true,
   emptyStateMessage,
 }: AgentGridManagerProps) => {
-  // Suppress unused variable warning - canDelete is part of the API but not yet used internally
-  void canDelete;
   const theme = useTheme();
   const { t } = useTranslation();
   const { showError } = useToast();
@@ -305,6 +303,7 @@ export const AgentGridManager = ({
 
       {/* Drawers / Modals */}
       <AgentEditDrawer
+        canDelete={canDelete}
         open={editOpen}
         agent={selected}
         onClose={() => setEditOpen(false)}

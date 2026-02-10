@@ -185,8 +185,11 @@ class AgentService:
         )
         self.agent_manager.log_current_settings()
 
-    @authorize(action=Action.DELETE, resource=Resource.AGENTS)
     async def delete_agent(self, user: KeycloakUser, agent_id: str):
+        await self.rebac.check_user_permission_or_raise(
+            user, AgentPermission.DELETE, agent_id
+        )
+
         await self.agent_manager.delete_agent(agent_id)
 
     @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
