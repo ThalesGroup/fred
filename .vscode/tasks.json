@@ -13,7 +13,11 @@
     {
       "label": "agentic-backend",
       "type": "shell",
-      "command": "make run",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8000 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
+      ],
       "options": { "cwd": "${workspaceFolder}/agentic-backend" },
       "problemMatcher": [],
       "presentation": { "panel": "new", "reveal": "always" }
@@ -21,7 +25,19 @@
     {
       "label": "knowledge-flow-backend",
       "type": "shell",
-      "command": "make run",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8111 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
+      ],
+      "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
+      "problemMatcher": [],
+      "presentation": { "panel": "new", "reveal": "always" }
+    },
+    {
+      "label": "knowledge-flow temporal worker",
+      "type": "shell",
+      "command": "make run-worker",
       "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
       "problemMatcher": [],
       "presentation": { "panel": "new", "reveal": "always" }
@@ -29,10 +45,14 @@
     {
       "label": "frontend",
       "type": "shell",
-      "command": "make run",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:5173 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
+      ],
       "options": { "cwd": "${workspaceFolder}/frontend" },
       "problemMatcher": [],
       "presentation": { "panel": "new", "reveal": "always" }
-    },
+    }
   ]
 }
