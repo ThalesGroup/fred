@@ -21,7 +21,7 @@ export function useAgentSelector(
   const currentAgent = useMemo(() => {
     // If user manually selected an agent, use that
     if (manuallySelectedAgentId) {
-      const manualAgent = agents.find((a) => a.name === manuallySelectedAgentId);
+      const manualAgent = agents.find((a) => a.id === manuallySelectedAgentId);
       if (manualAgent) return manualAgent;
     }
 
@@ -29,9 +29,9 @@ export function useAgentSelector(
     // (iterate backwards to skip sub-agents that might not be in the main agents list)
     if (!isNewConversation && history?.length) {
       for (let i = history.length - 1; i >= 0; i--) {
-        const agentName = history[i].metadata?.agent_name;
+        const agentName = history[i].metadata?.agent_id;
         if (agentName) {
-          const sessionAgent = agents.find((a) => a.name === agentName);
+          const sessionAgent = agents.find((a) => a.id === agentName);
           if (sessionAgent) return sessionAgent;
         }
       }
@@ -44,7 +44,7 @@ export function useAgentSelector(
   const setCurrentAgent = useCallback(
     (agent: AnyAgent) => {
       // Set as manually selected agent (overrides default logic)
-      setManuallySelectedAgentId(agent.name);
+      setManuallySelectedAgentId(agent.id);
     },
     [setManuallySelectedAgentId],
   );

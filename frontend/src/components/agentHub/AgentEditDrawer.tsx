@@ -21,7 +21,7 @@ import { usePermissions } from "../../security/usePermissions";
 import {
   FieldSpec,
   McpServerRef,
-  useDeleteAgentAgenticV1AgentsNameDeleteMutation,
+  useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
 } from "../../slices/agentic/agenticOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { TagsInput } from "./AgentTagsInput";
@@ -50,7 +50,7 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved, onDeleted }: Pr
   const { showConfirmationDialog } = useConfirmationDialog();
   const { can } = usePermissions();
   const canDeleteAgents = can("agents", "delete");
-  const [triggerDeleteAgent] = useDeleteAgentAgenticV1AgentsNameDeleteMutation();
+  const [triggerDeleteAgent] = useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation();
   // State for dynamic fields
   const [fields, setFields] = useState<FieldSpec[]>([]);
   // State for top-level Tuning properties
@@ -141,7 +141,7 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved, onDeleted }: Pr
       message: t("agentHub.confirmDeleteMessage"),
       onConfirm: async () => {
         try {
-          await triggerDeleteAgent({ name: agent.name }).unwrap();
+          await triggerDeleteAgent({ agentId: agent.id }).unwrap();
           onDeleted?.();
           onClose();
         } catch (err) {

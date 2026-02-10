@@ -162,12 +162,12 @@ export function useConversationOptionsController({
   const [currentAgent, setCurrentAgent] = useState<AnyAgent>(initialAgent ?? agents[0] ?? ({} as AnyAgent));
 
   useEffect(() => {
-    if (defaultAgent && (!currentAgent || !currentAgent.name)) setCurrentAgent(defaultAgent);
+    if (defaultAgent && (!currentAgent || !currentAgent.id)) setCurrentAgent(defaultAgent);
   }, [currentAgent, defaultAgent]);
 
   const defaultRagScope: SearchRagScope = "hybrid";
   const { prefs: initialCtx, resetToDefaults } = useInitialChatInputContext(
-    currentAgent?.name || "default",
+    currentAgent?.id || "default",
     chatSessionId,
     {
       includeCorpusScope: currentAgent?.chat_options?.include_corpus_in_search ?? true,
@@ -261,7 +261,7 @@ export function useConversationOptionsController({
       includeCorpusScope: supportsLibrariesSelection ? prefs.includeCorpusScope : undefined,
       includeDocumentScope: supportsDocumentsSelection ? prefs.includeDocumentScope : undefined,
       includeSessionScope: supportsAttachments ? prefs.includeSessionScope : undefined,
-      agent_name: agentName ?? currentAgent?.name ?? defaultAgent?.name,
+      agent_name: agentName ?? currentAgent?.id ?? defaultAgent?.id,
     }),
     [
       supportsRagScopeSelection,
@@ -269,8 +269,8 @@ export function useConversationOptionsController({
       supportsLibrariesSelection,
       supportsDocumentsSelection,
       supportsAttachments,
-      currentAgent?.name,
-      defaultAgent?.name,
+      currentAgent?.id,
+      defaultAgent?.id,
     ],
   );
 
@@ -307,8 +307,8 @@ export function useConversationOptionsController({
     if (!prefsTargetSessionId || prefsLoadState !== "hydrated") return;
 
     // Persist current prefs (agent_name derived from currentAgent)
-    savePrefs(conversationPrefs, currentAgent?.name);
-  }, [conversationPrefs, currentAgent?.name, prefsTargetSessionId, prefsLoadState, savePrefs]);
+    savePrefs(conversationPrefs, currentAgent?.id);
+  }, [conversationPrefs, currentAgent?.id, prefsTargetSessionId, prefsLoadState, savePrefs]);
 
   const seedSessionPrefs = useCallback(
     async (chatSessionIdToSeed: string, agentName?: string) => {
@@ -432,21 +432,21 @@ export function useConversationOptionsController({
         console.info("[PREFS][AGENT] skip (prefs not hydrated)", {
           sessionId: prefsTargetSessionId ?? null,
           prefsLoadState,
-          agent: agent.name,
+          agent: agent.id,
         });
         return;
       }
-      const prefs = buildPersistedPrefs(conversationPrefs, agent.name);
-      console.info("[PREFS][AGENT] saving", { sessionId: prefsTargetSessionId, agent: agent.name });
+      const prefs = buildPersistedPrefs(conversationPrefs, agent.id);
+      console.info("[PREFS][AGENT] saving", { sessionId: prefsTargetSessionId, agent: agent.id });
       try {
         await persistSessionPrefs({
           sessionId: prefsTargetSessionId,
           sessionPreferencesPayload: { preferences: prefs },
         }).unwrap();
         lastSentJson.current = serializePrefs(prefs);
-        console.info("[PREFS][AGENT] saved", { sessionId: prefsTargetSessionId, agent: agent.name });
+        console.info("[PREFS][AGENT] saved", { sessionId: prefsTargetSessionId, agent: agent.id });
       } catch (err) {
-        console.warn("[PREFS][AGENT] save failed", { sessionId: prefsTargetSessionId, agent: agent.name, error: err });
+        console.warn("[PREFS][AGENT] save failed", { sessionId: prefsTargetSessionId, agent: agent.id, error: err });
       }
     },
     [prefsTargetSessionId, prefsLoadState, buildPersistedPrefs, conversationPrefs, persistSessionPrefs],
@@ -499,8 +499,8 @@ export function useConversationOptionsController({
             ? seeded.prefs.agent_name
             : undefined;
         if (desiredAgentName) {
-          const foundAgent = agents.find((a) => a.name === desiredAgentName);
-          if (foundAgent && foundAgent.name !== currentAgent?.name) setCurrentAgent(foundAgent);
+          const foundAgent = agents.find((a) => a.id === desiredAgentName);
+          if (foundAgent && foundAgent.id !== currentAgent?.id) setCurrentAgent(foundAgent);
         }
         lastSentJson.current = serializePrefs(seeded.prefs);
         seededSessionRef.current = null;
@@ -568,8 +568,8 @@ export function useConversationOptionsController({
 
       const desiredAgentName = typeof p.agent_name === "string" && p.agent_name.length ? p.agent_name : undefined;
       if (desiredAgentName) {
-        const foundAgent = agents.find((a) => a.name === desiredAgentName);
-        if (foundAgent && foundAgent.name !== currentAgent?.name) setCurrentAgent(foundAgent);
+        const foundAgent = agents.find((a) => a.id === desiredAgentName);
+        if (foundAgent && foundAgent.id !== currentAgent?.id) setCurrentAgent(foundAgent);
       }
 
       lastSentJson.current = serializePrefs({
@@ -607,7 +607,7 @@ export function useConversationOptionsController({
     defaultRagScope,
     resetToDefaults,
     agents,
-    currentAgent?.name,
+    currentAgent?.id,
   ]);
 
   const isHydratingSession = prefsLoadState === "loading" && !isPrefsError;
@@ -621,8 +621,9 @@ export function useConversationOptionsController({
   const searchOptionsWidgetOpenDisplay = isHydratingSession
     ? false
     : (supportsRagScopeSelection || supportsSearchPolicySelection) && searchOptionsWidgetOpen;
-  const librariesWidgetOpenDisplay =
-    isHydratingSession ? false : supportsLibrariesSelection && librariesWidgetOpen && !documentsScopeActive;
+  const librariesWidgetOpenDisplay = isHydratingSession
+    ? false
+    : supportsLibrariesSelection && librariesWidgetOpen && !documentsScopeActive;
   const documentsWidgetOpenDisplay = isHydratingSession ? false : supportsDocumentsSelection && documentsWidgetOpen;
   const deepSearchWidgetOpenDisplay = isHydratingSession ? false : supportsDeepSearchSelection && deepSearchWidgetOpen;
   const logGeniusWidgetOpenDisplay = isHydratingSession ? false : logGeniusWidgetOpen;
@@ -828,12 +829,10 @@ export function ConversationOptionsPanel({
   const canOpenSearchOptions = supportsRagScopeSelection || supportsSearchPolicySelection;
   const showLogGenius = Boolean(onRequestLogGenius);
   const librariesDisabled = !supportsLibrariesSelection || documentsScopeActive;
-  const librariesDisabledReason = documentsScopeActive && supportsLibrariesSelection
-    ? t(
-        "chatbot.libraries.disabledByDocuments",
-        "Document scoping is active. Disable documents to use libraries.",
-      )
-    : undefined;
+  const librariesDisabledReason =
+    documentsScopeActive && supportsLibrariesSelection
+      ? t("chatbot.libraries.disabledByDocuments", "Document scoping is active. Disable documents to use libraries.")
+      : undefined;
   const allWidgetsOpen =
     chatContextWidgetOpenDisplay &&
     (!supportsLibrariesSelection || documentsScopeActive || librariesWidgetOpenDisplay) &&

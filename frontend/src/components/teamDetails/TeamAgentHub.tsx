@@ -7,6 +7,7 @@ import { AgentGridManager } from "../agentHub/AgentGridManager";
 const agents: AnyAgent[] = [
   {
     type: "leader",
+    id: "TeamLeader",
     name: "TeamLeader",
     enabled: true,
     tuning: {
@@ -23,6 +24,7 @@ const agents: AnyAgent[] = [
   },
   {
     type: "agent",
+    id: "DataAnalyst",
     name: "DataAnalyst",
     enabled: true,
     tuning: {
@@ -37,6 +39,7 @@ const agents: AnyAgent[] = [
   },
   {
     type: "agent",
+    id: "DocumentWriter",
     name: "DocumentWriter",
     enabled: true,
     tuning: {
@@ -52,6 +55,7 @@ const agents: AnyAgent[] = [
   },
   {
     type: "agent",
+    id: "CodeReviewer",
     name: "CodeReviewer",
     enabled: true,
     tuning: {
@@ -65,6 +69,7 @@ const agents: AnyAgent[] = [
   },
   {
     type: "agent",
+    id: "SecurityAuditor",
     name: "SecurityAuditor",
     enabled: false,
     tuning: {

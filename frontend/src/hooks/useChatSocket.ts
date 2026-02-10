@@ -16,9 +16,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 
 import { getConfig } from "../common/config";
+import { mergeAuthoritative, toWsUrl, upsertOne } from "../components/chatbot/ChatBotUtils";
 import { KeyCloakService } from "../security/KeycloakService";
-import { toWsUrl, mergeAuthoritative, upsertOne } from "../components/chatbot/ChatBotUtils";
 
+import { AnyAgent } from "../common/agent";
 import type {
   ChatAskInput,
   ChatMessage,
@@ -27,7 +28,6 @@ import type {
   SessionSchema,
   StreamEvent,
 } from "../slices/agentic/agenticOpenApi";
-import { AnyAgent } from "../common/agent";
 
 /**
  * WebSocket transport extracted from ChatBot.
@@ -191,7 +191,7 @@ export function useChatSocket(params: {
 
       const base: ChatAskInput = {
         message,
-        agent_name: agent.name,
+        agent_id: agent.id,
         session_id: session?.id,
         runtime_context: runtimeContext,
       };

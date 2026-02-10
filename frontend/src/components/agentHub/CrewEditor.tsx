@@ -44,7 +44,7 @@ export function CrewEditor({ open, leader, allAgents, onClose, onSaved }: Props)
 
   const crew = leader?.crew || [];
   const candidates = useMemo(
-    () => allAgents.filter((a) => a.type === "agent" && !crew.includes(a.name)).map((a) => a.name),
+    () => allAgents.filter((a) => a.type === "agent" && !crew.includes(a.id)).map((a) => a.id),
     [allAgents, crew],
   );
 
@@ -67,7 +67,7 @@ export function CrewEditor({ open, leader, allAgents, onClose, onSaved }: Props)
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Crew for {leader?.name}</DialogTitle>
+      <DialogTitle>Crew for {leader?.id}</DialogTitle>
       <DialogContent>
         <Typography variant="subtitle2">Current members</Typography>
         <Stack direction="row" flexWrap="wrap" gap={1} sx={{ my: 1 }}>

@@ -20,11 +20,11 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    deleteAgentAgenticV1AgentsNameDelete: build.mutation<
-      DeleteAgentAgenticV1AgentsNameDeleteApiResponse,
-      DeleteAgentAgenticV1AgentsNameDeleteApiArg
+    deleteAgentAgenticV1AgentsAgentIdDelete: build.mutation<
+      DeleteAgentAgenticV1AgentsAgentIdDeleteApiResponse,
+      DeleteAgentAgenticV1AgentsAgentIdDeleteApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/agents/${queryArg.name}`, method: "DELETE" }),
+      query: (queryArg) => ({ url: `/agentic/v1/agents/${queryArg.agentId}`, method: "DELETE" }),
     }),
     restoreAgentsAgenticV1AgentsRestorePost: build.mutation<
       RestoreAgentsAgenticV1AgentsRestorePostApiResponse,
@@ -321,9 +321,9 @@ export type UpdateAgentAgenticV1AgentsUpdatePutApiArg = {
         type: "leader";
       } & Leader);
 };
-export type DeleteAgentAgenticV1AgentsNameDeleteApiResponse = /** status 200 Successful Response */ any;
-export type DeleteAgentAgenticV1AgentsNameDeleteApiArg = {
-  name: string;
+export type DeleteAgentAgenticV1AgentsAgentIdDeleteApiResponse = /** status 200 Successful Response */ any;
+export type DeleteAgentAgenticV1AgentsAgentIdDeleteApiArg = {
+  agentId: string;
 };
 export type RestoreAgentsAgenticV1AgentsRestorePostApiResponse = /** status 200 Successful Response */ any;
 export type RestoreAgentsAgenticV1AgentsRestorePostApiArg = {
@@ -608,6 +608,7 @@ export type McpServerConfiguration = {
   auth_mode?: ClientAuthMode;
 };
 export type Agent = {
+  id: string;
   name: string;
   enabled?: boolean;
   class_path?: string | null;
@@ -622,6 +623,7 @@ export type Agent = {
   type?: "agent";
 };
 export type Leader = {
+  id: string;
   name: string;
   enabled?: boolean;
   class_path?: string | null;
@@ -634,7 +636,7 @@ export type Leader = {
   /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
   mcp_servers?: McpServerConfiguration[];
   type?: "leader";
-  /** Names of agents in this leader's crew (if any). */
+  /** IDs of agents in this leader's crew (if any). */
   crew?: string[];
 };
 export type SaveMcpServerRequest = {
@@ -767,7 +769,7 @@ export type ChatMetadata = {
   model?: string | null;
   token_usage?: ChatTokenUsage | null;
   sources?: VectorSearchHit[];
-  agent_name?: string | null;
+  agent_id?: string | null;
   latency_ms?: number | null;
   finish_reason?: FinishReason | null;
   runtime_context?: RuntimeContext | null;
@@ -836,7 +838,7 @@ export type AwaitingHumanEvent = {
       };
 };
 export type ChatAskInput = {
-  agent_name: string;
+  agent_id: string;
   runtime_context?: RuntimeContext | null;
   access_token?: string | null;
   refresh_token?: string | null;
@@ -852,7 +854,7 @@ export type StreamEvent = {
 export type SessionSchema = {
   id: string;
   user_id: string;
-  agent_name?: string | null;
+  agent_id?: string | null;
   title: string;
   updated_at: string;
   next_rank?: number | null;
@@ -881,7 +883,7 @@ export type AttachmentRef = {
 export type SessionWithFiles = {
   id: string;
   user_id: string;
-  agent_name?: string | null;
+  agent_id?: string | null;
   title: string;
   updated_at: string;
   next_rank?: number | null;
@@ -1021,6 +1023,7 @@ export type AgentTuning2 = {
   mcp_servers?: McpServerRef2[];
 };
 export type Agent2 = {
+  id: string;
   name: string;
   enabled?: boolean;
   class_path?: string | null;
@@ -1035,6 +1038,7 @@ export type Agent2 = {
   type?: "agent";
 };
 export type Leader2 = {
+  id: string;
   name: string;
   enabled?: boolean;
   class_path?: string | null;
@@ -1047,11 +1051,11 @@ export type Leader2 = {
   /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
   mcp_servers?: McpServerConfiguration[];
   type?: "leader";
-  /** Names of agents in this leader's crew (if any). */
+  /** IDs of agents in this leader's crew (if any). */
   crew?: string[];
 };
 export type CreateSessionPayload = {
-  agent_name?: string | null;
+  agent_id?: string | null;
   title?: string | null;
 };
 export type ChatMessage2 = {
@@ -1102,7 +1106,7 @@ export type FeedbackRecord = {
   /** Message ID the feedback refers to */
   message_id: string;
   /** Name of the agent that generated the message */
-  agent_name: string;
+  agent_id: string;
   /** User rating, typically 1–5 stars */
   rating: number;
   /** Optional user comment or clarification */
@@ -1198,7 +1202,7 @@ export type AgentTaskRecordV1 = {
 export const {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
-  useDeleteAgentAgenticV1AgentsNameDeleteMutation,
+  useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
   useRestoreAgentsAgenticV1AgentsRestorePostMutation,
   useListMcpServersAgenticV1AgentsMcpServersGetQuery,
   useLazyListMcpServersAgenticV1AgentsMcpServersGetQuery,

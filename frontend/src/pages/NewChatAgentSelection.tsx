@@ -75,7 +75,7 @@ export function NewChatAgentSelection() {
             )}
 
             {/* Agent list */}
-            {!agentLoading && !agentError && agents.map((agent) => <AgentTile key={agent.name} agent={agent} />)}
+            {!agentLoading && !agentError && agents.map((agent) => <AgentTile key={agent.id} agent={agent} />)}
           </Box>
         </Box>
       </Box>

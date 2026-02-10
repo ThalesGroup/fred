@@ -771,7 +771,7 @@ const ChatBot = ({
       seq: loadState.seq,
       chatSessionId,
       elapsedMs,
-      agent: currentAgent?.name ?? null,
+      agent: currentAgent?.id ?? null,
       messageCount: messagesRef.current.length,
     });
   }, [
@@ -781,7 +781,7 @@ const ChatBot = ({
     loadState.prefsReady,
     loadState.seq,
     loadState.startedAt,
-    currentAgent?.name,
+    currentAgent?.id,
   ]);
 
   const buildRuntimeContext = useCallback(() => {
@@ -863,10 +863,10 @@ const ChatBot = ({
     if (existing) return existing;
     try {
       const session = await createSession({
-        createSessionPayload: { agent_name: currentAgent?.name },
+        createSessionPayload: { agent_id: currentAgent?.id },
       }).unwrap();
       try {
-        await seedSessionPrefs(session.id, currentAgent?.name);
+        await seedSessionPrefs(session.id, currentAgent?.id);
       } catch (prefErr) {
         console.warn("[CHATBOT] Failed to seed session prefs on create", prefErr);
       }
@@ -885,7 +885,7 @@ const ChatBot = ({
       showError({ summary: "Session creation failed", detail: errMsg });
       throw err;
     }
-  }, [createSession, currentAgent?.name, chatSessionId, showError, onNewSessionCreated, seedSessionPrefs]);
+  }, [createSession, currentAgent?.id, chatSessionId, showError, onNewSessionCreated, seedSessionPrefs]);
 
   const handleAddAttachments = useCallback(
     async (files: File[]) => {
@@ -999,7 +999,7 @@ const ChatBot = ({
       channel: "final",
       parts: [{ type: "text", text: input }],
       metadata: {
-        agent_name: agent ? agent.name : currentAgent.name,
+        agent_id: agent ? agent.id : currentAgent.id,
         runtime_context: runtimeContext ?? null,
       },
     };
@@ -1015,7 +1015,7 @@ const ChatBot = ({
         channel: "thought",
         parts: [{ type: "text", text: options.traceThought }],
         metadata: {
-          agent_name: agent ? agent.name : currentAgent.name,
+          agent_id: agent ? agent.id : currentAgent.id,
           extras: {
             task: "log_genius",
             node: "log_genius_request",
@@ -1037,7 +1037,7 @@ const ChatBot = ({
     const eventBase: ChatAskInput = {
       type: "ask",
       message: input,
-      agent_name: agent ? agent.name : currentAgent.name,
+      agent_id: agent ? agent.id : currentAgent.id,
       // Use the already-resolved sid (may come from ensureSessionId()) to avoid any drift
       // between the check above and the payload build here.
       session_id: sid,
@@ -1090,7 +1090,7 @@ const ChatBot = ({
             text: freeText,
             checkpoint_id: (target as any)?.payload?.checkpoint_id,
           },
-          agent_name: currentAgent?.name,
+          agent_name: currentAgent?.id,
           access_token: accessToken || undefined,
           refresh_token: refreshToken || undefined,
         };

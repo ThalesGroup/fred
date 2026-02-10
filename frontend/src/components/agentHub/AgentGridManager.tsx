@@ -121,16 +121,16 @@ export const AgentGridManager = ({
   };
 
   const handleInspectCode = async (agent: AnyAgent) => {
-    const AGENT_CODE_KEY = `agent.${agent.name}`;
+    const AGENT_CODE_KEY = `agent.${agent.id}`;
 
-    setCodeDrawer({ open: true, title: `Fetching Source: ${agent.name}...`, content: null });
+    setCodeDrawer({ open: true, title: `Fetching Source: ${agent.id}...`, content: null });
 
     try {
       const code = await triggerGetSource({ key: AGENT_CODE_KEY }).unwrap();
 
       setCodeDrawer({
         open: true,
-        title: `Source: ${agent.name}`,
+        title: `Source: ${agent.id}`,
         content: code,
       });
     } catch (error: any) {
@@ -141,7 +141,7 @@ export const AgentGridManager = ({
 
       showError({
         summary: "Code Inspection Failed",
-        detail: `Could not retrieve source for ${agent.name}. Details: ${detail}`,
+        detail: `Could not retrieve source for ${agent.id}. Details: ${detail}`,
       });
     }
   };
@@ -156,7 +156,7 @@ export const AgentGridManager = ({
       });
       return;
     }
-    setA2aCardView({ open: true, card, agentName: agent.name });
+    setA2aCardView({ open: true, card, agentName: agent.id });
   };
 
   // Action handlers wired to card
@@ -239,7 +239,7 @@ export const AgentGridManager = ({
             {agents.length > 0 ? (
               <Grid2 container spacing={2}>
                 {agents.map((agent) => (
-                  <Grid2 key={agent.name} size={{ xs: 12, sm: 6, md: 4, lg: 4, xl: 4 }} sx={{ display: "flex" }}>
+                  <Grid2 key={agent.id} size={{ xs: 12, sm: 6, md: 4, lg: 4, xl: 4 }} sx={{ display: "flex" }}>
                     <Fade in timeout={500}>
                       <Box sx={{ width: "100%" }}>
                         <AgentCard
@@ -317,7 +317,7 @@ export const AgentGridManager = ({
         <AgentConfigWorkspaceManagerDrawer
           isOpen={assetManagerOpen}
           onClose={handleCloseAssetManager}
-          agentId={agentForAssetManagement.name}
+          agentId={agentForAssetManagement.id}
         />
       )}
 

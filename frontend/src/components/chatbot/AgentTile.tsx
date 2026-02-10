@@ -21,7 +21,7 @@ export function AgentTile({ agent }: AgentTileProps) {
   const agentColor = THEME_COLOR_MAP(theme)[colorHint];
 
   return (
-    <InvisibleLink to={`/new-chat/${encodeURIComponent(agent.name)}`}>
+    <InvisibleLink to={`/new-chat/${encodeURIComponent(agent.id)}`}>
       <Paper
         elevation={2}
         sx={{
