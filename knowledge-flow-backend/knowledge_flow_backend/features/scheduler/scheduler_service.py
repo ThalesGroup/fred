@@ -117,3 +117,15 @@ class IngestionTaskService:
         Proxy progress polling to the configured scheduler backend.
         """
         return await self._scheduler.get_progress(user, workflow_id)
+
+    async def store_fast_vectors(self, *, payload: dict) -> dict:
+        """
+        Store fast-ingest vectors using the configured scheduler backend.
+        """
+        return await self._scheduler.store_fast_vectors(payload)
+
+    async def delete_fast_vectors(self, *, payload: dict) -> dict:
+        """
+        Delete fast-ingest vectors using the configured scheduler backend.
+        """
+        return await self._scheduler.delete_fast_vectors(payload)

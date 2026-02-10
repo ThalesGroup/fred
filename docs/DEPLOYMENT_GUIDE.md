@@ -80,6 +80,10 @@ Files of interest:
 - `agentic-backend/config/configuration.yaml`
 - `knowledge-flow-backend/config/.env`
 - `knowledge-flow-backend/config/configuration.yaml`
+- Password mapping to remember:
+  - **Core Postgres (metadata/tags/vector, etc.)** → `storage.postgres` → `FRED_POSTGRES_PASSWORD` (or `password:` in YAML).
+  - **Tabular Postgres (CSV ingestion/statistic)** → `storage.tabular_stores` → `TABULAR_POSTGRES_PASSWORD` (or `password:` in YAML; legacy fallback `SQL_PASSWORD`).
+  - These two stores are independent; keep separate DB/users in production for least privilege.
 
 For concrete examples of model configuration, see the main [`README.md`](../README.md#model-configuration).
 

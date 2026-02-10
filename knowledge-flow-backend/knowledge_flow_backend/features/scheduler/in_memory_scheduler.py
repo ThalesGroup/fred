@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from tempfile import NamedTemporaryFile
@@ -21,11 +22,19 @@ from typing import List, Optional
 
 from fastapi import BackgroundTasks
 from fred_core import KeycloakUser
+from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryDocumentInput, LibraryOutputProcessor
-from knowledge_flow_backend.features.scheduler.activities import create_pull_file_metadata, get_push_file_metadata, input_process, load_pull_file, load_push_file, output_process
+from knowledge_flow_backend.features.scheduler.activities import (
+    create_pull_file_metadata,
+    get_push_file_metadata,
+    input_process,
+    load_pull_file,
+    load_push_file,
+    output_process,
+)
 from knowledge_flow_backend.features.scheduler.base_scheduler import BaseScheduler, WorkflowHandle
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     PipelineDefinition,
@@ -59,15 +68,24 @@ async def _run_ingestion_pipeline(definition: PipelineDefinition) -> str:
         if file.is_pull():
             metadata = await create_pull_file_metadata(file)
             local_file_path = await load_pull_file(file, metadata)
-            metadata = await input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
-            _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
         else:
             metadata = await get_push_file_metadata(file)
             local_file_path = await load_push_file(file, metadata)
-            metadata = await input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
-            _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
+
+        metadata = await input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
+        _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
 
     return "success"
+
+
+def _log_pipeline_task_result(task: asyncio.Task[str]) -> None:
+    try:
+        exc = task.exception()
+    except asyncio.CancelledError:
+        logger.warning("[SCHEDULER][IN_MEMORY] Pipeline task was cancelled")
+        return
+    if exc is not None:
+        logger.exception("[SCHEDULER][IN_MEMORY] Pipeline task failed: %s", exc)
 
 
 class InMemoryScheduler(BaseScheduler):
@@ -86,8 +104,12 @@ class InMemoryScheduler(BaseScheduler):
     ) -> WorkflowHandle:
         handle = self._register_workflow(user, definition)
 
+        # IMPORTANT: do not rely on FastAPI BackgroundTasks here.
+        # For streaming responses, BackgroundTasks run only after response completion,
+        # which can deadlock progress polling.
         if background_tasks is not None:
-            background_tasks.add_task(_run_ingestion_pipeline, definition)
+            task = asyncio.create_task(_run_ingestion_pipeline(definition))
+            task.add_done_callback(_log_pipeline_task_result)
         else:
             # Fallback for non-HTTP contexts; this will block the caller.
             logger.warning("[SCHEDULER][IN_MEMORY] BackgroundTasks not provided, running ingestion pipeline synchronously")
@@ -180,3 +202,40 @@ class InMemoryScheduler(BaseScheduler):
         module_name, class_name = class_path.rsplit(".", 1)
         module = __import__(module_name, fromlist=[class_name])
         return getattr(module, class_name)
+
+    async def store_fast_vectors(self, payload: dict) -> dict:
+        docs_payload = payload.get("documents") or []
+        if not isinstance(docs_payload, list):
+            raise ValueError("payload.documents must be a list")
+
+        context = ApplicationContext.get_instance()
+        embedder = context.get_embedder()
+        vector_store = context.get_create_vector_store(embedder)
+
+        docs: list[Document] = []
+        for item in docs_payload:
+            if not isinstance(item, dict):
+                continue
+            page_content = str(item.get("page_content") or "")
+            metadata = item.get("metadata") or {}
+            if not isinstance(metadata, dict):
+                metadata = {}
+            docs.append(Document(page_content=page_content, metadata=metadata))
+
+        if not docs:
+            return {"chunks": 0}
+
+        ids = vector_store.add_documents(docs)
+        chunks = len(ids) if isinstance(ids, (list, tuple, set)) else len(docs)
+        return {"chunks": chunks}
+
+    async def delete_fast_vectors(self, payload: dict) -> dict:
+        document_uid = payload.get("document_uid")
+        if not document_uid:
+            raise ValueError("payload.document_uid is required")
+
+        context = ApplicationContext.get_instance()
+        embedder = context.get_embedder()
+        vector_store = context.get_create_vector_store(embedder)
+        vector_store.delete_vectors_for_document(document_uid=document_uid)
+        return {"status": "ok", "document_uid": document_uid}

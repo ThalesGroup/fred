@@ -343,7 +343,7 @@ class TagService:
                 "tag_parent_relations_created": 0,
             }
 
-        tags = self._tag_store.list_all_tags()
+        tags = await self._tag_store.list_all_tags()
         tag_owner_relations_created = 0
         tag_parent_relations_created = 0
         documents_seen = 0

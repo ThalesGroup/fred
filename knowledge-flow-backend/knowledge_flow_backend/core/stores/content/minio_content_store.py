@@ -70,11 +70,17 @@ class MinioStorageBackend(BaseContentStore):
     one for documents and one for generic objects/assets.
     """
 
-    # 🚨 NOTE: The factory function must be updated to pass both bucket names.
-    # The new expected signature in __init__ is:
-    # def __init__(self, endpoint: str, access_key: str, secret_key: str, document_bucket: str, object_bucket: str, secure: bool):
-
-    def __init__(self, endpoint: str, access_key: str, secret_key: str, document_bucket: str, object_bucket: str, secure: bool):
+    def __init__(
+        self,
+        endpoint: str,
+        access_key: str,
+        secret_key: str,
+        document_bucket: str,
+        object_bucket: str,
+        secure: bool,
+        public_endpoint: Optional[str] = None,
+        public_secure: Optional[bool] = None,
+    ):
         """
         Initializes the MinIO client and ensures both buckets exist.
         """
@@ -100,6 +106,17 @@ class MinioStorageBackend(BaseContentStore):
         except ValueError as e:
             logger.error(f"❌ Failed to initialize MinIO client: {e}")
             raise
+
+        # Create a separate client for presigned URLs when a public endpoint (ingress) is configured.
+        # The presigned URL signature is bound to the hostname, so we need a client
+        # that signs against the public endpoint (ingress) that browsers will use.
+        if public_endpoint:
+            parsed_public = urlparse(public_endpoint)
+            clean_public = public_endpoint.replace("https://", "").replace("http://", "")
+            inferred_secure = public_secure if public_secure is not None else (parsed_public.scheme == "https")
+            self.public_client = Minio(clean_public, access_key=access_key, secret_key=secret_key, secure=inferred_secure)
+        else:
+            self.public_client = self.client
 
         # Ensure both buckets exist or create them
         for bucket_name in self.buckets:
@@ -474,7 +491,7 @@ class MinioStorageBackend(BaseContentStore):
         object_name = self._normalize_key(key)
 
         try:
-            url = self.client.presigned_get_object(
+            url = self.public_client.presigned_get_object(
                 self.object_bucket,
                 object_name,
                 expires=expires,

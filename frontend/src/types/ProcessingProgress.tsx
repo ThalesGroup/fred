@@ -18,4 +18,5 @@ export interface ProcessingProgress {
   filename?: string;
   error?: string;
   document_uid?: string;
+  workflow_id?: string;
 }

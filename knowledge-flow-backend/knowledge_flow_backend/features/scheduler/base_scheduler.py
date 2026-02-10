@@ -91,6 +91,20 @@ class BaseScheduler(ABC):
         """
         pass
 
+    @abstractmethod
+    async def store_fast_vectors(self, payload: dict) -> dict:
+        """
+        Store fast-ingest vectors (backend-specific implementation).
+        """
+        pass
+
+    @abstractmethod
+    async def delete_fast_vectors(self, payload: dict) -> dict:
+        """
+        Delete fast-ingest vectors (backend-specific implementation).
+        """
+        pass
+
     def _extract_document_uids(self, definition: PipelineDefinition) -> List[str]:
         document_uids: List[str] = []
         for file in definition.files:
@@ -157,7 +171,9 @@ class BaseScheduler(ABC):
             preview_done = stages.get(ProcessingStage.PREVIEW_READY) == ProcessingStatus.DONE
             vectorized_done = stages.get(ProcessingStage.VECTORIZED) == ProcessingStatus.DONE
             sql_indexed_done = stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE
-            fully_processed = vectorized_done or sql_indexed_done
+            # Consider PREVIEW_READY as terminal success for pipelines that do not
+            # produce vector/sql stages (or where those stages are optional).
+            fully_processed = preview_done or vectorized_done or sql_indexed_done
 
             if preview_done:
                 documents_with_preview += 1

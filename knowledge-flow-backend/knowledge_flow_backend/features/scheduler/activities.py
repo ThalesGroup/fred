@@ -89,7 +89,7 @@ async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
 
 
 @activity.defn
-async def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.Path:
+async def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> str:
     logger = activity.logger
     logger.info(f"[SCHEDULER][ACTIVITY][LOAD_PUSH_FILE] Loading file uid={metadata.document_uid}")
 
@@ -105,11 +105,12 @@ async def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> pat
     # 🗂️ Download input file
     ingestion_service.get_local_copy(file.processed_by, metadata, working_dir)
     input_file = next(input_dir.glob("*"))
-    return input_file
+    # Temporal payloads must be JSON-serializable.
+    return str(input_file)
 
 
 @activity.defn
-async def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.Path:
+async def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> str:
     logger = activity.logger
     logger.info(f"[SCHEDULER][ACTIVITY][LOAD_PULL_FILE] Fetching file uid={metadata.document_uid}")
 
@@ -131,11 +132,12 @@ async def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> pat
         raise FileNotFoundError(f"File not found after fetch: {full_path}")
 
     logger.info(f"[SCHEDULER][ACTIVITY][LOAD_PULL_FILE] File copied to working dir: path={full_path}")
-    return full_path
+    # Temporal payloads must be JSON-serializable.
+    return str(full_path)
 
 
 @activity.defn
-async def input_process(user: KeycloakUser, input_file: pathlib.Path, metadata: DocumentMetadata) -> DocumentMetadata:
+async def input_process(user: KeycloakUser, input_file: str, metadata: DocumentMetadata) -> DocumentMetadata:
     """
     Processes the provided local input file and saves the metadata.
     This method generates the output files (preview, markdown, CSV) and
@@ -154,7 +156,7 @@ async def input_process(user: KeycloakUser, input_file: pathlib.Path, metadata: 
     output_dir.mkdir(exist_ok=True)
 
     # Process the file
-    ingestion_service.process_input(user, input_file, output_dir, metadata)
+    ingestion_service.process_input(user, pathlib.Path(input_file), output_dir, metadata)
     ingestion_service.save_output(user, metadata=metadata, output_dir=output_dir)
 
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
@@ -199,3 +201,64 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
 
     logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] completed uid={metadata.document_uid}")
     return metadata
+
+
+@activity.defn
+async def fast_store_vectors(payload: dict) -> dict:
+    """
+    Store fast-ingest chunks into the configured vector store.
+    Payload shape:
+      {
+        "documents": [{"page_content": str, "metadata": dict}, ...]
+      }
+    """
+    logger = activity.logger
+    docs_payload = payload.get("documents") or []
+    if not isinstance(docs_payload, list):
+        raise ValueError("payload.documents must be a list")
+
+    from langchain_core.documents import Document
+
+    from knowledge_flow_backend.application_context import ApplicationContext
+
+    context = ApplicationContext.get_instance()
+    embedder = context.get_embedder()
+    vector_store = context.get_create_vector_store(embedder)
+
+    docs = []
+    for item in docs_payload:
+        if not isinstance(item, dict):
+            continue
+        page_content = str(item.get("page_content") or "")
+        metadata = item.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        docs.append(Document(page_content=page_content, metadata=metadata))
+
+    if not docs:
+        return {"chunks": 0}
+
+    ids = vector_store.add_documents(docs)
+    chunks = len(ids) if isinstance(ids, (list, tuple, set)) else len(docs)
+    logger.info("[SCHEDULER][ACTIVITY][FAST_STORE_VECTORS] Stored %d chunks", chunks)
+    return {"chunks": chunks}
+
+
+@activity.defn
+async def fast_delete_vectors(payload: dict) -> dict:
+    """
+    Delete all vectors for a fast-ingested document.
+    Payload: {"document_uid": "<uid>"}
+    """
+    document_uid = payload.get("document_uid")
+    if not document_uid:
+        raise ValueError("payload.document_uid is required")
+
+    from knowledge_flow_backend.application_context import ApplicationContext
+
+    context = ApplicationContext.get_instance()
+    embedder = context.get_embedder()
+    vector_store = context.get_create_vector_store(embedder)
+    vector_store.delete_vectors_for_document(document_uid=document_uid)
+    activity.logger.info("[SCHEDULER][ACTIVITY][FAST_DELETE_VECTORS] Deleted vectors for %s", document_uid)
+    return {"status": "ok", "document_uid": document_uid}

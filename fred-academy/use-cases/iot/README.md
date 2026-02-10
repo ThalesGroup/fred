@@ -23,7 +23,7 @@ Use this docker command :
 ```bash
 docker run -d \
   --name postgres-test \
-  -e POSTGRES_PASSWORD=postgres\
+  -e FRED_POSTGRES_PASSWORD=postgres\
   -e POSTGRES_DB=base_database\
   -p 5432:5432 \
   postgres:latest

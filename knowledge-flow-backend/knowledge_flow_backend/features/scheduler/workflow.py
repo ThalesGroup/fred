@@ -19,11 +19,17 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 
+def _wf_get(item: Any, key: str, default=None):
+    if isinstance(item, dict):
+        return item.get(key, default)
+    return getattr(item, key, default)
+
+
 @workflow.defn
 class CreatePullFileMetadata:
     @workflow.run
-    async def run(self, file):
-        workflow.logger.info(f"[SCHEDULER] ExtractMetadataWorkflow: {file}")
+    async def run(self, file: Any) -> Any:
+        workflow.logger.info("[SCHEDULER] CreatePullFileMetadata: %s", _wf_get(file, "display_name", "unknown"))
         return await workflow.execute_activity(
             "create_pull_file_metadata",
             args=[file],
@@ -34,8 +40,8 @@ class CreatePullFileMetadata:
 @workflow.defn
 class GetPushFileMetadata:
     @workflow.run
-    async def run(self, file):
-        workflow.logger.info(f"[SCHEDULER] ExtractMetadataWorkflow: {file}")
+    async def run(self, file: Any) -> Any:
+        workflow.logger.info("[SCHEDULER] GetPushFileMetadata: %s", _wf_get(file, "display_name", "unknown"))
         return await workflow.execute_activity(
             "get_push_file_metadata",
             args=[file],
@@ -46,8 +52,8 @@ class GetPushFileMetadata:
 @workflow.defn
 class LoadPullFile:
     @workflow.run
-    async def run(self, file, metadata):
-        workflow.logger.info(f"[SCHEDULER] LoadPullFile: {file}")
+    async def run(self, file: Any, metadata: Any) -> str:
+        workflow.logger.info("[SCHEDULER] LoadPullFile: %s", _wf_get(file, "display_name", "unknown"))
         return await workflow.execute_activity(
             "load_pull_file",
             args=[file, metadata],
@@ -58,8 +64,8 @@ class LoadPullFile:
 @workflow.defn
 class LoadPushFile:
     @workflow.run
-    async def run(self, file, metadata):
-        workflow.logger.info(f"[SCHEDULER] LoadPushFile: {file}")
+    async def run(self, file: Any, metadata: Any) -> str:
+        workflow.logger.info("[SCHEDULER] LoadPushFile: %s", _wf_get(file, "display_name", "unknown"))
         return await workflow.execute_activity(
             "load_push_file",
             args=[file, metadata],
@@ -70,8 +76,8 @@ class LoadPushFile:
 @workflow.defn
 class InputProcess:
     @workflow.run
-    async def run(self, user, input_file, metadata):
-        workflow.logger.info(f"[SCHEDULER] InputProcess: {input_file}")
+    async def run(self, user: Any, input_file: str, metadata: Any) -> Any:
+        workflow.logger.info("[SCHEDULER] InputProcess: %s", input_file)
         return await workflow.execute_activity(
             "input_process",
             args=[user, input_file, metadata],
@@ -82,8 +88,8 @@ class InputProcess:
 @workflow.defn
 class OutputProcess:
     @workflow.run
-    async def run(self, file, metadata):
-        workflow.logger.info(f"[SCHEDULER] OutputProcess: {file}")
+    async def run(self, file: Any, metadata: Any) -> None:
+        workflow.logger.info("[SCHEDULER] OutputProcess: %s", _wf_get(file, "display_name", "unknown"))
         await workflow.execute_activity(
             "output_process",
             args=[file, metadata, False],
@@ -92,46 +98,79 @@ class OutputProcess:
 
 
 @workflow.defn
+class FastStoreVectors:
+    @workflow.run
+    async def run(self, payload):
+        return await workflow.execute_activity(
+            "fast_store_vectors",
+            args=[payload],
+            schedule_to_close_timeout=timedelta(seconds=60),
+        )
+
+
+@workflow.defn
+class FastDeleteVectors:
+    @workflow.run
+    async def run(self, payload):
+        return await workflow.execute_activity(
+            "fast_delete_vectors",
+            args=[payload],
+            schedule_to_close_timeout=timedelta(seconds=30),
+        )
+
+
+@workflow.defn
 class Process:
     @workflow.run
     async def run(self, definition: Any) -> str:
-        workflow.logger.info(f"[SCHEDULER] Ingesting pipeline: {definition.name}")
+        pipeline_name = _wf_get(definition, "name", "unknown")
+        files = _wf_get(definition, "files", []) or []
+        workflow.logger.info(f"[SCHEDULER] Ingesting pipeline: {pipeline_name}")
 
-        for file in definition.files:
-            if file.is_pull():
-                workflow.logger.info(f"[SCHEDULER] Processing pull file: {file.display_name or 'unknown'}")
+        for file in files:
+            display_name = _wf_get(file, "display_name", None) or "unknown"
+            is_pull = _wf_get(file, "external_path", None) is not None
+            if is_pull:
+                workflow.logger.info("[SCHEDULER] Processing pull file: %s", display_name)
                 metadata = await workflow.execute_child_workflow(
-                    CreatePullFileMetadata.run, args=[file], id=f"CreatePullFileMetadata-{file.display_name or 'unknown'}", retry_policy=RetryPolicy(maximum_attempts=2)
+                    CreatePullFileMetadata.run,
+                    args=[file],
+                    id=f"CreatePullFileMetadata-{display_name}",
+                    retry_policy=RetryPolicy(maximum_attempts=2),
                 )
-
-                workflow.logger.info(f"[SCHEDULER] Loading pull file local copy: {file.display_name or 'unknown'}")
                 local_file_path = await workflow.execute_child_workflow(
-                    LoadPullFile.run, args=[file, metadata], id=f"LoadPullFile-{file.display_name or 'unknown'}", retry_policy=RetryPolicy(maximum_attempts=2)
+                    LoadPullFile.run,
+                    args=[file, metadata],
+                    id=f"LoadPullFile-{display_name}",
+                    retry_policy=RetryPolicy(maximum_attempts=2),
                 )
-
             else:
-                workflow.logger.info(f"[SCHEDULER] Processing push file: {file.display_name or 'unknown'}")
+                workflow.logger.info("[SCHEDULER] Processing push file: %s", display_name)
                 metadata = await workflow.execute_child_workflow(
-                    GetPushFileMetadata.run, args=[file], id=f"GetPushFileMetadata-{file.display_name or 'unknown'}", retry_policy=RetryPolicy(maximum_attempts=2)
+                    GetPushFileMetadata.run,
+                    args=[file],
+                    id=f"GetPushFileMetadata-{display_name}",
+                    retry_policy=RetryPolicy(maximum_attempts=2),
                 )
-
-                workflow.logger.info(f"[SCHEDULER] Loading push file local copy: {file.display_name or 'unknown'}")
                 local_file_path = await workflow.execute_child_workflow(
-                    LoadPushFile.run, args=[file, metadata], id=f"LoadPushFile-{file.display_name or 'unknown'}", retry_policy=RetryPolicy(maximum_attempts=2)
+                    LoadPushFile.run,
+                    args=[file, metadata],
+                    id=f"LoadPushFile-{display_name}",
+                    retry_policy=RetryPolicy(maximum_attempts=2),
                 )
-
-            workflow.logger.info(f"[SCHEDULER] Input process local copy: {local_file_path or 'unknown'}")
 
             metadata = await workflow.execute_child_workflow(
                 InputProcess.run,
-                args=[file.processed_by, local_file_path, metadata],
-                id=f"InputProcess-{file.display_name or 'unknown'}",
+                args=[_wf_get(file, "processed_by"), local_file_path, metadata],
+                id=f"InputProcess-{display_name}",
                 retry_policy=RetryPolicy(maximum_attempts=2),
             )
-
-            workflow.logger.info(f"[SCHEDULER] Output process local copy: {local_file_path or 'unknown'}")
-            await workflow.execute_child_workflow(OutputProcess.run, args=[file, metadata], id=f"OutputProcess-{file.display_name or 'unknown'}", retry_policy=RetryPolicy(maximum_attempts=2))
-
-            workflow.logger.info(f"[SCHEDULER] Completed file: {file.display_name}")
+            await workflow.execute_child_workflow(
+                OutputProcess.run,
+                args=[file, metadata],
+                id=f"OutputProcess-{display_name}",
+                retry_policy=RetryPolicy(maximum_attempts=2),
+            )
+            workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
 
         return "success"

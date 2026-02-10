@@ -18,7 +18,7 @@ import asyncio
 import logging
 from typing import Any, List
 
-from fred_core.sql import AsyncBaseSqlStore, BaseSqlStore, PydanticJsonMixin, json_for_engine
+from fred_core.sql import AsyncBaseSqlStore, PydanticJsonMixin, json_for_engine
 from sqlalchemy import Column, DateTime, MetaData, String, Table, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
