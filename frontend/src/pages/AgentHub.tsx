@@ -15,7 +15,6 @@
 import { Box, Fade } from "@mui/material";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { usePermissions } from "../security/usePermissions";
 
 import { TopBar } from "../common/TopBar";
 import { AgentGridManager } from "../components/agentHub/AgentGridManager";
@@ -41,11 +40,6 @@ export const AgentHub = () => {
 
   const [triggerGetFlows, { isLoading }] = useLazyListAgentsAgenticV1AgentsGetQuery();
   const [restoreAgents, { isLoading: isRestoring }] = useRestoreAgentsAgenticV1AgentsRestorePostMutation();
-
-  // RBAC utils
-  const { can } = usePermissions();
-  const canEditAgents = can("agents", "update");
-  const canCreateAgents = can("agents", "create");
 
   const fetchAgents = async () => {
     try {
@@ -108,14 +102,15 @@ export const AgentHub = () => {
             <AgentGridManager
               agents={agents}
               isLoading={isLoading}
-              canEdit={canEditAgents}
-              canCreate={canCreateAgents}
-              canDelete={canEditAgents}
               onRefetchAgents={fetchAgents}
               showRestoreButton={true}
               onRestore={handleRestore}
               isRestoring={isRestoring}
               showA2ACard={true}
+              // For now, all users can manager their personal agents
+              canEdit={true}
+              canCreate={true}
+              canDelete={true}
             />
           </Box>
         </Fade>

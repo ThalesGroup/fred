@@ -1,22 +1,16 @@
 import { useTranslation } from "react-i18next";
-import { usePermissions } from "../../security/usePermissions";
 import { useListAgentsAgenticV1AgentsGetQuery } from "../../slices/agentic/agenticOpenApi";
 import { AgentGridManager } from "../agentHub/AgentGridManager";
 
 interface TeamAgentHubProps {
   teamId: string;
+  canCreateAgents?: boolean;
 }
 
-export function TeamAgentHub({ teamId }: TeamAgentHubProps) {
+export function TeamAgentHub({ teamId, canCreateAgents }: TeamAgentHubProps) {
   const { t } = useTranslation();
 
   const { data: agents, isLoading, refetch } = useListAgentsAgenticV1AgentsGetQuery({ ownerFilter: "team", teamId });
-
-  // Permissions
-  // todo: base perm on ReBAC
-  const { can } = usePermissions();
-  const canEditAgents = can("agents", "update");
-  const canCreateAgents = can("agents", "create");
 
   const handleRefetch = async () => {
     await refetch();
@@ -27,9 +21,9 @@ export function TeamAgentHub({ teamId }: TeamAgentHubProps) {
       agents={agents || []}
       isLoading={isLoading}
       teamId={teamId}
-      canEdit={canEditAgents}
       canCreate={canCreateAgents}
-      canDelete={canEditAgents}
+      canEdit={canCreateAgents} // todo: remove this props and use permissions list returned with each agents
+      canDelete={canCreateAgents} // todo: remove this props and use permissions list returned with each agents
       onRefetchAgents={handleRefetch}
       showRestoreButton={false}
       showA2ACard={false}

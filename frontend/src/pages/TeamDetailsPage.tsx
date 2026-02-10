@@ -43,7 +43,7 @@ export function TeamDetailsPage() {
     {
       label: capitalize(agentsNicknamePlural || "..."),
       path: `/team/${teamId}/${agentsNicknamePlural}`,
-      component: <TeamAgentHub teamId={teamId} />,
+      component: <TeamAgentHub teamId={teamId} canCreateAgents={team?.permissions?.includes("can_update_agents")} />,
     },
     {
       label: t("teamDetails.tabs.resources"),
