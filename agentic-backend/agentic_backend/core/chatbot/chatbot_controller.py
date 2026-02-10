@@ -291,7 +291,6 @@ def get_user_permissions(
     return rbac_provider.list_permissions_for_user(current_user)
 
 
-
 def _update_tokens_from_request(
     user: KeycloakUser,
     token: str,
