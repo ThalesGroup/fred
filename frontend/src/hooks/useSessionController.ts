@@ -17,8 +17,8 @@ import { AnyAgent } from "../common/agent";
 import {
   SessionSchema,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
-  useListAgentsAgenticV1AgentsGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
+  useListAgentsAgenticV1AgentsGetQuery,
 } from "../slices/agentic/agenticOpenApi";
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
@@ -54,7 +54,7 @@ function saveMap(map: AgentBySessionMap) {
 
 export function useSessionController() {
   // ---- Remote data ----
-  const { data: flowsData, isLoading: flowsLoading } = useListAgentsAgenticV1AgentsGetQuery();
+  const { data: flowsData, isLoading: flowsLoading } = useListAgentsAgenticV1AgentsGetQuery({});
   const {
     data: sessionsData,
     isLoading: sessionsLoading,
