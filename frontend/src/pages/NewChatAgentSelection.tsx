@@ -6,7 +6,7 @@ import { AnyAgent } from "../common/agent";
 import { AgentTile } from "../components/chatbot/AgentTile";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { KeyCloakService } from "../security/KeycloakService";
-import { useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery } from "../slices/agentic/agenticOpenApi";
+import { useListAgentsAgenticV1AgentsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
 export function NewChatAgentSelection() {
@@ -23,7 +23,7 @@ export function NewChatAgentSelection() {
     data: rawAgents,
     isLoading: agentLoading,
     isError: agentError,
-  } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery(undefined, {
+  } = useListAgentsAgenticV1AgentsGetQuery(undefined, {
     refetchOnMountOrArgChange: true,
   });
 

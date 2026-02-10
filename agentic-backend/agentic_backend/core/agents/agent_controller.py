@@ -129,6 +129,19 @@ class CreateAgentRequest(BaseModel):
     a2a_token: str | None = None
 
 
+@router.get(
+    "/agents",
+    summary="Get the list of available agents",
+    response_model=list[AgentSettings],
+)
+def list_agents(
+    user: KeycloakUser = Depends(get_current_user),
+    agent_manager: AgentManager = Depends(get_agent_manager),
+) -> list[AgentSettings]:
+    service = AgentService(agent_manager=agent_manager)
+    return service.list_agents(user=user)
+
+
 @router.post(
     "/agents/create",
     summary="Create a Dynamic Agent that can access tools",

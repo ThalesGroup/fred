@@ -22,7 +22,7 @@ import { AgentGridManager } from "../components/agentHub/AgentGridManager";
 
 // OpenAPI
 import {
-  useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
+  useLazyListAgentsAgenticV1AgentsGetQuery,
   useRestoreAgentsAgenticV1AgentsRestorePostMutation,
 } from "../slices/agentic/agenticOpenApi";
 
@@ -39,7 +39,7 @@ export const AgentHub = () => {
   const [agents, setAgents] = useState<AnyAgent[]>([]);
   const [showElements, setShowElements] = useState(false);
 
-  const [triggerGetFlows, { isLoading }] = useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
+  const [triggerGetFlows, { isLoading }] = useLazyListAgentsAgenticV1AgentsGetQuery();
   const [restoreAgents, { isLoading: isRestoring }] = useRestoreAgentsAgenticV1AgentsRestorePostMutation();
 
   // RBAC utils

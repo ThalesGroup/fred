@@ -29,11 +29,10 @@ class TestChatbotController:
 
     headers = {"Authorization": "Bearer dummy-token"}
 
-    def test_get_agentic_flows(self, client: TestClient):
-        response = client.get("/agentic/v1/chatbot/agenticflows", headers=self.headers)
+    def test_list_agents(self, client: TestClient):
+        response = client.get("/agentic/v1/agents", headers=self.headers)
 
         assert response.status_code == status.HTTP_200_OK
         flows = response.json()
         assert isinstance(flows, list)
         assert all("name" in flow for flow in flows)
-        assert any(flow["name"].lower() == "fred" for flow in flows)

@@ -77,9 +77,8 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved, onDeleted }: Pr
       });
       const normalizedRefs =
         (agent.tuning.mcp_servers ?? []).map((ref) => ({
-          // Backend serializes as {id: "..."}; OpenAPI type uses {name: "..."}.
-          name: (ref as any).name ?? (ref as any).id,
-          require_tools: (ref as any).require_tools ?? [],
+          id: ref.id,
+          require_tools: ref.require_tools ?? [],
         })) ?? [];
       setMcpServerRefs(normalizedRefs);
     } else {

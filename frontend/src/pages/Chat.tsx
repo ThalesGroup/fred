@@ -19,7 +19,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
 
-import { useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery } from "../slices/agentic/agenticOpenApi";
+import { useListAgentsAgenticV1AgentsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
 export default function Chat() {
@@ -32,7 +32,7 @@ export default function Chat() {
     isLoading: flowsLoading,
     isError: flowsError,
     error: flowsErrObj,
-  } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery(undefined, {
+  } = useListAgentsAgenticV1AgentsGetQuery(undefined, {
     refetchOnMountOrArgChange: true,
     refetchOnFocus: false,
     refetchOnReconnect: false,

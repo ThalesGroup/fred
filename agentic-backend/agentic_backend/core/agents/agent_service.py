@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 from uuid import uuid4
 
 import httpx
@@ -52,6 +52,10 @@ class AgentService:
     def __init__(self, agent_manager: AgentManager):
         self.store = get_agent_store()
         self.agent_manager = agent_manager
+
+    @authorize(action=Action.READ, resource=Resource.AGENTS)
+    def list_agents(self, user: KeycloakUser) -> List[AgentSettings]:
+        return self.agent_manager.get_agentic_flows()
 
     @authorize(action=Action.CREATE, resource=Resource.AGENTS)
     async def create_agent(

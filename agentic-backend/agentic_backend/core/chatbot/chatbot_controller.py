@@ -48,7 +48,7 @@ from agentic_backend.application_context import (
     get_configuration,
     get_rebac_engine,
 )
-from agentic_backend.common.structures import AgentSettings, FrontendSettings
+from agentic_backend.common.structures import FrontendSettings
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
@@ -290,18 +290,6 @@ def get_user_permissions(
     """
     return rbac_provider.list_permissions_for_user(current_user)
 
-
-@router.get(
-    "/chatbot/agenticflows",
-    description="Get the list of available agentic flows",
-    summary="Get the list of available agentic flows",
-)
-def get_agentic_flows(
-    user: KeycloakUser = Depends(get_current_user),
-    agent_manager: AgentManager = Depends(get_agent_manager),  # Inject the dependency
-) -> List[AgentSettings]:
-    flows = agent_manager.get_agentic_flows()
-    return flows
 
 
 def _update_tokens_from_request(
