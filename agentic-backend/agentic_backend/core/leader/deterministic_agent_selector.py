@@ -32,8 +32,7 @@ class DeterministicAgentSelector(BaseAgentSelector):
     def _identity(self, agent: AgentFlow) -> Tuple[str, Tuple[str, ...], str, str]:
         """Extracts settings for scoring using AgentFlow's public methods."""
 
-        # Using public methods instead of accessing agent_settings directly
-        name = agent.get_name()
+        name = agent.agent_settings.name
         # Note: get_tags() returns List[str], which is easily converted to a tuple.
         tags = tuple(agent.get_tags())
         role = agent.get_role()

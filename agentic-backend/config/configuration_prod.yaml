@@ -150,21 +150,25 @@ ai:
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:
-    - name: "Custodian"
+    - id: "Custodian"
+      name: "Custodian"
       type: "agent"
       class_path: "agentic_backend.agents.custodian.custodian.Custodian"
       enabled: true
-    - name: "Georges"
+    - id: "Georges"
+      name: "Georges"
       type: "agent"
       class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
       enabled: true
       chat_options:
         attach_files: false
-    - name: "Sammy"
+    - id: "Sammy"
+      name: "Sammy"
       type: "agent"
       class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
       enabled: true
-    - name: "Rico"
+    - id: "Rico"
+      name: "Rico"
       type: "agent"
       class_path: "agentic_backend.agents.rags.rag_expert.Rico"
       chat_options:
@@ -174,7 +178,8 @@ ai:
         deep_search_delegate: false
         attach_files: true
         include_corpus_in_search: true # default value, set to false if you want to prevent the agent from searching in the corpus. Coupled with libraries_selection=false gives you an agent only capable of searching through attachments with a disabled widget for searching through the libraries.
-    - name: "Rico Senior"
+    - id: "Rico Senior"
+      name: "Rico Senior"
       type: "agent"
       class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
       enabled: true
@@ -184,31 +189,38 @@ ai:
         search_rag_scoping: true
         deep_search_delegate: false
         attach_files: true
-    - name: "Tessa"
+    - id: "Tessa"
+      name: "Tessa"
       type: "agent"
       class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
       enabled: true
-    - name: "Kellia"
+    - id: "Kellia"
+      name: "Kellia"
       type: "agent"
       class_path: "agentic_backend.agents.knowledge_extractor.slide_maker.SlideMaker"
       enabled: true
-    - name: "Raph"
+    - id: "Raph"
+      name: "Raph"
       type: "agent"
       class_path: "agentic_backend.agents.reference_editor.reference_editor.ReferenceEditor"
       enabled: true
-    - name: "CoachDG"
+    - id: "CoachDG"
+      name: "CoachDG"
       type: "agent"
       class_path: "agentic_backend.agents.coach_dg.coach_dg.CoachDG"
       enabled: false
-    - name: "LogGenius"
+    - id: "LogGenius"
+      name: "LogGenius"
       type: "agent"
       class_path: "agentic_backend.agents.log_genius.log_genius_expert.LogGenius"
       enabled: true
-    - name: "BusinessAgent"
+    - id: "BusinessAgent"
+      name: "BusinessAgent"
       type: "agent"
       class_path: "agentic_backend.academy.08_business_workflow.business_agent.BusinessAgent"
       enabled: true
-    - name: "HITL"
+    - id: "HITL"
+      name: "HITL"
       type: "agent"
       class_path: "agentic_backend.academy.10_human_in_the_loop.hitl_agent.HitlAgent"
       enabled: true

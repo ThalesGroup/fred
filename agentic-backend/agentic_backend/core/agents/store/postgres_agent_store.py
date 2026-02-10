@@ -54,7 +54,8 @@ class PostgresAgentStore(BaseAgentStore):
             self.table_name,
             metadata,
             Column("doc_id", String, primary_key=True),
-            Column("name", String, index=True),
+            Column("id", String, index=True),
+            Column("name", String),
             Column("scope", String, index=True),
             Column("scope_id", String, index=True),
             Column("payload_json", json_type),
@@ -85,8 +86,8 @@ class PostgresAgentStore(BaseAgentStore):
             await task
 
     @staticmethod
-    def _doc_id(name: str, scope: str, scope_id: Optional[str]) -> str:
-        return f"{name}:{scope}:{scope_id if scope_id is not None else 'NULL'}"
+    def _doc_id(agent_id: str, scope: str, scope_id: Optional[str]) -> str:
+        return f"{agent_id}:{scope}:{scope_id if scope_id is not None else 'NULL'}"
 
     async def save(
         self,
@@ -96,9 +97,9 @@ class PostgresAgentStore(BaseAgentStore):
         scope_id: Optional[str] = None,
     ) -> None:
         await self._ensure_table()
-        doc_id = self._doc_id(settings.name, scope, scope_id)
+        doc_id = self._doc_id(settings.id, scope, scope_id)
         if doc_id == self._seed_marker_id:
-            raise ValueError("Invalid agent name: reserved for seed marker")
+            raise ValueError("Invalid agent id: reserved for seed marker")
 
         payload = AgentSettingsAdapter.dump_python(
             settings, mode="json", exclude_none=True
@@ -109,7 +110,7 @@ class PostgresAgentStore(BaseAgentStore):
             except Exception:
                 logger.warning(
                     "[STORE][PG][AGENTS] Could not embed tuning into AgentSettings for '%s'",
-                    settings.name,
+                    settings.id,
                 )
                 pass
 
@@ -119,6 +120,7 @@ class PostgresAgentStore(BaseAgentStore):
                 self.table,
                 values={
                     "doc_id": doc_id,
+                    "id": settings.id,
                     "name": settings.name,
                     "scope": scope,
                     "scope_id": scope_id,
@@ -163,12 +165,12 @@ class PostgresAgentStore(BaseAgentStore):
 
     async def get(
         self,
-        name: str,
+        agent_id: str,
         scope: str = SCOPE_GLOBAL,
         scope_id: Optional[str] = None,
     ) -> Optional[AgentSettings]:
         await self._ensure_table()
-        doc_id = self._doc_id(name, scope, scope_id)
+        doc_id = self._doc_id(agent_id, scope, scope_id)
         if doc_id == self._seed_marker_id:
             return None
         async with self.store.begin() as conn:
@@ -183,19 +185,19 @@ class PostgresAgentStore(BaseAgentStore):
         except Exception as e:
             logger.error(
                 "[STORE][PG][AGENTS] Failed to parse AgentSettings for '%s': %s",
-                name,
+                agent_id,
                 e,
             )
             return None
 
     async def delete(
         self,
-        name: str,
+        agent_id: str,
         scope: str = SCOPE_GLOBAL,
         scope_id: Optional[str] = None,
     ) -> None:
         await self._ensure_table()
-        doc_id = self._doc_id(name, scope, scope_id)
+        doc_id = self._doc_id(agent_id, scope, scope_id)
         if doc_id == self._seed_marker_id:
             return
         async with self.store.begin() as conn:
@@ -203,7 +205,7 @@ class PostgresAgentStore(BaseAgentStore):
                 self.table.delete().where(self.table.c.doc_id == doc_id)
             )
         if result.rowcount == 0:
-            raise AgentNotFoundError(f"Agent '{name}' not found")
+            raise AgentNotFoundError(f"Agent '{agent_id}' not found")
 
     async def static_seeded(self) -> bool:
         await self._ensure_table()
@@ -224,6 +226,7 @@ class PostgresAgentStore(BaseAgentStore):
                 self.table,
                 values={
                     "doc_id": self._seed_marker_id,
+                    "id": self._seed_marker_id,
                     "name": self._seed_marker_id,
                     "scope": SCOPE_GLOBAL,
                     "scope_id": None,

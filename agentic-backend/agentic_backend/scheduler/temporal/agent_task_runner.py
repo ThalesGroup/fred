@@ -119,7 +119,7 @@ class AgentTaskRunner:
 
         # 2. Agent Initialization
         agent, _ = await self._agent_factory.create_and_init(
-            agent_name=task_input.target_ref,
+            agent_id=task_input.target_ref,
             runtime_context=runtime_context,
             session_id=session_id,
         )

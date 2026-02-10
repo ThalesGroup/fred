@@ -171,17 +171,17 @@ async def update_agent(
 
 
 @router.delete(
-    "/agents/{name}",
-    summary="Delete a dynamic agent by name",
+    "/agents/{agent_id}",
+    summary="Delete a dynamic agent by ID",
 )
 async def delete_agent(
-    name: str,
+    agent_id: str,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
 ):
     try:
         service = AgentService(agent_manager=agent_manager)
-        return await service.delete_agent(user=user, agent_name=name)
+        return await service.delete_agent(user=user, agent_id=agent_id)
     except Exception as e:
         log_exception(e)
         raise handle_exception(e)

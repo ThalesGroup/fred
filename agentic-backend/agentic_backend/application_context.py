@@ -212,16 +212,6 @@ def get_temporal_client_provider() -> TemporalClientProvider:
     return get_app_context().get_temporal_client_provider()
 
 
-def get_enabled_agent_names() -> List[str]:
-    """
-    Retrieves a list of enabled agent names from the application context.
-
-    Returns:
-        List[str]: List of enabled agent names.
-    """
-    return get_app_context().get_enabled_agent_names()
-
-
 def get_app_context() -> "ApplicationContext":
     """
     Retrieves the global application context instance.
@@ -444,17 +434,6 @@ class ApplicationContext:
                 type(self._default_model_instance).__name__,
             )
         return self._default_model_instance
-
-    # --- Agent classes ---
-
-    def get_enabled_agent_names(self) -> List[str]:
-        """
-        Retrieves a list of enabled agent names from the configuration.
-
-        Returns:
-            List[str]: List of enabled agent names.
-        """
-        return [agent.name for agent in self.configuration.ai.agents if agent.enabled]
 
     def get_pg_async_engine(self):
         """
@@ -850,7 +829,7 @@ class ApplicationContext:
         )
 
         # Agents
-        enabled_agents = [a.name for a in cfg.ai.agents if a.enabled]
+        enabled_agents = [a.id for a in cfg.ai.agents if a.enabled]
         logger.info(
             "  🤖 Agents enabled: %d%s",
             len(enabled_agents),

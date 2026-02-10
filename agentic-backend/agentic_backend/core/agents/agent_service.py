@@ -14,6 +14,7 @@
 
 import logging
 from typing import Optional, Tuple, Union
+from uuid import uuid4
 
 import httpx
 from a2a.client import A2ACardResolver
@@ -65,36 +66,7 @@ class AgentService:
         """
         Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
         """
-        # Guard: disallow duplicates at the store level (with helpful diagnostics)
-        existing = await self._safe_get(name)
-        if existing:
-            if not getattr(existing, "class_path", None):
-                logger.warning(
-                    "Agent name conflict with missing class_path: name='%s'. "
-                    "Deleting stale entry then recreating.",
-                    name,
-                )
-                try:
-                    await self.store.delete(name)
-                except Exception:
-                    logger.exception(
-                        "Failed to delete stale agent '%s' lacking class_path", name
-                    )
-                    raise AgentAlreadyExistsException(
-                        f"Agent '{name}' already exists with invalid state (missing class_path). "
-                        "Delete it manually and retry."
-                    )
-            else:
-                logger.warning(
-                    "Agent creation blocked: name='%s' already present in store "
-                    "(class_path=%s, enabled=%s). If it does not appear in UI, delete it explicitly.",
-                    name,
-                    getattr(existing, "class_path", None),
-                    getattr(existing, "enabled", None),
-                )
-                raise AgentAlreadyExistsException(
-                    f"Agent '{name}' already exists in the persistent store. If it is hidden in UI, delete it then recreate."
-                )
+        agent_id = str(uuid4())
 
         if agent_type == "a2a_proxy":
             if not a2a_base_url:
@@ -104,6 +76,7 @@ class AgentService:
             tuning = A2AProxyAgent.tuning
             card_payload = await self._fetch_a2a_card(a2a_base_url, a2a_token)
             agent_settings = Agent(
+                id=agent_id,
                 name=name,
                 class_path=_class_path(A2AProxyAgent),
                 enabled=True,
@@ -117,6 +90,7 @@ class AgentService:
             await self.agent_manager.create_dynamic_agent(agent_settings, tuning)
         else:
             agent_settings = Agent(
+                id=agent_id,
                 name=name,
                 class_path=_class_path(BasicReActAgent),
                 enabled=False,  # Start disabled until fully initialized
@@ -133,26 +107,20 @@ class AgentService:
     async def update_agent(
         self, user: KeycloakUser, agent_settings: AgentSettings, is_global: bool
     ):
-        # Delete existing agent (if any)
-        # await self.agent_manager.unregister_agent(agent_settings)
-        # self.store.delete(agent_settings.name)
-
-        # Recreate it using the same logic as in create
-        # return await self.build_and_register_mcp_agent(user, agent_settings)
         await self.agent_manager.update_agent(
             new_settings=agent_settings, is_global=is_global
         )
         self.agent_manager.log_current_settings()
 
     @authorize(action=Action.DELETE, resource=Resource.AGENTS)
-    async def delete_agent(self, user: KeycloakUser, agent_name: str):
+    async def delete_agent(self, user: KeycloakUser, agent_id: str):
         # Unregister from memory
-        await self.agent_manager.delete_agent(agent_name)
+        await self.agent_manager.delete_agent(agent_id)
 
         # Delete from DuckDB
-        await self.store.delete(agent_name)
+        await self.store.delete(agent_id)
 
-        return {"message": f"✅ Agent '{agent_name}' deleted successfully."}
+        return {"message": f"✅ Agent '{agent_id}' deleted successfully."}
 
     @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
     async def restore_static_agents(
@@ -215,14 +183,3 @@ class AgentService:
             return base.rstrip("/"), path
         return cleaned.rstrip("/"), default_path
 
-    async def _safe_get(self, name: str) -> Optional[AgentSettings]:
-        """Wrapper to protect create/update flows from store.get anomalies."""
-        try:
-            return await self.store.get(name)
-        except Exception:
-            logger.warning(
-                "store.get raised unexpectedly while checking existence for agent=%s",
-                name,
-                exc_info=True,
-            )
-            return None

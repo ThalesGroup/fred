@@ -65,19 +65,19 @@ class BaseAgentStore(ABC):
     @abstractmethod
     async def get(
         self,
-        name: str,
+        agent_id: str,
         scope: str = SCOPE_GLOBAL,
         scope_id: Optional[str] = None,
     ) -> Optional[AgentSettings]:
         """
-        Retrieve a single agent definition by name for a specific scope.
+        Retrieve a single agent definition by ID for a specific scope.
         """
         pass
 
     @abstractmethod
     async def delete(
         self,
-        name: str,
+        agent_id: str,
         scope: str = SCOPE_GLOBAL,
         scope_id: Optional[str] = None,
     ) -> None:
@@ -86,7 +86,7 @@ class BaseAgentStore(ABC):
         - Admin action: delete with scope=GLOBAL.
         - User action: delete with scope=USER and user_id.
 
-        :param name: The name of the agent to delete.
+        :param agent_id: The ID of the agent to delete.
         :param scope: The scope of the settings to delete.
         :param scope_id: The ID of the scope (e.g., user ID).
         """

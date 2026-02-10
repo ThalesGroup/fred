@@ -108,7 +108,8 @@ ai:
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:
-    - name: "Georges"
+    - id: "Georges"
+      name: "Georges"
       type: "agent"
       class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
       enabled: true
@@ -116,11 +117,13 @@ ai:
         search_policy_selection: false
         libraries_selection: false
         attach_files: false
-    - name: "Sammy"
+    - id: "Sammy"
+      name: "Sammy"
       type: "agent"
       class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
       enabled: true
-    - name: "Rico"
+    - id: "Rico"
+      name: "Rico"
       type: "agent"
       class_path: "agentic_backend.agents.rags.rag_expert.Rico"
       enabled: true
@@ -133,33 +136,40 @@ ai:
       metadata:
         # Deep-search delegation target
         deep_search_delegate_to: "Rico Senior"
-    - name: "Rico Senior"
+    - id: "Rico Senior"
+      name: "Rico Senior"
       type: "agent"
       class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
       enabled: true
       metadata:
         deep_search_hidden_in_ui: true
-    - name: "Tessa"
+    - id: "Tessa"
+      name: "Tessa"
       type: "agent"
       class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
       enabled: true
-    - name: "Travel_agent"
+    - id: "Travel_agent"
+      name: "Travel_agent"
       type: "agent"
       class_path: "agentic_backend.academy.07_travel_agent.travel_agent.Travel"
       enabled: true
-    - name: "Kellia"
+    - id: "Kellia"
+      name: "Kellia"
       type: "agent"
       class_path: "agentic_backend.agents.knowledge_extractor.slide_maker.SlideMaker"
       enabled: true
-    - name: "Raph"
+    - id: "Raph"
+      name: "Raph"
       type: "agent"
       class_path: "agentic_backend.agents.reference_editor.reference_editor.ReferenceEditor"
       enabled: true
-    - name: "CoachDG"
+    - id: "CoachDG"
+      name: "CoachDG"
       type: "agent"
       class_path: "agentic_backend.agents.coach_dg.coach_dg.CoachDG"
       enabled: false
-    - name: "Temporal Test Agent"
+    - id: "Temporal Test Agent"
+      name: "Temporal Test Agent"
       type: "agent"
       class_path: "agentic_backend.agents.temporal_test_agent.temporal_test_agent.TemporalTestAgent"
       enabled: false

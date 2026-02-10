@@ -111,12 +111,14 @@ def minimal_generalist_config() -> Configuration:
             agents=[
                 # ⬇️ instantiate the concrete Agent (discriminator handled automatically)
                 Agent(
+                    id="Georges",
                     name="Georges",
                     class_path="agentic_backend.agents.generalist.generalist_expert.Georges",
                     enabled=True,
                 ),
                 # Include a basic flow named 'Fred' to satisfy tests expecting it
                 Agent(
+                    id="Fred",
                     name="Fred",
                     class_path="agentic_backend.agents.generalist.generalist_expert.Georges",
                     enabled=True,

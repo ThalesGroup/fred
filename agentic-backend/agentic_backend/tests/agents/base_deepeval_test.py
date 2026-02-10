@@ -184,10 +184,10 @@ class BaseEvaluator(ABC):
             Any: The compiled graph of the initialized agent.
         """
         agents = get_configuration().ai.agents
-        settings = next((a for a in agents if a.name == agent_name), None)
+        settings = next((a for a in agents if a.id == agent_name), None)
 
         if not settings:
-            available = [a.name for a in agents]
+            available = [a.id for a in agents]
             raise ValueError(f"Agent '{agent_name}' not found. Available: {available}")
 
         agent = agent_type(settings)
