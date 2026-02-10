@@ -91,6 +91,11 @@ class AgentPermission(str, Enum):
     UPDATE = "update"
     DELETE = "delete"
 
+    # "owner" is a relation in the FGA schema, not a permission,
+    # but openfga does not make distinction so we add it here
+    # to use lookup_resources on it (for owner-based filtering).
+    OWNER = RelationType.OWNER.value
+
 
 RebacPermission = (
     TagPermission

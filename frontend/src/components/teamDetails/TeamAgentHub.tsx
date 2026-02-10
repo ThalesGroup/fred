@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../common/agent";
 import { usePermissions } from "../../security/usePermissions";
+import { useListAgentsAgenticV1AgentsGetQuery } from "../../slices/agentic/agenticOpenApi";
 import { AgentGridManager } from "../agentHub/AgentGridManager";
 
 // mock agents (todo: get them from back)
@@ -91,28 +92,29 @@ interface TeamAgentHubProps {
 export function TeamAgentHub({ teamId }: TeamAgentHubProps) {
   const { t } = useTranslation();
 
+  const { data: agents, isLoading, refetch } = useListAgentsAgenticV1AgentsGetQuery({ ownerFilter: "team", teamId });
+
   // Permissions
   // todo: base perm on ReBAC
   const { can } = usePermissions();
   const canEditAgents = can("agents", "update");
   const canCreateAgents = can("agents", "create");
 
-  const handleRefetch = () => {
-    // TODO: Implement when backend is ready
-    console.log("Refresh team agents");
+  const handleRefetch = async () => {
+    await refetch();
   };
 
   return (
     <AgentGridManager
-      agents={agents}
-      isLoading={false}
+      agents={agents || []}
+      isLoading={isLoading}
       teamId={teamId}
       canEdit={canEditAgents}
       canCreate={canCreateAgents}
       canDelete={canEditAgents}
       onRefetchAgents={handleRefetch}
       showRestoreButton={false}
-      showA2ACard={true}
+      showA2ACard={false}
       emptyStateMessage={t("teamDetails.noAgents")}
     />
   );

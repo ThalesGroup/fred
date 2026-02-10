@@ -49,7 +49,7 @@ export const AgentHub = () => {
 
   const fetchAgents = async () => {
     try {
-      const flows = (await triggerGetFlows().unwrap()) as unknown as AnyAgent[];
+      const flows = (await triggerGetFlows({ ownerFilter: "personal" }).unwrap()) as unknown as AnyAgent[];
       setAgents(flows);
     } catch (err) {
       console.error("Error fetching agents:", err);

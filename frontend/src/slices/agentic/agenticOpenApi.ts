@@ -5,7 +5,13 @@ const injectedRtkApi = api.injectEndpoints({
       ListAgentsAgenticV1AgentsGetApiResponse,
       ListAgentsAgenticV1AgentsGetApiArg
     >({
-      query: () => ({ url: `/agentic/v1/agents` }),
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents`,
+        params: {
+          owner_filter: queryArg.ownerFilter,
+          team_id: queryArg.teamId,
+        },
+      }),
     }),
     createAgentAgenticV1AgentsCreatePost: build.mutation<
       CreateAgentAgenticV1AgentsCreatePostApiResponse,
@@ -314,7 +320,10 @@ export type ListAgentsAgenticV1AgentsGetApiResponse = /** status 200 Successful 
       type: "leader";
     } & Leader)
 )[];
-export type ListAgentsAgenticV1AgentsGetApiArg = void;
+export type ListAgentsAgenticV1AgentsGetApiArg = {
+  ownerFilter?: OwnerFilter | null;
+  teamId?: string | null;
+};
 export type CreateAgentAgenticV1AgentsCreatePostApiResponse = /** status 200 Successful Response */ any;
 export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
   createAgentRequest: CreateAgentRequest;
@@ -633,6 +642,7 @@ export type ValidationError = {
 export type HttpValidationError = {
   detail?: ValidationError[];
 };
+export type OwnerFilter = "personal" | "team";
 export type CreateAgentRequest = {
   name: string;
   type?: string;

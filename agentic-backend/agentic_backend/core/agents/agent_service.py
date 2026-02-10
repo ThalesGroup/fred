@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
+from enum import Enum
 from typing import List, Optional, Tuple, Union
 from uuid import uuid4
 
@@ -23,7 +25,9 @@ from a2a.types import AgentCard
 from a2a.utils.constants import EXTENDED_AGENT_CARD_PATH
 from fred_core import (
     Action,
+    AgentPermission,
     KeycloakUser,
+    RebacDisabledResult,
     RebacReference,
     Relation,
     RelationType,
@@ -51,6 +55,23 @@ from agentic_backend.core.agents.basic_react_agent import (
 logger = logging.getLogger(__name__)
 
 
+class OwnerFilter(str, Enum):
+    """Filter agents by ownership type.
+
+    - PERSONAL: only agents where the user is directly the owner
+    - TEAM: only agents owned by the specified team (team_id required)
+    """
+
+    PERSONAL = "personal"
+    TEAM = "team"
+
+
+class MissingTeamIdError(Exception):
+    """Raised when owner_filter is 'team' but no team_id is provided."""
+
+    pass
+
+
 def _class_path(obj_or_type: Union[type, object]) -> str:
     """Return fully-qualified class path, e.g. 'agentic_backend.agents.basic_react_agent.BasicReActAgent'."""
     t: type = obj_or_type if isinstance(obj_or_type, type) else type(obj_or_type)
@@ -63,8 +84,21 @@ class AgentService:
         self.agent_manager = agent_manager
 
     @authorize(action=Action.READ, resource=Resource.AGENTS)
-    def list_agents(self, user: KeycloakUser) -> List[AgentSettings]:
-        return self.agent_manager.get_agentic_flows()
+    async def list_agents(
+        self,
+        user: KeycloakUser,
+        owner_filter: Optional[OwnerFilter] = None,
+        team_id: Optional[str] = None,
+    ) -> List[AgentSettings]:
+        agents = self.agent_manager.get_agentic_flows()
+
+        authorized_ids = await self._resolve_authorized_agent_ids(
+            user, owner_filter, team_id
+        )
+        if authorized_ids is not None:
+            agents = [a for a in agents if a.id in authorized_ids]
+
+        return agents
 
     @authorize(action=Action.CREATE, resource=Resource.AGENTS)
     async def create_agent(
@@ -84,7 +118,9 @@ class AgentService:
 
         # If team_id is provided, check user has permission to manage team agents
         if team_id:
-            await rebac.check_user_permission_or_raise(user, TeamPermission.CAN_UPDATE_AGENTS, team_id)
+            await rebac.check_user_permission_or_raise(
+                user, TeamPermission.CAN_UPDATE_AGENTS, team_id
+            )
 
         agent_id = str(uuid4())
 
@@ -133,7 +169,12 @@ class AgentService:
                 )
             )
         else:
-            await rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.AGENT, resource_id=agent_id)
+            await rebac.add_user_relation(
+                user,
+                RelationType.OWNER,
+                resource_type=Resource.AGENT,
+                resource_id=agent_id,
+            )
 
     @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
     async def update_agent(
@@ -146,19 +187,57 @@ class AgentService:
 
     @authorize(action=Action.DELETE, resource=Resource.AGENTS)
     async def delete_agent(self, user: KeycloakUser, agent_id: str):
-        # Unregister from memory
         await self.agent_manager.delete_agent(agent_id)
-
-        # Delete from DuckDB
-        await self.store.delete(agent_id)
-
-        return {"message": f"✅ Agent '{agent_id}' deleted successfully."}
 
     @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
     async def restore_static_agents(
         self, user: KeycloakUser, force_overwrite: bool = True
     ) -> None:
         await self.agent_manager.restore_static_agents(force_overwrite=force_overwrite)
+
+    async def _resolve_authorized_agent_ids(
+        self,
+        user: KeycloakUser,
+        owner_filter: Optional[OwnerFilter],
+        team_id: Optional[str],
+    ) -> set[str] | None:
+        """Return the set of agent IDs the user is allowed to see, or None if ReBAC is disabled.
+
+        When an owner_filter is provided, the result is intersected with the
+        owner-filtered agent IDs so only readable agents matching the filter are returned.
+        """
+        rebac = get_rebac_engine()
+        readable_coro = rebac.lookup_user_resources(user, AgentPermission.READ)
+
+        if owner_filter is None:
+            readable_refs = await readable_coro
+            if isinstance(readable_refs, RebacDisabledResult):
+                return None
+            return {ref.id for ref in readable_refs}
+
+        # Determine the subject reference based on the filter
+        if owner_filter == OwnerFilter.TEAM:
+            if not team_id:
+                raise MissingTeamIdError(
+                    "team_id is required when owner_filter is 'team'"
+                )
+            subject_ref = RebacReference(type=Resource.TEAM, id=team_id)
+        else:
+            subject_ref = RebacReference(type=Resource.USER, id=user.uid)
+
+        # Run lookups in parallel: security baseline + owner-filtered lookup
+        readable_refs, owned = await asyncio.gather(
+            readable_coro,
+            rebac.lookup_resources(subject_ref, AgentPermission.OWNER, Resource.AGENT),
+        )
+        if isinstance(readable_refs, RebacDisabledResult) or isinstance(
+            owned, RebacDisabledResult
+        ):
+            return None
+
+        readable_ids = {ref.id for ref in readable_refs}
+        filtered_ids = {ref.id for ref in owned}
+        return readable_ids & filtered_ids
 
     async def _fetch_a2a_card(
         self, base_url: str, token: Optional[str]
@@ -214,4 +293,3 @@ class AgentService:
             path = cleaned[idx + 1 :]  # drop leading slash
             return base.rstrip("/"), path
         return cleaned.rstrip("/"), default_path
-
