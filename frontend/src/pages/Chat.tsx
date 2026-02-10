@@ -32,11 +32,14 @@ export default function Chat() {
     isLoading: flowsLoading,
     isError: flowsError,
     error: flowsErrObj,
-  } = useListAgentsAgenticV1AgentsGetQuery(undefined, {
-    refetchOnMountOrArgChange: true,
-    refetchOnFocus: false,
-    refetchOnReconnect: false,
-  });
+  } = useListAgentsAgenticV1AgentsGetQuery(
+    {},
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: false,
+      refetchOnReconnect: false,
+    },
+  );
 
   const agentsFromServer = useMemo<AnyAgent[]>(() => normalizeAgenticFlows(rawAgentsFromServer), [rawAgentsFromServer]);
   const enabledAgents = (agentsFromServer ?? []).filter(

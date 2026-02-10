@@ -329,7 +329,7 @@ const ChatBotView = ({
                   </Typography>
                 </Box>
                 <Typography variant="h5" color="text.primary" sx={{ textAlign: "center" }}>
-                  {t("chatbot.startNew", { name: currentAgent?.id ?? "assistant" })}
+                  {t("chatbot.startNew", { name: currentAgent?.name ?? "assistant" })}
                 </Typography>
                 <Box sx={{ width: "min(900px, 100%)" }}>
                   <UserInput {...userInputProps} />
