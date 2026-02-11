@@ -70,6 +70,9 @@ frontend_settings:
     agentsNicknamePlural: "Lumis"
     contactSupportLink: "https://join.citadel.team/web-client/#/room/!rPdYXaGrZwwbgsEPaK:thales.citadel.team?deeplink=true"
     agentIconName: "icon_lumi"
+    showAgentRegisterA2A: false
+    showAgentRestoreFromConfiguration: false
+    showAgentCode: false
 
 ai:
   # In production  activate the configuration persistence mechanism

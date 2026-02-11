@@ -68,6 +68,9 @@ applications:
           agentsNicknamePlural: "Lumis"
           contactSupportLink: "https://join.citadel.team/web-client/#/room/!rPdYXaGrZwwbgsEPaK:thales.citadel.team?deeplink=true"
           agentIconName: "icon_lumi"
+          showAgentRegisterA2A: false
+          showAgentRestoreFromConfiguration: false
+          showAgentCode: false
 
       ai:
         # Set KF right url
@@ -127,7 +130,7 @@ applications:
           database: fred
           # todo: use fred user
           username: postgres
-          
+
 
         # Set Opensearch connection params
         opensearch: &storage-opensearch
@@ -313,7 +316,7 @@ applications:
             <<: *storage-postgres
             type: "sql"
             mode: read_and_write
-            driver: "postgresql+psycopg2"            
+            driver: "postgresql+psycopg2"
             path: null # (important: remove the `path` default value)
 
       # Enable filesystem mcp
