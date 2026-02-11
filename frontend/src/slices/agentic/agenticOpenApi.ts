@@ -27,9 +27,6 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/agentic/v1/agents/update`,
         method: "PUT",
         body: queryArg.agentSettings,
-        params: {
-          is_global: queryArg.isGlobal,
-        },
       }),
     }),
     deleteAgentAgenticV1AgentsAgentIdDelete: build.mutation<
@@ -330,7 +327,6 @@ export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
 };
 export type UpdateAgentAgenticV1AgentsUpdatePutApiResponse = /** status 200 Successful Response */ any;
 export type UpdateAgentAgenticV1AgentsUpdatePutApiArg = {
-  isGlobal?: boolean;
   agentSettings:
     | ({
         type: "agent";

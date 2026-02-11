@@ -183,15 +183,13 @@ class AgentService:
             )
 
     async def update_agent(
-        self, user: KeycloakUser, agent_settings: AgentSettings, is_global: bool
+        self, user: KeycloakUser, agent_settings: AgentSettings
     ):
         await self.rebac.check_user_permission_or_raise(
             user, AgentPermission.UPDATE, agent_settings.id
         )
 
-        await self.agent_manager.update_agent(
-            new_settings=agent_settings, is_global=is_global
-        )
+        await self.agent_manager.update_agent(new_settings=agent_settings)
         self.agent_manager.log_current_settings()
 
     async def delete_agent(self, user: KeycloakUser, agent_id: str):

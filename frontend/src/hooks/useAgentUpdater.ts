@@ -31,13 +31,13 @@ export function useAgentUpdater() {
   };
   // -------------------------------------
 
-  const updateEnabled = async (agent: AnyAgent, enabled: boolean, isGlobal: boolean = true) => {
+  const updateEnabled = async (agent: AnyAgent, enabled: boolean) => {
     // The cast to AnyAgent is clean here as the type definition ensures correct properties
     const payload: AnyAgent = { ...agent, enabled };
 
     try {
       // The mutation expects a type compatible with Agent | Leader, which AnyAgent is.
-      return await mutate({ agentSettings: payload, isGlobal }).unwrap();
+      return await mutate({ agentSettings: payload }).unwrap();
     } catch (e: unknown) {
       handleUpdateError(e, t("agentHub.errors.updateFailed"));
     }
@@ -46,26 +46,25 @@ export function useAgentUpdater() {
   const updateTuning = async (
     agent: AnyAgent,
     newTuning: NonNullable<AnyAgent["tuning"]>,
-    isGlobal: boolean = false,
   ) => {
     // The cast to AnyAgent is clean here as the type definition ensures correct properties
     const payload: AnyAgent = { ...agent, tuning: newTuning };
 
     try {
       // The mutation expects a type compatible with Agent | Leader, which AnyAgent is.
-      return await mutate({ agentSettings: payload, isGlobal }).unwrap();
+      return await mutate({ agentSettings: payload }).unwrap();
     } catch (e: unknown) {
       handleUpdateError(e, t("agentHub.errors.tuningUpdateFailed"));
     }
   };
 
-  const updateLeaderCrew = async (leader: Leader & { type: "leader" }, crew: string[], isGlobal: boolean = false) => {
+  const updateLeaderCrew = async (leader: Leader & { type: "leader" }, crew: string[]) => {
     // The payload is already guaranteed to be a Leader | AnyAgent
     const payload: AnyAgent = { ...leader, crew };
 
     try {
       // The mutation expects a type compatible with Agent | Leader, which AnyAgent is.
-      return await mutate({ agentSettings: payload, isGlobal }).unwrap();
+      return await mutate({ agentSettings: payload }).unwrap();
     } catch (e: unknown) {
       handleUpdateError(e, t("agentHub.errors.crewUpdateFailed"));
     }

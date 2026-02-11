@@ -196,16 +196,15 @@ async def create_agent(
 
 @router.put(
     "/agents/update",
-    summary="Update an agent. Only the tuning part is upfatable",
+    summary="Update an agent. Only the tuning part is updatable",
 )
 async def update_agent(
     agent_settings: AgentSettings,
-    is_global: bool = False,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
 ):
     service = AgentService(agent_manager=agent_manager)
-    return await service.update_agent(user, agent_settings, is_global=is_global)
+    return await service.update_agent(user, agent_settings)
 
 
 @router.delete(

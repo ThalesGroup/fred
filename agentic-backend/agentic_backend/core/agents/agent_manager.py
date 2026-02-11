@@ -32,8 +32,6 @@ from agentic_backend.core.agents.agent_spec import (
     MCPServerConfiguration,
 )
 from agentic_backend.core.agents.store.base_agent_store import (
-    SCOPE_GLOBAL,
-    SCOPE_USER,
     BaseAgentStore,
 )
 
@@ -162,7 +160,7 @@ class AgentManager:
         self.agent_settings[agent_settings.id] = agent_settings
         logger.info("[AGENTS] agent=%s registered as dynamic agent.", agent_settings.id)
 
-    async def update_agent(self, new_settings: AgentSettings, is_global: bool) -> bool:
+    async def update_agent(self, new_settings: AgentSettings) -> bool:
         """
         Contract:
         - Update tuning/settings in memory + persist.
@@ -203,9 +201,7 @@ class AgentManager:
             )
         # 1) Persist source of truth (DB)
         try:
-            await self.store.save(
-                new_settings, tunings, scope=SCOPE_GLOBAL if is_global else SCOPE_USER
-            )
+            await self.store.save(new_settings, tunings)
         except Exception:
             logger.exception(
                 "Failed to persist agent '%s'; continuing with runtime update.",
@@ -282,9 +278,7 @@ class AgentManager:
         if not self.use_static_config_only and not await self.store.static_seeded():
             for agent_id, (settings, tunings) in static_catalogue.items():
                 try:
-                    await self.store.save(
-                        settings, tunings, scope=SCOPE_GLOBAL, scope_id=None
-                    )
+                    await self.store.save(settings, tunings)
                     logger.info(
                         "[AGENTS] Seeded static agent '%s' into store", agent_id
                     )
@@ -320,7 +314,7 @@ class AgentManager:
                 _, persisted_tunings = persisted_state[agent_id]
 
                 logger.info(
-                    "[AGENTS] agent=%s found in YAML and persistent store with global scope tunings. Using persisted tunings.",
+                    "[AGENTS] agent=%s found in YAML and persistent store. Using persisted tunings.",
                     agent_id,
                 )
                 final_settings = static_settings.model_copy(
@@ -357,7 +351,7 @@ class AgentManager:
 
         for agent_id, settings in agents_to_load.items():
             logger.info(
-                "[AGENTS] agent=%s registered with global scope tunings into runtime catalog",
+                "[AGENTS] agent=%s registered into runtime catalog",
                 agent_id,
             )
             logger.info(
@@ -405,11 +399,9 @@ class AgentManager:
 
             if force_overwrite:
                 try:
-                    await self.store.delete(
-                        agent_cfg.id, scope=SCOPE_GLOBAL, scope_id=None
-                    )
+                    await self.store.delete(agent_cfg.id)
                     logger.info(
-                        "[AGENTS] Overwrite restore: deleted persisted agent '%s' (GLOBAL)",
+                        "[AGENTS] Overwrite restore: deleted persisted agent '%s'",
                         agent_cfg.id,
                     )
                 except Exception:
@@ -419,9 +411,7 @@ class AgentManager:
                     )
 
             try:
-                await self.store.save(
-                    settings_with_tuning, tuning, scope=SCOPE_GLOBAL, scope_id=None
-                )
+                await self.store.save(settings_with_tuning, tuning)
                 logger.info(
                     "[AGENTS] Restored static agent '%s' into store", agent_cfg.id
                 )

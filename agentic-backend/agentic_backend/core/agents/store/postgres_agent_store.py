@@ -27,7 +27,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_spec import AgentTuning
 from agentic_backend.core.agents.store.base_agent_store import (
-    SCOPE_GLOBAL,
     AgentNotFoundError,
     BaseAgentStore,
 )
@@ -53,11 +52,8 @@ class PostgresAgentStore(BaseAgentStore):
         self.table = Table(
             self.table_name,
             metadata,
-            Column("doc_id", String, primary_key=True),
-            Column("id", String, index=True),
+            Column("id", String, primary_key=True),
             Column("name", String),
-            Column("scope", String, index=True),
-            Column("scope_id", String, index=True),
             Column("payload_json", json_type),
             keep_existing=True,
         )
@@ -85,20 +81,13 @@ class PostgresAgentStore(BaseAgentStore):
         if task is not None and not task.done():
             await task
 
-    @staticmethod
-    def _doc_id(agent_id: str, scope: str, scope_id: Optional[str]) -> str:
-        return f"{agent_id}:{scope}:{scope_id if scope_id is not None else 'NULL'}"
-
     async def save(
         self,
         settings: AgentSettings,
         tuning: AgentTuning,
-        scope: str = SCOPE_GLOBAL,
-        scope_id: Optional[str] = None,
     ) -> None:
         await self._ensure_table()
-        doc_id = self._doc_id(settings.id, scope, scope_id)
-        if doc_id == self._seed_marker_id:
+        if settings.id == self._seed_marker_id:
             raise ValueError("Invalid agent id: reserved for seed marker")
 
         payload = AgentSettingsAdapter.dump_python(
@@ -119,40 +108,24 @@ class PostgresAgentStore(BaseAgentStore):
                 conn,
                 self.table,
                 values={
-                    "doc_id": doc_id,
                     "id": settings.id,
                     "name": settings.name,
-                    "scope": scope,
-                    "scope_id": scope_id,
                     "payload_json": payload,
                 },
-                pk_cols=["doc_id"],
+                pk_cols=["id"],
             )
 
-    async def load_by_scope(
-        self,
-        scope: str,
-        scope_id: Optional[str] = None,
-    ) -> List[AgentSettings]:
+    async def load_all(self) -> List[AgentSettings]:
         await self._ensure_table()
         async with self.store.begin() as conn:
-            if scope_id is None:
-                result = await conn.execute(
-                    select(self.table.c.payload_json, self.table.c.doc_id).where(
-                        self.table.c.scope == scope, self.table.c.scope_id.is_(None)
-                    )
-                )
-            else:
-                result = await conn.execute(
-                    select(self.table.c.payload_json, self.table.c.doc_id).where(
-                        self.table.c.scope == scope, self.table.c.scope_id == scope_id
-                    )
-                )
+            result = await conn.execute(
+                select(self.table.c.payload_json, self.table.c.id)
+            )
             rows = result.fetchall()
 
         out: List[AgentSettings] = []
-        for payload_json, doc_id in rows:
-            if doc_id == self._seed_marker_id:
+        for payload_json, agent_id in rows:
+            if agent_id == self._seed_marker_id:
                 continue
             try:
                 out.append(AgentSettingsAdapter.validate_python(payload_json or {}))
@@ -160,22 +133,16 @@ class PostgresAgentStore(BaseAgentStore):
                 logger.error("[STORE][PG][AGENTS] Failed to parse AgentSettings: %s", e)
         return out
 
-    async def load_all_global_scope(self) -> List[AgentSettings]:
-        return await self.load_by_scope(scope=SCOPE_GLOBAL, scope_id=None)
-
     async def get(
         self,
         agent_id: str,
-        scope: str = SCOPE_GLOBAL,
-        scope_id: Optional[str] = None,
     ) -> Optional[AgentSettings]:
         await self._ensure_table()
-        doc_id = self._doc_id(agent_id, scope, scope_id)
-        if doc_id == self._seed_marker_id:
+        if agent_id == self._seed_marker_id:
             return None
         async with self.store.begin() as conn:
             result = await conn.execute(
-                select(self.table.c.payload_json).where(self.table.c.doc_id == doc_id)
+                select(self.table.c.payload_json).where(self.table.c.id == agent_id)
             )
             row = result.fetchone()
         if not row:
@@ -193,16 +160,13 @@ class PostgresAgentStore(BaseAgentStore):
     async def delete(
         self,
         agent_id: str,
-        scope: str = SCOPE_GLOBAL,
-        scope_id: Optional[str] = None,
     ) -> None:
         await self._ensure_table()
-        doc_id = self._doc_id(agent_id, scope, scope_id)
-        if doc_id == self._seed_marker_id:
+        if agent_id == self._seed_marker_id:
             return
         async with self.store.begin() as conn:
             result = await conn.execute(
-                self.table.delete().where(self.table.c.doc_id == doc_id)
+                self.table.delete().where(self.table.c.id == agent_id)
             )
         if result.rowcount == 0:
             raise AgentNotFoundError(f"Agent '{agent_id}' not found")
@@ -211,8 +175,8 @@ class PostgresAgentStore(BaseAgentStore):
         await self._ensure_table()
         async with self.store.begin() as conn:
             result = await conn.execute(
-                select(self.table.c.doc_id).where(
-                    self.table.c.doc_id == self._seed_marker_id
+                select(self.table.c.id).where(
+                    self.table.c.id == self._seed_marker_id
                 )
             )
             row = result.fetchone()
@@ -225,12 +189,9 @@ class PostgresAgentStore(BaseAgentStore):
                 conn,
                 self.table,
                 values={
-                    "doc_id": self._seed_marker_id,
                     "id": self._seed_marker_id,
                     "name": self._seed_marker_id,
-                    "scope": SCOPE_GLOBAL,
-                    "scope_id": None,
                     "payload_json": {},
                 },
-                pk_cols=["doc_id"],
+                pk_cols=["id"],
             )

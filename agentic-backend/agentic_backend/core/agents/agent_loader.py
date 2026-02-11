@@ -87,7 +87,7 @@ class AgentLoader:
         """
         out: List[AgentFlow] = []
 
-        for agent_settings in await self.store.load_all_global_scope():
+        for agent_settings in await self.store.load_all():
             if not agent_settings.class_path:
                 logger.warning(
                     "agent=%s No class_path found — deleting stale entry from store.",

@@ -387,8 +387,6 @@
     "coreFields": "Champs de base",
     "tunableFields": "Champs réglables",
     "tagsLabel": "Tags",
-    "saveUser": "Appliquer pour mon profil",
-    "saveGlobal": "Appliquer pour tous les utilisateurs",
     "selectMcpServers": "Sélectionnez des serveurs MCP",
     "noMcpServers": "Aucun serveur MCP disponible pour le moment."
   },

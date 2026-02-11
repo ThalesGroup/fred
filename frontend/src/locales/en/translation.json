@@ -386,8 +386,6 @@
     "coreFields": "Core Fields",
     "tunableFields": "Tunable Fields",
     "tagsLabel": "Tags",
-    "saveUser": "Apply to my profile",
-    "saveGlobal": "Apply to all users",
     "selectMcpServers": "Select MCP servers",
     "noMcpServers": "No MCP servers are currently available."
   },

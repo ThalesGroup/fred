@@ -108,7 +108,7 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
     }));
   };
 
-  const handleSave = async (isGlobal: boolean) => {
+  const handleSave = async () => {
     if (!agent) return;
 
     // 1. Construct the new AgentTuning object by merging all parts
@@ -124,9 +124,7 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
       mcp_servers: mcpServerRefs,
     };
 
-    console.log("Saving agent tuning", newTuning, "with global scope:", isGlobal);
-
-    await updateTuning(agent, newTuning, isGlobal);
+    await updateTuning(agent, newTuning);
     onSaved?.();
     onClose();
   };
@@ -256,18 +254,9 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
             <Button
               variant="contained"
               disabled={isSaveDisabled}
-              onClick={() => handleSave(false)} // Pass false for user-specific
+              onClick={handleSave}
             >
-              {t("agentEditDrawer.saveUser")}
-            </Button>
-
-            <Button
-              variant="contained"
-              color="secondary" // Use a different color to highlight global scope
-              disabled={isSaveDisabled}
-              onClick={() => handleSave(true)} // Pass true for global scope
-            >
-              {t("agentEditDrawer.saveGlobal")}
+              {t("common.save")}
             </Button>
           </Stack>
         </Box>
