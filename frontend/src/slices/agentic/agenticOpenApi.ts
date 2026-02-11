@@ -23,11 +23,7 @@ const injectedRtkApi = api.injectEndpoints({
       UpdateAgentAgenticV1AgentsUpdatePutApiResponse,
       UpdateAgentAgenticV1AgentsUpdatePutApiArg
     >({
-      query: (queryArg) => ({
-        url: `/agentic/v1/agents/update`,
-        method: "PUT",
-        body: queryArg.agentSettings,
-      }),
+      query: (queryArg) => ({ url: `/agentic/v1/agents/update`, method: "PUT", body: queryArg.agentSettings }),
     }),
     deleteAgentAgenticV1AgentsAgentIdDelete: build.mutation<
       DeleteAgentAgenticV1AgentsAgentIdDeleteApiResponse,
@@ -1046,6 +1042,9 @@ export type Properties = {
   contactSupportLink?: string | null;
   /** Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme. */
   agentIconName?: string | null;
+  showAgentRegisterA2A?: boolean;
+  showAgentRestoreFromConfiguration?: boolean;
+  showAgentCode?: boolean;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;

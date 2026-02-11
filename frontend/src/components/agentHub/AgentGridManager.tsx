@@ -29,6 +29,7 @@ import { useLazyGetRuntimeSourceTextQuery } from "../../slices/agentic/agenticSo
 import { LoadingSpinner } from "../../utils/loadingSpinner";
 import { useToast } from "../ToastProvider";
 
+import { useFrontendProperties } from "../../hooks/useFrontendProperties";
 import { A2aCardDialog } from "./A2aCardDialog";
 import { AgentCard } from "./AgentCard";
 import { AgentConfigWorkspaceManagerDrawer } from "./AgentConfigWorkspaceManagerDrawer";
@@ -196,6 +197,8 @@ export const AgentGridManager = ({
     }
   };
 
+  const { showAgentRegisterA2A, showAgentRestoreFromConfiguration } = useFrontendProperties();
+
   return (
     <>
       <CardContent sx={{ p: { xs: 2, md: 3 } }}>
@@ -208,7 +211,7 @@ export const AgentGridManager = ({
             {/* Toolbar */}
             <Box display="flex" justifyContent="flex-end" alignItems="center" mb={2}>
               <Box sx={{ display: "flex", gap: 1 }}>
-                {showRestoreButton && onRestore && (
+                {showAgentRestoreFromConfiguration && showRestoreButton && onRestore && (
                   <Button
                     variant="outlined"
                     startIcon={<RefreshIcon />}
@@ -218,14 +221,16 @@ export const AgentGridManager = ({
                     {t("agentHub.restoreButton")}
                   </Button>
                 )}
-                <Button
-                  variant="outlined"
-                  startIcon={<CloudQueueIcon />}
-                  onClick={canCreate ? handleOpenRegisterA2AAgent : undefined}
-                  disabled={!canCreate}
-                >
-                  {t("agentHub.registerA2A")}
-                </Button>
+                {showAgentRegisterA2A && (
+                  <Button
+                    variant="outlined"
+                    startIcon={<CloudQueueIcon />}
+                    onClick={canCreate ? handleOpenRegisterA2AAgent : undefined}
+                    disabled={!canCreate}
+                  >
+                    {t("agentHub.registerA2A")}
+                  </Button>
+                )}
                 <Button
                   variant="contained"
                   startIcon={<AddIcon />}

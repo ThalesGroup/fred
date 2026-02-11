@@ -285,6 +285,9 @@ class Properties(BaseModel):
         default=None,
         description="Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme.",
     )
+    showAgentRegisterA2A: bool = True
+    showAgentRestoreFromConfiguration: bool = True
+    showAgentCode: bool = True
 
 
 class FrontendSettings(BaseModel):
