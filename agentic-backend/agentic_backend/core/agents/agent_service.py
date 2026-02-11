@@ -104,7 +104,7 @@ class AgentService:
         self, user: KeycloakUser, agent_id: str
     ) -> AgentSettings | None:
         await self.rebac.check_user_permission_or_raise(
-            user, AgentPermission.UPDATE, agent_id
+            user, AgentPermission.READ, agent_id
         )
 
         return self.agent_manager.get_agent_settings(agent_id)
