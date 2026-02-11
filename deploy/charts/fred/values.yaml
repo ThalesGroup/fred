@@ -514,9 +514,10 @@ applications:
         websocket_url: "ws://fred.dev.fred.thalesgroup.com/fred/chatbot/query"
         frontend_basename : "/"
 
-  knowledge-flow-backend: &knowledgeFlowBackend
+  knowledge-flow-backend:
     enabled: true
     applicationName: knowledge-flow-backend
+    configurationFileName: configuration.yaml
     deployment:
       enabled: true
     replicaCount: 1
@@ -825,22 +826,38 @@ applications:
       TABULAR_POSTGRES_PASSWORD: ""
 
   knowledge-flow-worker:
-    <<: *knowledgeFlowBackend
     # Toggle Temporal worker pod deployment.
     # Note: You need to have set knowledge-flow-backend.configuration.scheduler.enabled = true
     # otherwise this deployment will not be created.
     enabled: false
     applicationName: knowledge-flow-worker
+    configurationFileName: configuration_worker.yaml
+    deployment:
+      enabled: false
     replicaCount: 3 # 3 temporal workers
-    configuration:
-      app:
-        metrics_enabled: false # Do not export metrics since its a worker pod
+    statefulset:
+      enabled: false
+    job:
+      enabled: false
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    image:
+      repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
+      tag: "v1.0.10"
     command:
       enabled: true
       data:
         - "python"
         - "-m"
         - "knowledge_flow_backend.main_worker"
+    env:
+      - name: LOG_LEVEL
+        value: "INFO"
+      - name: ENV_FILE
+        value: "/app/config/.env"
+      - name: CONFIG_FILE
+        value: "/app/config/configuration_worker.yaml"
     ports:
       - name: worker
         containerPort: 8112
@@ -873,6 +890,24 @@ applications:
         relabelings: []
         metricRelabelings: []
         namespaceSelector: {}
+    ingress:
+      enabled: false
+      className: ""
+      hosts: []
+    volumeMounts:
+      - name: knowledge-flow-worker-vol
+        mountPath: /app/config/configuration_worker.yaml
+        subPath: configuration_worker.yaml
+      - name: knowledge-flow-worker-env-vol
+        mountPath: /app/config/.env
+        subPath: .env
+    volumes:
+      - name: knowledge-flow-worker-vol
+        configMap:
+          name: knowledge-flow-worker-back
+      - name: knowledge-flow-worker-env-vol
+        secret:
+          secretName: knowledge-flow-backend-env
     probes:
       lifecycle:
         enabled: false
@@ -884,20 +919,198 @@ applications:
         data: {}
       startupProbe:
         enabled: false
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - "ALL"
+      runAsUser: 1000
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+    serviceAccount:
+      annotations: {}
+      labels: {}
+      automountServiceAccountToken: true
+      rbac:
+        enabled: true
+        permissions: {}
+    kubeconfig:
+      enabled: false
     configuration_type:
-      backend: false
+      backend: true
       frontend: false
-    volumeMounts:
-      - name: knowledge-flow-backend-vol
-        mountPath: /app/config/configuration.yaml
-        subPath: configuration.yaml
-      - name: knowledge-flow-backend-env-vol
-        mountPath: /app/config/.env
-        subPath: .env
-    volumes:
-      - name: knowledge-flow-backend-vol
-        configMap:
-          name: knowledge-flow-backend-back
-      - name: knowledge-flow-backend-env-vol
-        secret:
-          secretName: knowledge-flow-backend-env
+    configuration:
+      app:
+        name: "Knowledge Flow Backend"
+        base_url: "/knowledge-flow/v1"
+        address: "127.0.0.1"
+        port: 8112
+        log_level: "info"
+        reload: false
+        reload_dir: "."
+        metrics_enabled: false # Do not export metrics since its a worker pod
+        metrics_address: "0.0.0.0"
+        metrics_port: 9111
+        kpi_process_metrics_interval_sec: 0
+        kpi_log_summary_interval_sec: 0.0
+        kpi_log_summary_top_n: 0
+
+      processing:
+        generate_summary: true
+        use_gpu: true
+        process_images: true
+      security:
+        m2m:
+          enabled: true
+          client_id: "knowledge-flow"
+          realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
+          secret_env_var: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET
+        user:
+          enabled: true
+          client_id: "app"
+          realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
+        authorized_origins:
+          - "http://fred.dev.fred.thalesgroup.com:80"
+        rebac:
+          enabled: false                    # Set false to bypass ReBAC (warning: all private resources will become public)
+          type: openfga
+          api_url: "http://openfga:8080"    # OpenFGA HTTP endpoint
+          # store_name: "fred"                # OpenFGA store name. Reuse the same store across services
+          # create_store_if_needed: true      # Automates store bootstrap (disable if pre-provisioned)
+          # sync_schema_on_init: true         # Pushes the default Fred authorization model
+          # authorization_model_id: null      # Authorization model id to use in case `sync_schema_on_init: false`
+          # token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
+          # timeout_millisec: 2000            # Optional request timeout
+          # headers:
+          #   # Optional static headers sent to OpenFGA
+          #   X-Custom-Header: "value"
+      scheduler:
+        enabled: true
+        backend: "temporal"
+        temporal:
+          host: "localhost:7233"
+          namespace: "default"
+          task_queue: "ingestion"
+          workflow_id_prefix: "pipeline"
+          connect_timeout_seconds: 5
+      input_processors:
+        - prefix: ".pdf"
+          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+        - prefix: ".docx"
+          class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+        - prefix: ".pptx"
+          class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+        - prefix: ".csv"
+          class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+        - prefix: ".txt"
+          class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+        - prefix: ".md"
+          class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+        - prefix: ".xlsm"
+          class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+        - prefix: ".jsonl"
+          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+      content_storage:
+        type: local
+        root_path: /home/fred-user/.fred/knowledge-flow/content-storage
+        # type: minio
+        # endpoint: http://minio:9000
+        # access_key: admin
+        # bucket_name: app-bucket
+        # secure: false
+        # public_endpoint: https://minio.example.com  # Public URL for browser-facing presigned URLs
+        # public_secure: true  # Optional, inferred from public_endpoint scheme if omitted
+      document_sources:
+        fred:
+          type: push
+          description: "Documents manually uploaded by users"
+        local:
+          type: pull
+          provider: local_path
+          base_path: ~/Documents/Fred
+          description: "Personal local documents available for pull-mode ingestion"
+      embedding_model:
+        provider: openai
+        name: text-embedding-3-large
+        settings: {}
+        type: "openai"
+      chat_model:
+        provider: openai # openai | azure | ollama
+        name: gpt-4o-mini # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
+        settings: {}
+          # openai: nothing else required (keys in .env)
+          # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
+          # ollama: { base_url: "http://localhost:11434"
+      vision_model:
+        provider: openai
+        name: gpt-4o-mini # or gpt-4o if you want higher fidelity
+        settings:
+          temperature: 0 # optional
+          max_retries: 2 # optional
+      storage:
+        postgres:
+          host: localhost
+          port: 5432
+          database: fred
+          username: admin
+        opensearch:
+          host: https://localhost:9200
+          secure: true
+          verify_certs: false
+          username: admin
+        catalog_store:
+          type: "duckdb"
+          duckdb_path: "/home/fred-user/.fred/knowledge-flow/catalog.duckdb"
+        prompt_store:
+          type: "duckdb"
+          duckdb_path: "/home/fred-user/.fred/knowledge-flow/prompt.duckdb"
+        resource_store:
+          type: "duckdb"
+          duckdb_path: "/home/fred-user/.fred/knowledge-flow/resource.duckdb"
+        kpi_store:
+          type: "log"
+          level: "INFO"
+        tag_store:
+          type: "duckdb"
+          duckdb_path: "/home/fred-user/.fred/knowledge-flow/tag.duckdb"
+        metadata_store:
+          type: "duckdb"
+          duckdb_path: "/home/fred-user/.fred/knowledge-flow/metadata.duckdb"
+
+        vector_store:
+          type: in_memory
+        tabular_stores:
+          base_database: # Minimal configuration to enable CSV document ingestion
+            type: "sql"
+            driver: "duckdb"
+            database: "base_database"
+            path: "/home/fred-user/.fred/knowledge-flow/db.duckdb"
+            mode: "read_and_write"
+      mcp:
+        reports_enabled: true
+        kpi_enabled: true
+        tabular_enabled: true
+        statistic_enabled: true
+        text_enabled: true
+        templates_enabled: true
+        resources_enabled: true
+        filesystem_enabled: false
+        opensearch_ops_enabled: false
+        neo4j_enabled: false
+
+      filesystem:
+        type: local
+        # type: minio
+        # endpoint: http://localhost:9000
+        # access_key: admin
+        # bucket_name: filesystem
+        # secure: false
+    dotenv:
+      KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
+      MINIO_SECRET_KEY: ""
+      OPENAI_API_KEY: ""
+      OPENSEARCH_PASSWORD: ""
+      OPENFGA_API_TOKEN: ""
+      FRED_POSTGRES_PASSWORD: ""
+      TABULAR_POSTGRES_PASSWORD: ""
