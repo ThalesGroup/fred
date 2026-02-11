@@ -175,9 +175,7 @@ class PostgresAgentStore(BaseAgentStore):
         await self._ensure_table()
         async with self.store.begin() as conn:
             result = await conn.execute(
-                select(self.table.c.id).where(
-                    self.table.c.id == self._seed_marker_id
-                )
+                select(self.table.c.id).where(self.table.c.id == self._seed_marker_id)
             )
             row = result.fetchone()
         return bool(row)
